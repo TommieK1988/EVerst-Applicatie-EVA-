@@ -2,6 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { getMijnTeKeurenUren } from '@/lib/uren/bouw7-goedkeuring'
 import { periodeBereik } from '@/lib/uren/types'
+import { signBonnen } from '@/lib/uren/bonnen'
+import type { OnkostenSoort, Vervoermiddel } from '@/lib/uren/onkosten'
 
 /**
  * Datalaag van het mobiele fiatteerscherm (`/m/uren/keuren`).
@@ -73,6 +75,26 @@ export type KeurGroep = {
   totaalUren: number
 }
 
+/**
+ * Een ingediende kostenpost van iemand wiens uren jij beoordeelt.
+ *
+ * Alleen-lezen: onkosten hangen aan een EVA-week en niet aan een Bouw7 hour-log, dus er is
+ * geen goedkeurvlag om om te zetten. Ze staan hier omdat je bij het fiatteren wilt zien wat
+ * je mensen die week aan kosten hebben gedeclareerd -- inclusief het bonnetje.
+ */
+export type KeurOnkosten = {
+  id: string
+  datum: string
+  medewerkerNaam: string
+  soort: OnkostenSoort
+  vervoermiddel: Vervoermiddel | null
+  km: number | null
+  bedrag: number
+  omschrijving: string | null
+  /** Verse signed URL; de bonnen-bucket is prive. */
+  bonUrl: string | null
+}
+
 export type KeurData = {
   groepen: KeurGroep[]
   totaalRegels: number
@@ -83,6 +105,8 @@ export type KeurData = {
    * vraagt een bevestiging.
    */
   wachtOpTeamleider: number
+  /** Parkeer- en reiskosten van dezelfde mensen over dezelfde periode. Alleen-lezen. */
+  onkosten: KeurOnkosten[]
   /** Bouw7 was niet bereikbaar; dan tonen we dat in plaats van "niets te doen". */
   fout: string | null
 }
@@ -93,7 +117,10 @@ export async function haalTeKeuren(): Promise<KeurData> {
   const { van, tot } = periodeBereik('te_keuren')
   const res = await getMijnTeKeurenUren(van, tot)
   if (res.fout) {
-    return { groepen: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0, fout: res.fout }
+    return {
+      groepen: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0, onkosten: [],
+      fout: res.fout,
+    }
   }
 
   // Drie bronnen, oplopend in zeggenschap: eerst wat nog bij de teamleider ligt, dan wat op
@@ -155,8 +182,66 @@ export async function haalTeKeuren(): Promise<KeurData> {
     totaalRegels: alles.length,
     totaalUren: rondUren(alles.reduce((s, r) => s + r.uren, 0)),
     wachtOpTeamleider: alles.filter(r => r.wachtOpTeamleider).length,
+    onkosten: await haalOnkosten([...bron.values()], van, tot),
     fout: null,
   }
+}
+
+/**
+ * De onkosten van de mensen wier uren ik beoordeel, over dezelfde periode.
+ *
+ * De kring komt uit de Bouw7-regels die we toch al hadden: zie ik jouw uren, dan zie ik ook
+ * wat je die periode aan kosten indiende. Er is geen aparte rol voor -- een kostenpost hangt
+ * aan een week en niet aan een dossier, dus hem per project toewijzen kan niet.
+ *
+ * De query is begrensd door de medewerkerslijst en het datumbereik en blijft daarmee ruim
+ * onder de PostgREST-grens van 1000 rijen.
+ */
+async function haalOnkosten(
+  regels: { medewerkerId: string | null; medewerkerNaam: string }[],
+  van: string,
+  tot: string,
+): Promise<KeurOnkosten[]> {
+  const namen = new Map<string, string>()
+  for (const r of regels) if (r.medewerkerId) namen.set(r.medewerkerId, r.medewerkerNaam)
+  if (namen.size === 0) return []
+
+  const { data, error } = await createAdminClient()
+    .from('uren_onkosten')
+    .select('id, datum, medewerker_id, soort, vervoermiddel, km, bedrag, omschrijving, bon_pad')
+    .in('medewerker_id', [...namen.keys()])
+    .gte('datum', van)
+    .lte('datum', tot)
+    .order('datum')
+  if (error || !data) return []
+
+  const rijen = data as OnkostenRij[]
+  const bonLinks = await signBonnen(rijen.map(r => r.bon_pad))
+
+  return rijen.map(r => ({
+    id: r.id,
+    datum: r.datum,
+    medewerkerNaam: namen.get(r.medewerker_id) ?? '-',
+    soort: r.soort as OnkostenSoort,
+    vervoermiddel: (r.vervoermiddel as Vervoermiddel) ?? null,
+    km: r.km == null ? null : Number(r.km),
+    bedrag: Number(r.bedrag),
+    omschrijving: r.omschrijving ?? null,
+    bonUrl: bonLinks.get(r.bon_pad ?? '') ?? null,
+  }))
+}
+
+/** De kolommen die `haalOnkosten` opvraagt; los benoemd zodat er geen any aan te pas komt. */
+type OnkostenRij = {
+  id: string
+  datum: string
+  medewerker_id: string
+  soort: string
+  vervoermiddel: string | null
+  km: number | string | null
+  bedrag: number | string
+  omschrijving: string | null
+  bon_pad: string | null
 }
 
 type BronRegel = Awaited<ReturnType<typeof getMijnTeKeurenUren>>['alsProjectleider'][number]

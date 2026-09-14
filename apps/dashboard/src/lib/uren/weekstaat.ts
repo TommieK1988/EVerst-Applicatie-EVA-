@@ -18,11 +18,12 @@ import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen
 import { getUrenInstellingen, getIndirectDossierId } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
+import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
+import type { OnkostenSoort, Vervoermiddel } from './onkosten'
+import { signBonnen } from './bonnen'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
-
-export type WeekStatus = 'concept' | 'ingediend' | 'teamleider_akkoord' | 'goedgekeurd' | 'afgekeurd'
 
 export type UursoortOptie = {
   id: string
@@ -51,10 +52,13 @@ export type WeekRegel = {
 export type WeekOnkosten = {
   id: string
   datum: string
-  soort: 'parkeren' | 'reiskosten' | 'overig'
+  soort: OnkostenSoort
+  /** Alleen bij reiskosten; auto en bromfiets rekenen per kilometer, OV vraagt een kaartje. */
+  vervoermiddel: Vervoermiddel | null
   bedrag: number
   km: number | null
   omschrijving: string | null
+  /** Verse signed URL van het bonnetje; de bucket is prive, zie ./bonnen. */
   bon_url: string | null
 }
 
@@ -77,31 +81,11 @@ export type Weekstaat = {
   afkeurReden: string | null
   regels: WeekRegel[]
   onkosten: WeekOnkosten[]
+  /** De kilometervergoedingen, zodat de sheet het bedrag alvast kan laten zien. */
+  kmTarieven: { auto: number; bromfiets: number }
 }
 
 /* ── Interne helpers ──────────────────────────────────────────────── */
-
-/**
- * Haalt de week op en controleert dat hij van de ingelogde medewerker is.
- * Dit is de enige plek waar dat gebeurt; elke muterende functie gaat er langs.
- */
-async function eigenWeek(weekId: string) {
-  const medewerker = await vereisSessie()
-  const supabase = db()
-  const { data: week } = await supabase
-    .from('uren_weken')
-    .select('id, medewerker_id, week_start, status, contracturen')
-    .eq('id', weekId)
-    .maybeSingle()
-  if (!week) throw new Error('Week niet gevonden.')
-  if (week.medewerker_id !== medewerker.id) throw new Error('Dit is niet jouw weekstaat.')
-  return { medewerker, week, supabase }
-}
-
-/** Een week is alleen te wijzigen zolang hij nog niet ingediend is (of is afgekeurd). */
-function bewerkbaar(status: WeekStatus) {
-  return status === 'concept' || status === 'afgekeurd'
-}
 
 /* ── Opbouw ───────────────────────────────────────────────────────── */
 
@@ -258,6 +242,9 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   const ongecodeerd = nette.filter(r => r.categorie === 'werk' && (!r.dossier_id || !r.bewakingscode)).length
   const blokkade = indienBlokkade(totalen, contracturen, ongecodeerd)
 
+  // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
+  const bonLinks = await signBonnen((onkosten ?? []).map((o: Record<string, unknown>) => o.bon_pad as string))
+
   return {
     weekId,
     weekStart,
@@ -276,12 +263,14 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     onkosten: (onkosten ?? []).map((o: Record<string, unknown>) => ({
       id: o.id as string,
       datum: o.datum as string,
-      soort: o.soort as WeekOnkosten['soort'],
+      soort: o.soort as OnkostenSoort,
+      vervoermiddel: (o.vervoermiddel as Vervoermiddel) ?? null,
       bedrag: Number(o.bedrag),
       km: o.km == null ? null : Number(o.km),
       omschrijving: (o.omschrijving as string) ?? null,
-      bon_url: (o.bon_url as string) ?? null,
+      bon_url: bonLinks.get(o.bon_pad as string) ?? null,
     })),
+    kmTarieven: { auto: inst.km_vergoeding_auto, bromfiets: inst.km_vergoeding_bromfiets },
   }
 }
 
@@ -575,55 +564,6 @@ export async function verwijderRegel(
   if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: 'Deze week is al ingediend.' }
 
   const { error } = await supabase.from('uren_regels').delete().eq('id', regelId)
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/m/uren')
-  return { ok: true }
-}
-
-/* ── Onkosten ─────────────────────────────────────────────────────── */
-
-export async function voegOnkostenToe(weekId: string, invoer: {
-  datum: string
-  soort: 'parkeren' | 'reiskosten' | 'overig'
-  bedrag: number
-  km?: number | null
-  omschrijving?: string | null
-  dossier_id?: string | null
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { medewerker, week, supabase } = await eigenWeek(weekId)
-  if (!bewerkbaar(week.status)) return { ok: false, error: 'Deze week is al ingediend.' }
-  if (!(invoer.bedrag >= 0)) return { ok: false, error: 'Vul een geldig bedrag in.' }
-
-  const { error } = await supabase.from('uren_onkosten').insert({
-    week_id: weekId,
-    medewerker_id: medewerker.id,
-    datum: invoer.datum,
-    soort: invoer.soort,
-    bedrag: invoer.bedrag,
-    km: invoer.km ?? null,
-    omschrijving: invoer.omschrijving?.trim() || null,
-    dossier_id: invoer.dossier_id ?? null,
-  })
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/m/uren')
-  return { ok: true }
-}
-
-export async function verwijderOnkosten(
-  onkostenId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const medewerker = await vereisSessie()
-  const supabase = db()
-  const { data: rij } = await supabase
-    .from('uren_onkosten')
-    .select('id, medewerker_id, uren_weken(status)')
-    .eq('id', onkostenId)
-    .maybeSingle()
-  if (!rij) return { ok: false, error: 'Regel niet gevonden.' }
-  if (rij.medewerker_id !== medewerker.id) return { ok: false, error: 'Dit is niet jouw regel.' }
-  if (!bewerkbaar(rij.uren_weken?.status)) return { ok: false, error: 'Deze week is al ingediend.' }
-
-  const { error } = await supabase.from('uren_onkosten').delete().eq('id', onkostenId)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/m/uren')
   return { ok: true }

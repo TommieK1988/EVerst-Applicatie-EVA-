@@ -6,6 +6,7 @@ import { vereisSessie, getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { SkeletonCard } from '@/components/ui'
 import { getAlleUren } from '@/lib/uren/actions'
+import { getOnkosten } from '@/lib/uren/onkosten-overzicht'
 import { alsPeriode, type UrenPeriode } from '@/lib/uren/types'
 import UrenOverzicht from './UrenOverzicht'
 
@@ -27,9 +28,12 @@ async function UrenInhoud({ periode, magAlles, medewerkerId }: {
     user_id = user?.id ?? null
   } catch { /* geen sessie → geen opgeslagen kolomlayouts, tabel werkt verder gewoon */ }
 
-  const [alle, layouts] = await Promise.all([
+  // De onkosten alleen voor wie ze uitbetaalt. Een projectleider zonder financieel-recht ziet
+  // de kosten van zijn eigen mensen op /m/uren/keuren; het bedrijfsbrede overzicht is niet aan hem.
+  const [alle, layouts, onkosten] = await Promise.all([
     getAlleUren(periode),
     user_id ? laadLayouts(user_id, 'uren') : Promise.resolve([]),
+    magAlles ? getOnkosten(periode) : Promise.resolve(null),
   ])
 
   // Zonder financieel-recht gaat alleen je eigen goed te keuren werk naar de browser. Dit hoort
@@ -50,7 +54,7 @@ async function UrenInhoud({ periode, magAlles, medewerkerId }: {
 
   return (
     <UrenOverzicht
-      data={data} periode={periode} layouts={layouts} user_id={user_id}
+      data={data} onkosten={onkosten} periode={periode} layouts={layouts} user_id={user_id}
       magAlles={magAlles} medewerkerId={medewerkerId}
     />
   )

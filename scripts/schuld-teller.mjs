@@ -59,6 +59,12 @@ const GENEGEERD = [/database\.types\.ts$/, /\.d\.ts$/, /node_modules/, /[\\/]\.n
  * kost elke nieuwe, correct gegate action een budgetverhoging. Een teller die de juiste
  * schrijfwijze beboet leert precies het verkeerde af.
  *
+ * `eigenWeek` (`lib/uren/week-guard.ts`) staat er om dezelfde reden bij: het roept als eerste
+ * regel onvoorwaardelijk `vereisSessie()` aan en gooit als de week niet van de ingelogde
+ * medewerker is. Het stond eerst in `weekstaat.ts` zelf, waar de helper-resolutie binnen
+ * hetzelfde bestand hem nog zag; toen de kosten een eigen module kregen moest de guard mee
+ * naar een gedeeld bestand en telde elke correct gegate action ineens als ongegate.
+ *
  * De regel voor uitbreiden: alleen een helper die zélf onvoorwaardelijk een gate uit deze
  * lijst aanroept en gooit bij onvoldoende recht. Een helper die de gate achter een `if`
  * zet hoort hier niet in.
@@ -66,6 +72,7 @@ const GENEGEERD = [/database\.types\.ts$/, /\.d\.ts$/, /node_modules/, /[\\/]\.n
 const GATES = [
   'vereisRecht', 'vereisSessie', 'vereisBeheerder', 'vereisModuleToegang',
   'vereisMaterieelToegang', 'vereisMaterieelMutatie', 'vereisMaterieelBeheer',
+  'eigenWeek',
 ]
 
 const REGELLIMIET = 800

@@ -11,7 +11,8 @@ import { useDialogen } from '@/components/ui/dialogen'
 import { fiatteerUren } from '@/app/m/uren/keuren/actions'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import KeurRegelSheet from './KeurRegelSheet'
-import type { KeurData, KeurGroep, KeurRegel } from '@/lib/mobiel/keuren'
+import type { KeurData, KeurGroep, KeurOnkosten, KeurRegel } from '@/lib/mobiel/keuren'
+import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
 
 const GROEN = '#009439'
 const GRIJS = '#6b757c'
@@ -19,6 +20,8 @@ const ZACHT = '#9aa4ab'
 const ORANJE = '#b85a00'
 
 const uur = (n: number) => `${n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`
+const euro = (n: number) =>
+  `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /** De regels die de teamleider nog niet gezien heeft, in één zin. */
 const wachtZin = (n: number) =>
@@ -174,12 +177,15 @@ export default function KeurenClient({ data }: { data: KeurData }) {
 
   if (groepen.length === 0) {
     return (
-      <Melding
-        titel="Niets te fiatteren"
-        tekst={afgehandeld.size > 0
-          ? 'Je hebt alles weggewerkt.'
-          : 'Er staan geen uren op jouw akkoord.'}
-      />
+      <>
+        <Melding
+          titel="Niets te fiatteren"
+          tekst={afgehandeld.size > 0
+            ? 'Je hebt alles weggewerkt.'
+            : 'Er staan geen uren op jouw akkoord.'}
+        />
+        <KostenBlok onkosten={data.onkosten} />
+      </>
     )
   }
 
@@ -212,6 +218,8 @@ export default function KeurenClient({ data }: { data: KeurData }) {
             onBewerk={setBewerken}
           />
         ))}
+
+        <KostenBlok onkosten={data.onkosten} />
       </div>
 
       <MobielStickyFooter>
@@ -250,6 +258,72 @@ export default function KeurenClient({ data }: { data: KeurData }) {
 }
 
 /* ── Onderdelen ───────────────────────────────────────────────────── */
+
+/**
+ * De kosten die je mensen deze periode indienden: parkeren, reiskosten, overig.
+ *
+ * Bewust alleen-lezen en zonder vinkjes. Een kostenpost hangt aan een weekstaat en niet aan
+ * een Bouw7-urenregel, dus er is geen vlag om om te zetten -- het staat er zodat je bij het
+ * fiatteren ziet wat er verder op die week geschreven is, met het bonnetje erbij.
+ */
+function KostenBlok({ onkosten }: { onkosten: KeurOnkosten[] }) {
+  if (onkosten.length === 0) return null
+  const totaal = onkosten.reduce((s, k) => s + k.bedrag, 0)
+
+  return (
+    <div style={{
+      border: '1px solid var(--border)', borderRadius: 12,
+      background: 'var(--bg-elev)', overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '11px 14px', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'baseline', gap: 8,
+      }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--fg)', flex: 1 }}>
+          Ingediende kosten
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: GRIJS, fontVariantNumeric: 'tabular-nums' }}>
+          {euro(totaal)}
+        </span>
+      </div>
+
+      {onkosten.map(k => (
+        <div key={k.id} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 14px', borderTop: '1px solid var(--border)',
+        }}>
+          {k.bonUrl ? (
+            <a href={k.bonUrl} target="_blank" rel="noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={k.bonUrl} alt="Bonnetje" style={{
+                width: 34, height: 34, objectFit: 'cover',
+                borderRadius: 7, border: '1px solid var(--border)',
+              }} />
+            </a>
+          ) : (
+            <span style={{ width: 34, flexShrink: 0 }} />
+          )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: 'var(--fg)' }}>
+              {ONKOSTEN_LABEL[k.soort]}
+              {k.vervoermiddel ? ` · ${VERVOERMIDDEL_LABEL[k.vervoermiddel]}` : ''}
+              {k.km ? ` · ${k.km.toLocaleString('nl-NL')} km` : ''}
+            </div>
+            <div style={{ fontSize: 11.5, color: ZACHT, marginTop: 1 }}>
+              {datumKort(k.datum)} · {k.medewerkerNaam}
+              {k.omschrijving ? ` · ${k.omschrijving}` : ''}
+            </div>
+          </div>
+
+          <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+            {euro(k.bedrag)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /** "Daarna nog projectleider" — jouw akkoord is hier niet het laatste woord. */
 const badgeStijl: React.CSSProperties = {

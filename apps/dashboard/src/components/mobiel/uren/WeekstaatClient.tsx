@@ -4,9 +4,11 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { Weekstaat, WeekRegel, UursoortOptie, RegelInvoer } from '@/lib/uren/weekstaat'
-import { voegRegelToe, wijzigRegel, verwijderRegel, verwijderOnkosten, dienWeekIn } from '@/lib/uren/weekstaat'
+import { voegRegelToe, wijzigRegel, verwijderRegel, dienWeekIn } from '@/lib/uren/weekstaat'
+import { verwijderOnkosten } from '@/lib/uren/onkosten-acties'
 import RegelSheet from './RegelSheet'
 import OnkostenSheet from './OnkostenSheet'
+import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
 
 /**
  * De mobiele weekstaat: per dag een kaart met regels, een voortgangskop en één knop Indienen.
@@ -27,10 +29,6 @@ function dagLabel(datum: string, vandaag: string) {
 
 const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
 const euro = (n: number) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
-const KOSTEN_LABEL: Record<string, string> = {
-  parkeren: 'Parkeren', reiskosten: 'Reiskosten', overig: 'Overige kosten',
-}
 
 const STATUS_TEKST: Record<string, { label: string; kleur: string; achtergrond: string }> = {
   concept: { label: 'Nog niet ingediend', kleur: '#6b757c', achtergrond: '#f1f3f4' },
@@ -214,8 +212,18 @@ export default function WeekstaatClient({
                   padding: '9px 14px', borderTop: '1px solid var(--border)',
                   background: 'rgba(0,0,0,0.015)',
                 }}>
+                  {k.bon_url && (
+                    <a href={k.bon_url} target="_blank" rel="noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={k.bon_url} alt="Bonnetje" style={{
+                        width: 30, height: 30, objectFit: 'cover',
+                        borderRadius: 6, border: '1px solid var(--border)',
+                      }} />
+                    </a>
+                  )}
                   <span style={{ fontSize: 13, color: 'var(--fg)', flex: 1, minWidth: 0 }}>
-                    {KOSTEN_LABEL[k.soort]}
+                    {ONKOSTEN_LABEL[k.soort]}
+                    {k.vervoermiddel ? ` · ${VERVOERMIDDEL_LABEL[k.vervoermiddel]}` : ''}
                     {k.km ? ` · ${k.km.toLocaleString('nl-NL')} km` : ''}
                     {k.omschrijving ? ` · ${k.omschrijving}` : ''}
                   </span>
@@ -288,6 +296,7 @@ export default function WeekstaatClient({
         <OnkostenSheet
           weekId={staat.weekId}
           datum={kostenSheet}
+          kmTarieven={staat.kmTarieven}
           onSluit={() => setKostenSheet(null)}
           onKlaar={ververs}
         />

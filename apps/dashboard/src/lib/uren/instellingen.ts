@@ -19,6 +19,13 @@ export type UrenInstellingen = {
    * moet blijven werken zolang de overstap loopt. Per ploeg te overschrijven, zie `bepaalModus`.
    */
   goedkeuring_modus: 'eva' | 'bouw7'
+  /**
+   * Kilometervergoeding bij reiskosten op eigen gelegenheid, in euro per kilometer. Een
+   * bedrijfsafspraak en geen wetgeving, dus instelbaar: een tariefwijziging hoort geen release
+   * te vragen. Hier staat alleen het getal; het rekenen zit in `lib/uren/onkosten.ts`.
+   */
+  km_vergoeding_auto: number
+  km_vergoeding_bromfiets: number
 }
 
 const STANDAARD: UrenInstellingen = {
@@ -29,6 +36,8 @@ const STANDAARD: UrenInstellingen = {
   goedkeur_deadline_dag: 1,
   goedkeur_deadline_tijd: '12:00:00',
   goedkeuring_modus: 'bouw7',
+  km_vergoeding_auto: 0.3,
+  km_vergoeding_bromfiets: 0.11,
 }
 
 /** De singleton-rij. Valt terug op de standaarden als de rij (nog) ontbreekt. */
@@ -36,11 +45,16 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
   const supabase = db()
   const { data } = await supabase
     .from('uren_instellingen')
-    .select('terugval_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus')
+    .select('terugval_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, km_vergoeding_auto, km_vergoeding_bromfiets')
     .eq('id', true)
     .maybeSingle()
   if (!data) return STANDAARD
-  return { ...data, tolerantie_uren: Number(data.tolerantie_uren ?? 0) }
+  return {
+    ...data,
+    tolerantie_uren: Number(data.tolerantie_uren ?? 0),
+    km_vergoeding_auto: Number(data.km_vergoeding_auto ?? STANDAARD.km_vergoeding_auto),
+    km_vergoeding_bromfiets: Number(data.km_vergoeding_bromfiets ?? STANDAARD.km_vergoeding_bromfiets),
+  }
 }
 
 /**
