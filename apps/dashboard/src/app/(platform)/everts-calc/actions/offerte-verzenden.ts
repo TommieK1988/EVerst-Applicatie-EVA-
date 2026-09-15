@@ -39,9 +39,11 @@ export interface OfferteDetailStatus {
  * Wie de staat toch moet delen, downloadt hem en verstuurt hem bewust zelf.
  */
 async function isInterneBegroting(quoteId: string): Promise<boolean> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as any
-  const { data } = await admin.from('quotes').select('type').eq('id', quoteId).maybeSingle()
+  const { data } = await createAdminClient()
+    .from('quotes')
+    .select('type')
+    .eq('id', quoteId)
+    .maybeSingle()
   return data?.type === 'interne_calculatie'
 }
 

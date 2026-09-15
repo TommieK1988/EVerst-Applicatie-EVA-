@@ -666,8 +666,7 @@ function telSomOp(doel: KostenSom, bron: KostenSom): void {
 
 /** Telt één offerteregel op bij een som. Tekstregels dragen per definitie niets bij. */
 function telRegelOp(som: KostenSom, line: QuoteLine): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((line as any).soort === 'tekst') return
+  if (line.soort === 'tekst') return
   const aantal = line.hoeveelheid ?? 0
   som.verkoop += line.line_total ?? 0
 
@@ -1201,14 +1200,12 @@ export function buildRenderContext(
   // `stelposten_in_totaal` aan staat. Zou de staat een andere verzameling regels
   // optellen dan de offerte, dan staan er twee verschillende kostprijzen onder
   // hetzelfde bedrag.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const stelpostenInTotaal: boolean = (quote as any).stelposten_in_totaal ?? true
+  const stelpostenInTotaal = quote.stelposten_in_totaal ?? true
   const eindSom = legeSom()
   for (const sectie of sections) {
     if (sectie.is_optioneel) continue
     for (const line of sectie.lines ?? []) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (!stelpostenInTotaal && ((line as any).is_stelpost ?? false)) continue
+      if (!stelpostenInTotaal && line.is_stelpost) continue
       telRegelOp(eindSom, line)
     }
   }
