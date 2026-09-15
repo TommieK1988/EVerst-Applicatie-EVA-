@@ -492,15 +492,6 @@ export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
     .or(`teamleider_id.eq.${medewerkerId},project_manager_id.eq.${medewerkerId}`)
   if (!error && (count ?? 0) > 0) return true
 
-  // Of ik ben teamleider van een ploeg. Dat is de terugval van de teamleiderstap en in de
-  // praktijk de hoofdroute: `dossiers.teamleider_id` is nagenoeg nergens ingevuld, dus zonder
-  // deze vraag zou juist de groep voor wie dit scherm bedoeld is de tegel nooit zien.
-  const { count: ploegen, error: ploegFout } = await supabase
-    .from('ploegen')
-    .select('id', { count: 'exact', head: true })
-    .eq('teamleider_id', medewerkerId)
-  if (!ploegFout && (ploegen ?? 0) > 0) return true
-
   // Of er staan medewerkers die mij als goedkeurder van hun verlof en ziekte hebben; die route
   // loopt niet via een dossier, dus zonder deze vraag zou hij nooit een lijst te zien krijgen.
   const { count: eigen, error: fout } = await supabase

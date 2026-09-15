@@ -50,19 +50,9 @@ export type OpenUurRegel = {
   bouw7ProjectId: number | null
   /** Null als EVA dit Bouw7-project niet kent. */
   dossierId: string | null
-  /**
-   * Wie de eerste stap zet. Bij voorkeur de teamleider van de ópdracht
-   * (`dossiers.teamleider_id`); staat die er niet, dan de teamleider van de ploeg waar de
-   * medewerker in zit. Zie `teamleiderBron` voor welke van de twee het werd.
-   */
+  /** Projectrol op het dossier -- niet de teamleider van de ploeg van de medewerker. */
   teamleiderId: string | null
   teamleiderNaam: string | null
-  /**
-   * Waar de teamleider vandaan komt. Dit hoort op het scherm: "via je ploeg" is iets anders
-   * dan "jij staat op dit dossier", en wie zich afvraagt waarom bepaalde uren bij hem liggen
-   * moet dat kunnen zien zonder de code te lezen.
-   */
-  teamleiderBron: 'dossier' | 'ploeg' | null
   projectleiderId: string | null
   projectleiderNaam: string | null
   bewakingscode: string | null
@@ -150,14 +140,7 @@ export async function haalOpenstaandeUren(
     // De vaste goedkeurder komt hier mee: die bepaalt de route en hoort bij de medewerker,
     // niet bij het dossier. Zijn naam volgt in een tweede query -- medewerkers naar zichzelf
     // is een self-join, en die kan PostgREST alleen embedden met de naam van de foreign key.
-    // De ploeg komt mee omdat hij de terugval van de teamleiderstap is: staat er geen
-    // teamleider op het dossier, dan beoordeelt de teamleider van de ploeg waar de medewerker
-    // in zit. Zonder die terugval zou vrijwel alles meteen bij de projectleider belanden --
-    // `dossiers.teamleider_id` is in de praktijk nauwelijks ingevuld.
-    supabase
-      .from('medewerkers')
-      .select('id, bouw7_id, uren_goedkeurder_id, ploeg_id, ploegen!medewerkers_ploeg_id_fkey(teamleider_id)')
-      .in('bouw7_id', employeeIds),
+    supabase.from('medewerkers').select('id, bouw7_id, uren_goedkeurder_id').in('bouw7_id', employeeIds),
     supabase
       .from('dossiers')
       .select('id, bouw7_id, dossiernummer, titel, project_manager_id, teamleider_id, projectleider:medewerkers!dossiers_project_manager_id_fkey(voornaam, tussenvoegsel, achternaam), teamleider:medewerkers!dossiers_teamleider_id_fkey(voornaam, tussenvoegsel, achternaam)')
@@ -175,22 +158,15 @@ export async function haalOpenstaandeUren(
   // toevallig geboekt staat -- precies wat deze routering moet voorkomen.
   const standaardGoedkeurderId = (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id
 
-  type MedewerkerRij = {
-    id: string; bouw7_id: string; uren_goedkeurder_id: string | null
-    ploeg_id: string | null
-    ploegen: { teamleider_id: string | null } | null
-  }
+  type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
   const medRijen = (medewerkers ?? []) as MedewerkerRij[]
   const medMap = new Map<string, MedewerkerRij>(medRijen.map(m => [m.bouw7_id, m]))
 
-  // Namen van de vaste goedkeurders én van de ploegteamleiders. Begrensd door de `.in()`:
-  // hooguit zoveel rijen als er verschillende goedkeurders en ploegen zijn.
+  // Namen van de goedkeurders. Begrensd door de `.in()`: hooguit zoveel rijen als er
+  // verschillende goedkeurders zijn.
   const naamIds = [...new Set(
-    [
-      ...medRijen.map(m => m.uren_goedkeurder_id),
-      ...medRijen.map(m => m.ploegen?.teamleider_id ?? null),
-      standaardGoedkeurderId,
-    ].filter((v): v is string => !!v),
+    [...medRijen.map(m => m.uren_goedkeurder_id), standaardGoedkeurderId]
+      .filter((v): v is string => !!v),
   )]
   const goedkeurderNaam = new Map<string, string>()
   if (naamIds.length) {
@@ -236,27 +212,19 @@ export async function haalOpenstaandeUren(
     const tl = dossier?.teamleider
     const projectleiderId = dossier?.project_manager_id ?? null
 
-    // De teamleiderstap in drie tredes: de teamleider van de opdracht, anders die van de ploeg
-    // waar de medewerker in zit, anders geen tussenstop en meteen door naar de projectleider.
-    //
-    // Je eigen uren beoordeel je niet -- een teamleider die zelf in zijn ploeg zit valt dus door
-    // naar de projectleider. Dat de ploegteamleider toevallig ook de projectleider is hoeft hier
-    // niet afgevangen te worden: `keurUrenGoed` ziet dat en handelt beide stappen in één keer af.
-    const ploegTeamleiderId = medewerker?.ploegen?.teamleider_id ?? null
-    const teamleiderId =
-      dossier?.teamleider_id
-      ?? (ploegTeamleiderId && ploegTeamleiderId !== medewerkerId ? ploegTeamleiderId : null)
-    const teamleiderBron: OpenUurRegel['teamleiderBron'] =
-      !teamleiderId ? null : dossier?.teamleider_id ? 'dossier' : 'ploeg'
+    // De teamleiderstap komt van de OPDRACHT en niet van de ploeg: wie de uren beoordeelt hangt
+    // af van het werk, niet van waar iemand organisatorisch hangt. Staat er geen teamleider op
+    // het dossier, dan is er geen tussenstop en gaat de regel meteen naar de projectleider.
+    const teamleiderId = dossier?.teamleider_id ?? null
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
     // Niet-gewerkte uren met een vaste goedkeurder gaan naar hem, en naar niemand anders: over
     // iemands verlof heeft de projectleider van het project waarop het toevallig geboekt staat
-    // niets te zeggen. Alle andere regels volgen de gewone volgorde: eerst de teamleider (van
-    // het dossier, anders van de ploeg), daarna de projectleider. Is er geen van beide, dan kan
-    // EVA de regel nergens heen sturen -- die verdwijnt niet stilletjes maar komt apart in beeld,
-    // zodat iemand de rollen kan invullen of hem alsnog in Bouw7 kan afhandelen.
+    // niets te zeggen. Alle andere regels volgen de gewone volgorde: eerst de teamleider van het
+    // dossier, daarna de projectleider. Is er geen van beide, dan kan EVA de regel nergens heen
+    // sturen -- die verdwijnt niet stilletjes maar komt apart in beeld, zodat iemand de rollen
+    // kan invullen of hem alsnog in Bouw7 kan afhandelen.
     const status: OpenUurRegel['status'] =
       vasteGoedkeurderId ? 'wacht_op_vaste_goedkeurder'
       : !teamleiderId && !projectleiderId ? 'niet_toe_te_wijzen'
@@ -280,11 +248,7 @@ export async function haalOpenstaandeUren(
       bouw7ProjectId: l.project?.id ?? null,
       dossierId: dossier?.id ?? null,
       teamleiderId,
-      teamleiderNaam:
-        teamleiderBron === 'dossier' && tl
-          ? [tl.voornaam, tl.tussenvoegsel, tl.achternaam].filter(Boolean).join(' ')
-          : teamleiderId ? (goedkeurderNaam.get(teamleiderId) ?? null) : null,
-      teamleiderBron,
+      teamleiderNaam: tl ? [tl.voornaam, tl.tussenvoegsel, tl.achternaam].filter(Boolean).join(' ') : null,
       projectleiderId,
       projectleiderNaam: pl
         ? [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ')

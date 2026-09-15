@@ -11,8 +11,8 @@
 // 404; die bestaan alleen voor contracten en inkoopfacturen). EVA bepaalt de routering dus zelf,
 // en wel in de eerste plaats uit de PROJECTROLLEN OP HET DOSSIER waarop de uren geboekt zijn --
 // `dossiers.teamleider_id` en `dossiers.project_manager_id`. Wie de uren beoordeelt hangt dus af
-// van het werk, niet van waar iemand organisatorisch hangt. Alleen als het dossier geen teamleider
-// heeft valt de eerste stap terug op de ploeg; zie verderop.
+// van het werk, niet van waar iemand organisatorisch hangt -- dus niet uit de ploeg waar de
+// medewerker in zit.
 //
 // DE UURSOORT BEPAALT WELKE ROUTE GELDT. Een regel is óf gewerkte tijd op een project, óf niet
 // gewerkte tijd (verlof, ziek, vakantie, feestdag, tijd-voor-tijd -- `uren_categorie != 'werk'`
@@ -55,16 +55,13 @@
 // Terug omlaag mag ook nog: trekt de projectleider een goedkeuring in, dan vervalt alles en begint
 // de keten opnieuw.
 //
-// DE TEAMLEIDERSTAP HEEFT ÉÉN TERUGVAL: de ploeg. Staat er geen teamleider op het dossier, dan
-// beoordeelt de teamleider van de ploeg waar de medewerker in zit (`ploegen.teamleider_id`).
-// Zonder die terugval bestond de eerste stap in de praktijk niet -- `dossiers.teamleider_id` is
-// nagenoeg nergens ingevuld, dus liep alles rechtstreeks naar de projectleider. De opdracht gaat
-// wel vóór de ploeg: wie op het dossier staat heeft het werk gezien.
+// DE TEAMLEIDERSTAP HEEFT GEEN TERUGVAL. Staat er geen teamleider op het dossier, dan gaat de
+// regel rechtstreeks naar de projectleider. Er is bewust geen terugval op de ploegteamleider
+// (sep 2026, op verzoek van Tom teruggedraaid): de route hangt aan het werk, en een tussenstap
+// die uit de personeelsindeling komt maakt niet zichtbaar waarom uren bij iemand liggen.
 //
-// Verder is er geen terugval. Is er ook geen ploegteamleider, dan is het de projectleider, en
-// staat ook die er niet dan hoort de regel bij "niet toe te wijzen" in plaats van op het bureau
-// van iemand die er niets mee te maken heeft. Je eigen uren beoordeel je nooit: een teamleider
-// die zelf in zijn ploeg zit valt door naar de projectleider.
+// Staat ook de projectleider er niet, dan hoort de regel bij "niet toe te wijzen" in plaats van
+// op het bureau van iemand die er niets mee te maken heeft.
 //
 // VOLLEDIGE BODY BIJ ELKE SCHRIJFACTIE. `POST /project/hour-log` is een upsert, en het is niet
 // gedocumenteerd of niet-meegestuurde velden blijven staan of leeggemaakt worden. De bestaande
