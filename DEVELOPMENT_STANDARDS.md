@@ -244,8 +244,9 @@ waarom het risico aanvaardbaar is.
 ## 13. Code review en werkwijze
 
 **13.1 — Geen commit rechtstreeks op `main` zonder dat `npm run build`, `npm run lint` en
-`npm run type-check` lokaal groen zijn.** Zolang er geen CI is, is dit handwerk — en dus een
-afspraak.
+`npm run type-check` lokaal groen zijn.** Sinds september 2026 draait CI (`.github/workflows/ci.yml`)
+dit bij elke push mee, maar dan ben je vier minuten verder en staat het al op `main` — lokaal
+groen is nog steeds de afspraak.
 
 **13.2 — Eén feature per branch, één onderwerp per commit.** De commitgrootte is nu gezond
 (~6 bestanden per commit); houd dat vast.
@@ -258,6 +259,13 @@ productie-Supabase en is meteen voor iedereen zichtbaar.
 
 **13.5 — Bij een wijziging aan de rechten-, RLS- of tokenlaag: laat een tweede persoon
 meekijken.** Dat is de enige laag waar een fout stil is én naar buiten lekt.
+
+**13.6 — Zet de pre-push hook aan:** `git config core.hooksPath .githooks` (eenmalig per
+kloon). Hij draait `scripts/schuld-teller.mjs` op de commit die je pusht. De teller is een
+ratel — één `any`-cast of één ongegate action erbij is genoeg voor een rode CI-run — en de
+twee regels die hem het vaakst breken (3.1 en 3.2) zijn juist de regels die lint niet ziet,
+omdat de bestanden waar je in werkt de melding vaak al hebben uitgezet. Doorduwen kan met
+`git push --no-verify`; doe dat alleen met een reden in de commitmelding.
 
 ---
 

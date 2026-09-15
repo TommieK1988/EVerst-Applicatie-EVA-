@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# Draait de schuldteller op wat je daadwerkelijk pusht, vóórdat het weggaat.
+#
+# WAAROM: de teller is een ratel -- één cast erbij is genoeg voor een rode CI-run.
+# Hij stond alleen in CI, dus je hoorde het pas vier minuten later, en dan is het
+# al op main. Hier valt het in een seconde of twee om, op je eigen machine.
+#
+# WAAROM `git archive` EN NIET GEWOON DE WERKMAP: die werkmap is bijna altijd
+# gemengd -- tientallen bestanden van parallelle sessies die je niet meepusht.
+# De teller daarop draaien meet dus iets anders dan wat CI straks meet, en dat is
+# vals alarm in beide richtingen. `git archive <sha>` pakt exact de boom die je
+# pusht uit, precies zoals de checkout in CI.
+#
+# Activeren (eenmalig per kloon):  git config core.hooksPath .githooks
+# Overslaan als het echt moet:     git push --no-verify
+
+root=$(git rev-parse --show-toplevel) || exit 0
+[ -f "$root/scripts/schuld-teller.mjs" ] || exit 0
+
+leeg=0000000000000000000000000000000000000000
+status=0
+
+while read -r _lokale_ref lokale_sha _externe_ref _externe_sha; do
+  # Een branch verwijderen levert geen boom op om te meten.
+  if [ "$lokale_sha" = "$leeg" ] || [ -z "$lokale_sha" ]; then
+    continue
+  fi
+
+  boom=$(mktemp -d) || exit 1
+  if git archive "$lokale_sha" | tar -x -C "$boom"; then
+    node "$root/scripts/schuld-teller.mjs" --wortel "$boom" || status=1
+  else
+    echo "pre-push: kon $lokale_sha niet uitpakken; schuldteller overgeslagen." >&2
+  fi
+  rm -rf "$boom"
+done
+
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "pre-push afgebroken: de schuldteller is rood op de commit die je pusht." >&2
+  echo "Repareer het en commit opnieuw, of push met --no-verify als je weet waarom." >&2
+fi
+
+exit "$status"
