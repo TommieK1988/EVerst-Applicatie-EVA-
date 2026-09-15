@@ -28,6 +28,12 @@ interface ImportRegel {
   eenheidsprijs: number
   kostprijs_pe: number
   uren_pe: number
+  /** Kostensoort-uitsplitsing uit de calculatie; voedt de begrotingsstaat. */
+  arbeid_pe: number
+  materieel_pe: number
+  oa_pe: number
+  kostengroep: string | null
+  is_verrekenbaar: boolean
   calculatieregel_id: string
   is_stelpost?: boolean
   btw_pct?: number | null
@@ -113,6 +119,14 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
             eenheidsprijs: +berekend.vp_pe.toFixed(2),
             kostprijs_pe: +berekend.kp_pe.toFixed(2),
             uren_pe: +berekend.uren_pe.toFixed(3),
+            // Kostensoort-uitsplitsing voor de begrotingsstaat. Nul is hier een
+            // echte nul (geen arbeid in deze post); leeg blijft voorbehouden aan
+            // regels die nooit uit een calculatie zijn gekomen.
+            arbeid_pe: +berekend.arbeid_pe.toFixed(4),
+            materieel_pe: +berekend.materieel_pe.toFixed(4),
+            oa_pe: +berekend.oa_pe.toFixed(4),
+            kostengroep: r.kostengroep ?? null,
+            is_verrekenbaar: r.is_verrekenbaar ?? false,
             calculatieregel_id: r.id,
             werkomschrijving: r.werkomschrijving ?? '',
             werkomschrijving_afbeeldingen: r.werkomschrijving_afbeeldingen,
@@ -190,6 +204,11 @@ export default function QuoteImportModal({ quoteId, type, projectId, onClose }: 
           eenheidsprijs: r.eenheidsprijs,
           kostprijs_pe: r.kostprijs_pe,
           uren_pe: r.uren_pe,
+          arbeid_pe: r.arbeid_pe,
+          materieel_pe: r.materieel_pe,
+          oa_pe: r.oa_pe,
+          kostengroep: r.kostengroep,
+          is_verrekenbaar: r.is_verrekenbaar,
           calculatieregel_id: r.calculatieregel_id,
           opmerking: (() => {
             const tekst = r.werkomschrijving || ''

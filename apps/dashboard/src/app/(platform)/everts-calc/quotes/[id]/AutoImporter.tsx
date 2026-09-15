@@ -87,6 +87,14 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
               eenheidsprijs: +berekend.vp_pe.toFixed(2),
               kostprijs_pe: +berekend.kp_pe.toFixed(2),
               uren_pe: +berekend.uren_pe.toFixed(3),
+              // Kostensoort-uitsplitsing voor de begrotingsstaat. Nul is hier een
+              // echte nul (geen arbeid in deze post); leeg blijft voorbehouden aan
+              // regels die nooit uit een calculatie zijn gekomen.
+              arbeid_pe: +berekend.arbeid_pe.toFixed(4),
+              materieel_pe: +berekend.materieel_pe.toFixed(4),
+              oa_pe: +berekend.oa_pe.toFixed(4),
+              kostengroep: regel.kostengroep ?? null,
+              is_verrekenbaar: regel.is_verrekenbaar ?? false,
               calculatieregel_id: regel.id,
               opmerking: regel.werkomschrijving ?? null,
               is_stelpost: regel.is_stelpost ?? false,

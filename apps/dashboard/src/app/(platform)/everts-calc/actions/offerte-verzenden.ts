@@ -26,6 +26,28 @@ export interface OfferteDetailStatus {
   dossierId: string | null
 }
 
+/**
+ * Een interne begroting mag EVA nooit uit zichzelf versturen.
+ *
+ * De begrotingsstaat toont kostprijzen, uren, opslag en marge — precies wat een
+ * opdrachtgever niet hoort te zien. De knop staat er in de interface al niet, maar
+ * dat is geen slot: een server action is gewoon een endpoint, en de goedkeuringsgate
+ * (`assertOfferteVerzendbaar`) laat een interne begroting juist dóór omdat er voor
+ * dit type geen goedkeuring vereist is. Zonder deze controle is de enige drempel
+ * tussen de kostprijzen en de klant dus een verborgen knop.
+ *
+ * Wie de staat toch moet delen, downloadt hem en verstuurt hem bewust zelf.
+ */
+async function isInterneBegroting(quoteId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('quotes').select('type').eq('id', quoteId).maybeSingle()
+  return data?.type === 'interne_calculatie'
+}
+
+const NIET_MAILBAAR =
+  'Een interne begroting kan niet vanuit EVA worden gemaild: de begrotingsstaat bevat kostprijzen en marges. Download het document als je het toch wilt delen.'
+
 /** Laadt de toolbar-status voor de inline offerte-detailweergave in het dossier. */
 export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteDetailStatus> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,6 +140,7 @@ export async function getOfferteGoedkeuringKnopStatus(quoteId: string): Promise<
 
 /** Prefill voor het verzendvenster: ontvanger + gerenderd onderwerp/tekst. */
 export async function getOfferteMailConcept(quoteId: string): Promise<MailConcept> {
+  if (await isInterneBegroting(quoteId)) throw new Error(NIET_MAILBAAR)
   const { ctx } = await laadOfferteContext(quoteId)
   const sjabloon = await getOfferteMailSjabloon()
   const vars = buildMailVars(ctx)
@@ -207,6 +230,10 @@ export async function verstuurOfferte(
 > {
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd.' }
+
+  // Harde gate: een interne begroting gaat nooit de deur uit. Bewust vóór alle
+  // andere controles — zie `isInterneBegroting` hierboven.
+  if (await isInterneBegroting(quoteId)) return { ok: false, error: NIET_MAILBAAR }
 
   // Word-versie ophalen vóór de gate. Dit is het moment dat telt: zonder deze
   // sync zou een bewerking in Word Online ná de goedkeuring ongemerkt naar de

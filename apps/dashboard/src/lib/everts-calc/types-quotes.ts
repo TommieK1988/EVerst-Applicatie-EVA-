@@ -89,6 +89,19 @@ export interface QuoteLine {
   soort?: 'post' | 'tekst' | null
   kostprijs_pe?: number | null
   uren_pe?: number | null
+  /**
+   * Kostensoort-uitsplitsing, bevroren uit de calculatie bij de import (net als
+   * `kostprijs_pe`/`uren_pe`). Voedt de begrotingsstaat in de Word-samenvoeging.
+   * `materieel_pe` heet daar `materiaal_*` — de calculatie noemt het componenttype
+   * `materieel`.
+   */
+  arbeid_pe?: number | null
+  materieel_pe?: number | null
+  oa_pe?: number | null
+  /** Kostengroep van de calculatieregel (bv. 'Bouwplaats'). */
+  kostengroep?: string | null
+  /** VRR: verrekenbare post — alleen dan heeft de verrekenprijs betekenis. */
+  is_verrekenbaar?: boolean
   opmerking?: string | null
   schilderbehandeling?: string | null
   /** Bevroren naam van de behandeling ("2-laags dekkend") — los van de tekst, zodat de offerte hem onderstreept kan tonen. */

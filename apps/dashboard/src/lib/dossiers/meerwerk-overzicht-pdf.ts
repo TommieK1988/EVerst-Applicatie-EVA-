@@ -106,6 +106,9 @@ async function haalBriefpapier(): Promise<Buffer | null> {
   const { data } = await supabase
     .from('quote_layouts')
     .select('briefpapier_pdf_url, is_standaard, updated_at')
+    // Alleen offerte-lay-outs: het meerwerkoverzicht gaat naar de klant, dus het
+    // briefpapier van een interne-begrotingslay-out hoort er niet onder.
+    .eq('soort', 'offerte')
     .not('briefpapier_pdf_url', 'is', null)
     .order('is_standaard', { ascending: false })
     .order('updated_at', { ascending: false })

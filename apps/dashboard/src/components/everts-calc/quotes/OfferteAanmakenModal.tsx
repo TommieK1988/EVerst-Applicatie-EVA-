@@ -64,7 +64,13 @@ export default function OfferteAanmakenModal({
     if (!open) return
     setFetchingData(true)
 
-    Promise.all([getLayouts(), getBetalingscondities()]).then(([lays, bcs]) => {
+    // Een interne begroting krijgt de begrotingsstaat-lay-out, een offerte de
+    // offerte-lay-out. Ze delen het sjabloonmechanisme maar niet de inhoud: op de
+    // interne begroting staan kostprijs, uren en opslag, en die horen niet in een
+    // document dat naar de klant kan.
+    const layoutSoort = type === 'interne_calculatie' ? 'interne_begroting' : 'offerte'
+
+    Promise.all([getLayouts(layoutSoort), getBetalingscondities()]).then(([lays, bcs]) => {
       setLayouts(lays)
       const standaard = lays.find((l: Layout) => l.is_standaard)
       setGekozenLayoutId(standaard?.id ?? lays[0]?.id ?? null)
@@ -94,7 +100,7 @@ export default function OfferteAanmakenModal({
         setAantalRegels(0)
       }
     })()
-  }, [open, projectId, scenarioId])
+  }, [open, projectId, scenarioId, type])
 
   async function handleAanmaken() {
     setLoading(true)
@@ -160,6 +166,14 @@ export default function OfferteAanmakenModal({
             eenheidsprijs: +berekend.vp_pe.toFixed(2),
             kostprijs_pe: +berekend.kp_pe.toFixed(2),
             uren_pe: +berekend.uren_pe.toFixed(3),
+            // Kostensoort-uitsplitsing voor de begrotingsstaat. Nul is hier een
+            // echte nul (geen arbeid in deze post); leeg blijft voorbehouden aan
+            // regels die nooit uit een calculatie zijn gekomen.
+            arbeid_pe: +berekend.arbeid_pe.toFixed(4),
+            materieel_pe: +berekend.materieel_pe.toFixed(4),
+            oa_pe: +berekend.oa_pe.toFixed(4),
+            kostengroep: regel.kostengroep ?? null,
+            is_verrekenbaar: regel.is_verrekenbaar ?? false,
             calculatieregel_id: regel.id,
             opmerking: regel.werkomschrijving ?? null,
             is_stelpost: regel.is_stelpost ?? false,
@@ -253,7 +267,11 @@ export default function OfferteAanmakenModal({
                 <span>Laden…</span>
               </div>
             ) : layouts.length === 0 ? (
-              <p className="text-sm text-slate-400 py-2">Geen lay-outs beschikbaar. Je kunt later een lay-out kiezen.</p>
+              <p className="text-sm text-slate-400 py-2">
+                {type === 'interne_calculatie'
+                  ? 'Nog geen lay-out voor de interne begroting. Maak er één aan onder Instellingen › Offertes.'
+                  : 'Geen lay-outs beschikbaar. Je kunt later een lay-out kiezen.'}
+              </p>
             ) : (
               <div className="space-y-2">
                 {layouts.map(layout => (

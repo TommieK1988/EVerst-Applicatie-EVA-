@@ -1,0 +1,8 @@
+{
+  "name": "begrotingsstaat-sjabloon",
+  "private": true,
+  "type": "module",
+  "description": "Bouwt het Word-sjabloon voor de interne begroting (begrotingsstaat) van EVA",
+  "scripts": { "build": "node build-docx.mjs ../../docs/Interne-begroting-sjabloon.docx" },
+  "dependencies": { "docx": "^9.7.1" }
+}

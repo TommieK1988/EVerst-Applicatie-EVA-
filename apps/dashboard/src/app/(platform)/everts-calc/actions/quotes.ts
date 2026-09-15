@@ -119,6 +119,12 @@ export type ImportRegel = {
   eenheidsprijs: number
   kostprijs_pe?: number | null
   uren_pe?: number | null
+  /** Kostensoort-uitsplitsing uit de calculatie; bevroren op de offerteregel. */
+  arbeid_pe?: number | null
+  materieel_pe?: number | null
+  oa_pe?: number | null
+  kostengroep?: string | null
+  is_verrekenbaar?: boolean
   calculatieregel_id?: string | null
   opmerking?: string | null
   is_stelpost?: boolean
@@ -920,6 +926,11 @@ export async function importeerRegels(
     eenheidsprijs: number
     kostprijs_pe?: number | null
     uren_pe?: number | null
+    arbeid_pe?: number | null
+    materieel_pe?: number | null
+    oa_pe?: number | null
+    kostengroep?: string | null
+    is_verrekenbaar?: boolean
     calculatieregel_id?: string | null
     opmerking?: string | null
     is_stelpost?: boolean
@@ -1043,6 +1054,14 @@ export async function importeerRegels(
         volgorde: i,
         kostprijs_pe: isTekst ? null : (r.kostprijs_pe ?? null),
         uren_pe: isTekst ? null : (r.uren_pe ?? null),
+        // Kostensoort-uitsplitsing voor de begrotingsstaat. Null blijft null: een
+        // regel die nooit een arbeid-component had, hoort in de staat leeg te
+        // blijven en niet als "€ 0,00 arbeid" te lezen.
+        arbeid_pe: isTekst ? null : (r.arbeid_pe ?? null),
+        materieel_pe: isTekst ? null : (r.materieel_pe ?? null),
+        oa_pe: isTekst ? null : (r.oa_pe ?? null),
+        kostengroep: isTekst ? null : (r.kostengroep ?? null),
+        is_verrekenbaar: isTekst ? false : (r.is_verrekenbaar ?? false),
         opmerking: isTekst ? null : (r.opmerking ?? null),
       }
     })

@@ -15,8 +15,8 @@ import {
 const PAD = '/instellingen/offerte-layout'
 const LIJST = '/instellingen/offertes'
 
-export async function getLayouts() {
-  return _getLayouts()
+export async function getLayouts(soort?: Parameters<typeof _getLayouts>[0]) {
+  return _getLayouts(soort)
 }
 
 export async function getLayout(id: string) {

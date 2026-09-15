@@ -17,6 +17,11 @@
  *   voorwaarden / uitsluitingen / opmerkingen
  *   totalen.*       - berekende totalen
  *   layout.*        - layout-instellingen
+ *
+ * Daarnaast de **begrotingsstaat**: de kostensoort-uitsplitsing (uren, arbeid,
+ * materiaal, onderaanneming, kostprijs, opslag) per regel, per groep (`eigen` en
+ * opgerold `incl`) en over de hele begroting. Bedoeld voor de interne begroting;
+ * zie `KostenVelden` hieronder.
  */
 
 import type { Quote, QuoteSection, QuoteLine } from './types-quotes'
@@ -253,8 +258,107 @@ export interface RenderContext {
     heeft_meerdere_btw: boolean
     heeft_verlegde_btw: boolean
     btw_verlegd_tekst: string
+
+    // ── Eindtotalen van de begrotingsstaat ─────────────────────────
+    // Zelfde afbakening als `subtotaal`: opties tellen nooit mee, stelposten alleen
+    // als `stelposten_in_totaal` aan staat. Zo staat de staat naast hetzelfde bedrag
+    // dat de offerte noemt.
+    uren: string
+    uren_raw: string
+    arbeid_bedrag: string
+    arbeid_bedrag_getal: string
+    arbeid_bedrag_raw: string
+    materiaal_bedrag: string
+    materiaal_bedrag_getal: string
+    materiaal_bedrag_raw: string
+    oa_bedrag: string
+    oa_bedrag_getal: string
+    oa_bedrag_raw: string
+    kostprijs: string
+    kostprijs_bedrag: string
+    kostprijs_raw: string
+    /** Verkoopprijs over dezelfde regels; gelijk aan `subtotaal`, maar uit dezelfde optelling als de kostprijs. */
+    verkoop: string
+    verkoop_bedrag: string
+    verkoop_raw: string
+    /** Opslag = verkoop − kostprijs, gerekend over de totaalbedragen. */
+    opslag_bedrag: string
+    opslag_bedrag_getal: string
+    opslag_bedrag_raw: string
+    /** Opslag ten opzichte van de **kostprijs** (AK inbegrepen). */
+    opslag_pct: string
+    opslag_pct_raw: string
+    /** Marge = hetzelfde bedrag als de opslag; het percentage rekent op de **verkoopprijs**. */
+    marge_bedrag: string
+    marge_bedrag_getal: string
+    marge_bedrag_raw: string
+    marge_pct: string
+    marge_pct_raw: string
+    kostprijs_volledig: boolean
   }
   layout: LayoutContext
+}
+
+/**
+ * De kostensoort-uitsplitsing van een groep of van de hele begroting — de kern van
+ * de begrotingsstaat.
+ *
+ * Elk geldbedrag komt in de drie vaste schrijfwijzen van dit bestand: met euroteken,
+ * zonder euroteken (`_bedrag`, of `_getal` als de naam al op `_bedrag` eindigt — zie
+ * `btw_bedrag_getal`) en kaal (`_raw`).
+ *
+ * **Leeg is niet nul.** Een leeg veld betekent dat het gegeven ontbreekt: de regel
+ * komt niet uit een calculatie, of is van vóór de kostensoort-uitsplitsing. "€ 0,00"
+ * betekent een echte nul. Die twee op één hoop gooien levert een staat op die
+ * kloppend oogt terwijl er gegevens missen.
+ */
+interface KostenVelden {
+  uren: string              // 12,50
+  uren_raw: string          // idem, kaal (zelfde notatie; apart veld voor sjablonen die het los zetten)
+  arbeid_bedrag: string     // € 1.250,00
+  arbeid_bedrag_getal: string
+  arbeid_bedrag_raw: string
+  materiaal_bedrag: string
+  materiaal_bedrag_getal: string
+  materiaal_bedrag_raw: string
+  oa_bedrag: string
+  oa_bedrag_getal: string
+  oa_bedrag_raw: string
+  kostprijs: string
+  kostprijs_bedrag: string
+  kostprijs_raw: string
+  /**
+   * Verkoopprijs van dezelfde regels. Gelijk aan `subtotaal` (eigen) resp.
+   * `subtotaal_incl` (opgeteld), maar hier uit dezelfde optelling als de kostprijs
+   * — zo klopt `verkoop − kostprijs = opslag` altijd binnen één blok.
+   */
+  verkoop: string
+  verkoop_bedrag: string
+  verkoop_raw: string
+  opslag_bedrag: string     // verkoop − kostprijs
+  opslag_bedrag_getal: string
+  opslag_bedrag_raw: string
+  opslag_pct: string        // "12,5%" — effectief, uit de bedragen gerekend
+  opslag_pct_raw: string    // "12,5"
+  /**
+   * False zodra één rekenregel geen bevroren kostprijs heeft. De opslag telt de
+   * verkoopprijs van die regel dan wél mee en de kostprijs niet, dus het percentage
+   * valt te hoog uit. Een sjabloon kan hierop een voorbehoud tonen.
+   */
+  kostprijs_volledig: boolean
+}
+
+/** Alles leeg — een groep zonder enige kostprijs- of kostensoortinformatie. */
+const LEGE_KOSTEN_VELDEN: KostenVelden = {
+  uren: '', uren_raw: '',
+  arbeid_bedrag: '', arbeid_bedrag_getal: '', arbeid_bedrag_raw: '',
+  materiaal_bedrag: '', materiaal_bedrag_getal: '', materiaal_bedrag_raw: '',
+  oa_bedrag: '', oa_bedrag_getal: '', oa_bedrag_raw: '',
+  kostprijs: '', kostprijs_bedrag: '', kostprijs_raw: '',
+  verkoop: '', verkoop_bedrag: '', verkoop_raw: '',
+  opslag_bedrag: '', opslag_bedrag_getal: '', opslag_bedrag_raw: '',
+  opslag_pct: '', opslag_pct_raw: '',
+  kostprijs_volledig: true,
 }
 
 interface SectieContext {
@@ -275,6 +379,14 @@ interface SectieContext {
   regels: RegelContext[]
   heeft_regels: boolean
   aantal_regels: number
+  /**
+   * Begrotingsstaat over de **eigen** regels van deze groep. Bewust géén `incl` hier:
+   * in de platte lijsten (`normale_secties`) staan subgroepen als losse rijen, dus
+   * daar bestaat "inclusief kinderen" niet. Die variant zit alleen op `boom`.
+   */
+  eigen: KostenVelden
+  /** intern: de ruwe som achter `eigen`, voor de optelling in de boom en de totalen. */
+  kosten_som: KostenSom
 }
 
 /**
@@ -288,6 +400,20 @@ interface BoomNode extends SectieContext {
   subtotaal_incl: string        // opgerold, geformatteerd (€ 12.500,00)
   subtotaal_incl_raw: string    // opgerold, kaal met duizendpunt, 2 decimalen (12.500,00)
   subtotaal_incl_bedrag: string // opgerold, zonder € (12.500,00)
+  /**
+   * Begrotingsstaat **opgerold**: eigen regels + alle subgroepen eronder. `incl` slaat
+   * hier op de kinderen, niet op BTW — net als bij `subtotaal_incl`.
+   */
+  incl: KostenVelden
+  /** intern: de opgerolde som achter `incl`. */
+  kosten_som_incl: KostenSom
+  /**
+   * Alleen waar als de groep én eigen regels én subgroepen heeft: dan zeggen `eigen`
+   * en `incl` iets verschillends en is een aparte "waarvan eigen regels"-rij zinnig.
+   * Eén vlag in plaats van twee geneste condities, omdat een Word-sjabloon een rij
+   * maar met één voorwaarde tegelijk kan tonen of verbergen.
+   */
+  toon_eigen_totaal: boolean
 }
 
 interface RegelContext {
@@ -325,6 +451,61 @@ interface RegelContext {
   kostprijs: string
   uren: string
   marge_pct: string
+
+  // ── Begrotingsstaat (interne begroting) ────────────────────────────────────
+  // Leeg = onbekend, "€ 0,00" = een echte nul; zie KostenVelden.
+  /** Kostengroep uit de calculatie (bv. 'Bouwplaats'). */
+  kostengroep_naam: string
+  /** VRR: verrekenbare post. */
+  is_verrekenbaar: boolean
+  /** VRR-prijs: de prijs per eenheid waartegen verrekend wordt. Leeg als de regel niet verrekenbaar is. */
+  verrekenprijs: string
+  verrekenprijs_bedrag: string
+  verrekenprijs_raw: string
+  /**
+   * Uren en kostprijs per eenheid volgens de leeg-is-onbekend-regel. De oudere
+   * `uren` en `kostprijs` hierboven tonen een em-streepje bij het ontbreken én bij
+   * nul; op een begrotingsstaat moeten die twee uit elkaar te houden zijn.
+   */
+  uren_per_eenheid: string
+  kostprijs_per_eenheid: string
+  kostprijs_per_eenheid_bedrag: string
+  kostprijs_per_eenheid_raw: string
+  /** Minuten per eenheid (uren p/e × 60). */
+  minuten_per_eenheid: string
+  /** Gewogen uurtarief van de arbeid: arbeidsbedrag ÷ uren. Leeg zonder uren. */
+  arbeid_tarief: string
+  arbeid_tarief_bedrag: string
+  arbeid_tarief_raw: string
+  arbeid_prijs_per_eenheid: string
+  arbeid_prijs_per_eenheid_bedrag: string
+  arbeid_prijs_per_eenheid_raw: string
+  arbeid_bedrag: string
+  arbeid_bedrag_getal: string
+  arbeid_bedrag_raw: string
+  /** 'Materiaal' op de staat = het componenttype `materieel` van de calculatie. */
+  materiaal_prijs_per_eenheid: string
+  materiaal_prijs_per_eenheid_bedrag: string
+  materiaal_prijs_per_eenheid_raw: string
+  materiaal_bedrag: string
+  materiaal_bedrag_getal: string
+  materiaal_bedrag_raw: string
+  oa_prijs_per_eenheid: string
+  oa_prijs_per_eenheid_bedrag: string
+  oa_prijs_per_eenheid_raw: string
+  oa_bedrag: string
+  oa_bedrag_getal: string
+  oa_bedrag_raw: string
+  uren_totaal: string
+  kostprijs_totaal: string
+  kostprijs_totaal_bedrag: string
+  kostprijs_totaal_raw: string
+  /** Opslag op de kostprijs, AK inbegrepen — uit de bedragen gerekend, dus effectief. */
+  opslag_pct: string
+  opslag_pct_raw: string
+  opslag_bedrag: string
+  opslag_bedrag_getal: string
+  opslag_bedrag_raw: string
 }
 
 /**
@@ -400,6 +581,284 @@ function numRaw(n: number | null | undefined): string {
   return num.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// ─── Begrotingsstaat: formatters en optelling ────────────────────────
+
+/**
+ * Lege-waarde-variant van `euro`/`numEuroPlain`/`numRaw`: `null`/`undefined` wordt een
+ * lege string in plaats van "€ 0,00".
+ *
+ * Dat onderscheid is de kern van de begrotingsstaat. Een regel die nooit uit een
+ * calculatie kwam heeft geen arbeidsbedrag — dat is iets anders dan een regel met
+ * € 0,00 aan arbeid. Een leeg vakje laat zien dat het gegeven ontbreekt; "€ 0,00"
+ * zou dezelfde staat kloppend laten ogen terwijl er niets bekend is.
+ *
+ * Bewust een lege string en niet het em-streepje van `kostprijs`/`uren` hierboven:
+ * de `_raw`-velden horen een kaal getal te zijn of niets, zodat een staat die naar
+ * Excel wordt geplakt niet vol rommel staat.
+ */
+function euroOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : euro(n)
+}
+function plainOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : numEuroPlain(n)
+}
+function rawOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : numRaw(n)
+}
+
+/** Percentage met één decimaal: "12,5%" (leeg bij onbekend). */
+function pctOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : numNL(n, 1) + '%'
+}
+/** Idem, zonder procentteken. */
+function pctRawOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : numNL(n, 1)
+}
+
+/** Uren met twee decimalen (leeg bij onbekend). */
+function urenOfLeeg(n: number | null | undefined): string {
+  return n == null || isNaN(Number(n)) ? '' : numNL(n, 2)
+}
+
+/** Op centen afronden — voorkomt dat 0.1 + 0.2 als 0,30000000000000004 doorwerkt. */
+function centen(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/**
+ * De ruwe optelling achter een `KostenVelden`-blok. De tellers onderscheiden
+ * "nul" van "niets bekend": zonder ook maar één regel met kostprijs blijven de
+ * kostprijs-, opslag- en margevelden leeg in plaats van nul te tonen.
+ */
+interface KostenSom {
+  uren: number
+  arbeid: number
+  materiaal: number
+  oa: number
+  kostprijs: number
+  /** Verkoopprijs van dezelfde regels — de tegenhanger waaruit de opslag volgt. */
+  verkoop: number
+  met_uren: number
+  met_uitsplitsing: number
+  met_kostprijs: number
+  zonder_kostprijs: number
+}
+
+function legeSom(): KostenSom {
+  return {
+    uren: 0, arbeid: 0, materiaal: 0, oa: 0, kostprijs: 0, verkoop: 0,
+    met_uren: 0, met_uitsplitsing: 0, met_kostprijs: 0, zonder_kostprijs: 0,
+  }
+}
+
+function telSomOp(doel: KostenSom, bron: KostenSom): void {
+  doel.uren += bron.uren
+  doel.arbeid += bron.arbeid
+  doel.materiaal += bron.materiaal
+  doel.oa += bron.oa
+  doel.kostprijs += bron.kostprijs
+  doel.verkoop += bron.verkoop
+  doel.met_uren += bron.met_uren
+  doel.met_uitsplitsing += bron.met_uitsplitsing
+  doel.met_kostprijs += bron.met_kostprijs
+  doel.zonder_kostprijs += bron.zonder_kostprijs
+}
+
+/** Telt één offerteregel op bij een som. Tekstregels dragen per definitie niets bij. */
+function telRegelOp(som: KostenSom, line: QuoteLine): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((line as any).soort === 'tekst') return
+  const aantal = line.hoeveelheid ?? 0
+  som.verkoop += line.line_total ?? 0
+
+  if (line.uren_pe != null) {
+    som.uren += Number(line.uren_pe) * aantal
+    som.met_uren++
+  }
+  const arbeid = line.arbeid_pe, materiaal = line.materieel_pe, oa = line.oa_pe
+  if (arbeid != null || materiaal != null || oa != null) {
+    som.arbeid += Number(arbeid ?? 0) * aantal
+    som.materiaal += Number(materiaal ?? 0) * aantal
+    som.oa += Number(oa ?? 0) * aantal
+    som.met_uitsplitsing++
+  }
+  if (line.kostprijs_pe != null) {
+    som.kostprijs += Number(line.kostprijs_pe) * aantal
+    som.met_kostprijs++
+  } else {
+    som.zonder_kostprijs++
+  }
+}
+
+/**
+ * Zet een optelling om in de opmaakvarianten voor de Word-samenvoeging.
+ *
+ * Het opslagpercentage komt uit de **totaalbedragen** (verkoop − kostprijs, gedeeld
+ * door de kostprijs) en nooit uit een gemiddelde van regelpercentages: een grote
+ * regel met een kleine opslag zou anders even zwaar wegen als een kleine regel met
+ * een grote opslag, en het percentage zou niet meer bij de bedragen passen. AK zit
+ * al in de opslag verwerkt en wordt er niet nog eens bij opgeteld.
+ */
+function kostenVelden(som: KostenSom): KostenVelden {
+  const heeftUitsplitsing = som.met_uitsplitsing > 0
+  const heeftUren = som.met_uren > 0
+  const heeftKostprijs = som.met_kostprijs > 0
+  const kostprijs = heeftKostprijs ? centen(som.kostprijs) : null
+  const verkoop = centen(som.verkoop)
+  const opslag = kostprijs == null ? null : centen(verkoop - kostprijs)
+  const opslagPct = kostprijs != null && kostprijs !== 0 && opslag != null
+    ? (opslag / kostprijs) * 100
+    : null
+  const arbeid = heeftUitsplitsing ? centen(som.arbeid) : null
+  const materiaal = heeftUitsplitsing ? centen(som.materiaal) : null
+  const oa = heeftUitsplitsing ? centen(som.oa) : null
+
+  return {
+    uren: heeftUren ? urenOfLeeg(som.uren) : '',
+    uren_raw: heeftUren ? urenOfLeeg(som.uren) : '',
+    arbeid_bedrag: euroOfLeeg(arbeid),
+    arbeid_bedrag_getal: plainOfLeeg(arbeid),
+    arbeid_bedrag_raw: rawOfLeeg(arbeid),
+    materiaal_bedrag: euroOfLeeg(materiaal),
+    materiaal_bedrag_getal: plainOfLeeg(materiaal),
+    materiaal_bedrag_raw: rawOfLeeg(materiaal),
+    oa_bedrag: euroOfLeeg(oa),
+    oa_bedrag_getal: plainOfLeeg(oa),
+    oa_bedrag_raw: rawOfLeeg(oa),
+    kostprijs: euroOfLeeg(kostprijs),
+    kostprijs_bedrag: plainOfLeeg(kostprijs),
+    kostprijs_raw: rawOfLeeg(kostprijs),
+    verkoop: euroOfLeeg(verkoop),
+    verkoop_bedrag: plainOfLeeg(verkoop),
+    verkoop_raw: rawOfLeeg(verkoop),
+    opslag_bedrag: euroOfLeeg(opslag),
+    opslag_bedrag_getal: plainOfLeeg(opslag),
+    opslag_bedrag_raw: rawOfLeeg(opslag),
+    opslag_pct: pctOfLeeg(opslagPct),
+    opslag_pct_raw: pctRawOfLeeg(opslagPct),
+    kostprijs_volledig: som.zonder_kostprijs === 0,
+  }
+}
+
+
+/** De begrotingsstaat-velden van één offerteregel. */
+type RegelStaatVelden = Pick<RegelContext,
+  | 'kostengroep_naam' | 'is_verrekenbaar'
+  | 'verrekenprijs' | 'verrekenprijs_bedrag' | 'verrekenprijs_raw'
+  | 'uren_per_eenheid'
+  | 'kostprijs_per_eenheid' | 'kostprijs_per_eenheid_bedrag' | 'kostprijs_per_eenheid_raw'
+  | 'minuten_per_eenheid'
+  | 'arbeid_tarief' | 'arbeid_tarief_bedrag' | 'arbeid_tarief_raw'
+  | 'arbeid_prijs_per_eenheid' | 'arbeid_prijs_per_eenheid_bedrag' | 'arbeid_prijs_per_eenheid_raw'
+  | 'arbeid_bedrag' | 'arbeid_bedrag_getal' | 'arbeid_bedrag_raw'
+  | 'materiaal_prijs_per_eenheid' | 'materiaal_prijs_per_eenheid_bedrag' | 'materiaal_prijs_per_eenheid_raw'
+  | 'materiaal_bedrag' | 'materiaal_bedrag_getal' | 'materiaal_bedrag_raw'
+  | 'oa_prijs_per_eenheid' | 'oa_prijs_per_eenheid_bedrag' | 'oa_prijs_per_eenheid_raw'
+  | 'oa_bedrag' | 'oa_bedrag_getal' | 'oa_bedrag_raw'
+  | 'uren_totaal'
+  | 'kostprijs_totaal' | 'kostprijs_totaal_bedrag' | 'kostprijs_totaal_raw'
+  | 'opslag_pct' | 'opslag_pct_raw'
+  | 'opslag_bedrag' | 'opslag_bedrag_getal' | 'opslag_bedrag_raw'
+>
+
+/** Alles leeg — tekstregels, en regels zonder enige calculatieherkomst. */
+const LEGE_REGEL_STAAT: RegelStaatVelden = {
+  kostengroep_naam: '', is_verrekenbaar: false,
+  verrekenprijs: '', verrekenprijs_bedrag: '', verrekenprijs_raw: '',
+  uren_per_eenheid: '',
+  kostprijs_per_eenheid: '', kostprijs_per_eenheid_bedrag: '', kostprijs_per_eenheid_raw: '',
+  minuten_per_eenheid: '',
+  arbeid_tarief: '', arbeid_tarief_bedrag: '', arbeid_tarief_raw: '',
+  arbeid_prijs_per_eenheid: '', arbeid_prijs_per_eenheid_bedrag: '', arbeid_prijs_per_eenheid_raw: '',
+  arbeid_bedrag: '', arbeid_bedrag_getal: '', arbeid_bedrag_raw: '',
+  materiaal_prijs_per_eenheid: '', materiaal_prijs_per_eenheid_bedrag: '', materiaal_prijs_per_eenheid_raw: '',
+  materiaal_bedrag: '', materiaal_bedrag_getal: '', materiaal_bedrag_raw: '',
+  oa_prijs_per_eenheid: '', oa_prijs_per_eenheid_bedrag: '', oa_prijs_per_eenheid_raw: '',
+  oa_bedrag: '', oa_bedrag_getal: '', oa_bedrag_raw: '',
+  uren_totaal: '',
+  kostprijs_totaal: '', kostprijs_totaal_bedrag: '', kostprijs_totaal_raw: '',
+  opslag_pct: '', opslag_pct_raw: '',
+  opslag_bedrag: '', opslag_bedrag_getal: '', opslag_bedrag_raw: '',
+}
+
+/**
+ * Bouwt de begrotingsstaat-velden van één offerteregel.
+ *
+ * De bedragen komen uit de kolommen die bij de import uit de calculatie zijn
+ * bevroren (`arbeid_pe`, `materieel_pe`, `oa_pe`, `kostprijs_pe`, `uren_pe`).
+ * Ontbreekt zo'n kolom — een met de hand getypte regel, of een offerte van vóór de
+ * uitsplitsing — dan blijft het veld leeg in plaats van nul te tonen.
+ *
+ * Twee afgeleiden die geen eigen kolom hebben:
+ *  - `arbeid_tarief` = arbeidsbedrag ÷ uren. Zonder uren bestaat er geen uurtarief,
+ *    dus dan blijft het veld leeg in plaats van te delen door nul.
+ *  - `opslag_bedrag` = verkoop − kostprijs, en het percentage daaruit. Bewust niet
+ *    het opgeslagen opslag_pct van de calculatie: dat kan per component verschillen,
+ *    en dan sluit het percentage niet meer aan op de bedragen in dezelfde rij.
+ */
+function begrotingsstaatVelden(line: QuoteLine, isTekst: boolean): RegelStaatVelden {
+  if (isTekst) return { ...LEGE_REGEL_STAAT }
+
+  const aantal = line.hoeveelheid ?? 0
+  const urenPe = line.uren_pe == null ? null : Number(line.uren_pe)
+  const arbeidPe = line.arbeid_pe == null ? null : Number(line.arbeid_pe)
+  const materiaalPe = line.materieel_pe == null ? null : Number(line.materieel_pe)
+  const oaPe = line.oa_pe == null ? null : Number(line.oa_pe)
+  const kpPe = line.kostprijs_pe == null ? null : Number(line.kostprijs_pe)
+
+  const maal = (pe: number | null) => (pe == null ? null : centen(pe * aantal))
+  const kostprijsTotaal = maal(kpPe)
+  const opslagBedrag = kostprijsTotaal == null ? null : centen((line.line_total ?? 0) - kostprijsTotaal)
+  const opslagPct = kostprijsTotaal != null && kostprijsTotaal !== 0 && opslagBedrag != null
+    ? (opslagBedrag / kostprijsTotaal) * 100
+    : null
+  const arbeidTarief = arbeidPe != null && urenPe != null && urenPe !== 0 ? arbeidPe / urenPe : null
+  const verrekenprijs = line.is_verrekenbaar ? line.eenheidsprijs : null
+
+  return {
+    kostengroep_naam: line.kostengroep ?? '',
+    is_verrekenbaar: line.is_verrekenbaar ?? false,
+    verrekenprijs: euroOfLeeg(verrekenprijs),
+    verrekenprijs_bedrag: plainOfLeeg(verrekenprijs),
+    verrekenprijs_raw: rawOfLeeg(verrekenprijs),
+    uren_per_eenheid: urenPe == null ? '' : numNL(urenPe, 3),
+    kostprijs_per_eenheid: euroOfLeeg(kpPe),
+    kostprijs_per_eenheid_bedrag: plainOfLeeg(kpPe),
+    kostprijs_per_eenheid_raw: rawOfLeeg(kpPe),
+    minuten_per_eenheid: urenPe == null ? '' : numNL(urenPe * 60, 0),
+    arbeid_tarief: euroOfLeeg(arbeidTarief),
+    arbeid_tarief_bedrag: plainOfLeeg(arbeidTarief),
+    arbeid_tarief_raw: rawOfLeeg(arbeidTarief),
+    arbeid_prijs_per_eenheid: euroOfLeeg(arbeidPe),
+    arbeid_prijs_per_eenheid_bedrag: plainOfLeeg(arbeidPe),
+    arbeid_prijs_per_eenheid_raw: rawOfLeeg(arbeidPe),
+    arbeid_bedrag: euroOfLeeg(maal(arbeidPe)),
+    arbeid_bedrag_getal: plainOfLeeg(maal(arbeidPe)),
+    arbeid_bedrag_raw: rawOfLeeg(maal(arbeidPe)),
+    materiaal_prijs_per_eenheid: euroOfLeeg(materiaalPe),
+    materiaal_prijs_per_eenheid_bedrag: plainOfLeeg(materiaalPe),
+    materiaal_prijs_per_eenheid_raw: rawOfLeeg(materiaalPe),
+    materiaal_bedrag: euroOfLeeg(maal(materiaalPe)),
+    materiaal_bedrag_getal: plainOfLeeg(maal(materiaalPe)),
+    materiaal_bedrag_raw: rawOfLeeg(maal(materiaalPe)),
+    oa_prijs_per_eenheid: euroOfLeeg(oaPe),
+    oa_prijs_per_eenheid_bedrag: plainOfLeeg(oaPe),
+    oa_prijs_per_eenheid_raw: rawOfLeeg(oaPe),
+    oa_bedrag: euroOfLeeg(maal(oaPe)),
+    oa_bedrag_getal: plainOfLeeg(maal(oaPe)),
+    oa_bedrag_raw: rawOfLeeg(maal(oaPe)),
+    uren_totaal: urenPe == null ? '' : urenOfLeeg(urenPe * aantal),
+    kostprijs_totaal: euroOfLeeg(kostprijsTotaal),
+    kostprijs_totaal_bedrag: plainOfLeeg(kostprijsTotaal),
+    kostprijs_totaal_raw: rawOfLeeg(kostprijsTotaal),
+    opslag_pct: pctOfLeeg(opslagPct),
+    opslag_pct_raw: pctRawOfLeeg(opslagPct),
+    opslag_bedrag: euroOfLeeg(opslagBedrag),
+    opslag_bedrag_getal: plainOfLeeg(opslagBedrag),
+    opslag_bedrag_raw: rawOfLeeg(opslagBedrag),
+  }
+}
+
 /**
  * Splitst de bevroren schilderbehandeling in de naam en de werkomschrijving.
  *
@@ -447,6 +906,9 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
       subtotaal_incl: '',
       subtotaal_incl_raw: '',
       subtotaal_incl_bedrag: '',
+      incl: LEGE_KOSTEN_VELDEN,
+      kosten_som_incl: legeSom(),
+      toon_eigen_totaal: false,
     }
     // Ga terug tot de bovenkant van de stack een lager niveau heeft: die is de ouder.
     while (stack.length && stack[stack.length - 1].niveau >= node.niveau) stack.pop()
@@ -464,15 +926,24 @@ function bouwBoom(items: SectieContext[]): BoomNode[] {
   }
   const behouden = roots.filter(heeftInhoud)
 
-  // Bottom-up de opgerolde subtotalen berekenen.
+  // Bottom-up de opgerolde subtotalen berekenen. De begrotingsstaat rolt in
+  // dezelfde pas mee op: `incl` = eigen regels + alle kinderen.
   function roll(n: BoomNode): number {
     let som = n.subtotaal_num
-    for (const k of n.kinderen) som += roll(k)
+    const kostenSom = legeSom()
+    telSomOp(kostenSom, n.kosten_som)
+    for (const k of n.kinderen) {
+      som += roll(k)
+      telSomOp(kostenSom, k.kosten_som_incl)
+    }
     const inclNum = Math.round(som * 100) / 100
     n.subtotaal_incl = euro(inclNum)
     n.subtotaal_incl_raw = numRaw(inclNum)
     n.subtotaal_incl_bedrag = numEuroPlain(inclNum)
+    n.kosten_som_incl = kostenSom
+    n.incl = kostenVelden(kostenSom)
     n.heeft_kinderen = n.kinderen.length > 0
+    n.toon_eigen_totaal = n.heeft_kinderen && n.aantal_regels > 0
     return inclNum
   }
   behouden.forEach(roll)
@@ -606,11 +1077,14 @@ export function buildRenderContext(
       kostprijs: kp > 0 ? euro(kp) : '—',
       uren: line.uren_pe != null ? numNL(line.uren_pe) : '—',
       marge_pct: marge != null ? marge.toFixed(1) + '%' : '—',
+      ...begrotingsstaatVelden(line, isTekst),
     }
   }
 
   function mapSectie(s: QuoteSection): SectieContext {
     const regels = (s.lines ?? []).map(mapRegel)
+    const kosten_som = legeSom()
+    for (const line of s.lines ?? []) telRegelOp(kosten_som, line)
     return {
       id: s.id,
       naam: s.naam,
@@ -629,6 +1103,8 @@ export function buildRenderContext(
       regels,
       heeft_regels: regels.length > 0,
       aantal_regels: regels.length,
+      eigen: kostenVelden(kosten_som),
+      kosten_som,
     }
   }
 
@@ -719,6 +1195,31 @@ export function buildRenderContext(
 
   const btw_groepen = groepeerBtwPerTarief(sections, quote.btw_pct)
   const heeft_verlegde_btw = btw_groepen.some(g => g.verlegd)
+
+  // Eindtotalen van de begrotingsstaat. Dezelfde afbakening als `subtotaal_ex_btw`
+  // in `herbereken()`: optie-secties tellen nooit mee, stelposten alleen als
+  // `stelposten_in_totaal` aan staat. Zou de staat een andere verzameling regels
+  // optellen dan de offerte, dan staan er twee verschillende kostprijzen onder
+  // hetzelfde bedrag.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stelpostenInTotaal: boolean = (quote as any).stelposten_in_totaal ?? true
+  const eindSom = legeSom()
+  for (const sectie of sections) {
+    if (sectie.is_optioneel) continue
+    for (const line of sectie.lines ?? []) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!stelpostenInTotaal && ((line as any).is_stelpost ?? false)) continue
+      telRegelOp(eindSom, line)
+    }
+  }
+  const eindVelden = kostenVelden(eindSom)
+  // Marge en opslag zijn hetzelfde bedrag, maar rekenen tegen een andere basis: de
+  // opslag tegen de kostprijs, de marge tegen de verkoopprijs. Allebei uit de
+  // totaalbedragen — nooit als gemiddelde van de regelpercentages.
+  const eindKostprijs = eindSom.met_kostprijs > 0 ? centen(eindSom.kostprijs) : null
+  const eindVerkoop = centen(eindSom.verkoop)
+  const margeBedrag = eindKostprijs == null ? null : centen(eindVerkoop - eindKostprijs)
+  const margePct = margeBedrag != null && eindVerkoop !== 0 ? (margeBedrag / eindVerkoop) * 100 : null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const betalingsconditie = (quote as any).betalingsconditie ?? null
@@ -832,6 +1333,12 @@ export function buildRenderContext(
       heeft_meerdere_btw: btw_groepen.length > 1,
       heeft_verlegde_btw,
       btw_verlegd_tekst: btwVerlegdTekst(btw_groepen),
+      ...eindVelden,
+      marge_bedrag: euroOfLeeg(margeBedrag),
+      marge_bedrag_getal: plainOfLeeg(margeBedrag),
+      marge_bedrag_raw: rawOfLeeg(margeBedrag),
+      marge_pct: pctOfLeeg(margePct),
+      marge_pct_raw: pctRawOfLeeg(margePct),
     },
     layout,
   }

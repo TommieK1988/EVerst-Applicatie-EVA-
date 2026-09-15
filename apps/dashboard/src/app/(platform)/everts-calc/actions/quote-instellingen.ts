@@ -85,12 +85,21 @@ export async function setStandaardSjabloon(id: string): Promise<void> {
 
 // ─── Layouts ──────────────────────────────────────────────────────────────────
 
-export async function getLayouts() {
+/**
+ * Lay-out-soort. `offerte` is de verkoopofferte; `interne_begroting` is de
+ * begrotingsstaat met kostprijs, uren en opslag — die gaat nooit naar buiten.
+ */
+export type LayoutSoort = 'offerte' | 'interne_begroting'
+
+/**
+ * @param soort  alleen lay-outs van deze soort. Zonder soort komt alles terug
+ *               (de beheerlijst in Instellingen toont beide).
+ */
+export async function getLayouts(soort?: LayoutSoort) {
   const supabase = await getDb()
-  const { data, error } = await supabase
-    .from('quote_layouts')
-    .select('*')
-    .order('naam')
+  let query = supabase.from('quote_layouts').select('*')
+  if (soort) query = query.eq('soort', soort)
+  const { data, error } = await query.order('naam')
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -128,6 +137,7 @@ export async function maakLayout(data: {
   koptekst?: string
   voettekst?: string
   is_standaard?: boolean
+  soort?: LayoutSoort
 }): Promise<string> {
   const supabase = await getDb()
   const { data: row, error } = await supabase
@@ -152,6 +162,7 @@ export async function maakLayout(data: {
       toon_paginanummer: true,
       voettekst: 'Pagina {{paginanummer}} van {{totaal_paginas}}',
       is_standaard: false,
+      soort: 'offerte',
       ...data,
     })
     .select('id')
@@ -227,9 +238,16 @@ export async function verwijderLayout(id: string): Promise<void> {
   revalidatePath('/instellingen/offertes')
 }
 
+/**
+ * Zet de standaard-lay-out **binnen de eigen soort**. Ongeschaald zou een standaard
+ * interne-begrotingslay-out de standaard van de offerte wegnemen, en zou een nieuwe
+ * offerte zonder voorselectie openen.
+ */
 export async function setStandaardLayout(id: string): Promise<void> {
   const supabase = await getDb()
-  await supabase.from('quote_layouts').update({ is_standaard: false }).neq('id', id)
+  const { data: rij } = await supabase.from('quote_layouts').select('soort').eq('id', id).maybeSingle()
+  const soort = rij?.soort ?? 'offerte'
+  await supabase.from('quote_layouts').update({ is_standaard: false }).eq('soort', soort).neq('id', id)
   await supabase.from('quote_layouts').update({ is_standaard: true }).eq('id', id)
   revalidatePath('/instellingen/offertes')
 }
