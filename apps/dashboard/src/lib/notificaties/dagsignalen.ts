@@ -11,6 +11,7 @@ import { dagVanTijdstip } from '@/lib/agenda/agenda-model'
 import {
   planningSleutel, planningVerschil, sorteerPlanning, type PlanRegel,
 } from '@/lib/notificaties/planning-verschil'
+import { bepaalTaakMelding } from '@/lib/notificaties/taak-signaal'
 import type { CronLogboek } from '@/lib/cron/logboek'
 
 /**
@@ -95,13 +96,12 @@ async function haalMedewerkers(): Promise<Medewerker[]> {
 /* ── 1. Acties met een deadline ───────────────────────────────────── */
 
 /**
- * Eén melding per medewerker over de acties die vandaag afmoeten, plus wat er nog
- * open staat van eerder. Bewust gebundeld: vijf losse pushmeldingen om 07:00 is
- * geen lijstje maar een wekker die vijf keer afgaat.
+ * Eén melding per medewerker over de acties die vandaag afmoeten en over wat er sinds
+ * de vorige melding over zijn deadline is gegaan. Bewust gebundeld: vijf losse
+ * pushmeldingen om 07:00 is geen lijstje maar een wekker die vijf keer afgaat.
  *
- * Achterstallige acties tellen apart mee en niet stilzwijgend bij vandaag. "3
- * vandaag, 1 te laat" vertelt of je een normale dag hebt of iets in te halen hebt;
- * "4 acties" vertelt dat niet.
+ * Wát er precies gemeld wordt (en wanneer juist niets) zit in `bepaalTaakMelding`;
+ * lees daar waarom een bekende achterstand op zichzelf geen melding oplevert.
  */
 async function meldTaakDeadlines(
   medewerkers: Medewerker[],
@@ -145,37 +145,30 @@ async function meldTaakDeadlines(
   let verzonden = 0
 
   for (const mw of medewerkers) {
-    const emmer = perUser.get(mw.auth_user_id)
-    if (!emmer || (emmer.vandaag.length === 0 && emmer.teLaat.length === 0)) continue
+    const emmer = perUser.get(mw.auth_user_id) ?? { vandaag: [], teLaat: [] }
+    const vorig = vorige.get(mw.id)
+    const eerder = (vorig?.stand as string[] | null) ?? null
 
-    // De datum zit in de sleutel: dezelfde stapel is morgen opnieuw het melden
-    // waard, dezelfde dag niet.
-    const sleutel = `${vandaag}|${emmer.vandaag.length}|${emmer.teLaat.length}`
-    if (vorige.get(mw.id)?.sleutel === sleutel) continue
+    const melding = bepaalTaakMelding(emmer.vandaag, emmer.teLaat, eerder)
 
-    const delen: string[] = []
-    if (emmer.vandaag.length > 0) {
-      delen.push(`${emmer.vandaag.length} ${emmer.vandaag.length === 1 ? 'actie' : 'acties'} met deadline vandaag`)
+    // Niets te melden, maar de stand moet wél mee: anders geldt de achterstand van
+    // vandaag morgen alsnog als nieuw.
+    if (!melding) {
+      const ids = [...emmer.vandaag, ...emmer.teLaat].map(t => t.id)
+      if (vorig || ids.length > 0) {
+        await onthoudSignaal(mw.id, 'taak_deadline', `${vandaag}|stil`, ids)
+      }
+      continue
     }
-    if (emmer.teLaat.length > 0) {
-      delen.push(`${emmer.teLaat.length} over de datum`)
-    }
-
-    // Bij één actie is de titel van die actie informatiever dan de telling.
-    const enige = emmer.vandaag.length + emmer.teLaat.length === 1
-      ? (emmer.vandaag[0] ?? emmer.teLaat[0])
-      : null
 
     await maakNotificatie({
       user_id: mw.auth_user_id,
       type: 'taak',
-      titel: enige
-        ? (emmer.teLaat.length === 1 ? `Actie over de datum: ${enige.titel}` : `Actie vandaag: ${enige.titel}`)
-        : 'Je acties van vandaag',
-      body: enige ? null : delen.join(' · '),
+      titel: melding.titel,
+      body: melding.body,
       url: '/mijn-taken',
     })
-    await onthoudSignaal(mw.id, 'taak_deadline', sleutel)
+    await onthoudSignaal(mw.id, 'taak_deadline', `${vandaag}|${melding.gemeldeIds.length}`, melding.gemeldeIds)
     verzonden++
   }
 
