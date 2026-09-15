@@ -4,6 +4,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
+import { vereisRecht } from '@/lib/auth/rechten'
 import {
   berekenDeadline,
   herhalingsDatums,
@@ -244,9 +245,16 @@ export async function herberekenDossierNu(dossier_id: string): Promise<void> {
  * Zonder deze ronde lijkt het wijzigen van de aanlooptijd niets te doen — de nieuwe
  * waarde geldt dan pas voor dossiers die er nog niet zijn, en dat is precies de
  * verzameling waar niemand naar kijkt.
+ *
+ * Eigen gate: dit is een geëxporteerde functie in een 'use server'-module en dus een
+ * aanroepbaar endpoint, niet alleen een hulpje van `updateTaak`. Hij schrijft met de
+ * service-role deadlines op álle dossiers van een sjabloon, dus hij controleert zelf of
+ * de aanroeper aan actielijsten mag werken.
  */
 export async function herberekenSjabloonInstanties(template_lijst_id: string): Promise<void> {
-  const sb = createAdminClient() as any
+  await vereisRecht('taken')
+
+  const sb = createAdminClient()
 
   const { data: instanties } = await sb
     .from('task_lists')
