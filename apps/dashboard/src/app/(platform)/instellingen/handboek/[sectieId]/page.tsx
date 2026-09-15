@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { PageHeader, Card, CardBody } from '@/components/ui'
 import { vereisHandboekBeheerPagina } from '@/lib/handboek/auth'
 import {
-  haalBeheerSectie, haalPopulatie, haalWerkmaatschappijKenmerken,
+  haalBeheerContacten, haalBeheerSectie, haalPopulatie, haalWerkmaatschappijKenmerken,
 } from '@/lib/handboek/beheer'
 import SectieEditor from '@/components/handboek/beheer/SectieEditor'
 
@@ -18,10 +18,11 @@ export default async function Page({ params }: { params: Promise<{ sectieId: str
   await vereisHandboekBeheerPagina('lezen')
   const { sectieId } = await params
 
-  const [sectie, werkmaatschappijen, populatie] = await Promise.all([
+  const [sectie, werkmaatschappijen, populatie, contacten] = await Promise.all([
     haalBeheerSectie(sectieId),
     haalWerkmaatschappijKenmerken(),
     haalPopulatie(),
+    haalBeheerContacten(),
   ])
   if (!sectie) notFound()
 
@@ -38,6 +39,7 @@ export default async function Page({ params }: { params: Promise<{ sectieId: str
             werkmaatschappijen={werkmaatschappijen}
             populatie={populatie.groepen}
             totaal={populatie.totaal}
+            contacten={contacten}
           />
         </CardBody>
       </Card>

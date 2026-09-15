@@ -7,27 +7,32 @@ import { ChevronUp, ChevronDown, Plus, FileText, Trash2, Download } from 'lucide
 import { Badge, Button, Input, useDialogen } from '@/components/ui'
 import { omschrijfZichtbaarheid, telZichtbaarVoor } from '@/lib/handboek/kenmerken'
 import { leesbareGrootte, bijlageUrl } from '@/lib/handboek/bijlagen'
-import type { BeheerSectie } from '@/lib/handboek/beheer'
+import type { BeheerContact, BeheerSectie } from '@/lib/handboek/beheer'
 import type { Bijlage } from '@/lib/handboek/types'
 import {
   archiveerSectie, bewaarBijlage, maakSectie, uploadBijlage, verplaatsSectie, verwijderBijlage,
 } from '@/app/(platform)/instellingen/handboek/actions'
 import ZichtbaarheidKiezer from './ZichtbaarheidKiezer'
+import ContactenBeheer from './ContactenBeheer'
 import PdfDownload from './PdfDownload'
 
 type Kenmerk = { key: string; label: string }
 
 export default function HandboekBeheer({
-  hoofdstukken, situaties, bijlagen, werkmaatschappijen, populatie, totaal,
+  hoofdstukken, situaties, bijlagen, contacten, medewerkers,
+  werkmaatschappijen, populatie, totaal,
 }: {
   hoofdstukken: BeheerSectie[]
   situaties: BeheerSectie[]
   bijlagen: (Bijlage & { status: string })[]
+  contacten: BeheerContact[]
+  medewerkers: { id: string; naam: string; nummer: string | null }[]
   werkmaatschappijen: Kenmerk[]
   populatie: { kenmerken: string[]; aantal: number }[]
   totaal: number
 }) {
-  const [tab, setTab] = useState<'hoofdstukken' | 'situaties' | 'bijlagen'>('hoofdstukken')
+  const [tab, setTab] =
+    useState<'hoofdstukken' | 'situaties' | 'bijlagen' | 'contacten'>('hoofdstukken')
 
   return (
     <div>
@@ -42,11 +47,22 @@ export default function HandboekBeheer({
           <Tab actief={tab === 'bijlagen'} onKies={() => setTab('bijlagen')}>
             Bijlagen ({bijlagen.length})
           </Tab>
+          <Tab actief={tab === 'contacten'} onKies={() => setTab('contacten')}>
+            Contacten ({contacten.length})
+          </Tab>
         </div>
         <PdfDownload werkmaatschappijen={werkmaatschappijen} />
       </div>
 
-      {tab === 'bijlagen' ? (
+      {tab === 'contacten' ? (
+        <ContactenBeheer
+          contacten={contacten}
+          medewerkers={medewerkers}
+          werkmaatschappijen={werkmaatschappijen}
+          populatie={populatie}
+          totaal={totaal}
+        />
+      ) : tab === 'bijlagen' ? (
         <Bijlagen
           bijlagen={bijlagen}
           werkmaatschappijen={werkmaatschappijen}

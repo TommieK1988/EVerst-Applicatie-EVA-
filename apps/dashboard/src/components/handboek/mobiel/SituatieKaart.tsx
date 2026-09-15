@@ -1,22 +1,13 @@
 import React from 'react'
 import Link from 'next/link'
-import {
-  HeartPulse, TriangleAlert, Flame, Shirt, Palmtree, Wrench, Users, Hammer, Car,
-  Smartphone, CircleHelp, type LucideIcon,
-} from 'lucide-react'
+import SituatieIcoon from '../SituatieIcoon'
 
 /**
  * Eén kaart uit "Wat te doen bij…".
  *
- * De iconen staan hier als expliciete map en niet als dynamische import uit
- * lucide: dan zou de hele iconenbibliotheek in de bundel belanden voor tien
- * plaatjes. Een naam die hier niet in staat valt terug op een vraagteken —
- * beter dan een lege plek als HR een situatie toevoegt.
+ * Het icoon komt uit de gedeelde lijst in `SituatieIcoon`, zodat het beheer
+ * niets kan kiezen wat hier een vraagteken wordt.
  */
-const ICONEN: Record<string, LucideIcon> = {
-  HeartPulse, TriangleAlert, Flame, Shirt, Palmtree, Wrench, Users, Hammer, Car, Smartphone,
-}
-
 export default function SituatieKaart({
   slug, titel, icoon,
 }: {
@@ -24,7 +15,6 @@ export default function SituatieKaart({
   titel: string
   icoon: string | null
 }) {
-  const Icon = (icoon && ICONEN[icoon]) || CircleHelp
   return (
     <Link
       href={`/m/handboek/situatie/${slug}`}
@@ -44,7 +34,7 @@ export default function SituatieKaart({
           background: 'rgba(0,148,57,.12)', color: '#009439',
         }}
       >
-        <Icon size={19} />
+        <SituatieIcoon naam={icoon} />
       </span>
       <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>{titel}</span>
     </Link>

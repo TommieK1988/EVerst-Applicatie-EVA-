@@ -2,7 +2,8 @@ import { PageHeader, Card, CardBody } from '@/components/ui'
 import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 import { vereisHandboekBeheerPagina } from '@/lib/handboek/auth'
 import {
-  haalBeheerBijlagen, haalBeheerHandboek, haalPopulatie, haalWerkmaatschappijKenmerken,
+  haalBeheerBijlagen, haalBeheerContacten, haalBeheerHandboek, haalKiesbareMedewerkers,
+  haalPopulatie, haalWerkmaatschappijKenmerken,
 } from '@/lib/handboek/beheer'
 import HandboekBeheer from '@/components/handboek/beheer/HandboekBeheer'
 
@@ -19,12 +20,15 @@ export const dynamic = 'force-dynamic'
 export default async function Page() {
   await vereisHandboekBeheerPagina('lezen')
 
-  const [secties, bijlagen, werkmaatschappijen, populatie] = await Promise.all([
-    haalBeheerHandboek(),
-    haalBeheerBijlagen(),
-    haalWerkmaatschappijKenmerken(),
-    haalPopulatie(),
-  ])
+  const [secties, bijlagen, contacten, medewerkers, werkmaatschappijen, populatie] =
+    await Promise.all([
+      haalBeheerHandboek(),
+      haalBeheerBijlagen(),
+      haalBeheerContacten(),
+      haalKiesbareMedewerkers(),
+      haalWerkmaatschappijKenmerken(),
+      haalPopulatie(),
+    ])
 
   return (
     <div className="eva-page">
@@ -42,6 +46,8 @@ export default async function Page() {
             hoofdstukken={secties.filter((s) => s.soort === 'hoofdstuk')}
             situaties={secties.filter((s) => s.soort === 'situatie')}
             bijlagen={bijlagen}
+            contacten={contacten}
+            medewerkers={medewerkers}
             werkmaatschappijen={werkmaatschappijen}
             populatie={populatie.groepen}
             totaal={populatie.totaal}

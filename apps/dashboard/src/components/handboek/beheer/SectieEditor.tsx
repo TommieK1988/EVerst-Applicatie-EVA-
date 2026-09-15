@@ -13,6 +13,7 @@ import type { BlokType } from '@/lib/handboek/types'
 import { omschrijfZichtbaarheid, type Zichtbaarheid } from '@/lib/handboek/kenmerken'
 import { bewaarBlokken, bewaarSectie } from '@/app/(platform)/instellingen/handboek/actions'
 import ZichtbaarheidKiezer from './ZichtbaarheidKiezer'
+import { SITUATIE_ICONEN } from '../SituatieIcoon'
 
 type Kenmerk = { key: string; label: string }
 
@@ -34,12 +35,14 @@ type BlokConcept = Zichtbaarheid & {
  * de deeplinks uit de zoekresultaten aan.
  */
 export default function SectieEditor({
-  sectie, werkmaatschappijen, populatie, totaal,
+  sectie, werkmaatschappijen, populatie, totaal, contacten = [],
 }: {
   sectie: BeheerSectie
   werkmaatschappijen: Kenmerk[]
   populatie: { kenmerken: string[]; aantal: number }[]
   totaal: number
+  /** Voor de belknop-blokken; alleen gevuld bij een situatiekaart. */
+  contacten?: { id: string; rol: string; nummer: string | null; medewerker_naam: string | null }[]
 }) {
   const router = useRouter()
   const { bevestig } = useDialogen()
@@ -47,6 +50,7 @@ export default function SectieEditor({
 
   const [titel, setTitel] = useState(sectie.titel)
   const [samenvatting, setSamenvatting] = useState(sectie.samenvatting ?? '')
+  const [icoon, setIcoon] = useState(sectie.icoon ?? '')
   const [status, setStatus] = useState<'concept' | 'gepubliceerd'>(
     sectie.status === 'gepubliceerd' ? 'gepubliceerd' : 'concept',
   )
@@ -111,7 +115,7 @@ export default function SectieEditor({
         await bewaarSectie(sectie.id, {
           titel,
           samenvatting: samenvatting || null,
-          icoon: sectie.icoon,
+          icoon: icoon || null,
           status,
           ...zichtbaarheid,
         })
@@ -159,6 +163,33 @@ export default function SectieEditor({
           className="mb-3 w-full"
           placeholder="Eén regel die onder de titel komt te staan."
         />
+
+        {sectie.soort === 'situatie' && (
+          <div className="mb-3">
+            <label className="mb-1 block text-[12px] font-semibold text-neutral-600">Icoon</label>
+            {/* De lijst komt uit hetzelfde bestand als de kaart op de telefoon,
+                dus je kunt hier niets kiezen wat daar een vraagteken wordt. */}
+            <div className="flex flex-wrap gap-1">
+              {SITUATIE_ICONEN.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={icoon === key}
+                  onClick={() => setIcoon(icoon === key ? '' : key)}
+                  className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border ${
+                    icoon === key
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Icon size={16} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <ZichtbaarheidKiezer
           waarde={zichtbaarheid}
@@ -225,7 +256,11 @@ export default function SectieEditor({
               </div>
             </div>
 
-            <BlokVeld blok={blok} onWijzig={(inhoud) => wijzigBlok(blok.id, { inhoud })} />
+            <BlokVeld
+              blok={blok}
+              contacten={contacten}
+              onWijzig={(inhoud) => wijzigBlok(blok.id, { inhoud })}
+            />
 
             <details className="mt-2">
               <summary className="cursor-pointer text-[12px] text-neutral-500">
@@ -275,13 +310,55 @@ export default function SectieEditor({
 
 /** Het invoerveld dat bij dit bloktype hoort. */
 function BlokVeld({
-  blok, onWijzig,
+  blok, contacten, onWijzig,
 }: {
   blok: BlokConcept
+  contacten: { id: string; rol: string; nummer: string | null; medewerker_naam: string | null }[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onWijzig: (inhoud: any) => void
 }) {
   const i = blok.inhoud ?? {}
+
+  if (blok.type === 'contact') {
+    const gekozen = contacten.find((c) => c.id === i.contact_id)
+    return (
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="eva-input"
+            style={{ width: 240, padding: '5px 10px', fontSize: 12 }}
+            value={i.contact_id ?? ''}
+            onChange={(e) => onWijzig({ ...i, contact_id: e.target.value })}
+          >
+            <option value="">Kies wie er gebeld wordt…</option>
+            {contacten.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.rol}{c.nummer ? '' : ' (geen nummer)'}
+              </option>
+            ))}
+          </select>
+          <Input
+            value={i.label ?? ''}
+            onChange={(e) => onWijzig({ ...i, label: e.target.value })}
+            placeholder="Tekst op de knop (leeg = naam van het contact)"
+            className="flex-1"
+          />
+        </div>
+        <p className="mt-1.5 text-[12px] text-neutral-500">
+          {!gekozen
+            ? 'Contacten beheer je op het tabblad Contacten.'
+            : !gekozen.nummer
+              ? 'Dit contact heeft geen nummer, dus de knop verschijnt niet op de telefoon. Vul het aan bij Contacten.'
+              : gekozen.medewerker_naam
+                // Alleen bij een gekoppelde medewerker klopt "komt uit de
+                // medewerkersgegevens"; een eigen nummer (112, Remplooi) staat
+                // gewoon bij het contact zelf.
+                ? `Belt ${gekozen.medewerker_naam} op ${gekozen.nummer}. Het nummer komt uit de medewerkersgegevens, dus de knop blijft kloppen als hij een ander toestel krijgt.`
+                : `Belt ${gekozen.nummer}.`}
+        </p>
+      </div>
+    )
+  }
 
   if (blok.type === 'kop') {
     return (

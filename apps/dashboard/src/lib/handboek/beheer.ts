@@ -94,6 +94,80 @@ export async function haalWerkmaatschappijKenmerken(): Promise<{ key: string; la
 }
 
 /**
+ * De contacten achter de belknoppen, met het nummer erbij zodat het beheer ziet
+ * of de knop iets doet.
+ *
+ * `medewerkers` staat achter de RLS-muur, dus ook dit gaat via de admin-client —
+ * en de aanroeper zit al achter een beheer-gate.
+ */
+export type BeheerContact = {
+  id: string
+  rol: string
+  medewerker_id: string | null
+  telefoon_override: string | null
+  volgorde: number
+  zichtbaar_voor: string[]
+  verborgen_voor: string[]
+  /** Naam van de gekoppelde medewerker, als die er is. */
+  medewerker_naam: string | null
+  /** Het nummer dat de knop straks belt; null betekent: de knop verschijnt niet. */
+  nummer: string | null
+}
+
+export async function haalBeheerContacten(): Promise<BeheerContact[]> {
+  const db = createAdminClient()
+
+  const { data: rijen } = await db
+    .from('personeelshandboek_contacten')
+    .select('id, rol, medewerker_id, telefoon_override, volgorde, zichtbaar_voor, verborgen_voor')
+    .order('volgorde')
+    .limit(200)
+
+  const contacten = (rijen ?? []) as unknown as Omit<BeheerContact, 'medewerker_naam' | 'nummer'>[]
+  const ids = contacten.map((c) => c.medewerker_id).filter((x): x is string => !!x)
+
+  const perMedewerker = new Map<string, { naam: string; nummer: string | null }>()
+  if (ids.length) {
+    const { data } = await db
+      .from('medewerkers')
+      .select('id, voornaam, tussenvoegsel, achternaam, mobiel, telefoon')
+      .in('id', ids)
+    for (const m of data ?? []) {
+      perMedewerker.set(m.id, {
+        naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+        // mobiel is bij de meesten leeg en het 06-nummer staat in telefoon.
+        nummer: m.mobiel || m.telefoon || null,
+      })
+    }
+  }
+
+  return contacten.map((c) => {
+    const mdw = c.medewerker_id ? perMedewerker.get(c.medewerker_id) : undefined
+    return {
+      ...c,
+      medewerker_naam: mdw?.naam ?? null,
+      nummer: c.telefoon_override || mdw?.nummer || null,
+    }
+  })
+}
+
+/** Actieve medewerkers om als contact te kunnen kiezen. */
+export async function haalKiesbareMedewerkers(): Promise<{ id: string; naam: string; nummer: string | null }[]> {
+  const { data } = await createAdminClient()
+    .from('medewerkers')
+    .select('id, voornaam, tussenvoegsel, achternaam, mobiel, telefoon')
+    .eq('actief', true)
+    .order('achternaam')
+    .limit(500)
+
+  return (data ?? []).map((m) => ({
+    id: m.id,
+    naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+    nummer: m.mobiel || m.telefoon || null,
+  }))
+}
+
+/**
  * Hoeveel actieve medewerkers voldoen aan een kenmerkenset?
  *
  * Dit getal staat onder elke zichtbaarheidsregel in het beheer. Zonder dat

@@ -209,6 +209,73 @@ export async function bewaarBlokken(
   ververs(sectieId)
 }
 
+/**
+ * Een nieuwe contactrol voor de belknoppen.
+ *
+ * Het telefoonnummer staat hier bewust NIET in: een contact wijst naar een
+ * medewerker, en het nummer wordt bij het tonen uit `medewerkers` gehaald.
+ * Krijgt iemand een ander 06-nummer of draagt hij de rol over, dan klopt elke
+ * knop vanzelf nog. `telefoon_override` is er alleen voor partijen zonder
+ * medewerkersrij: 112, Remplooi, de containerdienst.
+ */
+export async function maakContact(rol: string): Promise<string> {
+  await vereisHandboekMutatie()
+  const schoon = rol.trim()
+  if (!schoon) throw new Error('Geef de rol een naam')
+
+  const { data: laatste } = await db()
+    .from('personeelshandboek_contacten')
+    .select('volgorde').order('volgorde', { ascending: false }).limit(1).maybeSingle()
+
+  const { data, error } = await db()
+    .from('personeelshandboek_contacten')
+    .insert({ rol: schoon, volgorde: (laatste?.volgorde ?? 0) + 1 })
+    .select('id')
+    .single()
+  if (error) throw new Error(`Aanmaken mislukt: ${error.message}`)
+  ververs()
+  return data.id
+}
+
+export async function bewaarContact(
+  id: string,
+  velden: {
+    rol: string
+    medewerker_id: string | null
+    telefoon_override: string | null
+    zichtbaar_voor: string[]
+    verborgen_voor: string[]
+  },
+): Promise<void> {
+  await vereisHandboekMutatie()
+  const { error } = await db()
+    .from('personeelshandboek_contacten')
+    .update({
+      rol: velden.rol.trim(),
+      medewerker_id: velden.medewerker_id,
+      // Een leeg tekstveld is "geen eigen nummer", niet een lege string --
+      // anders wint dat lege nummer straks van de medewerker erachter.
+      telefoon_override: velden.telefoon_override?.trim() || null,
+      zichtbaar_voor: velden.zichtbaar_voor,
+      verborgen_voor: velden.verborgen_voor,
+    })
+    .eq('id', id)
+  if (error) throw new Error(`Opslaan mislukt: ${error.message}`)
+  ververs()
+}
+
+/**
+ * Een contact weghalen. De blokken die ernaar verwijzen blijven staan met een
+ * dood `contact_id`; de mobiele pagina laat een belknop zonder nummer gewoon
+ * weg, dus dat levert een kaart zonder knop op en geen kapot scherm.
+ */
+export async function verwijderContact(id: string): Promise<void> {
+  await vereisHandboekMutatie('beheren')
+  const { error } = await db().from('personeelshandboek_contacten').delete().eq('id', id)
+  if (error) throw new Error(`Verwijderen mislukt: ${error.message}`)
+  ververs()
+}
+
 /** Titel, omschrijving, status en zichtbaarheid van een bijlage. */
 export async function bewaarBijlage(
   id: string,

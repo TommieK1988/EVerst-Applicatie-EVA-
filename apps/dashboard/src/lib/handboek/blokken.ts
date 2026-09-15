@@ -12,12 +12,21 @@ export const BLOK_SOORTEN: { type: BlokType; label: string; uitleg: string }[] =
   { type: 'tabel', label: 'Tabel', uitleg: 'Rijen en kolommen; mobiel als kaartjes' },
   { type: 'let-op', label: 'Let op', uitleg: 'Opvallend kader voor iets belangrijks' },
   { type: 'stap', label: 'Stap', uitleg: 'Genummerde stap — alleen in "Wat te doen bij…"' },
+  { type: 'contact', label: 'Belknop', uitleg: 'Knop onderaan die de juiste persoon belt' },
 ]
 
-/** Bloktypes die alleen in een situatiekaart thuishoren, en andersom. */
+/**
+ * Bloktypes die in dit soort sectie thuishoren.
+ *
+ * Een stap en een belknop horen alleen bij een situatiekaart: die twee worden
+ * op de mobiele situatiepagina apart opgepakt (genummerde lijst respectievelijk
+ * voetbalk). In een gewoon hoofdstuk rendert `BlokRenderer` een contact-blok
+ * niet, dus je zou er een onzichtbaar blok aanmaken.
+ */
 export function soortenVoor(sectieSoort: 'hoofdstuk' | 'situatie') {
+  const alleenSituatie: BlokType[] = ['stap', 'contact']
   return BLOK_SOORTEN.filter((s) =>
-    sectieSoort === 'situatie' ? s.type !== 'kop' : s.type !== 'stap',
+    sectieSoort === 'situatie' ? s.type !== 'kop' : !alleenSituatie.includes(s.type),
   )
 }
 
