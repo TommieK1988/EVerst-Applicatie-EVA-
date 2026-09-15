@@ -16,8 +16,7 @@ import { createAdminClient } from '@everts/database/server'
  * `medewerkers.afdeling` is een vrij tekstveld zonder FK, dus overal genormaliseerd vergelijken.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
+const db = () => createAdminClient()
 
 /** Wie beoordeelt een afdeling waarvoor niets is ingesteld. */
 export const STANDAARD_BEOORDELENDE_AFDELING = 'Directie'

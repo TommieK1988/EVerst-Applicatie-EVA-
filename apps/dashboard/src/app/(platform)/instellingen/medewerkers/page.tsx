@@ -50,8 +50,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
 }
 
 async function Functies() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [{ data: functies }, { data: afdelingen }, { data: ploegen }, { data: medewerkers }] = await Promise.all([
     supabase.from('medewerker_functies').select('*').order('volgorde').order('naam'),
     supabase.from('medewerker_afdelingen').select('*').order('volgorde').order('naam'),
@@ -74,8 +73,7 @@ async function Functies() {
 }
 
 async function Cao() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [{ data: docs }, { data: wms }] = await Promise.all([
     supabase
       .from('cao_documenten')
@@ -89,9 +87,9 @@ async function Cao() {
       .order('naam'),
   ])
 
-  const initial = (docs ?? []).map((d: CaoDocument & { schalen: CaoLoonschaal[] }) => ({
+  const initial = ((docs ?? []) as (CaoDocument & { schalen: CaoLoonschaal[] })[]).map((d) => ({
     ...d,
-    schalen: (d.schalen ?? []).sort((a: CaoLoonschaal, b: CaoLoonschaal) => a.volgorde - b.volgorde),
+    schalen: (d.schalen ?? []).sort((a, b) => a.volgorde - b.volgorde),
   }))
 
   return (
@@ -111,8 +109,7 @@ async function Cao() {
 }
 
 async function Attributen() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('medewerker_attribuut_definities')
     .select('*')

@@ -9,6 +9,7 @@
  * auth-check af zodat alleen ingelogde gebruikers kunnen zoeken.
  */
 import { createAdminClient } from '@everts/database/server'
+import type { Hoofdstatus } from '@everts/database'
 import { dossierHref } from '@/lib/dossiers/href'
 
 export type EntityType =
@@ -82,7 +83,7 @@ export async function searchAllEntities(
   if (term.length < 2) return { query: term, groups: [], total: 0 }
 
   const limit = opts?.limitPer ?? 6
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const like = `%${term}%`
   const orLike = `%${safeOrTerm(term)}%`
 
@@ -203,14 +204,14 @@ export type MedewerkerProfiel = {
 }
 
 export async function getMedewerkerProfiel(id: string): Promise<MedewerkerProfiel | null> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('medewerkers')
+    // Eén ononderbroken string: supabase-js leidt het rijtype uit de select-string af, en
+    // van aan elkaar geplakte stukken maakt de typechecker `string` — dan valt het rijtype
+    // terug op `GenericStringError`.
     .select(
-      'id, voornaam, tussenvoegsel, achternaam, functie, afdeling, email, telefoon, ' +
-        'in_dienst_vanaf, uit_dienst_per, extern, actief, adres_plaats, ' +
-        'uurtarief_verkoop, uurtarief_kostprijs, cao_schaal, ' +
-        'werkmaatschappij:bedrijfsgegevens!werkmaatschappij_id ( naam )',
+      'id, voornaam, tussenvoegsel, achternaam, functie, afdeling, email, telefoon, in_dienst_vanaf, uit_dienst_per, extern, actief, adres_plaats, uurtarief_verkoop, uurtarief_kostprijs, cao_schaal, werkmaatschappij:bedrijfsgegevens!werkmaatschappij_id ( naam )',
     )
     .eq('id', id)
     .single()
@@ -239,11 +240,11 @@ export async function getMedewerkerProfiel(id: string): Promise<MedewerkerProfie
 
 export async function getDossiersVoorRelatie(
   relatieId: string,
-  opts?: { hoofdstatus?: string; limit?: number },
+  opts?: { hoofdstatus?: Hoofdstatus; limit?: number },
 ): Promise<
   { id: string; dossiernummer: string | null; titel: string; hoofdstatus: string; substatus: string | null; bedrag_excl_btw: number | null }[]
 > {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   let q = supabase
     .from('dossiers')
     .select(
@@ -301,8 +302,7 @@ const OPENSTAAND_IN_ANTWOORD = 25
  * regels helpt niemand — maar het bedrag en het aantal kloppen nu.
  */
 export async function getRelatieFinancien(relatieId: string): Promise<RelatieFinancien> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('dossiers')
     .select('id, dossiernummer, titel, bedrag_excl_btw, opdracht_substatus')

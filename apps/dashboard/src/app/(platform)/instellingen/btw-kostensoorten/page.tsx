@@ -24,8 +24,7 @@ const TOELICHTING: Record<number, string> = {
  * tegels voor twee tabellen die je alleen opzoekt.
  */
 export default async function Page() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('btw_tarieven')
     .select('*')

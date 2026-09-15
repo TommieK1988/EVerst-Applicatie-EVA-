@@ -27,8 +27,7 @@ export function GekoppeldeDossiersSkelet() {
 export default async function GekoppeldeDossiersSectie({ relatieId }: { relatieId: string }) {
   let user_id: string | null = null
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionClient = (await createServerClient()) as any
+    const sessionClient = await createServerClient()
     const { data: { user } } = await sessionClient.auth.getUser()
     user_id = user?.id ?? null
   } catch {

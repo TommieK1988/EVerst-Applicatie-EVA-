@@ -43,10 +43,15 @@ const MAX_RIJEN = 500
 
 const rond = (n: number): number => Math.round(n * 100) / 100
 
-/** Velden die elke dossierrij nodig heeft — één select-string voor alle drie de leesfuncties. */
+/**
+ * Velden die elke dossierrij nodig heeft — één select-string voor alle drie de leesfuncties.
+ *
+ * Bewust één `as const`-template en geen aan elkaar geplakte stukken: supabase-js leidt het
+ * rijtype af uit de select-string, en een samengestelde string is voor de typechecker gewoon
+ * `string`. Dan komt er `GenericStringError[]` uit en heb je weer een any-cast op de client nodig.
+ */
 const DOSSIER_KOLOMMEN =
-  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, created_at, ` +
-  'updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad'
+  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
 
 type RuweDossierRij = FaseVelden & {
   id: string
@@ -228,8 +233,7 @@ export async function getRelatieDossiers(relatieId: string): Promise<RelatieDoss
   const rechten = await getEffectieveRechten(medewerker)
   const magBedragenZien = heeftModuleToegang(rechten, 'inkoopfacturen', 'lezen')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [klant, betrokken] = await Promise.all([
     leesKlantDossiers(supabase, relatieId),
     leesBetrokkenDossiers(supabase, relatieId, magBedragenZien),
@@ -252,8 +256,7 @@ export async function getContactpersoonDossiers(contactpersoonId: string): Promi
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return []
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('dossiers')
     .select(DOSSIER_KOLOMMEN)
