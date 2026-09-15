@@ -459,7 +459,7 @@ export default function MedewerkerGegevensForm({
             {/* Wie het verlof, de ziekte- en vakantie-uren van deze medewerker aftekent. Gewerkte
                 uren staan hier bewust buiten: die horen bij het project waarop ze geboekt zijn,
                 en dus bij de teamleider en projectleider van dat dossier. */}
-            <Veld label="Verlof & ziekte goedkeuren" span>
+            <Veld label="Verlof, ziekte & indirecte uren" span>
               {editing ? (
                 <div style={{ width: '100%' }}>
                   <select
@@ -484,9 +484,10 @@ export default function MedewerkerGegevensForm({
                     {collegas.filter(c => c.id !== m.id).map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
                   </select>
                   <span style={{ fontSize: 11, color: 'var(--fg-muted)', display: 'block', marginTop: 4 }}>
-                    Geldt voor niet-gewerkte uren: verlof, ziek, vakantie, feestdag en
-                    tijd-voor-tijd. Gewerkte uren gaan altijd naar de teamleider en projectleider
-                    van het dossier. Kies je niets, dan gaat het naar {standaardNaam}.
+                    Geldt voor verlof, ziek, vakantie, feestdag en tijd-voor-tijd, en voor
+                    alles wat op een indirecte-urenproject geboekt staat. Gewerkte uren op een
+                    écht project gaan naar de teamleider en projectleider van dat dossier. Kies
+                    je niets, dan gaat het naar {standaardNaam}.
                   </span>
                 </div>
               ) : (

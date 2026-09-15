@@ -96,6 +96,8 @@ export type UrenExtraVelden = {
   vasteGoedkeurderId: string | null
   /** Verlof, ziek, vakantie, feestdag of tijd-voor-tijd — afgeleid uit de uursoort. */
   nietGewerkt: boolean
+  /** Geboekt op een indirecte-urenproject: overhead, geen projectwerk. */
+  indirectDossier: boolean
   /**
    * Wie er nu aan zet is, uitgeschreven voor het scherm: naam + in welke rol. Null als de regel
    * al geaccordeerd is, of als er niemand aan te wijzen valt. Dit is puur uitleg — wie werkelijk

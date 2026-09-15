@@ -24,7 +24,7 @@ const GEEL_VLAK = 'rgba(184,90,0,.08)'
 const ROL_TEKST: Record<'projectleider' | 'teamleider' | 'goedkeurder', string> = {
   projectleider: 'als projectleider',
   teamleider: 'als teamleider',
-  goedkeurder: 'verlof & ziekte',
+  goedkeurder: 'verlof & indirect',
 }
 
 const uur = (n: number) => `${n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`

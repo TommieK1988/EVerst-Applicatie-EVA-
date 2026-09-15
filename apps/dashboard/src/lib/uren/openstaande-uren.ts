@@ -64,6 +64,11 @@ export type OpenUurRegel = {
    * de regel staat -- verlof wordt net zo goed op een gewoon project geboekt.
    */
   nietGewerkt: boolean
+  /**
+   * Het dossier staat in `uren_instellingen.indirecte_dossier_ids`: overheadwerk, geen project.
+   * Dan gaan ook de gewerkte uren naar de eigen goedkeurder van de medewerker.
+   */
+  indirectDossier: boolean
 
   /**
    * De goedkeurder van deze regel als het niet-gewerkte uren zijn: die van het medewerkerprofiel,
@@ -156,7 +161,11 @@ export async function haalOpenstaandeUren(
   // Niet-gewerkte uren van iemand zonder eigen goedkeurder gaan naar één vaste persoon. Zonder
   // die terugval zou verlof alsnog bij de projectleider van het project belanden waarop het
   // toevallig geboekt staat -- precies wat deze routering moet voorkomen.
-  const standaardGoedkeurderId = (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id
+  const instellingen = await getUrenInstellingen()
+  const standaardGoedkeurderId = instellingen.niet_gewerkt_goedkeurder_id
+  // Op een indirecte-urenproject valt voor een projectleider niets te beoordelen: daar gaat ook
+  // de gewerkte tijd naar de eigen goedkeurder van de medewerker.
+  const indirecteDossiers = new Set(instellingen.indirecte_dossier_ids)
 
   type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
   const medRijen = (medewerkers ?? []) as MedewerkerRij[]
@@ -202,7 +211,8 @@ export async function haalOpenstaandeUren(
     // De uursoort bepaalt welke route geldt; de goedkeurder van de medewerker telt alleen mee
     // bij niet-gewerkte uren.
     const nietGewerkt = isNietGewerkt(l.type?.id)
-    const vasteGoedkeurderId = nietGewerkt
+    const indirectDossier = dossier?.id != null && indirecteDossiers.has(dossier.id)
+    const vasteGoedkeurderId = nietGewerkt || indirectDossier
       ? (medewerker?.uren_goedkeurder_id ?? standaardGoedkeurderId ?? null)
       : null
     const b = beoMap.get(l.id)
@@ -219,9 +229,9 @@ export async function haalOpenstaandeUren(
 
     const tlAkkoord = !!b?.tl_akkoord_op
     const plAkkoord = !!b?.pl_akkoord_op
-    // Niet-gewerkte uren met een vaste goedkeurder gaan naar hem, en naar niemand anders: over
-    // iemands verlof heeft de projectleider van het project waarop het toevallig geboekt staat
-    // niets te zeggen. Alle andere regels volgen de gewone volgorde: eerst de teamleider van het
+    // Uren met een eigen goedkeurder gaan naar hem en naar niemand anders -- over iemands verlof
+    // of kantoorwerk heeft de projectleider van het project waarop het geboekt staat niets te
+    // zeggen. Alle andere regels volgen de gewone volgorde: eerst de teamleider van het
     // dossier, daarna de projectleider. Is er geen van beide, dan kan EVA de regel nergens heen
     // sturen -- die verdwijnt niet stilletjes maar komt apart in beeld, zodat iemand de rollen
     // kan invullen of hem alsnog in Bouw7 kan afhandelen.
@@ -256,6 +266,7 @@ export async function haalOpenstaandeUren(
       bewakingscode: l.projectSecurityLink?.code ?? null,
       bouw7PslId: l.projectSecurityLink?.id ?? null,
       nietGewerkt,
+      indirectDossier,
       vasteGoedkeurderId,
       vasteGoedkeurderNaam: vasteGoedkeurderId ? (goedkeurderNaam.get(vasteGoedkeurderId) ?? null) : null,
       tlAkkoord,

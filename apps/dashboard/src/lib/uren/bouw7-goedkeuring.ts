@@ -19,7 +19,10 @@
 // in `planning_uursoorten`). Dat onderscheid staat in de regel zelf en niet in het project: verlof
 // wordt net zo goed op een gewoon project geboekt als op het indirecte-urenproject.
 //
-//   gewerkte uren      -> altijd via het dossier, de volgorde hieronder
+//   gewerkte uren op een echt project -> via het dossier, de volgorde hieronder
+//   alles op een indirecte-urenproject -> naar de eigen goedkeurder van de medewerker
+//                         (`uren_instellingen.indirecte_dossier_ids`); daar is geen projectwerk
+//                         te beoordelen, alleen overhead
 //   niet-gewerkte uren -> naar de vaste goedkeurder van de medewerker
 //                         (`medewerkers.uren_goedkeurder_id`, in te stellen op zijn profiel),
 //                         die dan in zijn eentje eindstation is
@@ -463,18 +466,21 @@ export async function trekGoedkeuringIn(
     .from('planning_uursoorten').select('uren_categorie')
     .eq('bouw7_id', String(log.type?.id)).maybeSingle()
   const nietGewerkt = ['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(soort?.uren_categorie ?? '')
-  // Zelfde terugval als bij het keuren: heeft de medewerker niets staan, dan is de standaard uit
-  // de uren-instellingen degene die dit akkoord gaf -- en dus ook de enige die het kan intrekken.
+  // Zelfde route als bij het keuren: niet-gewerkte uren én alles op een indirecte-urenproject
+  // gaan naar de eigen goedkeurder (of de standaard), en die is dan ook de enige die het akkoord
+  // kan intrekken.
   const { getUrenInstellingen } = await import('./instellingen')
-  const goedkeurderId = nietGewerkt
-    ? (medewerker?.uren_goedkeurder_id ?? (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id ?? null)
+  const instellingen = await getUrenInstellingen()
+  const indirectDossier = dossier?.id != null && instellingen.indirecte_dossier_ids.includes(dossier.id)
+  const goedkeurderId = nietGewerkt || indirectDossier
+    ? (medewerker?.uren_goedkeurder_id ?? instellingen.niet_gewerkt_goedkeurder_id ?? null)
     : null
   const viaVasteGoedkeurder = goedkeurderId != null
   if (viaVasteGoedkeurder) {
     if (goedkeurderId !== ik.id) {
       return {
         ok: false,
-        error: 'Dit zijn niet-gewerkte uren; alleen de goedkeurder van deze medewerker kan dat akkoord intrekken.',
+        error: 'Deze uren lopen niet via het dossier; alleen de goedkeurder van deze medewerker kan dat akkoord intrekken.',
       }
     }
   } else if (!dossier || dossier.project_manager_id !== ik.id) {

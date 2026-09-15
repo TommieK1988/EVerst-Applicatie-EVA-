@@ -99,6 +99,8 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
   const goedkeurderPerEmployee = new Map<number, { id: string; naam: string | null }>()
   // Terugval voor niet-gewerkte uren van wie zelf niets heeft staan.
   let standaardGoedkeurder: { id: string; naam: string | null } | null = null
+  // Dossiers waarop ook gewerkte tijd naar de eigen goedkeurder gaat (overhead, geen projectwerk).
+  const indirecteDossiers = new Set<string>()
   // Welke uursoorten geen gewerkte tijd zijn; dat bepaalt of de persoonlijke goedkeurder geldt.
   const nietGewerkteHourTypes = new Set<number>()
   // Tussenstand van de goedkeuring, zodat "wacht op" klopt: een regel waar de teamleider al
@@ -143,9 +145,13 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       tlAkkoordOp.add(Number(b.bouw7_hour_log_id))
     }
 
-    // Wie de niet-gewerkte uren krijgt van iedereen die zelf geen goedkeurder heeft staan.
-    const standaard = (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id
-    if (standaard) standaardGoedkeurder = { id: standaard, naam: null }
+    // Wie de uren buiten het projectwerk om krijgt van iedereen die zelf geen goedkeurder
+    // heeft staan, plus de dossiers waarop ook gewerkte tijd zo loopt.
+    const instellingen = await getUrenInstellingen()
+    if (instellingen.niet_gewerkt_goedkeurder_id) {
+      standaardGoedkeurder = { id: instellingen.niet_gewerkt_goedkeurder_id, naam: null }
+    }
+    for (const id of instellingen.indirecte_dossier_ids) indirecteDossiers.add(id)
 
     // Namen van de goedkeurders erbij. Medewerkers naar zichzelf is een self-join, en die embedt
     // PostgREST alleen met de naam van de foreign key -- dus in een tweede vraag.
@@ -176,7 +182,8 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
     // De uursoort kiest de route: niet-gewerkte tijd gaat naar de eigen goedkeurder van de
     // medewerker, gewerkte tijd hoort bij het project. Zie lib/uren/bouw7-goedkeuring.ts.
     const nietGewerkt = h.type?.id != null && nietGewerkteHourTypes.has(h.type.id)
-    const goedkeurder = nietGewerkt
+    const indirectDossier = dossier?.id != null && indirecteDossiers.has(dossier.id)
+    const goedkeurder = nietGewerkt || indirectDossier
       ? ((h.employee?.id != null ? goedkeurderPerEmployee.get(h.employee.id) : null) ?? standaardGoedkeurder)
       : null
     const geaccordeerd = h.isApproved === true
@@ -214,6 +221,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       projectleiderId: dossier?.project_manager_id ?? null,
       vasteGoedkeurderId: goedkeurder?.id ?? null,
       nietGewerkt,
+      indirectDossier,
       wachtOp,
       geaccordeerd,
       geaccordeerdDoor: h.approvedBy?.username ?? null,

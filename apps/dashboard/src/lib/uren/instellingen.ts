@@ -19,6 +19,13 @@ export type UrenInstellingen = {
    * geboekt staat.
    */
   niet_gewerkt_goedkeurder_id: string | null
+  /**
+   * Dossiers waarop ÁLLE uren naar de eigen goedkeurder van de medewerker gaan, ook de gewerkte.
+   * Op een indirecte-urenproject is gewerkte tijd geen projectwerk maar overhead -- er valt voor
+   * een projectleider inhoudelijk niets te beoordelen. Op een echt project blijft gewerkte tijd
+   * bij de teamleider en de projectleider: dat is hun budget.
+   */
+  indirecte_dossier_ids: string[]
   tolerantie_uren: number
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -46,6 +53,7 @@ export type UrenInstellingen = {
 const STANDAARD: UrenInstellingen = {
   terugval_goedkeurder_id: null,
   niet_gewerkt_goedkeurder_id: null,
+  indirecte_dossier_ids: [],
   tolerantie_uren: 0,
   indien_deadline_dag: 5,
   indien_deadline_tijd: '17:00:00',
@@ -62,12 +70,13 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
   const supabase = db()
   const { data } = await supabase
     .from('uren_instellingen')
-    .select('terugval_goedkeurder_id, niet_gewerkt_goedkeurder_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, verlof_routes, km_vergoeding_auto, km_vergoeding_bromfiets')
+    .select('terugval_goedkeurder_id, niet_gewerkt_goedkeurder_id, indirecte_dossier_ids, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, verlof_routes, km_vergoeding_auto, km_vergoeding_bromfiets')
     .eq('id', true)
     .maybeSingle()
   if (!data) return STANDAARD
   return {
     ...data,
+    indirecte_dossier_ids: (data.indirecte_dossier_ids ?? []) as string[],
     tolerantie_uren: Number(data.tolerantie_uren ?? 0),
     verlof_routes: (data.verlof_routes ?? {}) as Record<string, string>,
     km_vergoeding_auto: Number(data.km_vergoeding_auto ?? STANDAARD.km_vergoeding_auto),

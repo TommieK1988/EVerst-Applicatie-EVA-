@@ -48,7 +48,7 @@ const dossierLabel = (r: UrenOverzichtRegel) =>
 const ROL_LABEL: Record<'teamleider' | 'projectleider' | 'goedkeurder', string> = {
   teamleider: 'teamleider',
   projectleider: 'projectleider',
-  goedkeurder: 'verlof & ziekte',
+  goedkeurder: 'eigen goedkeurder',
 }
 
 type GroepKey = 'geen' | 'medewerker' | 'dossier' | 'uursoort' | 'week' | 'dienstverband' | 'geaccordeerd' | 'projectleider' | 'wachtOp'
@@ -508,7 +508,7 @@ export default function UrenOverzicht({
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
             Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
-              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Gewerkte uren beoordeelt de teamleider en daarna de projectleider van het dossier; verlof, ziekte en vakantie gaan naar de goedkeurder die op het medewerkerprofiel staat. De kolom Wacht op zegt per regel wie aan zet is.'
+              ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Gewerkte uren beoordeelt de teamleider en daarna de projectleider van het dossier; verlof, ziekte en alles op een indirecte-urenproject gaan naar de goedkeurder die op het medewerkerprofiel staat. De kolom Wacht op zegt per regel wie aan zet is.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
           </div>
         </div>

@@ -17,6 +17,7 @@ import {
 type Instellingen = {
   terugval_goedkeurder_id: string | null
   niet_gewerkt_goedkeurder_id: string | null
+  indirecte_dossier_ids: string[] | null
   tolerantie_uren: number | string
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -91,6 +92,7 @@ export default function UrenInstellingenBeheer({
   const [form, setForm] = useState({
     terugval_goedkeurder_id: instellingen?.terugval_goedkeurder_id ?? '',
     niet_gewerkt_goedkeurder_id: instellingen?.niet_gewerkt_goedkeurder_id ?? '',
+    indirecte_dossier_ids: instellingen?.indirecte_dossier_ids ?? [],
     tolerantie_uren: Number(instellingen?.tolerantie_uren ?? 0),
     indien_deadline_dag: instellingen?.indien_deadline_dag ?? 5,
     indien_deadline_tijd: (instellingen?.indien_deadline_tijd ?? '17:00').slice(0, 5),
@@ -110,6 +112,7 @@ export default function UrenInstellingenBeheer({
     const r = await setUrenInstellingen({
       terugval_goedkeurder_id: form.terugval_goedkeurder_id || null,
       niet_gewerkt_goedkeurder_id: form.niet_gewerkt_goedkeurder_id || null,
+      indirecte_dossier_ids: form.indirecte_dossier_ids,
       tolerantie_uren: form.tolerantie_uren,
       indien_deadline_dag: form.indien_deadline_dag,
       indien_deadline_tijd: `${form.indien_deadline_tijd}:00`,
@@ -368,7 +371,7 @@ export default function UrenInstellingenBeheer({
           <div style={{ marginTop: 18 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 420 }}>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
-                Goedkeurder verlof &amp; ziekte
+                Standaard goedkeurder verlof, ziekte &amp; indirect
               </span>
               <select value={form.niet_gewerkt_goedkeurder_id} style={veldStijl}
                 onChange={e => setForm(f => ({ ...f, niet_gewerkt_goedkeurder_id: e.target.value }))}>
@@ -376,9 +379,10 @@ export default function UrenInstellingenBeheer({
                 {medewerkers.map(m => <option key={m.id} value={m.id}>{volledigeNaam(m)}</option>)}
               </select>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-muted)' }}>
-                Keurt de niet-gewerkte uren (verlof, ziek, vakantie, feestdag, tijd-voor-tijd) van
-                iedereen die op zijn eigen profiel geen goedkeurder heeft staan. Gewerkte uren gaan
-                altijd naar de teamleider en projectleider van het dossier.
+                Keurt het verlof, de ziekte- en vakantie-uren én het werk op een indirecte-uren­
+                project van iedereen die op zijn eigen profiel geen goedkeurder heeft staan.
+                Gewerkte uren op een écht project gaan altijd naar de teamleider en projectleider
+                van dat dossier.
               </span>
             </label>
           </div>
@@ -422,6 +426,44 @@ export default function UrenInstellingenBeheer({
                 </select>
               </div>
             ))}
+          </div>
+
+          {/* Welke dossiers als indirect tellen voor de GOEDKEURING. Bewust een eigen lijst en
+              geen titel-match: "heet het toevallig Indirecte uren" is geen autorisatieregel, en
+              een hernoemd project zou de route stilletjes verleggen. */}
+          <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
+              Wie keurt de uren op deze dossiers?
+            </span>
+            <p style={{ ...uitlegStijl, marginTop: 4 }}>
+              Op een aangevinkt dossier gaan <strong>alle</strong> uren naar de eigen goedkeurder
+              van de medewerker — ook de gewerkte. Daar is geen projectwerk te beoordelen, alleen
+              overhead. Niet aangevinkt = gewerkte uren gaan naar de teamleider en projectleider
+              van dat dossier, zoals bij elk ander project.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {indirectDossiers.map(d => (
+                <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg)' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.indirecte_dossier_ids.includes(d.id)}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      indirecte_dossier_ids: e.target.checked
+                        ? [...f.indirecte_dossier_ids, d.id]
+                        : f.indirecte_dossier_ids.filter(id => id !== d.id),
+                    }))}
+                  />
+                  {d.dossiernummer} · {d.titel}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', marginTop: 12 }}>
+              <Button variant="primary" size="sm" onClick={bewaarInstellingen} loading={busy}
+                disabled={busy} style={{ marginLeft: 'auto' }}>
+                Opslaan
+              </Button>
+            </div>
           </div>
         </CardBody>
       </Card>
