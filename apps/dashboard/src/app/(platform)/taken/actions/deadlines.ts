@@ -53,7 +53,12 @@ async function stemHerhalingAf(
   sjabloonTaak: any,
   venster: PlanningVenster,
 ): Promise<void> {
-  const datums = herhalingsDatums(sjabloonTaak.herhaling_interval, venster.start, venster.eind)
+  const datums = herhalingsDatums(
+    sjabloonTaak.herhaling_interval,
+    venster.start,
+    venster.eind,
+    sjabloonTaak.herhaling_start_offset_dagen ?? 0,
+  )
   // Geen venster → één keer zonder deadline, zodat de taak zichtbaar is.
   const n = Math.max(datums.length, 1)
 
@@ -228,6 +233,37 @@ export async function herberekenDossierNu(dossier_id: string): Promise<void> {
   const sb = createAdminClient() as any
   const vensters = await planningVensters(sb)
   await verwerkDossier(sb, dossier_id, vensters.get(dossier_id) ?? LEEG_VENSTER)
+  revalidatePath('/taken')
+}
+
+/**
+ * Herbereken alle dossiers waar een sjabloon al op geactiveerd is.
+ *
+ * Nodig zodra iemand aan de herhaling van een sjabloontaak draait: de keren die al
+ * klaarstaan op lopende dossiers zijn dan namelijk berekend met de oude instelling.
+ * Zonder deze ronde lijkt het wijzigen van de aanlooptijd niets te doen — de nieuwe
+ * waarde geldt dan pas voor dossiers die er nog niet zijn, en dat is precies de
+ * verzameling waar niemand naar kijkt.
+ */
+export async function herberekenSjabloonInstanties(template_lijst_id: string): Promise<void> {
+  const sb = createAdminClient() as any
+
+  const { data: instanties } = await sb
+    .from('task_lists')
+    .select('dossier_id')
+    .eq('template_id', template_lijst_id)
+    .eq('is_template', false)
+    .not('dossier_id', 'is', null)
+
+  const dossierIds = [...new Set(
+    ((instanties ?? []) as { dossier_id: string }[]).map(l => l.dossier_id),
+  )]
+  if (dossierIds.length === 0) return
+
+  const vensters = await planningVensters(sb)
+  for (const dossier_id of dossierIds) {
+    await verwerkDossier(sb, dossier_id, vensters.get(dossier_id) ?? LEEG_VENSTER)
+  }
   revalidatePath('/taken')
 }
 

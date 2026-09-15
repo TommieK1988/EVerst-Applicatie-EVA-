@@ -90,6 +90,11 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const [herhalingInterval, setHerhalingInterval] = useState<HerhalingInterval>(
     taak.herhaling_interval ?? 'geen',
   )
+  // Aanlooptijd voor de eerste keer. Als tekst, zodat het veld leeggemaakt kan worden
+  // zonder dat er meteen een 0 in springt terwijl je typt.
+  const [herhalingOffset, setHerhalingOffset] = useState(
+    (taak.herhaling_start_offset_dagen ?? 0).toString(),
+  )
 
   // Blokkering
   const [blockedBy, setBlockedBy] = useState(taak.blocked_by_task_id ?? '')
@@ -216,6 +221,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
       deadline_basis:     effectieveBasis,
       deadline_dagen:     effectieveDagen,
       herhaling_interval: herhalingInterval,
+      herhaling_start_offset_dagen: Math.max(0, Number(herhalingOffset) || 0),
     }))
   }
 
@@ -698,10 +704,28 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               </div>
               {herhaalt && (
-                <p className="mt-1 text-xs text-slate-500 leading-snug">
-                  Bij activeren ontstaat één actie per keer, verdeeld over de uitvoering volgens
-                  de detailplanning van het dossier. Elke actie krijgt zijn eigen deadline.
-                </p>
+                <>
+                  <p className="mt-1 text-xs text-slate-500 leading-snug">
+                    Bij activeren ontstaat één actie per keer, verdeeld over de uitvoering volgens
+                    de detailplanning van het dossier. Elke actie krijgt zijn eigen deadline.
+                  </p>
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs text-slate-600">Eerste keer pas na</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={herhalingOffset}
+                      onChange={e => setHerhalingOffset(e.target.value)}
+                      placeholder="0"
+                      className="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-everts/30"
+                    />
+                    <span className="text-xs text-slate-600">dagen uitvoering</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 leading-snug">
+                    De hele reeks schuift mee op, dus het ritme blijft hetzelfde. Op 0 valt de
+                    eerste keer op de startdag zelf — voor een inspectie meestal te vroeg.
+                  </p>
+                </>
               )}
             </div>
 

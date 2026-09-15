@@ -932,6 +932,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     deadline_dagen:          null,
     deadline_handmatig:      false,
     herhaling_interval:      'geen',
+    herhaling_start_offset_dagen: 0,
     herhaling_bron_taak_id:  null,
     herhaling_index:         null,
     blocked_by_task_id:      null,

@@ -287,6 +287,7 @@ export async function kopieerActielijst(bron_id: string): Promise<{ id: string }
         deadline_basis:         taak.deadline_basis ?? 'geen',
         deadline_dagen:         taak.deadline_dagen ?? null,
         herhaling_interval:     taak.herhaling_interval ?? 'geen',
+        herhaling_start_offset_dagen: taak.herhaling_start_offset_dagen ?? 0,
         formulier_template_id:  taak.formulier_template_id ?? null,
         kwaliteit_ronde:        taak.kwaliteit_ronde ?? false,
         bezoek_ronde:           taak.bezoek_ronde ?? false,

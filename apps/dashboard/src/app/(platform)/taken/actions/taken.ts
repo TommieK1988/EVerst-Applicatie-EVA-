@@ -6,6 +6,7 @@ import { createAdminClient } from '@everts/database/server'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { spiegelTaakstatusNaarBouw7 } from '@/lib/bouw7/todo-write'
 import { activeerSjabloon } from './sjablonen'
+import { herberekenSjabloonInstanties } from './deadlines'
 import { getTaak } from '@/lib/taken/services/taken'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { meldTaakToegewezen } from '@/lib/taken/meldingen'
@@ -137,6 +138,8 @@ export async function maakTaak(data: {
   deadline_basis?: DeadlineBasis
   deadline_dagen?: number | null
   herhaling_interval?: HerhalingInterval
+  /** Aanlooptijd in dagen voor de eerste keer van een herhalende sjabloontaak. */
+  herhaling_start_offset_dagen?: number
   // Formulier-koppeling
   formulier_template_id?: string
   /** Deze actie start een kwaliteitsronde (zelfde mechaniek als de formulier-koppeling). */
@@ -169,6 +172,7 @@ export async function maakTaak(data: {
       deadline_dagen:         data.deadline_dagen         ?? null,
       deadline_handmatig:     data.deadline               != null,
       herhaling_interval:     data.herhaling_interval     ?? 'geen',
+      herhaling_start_offset_dagen: data.herhaling_start_offset_dagen ?? 0,
       formulier_template_id:  data.formulier_template_id  ?? null,
       kwaliteit_ronde:        data.kwaliteit_ronde        ?? false,
       bezoek_ronde:           data.bezoek_ronde           ?? false,
@@ -424,6 +428,7 @@ export async function updateTaak(id: string, data: {
   deadline_basis?: DeadlineBasis
   deadline_dagen?: number | null
   herhaling_interval?: HerhalingInterval
+  herhaling_start_offset_dagen?: number
   blocked_by_task_id?: string | null
   formulier_template_id?: string | null
   kwaliteit_ronde?: boolean
@@ -454,6 +459,9 @@ export async function updateTaak(id: string, data: {
   if (data.deadline_basis      !== undefined) updatePayload.deadline_basis       = data.deadline_basis
   if (data.deadline_dagen      !== undefined) updatePayload.deadline_dagen       = data.deadline_dagen
   if (data.herhaling_interval  !== undefined) updatePayload.herhaling_interval   = data.herhaling_interval
+  if (data.herhaling_start_offset_dagen !== undefined) {
+    updatePayload.herhaling_start_offset_dagen = Math.max(0, data.herhaling_start_offset_dagen)
+  }
   if (data.blocked_by_task_id      !== undefined) updatePayload.blocked_by_task_id      = data.blocked_by_task_id
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
   if (data.kwaliteit_ronde        !== undefined) updatePayload.kwaliteit_ronde        = data.kwaliteit_ronde
@@ -478,6 +486,21 @@ export async function updateTaak(id: string, data: {
   // Ook langs deze weg kan de status wijzigen → Bouw7 meenemen (fail-soft, zie updateTaakStatus).
   if (data.status !== undefined && data.status !== oud?.status) {
     await spiegelTaakstatusNaarBouw7(id, data.status).catch(() => {})
+  }
+
+  // Aan de herhaling van een sjabloontaak draaien raakt ook de keren die al op lopende
+  // dossiers klaarstaan; die zijn met de oude instelling berekend. Meteen narekenen,
+  // anders lijkt de wijziging niets te doen tot er toevallig planning verschuift.
+  const herhalingGewijzigd =
+    (data.herhaling_interval !== undefined &&
+      data.herhaling_interval !== oud?.herhaling_interval) ||
+    (data.herhaling_start_offset_dagen !== undefined &&
+      data.herhaling_start_offset_dagen !== oud?.herhaling_start_offset_dagen)
+
+  if (herhalingGewijzigd && oud?.lijst_id) {
+    const { data: lijst } = await supabase
+      .from('task_lists').select('is_template').eq('id', oud.lijst_id).single()
+    if (lijst?.is_template) await herberekenSjabloonInstanties(oud.lijst_id)
   }
 
   revalidatePath('/taken')

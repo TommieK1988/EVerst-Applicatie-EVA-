@@ -146,17 +146,30 @@ export const MAX_HERHALINGEN = 200
 /**
  * De datums waarop een herhalende taak moet vallen, binnen het uitvoeringsvenster
  * (start t/m eind, beide inclusief). Lege lijst als het venster onbekend is.
+ *
+ * `startOffsetDagen` is de aanlooptijd vóór de eerste keer. Zonder offset valt keer 1
+ * op de eerste dag van de uitvoering, en dat is voor een inspectie zinloos: dan staat
+ * er nog niets om te beoordelen. De offset schuift de héle reeks op, zodat het ritme
+ * van het interval intact blijft — bij 14 dagen maandelijks: dag 14, dag 14 + 1 maand, enz.
+ *
+ * Duurt de uitvoering korter dan de offset, dan valt de reeks terug op één keer op de
+ * laatste uitvoeringsdag. De taak helemaal laten vervallen zou een verplichte inspectie
+ * stil weglaten; een datum buiten het venster zetten zou net zo goed liegen.
  */
 export function herhalingsDatums(
   interval: HerhalingInterval | string | null | undefined,
   start: string | null | undefined,
   eind: string | null | undefined,
+  startOffsetDagen = 0,
 ): string[] {
   if (!interval || interval === 'geen' || !start || !eind) return []
 
-  const eersteDag = parseISO(start)
   const laatsteDag = parseISO(eind)
-  if (laatsteDag < eersteDag) return []
+  const vensterStart = parseISO(start)
+  if (laatsteDag < vensterStart) return []
+
+  const eersteDag = addDays(vensterStart, Math.max(0, startOffsetDagen))
+  if (eersteDag > laatsteDag) return [format(laatsteDag, 'yyyy-MM-dd')]
 
   const datums: string[] = []
   let cursor = eersteDag
