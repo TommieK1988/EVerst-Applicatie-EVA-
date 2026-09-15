@@ -11,6 +11,8 @@ import {
   ontkoppelContactpersoonVanOrganisatie,
   type ContactpersoonMetOrganisaties,
 } from '@/lib/relaties/contactpersonen-actions'
+import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
+import DossierLijstBlok from '@/components/relaties/DossierLijstBlok'
 
 const baseInput: React.CSSProperties = {
   width: '100%', padding: '7px 10px',
@@ -53,9 +55,13 @@ function VeldInput({ label, value, onChange, type = 'text', placeholder }: { lab
 
 const AANHEF_OPTIES = ['', 'De heer', 'Mevrouw', 'Dhr.', 'Mevr.', 'Dr.', 'Prof. dr.', 'Ir.', 'Mr.']
 
-type Props = { contactpersoon: ContactpersoonMetOrganisaties }
+type Props = {
+  contactpersoon: ContactpersoonMetOrganisaties
+  /** Dossiers waarop deze persoon de contactpersoon is. */
+  dossiers: RelatieDossier[]
+}
 
-export default function ContactpersoonDetailView({ contactpersoon: initial }: Props) {
+export default function ContactpersoonDetailView({ contactpersoon: initial, dossiers }: Props) {
   const [cp, setCp] = useState(initial)
   const [bewerken, setBewerken] = useState(false)
   const [form, setForm] = useState({
@@ -293,6 +299,9 @@ export default function ContactpersoonDetailView({ contactpersoon: initial }: Pr
               </p>
             )}
           </Blok>
+
+          {/* Dossiers waarop deze persoon de contactpersoon is */}
+          <DossierLijstBlok titel="Dossiers" dossiers={dossiers} />
         </div>
 
         {/* ── Rechter sidebar: Gekoppelde organisaties ── */}

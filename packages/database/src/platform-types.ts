@@ -235,17 +235,13 @@ export type OmzetPerJaar = {
   aantalDossiers: number
 }
 
-export type OmzetOpenstaand = {
-  id: string
-  dossiernummer: string | null
-  titel: string
-  bedrag: number | null
-  substatus: string
-}
-
+/**
+ * Alleen de jaarcijfers. De openstaande opdrachten stonden hier ook, maar die lijst staat
+ * sinds het blok Gekoppelde dossiers vollediger (en filterbaar) in de dossiertabel op de
+ * relatiepagina; twee lijstjes van dezelfde dossiers naast elkaar leverde alleen verwarring op.
+ */
 export type OmzetData = {
   perJaar: OmzetPerJaar[]
-  openstaand: OmzetOpenstaand[]
 }
 
 export type RelatieInkoop = {

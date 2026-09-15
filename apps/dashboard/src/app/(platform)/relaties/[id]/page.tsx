@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
 import type {
@@ -16,6 +17,7 @@ import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersone
 import { getOmzetVoorRelatie } from '@/lib/relaties/actions'
 import { getRelatieObjecten } from '@/lib/objecten/data'
 import RelatieDetailView from './RelatieDetailView'
+import GekoppeldeDossiersSectie, { GekoppeldeDossiersSkelet } from './GekoppeldeDossiersSectie'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const params = await props.params
@@ -70,6 +72,13 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
       contactpersonen={contactpersonen}
       omzet={omzet as OmzetData}
       objecten={objecten}
+      dossiers={
+        // Gestreamd: de dossierquery's (inclusief inkoopfacturen) zijn zwaarder dan de rest
+        // van de pagina, en de relatiekaart hoort daar niet op te wachten.
+        <Suspense fallback={<GekoppeldeDossiersSkelet />}>
+          <GekoppeldeDossiersSectie relatieId={params.id} />
+        </Suspense>
+      }
     />
   )
 }

@@ -453,26 +453,15 @@ export async function deleteInkoopPrijsafspraak(
 export async function getOmzetVoorRelatie(relatieId: string): Promise<OmzetData> {
   const supabase = createAdminClient() as any
 
-  const [jaarRes, openstaandRes] = await Promise.all([
-    // Gefactureerde omzet per boekjaar (opdrachten)
-    supabase
-      .from('dossiers')
-      .select('created_at, bedrag_excl_btw')
-      .eq('klant_id', relatieId)
-      .eq('hoofdstatus', 'opdracht')
-      .not('bedrag_excl_btw', 'is', null),
-
-    // Openstaande opdrachten (niet financieel afgesloten)
-    supabase
-      .from('dossiers')
-      .select('id, dossiernummer, titel, bedrag_excl_btw, opdracht_substatus')
-      .eq('klant_id', relatieId)
-      .eq('hoofdstatus', 'opdracht')
-      .not('opdracht_substatus', 'in', '("financieel_afgesloten","financieel_gereed")')
-      .not('bedrag_excl_btw', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(20),
-  ])
+  // Gefactureerde omzet per boekjaar (opdrachten). De openstaande opdrachten die hier ook
+  // werden opgehaald, staan nu in het blok Gekoppelde dossiers — daar zijn ze compleet,
+  // filterbaar en niet afgekapt op 20.
+  const jaarRes = await supabase
+    .from('dossiers')
+    .select('created_at, bedrag_excl_btw')
+    .eq('klant_id', relatieId)
+    .eq('hoofdstatus', 'opdracht')
+    .not('bedrag_excl_btw', 'is', null)
 
   // Groepeer per jaar in JavaScript
   const jaarMap = new Map<number, { bedrag: number; aantalDossiers: number }>()
@@ -489,13 +478,5 @@ export async function getOmzetVoorRelatie(relatieId: string): Promise<OmzetData>
     .sort((a, b) => b.jaar - a.jaar)
     .slice(0, 5)
 
-  const openstaand = (openstaandRes.data ?? []).map((r: any) => ({
-    id: r.id,
-    dossiernummer: r.dossiernummer,
-    titel: r.titel,
-    bedrag: r.bedrag_excl_btw != null ? Number(r.bedrag_excl_btw) : null,
-    substatus: r.opdracht_substatus ?? '',
-  }))
-
-  return { perJaar, openstaand }
+  return { perJaar }
 }

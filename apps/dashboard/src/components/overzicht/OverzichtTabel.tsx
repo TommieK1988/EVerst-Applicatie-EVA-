@@ -1202,7 +1202,11 @@ export default function OverzichtTabel<T extends { id: string }>({
 
         {/* ── Table ── */}
         <div style={{ overflowX: 'auto' }}>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          {/* `id` vast op de scherm-sleutel: zonder id nummert dnd-kit zijn aria-ids met een
+              globale teller, en die staat bij twee tabellen op één pagina (relatiepagina) op
+              de server anders dan in de browser — dat geeft een hydratiefout op
+              `aria-describedby`. Met een vaste id is de waarde aan beide kanten gelijk. */}
+          <DndContext id={scherm} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>

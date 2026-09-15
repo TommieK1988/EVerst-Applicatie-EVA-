@@ -10,6 +10,7 @@ import { PageHeader, Button, Badge, StatCard, Alert } from '@/components/ui'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import type { GebruikerLayout } from '@everts/database'
 import { dossierHref } from '@/lib/dossiers/href'
+import { FASE_LABEL, FASE_VOLGORDE } from '@/lib/dossiers/fase'
 import { objectAdresRegel } from '@/lib/objecten/adres'
 import { bouw7StatusLabel } from '@/lib/objecten/types'
 import type { ObjectDossier, ObjectRelatieRij, ObjectTotalen } from '@/lib/objecten/data'
@@ -31,10 +32,6 @@ const kopje: React.CSSProperties = {
   color: 'var(--fg-muted)', marginBottom: 14,
 }
 
-const FASE_LABEL: Record<string, string> = {
-  aanvraag: 'Aanvraag', offerte: 'Offerte', opdracht: 'Opdracht',
-  servicedesk: 'Servicedesk', afgesloten: 'Afgesloten',
-}
 
 type Props = {
   object: VastgoedObject
@@ -325,12 +322,12 @@ export default function ObjectDetailView({
           <div style={blok}>
             <div style={kopje}>Dossiers per fase</div>
             <dl style={{ display: 'grid', gap: 8, margin: 0, fontSize: 13 }}>
-              {Object.entries(totalen.aantalPerFase)
-                .filter(([, n]) => n > 0)
-                .map(([status, n]) => (
-                  <div key={status} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <dt style={{ color: 'var(--fg-soft)' }}>{FASE_LABEL[status] ?? status}</dt>
-                    <dd style={{ margin: 0, fontWeight: 600 }}>{n}</dd>
+              {FASE_VOLGORDE
+                .filter(fase => totalen.aantalPerFase[fase] > 0)
+                .map(fase => (
+                  <div key={fase} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <dt style={{ color: 'var(--fg-soft)' }}>{FASE_LABEL[fase]}</dt>
+                    <dd style={{ margin: 0, fontWeight: 600 }}>{totalen.aantalPerFase[fase]}</dd>
                   </div>
                 ))}
               {totalen.aantalDossiers === 0 && (

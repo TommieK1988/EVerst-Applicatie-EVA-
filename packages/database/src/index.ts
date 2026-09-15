@@ -30,7 +30,6 @@ export type {
   RelatieInkoopPrijsafspraak,
   OmzetData,
   OmzetPerJaar,
-  OmzetOpenstaand,
   Medewerker,
   Dossier,
   BtwSplitsingItem,

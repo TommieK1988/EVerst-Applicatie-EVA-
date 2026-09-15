@@ -9,7 +9,6 @@
  * auth-check af zodat alleen ingelogde gebruikers kunnen zoeken.
  */
 import { createAdminClient } from '@everts/database/server'
-import { getOmzetVoorRelatie } from '@/lib/relaties/actions'
 import { dossierHref } from '@/lib/dossiers/href'
 
 export type EntityType =
@@ -274,6 +273,7 @@ export type RelatieFinancien = {
   relatie_id: string
   openstaand_werk_eva: {
     totaal_excl_btw: number
+    aantal_dossiers: number
     dossiers: { id: string; dossiernummer: string | null; titel: string; bedrag: number | null; substatus: string }[]
   }
   openstaande_facturen_bouw7_exact: {
@@ -282,28 +282,54 @@ export type RelatieFinancien = {
   }
 }
 
+/** Hoeveel openstaande opdrachten het antwoord opsomt; het totaalbedrag telt ze allemaal. */
+const OPENSTAAND_IN_ANTWOORD = 25
+
 /**
  * "Hoeveel staat er nog open bij <opdrachtgever>?"
  *
- * Deel 1 — openstaand WERK in EVA: opdrachten die financieel nog niet afgesloten
- * zijn (hergebruikt getOmzetVoorRelatie).
+ * Deel 1 — openstaand WERK in EVA: opdrachten die financieel nog niet afgesloten zijn.
  * Deel 2 — openstaande FACTUREN/debiteuren: zit in Bouw7/Exact, nog niet gekoppeld.
+ *
+ * Deze query stond in `getOmzetVoorRelatie`, maar die functie voedt inmiddels alleen nog de
+ * jaarcijfers op de relatiepagina — de dossierlijst zelf staat daar in het blok Gekoppelde
+ * dossiers. Hij hoort hier thuis: dit is de enige plek die hem nog nodig heeft.
+ *
+ * Het totaal telt álle openstaande opdrachten. Dat was eerder niet zo: de lijst werd op 20
+ * afgekapt en het totaal werd over dié 20 berekend, waardoor een grote opdrachtgever een te
+ * laag open bedrag kreeg. De opsomming blijft wel begrensd — een chatantwoord met honderd
+ * regels helpt niemand — maar het bedrag en het aantal kloppen nu.
  */
 export async function getRelatieFinancien(relatieId: string): Promise<RelatieFinancien> {
-  const omzet = await getOmzetVoorRelatie(relatieId)
-  const totaal = omzet.openstaand.reduce((sum, d) => sum + (d.bedrag ?? 0), 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  const { data } = await supabase
+    .from('dossiers')
+    .select('id, dossiernummer, titel, bedrag_excl_btw, opdracht_substatus')
+    .eq('klant_id', relatieId)
+    .eq('hoofdstatus', 'opdracht')
+    .not('opdracht_substatus', 'in', '("financieel_afgesloten","financieel_gereed")')
+    .not('bedrag_excl_btw', 'is', null)
+    .order('bedrag_excl_btw', { ascending: false })
+
+  const openstaand = ((data ?? []) as {
+    id: string; dossiernummer: string | null; titel: string
+    bedrag_excl_btw: number | null; opdracht_substatus: string | null
+  }[]).map((r) => ({
+    id: r.id,
+    dossiernummer: r.dossiernummer,
+    titel: r.titel,
+    bedrag: r.bedrag_excl_btw != null ? Number(r.bedrag_excl_btw) : null,
+    substatus: r.opdracht_substatus ?? '',
+  }))
 
   return {
     relatie_id: relatieId,
     openstaand_werk_eva: {
-      totaal_excl_btw: totaal,
-      dossiers: omzet.openstaand.map((d) => ({
-        id: d.id,
-        dossiernummer: d.dossiernummer,
-        titel: d.titel,
-        bedrag: d.bedrag,
-        substatus: d.substatus,
-      })),
+      totaal_excl_btw: openstaand.reduce((sum, d) => sum + (d.bedrag ?? 0), 0),
+      aantal_dossiers: openstaand.length,
+      // Grootste bedragen eerst, zodat het afgekapte staartje het minst uitmaakt.
+      dossiers: openstaand.slice(0, OPENSTAAND_IN_ANTWOORD),
     },
     openstaande_facturen_bouw7_exact: {
       beschikbaar: false,

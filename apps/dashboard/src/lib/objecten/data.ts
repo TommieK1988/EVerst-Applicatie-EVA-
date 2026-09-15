@@ -11,57 +11,19 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import type { VastgoedObject, VastgoedObjectRol, Hoofdstatus } from '@everts/database'
 import { VASTGOED_OBJECT_ROLLEN } from '@everts/database'
+import { bepaalFase, jaarVan, FASE_KOLOMMEN } from '@/lib/dossiers/fase'
+import type { DossierFase, FaseVelden } from '@/lib/dossiers/fase'
 import { adresWijktAf, objectAdresRegel } from './adres'
 import type { RelatieObject } from './types'
 
 const rond = (n: number): number => Math.round(n * 100) / 100
 
 /**
- * Fase zoals de gebruiker hem kent. `hoofdstatus` kent alleen aanvraag/offerte/opdracht;
- * "servicedesk" en "afgesloten" zijn overlays daarbovenop — zelfde redenering als
- * `isActiefDossier` in `lib/dossiers/actief.ts`, waar dit de bron van waarheid is.
+ * Fase zoals de gebruiker hem kent. Woont in `lib/dossiers/fase.ts`, want de relatie- en
+ * contactpersoonschermen rekenen met exact dezelfde regels; een tweede kopie hier zou bij de
+ * eerste statuswijziging uit de pas lopen.
  */
-export type ObjectFase = 'aanvraag' | 'offerte' | 'opdracht' | 'servicedesk' | 'afgesloten'
-
-type FaseVelden = {
-  hoofdstatus: Hoofdstatus
-  offerte_substatus: string | null
-  opdracht_substatus: string | null
-  servicedesk_substatus: string | null
-  gearchiveerd: boolean | null
-}
-
-/** Offertestatussen waarna er niets meer loopt — gelijk aan `isActiefDossier`. */
-const OFFERTE_EIND = new Set(['gewonnen', 'verloren', 'vervallen'])
-
-function bepaalFase(d: FaseVelden): ObjectFase {
-  if (d.gearchiveerd === true) return 'afgesloten'
-  if (d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_afgesloten') return 'afgesloten'
-  if (d.servicedesk_substatus) {
-    return d.servicedesk_substatus === 'financieel_gereed' ? 'afgesloten' : 'servicedesk'
-  }
-  // Een gewonnen offerte is inmiddels een opdracht, een verloren of vervallen offerte is
-  // afgehandeld — in beide gevallen loopt er niets meer op dit dossier.
-  if (d.hoofdstatus === 'offerte' && OFFERTE_EIND.has(d.offerte_substatus ?? '')) return 'afgesloten'
-  return d.hoofdstatus
-}
-
-/** Kolommen die `bepaalFase` nodig heeft — één plek, zodat de selects niet uit elkaar lopen. */
-const FASE_KOLOMMEN = 'hoofdstatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, gearchiveerd'
-
-/**
- * Jaar waarin het dossier is ontstaan.
- *
- * `created_at` is uitdrukkelijk de laatste keus: dat is de dag waarop de bulk-sync het dossier
- * in EVA zette. Van de 174 gekoppelde dossiers vallen die datums op slechts 14 dagen, dus
- * daarop groeperen zou een verzonnen jaarverdeling geven. `bouw7_aanmaakdatum` is de echte
- * aanmaakdatum van het project en is overal gevuld.
- */
-function jaarVan(d: { bouw7_aanmaakdatum: string | null; aanvraagdatum: string | null; created_at: string }): number | null {
-  const bron = d.bouw7_aanmaakdatum ?? d.aanvraagdatum ?? d.created_at
-  const jaar = Number(String(bron ?? '').slice(0, 4))
-  return Number.isFinite(jaar) && jaar > 1990 ? jaar : null
-}
+export type ObjectFase = DossierFase
 
 /** Objectrij zoals het overzicht hem toont: het object plus een paar afgeleide tellingen. */
 export type ObjectRij = VastgoedObject & {

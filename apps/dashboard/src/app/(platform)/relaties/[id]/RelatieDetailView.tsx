@@ -18,7 +18,7 @@ import type {
   ContactpersoonOrganisatie,
   OmzetData,
 } from '@everts/database'
-import { organisatieTypeLabels, organisatieTypeTone, opdrachtSubstatusLabels } from '@everts/database'
+import { organisatieTypeLabels, organisatieTypeTone } from '@everts/database'
 import {
   Alert, Button, Card, CardBody, CardHeader, Badge, EmptyState,
   FormField, FormRow, FormSection, Input, Textarea, Checkbox, useDialogen,
@@ -40,9 +40,7 @@ import {
   deleteInkoopPrijsafspraak,
 } from '@/lib/relaties/actions'
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
-import { dossierHref } from '@/lib/dossiers/href'
 import type { RelatieObject } from '@/lib/objecten/types'
-import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import OpnamePrijslijstBeheer from '@/components/relaties/OpnamePrijslijstBeheer'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
@@ -888,74 +886,37 @@ function InkoopBlok({ relatieId, initial }: { relatieId: string; initial: Relati
 /* ─── Omzet blok ──────────────────────────────────────────────────────── */
 
 function OmzetBlok({ omzet }: { omzet: OmzetData }) {
-  const geenData = omzet.perJaar.length === 0 && omzet.openstaand.length === 0
-
   return (
     <Blok titel="Omzet">
-      {geenData ? (
+      {omzet.perJaar.length === 0 ? (
         <EmptyState size="sm" tone="neutral" title="Nog geen opdrachtdossiers" description="Dossiers in de opdracht-fase voor deze relatie verschijnen hier." />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Per boekjaar */}
-          {omzet.perJaar.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Gefactureerd per boekjaar
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    {['Boekjaar', 'Dossiers', 'Totaal excl. BTW'].map(h => (
-                      <th key={h} style={{ textAlign: h === 'Totaal excl. BTW' ? 'right' : 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {omzet.perJaar.map(r => (
-                    <tr key={r.jaar}>
-                      <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', borderBottom: '1px solid var(--border)' }}>{r.jaar}</td>
-                      <td style={{ padding: '7px 0', fontSize: 13, color: 'var(--fg-muted)', borderBottom: '1px solid var(--border)' }}>{r.aantalDossiers}</td>
-                      <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
-                        € {r.bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Openstaande opdrachten */}
-          {omzet.openstaand.length > 0 && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Openstaande opdrachten
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {omzet.openstaand.map(d => (
-                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Deze lijst bevat alleen opdracht-dossiers; er bestaat geen /dossiers-route. */}
-                      <a href={dossierHref(d.id, 'opdracht')} {...NAAR_NIEUW_TABBLAD} style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', textDecoration: 'none' }}>
-                        {d.dossiernummer ? `${d.dossiernummer} · ` : ''}{d.titel}
-                      </a>
-                      <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
-                        {(opdrachtSubstatusLabels as Record<string, string>)[d.substatus] ?? d.substatus}
-                      </div>
-                    </div>
-                    {d.bedrag != null && (
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg)', flexShrink: 0 }}>
-                        € {d.bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                      </span>
-                    )}
-                  </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+            Gefactureerd per boekjaar
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Boekjaar', 'Dossiers', 'Totaal excl. BTW'].map(h => (
+                  <th key={h} style={{ textAlign: h === 'Totaal excl. BTW' ? 'right' : 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                    {h}
+                  </th>
                 ))}
-              </div>
-            </div>
-          )}
+              </tr>
+            </thead>
+            <tbody>
+              {omzet.perJaar.map(r => (
+                <tr key={r.jaar}>
+                  <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', borderBottom: '1px solid var(--border)' }}>{r.jaar}</td>
+                  <td style={{ padding: '7px 0', fontSize: 13, color: 'var(--fg-muted)', borderBottom: '1px solid var(--border)' }}>{r.aantalDossiers}</td>
+                  <td style={{ padding: '7px 0', fontSize: 13, fontWeight: 600, color: 'var(--fg)', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
+                    € {r.bedrag.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </Blok>
@@ -1298,6 +1259,8 @@ type Props = {
   omzet: OmzetData
   /** Leeg als objectenbeheer uit staat of de gebruiker er geen leesrecht op heeft. */
   objecten: RelatieObject[]
+  /** Server-gerenderd blok Gekoppelde dossiers, gestreamd via <Suspense> vanaf de pagina. */
+  dossiers: React.ReactNode
 }
 
 export default function RelatieDetailView({
@@ -1312,6 +1275,7 @@ export default function RelatieDetailView({
   contactpersonen,
   omzet,
   objecten,
+  dossiers,
 }: Props) {
   const isOpdrachtgever = relatie.types.includes('opdrachtgever')
   const isLeverancier   = relatie.types.includes('leverancier')
@@ -1376,8 +1340,9 @@ export default function RelatieDetailView({
                 <div style={{ gridColumn: '1 / -1' }}>
                   <OpnamePrijslijstBeheer relatieId={relatie.id} />
                 </div>
-                <PlaceholderBlok titel="Gekoppelde dossiers" />
-                <OmzetBlok omzet={omzet} />
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <OmzetBlok omzet={omzet} />
+                </div>
               </div>
             </TypeSectie>
           )}
@@ -1412,6 +1377,14 @@ export default function RelatieDetailView({
         <div style={{ position: 'sticky', top: 20 }}>
           <ContactpersonenBlok relatieId={relatie.id} initial={contactpersonen} />
         </div>
+      </div>
+
+      {/* Gekoppelde dossiers staan onder het grid en over de volle breedte: het zijn tabellen
+          met kolombeheer, die passen niet in een halve kolom. Bewust buiten de type-secties,
+          want een relatie kan tegelijk opdrachtgever en onderaannemer zijn — het blok toont
+          dan beide kanten in twee aparte tabellen. */}
+      <div style={{ marginTop: 20 }}>
+        {dossiers}
       </div>
     </div>
   )
