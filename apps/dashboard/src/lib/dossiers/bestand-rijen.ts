@@ -14,8 +14,8 @@ import type { SharePointBestand } from './sharepoint-bestanden'
 
 export type BestandBronNaam = 'Bouw7' | 'SharePoint'
 
-/** Waar een bestand voor gebruikt wordt in de UI — bepaalt lijst vs. galerij vs. mailvenster. */
-export type BestandSoort = 'afbeelding' | 'mail' | 'document'
+/** Waar een bestand voor gebruikt wordt in de UI — bepaalt lijst, galerij of leesvenster. */
+export type BestandSoort = 'afbeelding' | 'mail' | 'markdown' | 'document'
 
 export type BestandRij = {
   /** Uniek over beide bronnen heen: de id's zelf kunnen botsen. */
@@ -51,6 +51,8 @@ const AFBEELDING_EXT = new Set([
 
 const MAIL_EXT = new Set(['msg', 'eml'])
 
+const MARKDOWN_EXT = new Set(['md', 'markdown'])
+
 /**
  * Extensie uit de naam als de bron er geen meelevert. Bouw7 vult `extension` niet
  * altijd, en zonder extensie belandt een foto in de documentenlijst i.p.v. de galerij.
@@ -68,6 +70,7 @@ export function soortVan(extensie: string | null): BestandSoort {
   if (!extensie) return 'document'
   if (AFBEELDING_EXT.has(extensie)) return 'afbeelding'
   if (MAIL_EXT.has(extensie)) return 'mail'
+  if (MARKDOWN_EXT.has(extensie)) return 'markdown'
   return 'document'
 }
 

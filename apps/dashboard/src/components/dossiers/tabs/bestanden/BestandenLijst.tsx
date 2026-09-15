@@ -9,7 +9,7 @@
  */
 
 import React, { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Mail, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileText, Mail, Search } from 'lucide-react'
 import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
 
 type SorteerVeld = 'naam' | 'extensie' | 'bron' | 'grootte' | 'datum' | 'door'
@@ -53,15 +53,15 @@ function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
  * De bestandsnaam ís de actie. Een aparte actiekolom bood nooit een keuze — er stond
  * altijd precies één ding in — en kostte wel breedte, die in een halve kolom schaars is.
  *
- * Een mail opent in het leesvenster, de rest in de bron (SharePoint/Office online) of,
- * als die er niet is, als download.
+ * Een mail of markdown-document opent in een leesvenster binnen EVA, de rest in de
+ * bron (SharePoint/Office online) of, als die er niet is, als download.
  */
-function BestandsnaamActie({ rij, onOpenMail }: { rij: BestandRij; onOpenMail: (r: BestandRij) => void }) {
+function BestandsnaamActie({ rij, onOpenVenster }: { rij: BestandRij; onOpenVenster: (r: BestandRij) => void }) {
   const stijl = 'block text-left text-neutral-800 hover:text-brand-700 hover:underline'
 
-  if (rij.soort === 'mail') {
+  if (rij.soort === 'mail' || rij.soort === 'markdown') {
     return (
-      <button onClick={() => onOpenMail(rij)} title={`${rij.naam} — lezen`} className={stijl}>
+      <button onClick={() => onOpenVenster(rij)} title={`${rij.naam} — lezen`} className={stijl}>
         {rij.naam}
       </button>
     )
@@ -86,14 +86,15 @@ const BRON_STIJL: Record<BestandRij['bron'], string> = {
 }
 
 export default function BestandenLijst({
-  rijen, inApp, onToggleApp, onOpenMail, voettekst, legeTekst,
+  rijen, inApp, onToggleApp, onOpenVenster, voettekst, legeTekst,
   inPortaal, onTogglePortaal,
 }: {
   rijen: BestandRij[]
   /** Bouw7-bestanden die de buitendienst in de mobiele app ziet (opt-in). */
   inApp: Set<number>
   onToggleApp: (bestandId: number, zichtbaar: boolean) => void
-  onOpenMail: (rij: BestandRij) => void
+  /** Bestanden met een leesvenster in EVA (mail, markdown) melden zich hier. */
+  onOpenVenster: (rij: BestandRij) => void
   voettekst: React.ReactNode
   /** Tekst als er niets te tonen valt — zoeken levert iets anders op dan een lege lijst. */
   legeTekst?: string
@@ -235,8 +236,9 @@ export default function BestandenLijst({
                     title={inPortaal?.has(r.sleutel) ? 'Staat in het klantportaal' : undefined}
                   >
                     {r.soort === 'mail' && <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
+                    {r.soort === 'markdown' && <FileText className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
                     <span className="min-w-0">
-                      <BestandsnaamActie rij={r} onOpenMail={onOpenMail} />
+                      <BestandsnaamActie rij={r} onOpenVenster={onOpenVenster} />
                       {r.omschrijving && (
                         <span className="block text-[10px] text-neutral-400">{r.omschrijving}</span>
                       )}

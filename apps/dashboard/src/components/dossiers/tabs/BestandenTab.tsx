@@ -36,6 +36,7 @@ import { useDialogen } from '@/components/ui'
 import BestandenLijst from './bestanden/BestandenLijst'
 import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
+import MarkdownVenster from './bestanden/MarkdownVenster'
 import OpenInVerkenner from './OpenInVerkenner'
 
 /**
@@ -85,7 +86,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   // null = deze gebruiker heeft geen recht op het klantportaal; dan verdwijnt
   // de kolom in plaats van uitgegrijsd te blijven staan.
   const [inPortaal, setInPortaal] = useState<Set<string> | null>(null)
-  const [mail, setMail] = useState<BestandRij | null>(null)
+  // Eén geopend leesvenster tegelijk; de soort van de rij bepaalt welk venster dat is.
+  const [venster, setVenster] = useState<BestandRij | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [bezig, start] = useTransition()
 
@@ -158,7 +160,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
         bronQuery: rij.bronQuery,
         naam: rij.naam,
         extensie: rij.extensie,
-        // Mails horen bij de documenten: de klant heeft geen leesvenster voor .msg.
+        // Mails en markdown horen bij de documenten: het klantportaal heeft
+        // daar geen leesvenster voor.
         soort: rij.soort === 'afbeelding' ? 'afbeelding' : 'document',
         grootte: rij.grootte,
         datum: rij.datum,
@@ -371,7 +374,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 onToggleApp={toggleApp}
                 inPortaal={inPortaal ?? undefined}
                 onTogglePortaal={inPortaal ? togglePortaal : undefined}
-                onOpenMail={setMail}
+                onOpenVenster={setVenster}
                 legeTekst="Alle bestanden bij dit dossier zijn afbeeldingen — die staan in de fotogalerij."
                 voettekst={
                   <div className="border-t border-neutral-100 px-3 py-2.5">
@@ -399,7 +402,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
         />
       </div>
 
-      <MailVenster rij={mail} onClose={() => setMail(null)} />
+      <MailVenster rij={venster?.soort === 'mail' ? venster : null} onClose={() => setVenster(null)} />
+      <MarkdownVenster rij={venster?.soort === 'markdown' ? venster : null} onClose={() => setVenster(null)} />
     </div>
   )
 }
