@@ -85,6 +85,12 @@ async function schrijfKoppeling(
     webUrl: string | null
     status: MatchStatus | null
     handmatig?: boolean
+    /**
+     * De mapnaam zoals EVA hem zelf schreef. Standaard `null`: een gematchte of met de hand
+     * gekozen map is niet van ons en mag nooit meebewegen met de projectnaam. Laat je dit
+     * veld weg, dan erft de nieuwe koppeling anders de naamadministratie van de vorige map.
+     */
+    mapNaam?: string | null
   },
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,6 +103,7 @@ async function schrijfKoppeling(
       sharepoint_web_url: velden.webUrl,
       sharepoint_match_status: velden.status,
       ...(velden.handmatig === undefined ? {} : { sharepoint_handmatig: velden.handmatig }),
+      sharepoint_map_naam: velden.mapNaam ?? null,
       sharepoint_gematcht_op: new Date().toISOString(),
     })
     .eq('id', dossierId)
@@ -117,6 +124,7 @@ async function wisKoppeling(dossierId: string): Promise<void> {
       sharepoint_web_url: null,
       sharepoint_match_status: null,
       sharepoint_handmatig: false,
+      sharepoint_map_naam: null,
       sharepoint_gematcht_op: null,
     })
     .eq('id', dossierId)
@@ -350,12 +358,17 @@ export async function maakDossierMap(dossierId: string, naam?: string): Promise<
     if (!gewenst) return foutData('Geef een mapnaam op.', d.sharepoint_match_status)
 
     const map = await maakContainerMap(ctx, gewenst)
+    // Alleen een zélf aangemaakte map die de conventienaam draagt volgt later de
+    // projectnaam. Typt iemand een eigen naam, dan is dat een bewuste keuze en laten we
+    // hem met rust; een map die al bestond is sowieso niet van ons.
+    const volgtConventie = map.status === 'aangemaakt' && gewenst === saneerMapNaam(dossierMapNaam(d))
     await schrijfKoppeling(dossierId, {
       driveId: map.driveId,
       itemId: map.itemId,
       webUrl: map.webUrl,
       status: 'gematcht',
       handmatig: true,
+      mapNaam: volgtConventie ? gewenst : null,
     })
     return metBestanden(
       dossierId,

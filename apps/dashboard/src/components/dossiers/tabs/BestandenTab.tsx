@@ -489,7 +489,8 @@ function SharePointKoppeling({
         {data.status === 'meerdere'
           ? 'Meerdere SharePoint-mappen komen in aanmerking — kies de juiste.'
           : data.status === 'niet_gevonden'
-            ? 'Geen SharePoint-map gekoppeld. Kies de juiste map, of maak hem aan.'
+            ? 'Geen SharePoint-map gekoppeld. Nieuwe aanvragen krijgen die automatisch; ' +
+              'voor oudere dossiers kies je de juiste map, of maak je hem aan.'
             : 'SharePoint is nu niet bereikbaar.'}
       </p>
 

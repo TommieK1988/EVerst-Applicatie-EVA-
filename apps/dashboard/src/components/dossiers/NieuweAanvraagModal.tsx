@@ -289,6 +289,19 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
         toast.error(`Aanvraag opgeslagen in EVA, maar niet naar Bouw7: ${result.bouw7.error ?? 'onbekende fout'}`)
       }
 
+      // De dossiermap. Lukte het niet, dan is dat geen blokkade: de nachtelijke naloop
+      // probeert het opnieuw. Wel melden, want iemand die meteen bestanden kwijt wil
+      // moet weten dat de map er nog niet staat.
+      if (result.map) {
+        if (result.map.status === 'aangemaakt') {
+          const erbij = result.map.geplaatst
+            ? ` met ${result.map.geplaatst} standaardbestand${result.map.geplaatst === 1 ? '' : 'en'}`
+            : ''
+          toast.success(`SharePoint-map aangemaakt${erbij}`)
+        }
+        if (result.map.fout) toast.error(`Dossiermap: ${result.map.fout}`)
+      }
+
       // Meegestuurde bestanden naar de SharePoint-dossiermap (best-effort, niet blokkerend).
       if (bestanden.length > 0) {
         try {

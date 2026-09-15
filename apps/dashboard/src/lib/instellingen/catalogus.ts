@@ -54,6 +54,14 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
         module: 'dossiers',
         synoniemen: ['categorie', 'soort werk', 'toggle', 'schakelaar', 'tab', 'houtrot', 'vca', 'opname'],
       },
+      {
+        href: '/instellingen/dossiermap',
+        titel: 'Dossiermap',
+        omschrijving: 'De SharePoint-map die EVA bij een nieuwe aanvraag aanmaakt, en de voorbeeldbestanden die er meteen in komen.',
+        module: 'instellingen',
+        guard: { module: 'instellingen', niveau: 'beheren' },
+        synoniemen: ['sharepoint', 'map', 'bestanden', 'voorbeeld', 'standaard', 'submap', 'projectmap'],
+      },
     ],
   },
   {

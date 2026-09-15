@@ -83,6 +83,26 @@ export async function runCronSync(
     geocode = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  // SharePoint-dossiermappen bijwerken. Bewust ná de sync en niet erin: een Graph-storing
+  // mag de sync niet vertragen, en beide nalopen herstellen zichzelf — wat nu niet lukt
+  // staat morgen weer in de selectie.
+  //  - hernoemen: dossiers waarvan de projectnaam wijzigde (in EVA of in Bouw7);
+  //  - aanmaken:  aanvragen waarvan het dossiernummer pas later uit Bouw7 kwam.
+  let dossiermappen: unknown
+  log.stap('dossiermappen')
+  try {
+    const { hernoemVerouderdeDossierMappen, maakOntbrekendeDossierMappen } = await import(
+      '@/lib/o365/dossiermap-naam'
+    )
+    const [hernoemd, aangemaakt] = [
+      await hernoemVerouderdeDossierMappen({ max: 50 }),
+      await maakOntbrekendeDossierMappen({ max: 25 }),
+    ]
+    dossiermappen = { hernoemd, aangemaakt }
+  } catch (e) {
+    dossiermappen = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   log.klaar({ mode, projecten: full.projects })
 
   return NextResponse.json(
@@ -96,6 +116,7 @@ export async function runCronSync(
       planning: full.planning,
       management,
       geocode,
+      dossiermappen,
       duur_ms: Date.now() - startedAt,
     },
     { status: 200 },

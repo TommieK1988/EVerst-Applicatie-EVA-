@@ -17,6 +17,7 @@ import type {
 } from '@/lib/bouw7/snapshot-bronnen'
 import { SOORTEN_PER_TAB, BEWAKING_KOSTENSOORTEN } from '@/lib/bouw7/snapshot-bronnen'
 import { revalidatePath, unstable_cache } from 'next/cache'
+import { after } from 'next/server'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
@@ -795,8 +796,23 @@ export async function getAanvraagCategorieen(): Promise<{ id: number; name: stri
 }
 
 /** Resultaat van `maakAanvraag`: het EVA-dossier + de status van de synchrone Bouw7-push. */
+/** Wat er met de SharePoint-dossiermap gebeurde bij het aanmaken van de aanvraag. */
+export type MapAanmaakStatus = {
+  ok: boolean
+  status: 'aangemaakt' | 'bestond_al' | 'overgeslagen'
+  /** Aantal geplaatste voorbeeldbestanden uit de instellingen. */
+  geplaatst?: number
+  fout?: string
+}
+
 export type MaakAanvraagResult =
-  | { ok: true; data: DossierRij; bouw7: { ok: boolean; error?: string; dossiernummer?: string | null } }
+  | {
+      ok: true
+      data: DossierRij
+      bouw7: { ok: boolean; error?: string; dossiernummer?: string | null }
+      /** Ontbreekt als SharePoint niet is ingesteld of de Bouw7-push faalde. */
+      map?: MapAanmaakStatus
+    }
   | { ok: false; error: string }
 
 /**
@@ -850,6 +866,9 @@ export async function maakAanvraag(input: {
       object_gekoppeld_op:  input.object_id ? new Date().toISOString() : null,
       object_koppel_bron:   input.object_id ? 'aanmaak' : null,
       bouw7_sync_status:    'pending',
+      // Deze aanvraag hoort een eigen SharePoint-dossiermap te krijgen. Blijft staan tot
+      // de map er is, zodat de naloop hem alsnog maakt als de Bouw7-push nu faalt.
+      sharepoint_map_gewenst: true,
     })
     .select(`*, ${ROL_SELECT}`)
     .single()
@@ -914,8 +933,24 @@ export async function maakAanvraag(input: {
     bouw7 = { ok: false, error: msg }
   }
 
+  // SharePoint-dossiermap. Bewust inline en niet via `after()`: de aanvraagmodal uploadt
+  // meegestuurde bestanden direct hierna, en dát pad maakt de map ook aan — twee creates
+  // tegelijk op dezelfde naam. Inline betekent ook dat de gebruiker meteen hoort of de map
+  // er staat. De eigen tijdslimiet houdt de modal snel als Graph traag is; wat niet lukt
+  // pakt de nachtelijke naloop op.
+  let map: MapAanmaakStatus | undefined
+  if (bouw7.ok) {
+    const { zorgVoorDossierMapBijAanmaak } = await import('@/lib/o365/dossier-map')
+    map = await Promise.race([
+      zorgVoorDossierMapBijAanmaak(data.id),
+      new Promise<MapAanmaakStatus>(resolve =>
+        setTimeout(() => resolve({ ok: false, status: 'overgeslagen', fout: 'SharePoint reageerde niet op tijd.' }), 20_000),
+      ),
+    ])
+  }
+
   revalidatePath('/aanvragen')
-  return { ok: true, data: mapRij(data), bouw7 }
+  return { ok: true, data: mapRij(data), bouw7, map }
 }
 
 /** Haal één dossier op via id, verrijkt met klant- en rolnamen. */
@@ -3208,6 +3243,19 @@ export async function updateDossierInfo(
 
   // categorie is een gevolgd triggerveld (veld_waarde); evalueer direct.
   await verwerkDossierTriggers(id).catch(() => {})
+
+  // Projectnaam gewijzigd → de SharePoint-dossiermap heet ernaar en gaat mee. Via `after()`:
+  // niemand wacht op Graph, en de nachtelijke naloop is het vangnet als dit niet lukt.
+  if (gewijzigd.includes('titel')) {
+    try {
+      after(async () => {
+        const { synchroniseerDossierMapNaam } = await import('@/lib/o365/dossiermap-naam')
+        await synchroniseerDossierMapNaam(id).catch(() => {})
+      })
+    } catch {
+      // Buiten een request-context (bv. vanuit de cron) bestaat `after` niet.
+    }
+  }
 
   // Naar Bouw7. Wat daar aankomt wordt ontmarkeerd (Bouw7 en EVA zijn dan gelijk); wat niet
   // aankomt blijft beschermd en krijgt via de cron een herkansing.

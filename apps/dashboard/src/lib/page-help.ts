@@ -367,6 +367,17 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Geavanceerde instellingen voor de managementmodule: KPI-drempelwaarden, rapportageperioden en koppeling met externe managementrapportage.',
   }],
 
+  [/^\/instellingen\/dossiermap$/, {
+    title: 'Dossiermap',
+    description: 'Bij een nieuwe aanvraag maakt EVA in SharePoint een map aan met de naam "dossiernummer - projectnaam". Op dit scherm bepaal je welke voorbeeldbestanden daar meteen in komen te staan.',
+    sections: [
+      { title: 'De mapnaam', body: 'De map heet altijd "dossiernummer - projectnaam". Wijzigt de projectnaam later — in EVA of in Bouw7 — dan hernoemt EVA de map mee. Zoeken gebeurt altijd op het dossiernummer, dus dat blijft vooraan staan.' },
+      { title: 'Voorbeeldbestanden', body: 'Wat je hier toevoegt komt in elke nieuwe dossiermap. Alleen in mappen die EVA zelf aanmaakt: een bestaande map van een collega wordt nooit achteraf aangevuld, en een bestand dat er al staat wordt nooit overschreven.' },
+      { title: 'Alleen voor bepaalde dossiers', body: 'Vink je niets aan bij categorie of werkmaatschappij, dan geldt het bestand voor alles. Dat is het gangbare geval. Vink je wel iets aan, dan komt het bestand alleen in mappen van dossiers die daarbij passen.' },
+      { title: 'Submappen', body: 'Laat je de submap leeg, dan komt het bestand direct in de dossiermap. Vul je er een naam in, dan maakt EVA die submap aan en zet het bestand daarin.' },
+    ],
+  }],
+
   // ── Klantportaal ───────────────────────────────────────────────────────
   [/^\/instellingen\/klantportaal$/, {
     title: 'Klantportaal',

@@ -3,9 +3,14 @@
  *
  * App-only Graph-helpers voor dossier-bestanden in SharePoint. EVA zoekt zelfstandig
  * de juiste dossiermap binnen één container (`O365_DOSSIER_DRIVE_ID`) en toont de
- * bestanden. Bestaat de map niet, dan kan hij vanuit EVA aangemaakt worden — de
- * container is een calculatie-archief, dus voor dossiers zonder calculatie is er
- * simpelweg nog niets om te vinden.
+ * bestanden.
+ *
+ * De container bégon als calculatie-archief: alleen dossiers waarvoor ooit een begroting
+ * is gemaakt hadden er een map. Sinds september 2026 krijgt élke in EVA aangemaakte
+ * aanvraag er meteen een eigen map (zie `dossier-map.ts`), en volgt de mapnaam de
+ * projectnaam (`dossiermap-naam.ts`). Voor dossiers van vóór die datum geldt het oude
+ * verhaal nog: geen calculatie betekent niets te vinden, en dan kiest of maakt de
+ * gebruiker de map zelf vanaf de Bestanden-tab.
  */
 
 import { appGraphFetch, appGraphGet } from './graph'
@@ -171,6 +176,15 @@ export async function lijstContainerMappen(ctx: DriveContext): Promise<SharePoin
 /** Wist de listing-cache — na het aanmaken van een map, zodat hij meteen zichtbaar is. */
 function vergeetLijst(ctx: DriveContext): void {
   lijstCache.delete(lijstSleutel(ctx))
+}
+
+/**
+ * Zelfde als `vergeetLijst`, maar voor aanroepers buiten deze module: wie een map
+ * hernoemt moet de listing kunnen laten vervallen, anders blijft de match een minuut
+ * lang op de oude naam draaien.
+ */
+export function vergeetContainerLijst(ctx: DriveContext): void {
+  vergeetLijst(ctx)
 }
 
 /**
@@ -430,4 +444,128 @@ export async function resolveShareLink(shareLink: string): Promise<MatchResultaa
   const driveId = item.parentReference?.driveId
   if (!driveId || !item.id) return { status: 'niet_gevonden' }
   return { status: 'gematcht', driveId, itemId: item.id, webUrl: item.webUrl ?? null }
+}
+
+/* ─── Hernoemen, submappen en uploaden ────────────────────────────────────── */
+
+export type HernoemResultaat =
+  | { status: 'hernoemd'; naam: string; webUrl: string | null }
+  /** Er staat al een andere map met die naam in dezelfde container. */
+  | { status: 'naam_bezet' }
+  /** De map bestaat niet meer — de aanroeper hoort de koppeling te wissen. */
+  | { status: 'niet_gevonden' }
+  | { status: 'mislukt'; fout: string }
+
+/**
+ * Hernoemt een map. Gooit nooit: hernoemen is altijd een neveneffect van iets anders
+ * (de projectnaam wijzigen), en dat mag er niet op stuklopen.
+ *
+ * De `webUrl` van een driveItem bevat het pad inclusief mapnaam en verandert dus mee;
+ * de aanroeper moet de nieuwe waarde op het dossier wegschrijven, anders wijst
+ * "Open map in SharePoint" na een naamwijziging naar een 404.
+ */
+export async function hernoemMapItem(
+  driveId: string,
+  itemId: string,
+  nieuweNaam: string,
+): Promise<HernoemResultaat> {
+  const schoon = saneerMapNaam(nieuweNaam)
+  if (!schoon) return { status: 'mislukt', fout: 'Lege mapnaam.' }
+
+  try {
+    const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: schoon }),
+    })
+
+    if (res.status === 404) return { status: 'niet_gevonden' }
+    if (res.status === 409) return { status: 'naam_bezet' }
+    if (!res.ok) {
+      // 423 (resourceLocked) is een reëel antwoord als iemand de map openheeft staan.
+      return { status: 'mislukt', fout: `HTTP ${res.status}: ${await res.text().catch(() => '')}`.slice(0, 300) }
+    }
+
+    const item = (await res.json()) as DriveItem
+    return { status: 'hernoemd', naam: item.name ?? schoon, webUrl: item.webUrl ?? null }
+  } catch (err) {
+    return { status: 'mislukt', fout: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Huidige naam van een driveItem; `null` als hij niet (meer) bestaat. */
+export async function haalMapNaam(driveId: string, itemId: string): Promise<string | null> {
+  try {
+    const item = await appGraphGet<DriveItem>(`/drives/${driveId}/items/${itemId}?$select=id,name`)
+    return item.name ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Maakt een submap binnen een dossiermap. Anders dan `maakContainerMap` zoekt dit bij
+ * een naambotsing in de kinderen van díe map — de container-listing zegt niets over
+ * wat er ín een dossiermap staat.
+ */
+export async function maakSubmap(
+  driveId: string,
+  ouderItemId: string,
+  naam: string,
+): Promise<{ status: 'aangemaakt' | 'bestaat_al'; itemId: string; webUrl: string | null }> {
+  const schoon = saneerMapNaam(naam)
+  if (!schoon) throw new Error('Geef een mapnaam op.')
+
+  const res = await appGraphFetch(`/drives/${driveId}/items/${ouderItemId}/children`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: schoon, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
+  })
+
+  if (res.status === 409) {
+    const doel = normaliseer(schoon)
+    const kinderen = await appGraphGet<{ value?: DriveItem[] }>(
+      `/drives/${driveId}/items/${ouderItemId}/children?$select=id,name,webUrl,folder&$top=200`,
+    )
+    const bestaand = (kinderen.value ?? []).find(it => it.folder && normaliseer(it.name ?? '') === doel)
+    if (bestaand) return { status: 'bestaat_al', itemId: bestaand.id, webUrl: bestaand.webUrl ?? null }
+    throw new Error(`Submap "${schoon}" bestaat al, maar kon niet worden teruggevonden.`)
+  }
+
+  if (!res.ok) throw new Error(`Kon submap niet aanmaken (${res.status}).`)
+
+  const item = (await res.json()) as DriveItem
+  return { status: 'aangemaakt', itemId: item.id, webUrl: item.webUrl ?? null }
+}
+
+/**
+ * Zet bytes als bestand in een map. `conflict` staat standaard op `fail`: een bestand
+ * dat er al staat is van iemand anders en wordt nooit overschreven.
+ */
+export async function uploadNaarMap(
+  driveId: string,
+  itemId: string,
+  naam: string,
+  bytes: Uint8Array,
+  contentType: string,
+  conflict: 'fail' | 'rename' | 'replace' = 'fail',
+): Promise<{ ok: boolean; status: number; itemId?: string; webUrl?: string | null }> {
+  const res = await appGraphFetch(
+    `/drives/${driveId}/items/${itemId}:/${encodeURIComponent(naam)}:/content` +
+      `?@microsoft.graph.conflictBehavior=${conflict}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType || 'application/octet-stream' },
+      body: bytes as unknown as BodyInit,
+    },
+  )
+
+  if (!res.ok) return { ok: false, status: res.status }
+
+  try {
+    const item = (await res.json()) as DriveItem
+    return { ok: true, status: res.status, itemId: item.id, webUrl: item.webUrl ?? null }
+  } catch {
+    return { ok: true, status: res.status }
+  }
 }
