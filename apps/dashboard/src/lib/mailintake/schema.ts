@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-08.1'
+export const PROMPT_VERSIE = '2026-09-16.1'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -51,6 +51,8 @@ export const extractieSchema = z.object({
   // ── Kenmerken ──
   referentie: korteTekst,               // hún bestel-/ordernummer
   onze_offerte_referentie: korteTekst,  // óns dossier-/offertenummer, als zij dat noemen
+  opdracht_referentie: korteTekst,      // het nummer dat zij aan deze opdracht geven
+  opdrachtdatum: korteTekst,            // datum van de opdracht zelf
   vve_code: korteTekst,
   categorie_voorstel: korteTekst,
   werkmaatschappij_voorstel: korteTekst,
@@ -64,6 +66,10 @@ export const extractieSchema = z.object({
   bedrag_excl_btw: z.number().nullable().catch(null),
   spoed: z.boolean().catch(false),
   opmerkingen: tekst,
+  /** Letterlijke opmerkingen van de klant; worden een notitie op het dossier. */
+  klant_opmerkingen: tekst,
+  /** Servicedesk: het bedrag waarbinnen wij zonder nadere goedkeuring mogen werken. */
+  mandaat_bedrag: z.number().nullable().catch(null),
   meerdere_werkadressen: z.boolean().catch(false),
 
   bijlage_rollen: z.array(z.object({
@@ -97,6 +103,10 @@ export const VELD_LABELS: Record<string, string> = {
   werkadres_stad:            'Plaats',
   referentie:                'Referentie opdrachtgever',
   onze_offerte_referentie:   'Ons offerte-/dossiernummer',
+  opdracht_referentie:       'Opdrachtreferentie',
+  opdrachtdatum:             'Opdrachtdatum',
+  klant_opmerkingen:         'Opmerkingen van de klant',
+  mandaat_bedrag:            'Mandaat (excl. btw)',
   vve_code:                  'VvE-code',
   categorie_voorstel:        'Categorie',
   werkmaatschappij_voorstel: 'Werkmaatschappij',
@@ -169,6 +179,16 @@ export const LEVER_EXTRACTIE_TOOL = {
         type: 'string',
         description: 'Een dossier- of offertenummer van óns dat in deze mail wordt genoemd.',
       },
+      opdracht_referentie: {
+        type: 'string',
+        description:
+          'Het nummer dat de opdrachtgever aan DEZE opdracht geeft: opdrachtbonnummer, ordernummer, ' +
+          'contractnummer. Dus niet ons offertenummer, en niet een algemeen debiteurennummer.',
+      },
+      opdrachtdatum: {
+        type: 'string',
+        description: 'De datum van de opdracht zelf als ISO-datum (JJJJ-MM-DD), als die op de bon staat.',
+      },
       vve_code: { type: 'string', description: 'VvE- of complexcode, als die genoemd wordt.' },
       categorie_voorstel: { type: 'string', description: 'Soort werk, bijvoorbeeld Schilderwerk, Dagelijks onderhoud, Mutatie, Renovatie.' },
       werkmaatschappij_voorstel: { type: 'string', description: 'Werkmaatschappij, alleen als de mail die expliciet noemt.' },
@@ -178,6 +198,19 @@ export const LEVER_EXTRACTIE_TOOL = {
       bedrag_excl_btw: { type: 'number', description: 'Opdrachtbedrag exclusief btw, als de mail of bon dat noemt.' },
       spoed: { type: 'boolean', description: 'true als er om spoed of directe actie wordt gevraagd.' },
       opmerkingen: { type: 'string', description: 'Bijzonderheden die de behandelaar moet weten (bereikbaarheid, sleutels, asbest, bewoners).' },
+      klant_opmerkingen: {
+        type: 'string',
+        description:
+          'Opmerkingen die de klant zelf bij deze opdracht maakt en die op het dossier horen te komen, ' +
+          'zo dicht mogelijk bij hun eigen woorden. Laat leeg als de klant niets bijzonders meldt.',
+      },
+      mandaat_bedrag: {
+        type: 'number',
+        description:
+          'Het bedrag tot waar wij zonder nadere goedkeuring mogen werken: mandaat, budgetplafond, ' +
+          'kostenlimiet. Alleen invullen als de mail dat ook zo benoemt - een los bedrag is meestal ' +
+          'de geschatte prijs, niet het mandaat.',
+      },
       meerdere_werkadressen: {
         type: 'boolean',
         description: 'true als de mail werk op meerdere adressen tegelijk betreft (verzamelopdracht).',

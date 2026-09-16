@@ -19,7 +19,8 @@ export default async function MailintakeInstellingenPage() {
     getPostbussen(),
     getAliassen(),
     getNabehandelStand(),
-    supabase.from('medewerkers').select('id, voornaam, achternaam').eq('actief', true).order('achternaam').limit(300),
+    supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam, auth_user_id')
+      .eq('actief', true).order('achternaam').limit(300),
     supabase.from('bedrijfsgegevens').select('id, naam').eq('type', 'werkmaatschappij').order('naam').limit(50),
   ])
 
@@ -28,8 +29,12 @@ export default async function MailintakeInstellingenPage() {
       postbussen={JSON.parse(JSON.stringify(postbussen))}
       aliassen={JSON.parse(JSON.stringify(aliassen))}
       nabehandelStand={stand}
-      medewerkers={(medewerkers ?? []).map((m: any) => ({
-        id: m.id, naam: [m.voornaam, m.achternaam].filter(Boolean).join(' '),
+      medewerkers={(medewerkers ?? []).map(m => ({
+        id: m.id,
+        naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+        // Zonder EVA-account kan een actie niet aan iemand hangen; het scherm
+        // waarschuwt daarvoor in plaats van hem stil te laten verdwijnen.
+        heeftLogin: m.auth_user_id != null,
       }))}
       werkmaatschappijen={werkmaatschappijen ?? []}
       magBeheren={rechten.mailintake === 'beheren'}

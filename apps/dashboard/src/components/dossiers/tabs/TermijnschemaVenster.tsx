@@ -30,6 +30,9 @@ import {
   getTermijnschemaBron, maakTermijnschema,
   type TermijnschemaBron, type TermijnschemaRegel, type TermijnGrondslag, type BtwAandeel,
 } from '@/lib/dossiers/termijnen'
+import {
+  bouwTermijnrijen, termijnBedragen, type TermijnRij,
+} from '@/lib/dossiers/termijnen-schema'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -44,56 +47,14 @@ const pct = (s: string): number => {
 const pctTekst = (n: number): string =>
   new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 4 }).format(Math.round(n * 10000) / 10000)
 
-/** Eén termijn zoals hij in Bouw7 komt te staan: eigen bedrag, eigen btw-tarief. */
-type Rij = TermijnschemaRegel & { btwTariefBouw7Id: number | null }
-
 /**
- * Zet een termijnschema om in de termijnen die Bouw7 krijgt.
- *
- * Kent de offerte meerdere btw-tarieven, dan valt elke schema-regel uiteen in een regel per
- * tarief: "Aanbetaling" met 30% wordt bij een verdeling 40/60 een regel van 12% tegen het ene
- * tarief en 18% tegen het andere. De laatste regel neemt het afrondingsverschil op, zodat het
- * totaal exact 100% blijft.
+ * De rekenregel zelf staat in lib/dossiers/termijnen-schema.ts, zodat dit venster en de
+ * mailintake gegarandeerd hetzelfde rekenen. Een afwijking in de btw-splitsing is
+ * onzichtbaar tot de eerste factuur.
  */
-function bouwRijen(schema: TermijnschemaRegel[], verdeling: BtwAandeel[], standaard: number | null): Rij[] {
-  if (schema.length === 0) return []
-
-  const groepen = verdeling.length > 0
-    ? verdeling
-    : [{ bouw7TariefId: standaard, label: '', pct: 0, aandeel: 1 } as BtwAandeel]
-
-  const rijen: Rij[] = []
-  for (const regel of schema) {
-    for (const groep of groepen) {
-      rijen.push({
-        omschrijving: groepen.length > 1 && groep.label
-          ? `${regel.omschrijving || 'Termijn'} (${groep.label})`
-          : regel.omschrijving,
-        percentage: Math.round(regel.percentage * groep.aandeel * 10000) / 10000,
-        btwTariefBouw7Id: groep.bouw7TariefId,
-      })
-    }
-  }
-
-  const somOpEen = rijen.slice(0, -1).reduce((s, r) => s + r.percentage, 0)
-  const laatste = rijen[rijen.length - 1]
-  laatste.percentage = Math.round((100 - somOpEen) * 10000) / 10000
-  return rijen
-}
-
-/**
- * Verdeelt de grondslag over de termijnen. De laatste termijn absorbeert het afrondingsverschil —
- * anders blijft er een cent over die op geen enkele factuur terechtkomt.
- */
-function bedragen(rijen: Rij[], grondslag: number): number[] {
-  const centen = Math.round(grondslag * 100)
-  let verdeeld = 0
-  return rijen.map((r, i) => {
-    const eigen = i === rijen.length - 1 ? centen - verdeeld : Math.round(centen * r.percentage / 100)
-    verdeeld += eigen
-    return eigen / 100
-  })
-}
+type Rij = TermijnRij
+const bouwRijen = bouwTermijnrijen
+const bedragen = termijnBedragen
 
 const KEUZE_EIGEN = '__eigen__'
 

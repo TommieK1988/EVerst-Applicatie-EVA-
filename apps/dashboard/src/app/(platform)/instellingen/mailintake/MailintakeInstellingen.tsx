@@ -24,6 +24,7 @@ type Postbus = {
   id: string; sleutel: string; naam: string; adres: string; soort: string
   actief: boolean; automatisch_aanmaken: boolean
   standaard_werkmaatschappij_id: string | null
+  standaard_behandelaar_id: string | null
   notificatie_medewerkers: string[]
   dagbudget_cent: number
   map_verwerkt_naam: string
@@ -43,7 +44,7 @@ export default function MailintakeInstellingen({
   postbussen: Postbus[]
   aliassen: Alias[]
   nabehandelStand: string
-  medewerkers: { id: string; naam: string }[]
+  medewerkers: { id: string; naam: string; heeftLogin: boolean }[]
   werkmaatschappijen: { id: string; naam: string }[]
   magBeheren: boolean
 }) {
@@ -196,6 +197,37 @@ export default function MailintakeInstellingen({
                     type="number" min={0} style={veldStijl} defaultValue={p.dagbudget_cent}
                     onBlur={e => Number(e.target.value) !== p.dagbudget_cent && wijzig(p.id, 'dagbudget_cent', Number(e.target.value))}
                   />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <span style={klein}>Wie behandelt wat EVA voorlegt</span>
+                  <select
+                    style={veldStijl}
+                    defaultValue={p.standaard_behandelaar_id ?? ''}
+                    onChange={e => wijzig(p.id, 'standaard_behandelaar_id', e.target.value || null)}
+                  >
+                    <option value="">— niemand —</option>
+                    {medewerkers.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.naam}{m.heeftLogin ? '' : ' — geen EVA-login'}
+                      </option>
+                    ))}
+                  </select>
+                  {(() => {
+                    const b = medewerkers.find(m => m.id === p.standaard_behandelaar_id)
+                    if (!p.standaard_behandelaar_id) {
+                      return <span style={klein}>Zonder behandelaar blijft een voorgelegd bericht in het postvak staan zonder dat er een actie voor iemand ontstaat.</span>
+                    }
+                    if (b && !b.heeftLogin) {
+                      return (
+                        <span style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
+                          {b.naam} kan nog niet inloggen in EVA. De actie wordt wel aangemaakt, maar
+                          komt pas in beeld zodra er een account is.
+                        </span>
+                      )
+                    }
+                    return null
+                  })()}
                 </label>
 
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

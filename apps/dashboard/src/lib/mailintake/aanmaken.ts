@@ -18,6 +18,7 @@ import { maakNotificatie } from '@/lib/notificaties/maak'
 import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 import type { GekeurdeVelden } from './extractie'
+import { maakIntakeActie } from './taken'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
 export interface AanmaakInvoer {
@@ -33,6 +34,8 @@ export interface AanmaakInvoer {
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
   medewerkerId: string | null
+  /** De standaard behandelaar van de postbus; krijgt de controletaak. */
+  behandelaarId?: string | null
 }
 
 export type AanmaakResultaat =
@@ -201,6 +204,15 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // opgesteld als de behandelaar hem niet heeft aangepast.
   await zetWerkzaamhedenOpDossier(dossierId, inv.berichtId, inv.gevraagdeWerkzaamheden ?? null).catch(() => {})
 
+  // Het mandaat hoort bij een servicedeskbon en kan niet mee in maakAanvraag --
+  // dat veld kent de aanvraagmodal niet. Zonder deze stap zou het bedrag uit de bon
+  // wel gelezen zijn en nergens terechtkomen.
+  if (v.mandaatBedrag != null) {
+    const { updateServicedeskInstellingen } = await import('@/lib/dossiers/servicedesk')
+    await updateServicedeskInstellingen(dossierId, { mandaat_bedrag: v.mandaatBedrag })
+      .catch(() => undefined)
+  }
+
   // Herkomst vastleggen. Dit is wat de nacontroles later leesbaar maakt:
   // "welke dossiers komen uit mail, en hoeveel daarvan zijn achteraf vervallen?"
   await supabase.from('dossiers').update({ mailintake_bericht_id: inv.berichtId }).eq('id', dossierId)
@@ -236,7 +248,7 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
 
   // Bij een automatisch dossier hoort altijd een mens die er nog naar kijkt.
   if (inv.automatisch) {
-    await zetControletaak(dossierId, res.data.dossiernummer ?? null).catch(() => {})
+    await zetControletaak(dossierId, res.data.dossiernummer ?? null, inv.berichtId, inv.behandelaarId ?? null)
     await meldAutomatischAangemaakt(dossierId, inv.berichtId, res.data.dossiernummer ?? null).catch(() => {})
   }
 
@@ -262,10 +274,20 @@ export async function koppelAanDossier(
 ): Promise<void> {
   const supabase = createAdminClient()
 
+  // De klant van het dossier overnemen als het bericht er nog geen had. Zonder dit
+  // toonde een afgehandeld bericht achteraf geen opdrachtgever, terwijl die bij het
+  // gekozen dossier gewoon bekend is.
+  const { data: dossier } = await supabase
+    .from('dossiers').select('klant_id, contactpersoon_id').eq('id', dossierId).maybeSingle()
+  const { data: huidig } = await supabase
+    .from('mailintake_berichten').select('relatie_id, contactpersoon_id').eq('id', berichtId).maybeSingle()
+
   await supabase.from('mailintake_berichten').update({
     status: 'verwerkt',
     besluit,
     dossier_id: dossierId,
+    relatie_id: huidig?.relatie_id ?? dossier?.klant_id ?? null,
+    contactpersoon_id: huidig?.contactpersoon_id ?? dossier?.contactpersoon_id ?? null,
     behandeld_door: medewerkerId,
     behandeld_op: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -313,16 +335,23 @@ export async function onthoudAlias(opts: {
 
 // ─── Meldingen bij een automatisch dossier ───────────────────────────────────
 
-async function zetControletaak(dossierId: string, dossiernummer: string | null): Promise<void> {
-  const { maakTaak } = await import('@/app/(platform)/taken/actions/taken')
-  await maakTaak({
+async function zetControletaak(
+  dossierId: string,
+  dossiernummer: string | null,
+  berichtId: string,
+  behandelaarId: string | null,
+): Promise<void> {
+  // Ging eerder naar de calculator van het dossier. Dat werkte niet: die rol wordt
+  // pas later gevuld, dus bij een vers dossier hing de taak aan niemand. En hij
+  // liep via de gated `maakTaak`, die in de cron altijd "Niet ingelogd" gooide --
+  // de taak werd dus sowieso nooit aangemaakt.
+  await maakIntakeActie({
+    berichtId,
+    dossierId,
+    medewerkerId: behandelaarId,
     titel: `Controleer automatisch aangemaakt dossier${dossiernummer ? ` ${dossiernummer}` : ''}`,
-    dossier_id: dossierId,
-    assignee_type: 'dossier_rol',
-    dossier_rollen: ['calculator'],
-    deadline_basis: 'activatie',
-    deadline_dagen: 1,
-    prioriteit: 'normaal',
+    toelichting: 'EVA heeft dit dossier zelf aangemaakt uit een binnengekomen e-mail. Loop de klant, het adres en de omschrijving na.',
+    dagen: 1,
   })
 }
 

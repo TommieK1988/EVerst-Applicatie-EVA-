@@ -19,6 +19,9 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { createHash } from 'node:crypto'
 import { getDossierVerkoop, bouw7VoorDossier } from './actions'
+export type { TermijnschemaRegel, BtwAandeel } from './termijnen-schema'
+import type { TermijnschemaRegel, BtwAandeel } from './termijnen-schema'
+import { leesTermijnen, offerteBetalingsconditie, offerteBtwVerdeling } from './termijnen-bron'
 import { getDossierMeerwerk } from './meerwerk'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
@@ -169,8 +172,6 @@ export async function zetTermijnenKlaar(
  * ontbreken waar hij het meeste werk scheelt.
  * ------------------------------------------------------------------------------------------ */
 
-/** Eén regel van een termijnschema: wat er verschuldigd is, en welk deel van de grondslag. */
-export type TermijnschemaRegel = { omschrijving: string; percentage: number }
 
 /** Waar de bedragen op gerekend worden. Meerwerk telt alleen mee als de gebruiker dat kiest. */
 export type TermijnGrondslag = 'aanneemsom' | 'contracttotaal'
@@ -191,167 +192,7 @@ export type TermijnschemaBron = {
   tarieven: BtwTariefKeuze[]
 }
 
-/** Eén btw-tarief met het deel van de offerte dat eronder valt. */
-export type BtwAandeel = {
-  /** `btw_tarieven.bouw7_id` — waar Bouw7 de termijn aan ophangt. */
-  bouw7TariefId: number | null
-  label: string
-  /** Te heffen percentage (verlegd heft hier zijn nominale tarief; zie lib/stamdata/btw). */
-  pct: number
-  /** Deel van de offertegrondslag onder dit tarief, 0–1. */
-  aandeel: number
-}
 
-/** Leest de termijnen van een betalingsconditie-rij uit; ongeldige regels vallen af. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function leesTermijnen(ruw: any): TermijnschemaRegel[] {
-  if (!Array.isArray(ruw)) return []
-  return ruw
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((t: any) => ({
-      omschrijving: String(t?.omschrijving ?? '').trim(),
-      percentage: Number(t?.percentage ?? 0),
-    }))
-    .filter((t: TermijnschemaRegel) => Number.isFinite(t.percentage))
-}
-
-/**
- * De betalingsconditie die aan de hoofdofferte van dit dossier hangt.
- *
- * De offerte kent haar termijnen via `quotes.betalingsconditie_id` → `betalingscondities.termijnen`
- * (`[{ omschrijving, percentage }]`). Meerwerkoffertes blijven buiten beeld: die dragen hun eigen
- * regel en zeggen niets over het schema van de aanneemsom.
- */
-async function offerteBetalingsconditie(
-  dossierId: string,
-): Promise<{ conditieId: string; naam: string; termijnen: TermijnschemaRegel[] } | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-
-  const { data: dossier } = await supabase
-    .from('dossiers').select('everts_calc_project_id').eq('id', dossierId).maybeSingle()
-  if (!dossier?.everts_calc_project_id) return null
-
-  const { data: quote } = await supabase
-    .from('quotes')
-    .select('betalingsconditie_id')
-    .eq('project_id', dossier.everts_calc_project_id)
-    .is('meerwerk_regel_id', null)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (!quote?.betalingsconditie_id) return null
-
-  const { data: conditie } = await supabase
-    .from('betalingscondities').select('naam, termijnen').eq('id', quote.betalingsconditie_id).maybeSingle()
-  const termijnen = leesTermijnen(conditie?.termijnen)
-  if (termijnen.length === 0) return null
-
-  return {
-    conditieId: quote.betalingsconditie_id as string,
-    naam: (conditie?.naam as string) ?? 'Betalingsconditie',
-    termijnen,
-  }
-}
-
-/**
- * Hoe de aanneemsom over de btw-tarieven is verdeeld, volgens de offerte.
- *
- * Dit is de reden dat een termijnschema niet met één btw-tarief afkan. Een Bouw7-termijn draagt
- * precies één `vatTariff`; een opdracht met 9% over arbeid en 21% over materiaal moet daar dus
- * gesplitst worden in een termijn per tarief. Zet je alles op één tarief, dan staat er btw in de
- * termijnstaat die niemand zo heeft geoffreerd — en dat rolt door naar de factuur.
- *
- * De grondslag komt uit de offerteregels en niet uit de calculatie: de offerte is wat de klant
- * heeft geaccepteerd. Tekstregels dragen geen bedrag en optionele secties zitten niet in de
- * aanneemsom, dus die tellen niet mee.
- *
- * Secties en regels worden apart gelezen in plaats van als één genest `select`. Beide zijn
- * begrensd op één offerte (`quote_id`), en zo is er geen twijfel of PostgREST een ingebedde
- * verzameling stilletjes afkapt — dat gaat nergens harder mis dan in een btw-verdeling, want een
- * ontbrekende regel verschuift de verhouding zonder dat er iets fout lijkt te gaan.
- */
-async function offerteBtwVerdeling(
-  dossierId: string,
-  tarieven: BtwTariefKeuze[],
-): Promise<BtwAandeel[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-
-  const { data: dossier } = await supabase
-    .from('dossiers').select('everts_calc_project_id').eq('id', dossierId).maybeSingle()
-  if (!dossier?.everts_calc_project_id) return []
-
-  const { data: quote } = await supabase
-    .from('quotes')
-    .select('id, btw_tarief_id, btw_pct')
-    .eq('project_id', dossier.everts_calc_project_id)
-    .is('meerwerk_regel_id', null)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (!quote?.id) return []
-
-  const [sectieRes, regelRes] = await Promise.all([
-    supabase.from('quote_sections').select('id, is_optioneel').eq('quote_id', quote.id),
-    supabase.from('quote_lines')
-      .select('section_id, soort, line_total, btw_tarief_id, btw_pct').eq('quote_id', quote.id),
-  ])
-  const optioneel = new Set(
-    ((sectieRes?.data ?? []) as { id: string; is_optioneel: boolean | null }[])
-      .filter(x => x.is_optioneel).map(x => x.id),
-  )
-
-  const perTarief = new Map<string, { aandeel: BtwAandeel; grondslag: number }>()
-  let totaal = 0
-  type Regel = {
-    section_id: string | null; soort: string | null; line_total: number | string | null
-    btw_tarief_id: string | null; btw_pct: number | string | null
-  }
-  for (const regel of (regelRes?.data ?? []) as Regel[]) {
-    if (regel.soort === 'tekst') continue
-    if (regel.section_id && optioneel.has(regel.section_id)) continue
-    const bedrag = Number(regel.line_total ?? 0)
-    if (!Number.isFinite(bedrag) || bedrag === 0) continue
-
-    const tariefId = regel.btw_tarief_id ?? quote.btw_tarief_id ?? null
-    const tarief = tariefId ? tarieven.find(t => t.id === tariefId) : undefined
-    const pct = tarief
-      ? heffingsPercentage(tarief)
-      : Number(regel.btw_pct ?? quote.btw_pct ?? 21)
-    const sleutel = tarief ? `t:${tarief.id}` : `p:${pct}`
-
-    const bestaand = perTarief.get(sleutel)
-    if (bestaand) bestaand.grondslag += bedrag
-    else {
-      perTarief.set(sleutel, {
-        grondslag: bedrag,
-        aandeel: {
-          bouw7TariefId: tarief?.bouw7_id ?? null,
-          label: tarief?.label ?? `${pct}%`,
-          pct,
-          aandeel: 0,
-        },
-      })
-    }
-    totaal += bedrag
-  }
-  if (totaal <= 0) return []
-
-  return Array.from(perTarief.values())
-    .map(({ aandeel, grondslag }) => ({ ...aandeel, aandeel: grondslag / totaal }))
-    .sort((a, b) => b.pct - a.pct)
-}
-
-/**
- * De bedragen waarover een termijnschema gerekend kan worden.
- *
- * Meerwerk komt uit de EVA-meerwerkregels zodra die er zijn, en anders uit het Bouw7-aggregaat —
- * dezelfde regel die de Verkoop-tab zelf hanteert. Zou het venster een ander meerwerkbedrag
- * gebruiken dan het scherm eromheen toont, dan factureer je straks over een grondslag die niemand
- * heeft zien staan. De vergelijking kijkt naar het AANTAL goedgekeurde regels en niet naar het
- * bedrag: bij per saldo minderwerk is de som negatief.
- */
 async function termijnGrondslagen(dossierId: string): Promise<{
   aanneemsom: number
   meerwerk: number

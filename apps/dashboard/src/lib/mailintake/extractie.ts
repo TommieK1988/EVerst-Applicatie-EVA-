@@ -25,6 +25,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { zoekAdres, eersteHuisnummer } from '@/lib/adres/pdok'
 
 import { LEVER_EXTRACTIE_TOOL, PROMPT_VERSIE, veiligParse, type Extractie } from './schema'
+import {
+  kiesWerkmaatschappij, noemtMandaat, datumPlusDagen, SERVICEDESK_CATEGORIEEN,
+} from './regels'
 import { SYSTEM_PROMPT, bouwTekstBlok, type PromptContext } from './prompt'
 import { VELD_BETROUWBAAR } from './types'
 
@@ -243,6 +246,12 @@ export interface GekeurdeVelden {
   werkmaatschappijId: string | null
   aanvraagdatum: string | null
   deadline: string | null
+  /** true als de deadline niet in de mail stond maar is afgeleid (+4 weken). */
+  deadlineAfgeleid: boolean
+  opdrachtdatum: string | null
+  opdrachtReferentie: string | null
+  mandaatBedrag: number | null
+  klantOpmerkingen: string | null
   bedragExclBtw: number | null
   spoed: boolean
   opmerkingen: string | null
@@ -287,6 +296,14 @@ export async function keurEnKalibreer(
   lijsten: WitteLijsten,
   brontekst: string,
   standaardWerkmaatschappijId: string | null,
+  opties: {
+    /** Datum waarop de mail binnenkwam; de terugval voor de aanvraagdatum. */
+    ontvangenOp: string
+    /** true op de servicedesk-postbus: dan wordt de categorie geklemd. */
+    isServicedesk?: boolean
+    /** De standaardcategorie van de postbus, als terugval binnen die klem. */
+    standaardCategorieId?: number | null
+  },
 ): Promise<GekeurdeVelden> {
   const v: Record<string, number> = {}
   const modelScore = (veld: string): number => {
@@ -341,15 +358,32 @@ export async function keurEnKalibreer(
 
   // ── Categorie: alleen uit de witte lijst ──────────────────────────────────
   const catNaam = (data.categorie_voorstel ?? '').trim().toLowerCase()
-  const cat = lijsten.categorieen.find(c => c.naam.toLowerCase() === catNaam)
+  let cat = lijsten.categorieen.find(c => c.naam.toLowerCase() === catNaam)
     ?? lijsten.categorieen.find(c => catNaam.length >= 4 && c.naam.toLowerCase().includes(catNaam))
+
+  // Op de servicedesk-postbus is de categorie geen vrije keuze. Een servicedeskdossier
+  // wordt herkend aan exact 'Dagelijks onderhoud' of 'Mutatie'; kiest het model iets
+  // anders, dan verdwijnt de bon van het servicedeskbord zonder dat iemand dat merkt.
+  if (opties.isServicedesk) {
+    const toegestaan = lijsten.categorieen.filter(c => SERVICEDESK_CATEGORIEEN.includes(c.naam))
+    if (!cat || !SERVICEDESK_CATEGORIEEN.includes(cat.naam)) {
+      cat = toegestaan.find(c => c.id === opties.standaardCategorieId)
+        ?? toegestaan.find(c => c.naam === 'Dagelijks onderhoud')
+        ?? toegestaan[0]
+    }
+  }
   zet('categorie_voorstel', cat?.naam ?? null, cat ? 1 : 0)
 
   // ── Werkmaatschappij: witte lijst, anders de standaard van de postbus ─────
-  const wmNaam = (data.werkmaatschappij_voorstel ?? '').trim().toLowerCase()
-  const wm = wmNaam ? lijsten.werkmaatschappijen.find(w => w.naam.toLowerCase() === wmNaam) : undefined
-  const werkmaatschappijId = wm?.id ?? standaardWerkmaatschappijId
-  zet('werkmaatschappij_voorstel', werkmaatschappijId, wm ? 1 : werkmaatschappijId ? 0.7 : 0)
+  const wmKeuze = kiesWerkmaatschappij(
+    data.werkmaatschappij_voorstel, cat?.naam ?? null,
+    lijsten.werkmaatschappijen, standaardWerkmaatschappijId,
+  )
+  const werkmaatschappijId = wmKeuze.id
+  // Uit de mail of uit de categorieregel is een vaststelling; de postbusstandaard is
+  // een terugval en scoort daarom lager.
+  zet('werkmaatschappij_voorstel', werkmaatschappijId,
+    wmKeuze.via === 'mail' || wmKeuze.via === 'categorie' ? 1 : werkmaatschappijId ? 0.7 : 0)
 
   // ── Tekstvelden: staat het er letterlijk? ─────────────────────────────────
   for (const veld of ['omschrijving', 'klant_naam', 'contactpersoon_naam', 'contactpersoon_email', 'referentie', 'onze_offerte_referentie', 'vve_code'] as const) {
@@ -359,10 +393,40 @@ export async function keurEnKalibreer(
     zet(veld, waarde, score)
   }
 
-  const aanvraagdatum = geldigeDatum(data.aanvraagdatum)
-  const deadline = geldigeDatum(data.deadline)
-  zet('aanvraagdatum', aanvraagdatum, aanvraagdatum ? modelScore('aanvraagdatum') : 0)
-  zet('deadline', deadline, deadline ? modelScore('deadline') : 0)
+  // De aanvraagdatum is de datum dat de mail binnenkwam, tenzij er in de stukken een
+  // andere staat. De terugval is een feit en geen inschatting, vandaar 1,0.
+  const uitMailDatum = geldigeDatum(data.aanvraagdatum)
+  const aanvraagdatum = uitMailDatum ?? opties.ontvangenOp.slice(0, 10)
+  zet('aanvraagdatum', aanvraagdatum, uitMailDatum ? modelScore('aanvraagdatum') : 1)
+
+  // Geen deadline in de mail? Dan vier weken. Let op: dit veld gaat als opleverdatum
+  // naar Bouw7, dus een afgeleide waarde moet als afgeleid herkenbaar blijven --
+  // `deadlineAfgeleid` draagt dat naar het scherm en het besluitenlog.
+  const uitMailDeadline = geldigeDatum(data.deadline)
+  const deadline = uitMailDeadline ?? datumPlusDagen(aanvraagdatum, 28)
+  const deadlineAfgeleid = uitMailDeadline == null
+  zet('deadline', deadline, uitMailDeadline ? modelScore('deadline') : 0.5)
+
+  const opdrachtdatum = geldigeDatum(data.opdrachtdatum)
+  zet('opdrachtdatum', opdrachtdatum, opdrachtdatum ? modelScore('opdrachtdatum') : 0)
+
+  // Opdrachtreferentie alleen vertrouwen als hij er letterlijk staat: een verzonnen
+  // bonnummer belandt anders op de factuur van de klant.
+  const opdrachtReferentie = (data.opdracht_referentie ?? '').trim().slice(0, 60) || null
+  zet('opdracht_referentie', opdrachtReferentie,
+    komtLetterlijkVoor(opdrachtReferentie, brontekst)
+      ? Math.max(modelScore('opdracht_referentie'), 0.85)
+      : Math.min(modelScore('opdracht_referentie'), 0.4))
+
+  // Een los bedrag in een servicedeskbon is veel vaker de prijsindicatie dan het
+  // mandaat. Alleen overnemen als de stukken er ook een mandaatwoord bij zetten.
+  const mandaatGenoemd = noemtMandaat(brontekst)
+  const mandaat =
+    data.mandaat_bedrag != null && data.mandaat_bedrag >= 0 &&
+    data.mandaat_bedrag < 10_000_000 && mandaatGenoemd
+      ? data.mandaat_bedrag
+      : null
+  zet('mandaat_bedrag', mandaat, mandaat != null ? modelScore('mandaat_bedrag') : 0)
 
   const bedrag = data.bedrag_excl_btw != null && data.bedrag_excl_btw >= 0 && data.bedrag_excl_btw < 10_000_000
     ? data.bedrag_excl_btw
@@ -391,6 +455,11 @@ export async function keurEnKalibreer(
     werkmaatschappijId,
     aanvraagdatum,
     deadline,
+    deadlineAfgeleid,
+    opdrachtdatum,
+    opdrachtReferentie,
+    mandaatBedrag: mandaat,
+    klantOpmerkingen: data.klant_opmerkingen,
     bedragExclBtw: bedrag,
     spoed: Boolean(data.spoed),
     opmerkingen: data.opmerkingen,

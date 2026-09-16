@@ -20,13 +20,18 @@ import { extraheer, keurEnKalibreer, kernVertrouwen, type BijlageVoorAI, type Wi
 import { herkenAfzender, hulplijstRelaties } from './afzender'
 import { zoekDuplicaten } from './duplicaten'
 import { beslis, samenvattendeReden } from './beslis'
+import { zetOfferteGewonnenUitBericht } from './opdracht'
+import { maakIntakeActie } from './taken'
 import { zoekObjectBijAdres } from './objecten'
 import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
-import { AFZENDER_ONBEKEND, SOORT_ONZEKER, type PostbusRij, type MailSoort } from './types'
+import {
+  AFZENDER_ONBEKEND, SOORT_ONZEKER, DUPLICAAT_HARD,
+  type PostbusRij, type MailSoort,
+} from './types'
 
 /** Per run; de AI-stap plus een eventuele Bouw7-push duurt 10-30 s per bericht. */
 const BATCH = 5
@@ -245,7 +250,11 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     log.stap('velden keuren')
     const lijsten = await witteLijsten()
     const brontekst = `${geclaimd.onderwerp ?? ''}\n${geclaimd.body_tekst ?? ''}`
-    const velden = await keurEnKalibreer(ex.data, lijsten, brontekst, postbus.standaard_werkmaatschappij_id)
+    const velden = await keurEnKalibreer(ex.data, lijsten, brontekst, postbus.standaard_werkmaatschappij_id, {
+      ontvangenOp: geclaimd.ontvangen_op,
+      isServicedesk: postbus.soort === 'servicedesk',
+      standaardCategorieId: postbus.standaard_bouw7_categorie_id,
+    })
 
     // ── Object bij het werkadres ────────────────────────────────────────────
     // Een aanvraag hoort bij een complex of pand dat we vaak al kennen. Koppelen
@@ -303,6 +312,16 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     }
     const topscore = kandidaten[0]?.score ?? 0
 
+    // Een offertetreffer is iets anders dan een duplicaat: het is het dossier waar
+    // deze opdracht bij hoort. "Hard" betekent dat er niets te kiezen valt -- een
+    // score boven de duplicaatdrempel en maar een enkele kandidaat op dat niveau.
+    // Bij 194 lopende offertes is de verkeerde aanwijzen duur: dan gaat de verkeerde
+    // offerte op gewonnen, promoveert dat dossier en vertrekt er een aanneemsom.
+    const offertes = kandidaten.filter(k => k.soort === 'offerte_match')
+    const harde = offertes.filter(k => k.score >= DUPLICAAT_HARD)
+    const offerteMatchGevonden = offertes.length > 0
+    const offerteMatchHard = harde.length === 1
+
     // ── Beslissen ───────────────────────────────────────────────────────────
     const veldenCompleet = Boolean(
       afz.relatieId && velden.omschrijving && velden.werkmaatschappijId && velden.bouw7CategorieId &&
@@ -319,6 +338,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       adresBevestigd: velden.adresBevestigd,
       vertrouwen: velden.vertrouwen,
       duplicaatTopscore: topscore,
+      offerteMatchGevonden,
+      offerteMatchHard,
       isAntwoord: Boolean(geclaimd.is_antwoord),
       meerdereWerkadressen: velden.meerdereWerkadressen,
       ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.length > 0,
@@ -373,7 +394,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     }
 
     // ── Uitvoeren ───────────────────────────────────────────────────────────
-    if (besluit.automatisch && afz.relatieId) {
+    if (besluit.automatisch && besluit.route === 'nieuw_dossier' && afz.relatieId) {
       log.stap('dossier aanmaken')
       const res = await maakDossierUitBericht({
         berichtId,
@@ -383,17 +404,47 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         objectId: objectTreffer.objectId,
         automatisch: true,
         medewerkerId: null,
+        behandelaarId: postbus.standaard_behandelaar_id,
       })
       if (!res.ok) {
         await supabase.from('mailintake_berichten')
           .update({ status: 'wacht_op_mens', laatste_fout: res.error }).eq('id', berichtId)
+        await voorleggen(postbus, berichtId, geclaimd, 'Automatisch aanmaken mislukt; beoordeel dit zelf.')
         return { ...uit, status: 'wacht_op_mens', fout: res.error, reden: 'Automatisch aanmaken mislukt; voorgelegd.' }
+      }
+      uit.status = 'verwerkt'
+      uit.automatisch = true
+    } else if (besluit.automatisch && besluit.route === 'offerte_winnen') {
+      log.stap('offerte op gewonnen zetten')
+      const doel = kandidaten.find(k => k.soort === 'offerte_match' && k.score >= DUPLICAAT_HARD)
+      const res = doel
+        ? await zetOfferteGewonnenUitBericht({
+            berichtId,
+            dossierId: doel.dossierId,
+            medewerkerId: null,
+            behandelaarId: postbus.standaard_behandelaar_id,
+            opdrachtReferentie: velden.opdrachtReferentie,
+            opdrachtdatum: velden.opdrachtdatum ?? geclaimd.ontvangen_op.slice(0, 10),
+            klantOpmerkingen: velden.klantOpmerkingen,
+            relatieId: afz.relatieId,
+            contactpersoonId: afz.contactpersoonId,
+          })
+        : { ok: false, error: 'De offerte was bij het uitvoeren niet meer te vinden.' }
+
+      if (!res.ok) {
+        await supabase.from('mailintake_berichten')
+          .update({ status: 'wacht_op_mens', laatste_fout: res.error ?? null }).eq('id', berichtId)
+        await voorleggen(postbus, berichtId, geclaimd, `De offerte kon niet op gewonnen: ${res.error ?? 'onbekende fout'}`)
+        return { ...uit, status: 'wacht_op_mens', fout: res.error ?? null, reden: 'Offerte winnen mislukt; voorgelegd.' }
       }
       uit.status = 'verwerkt'
       uit.automatisch = true
     } else {
       uit.status = besluit.status
       await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, ex.data.soort_vertrouwen, besluit.status)
+      if (besluit.status === 'wacht_op_mens') {
+        await voorleggen(postbus, berichtId, geclaimd, samenvattendeReden(besluit))
+      }
     }
 
     // ── Nabehandeling in Outlook ────────────────────────────────────────────
@@ -412,6 +463,39 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       .update({ status: eindStatus, pogingen, laatste_fout: melding.slice(0, 500) }).eq('id', berichtId)
     log.mislukt(e)
     return { ...uit, status: eindStatus, fout: melding, reden: 'Verwerking mislukt.' }
+  }
+}
+
+/**
+ * Zet een actie klaar voor de standaard behandelaar van deze postbus.
+ *
+ * Dit is waar "bij twijfel voorleggen" pas echt landt. Zonder deze stap belandde
+ * een voorgelegd bericht alleen in het postvak, en de controletaak ging naar de
+ * calculator van het dossier -- een rol die bij een vers bericht nog leeg is.
+ */
+async function voorleggen(
+  postbus: PostbusRij,
+  berichtId: string,
+  bericht: { onderwerp?: string | null; van_naam?: string | null; van_adres?: string | null },
+  reden: string,
+): Promise<void> {
+  if (!postbus.standaard_behandelaar_id) return
+  const afzender = bericht.van_naam || bericht.van_adres || 'onbekende afzender'
+  const res = await maakIntakeActie({
+    berichtId,
+    medewerkerId: postbus.standaard_behandelaar_id,
+    titel: `Beoordeel ${postbus.naam.toLowerCase()} van ${afzender}`.slice(0, 200),
+    toelichting: `${reden}\n\nOnderwerp: ${bericht.onderwerp ?? '(geen onderwerp)'}`,
+    dagen: 2,
+  })
+  // Een behandelaar zonder EVA-account krijgt de actie niet te zien. Dat mag niet
+  // stil blijven: het beheerscherm waarschuwt ervoor, en hier blijft het spoor staan.
+  if (res.zonderOntvanger && res.taakId) {
+    const supabase = createAdminClient()
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: berichtId, actor: 'systeem', actie: 'actie_zonder_ontvanger',
+      details: { taak_id: res.taakId, behandelaar: res.toegewezenAan },
+    })
   }
 }
 

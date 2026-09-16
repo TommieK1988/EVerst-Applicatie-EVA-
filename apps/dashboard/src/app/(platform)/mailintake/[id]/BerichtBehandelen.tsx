@@ -24,8 +24,10 @@ import {
 } from '@/lib/mailintake/actions'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL,
-  VELD_BETROUWBAAR,
+  VELD_BETROUWBAAR, bepaalRoute,
 } from '@/lib/mailintake/types'
+import OpdrachtPaneel from './panelen/OpdrachtPaneel'
+import MailPaneel from './panelen/MailPaneel'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
@@ -34,11 +36,6 @@ const kop = { fontSize: 13, fontWeight: 600, marginBottom: 6 } as const
 const veldStijl: React.CSSProperties = {
   width: '100%', padding: '7px 9px', borderRadius: 6, fontSize: 13,
   border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
-}
-
-function bytes(n: number | null): string {
-  if (!n) return ''
-  return n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} kB`
 }
 
 /** Percentage-badge achter een veld. Onder de 80% is het nakijken waard. */
@@ -131,6 +128,10 @@ export default function BerichtBehandelen({
   const [stad, setStad] = useState(velden.werkadres_stad ?? '')
   const [adresBevestigd, setAdresBevestigd] = useState(false)
 
+  const [mandaat, setMandaat] = useState<string>(
+    velden.mandaat_bedrag != null ? String(velden.mandaat_bedrag) : '',
+  )
+
   const [werkzaamheden, setWerkzaamheden] = useState<string>(b.gevraagde_werkzaamheden ?? '')
   const [samenvatBezig, setSamenvatBezig] = useState(false)
 
@@ -197,6 +198,12 @@ export default function BerichtBehandelen({
     }
   }
 
+  // Welke route hoort bij dit bericht? Een opdracht maakt geen nieuw dossier maar
+  // wint een bestaande offerte; het scherm toont dan een ander paneel.
+  const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
+  const route = bepaalRoute(b.soort, offerteKandidaten.length > 0)
+  const isServicedesk = b.soort === 'servicedeskbon'
+
   const compleet = Boolean(klantId && omschrijving.trim() && werkmaatschappijId && categorieId && straat && huisnummer && postcode && stad)
   const topDuplicaat = detail.duplicaten[0]
   const heeftDuplicaatWaarschuwing = (topDuplicaat?.score ?? 0) >= DUPLICAAT_TWIJFEL
@@ -248,6 +255,11 @@ export default function BerichtBehandelen({
         werkmaatschappijId: werkmaatschappijId || null,
         aanvraagdatum: velden.aanvraagdatum ?? null,
         deadline: deadline || null,
+        deadlineAfgeleid: false,
+        opdrachtdatum: velden.opdrachtdatum ?? null,
+        opdrachtReferentie: velden.opdracht_referentie ?? null,
+        mandaatBedrag: mandaat.trim() ? Number(mandaat.replace(',', '.')) : null,
+        klantOpmerkingen: velden.klant_opmerkingen ?? null,
         bedragExclBtw: velden.bedrag_excl_btw ?? null,
         spoed: Boolean(velden.spoed),
         opmerkingen: opmerkingen.trim() || null,
@@ -446,53 +458,27 @@ export default function BerichtBehandelen({
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.1fr) minmax(260px, 0.9fr)', gap: 12, alignItems: 'start' }}>
 
         {/* ── Links: de mail ── */}
-        <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <div style={kop}>{b.onderwerp ?? '(geen onderwerp)'}</div>
-            <div style={zacht}>{b.van_naam ?? ''} &lt;{b.van_adres ?? 'onbekend'}&gt;</div>
-            <div style={klein}>
-              {new Date(b.ontvangen_op).toLocaleString('nl-NL')} · {b.postbus?.naam}
-            </div>
-            {b.aan?.length ? <div style={klein}>Aan: {b.aan.join(', ')}</div> : null}
-            {b.cc?.length ? <div style={klein}>Cc: {b.cc.join(', ')}</div> : null}
-          </div>
-
-          <div style={{
-            whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5,
-            maxHeight: 420, overflowY: 'auto', padding: 10, borderRadius: 6,
-            background: 'var(--surface-2, var(--bg))', border: '1px solid var(--border)',
-          }}>
-            {b.body_tekst || '(lege mail)'}
-          </div>
-
-          {detail.bijlagen.length > 0 && (
-            <div>
-              <div style={kop}>Bijlagen</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {detail.bijlagen.map(bij => (
-                  <div key={bij.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                    <button
-                      onClick={() => openBijlage(bij.id)}
-                      disabled={!bij.opslag_pad}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, textAlign: 'left',
-                        color: bij.opslag_pad ? 'hsl(var(--primary))' : 'var(--fg-muted)',
-                        cursor: bij.opslag_pad ? 'pointer' : 'default',
-                        textDecoration: bij.opslag_pad ? 'underline' : 'none',
-                      }}
-                    >
-                      {bij.bestandsnaam}
-                    </button>
-                    <span style={klein}>{bytes(bij.grootte_bytes)}</span>
-                    {bij.te_groot && <Badge tone="warning">niet gelezen</Badge>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
+        <MailPaneel
+          bericht={b}
+          bijlagen={detail.bijlagen}
+          onOpenBijlage={openBijlage}
+        />
 
         {/* ── Midden: het voorstel ── */}
+        {route === 'offerte_winnen' ? (
+          <OpdrachtPaneel
+            berichtId={b.id}
+            kandidaten={detail.duplicaten}
+            relatieId={klantId}
+            bewerkbaar={bewerkbaar}
+            voorstel={{
+              opdrachtReferentie: velden.opdracht_referentie ?? null,
+              opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
+              klantOpmerkingen: velden.klant_opmerkingen ?? null,
+            }}
+            onKlaar={dossierId => router.push(`/dossiers/${dossierId}`)}
+          />
+        ) : (
         <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={kop}>Voorstel</div>
 
@@ -633,7 +619,21 @@ export default function BerichtBehandelen({
             <Veld label="VvE-code" score={zekerheid.vve_code}>
               <input style={veldStijl} value={vveCode} onChange={e => setVveCode(e.target.value)} disabled={!bewerkbaar} />
             </Veld>
-            <Veld label="Deadline" score={zekerheid.deadline}>
+            {isServicedesk && (
+            <Veld label="Mandaat (excl. btw)" score={zekerheid.mandaat_bedrag}>
+              <input
+                style={veldStijl} value={mandaat} disabled={!bewerkbaar}
+                onChange={e => setMandaat(e.target.value)}
+                placeholder="Bedrag waarbinnen we mogen werken"
+              />
+              <span style={klein}>
+                Alleen invullen als de bon een mandaat of budgetplafond noemt; een los bedrag is
+                meestal de geschatte prijs.
+              </span>
+            </Veld>
+          )}
+
+          <Veld label="Deadline" score={zekerheid.deadline}>
               <input type="date" style={veldStijl} value={deadline ?? ''} onChange={e => setDeadline(e.target.value)} disabled={!bewerkbaar} />
             </Veld>
           </div>
@@ -656,6 +656,7 @@ export default function BerichtBehandelen({
             <span style={klein}>Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het volledige werkadres in.</span>
           )}
         </Card>
+        )}
 
         {/* ── Rechts: waarop berust dit ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

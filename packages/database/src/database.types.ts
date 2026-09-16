@@ -6568,6 +6568,7 @@ export type Database = {
           sleutel: string
           soort: string
           standaard_bouw7_categorie_id: number | null
+          standaard_behandelaar_id: string | null
           standaard_categorie: string | null
           standaard_werkmaatschappij_id: string | null
           updated_at: string
@@ -6590,6 +6591,7 @@ export type Database = {
           sleutel: string
           soort: string
           standaard_bouw7_categorie_id?: number | null
+          standaard_behandelaar_id?: string | null
           standaard_categorie?: string | null
           standaard_werkmaatschappij_id?: string | null
           updated_at?: string
@@ -6612,6 +6614,7 @@ export type Database = {
           sleutel?: string
           soort?: string
           standaard_bouw7_categorie_id?: number | null
+          standaard_behandelaar_id?: string | null
           standaard_categorie?: string | null
           standaard_werkmaatschappij_id?: string | null
           updated_at?: string
@@ -14423,6 +14426,7 @@ export type Database = {
           id: string
           kwaliteit_ronde: boolean
           lijst_id: string | null
+          mailintake_bericht_id: string | null
           max_doorlooptijd_dagen: number | null
           medewerker_id: string | null
           omschrijving: Json | null
@@ -14457,6 +14461,7 @@ export type Database = {
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
+          mailintake_bericht_id?: string | null
           max_doorlooptijd_dagen?: number | null
           medewerker_id?: string | null
           omschrijving?: Json | null
@@ -14491,6 +14496,7 @@ export type Database = {
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
+          mailintake_bericht_id?: string | null
           max_doorlooptijd_dagen?: number | null
           medewerker_id?: string | null
           omschrijving?: Json | null

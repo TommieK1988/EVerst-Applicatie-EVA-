@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache'
 
 import { vereisRecht, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { toetsPostbus } from '@/lib/o365/inbox'
+import { zetOfferteGewonnenUitBericht, toetsOfferteDossier } from './opdracht'
 
 import { maakDossierUitBericht, koppelAanDossier, onthoudAlias } from './aanmaken'
 import { haalPostbusOp } from './ophalen'
@@ -64,7 +65,10 @@ export async function maakDossierVanBericht(
   const supabase = createAdminClient()
 
   const { data: bericht } = await supabase
-    .from('mailintake_berichten').select('id, status, van_adres, duplicaat_topscore').eq('id', berichtId).maybeSingle()
+    .from('mailintake_berichten')
+    .select('id, status, van_adres, duplicaat_topscore, postbus:mailintake_postbussen(standaard_behandelaar_id)')
+    .eq('id', berichtId)
+    .maybeSingle()
   if (!bericht) return { ok: false, error: 'Bericht niet gevonden.' }
   if (bericht.status === 'verwerkt') return { ok: false, error: 'Dit bericht is al afgehandeld.' }
 
@@ -77,6 +81,7 @@ export async function maakDossierVanBericht(
     gevraagdeWerkzaamheden: velden.gevraagdeWerkzaamheden ?? null,
     automatisch: false,
     medewerkerId: medewerker.id,
+    behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,
   })
 
   if (!res.ok) return { ok: false, error: res.error }
@@ -102,6 +107,113 @@ export async function maakDossierVanBericht(
     ok: true, dossierId: res.dossierId, dossiernummer: res.dossiernummer,
     bouw7Ok: res.bouw7Ok, bouw7Fout: res.bouw7Fout,
   }
+}
+
+/**
+ * Zet de offerte op gewonnen en maakt de opdracht compleet.
+ *
+ * LET OP het rechtenverschil: deze action vraagt `mailintake:schrijven`, en
+ * verandert daarmee de fase van een dossier en de projectstatus in Bouw7 --
+ * handelingen die op het dossierscherm zelf achter `dossiers:schrijven` zitten.
+ * Dat is bewust: dit is de handeling waarvoor de knop bestaat. Wie de mailintake
+ * mag behandelen, mag een binnengekomen opdracht verwerken.
+ */
+export async function bevestigOpdrachtOpDossier(
+  berichtId: string,
+  dossierId: string,
+  invoer?: {
+    opdrachtReferentie?: string | null
+    opdrachtdatum?: string | null
+    klantOpmerkingen?: string | null
+    factuuradresId?: string | null
+    /** Alleen na een expliciete tweede klik bij een Bouw7-conflict. */
+    forceerBouw7?: boolean
+  },
+): Promise<{
+  ok: boolean
+  error?: string
+  conflict?: { bouw7Label: string }
+  dossiernummer?: string | null
+  nazorg?: { termijnen: string; termijnenReden?: string; bijlagen: number; notitie: boolean }
+}> {
+  const { medewerker } = await vereisRecht('mailintake', 'schrijven')
+  const supabase = createAdminClient()
+
+  const { data: bericht } = await supabase
+    .from('mailintake_berichten')
+    .select('id, status, relatie_id, contactpersoon_id, ontvangen_op, postbus:mailintake_postbussen(standaard_behandelaar_id)')
+    .eq('id', berichtId)
+    .maybeSingle()
+  if (!bericht) return { ok: false, error: 'Bericht niet gevonden.' }
+  if (bericht.status === 'verwerkt') return { ok: false, error: 'Dit bericht is al afgehandeld.' }
+
+  const res = await zetOfferteGewonnenUitBericht({
+    berichtId,
+    dossierId,
+    medewerkerId: medewerker.id,
+    behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,
+    opdrachtReferentie: invoer?.opdrachtReferentie ?? null,
+    opdrachtdatum: invoer?.opdrachtdatum ?? bericht.ontvangen_op?.slice(0, 10) ?? null,
+    klantOpmerkingen: invoer?.klantOpmerkingen ?? null,
+    factuuradresId: invoer?.factuuradresId,
+    relatieId: bericht.relatie_id,
+    contactpersoonId: bericht.contactpersoon_id,
+    forceerBouw7: invoer?.forceerBouw7 === true,
+  })
+
+  revalidatePath('/mailintake')
+  revalidatePath('/offertes')
+  revalidatePath('/opdrachten')
+  return res
+}
+
+/** Kan deze offerte gewonnen worden? Voor de knop in het behandelscherm. */
+export async function toetsOfferteVoorOpdracht(dossierId: string): Promise<
+  { ok: true; dossiernummer: string | null; titel: string | null } | { ok: false; error: string }
+> {
+  await vereisRecht('mailintake', 'lezen')
+  return toetsOfferteDossier(dossierId)
+}
+
+/** Factuuradressen van een relatie, voor de controle bij een opdracht. */
+export async function getFactuuradressenVoorIntake(relatieId: string): Promise<
+  { id: string; label: string; straat: string | null; postcode: string | null; plaats: string | null }[]
+> {
+  await vereisRecht('mailintake', 'lezen')
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('relatie_factuuradressen')
+    .select('id, label, straat, postcode, plaats')
+    .eq('relatie_id', relatieId)
+    .order('label')
+    .limit(50)
+  return data ?? []
+}
+
+/**
+ * Legt een afwijkend factuuradres vast bij de opdrachtgever en geeft het id terug.
+ * De opdrachtgever zelf verandert niet -- alleen het adres waar de factuur heen gaat.
+ */
+export async function bewaarFactuuradresVoorIntake(
+  relatieId: string,
+  adres: { label: string; straat: string; postcode: string; plaats: string },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await vereisRecht('mailintake', 'schrijven')
+  const supabase = createAdminClient()
+  const label = adres.label.trim() || 'Factuuradres'
+  const { data, error } = await supabase
+    .from('relatie_factuuradressen')
+    .insert({
+      relatie_id: relatieId,
+      label,
+      straat: adres.straat.trim() || null,
+      postcode: adres.postcode.trim() || null,
+      plaats: adres.plaats.trim() || null,
+    })
+    .select('id')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, id: data.id }
 }
 
 export async function koppelBerichtAanDossier(
@@ -277,6 +389,8 @@ export async function updatePostbus(id: string, wijziging: Record<string, unknow
     schoon.standaard_bouw7_categorie_id = w.standaard_bouw7_categorie_id
   if (typeof w.standaard_categorie === 'string' || w.standaard_categorie === null)
     schoon.standaard_categorie = w.standaard_categorie
+  if (typeof w.standaard_behandelaar_id === 'string' || w.standaard_behandelaar_id === null)
+    schoon.standaard_behandelaar_id = w.standaard_behandelaar_id
   if (Array.isArray(w.notificatie_medewerkers) && w.notificatie_medewerkers.every(x => typeof x === 'string'))
     schoon.notificatie_medewerkers = w.notificatie_medewerkers as string[]
   if (typeof w.dagbudget_cent === 'number' && Number.isFinite(w.dagbudget_cent) && w.dagbudget_cent >= 0)

@@ -67,6 +67,16 @@ function normaliseerPostcode(pc: string | null | undefined): string | null {
   return m ? `${m[1]} ${m[2]}` : null
 }
 
+/**
+ * Maakt een waarde veilig voor een PostgREST-`or`-filter. Alleen tekens die in een
+ * referentie of dossiernummer voorkomen blijven staan; de rest verdwijnt. Levert
+ * null als er te weinig overblijft om nog onderscheidend te zijn.
+ */
+function veiligeFilterwaarde(ruw: string | null | undefined): string | null {
+  const v = (ruw ?? '').trim().replace(/[^A-Za-z0-9./-]/g, '').slice(0, 40)
+  return v.length >= 3 ? v : null
+}
+
 function huisnummerKern(hn: string | null | undefined): string | null {
   const m = (hn ?? '').match(/\d+/)
   return m ? m[0] : null
@@ -110,14 +120,29 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
   }
 
   // ── Ingang 3: referentie van de klant, of ons eigen nummer in hun mail ────
+  // De waarde komt uit het taalmodel en gaat een PostgREST-filterstring in. Een
+  // komma of haakje zou de betekenis van dat filter veranderen, dus eerst langs
+  // een tekenwitlijst. Dit is de ingang waar de opdrachtroute op leunt.
   for (const ref of [invoer.referentie, invoer.onzeReferentie]) {
-    const v = (ref ?? '').trim()
-    if (v.length < 3) continue
+    const v = veiligeFilterwaarde(ref)
+    if (!v) continue
     const { data } = await supabase
       .from('dossiers').select(DOSSIER_SELECT)
       .or(`referentie.eq.${v},dossiernummer.eq.${v}`)
       .limit(50)
     voegToe(data)
+
+    // Klanten schrijven ons nummer zelden over zoals wij het noteren: "2026-1234",
+    // "20261234" en "offerte 1234" horen hetzelfde dossier te vinden. Zoek daarom
+    // ook op alleen de cijfers, zolang dat er genoeg zijn om onderscheidend te zijn.
+    const cijfers = v.replace(/\D/g, '')
+    if (cijfers.length >= 6) {
+      const { data: opNummer } = await supabase
+        .from('dossiers').select(DOSSIER_SELECT)
+        .ilike('dossiernummer', `%${cijfers}%`)
+        .limit(20)
+      voegToe(opNummer)
+    }
   }
 
   // ── Ingang 4: eerder bericht in dezelfde conversatie ──────────────────────

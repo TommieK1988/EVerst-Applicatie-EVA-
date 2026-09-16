@@ -47,8 +47,50 @@ export const WERK_SOORTEN: MailSoort[] = [
 
 /** Soorten waarvoor automatisch aanmaken überhaupt in beeld komt (fase 2). */
 export const AUTOMATISCH_TOEGESTANE_SOORTEN: MailSoort[] = [
-  'offerteaanvraag', 'opdrachtbon', 'servicedeskbon',
+  'offerteaanvraag', 'servicedeskbon',
 ]
+
+/**
+ * Soorten die altijd een bestaand dossier raken. Een opdrachtbon staat hier ook
+ * in: die hoort bij werk dat al loopt, of hij hoort door een mens bekeken te
+ * worden. Hem als losse aanvraag inschrijven zet een dossier in de verkeerde
+ * fase, en dat is achteraf lastig recht te zetten.
+ */
+export const OPDRACHT_SOORTEN: MailSoort[] = ['opdracht_op_offerte', 'opdrachtbon']
+
+/**
+ * Wat er met een bericht moet gebeuren. Los van de vraag of EVA dat zelf mag
+ * doen -- dat is een tweede afweging, zie beslis.ts.
+ */
+export type IntakeRoute = 'nieuw_dossier' | 'offerte_winnen' | 'geen'
+
+export const ROUTE_LABELS: Record<IntakeRoute, string> = {
+  nieuw_dossier:  'Nieuw dossier aanmaken',
+  offerte_winnen: 'Offerte op gewonnen zetten',
+  geen:           'Koppelen aan bestaand werk',
+}
+
+/**
+ * Welke route hoort bij deze soort?
+ *
+ * Staat hier en niet in beslis.ts omdat het behandelscherm hem ook nodig heeft, en
+ * dat is een client-component. types.ts is de plek voor wat beide kanten delen.
+ *
+ * Een opdracht raakt altijd een bestaand dossier -- ook een opdrachtbon zonder
+ * voorafgaande offerte. EVA schrijft een opdracht nooit in als losse aanvraag: dan
+ * staat er een dossier in de verkeerde fase, en dat is achteraf lastig recht te
+ * zetten. Vindt EVA geen offerte, dan wijst een mens het dossier aan.
+ *
+ * Een servicedeskbon is het enige geval waarin de route van de omstandigheden
+ * afhangt: is er een offerte, dan is het een opdracht; is die er niet, dan is het
+ * nieuw werk.
+ */
+export function bepaalRoute(soort: MailSoort | null, offerteMatchGevonden: boolean): IntakeRoute {
+  if (soort === 'offerteaanvraag') return 'nieuw_dossier'
+  if (soort != null && OPDRACHT_SOORTEN.includes(soort)) return 'offerte_winnen'
+  if (soort === 'servicedeskbon') return offerteMatchGevonden ? 'offerte_winnen' : 'nieuw_dossier'
+  return 'geen'
+}
 
 export type HerkendVia =
   | 'alias' | 'email_contactpersoon' | 'email_domein' | 'relatie_naam' | 'handmatig'
@@ -101,6 +143,12 @@ export interface PostbusRij {
   standaard_werkmaatschappij_id: string | null
   standaard_bouw7_categorie_id: number | null
   standaard_categorie: string | null
+  /**
+   * Wie de actie krijgt als een bericht uit deze postbus wordt voorgelegd. De
+   * dossierrollen zijn op dat moment nog niet gevuld, dus zonder dit veld hangt
+   * een voorgelegd bericht aan niemand.
+   */
+  standaard_behandelaar_id: string | null
   notificatie_medewerkers: string[]
   dagbudget_cent: number
   map_verwerkt_id: string | null
@@ -125,6 +173,7 @@ export interface PostbusPatch {
   standaard_werkmaatschappij_id?: string | null
   standaard_bouw7_categorie_id?: number | null
   standaard_categorie?: string | null
+  standaard_behandelaar_id?: string | null
   notificatie_medewerkers?: string[]
   dagbudget_cent?: number
   map_verwerkt_naam?: string
