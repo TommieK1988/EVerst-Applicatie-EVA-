@@ -199,7 +199,7 @@ export default function QuoteEditorClient({ quote, templates, betalingscondities
 
         <div className="ml-auto flex items-center gap-2">
           <Link
-            href={`/quotes/${quote.id}/preview`}
+            href={`/everts-calc/quotes/${quote.id}/preview`}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors"
           >
             <Eye className="w-3.5 h-3.5" />

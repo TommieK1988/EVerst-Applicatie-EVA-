@@ -17,6 +17,8 @@ import { Button, Badge, Card, BulletTextarea, useDialogen } from '@/components/u
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres } from '@/lib/adres/pdok'
+// Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
+import { dossierHref } from '@/lib/dossiers/href'
 import {
   maakDossierVanBericht, koppelBerichtAanDossier, negeerBericht,
   markeerGeenAanvraag, leesOpnieuw, getBijlageUrl, heropenBericht,
@@ -278,7 +280,10 @@ export default function BerichtBehandelen({
             'Je kunt dat later opnieuw proberen vanaf de dossierpagina.',
         })
       }
-      router.push(`/dossiers/${res.dossierId}`)
+      // maakDossierUitBericht loopt via maakAanvraag, dus dit dossier staat in de aanvraagfase.
+      // `dossierId` is optioneel in het retourtype; zonder id is er niets om heen te springen —
+      // dan blijft het scherm staan in plaats van naar /undefined te navigeren.
+      if (res.dossierId) router.push(dossierHref(res.dossierId, 'aanvraag'))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Aanmaken mislukt')
     } finally {
@@ -476,7 +481,8 @@ export default function BerichtBehandelen({
               opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
               klantOpmerkingen: velden.klant_opmerkingen ?? null,
             }}
-            onKlaar={dossierId => router.push(`/dossiers/${dossierId}`)}
+            // Deze route wint een offerte; het dossier is daarna een opdracht.
+            onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
           />
         ) : (
         <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -755,7 +761,7 @@ export default function BerichtBehandelen({
                       {d.redenen.map((r: string, i: number) => <li key={i}>{r}</li>)}
                     </ul>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                      <a href={`/dossiers/${d.dossierId}`} target="_blank" rel="noopener noreferrer"
+                      <a href={dossierHref(d.dossierId, d.hoofdstatus)} target="_blank" rel="noopener noreferrer"
                          style={{ fontSize: 12, color: 'hsl(var(--primary))' }}>
                         Bekijk dossier
                       </a>
