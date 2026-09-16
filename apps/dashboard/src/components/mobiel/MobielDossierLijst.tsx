@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import StatusBadge from './StatusBadge'
 
@@ -14,52 +14,119 @@ export type MobielDossier = {
   statusColor: string
 }
 
-const SLICER: { key: string; label: string }[] = [
-  { key: 'alle',        label: 'Alle' },
+/**
+ * De chips boven de lijst.
+ *
+ * Er was ook een chip "Alle". Die is weg: hij voegde niets toe — je zoekt op de telefoon nooit
+ * door aanvragen en opdrachten tegelijk, en hij stond wél altijd vooraan de rij te vullen.
+ * Een chip zonder dossiers verdwijnt nu ook helemaal, in plaats van als lege knop te blijven
+ * staan.
+ */
+const SLICER: { key: MobielDossier['groep']; label: string }[] = [
   { key: 'aanvraag',    label: 'Aanvragen' },
   { key: 'opdracht',    label: 'Opdrachten' },
   { key: 'servicedesk', label: 'Servicedesk' },
 ]
 
+/**
+ * Vanaf hoeveel dossiers het zoekveld verschijnt.
+ *
+ * Onder dit aantal zie je de hele lijst in één oogopslag en is zoeken alleen maar een extra
+ * regel die de kaarten omlaag duwt.
+ */
+const ZOEK_DREMPEL = 5
+
+/** Hoofdletter- en diakriet-ongevoelig, zodat "krue" ook "Krüger" vindt. */
+function normaliseer(v: string): string {
+  return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
 export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossier[] }) {
-  const [filter, setFilter] = useState('alle')
-  const gefilterd = filter === 'alle' ? dossiers : dossiers.filter(d => d.groep === filter)
+  const zichtbareChips = useMemo(
+    () => SLICER
+      .map(s => ({ ...s, aantal: dossiers.filter(d => d.groep === s.key).length }))
+      .filter(s => s.aantal > 0),
+    [dossiers],
+  )
+
+  const [filter, setFilter] = useState<MobielDossier['groep'] | null>(null)
+  const [term, setTerm] = useState('')
+
+  // Geen eigen effect om de selectie te herstellen: de eerste chip met inhoud is de
+  // standaard, en zodra de gekozen groep leegloopt valt hij daar vanzelf op terug.
+  const actief = zichtbareChips.some(c => c.key === filter)
+    ? (filter as MobielDossier['groep'])
+    : zichtbareChips[0]?.key ?? null
+
+  const vanGroep = useMemo(
+    () => (actief ? dossiers.filter(d => d.groep === actief) : []),
+    [dossiers, actief],
+  )
+
+  const toonZoek = vanGroep.length > ZOEK_DREMPEL
+  const schoon = normaliseer(term.trim())
+  const gefilterd = useMemo(() => {
+    if (!toonZoek || !schoon) return vanGroep
+    return vanGroep.filter(d => normaliseer(
+      [d.titel, d.dossiernummer, d.klant_naam, d.projectleider_naam].filter(Boolean).join(' '),
+    ).includes(schoon))
+  }, [vanGroep, toonZoek, schoon])
 
   return (
     <>
-      {/* Slicer op hoofdstatus */}
-      <div
-        style={{
-          display: 'flex', gap: 5, padding: '10px 14px 8px',
-          background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
-          overflowX: 'auto', flexShrink: 0,
-        }}
-      >
-        {SLICER.map(s => {
-          const actief = filter === s.key
-          const aantal = s.key === 'alle' ? dossiers.length : dossiers.filter(d => d.groep === s.key).length
-          return (
-            <button
-              key={s.key}
-              onClick={() => setFilter(s.key)}
-              style={{
-                height: 30, padding: '0 11px', borderRadius: 99, border: 'none',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-                background: actief ? '#009439' : '#f1f4f5',
-                color: actief ? '#fff' : '#6b757c',
-                transition: 'all 120ms', whiteSpace: 'nowrap',
-              }}
-            >
-              {s.label}{aantal > 0 ? ` ${aantal}` : ''}
-            </button>
-          )
-        })}
-      </div>
+      {zichtbareChips.length > 0 && (
+        <div
+          style={{
+            display: 'flex', gap: 5, padding: '10px 14px 8px',
+            background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
+            overflowX: 'auto', flexShrink: 0,
+          }}
+        >
+          {zichtbareChips.map(s => {
+            const aan = actief === s.key
+            return (
+              <button
+                key={s.key}
+                onClick={() => { setFilter(s.key); setTerm('') }}
+                style={{
+                  height: 30, padding: '0 11px', borderRadius: 99, border: 'none',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                  background: aan ? '#009439' : '#f1f4f5',
+                  color: aan ? '#fff' : '#6b757c',
+                  transition: 'all 120ms', whiteSpace: 'nowrap',
+                }}
+              >
+                {s.label} {s.aantal}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {toonZoek && (
+        <div style={{ padding: '10px 12px 0', position: 'relative' }}>
+          <input
+            type="search"
+            value={term}
+            onChange={e => setTerm(e.target.value)}
+            placeholder="Zoek op titel, nummer, klant of projectleider"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            style={{
+              width: '100%', padding: '11px 12px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--bg-elev)',
+              fontSize: 16, // onder de 16px zoomt iOS in bij focus
+              color: 'var(--fg)', fontFamily: 'inherit', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      )}
 
       <div style={{ padding: '10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {gefilterd.length === 0 && (
           <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 0', fontSize: 14 }}>
-            Geen dossiers
+            {schoon ? 'Geen dossier gevonden' : 'Geen dossiers'}
           </div>
         )}
         {gefilterd.map(d => (

@@ -11,6 +11,12 @@ export const metadata = { title: 'Dossiers · EVA Mobiel' }
 
 type Res = { ok: true; data: DossierRij[] } | { ok: false; error: string; missingTable?: boolean }
 
+/**
+ * Substatussen waarbij het werk voorbij is. Zie `components/dossiers/types.ts`: opdracht kent
+ * beide, servicedesk alleen `financieel_gereed`.
+ */
+const AFGEROND = new Set(['financieel_gereed', 'financieel_afgesloten'])
+
 export default async function MobielDossiersPage() {
   const medewerker = await getCurrentMedewerker()
 
@@ -42,6 +48,12 @@ export default async function MobielDossiersPage() {
       if (seen.has(d.id)) continue
       // Alleen actieve dossiers (niet in eindstatus / niet gearchiveerd).
       if (!isActiefDossier(d as unknown as DossierActiefVelden)) continue
+      // En op de telefoon alleen wat écht nog loopt. `isActiefDossier` laat een opdracht op
+      // `financieel_gereed` nog door — terecht, want de Overzicht-schermen van Acties en
+      // Formulieren hebben die nodig. Maar het werk is dan klaar en er loopt alleen nog
+      // administratie; dat is kantoorwerk en het vult hier de lijst.
+      if (AFGEROND.has(d.opdracht_substatus ?? '')) continue
+      if (AFGEROND.has(d.servicedesk_substatus ?? '')) continue
       seen.add(d.id)
       const { label, color } = dossierStatusBadge(d)
       rows.push({
