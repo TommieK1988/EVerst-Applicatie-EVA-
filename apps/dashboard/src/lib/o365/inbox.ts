@@ -16,6 +16,7 @@
 
 import 'server-only'
 import { intakeGraphFetch, intakeGraphGet, GraphError } from './graph'
+import { intakeRegistratie, type IntakeRegistratie } from './tokens'
 
 /** Boven deze grens halen we een bijlage niet op; hij wordt alleen geregistreerd. */
 export const MAX_BIJLAGE_BYTES = 25 * 1024 * 1024
@@ -288,14 +289,25 @@ export async function zorgVoorCategorieen(postbusAdres: string): Promise<void> {
 /** Leest één bericht, om de verbinding en de ApplicationAccessPolicy te toetsen. */
 export async function toetsPostbus(
   postbusAdres: string,
-): Promise<{ ok: true; onderwerp: string | null; ontvangenOp: string | null } | { ok: false; fout: string }> {
+): Promise<
+  | { ok: true; onderwerp: string | null; ontvangenOp: string | null; registratie: IntakeRegistratie }
+  | { ok: false; fout: string; registratie: IntakeRegistratie }
+> {
+  // Welke registratie het token leverde hoort bij de uitslag: lezen via de
+  // hoofdregistratie kan toevallig lukken en zegt dan niets over fase 0.
+  const registratie = intakeRegistratie()
   try {
     const data = await intakeGraphGet<{ value?: { subject?: string; receivedDateTime?: string }[] }>(
       `/users/${encodeURIComponent(postbusAdres)}/mailFolders/inbox/messages` +
       `?$top=1&$orderby=receivedDateTime desc&$select=subject,receivedDateTime`,
     )
     const eerste = data.value?.[0]
-    return { ok: true, onderwerp: eerste?.subject ?? null, ontvangenOp: eerste?.receivedDateTime ?? null }
+    return {
+      ok: true,
+      onderwerp: eerste?.subject ?? null,
+      ontvangenOp: eerste?.receivedDateTime ?? null,
+      registratie,
+    }
   } catch (e) {
     const status = e instanceof GraphError ? e.status : 0
     // 403 hier betekent bijna altijd: Mail.ReadWrite ontbreekt, of de
@@ -305,6 +317,6 @@ export async function toetsPostbus(
       : status === 404
         ? ' — postbus niet gevonden; klopt het adres?'
         : ''
-    return { ok: false, fout: (e instanceof Error ? e.message : String(e)) + hint }
+    return { ok: false, fout: (e instanceof Error ? e.message : String(e)) + hint, registratie }
   }
 }

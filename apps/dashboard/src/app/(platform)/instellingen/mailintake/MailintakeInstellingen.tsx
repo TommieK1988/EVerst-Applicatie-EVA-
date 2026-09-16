@@ -106,7 +106,16 @@ export default function MailintakeInstellingen({
     setBezig(p.id)
     try {
       const res = await controleerVerbinding(p.id)
-      if (res.ok) {
+      // Een geslaagde toets via de hoofdregistratie is geen groen licht: dan zijn
+      // O365_INTAKE_CLIENT_ID/SECRET niet gezet en leest EVA met de machtigingen
+      // van de gewone app-registratie.
+      if (res.registratie === 'hoofd') {
+        toast.error(
+          'Gelezen met de gewone EVA-registratie, niet met "EVA Mailintake". ' +
+          'Zet O365_INTAKE_CLIENT_ID en O365_INTAKE_CLIENT_SECRET in Vercel.',
+          { duration: 8000 },
+        )
+      } else if (res.ok) {
         toast.success(
           res.onderwerp
             ? `Verbinding werkt. Laatste bericht: "${res.onderwerp}"`

@@ -255,3 +255,20 @@ export async function getIntakeAccessToken(): Promise<string> {
   intakeTokenCache = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 }
   return data.access_token
 }
+
+export type IntakeRegistratie = 'intake' | 'hoofd' | 'geen'
+
+/**
+ * Welke app-registratie de mailintake feitelijk gebruikt.
+ *
+ * Nodig omdat getIntakeAccessToken hierboven stil terugvalt op de
+ * hoofdregistratie. Zonder dit onderscheid ziet een geslaagde verbindingstoets
+ * er precies hetzelfde uit of de aparte intake-app nu wel of niet is ingesteld
+ * -- en dan denk je dat fase 0 klaar is terwijl EVA met de verkeerde
+ * machtigingen leest.
+ */
+export function intakeRegistratie(): IntakeRegistratie {
+  if (process.env.O365_INTAKE_CLIENT_ID && process.env.O365_INTAKE_CLIENT_SECRET) return 'intake'
+  if (process.env.O365_CLIENT_ID && process.env.O365_CLIENT_SECRET) return 'hoofd'
+  return 'geen'
+}

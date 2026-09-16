@@ -322,7 +322,14 @@ export async function getNabehandelStand(): Promise<string> {
 }
 
 /** Leest één bericht uit de postbus om de verbinding te toetsen. Schrijft niets. */
-export async function controleerVerbinding(postbusId: string): Promise<{ ok: boolean; onderwerp?: string | null; ontvangenOp?: string | null; error?: string }> {
+export async function controleerVerbinding(postbusId: string): Promise<{
+  ok: boolean
+  onderwerp?: string | null
+  ontvangenOp?: string | null
+  /** 'intake' = de aparte registratie; 'hoofd' = stil teruggevallen op de EVA-app. */
+  registratie?: 'intake' | 'hoofd' | 'geen'
+  error?: string
+}> {
   await vereisRecht('mailintake', 'beheren')
   const supabase = createAdminClient()
   const { data: p } = await supabase.from('mailintake_postbussen').select('adres').eq('id', postbusId).maybeSingle()
@@ -330,8 +337,8 @@ export async function controleerVerbinding(postbusId: string): Promise<{ ok: boo
 
   const res = await toetsPostbus(p.adres)
   return res.ok
-    ? { ok: true, onderwerp: res.onderwerp, ontvangenOp: res.ontvangenOp }
-    : { ok: false, error: res.fout }
+    ? { ok: true, onderwerp: res.onderwerp, ontvangenOp: res.ontvangenOp, registratie: res.registratie }
+    : { ok: false, error: res.fout, registratie: res.registratie }
 }
 
 /** Handmatig ophalen ("Nu ophalen" in het postvak). */
