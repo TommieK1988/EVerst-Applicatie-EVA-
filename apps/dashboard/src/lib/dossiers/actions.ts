@@ -234,6 +234,7 @@ type BewakingVerrijking = {
   bewaking_stap_tekst: string | null
   bewaking_stap_datum: string | null
   bewaking_wacht_op: 'klant' | 'intern' | 'extern' | null
+  bewaking_stap_bron: 'handmatig' | 'actie' | null
   bewaking_actiehouder: string | null
   bewaking_actiehouder_id: string | null
   bewaking_eigenaar_id: string | null
@@ -251,7 +252,7 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
   const resultaten = await Promise.all(
     blokken.map(blok => supabase
       .from('commercie_bewaking')
-      .select('dossier_id,stap_soort,stap_tekst,stap_datum,wacht_op,actiehouder_id,eigenaar_id')
+      .select('dossier_id,stap_soort,stap_tekst,stap_datum,wacht_op,stap_bron,actiehouder_id,eigenaar_id')
       .in('dossier_id', blok)),
   )
 
@@ -275,6 +276,7 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
       bewaking_stap_datum:  r.stap_datum ?? null,
       bewaking_wacht_op:
         r.wacht_op === 'klant' || r.wacht_op === 'intern' || r.wacht_op === 'extern' ? r.wacht_op : null,
+      bewaking_stap_bron:   r.stap_bron === 'actie' ? 'actie' : 'handmatig',
       bewaking_actiehouder: r.actiehouder_id ? namen.get(r.actiehouder_id) ?? null : null,
       bewaking_actiehouder_id: r.actiehouder_id ?? null,
       bewaking_eigenaar_id: r.eigenaar_id ?? null,

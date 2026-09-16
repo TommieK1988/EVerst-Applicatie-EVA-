@@ -191,7 +191,17 @@ export function BewakingWerklijst(props: Props) {
     },
     {
       key: 'stap', label: 'Volgende stap', breedte: 340,
-      render: r => r._stap ?? <span className="text-neutral-400">Nog niets afgesproken</span>,
+      render: r => r._stap
+        ? (
+          <span>
+            {r._stap}
+            {/* Uit de actielijst overgenomen: wel een afspraak, nog geen commerciële beslissing. */}
+            {r.bewaking_stap_bron === 'actie' && (
+              <span className="text-neutral-400" title="Overgenomen uit de actielijst van dit dossier"> · uit de actielijst</span>
+            )}
+          </span>
+        )
+        : <span className="text-neutral-400">Nog niets afgesproken</span>,
       sorteerWaarde: r => r._stap ?? '',
     },
     {

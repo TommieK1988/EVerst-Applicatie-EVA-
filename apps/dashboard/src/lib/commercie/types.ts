@@ -48,6 +48,15 @@ export type BewakingKaart = {
   verwachte_opdracht: string | null
 
   getrieerd_op: string | null
+
+  /**
+   * Waar de stap vandaan komt. 'handmatig' = iemand heeft hem vastgelegd; 'actie' = afgeleid
+   * uit de actielijst van het dossier. Een afgeleide stap is geen commerciële beslissing en
+   * wordt daarom als zodanig getoond — en de synchronisatie raakt een handmatige nooit aan.
+   */
+  stap_bron: 'handmatig' | 'actie'
+  /** De actie waar een afgeleide stap uit komt; houdt kaart en actielijst gelijk. */
+  taak_id: string | null
 }
 
 /**

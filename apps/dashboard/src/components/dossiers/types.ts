@@ -74,6 +74,9 @@ export type DossierRij = Dossier & {
   bewaking_stap_tekst?: string | null
   bewaking_stap_datum?: string | null
   bewaking_wacht_op?: 'klant' | 'intern' | 'extern' | null
+  /** Waar de stap vandaan komt: 'actie' = overgenomen uit de actielijst, nog geen commerciële
+      afspraak; 'handmatig' = iemand heeft hem zelf vastgelegd. */
+  bewaking_stap_bron?: 'handmatig' | 'actie' | null
   /** Naam van wie nu aan zet is — voorkomt dat twee collega's dezelfde klant nabellen. */
   bewaking_actiehouder?: string | null
   /** Id van de actiehouder; draagt het "alleen van mij"-filter op de werklijst. */

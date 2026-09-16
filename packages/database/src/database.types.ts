@@ -1200,9 +1200,11 @@ export type Database = {
           id: string
           kans_pct: number | null
           soort: string
+          stap_bron: string
           stap_datum: string | null
           stap_soort: string | null
           stap_tekst: string | null
+          taak_id: string | null
           titel: string | null
           updated_at: string
           verwachte_opdracht: string | null
@@ -1218,9 +1220,11 @@ export type Database = {
           id?: string
           kans_pct?: number | null
           soort?: string
+          stap_bron?: string
           stap_datum?: string | null
           stap_soort?: string | null
           stap_tekst?: string | null
+          taak_id?: string | null
           titel?: string | null
           updated_at?: string
           verwachte_opdracht?: string | null
@@ -1236,9 +1240,11 @@ export type Database = {
           id?: string
           kans_pct?: number | null
           soort?: string
+          stap_bron?: string
           stap_datum?: string | null
           stap_soort?: string | null
           stap_tekst?: string | null
+          taak_id?: string | null
           titel?: string | null
           updated_at?: string
           verwachte_opdracht?: string | null

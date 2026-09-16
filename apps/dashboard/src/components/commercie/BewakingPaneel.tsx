@@ -93,6 +93,15 @@ export function BewakingPaneel(props: Props) {
                 </span>
               )}
             </div>
+            {/* Komt de stap uit de actielijst, dan is dat nog geen commerciële afspraak: hij is
+                overgenomen zodat de offerte niet ten onrechte als onbeoordeeld oogt. Zeg dat er
+                dan ook bij, anders leest een openstaande taak als een bewuste keuze. */}
+            {stap && kaart?.stap_bron === 'actie' && (
+              <div className="mt-1 text-xs text-neutral-500">
+                Overgenomen uit de actielijst van dit dossier. Leg een uitkomst vast zodra je
+                klant hebt gesproken — dan vinkt EVA die actie mee af.
+              </div>
+            )}
           </div>
 
           {(kaart?.kans_pct != null || kaart?.verwachte_opdracht) && (

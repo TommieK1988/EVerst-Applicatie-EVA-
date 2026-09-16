@@ -22,6 +22,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
+import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 // Pure, afhankelijkheidsvrije helper ("vandaag als YYYY-MM-DD in Nederlandse tijd").
 // Op Vercel draait de server in UTC: zonder deze normalisatie zou een actie die om 00:30
 // Nederlandse tijd wordt afgerond op de vorige kalenderdag worden gezet.
@@ -43,7 +44,7 @@ export type ActieResultaat =
 // select-string. Een samengestelde string maakt daar `string` van en dan valt de hele
 // typering terug op `GenericStringError`. Geen spaties — de select gaat als query-parameter mee.
 const KAART_VELDEN =
-  'id,dossier_id,soort,titel,eigenaar_id,actiehouder_id,stap_soort,stap_tekst,stap_datum,wacht_op,kans_pct,verwachte_opdracht,getrieerd_op' as const
+  'id,dossier_id,soort,titel,eigenaar_id,actiehouder_id,stap_soort,stap_tekst,stap_datum,wacht_op,kans_pct,verwachte_opdracht,getrieerd_op,stap_bron,taak_id' as const
 
 /** Rijvorm zoals PostgREST hem teruggeeft: de check-constraints zijn daar gewoon `text`. */
 type KaartRij = {
@@ -60,6 +61,8 @@ type KaartRij = {
   kans_pct: number | null
   verwachte_opdracht: string | null
   getrieerd_op: string | null
+  stap_bron: string | null
+  taak_id: string | null
 }
 
 /**
@@ -72,6 +75,7 @@ function naarKaart(rij: KaartRij | null): BewakingKaart | null {
   return {
     ...rij,
     soort: rij.soort === 'signaal' ? 'signaal' : 'offerte',
+    stap_bron: rij.stap_bron === 'actie' ? 'actie' : 'handmatig',
     stap_soort: rij.stap_soort === 'actie' || rij.stap_soort === 'wachten' ? rij.stap_soort : null,
     wacht_op:
       rij.wacht_op === 'klant' || rij.wacht_op === 'intern' || rij.wacht_op === 'extern'
@@ -92,6 +96,8 @@ type KaartUpdate = {
   verwachte_opdracht?: string | null
   getrieerd_op?: string | null
   getrieerd_door?: string | null
+  stap_bron?: 'handmatig' | 'actie'
+  taak_id?: string | null
 }
 
 /** Fases waarin commerciële opvolging niet meer nodig is. */
@@ -383,6 +389,13 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
   if (invoer.kansPct !== undefined) update.kans_pct = invoer.kansPct
   if (invoer.verwachteOpdracht !== undefined) update.verwachte_opdracht = invoer.verwachteOpdracht
 
+  // Raakt iemand de stap zelf aan, dan is hij vanaf nu handmatig: de synchronisatie met de
+  // actielijst laat hem met rust. `taak_id` blijft wél staan — de actie waar deze stap uit
+  // voortkwam blijft dezelfde afspraak, en die moet mee af zodra de uitkomst wordt vastgelegd.
+  if (invoer.stapSoort !== undefined || invoer.stapTekst !== undefined || invoer.stapDatum !== undefined) {
+    update.stap_bron = 'handmatig'
+  }
+
   // Eerste keer dat er een eigenaar én een stap staat: de triage is gedaan. Vanaf dat moment
   // toont de kaart niet langer "nog niet beoordeeld".
   const krijgtEigenaar = (update.eigenaar_id ?? kaart.eigenaar_id) != null
@@ -493,6 +506,8 @@ export async function legUitkomstVast(
     actiehouder_id: def.stapSoort ? actiehouder : kaart.actiehouder_id,
     // Wie nog geen eigenaar had krijgt hem nu: wie een uitkomst vastlegt, is er duidelijk mee bezig.
     eigenaar_id: kaart.eigenaar_id ?? medewerker.id,
+    // Vanaf hier is dit een commerciële beslissing, geen afgeleide uit de actielijst.
+    stap_bron: 'handmatig',
   }
   if (def.kans != null) update.kans_pct = def.kans
   if (!kaart.getrieerd_op) {
@@ -502,6 +517,17 @@ export async function legUitkomstVast(
 
   const { error } = await supabase.from('commercie_bewaking').update(update).eq('id', kaart.id)
   if (error) return { ok: false, error: vertaalDbFout(error.message) }
+
+  // 2b. De gekoppelde actie mee afronden. Kwam de stap uit de actielijst ("Offerte nabellen"),
+  //     dan is die afspraak nu uitgevoerd — het gesprek is immers net vastgelegd. Zou hij open
+  //     blijven staan, dan zie je dezelfde offerte twee keer: één keer op de kaart met de nieuwe
+  //     stap en één keer in de actielijst met de oude deadline. Pas ná een geslaagde afronding
+  //     laten we de koppeling los; mislukt het (een doorloopcontrole in updateTaakStatus), dan
+  //     blijft de koppeling staan en probeert de volgende uitkomst het opnieuw.
+  if (kaart.taak_id) {
+    const afgerond = await updateTaakStatus(kaart.taak_id, 'gereed').then(() => true, () => false)
+    if (afgerond) await supabase.from('commercie_bewaking').update({ taak_id: null }).eq('id', kaart.id)
+  }
 
   // 3. De tijdlijn.
   await supabase.from('commercie_gebeurtenissen').insert({

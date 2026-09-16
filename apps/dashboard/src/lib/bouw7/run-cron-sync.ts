@@ -71,6 +71,20 @@ export async function runCronSync(
   log.stap('syncManagementProjecten')
   const management = await syncManagementProjecten(mode)
 
+  // Offertebewaking gelijktrekken met de actielijst. Draait ná de sync, want die kan zelf
+  // dossiers in of uit de offertefase brengen en acties uit Bouw7 meebrengen. Het scherm werkt
+  // ook zonder deze ronde bij — aanmaken en afvinken van een actie stemmen de kaart meteen af —
+  // maar een deadline die elders verschuift, of een dossier dat vanuit Bouw7 in de offertefase
+  // belandt, komt alleen hier langs. Best-effort: een fout mag de sync niet laten mislukken.
+  let offertebewaking: unknown
+  log.stap('offertebewaking')
+  try {
+    const { synchroniseerBewakingUitActies } = await import('@/lib/commercie/nabel-sync')
+    offertebewaking = await synchroniseerBewakingUitActies()
+  } catch (e) {
+    offertebewaking = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   // Werkadres-coördinaten bijwerken voor "dossier openen op locatie" (mobiel).
   // Best-effort: Nominatim throttelt op ~1/s, dus per ronde begrensd — de
   // gesynchte dossiers stromen zo over meerdere cron-rondes vol. Een fout hier
@@ -115,6 +129,7 @@ export async function runCronSync(
       projects: full.projects,
       planning: full.planning,
       management,
+      offertebewaking,
       geocode,
       dossiermappen,
       duur_ms: Date.now() - startedAt,

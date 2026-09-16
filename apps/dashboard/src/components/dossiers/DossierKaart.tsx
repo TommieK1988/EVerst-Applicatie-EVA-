@@ -284,6 +284,11 @@ export const DossierKaart = React.memo(function DossierKaart({
               {dossier.bewaking_actiehouder && (
                 <span style={{ color: 'var(--neutral-400)' }}> · {dossier.bewaking_actiehouder}</span>
               )}
+              {/* Overgenomen uit de actielijst en dus geen commerciële afspraak. Zonder dit
+                  onderscheid lijkt elke openstaande taak een bewuste opvolgstap. */}
+              {dossier.bewaking_stap_bron === 'actie' && (
+                <span style={{ color: 'var(--neutral-400)' }} title="Overgenomen uit de actielijst van dit dossier"> · uit de actielijst</span>
+              )}
             </span>
           </div>
         )}

@@ -13,6 +13,7 @@ import { meldTaakToegewezen } from '@/lib/taken/meldingen'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
+import { synchroniseerBewakingUitActies } from '@/lib/commercie/nabel-sync'
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
 
@@ -118,6 +119,19 @@ export async function verwijderActielijst(id: string): Promise<void> {
 
 // ─── Taken ────────────────────────────────────────────────────────────────────
 
+/**
+ * Houdt de offertebewaking gelijk met de actielijst.
+ *
+ * De bewakingskaart toont als volgende stap de eerstvolgende openstaande actie van het dossier.
+ * Verandert die verzameling — een nieuwe actie erbij, of de lopende wordt afgevinkt — dan moet de
+ * kaart mee, anders wijst hij naar een afspraak die niemand meer heeft staan. Stil bij fouten:
+ * het aanmaken of afvinken van een actie mag hier nooit op stuklopen.
+ */
+async function stemBewakingAf(dossierId: string | null | undefined): Promise<void> {
+  if (!dossierId) return
+  await synchroniseerBewakingUitActies({ dossierIds: [dossierId] }).catch(() => {})
+}
+
 export async function maakTaak(data: {
   titel: string
   lijst_id?: string
@@ -201,6 +215,17 @@ export async function maakTaak(data: {
     actie:        'aangemaakt',
     nieuwe_waarde: { titel: data.titel, status: data.status ?? 'open' },
   })
+
+  // Nieuwe actie met een deadline op een offertedossier: die is meteen de volgende stap op de
+  // bewakingskaart. Zonder deze aanroep zou de kaart tot de volgende nachtelijke run blijven
+  // zeggen dat er niets gepland staat.
+  if (data.deadline) {
+    const dossierId = data.dossier_id
+      ?? (data.lijst_id
+        ? (await supabase.from('task_lists').select('dossier_id').eq('id', data.lijst_id).maybeSingle()).data?.dossier_id
+        : null)
+    await stemBewakingAf(dossierId)
+  }
 
   revalidatePath('/taken')
   if (data.lijst_id) revalidatePath(`/taken/lijsten/${data.lijst_id}`)
@@ -352,6 +377,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       ?? (oud?.task_lists as { dossier_id?: string } | null)?.dossier_id
       ?? null
     await verwerkVoltooiingsActies(id, dossierId).catch(() => {})
+    await stemBewakingAf(dossierId)
   }
 
   // Uit Bouw7 geïmporteerde taak → het vinkje ook daar zetten. Fail-soft: lukt de write niet,
