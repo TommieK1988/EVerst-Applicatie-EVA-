@@ -38,6 +38,56 @@ type Alias = {
   relatieNaam: string | null; laatstGebruiktOp: string | null; createdAt: string
 }
 
+/**
+ * Wie er meldingen krijgt, als aanvinklijst.
+ *
+ * Stond eerst als `<select multiple>`. Dat werkt, maar alleen als je weet dat je
+ * ctrl moet ingedrukt houden: een gewone klik vervangt de hele selectie in plaats
+ * van er een naam bij te zetten, en deselecteren lukt helemaal niet zonder ctrl.
+ * Voor een instelling die bepaalt of iemand wel of geen bericht krijgt, is dat de
+ * verkeerde bediening.
+ */
+function MeldingKiezer({
+  medewerkers, gekozen, onWijzig,
+}: {
+  medewerkers: { id: string; naam: string; heeftLogin: boolean }[]
+  gekozen: string[]
+  onWijzig: (ids: string[]) => void
+}) {
+  // Eigen stand, zodat het vinkje meteen meebeweegt en niet pas na de server-ronde.
+  const [keuze, setKeuze] = useState<string[]>(gekozen)
+  React.useEffect(() => { setKeuze(gekozen) }, [gekozen])
+
+  const wissel = (id: string) => {
+    const nieuw = keuze.includes(id) ? keuze.filter(x => x !== id) : [...keuze, id]
+    setKeuze(nieuw)
+    onWijzig(nieuw)
+  }
+
+  return (
+    <div style={{
+      maxHeight: 132, overflowY: 'auto', padding: '6px 8px', borderRadius: 6,
+      border: '1px solid var(--border)', background: 'var(--surface)',
+      display: 'flex', flexDirection: 'column', gap: 2,
+    }}>
+      {medewerkers.map(m => (
+        <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <input type="checkbox" checked={keuze.includes(m.id)} onChange={() => wissel(m.id)} />
+          <span>{m.naam}</span>
+          {/* Zonder account komt een melding nergens aan; dat hoort hier te staan
+              en niet pas als iemand zich afvraagt waarom hij niets hoort. */}
+          {!m.heeftLogin && <span style={klein}>geen EVA-login</span>}
+        </label>
+      ))}
+      {keuze.length === 0 && (
+        <span style={{ ...klein, color: 'var(--wa-700, #b45309)', marginTop: 4 }}>
+          Niemand aangevinkt — voorgelegde mail blijft dan onopgemerkt in het postvak staan.
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function MailintakeInstellingen({
   postbussen, aliassen, nabehandelStand, medewerkers, werkmaatschappijen, magBeheren,
 }: {
@@ -230,20 +280,18 @@ export default function MailintakeInstellingen({
                   })()}
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <span style={klein}>Wie krijgt meldingen</span>
-                  <select
-                    multiple
-                    style={{ ...veldStijl, minHeight: 90 }}
-                    defaultValue={p.notificatie_medewerkers}
-                    onBlur={e => {
-                      const gekozen = Array.from(e.target.selectedOptions).map(o => o.value)
-                      wijzig(p.id, 'notificatie_medewerkers', gekozen)
-                    }}
-                  >
-                    {medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-                  </select>
-                </label>
+                  <MeldingKiezer
+                    medewerkers={medewerkers}
+                    gekozen={p.notificatie_medewerkers}
+                    onWijzig={ids => wijzig(p.id, 'notificatie_medewerkers', ids)}
+                  />
+                  <span style={klein}>
+                    Krijgt bericht bij een voorgelegde mail, een onbekende afzender, en als deze
+                    postbus niet meer gelezen kan worden.
+                  </span>
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'flex-end' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>

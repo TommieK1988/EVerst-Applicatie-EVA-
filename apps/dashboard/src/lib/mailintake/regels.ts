@@ -11,6 +11,8 @@
  * server-only-import.
  */
 
+import type { MailSoort, PostbusSoort } from './types'
+
 /** De categorie waarvoor de schilders-werkmaatschappij geldt; al het andere gaat naar bouw. */
 const SCHILDER_CATEGORIE = 'schilderwerk'
 const WM_SCHILDERS = 'everts onderhoudsschilders'
@@ -65,6 +67,29 @@ export function kiesWerkmaatschappij(
   }
 
   return standaardId ? { id: standaardId, via: 'standaard' } : { id: null, via: 'geen' }
+}
+
+/**
+ * Bij welke postbus hoort deze mailsoort inhoudelijk?
+ *
+ * Post komt lang niet altijd in de goede bus terecht: een servicedeskbon wordt naar
+ * opdrachten@ gestuurd, een offerteaanvraag naar servicedesk@. Wat er met zo'n
+ * bericht moet gebeuren volgt uit de inhoud, niet uit het adres waar het toevallig
+ * binnenkwam -- anders krijgt een offerteaanvraag een servicedeskcategorie omdat de
+ * bus dat nu eenmaal afdwingt, en gaat een storing naar de verkeerde behandelaar.
+ *
+ * `null` = de inhoud zegt er niets over (ruis, aanvullende informatie); dan blijft
+ * de bus waar het binnenkwam leidend.
+ */
+export function postbusSoortVoorMail(soort: MailSoort | null): PostbusSoort | null {
+  switch (soort) {
+    case 'offerteaanvraag': return 'offerteaanvraag'
+    case 'opdracht_op_offerte':
+    case 'opdrachtbon':
+    case 'meerwerk': return 'opdracht'
+    case 'servicedeskbon': return 'servicedesk'
+    default: return null
+  }
 }
 
 /** Datum plus een aantal dagen, als ISO-datum. */

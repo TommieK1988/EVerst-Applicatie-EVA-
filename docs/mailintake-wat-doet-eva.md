@@ -301,6 +301,27 @@ de categorie; staat daar iets anders, dan belandt de bon in het aanvragenscherm.
 
 ---
 
+## 6b. Mail in de verkeerde postbus
+
+Een servicedeskbon naar `opdrachten@`, een offerteaanvraag naar `servicedesk@` — dat gebeurt,
+en het adres waar iets binnenkwam mag niet bepalen wat ermee gebeurt.
+
+**Alles wat telt volgt de inhoud, niet de bus:**
+
+- de **soort** komt uit de mailtekst en de bijlagen; de postbus is in de prompt niet meer dan
+  een aanwijzing;
+- de **route** volgt uit die soort;
+- de **categorieklem** op Dagelijks onderhoud / Mutatie geldt voor een servicedeskbon, waar hij
+  ook vandaan komt — en geldt niet voor een offerteaanvraag die per ongeluk op de
+  servicedeskbus belandde;
+- de **actie** gaat naar de behandelaar van de postbus die bij de inhoud hoort. Een storing in
+  `opdrachten@` komt dus bij Marga terecht, niet bij Tom.
+
+**De melding blijft wél bij de ontvangende postbus.** Dat is hun mailbox, en zij horen te weten
+wat erin binnenkwam — ook als iemand anders het afhandelt.
+
+---
+
 ## 7. Wanneer EVA het zelf mag doen
 
 Automatisch handelen staat nu **overal uit**. Zet je het aan voor een postbus, dan gelden deze

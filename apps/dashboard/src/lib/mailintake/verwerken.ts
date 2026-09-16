@@ -29,6 +29,7 @@ import { zoekObjectBijAdres } from './objecten'
 import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
+import { postbusSoortVoorMail } from './regels'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
 import {
@@ -255,9 +256,16 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     const brontekst = `${geclaimd.onderwerp ?? ''}\n${geclaimd.body_tekst ?? ''}`
     const velden = await keurEnKalibreer(ex.data, lijsten, brontekst, postbus.standaard_werkmaatschappij_id, {
       ontvangenOp: geclaimd.ontvangen_op,
-      isServicedesk: postbus.soort === 'servicedesk',
+      // Op de inhoud en niet op de bus: een offerteaanvraag die per ongeluk naar
+      // servicedesk@ is gestuurd hoort geen servicedeskcategorie te krijgen.
+      isServicedesk: ex.data.soort === 'servicedeskbon',
       standaardCategorieId: postbus.standaard_bouw7_categorie_id,
     })
+
+    // ── Wie hoort dit te behandelen? ────────────────────────────────────────
+    // De bus waar het binnenkwam zegt niets als de afzender zich vergist heeft.
+    // Een servicedeskbon in opdrachten@ hoort bij de servicedeskbehandelaar.
+    const behandelaarId = await behandelaarVoorMail(postbus, ex.data.soort as MailSoort)
 
     // ── Object bij het werkadres ────────────────────────────────────────────
     // Een aanvraag hoort bij een complex of pand dat we vaak al kennen. Koppelen
@@ -407,12 +415,12 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         objectId: objectTreffer.objectId,
         automatisch: true,
         medewerkerId: null,
-        behandelaarId: postbus.standaard_behandelaar_id,
+        behandelaarId,
       })
       if (!res.ok) {
         await supabase.from('mailintake_berichten')
           .update({ status: 'wacht_op_mens', laatste_fout: res.error }).eq('id', berichtId)
-        await voorleggen(postbus, berichtId, geclaimd,
+        await voorleggen(postbus, behandelaarId, berichtId, geclaimd,
           ['EVA kon het dossier niet zelf aanmaken: ' + (res.error ?? 'onbekende fout')],
           { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error, reden: 'Automatisch aanmaken mislukt; voorgelegd.' }
@@ -427,7 +435,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
             berichtId,
             dossierId: doel.dossierId,
             medewerkerId: null,
-            behandelaarId: postbus.standaard_behandelaar_id,
+            behandelaarId,
             opdrachtReferentie: velden.opdrachtReferentie,
             opdrachtdatum: velden.opdrachtdatum ?? geclaimd.ontvangen_op.slice(0, 10),
             klantOpmerkingen: velden.klantOpmerkingen,
@@ -439,7 +447,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       if (!res.ok) {
         await supabase.from('mailintake_berichten')
           .update({ status: 'wacht_op_mens', laatste_fout: res.error ?? null }).eq('id', berichtId)
-        await voorleggen(postbus, berichtId, geclaimd,
+        await voorleggen(postbus, behandelaarId, berichtId, geclaimd,
           [`De offerte kon niet op gewonnen gezet worden: ${res.error ?? 'onbekende fout'}`],
           { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error ?? null, reden: 'Offerte winnen mislukt; voorgelegd.' }
@@ -450,7 +458,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       uit.status = besluit.status
       await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, ex.data.soort_vertrouwen, besluit.status)
       if (besluit.status === 'wacht_op_mens') {
-        await voorleggen(postbus, berichtId, geclaimd, besluit.redenen,
+        await voorleggen(postbus, behandelaarId, berichtId, geclaimd, besluit.redenen,
           { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
       }
     }
@@ -475,6 +483,33 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
 }
 
 /**
+ * Wie behandelt dit bericht, gezien wat het is?
+ *
+ * Post belandt regelmatig in de verkeerde bus. Hoort de inhoud bij een andere
+ * postbus dan waar hij binnenkwam, dan pakken we de behandelaar van díé bus --
+ * een storing hoort bij de servicedesk, ook als hij naar opdrachten@ is gestuurd.
+ * Bestaat die bus niet of heeft hij geen behandelaar, dan blijft de bus van
+ * binnenkomst leidend; liever iemand dan niemand.
+ *
+ * De meldingen blijven wél bij de mensen die de ontvangende bus in de gaten
+ * houden: dat is hun mailbox, en zij horen te weten wat erin kwam.
+ */
+async function behandelaarVoorMail(postbus: PostbusRij, soort: MailSoort): Promise<string | null> {
+  const doel = postbusSoortVoorMail(soort)
+  if (!doel || doel === postbus.soort) return postbus.standaard_behandelaar_id
+
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('mailintake_postbussen')
+    .select('standaard_behandelaar_id')
+    .eq('soort', doel)
+    .limit(1)
+    .maybeSingle()
+
+  return data?.standaard_behandelaar_id ?? postbus.standaard_behandelaar_id
+}
+
+/**
  * Zet een actie klaar voor de standaard behandelaar van deze postbus.
  *
  * Dit is waar "bij twijfel voorleggen" pas echt landt. Zonder deze stap belandde
@@ -488,12 +523,13 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
  */
 async function voorleggen(
   postbus: PostbusRij,
+  behandelaarId: string | null,
   berichtId: string,
   bericht: { onderwerp?: string | null; van_naam?: string | null; van_adres?: string | null; ontvangen_op?: string | null },
   redenen: string[],
   context?: { velden?: GekeurdeVelden; relatieNaam?: string | null; soort?: string | null },
 ): Promise<void> {
-  if (!postbus.standaard_behandelaar_id) return
+  if (!behandelaarId) return
 
   const afzender = bericht.van_naam || bericht.van_adres || 'onbekende afzender'
   const v = context?.velden
@@ -548,7 +584,7 @@ async function voorleggen(
 
   const res = await maakIntakeActie({
     berichtId,
-    medewerkerId: postbus.standaard_behandelaar_id,
+    medewerkerId: behandelaarId,
     titel: `Beoordeel ${postbus.naam.toLowerCase()} van ${afzender}`.slice(0, 200),
     toelichting: regels.join('\n'),
     dagen: 2,
