@@ -96,7 +96,7 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten')
-    .select('id, graph_message_id, status, besluit, outlook_pogingen, dossier_id, postbus_id, dossier:dossiers(dossiernummer)')
+    .select('id, graph_message_id, status, besluit, outlook_pogingen, dossier_id, postbus_id, dossier:dossiers!mailintake_berichten_dossier_id_fkey(dossiernummer)')
     .eq('id', berichtId)
     .maybeSingle()
 

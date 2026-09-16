@@ -22,7 +22,7 @@ const LIJST_SELECT = `
   herkend_via, herkenning_score, duplicaat_topscore, outlook_nabehandeling, laatste_fout,
   postbus:mailintake_postbussen(naam, sleutel),
   relatie:relaties(id, naam),
-  dossier:dossiers(dossiernummer),
+  dossier:dossiers!mailintake_berichten_dossier_id_fkey(dossiernummer),
   toegewezen:medewerkers!mailintake_berichten_toegewezen_medewerker_id_fkey(voornaam, achternaam)
 `
 
@@ -52,7 +52,11 @@ export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promis
       q = q.gte('ontvangen_op', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
   }
 
-  const { data } = await q.order('ontvangen_op', { ascending: false }).limit(500)
+  const { data, error } = await q.order('ontvangen_op', { ascending: false }).limit(500)
+  // Nooit stil leeg teruggeven. Een kapotte select (bijvoorbeeld een dubbelzinnige
+  // koppeling) levert hier `data: null` op, en dat ziet er in het scherm precies zo
+  // uit als "er is geen post" -- terwijl de teller er wel twee laat zien.
+  if (error) throw new Error(`Postvak laden mislukt: ${error.message}`)
   const rijen = (data ?? []) as any[]
 
   // Het dossiernummer van de sterkste duplicaatkandidaat, voor de badge in de lijst.
@@ -138,17 +142,18 @@ export interface BerichtDetail {
 export async function getBerichtDetail(id: string): Promise<BerichtDetail | null> {
   const supabase = createAdminClient()
 
-  const { data: bericht } = await supabase
+  const { data: bericht, error: berichtFout } = await supabase
     .from('mailintake_berichten')
     .select(`*,
              postbus:mailintake_postbussen(*),
              relatie:relaties(id, naam),
              contactpersoon:contactpersonen(id, voornaam, achternaam, email),
-             dossier:dossiers(id, dossiernummer, titel),
+             dossier:dossiers!mailintake_berichten_dossier_id_fkey(id, dossiernummer, titel),
              object:vastgoed_objecten(id, naam, objectnummer, adres_straat, adres_plaats)`)
     .eq('id', id)
     .maybeSingle()
 
+  if (berichtFout) throw new Error(`Bericht laden mislukt: ${berichtFout.message}`)
   if (!bericht) return null
 
   const [bijlagen, extractie, duplicaten, log] = await Promise.all([
