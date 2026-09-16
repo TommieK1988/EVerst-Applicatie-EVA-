@@ -98,6 +98,17 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
         guard: { module: 'instellingen', niveau: 'beheren' },
         synoniemen: ['sjabloon', 'template', 'mail', 'e-mail', 'bericht', 'onderwerp'],
       },
+      {
+        href: '/instellingen/mailintake',
+        titel: 'Mailintake',
+        omschrijving: 'De gedeelde postbussen waaruit EVA offerteaanvragen, opdrachten en servicedeskbonnen leest: verbinding, standaarden, wie meldingen krijgt, en wat er met behandelde mail gebeurt.',
+        module: 'mailintake',
+        guard: { module: 'mailintake', niveau: 'lezen' },
+        synoniemen: [
+          'mail', 'e-mail', 'postbus', 'mailbox', 'inbox', 'postvak', 'intake',
+          'aanvragen', 'opdrachten', 'servicedesk', 'outlook', 'alias', 'negeerlijst',
+        ],
+      },
     ],
   },
   {
