@@ -107,7 +107,10 @@ export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promis
 /** Tellers voor de tabbladen. */
 export async function getPostvakTellers(): Promise<Record<string, number>> {
   const supabase = createAdminClient()
-  const statussen = ['wacht_op_mens', 'geen_aanvraag', 'genegeerd', 'mislukt']
+  // 'nieuw' en 'bezig' horen erbij: een bericht in de wachtrij staat in geen enkel
+  // tabblad behalve Alles. Blijft de verwerking hangen, dan is dat onzichtbaar --
+  // en onzichtbare post is precies wat deze module hoort te voorkomen.
+  const statussen = ['wacht_op_mens', 'geen_aanvraag', 'genegeerd', 'mislukt', 'nieuw', 'bezig']
   const uit: Record<string, number> = {}
   for (const s of statussen) {
     const { count } = await supabase

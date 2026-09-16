@@ -213,6 +213,8 @@ export default function Postvak({
   const pathname = usePathname()
   const [bezig, setBezig] = useState(false)
 
+  const wachtrij = (tellers.nieuw ?? 0) + (tellers.bezig ?? 0)
+
   const tellerVoor = (tab: PostvakTab): number | null => {
     switch (tab) {
       case 'te_behandelen': return tellers.wacht_op_mens ?? 0
@@ -270,6 +272,16 @@ export default function Postvak({
           )
         })}
       </div>
+
+      {/* De wachtrij. Zichtbaar zodra er iets in staat, want deze berichten vallen
+          buiten elk tabblad behalve Alles -- en dan lijkt er niets te liggen. */}
+      {wachtrij > 0 && (
+        <p style={{ ...klein, marginBottom: 10 }}>
+          {wachtrij === 1 ? 'Eén bericht wacht' : `${wachtrij} berichten wachten`} nog op verwerking
+          door EVA. Ze verschijnen bij <em>Te behandelen</em> zodra ze gelezen zijn; staat dit er
+          langer dan een kwartier, dan loopt de verwerking vast.
+        </p>
+      )}
 
       <OverzichtTabel
         scherm="mailintake"
