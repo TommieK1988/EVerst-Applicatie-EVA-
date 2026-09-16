@@ -238,14 +238,17 @@ export default function Postvak({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <PageHeader title="Postvak" />
-      <p style={{ ...zacht, marginTop: -8 }}>
+    // eva-page-full is de container die de andere overzichten (Objecten, Relaties,
+    // Medewerkers) ook gebruiken: vaste marges rondom en volle breedte voor de tabel.
+    // Zonder die klasse plakt de inhoud tegen de rand en klopt de witruimte niet.
+    <div className="eva-page-full">
+      <PageHeader eyebrow="Beheer" title="Postvak" />
+      <p className="eva-page-desc">
         Binnengekomen post uit de intakepostbussen. EVA doet een voorstel; jij beslist.
       </p>
 
       {/* Tabbladen. Via de URL, zodat een link naar "te behandelen" deelbaar is. */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {POSTVAK_TABS.map(t => {
           const actief = t.key === actieveTab
           const teller = tellerVoor(t.key)
@@ -285,7 +288,7 @@ export default function Postvak({
       />
 
       {!magSchrijven && (
-        <p style={klein}>
+        <p style={{ ...klein, marginTop: 12 }}>
           Je kunt hier meekijken, maar niet behandelen. Vraag om schrijfrechten op Mailintake als dat wel nodig is.
         </p>
       )}

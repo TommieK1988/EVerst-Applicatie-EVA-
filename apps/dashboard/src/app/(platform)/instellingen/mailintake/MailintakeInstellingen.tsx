@@ -181,7 +181,7 @@ export default function MailintakeInstellingen({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="eva-page-full" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title={['Instellingen', 'Mailintake']} />
       <p style={{ ...zacht, marginTop: -8 }}>
         De drie gedeelde postbussen waaruit EVA aanvragen, opdrachten en servicedeskbonnen leest.

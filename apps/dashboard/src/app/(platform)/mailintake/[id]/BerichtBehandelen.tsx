@@ -420,7 +420,9 @@ export default function BerichtBehandelen({
   }, [detail.log])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    // Zelfde container als de overige overzichtsschermen; zonder deze klasse plakt
+    // de driekolomsindeling tegen de schermrand.
+    <div className="eva-page-full" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Waarom ligt dit hier? */}
       {redenVoorleggen && !afgehandeld && (
         <div style={{
