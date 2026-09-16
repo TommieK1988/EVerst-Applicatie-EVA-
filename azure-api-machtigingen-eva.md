@@ -176,3 +176,137 @@ Instellingen → Mailintake → **Verbinding controleren** leest één bericht p
 postbus en schrijft niets. Een **403** betekent vrijwel altijd dat
 `Mail.ReadWrite` ontbreekt, dat de beheerderstoestemming niet is verleend, of
 dat de ApplicationAccessPolicy deze postbus juist uitsluit.
+
+### Stappenplan
+
+Je hebt hiervoor een **globale beheerder** (of Privileged Role Administrator)
+nodig: alleen die mag beheerderstoestemming verlenen. Reken op een half uur,
+plus wachttijd voor de Exchange-policy.
+
+Vervang overal `<postbus-1>` … `<postbus-3>` door de echte adressen van de drie
+intakepostbussen.
+
+#### 1. App-registratie aanmaken
+
+Azure Portal → **Microsoft Entra ID** → **App-registraties** → *Nieuwe registratie*.
+
+| Veld | Waarde |
+|---|---|
+| Naam | `EVA Mailintake` |
+| Ondersteunde accounttypen | Alleen accounts in deze organisatiemap (één tenant) |
+| Omleidings-URI | **leeglaten** — deze app logt nooit een gebruiker in |
+
+Noteer na het aanmaken van het overzicht:
+- **Toepassings-id (client)** → wordt `O365_INTAKE_CLIENT_ID`
+- **Map-id (tenant)** → moet gelijk zijn aan `O365_TENANT_ID`
+
+#### 2. Clientgeheim
+
+**Certificaten en geheimen** → *Nieuw clientgeheim*. Kies de langste geldigheid
+(24 maanden) en zet de vervaldatum meteen in de agenda.
+
+Kopieer de **Waarde**, niet de Geheim-id. De waarde is na het verlaten van de
+pagina niet meer op te vragen. Dit wordt `O365_INTAKE_CLIENT_SECRET`.
+
+> Loopt het geheim af, dan stopt de intake. Stil is dat niet: de bewakingscron
+> meldt "Mailintake: {postbus} kon niet worden gelezen" aan de beheerders.
+
+#### 3. Machtiging + toestemming
+
+**API-machtigingen** → *Een machtiging toevoegen* → **Microsoft Graph** →
+**Toepassingsmachtigingen** (niet Gedelegeerd!) → zoek `Mail.ReadWrite` → toevoegen.
+
+Verwijder daarna `User.Read` als die er standaard bij staat — deze app heeft geen
+gebruikerscontext.
+
+Klik **Beheerderstoestemming verlenen voor …**. Controleer dat de status groen is;
+zonder die stap geeft elke aanroep 403.
+
+Het eindresultaat is één machtiging:
+
+| API | Machtiging | Type | Status |
+|---|---|---|---|
+| Microsoft Graph | `Mail.ReadWrite` | Toepassing | Verleend |
+
+#### 4. De app afbakenen tot de drie postbussen
+
+**Dit is de belangrijkste stap.** Zonder policy mag deze app op dit moment élke
+postbus in de tenant lezen én wijzigen.
+
+```powershell
+Connect-ExchangeOnline
+
+# Een mail-enabled beveiligingsgroep met precies de drie intakepostbussen.
+New-DistributionGroup -Name "EVA Mailintake Postbussen" `
+  -Alias "eva-mailintake-scope" `
+  -Type Security `
+  -Members "<postbus-1>","<postbus-2>","<postbus-3>"
+
+# Uit het adresboek halen: hij is een afbakening, geen verzendlijst.
+Set-DistributionGroup -Identity "eva-mailintake-scope" `
+  -HiddenFromAddressListsEnabled $true
+
+# De app vastzetten op die groep.
+New-ApplicationAccessPolicy `
+  -AppId "<toepassings-id uit stap 1>" `
+  -PolicyScopeGroupId "eva-mailintake-scope@<jouw-domein>" `
+  -AccessRight RestrictAccess `
+  -Description "EVA Mailintake mag alleen de drie intakepostbussen lezen"
+```
+
+Controleer daarna beide kanten — een policy die alles toestaat ziet er precies
+zo uit als een policy die werkt:
+
+```powershell
+Test-ApplicationAccessPolicy -Identity <postbus-1> -AppId <toepassings-id>
+#   AccessCheckResult : Granted
+
+Test-ApplicationAccessPolicy -Identity <een willekeurige collega> -AppId <toepassings-id>
+#   AccessCheckResult : Denied
+```
+
+> Exchange heeft tot ongeveer **30 minuten** nodig om de policy door te voeren.
+> Krijg je vlak na het aanmaken nog `Granted` op een postbus die geweigerd hoort
+> te worden: even wachten en opnieuw toetsen.
+
+#### 5. In Vercel zetten
+
+Project-instellingen → Environment Variables, voor **Production**:
+
+| Variabele | Waarde |
+|---|---|
+| `O365_INTAKE_CLIENT_ID` | toepassings-id uit stap 1 |
+| `O365_INTAKE_CLIENT_SECRET` | de waarde uit stap 2 |
+
+Controleer meteen dat **`O365_TENANT_ID` de echte tenant-GUID is** en niet
+`common`. App-only werkt niet met `common`; dat geldt ook voor deze registratie.
+
+Env-wijzigingen gaan pas in bij een nieuwe deployment — even opnieuw deployen.
+
+#### 6. Aanzetten in EVA
+
+Instellingen → **Mailintake**:
+
+1. Vul per postbus het echte e-mailadres in.
+2. Klik **Verbinding controleren**. Die leest één bericht en schrijft niets.
+   - *Verbinding werkt* → door naar 3.
+   - *403* → machtiging, toestemming of policy klopt niet (zie Controleren hierboven).
+   - *404* → het adres klopt niet.
+3. Zet de postbus op **actief**. Vanaf dat moment leest de cron elke tien minuten.
+4. Laat **Automatisch aanmaken** uit en de **Nabehandeling** op *Alleen categorie*.
+   Kijk eerst een paar weken mee of de beoordeling klopt voordat EVA zelf
+   dossiers gaat aanmaken of mail gaat verplaatsen.
+
+#### Checklist
+
+- [ ] App-registratie `EVA Mailintake` bestaat, single tenant, geen redirect-URI
+- [ ] Clientgeheim aangemaakt; vervaldatum in de agenda
+- [ ] `Mail.ReadWrite` als **Toepassings**machtiging, beheerderstoestemming verleend
+- [ ] Beveiligingsgroep met precies de drie postbussen, verborgen uit het adresboek
+- [ ] `New-ApplicationAccessPolicy` aangemaakt
+- [ ] `Test-ApplicationAccessPolicy` geeft **Granted** op een intakepostbus
+- [ ] `Test-ApplicationAccessPolicy` geeft **Denied** op een gewone collega
+- [ ] `O365_INTAKE_CLIENT_ID` + `O365_INTAKE_CLIENT_SECRET` in Vercel (Production)
+- [ ] `O365_TENANT_ID` is een GUID, niet `common`
+- [ ] Opnieuw gedeployd
+- [ ] "Verbinding controleren" slaagt voor alle drie de postbussen
