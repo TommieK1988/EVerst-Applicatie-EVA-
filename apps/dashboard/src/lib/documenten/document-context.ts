@@ -344,6 +344,9 @@ export function documentImageMax(documentsoort?: string): Record<string, { w: nu
   max['bevinding_foto_na'] = BEZOEK_FOTO_MAX
   max['waarneming_foto'] = BEZOEK_FOTO_KLEIN
   max['beeld'] = BEZOEK_FOTO_KLEIN
+  // Het hoofdstuk "Per onderdeel" is een lijstje, geen bewijsfoto; zonder eigen kader valt
+  // de tag terug op het algemene maximum en loopt een punt uit zijn tabelrij.
+  max['disciplinefoto'] = BEZOEK_FOTO_KLEIN
 
   // Kwaliteitsrapport: `foto` staat al in STANDAARD_IMAGE_MAX op PHOTO_MAX, maar dat kader is te
   // groot voor drie afwijkingen op één pagina. Hier begrenst het kader de blokhoogte, net als bij

@@ -102,7 +102,6 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
 
   // Formulier-koppeling
   const [formulierTemplateId, setFormulierTemplateId] = useState(taak.formulier_template_id ?? '')
-  const [kwaliteitRonde, setKwaliteitRonde] = useState(taak.kwaliteit_ronde ?? false)
   const [bezoekRonde, setBezoekRonde] = useState(taak.bezoek_ronde ?? false)
   const [opnameRonde, setOpnameRonde] = useState(taak.opname_ronde ?? false)
   const [formulieren, setFormulieren] = useState<{ id: string; naam: string; categorie: string | null }[]>([])
@@ -233,15 +232,6 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   const handleFormulierChange = (val: string) => {
     setFormulierTemplateId(val)
     startTransition(() => updateTaak(taak.id, { formulier_template_id: val || null }))
-  }
-
-  /**
-   * Zelfde mechaniek als de formulier-koppeling: de actie krijgt een startknop in Mijn acties en
-   * op de telefoon, en gaat automatisch op gereed zodra de inspectie definitief is.
-   */
-  const handleKwaliteitRondeChange = (val: boolean) => {
-    setKwaliteitRonde(val)
-    startTransition(() => updateTaak(taak.id, { kwaliteit_ronde: val }))
   }
 
   /**
@@ -474,42 +464,6 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
             >
               <ExternalLink className="w-3 h-3" />
               Bezoek starten
-            </a>
-          )}
-        </div>
-
-        {/* Kwaliteitsronde — zelfde plek als de formulier-koppeling, want het is dezelfde soort
-            koppeling: de actie is de ingang naar een uit te voeren registratie. */}
-        <div>
-          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={kwaliteitRonde}
-              onChange={e => handleKwaliteitRondeChange(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              <span className="font-medium">Kwaliteitsronde</span>
-              <span className="block text-[11px] text-slate-500">
-                De uitvoerder krijgt bij deze actie de knop &ldquo;Kwaliteitsronde starten&rdquo;.
-                De actie gaat automatisch op gereed zodra de inspectie definitief is.
-              </span>
-            </span>
-          </label>
-
-          {/* Startknop, zoals de Invullen-link bij een formulier. De ronde zelf is een mobiel
-              scherm -- op een breed venster oogt hij smal, maar hij wérkt, en dat is precies wat
-              je wilt om even mee te kijken zonder je telefoon erbij te pakken. */}
-          {kwaliteitRonde && (
-            <a
-              href={`/m/taken/${taak.id}/kwaliteit`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-everts/30 px-2 py-1.5 text-xs text-everts hover:bg-everts/5 transition-colors"
-              title="Kwaliteitsronde starten"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Ronde starten
             </a>
           )}
         </div>

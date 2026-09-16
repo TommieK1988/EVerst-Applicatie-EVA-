@@ -31,8 +31,9 @@ export default async function KwaliteitBlok({ dossierId }: { dossierId: string }
       <section style={{ marginBottom: 32 }}>
         <h3 style={kop}>Kwaliteitscontrole</h3>
         <p style={zacht}>
-          Er is nog geen kwaliteitsronde uitgevoerd op deze opdracht. Een ronde start vanuit een
-          actie in de actielijst waarop &ldquo;Kwaliteitsronde&rdquo; is aangevinkt.
+          Er is nog geen kwaliteitsronde uitgevoerd op deze opdracht. Een ronde start je in de
+          module Kwaliteitsinspecties; vanuit een actie kan het niet meer. Voor wat een
+          projectleider op locatie vastlegt is er het projectbezoek.
         </p>
       </section>
     )

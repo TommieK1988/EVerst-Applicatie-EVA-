@@ -1,23 +1,44 @@
 # Bezoekrapport — één rapportage voor elke controle
 
-`Bezoekrapport.docx` is het startsjabloon voor **één** rapportage over een
-projectbezoek, ongeacht wat er gecontroleerd is: een kwaliteitsronde, een
-oplevering, een veiligheidsronde (VCA) of een ingevuld inspectieformulier.
+`Bezoekrapport.docx` is het startsjabloon voor **één** rapportage over wat er op
+locatie is vastgelegd: een **projectbezoek**, een **kwaliteitsronde** of een
+**oplevering**.
+
+> **VCA-formulieren en gewone formulieren horen hier niet bij.** Die houden hun
+> eigen formulier en hun eigen rapportage; VCA-actiepunten komen nooit terug in
+> het bezoekrapport. De bronnen "Veiligheidsronde" en "Inspectieformulier" zijn in
+> september 2026 uit de bronkiezer verwijderd.
 
 Er is bewust geen apart opleverrapport, kwaliteitsrapport en formulierrapport.
 Elk hoofdstuk staat achter een `{#bezoek.heeft_…}`-conditie, dus een bron die
 iets niet kent, laat dat hoofdstuk vanzelf verdwijnen. De klant ziet daardoor
 altijd hetzelfde document, met andere hoofdstukken erin.
 
-| Hoofdstuk | Kwaliteitsronde | Oplevering | Veiligheidsronde | Inspectieformulier |
-|---|:--:|:--:|:--:|:--:|
-| Voorblad, inleiding, samenvatting | ✓ | ✓ | ✓ | ✓ |
-| Bevindingen | ✓ | ✓ | ✓ | ✓ |
-| Metingen | ✓ | – | – | – |
-| Wat er is beoordeeld | ✓ | – | ✓ | ✓ |
-| Wat er goed ging | ✓ | – | ✓ | – |
-| Opvolging van eerdere bezoeken | ✓ | – | ✓ | – |
-| Ondertekening | – | ✓ | ✓ | ✓ |
+| Hoofdstuk | Projectbezoek | Kwaliteitsronde | Oplevering |
+|---|:--:|:--:|:--:|
+| Voorblad, inleiding, samenvatting | ✓ | ✓ | ✓ |
+| **Voortgang** | ✓ | – | – |
+| Bevindingen | ✓ | ✓ | ✓ |
+| **Per onderdeel** | ✓ | – | – |
+| Wat er goed ging | ✓ | ✓ | – |
+| Opvolging van eerdere bezoeken | – | ✓ | – |
+| Ondertekening | – | – | ✓ |
+
+> **Metingen en "Wat er is beoordeeld" staan sinds 16 september 2026 niet meer in dit
+> sjabloon.** Beide hoorden bij de kwaliteitsronde — laagdiktemetingen en de afgevinkte
+> controlepunten uit de bibliotheek — en die module is geparkeerd.
+>
+> De tags bestaan nog wel. Wie de controlepunten in een eigen sjabloonvariant terug wil:
+> `{#bezoek.heeft_punten}` … `{#bezoek.punten}{groep}{onderdeel}{resultaat}{opmerking}{/…}`
+> en `{#bezoek.heeft_metingen}` … Ze staan nog in de variabelenlijst, dus
+> **Template controleren** blijft ze herkennen.
+
+Bij een **projectbezoek** zijn er twee hoofdstukken die op elkaar lijken maar iets
+anders doen. **Bevindingen** bevat alleen de punten die de projectleider als
+aandachtspunt heeft aangemerkt: die staan op het dossier, hebben een nummer en
+krijgen opvolging — dat is het actielijstje. **Per onderdeel** bevat álle punten,
+gegroepeerd per discipline en met het voortgangspercentage erbij — dat is het
+verslag van wat er is gezien.
 
 ---
 
@@ -42,9 +63,13 @@ eigen briefpapier aan.
 
 ## Gebruiken
 
-Op de Oplevering-tab, in het kwaliteitsblok, op het inspectiedetail en bij een
-formulierinzending staat de knop **Rapport opstellen**. Het bezoek waar je op dat
-moment naar kijkt, staat voorgevuld. Daarna: preview → PDF → archiveren in de
+Op de Oplevering-tab, in het kwaliteitsblok en op het inspectiedetail staat de knop
+**Rapport opstellen**. Het bezoek waar je op dat moment naar kijkt, staat voorgevuld.
+
+> Een **projectbezoek** verschijnt pas in de bronkiezer als het is **afgerond**;
+> zolang het concept is, staat het er niet tussen en valt het rapport terug op de
+> meest recente andere bron. Mis je de voortgang of zie je onverwacht
+> kwaliteitsgegevens, kijk dan eerst welke bron er gekozen is. Daarna: preview → PDF → archiveren in de
 dossiermap → eventueel vrijgeven in het klantportaal.
 
 > Een bezoekrapport opstellen vereist dat EVA met Microsoft verbonden is: de
@@ -60,7 +85,8 @@ dossiermap → eventueel vrijgeven in het klantportaal.
 
 | Tag | Betekenis |
 |---|---|
-| `{bezoek.soort_label}` | "Kwaliteitsronde", "Oplevering", "Veiligheidsronde" of "Inspectie" — de titel op het voorblad |
+| `{bezoek.soort_label}` | "Projectbezoek", "Kwaliteitsronde", "Oplevering", "Veiligheidsronde" of "Inspectie" — de titel op het voorblad |
+| `{bezoek.disciplines_regel}` | De uitgevoerde disciplines als één regel (alleen de namen; de percentages staan in het hoofdstuk Voortgang). Alleen bij een projectbezoek |
 | `{bezoek.kenmerk}` | Inspectienummer, naam van het oplevermoment of van het formulier |
 | `{bezoek.datum}` `{bezoek.tijd}` | Wanneer het bezoek plaatsvond |
 | `{bezoek.uitvoerder}` | Wie het bezoek deed |
@@ -103,6 +129,45 @@ Binnen `{#bevindingen}`: `{nummer}`, `{titel}`, `{omschrijving_kort}`,
 `{locatie}`, `{groep}`, `{ernst_label}`, `{status_label}`, `{eis_kort}`,
 `{meting}`, `{actie_kort}`, `{datum}`, `{hersteldatum}`, plus de foto's
 `{%bevinding_foto}` en — achter `{#heeft_foto_na}` — `{%bevinding_foto_na}`.
+
+### Voortgang (alleen een projectbezoek)
+
+```
+{#bezoek.heeft_disciplines}
+  Voortgang
+  DISCIPLINE            GEREED
+  {#bezoek.disciplines}{discipline_naam}   {voortgang_label}{/bezoek.disciplines}
+{/bezoek.heeft_disciplines}
+```
+
+Een tabel vlak na de samenvatting, vóór de bevindingen: dit is wat een opdrachtgever als
+eerste wil weten. `{voortgang_label}` is `"60 %"`, of een streepje wanneer er niets is
+opgegeven — *niet beoordeeld* is iets anders dan *0 % gereed*.
+
+### Per onderdeel (alleen een projectbezoek)
+
+```
+{#bezoek.heeft_disciplines}
+  {#bezoek.disciplines}
+     {discipline_naam}
+     {#heeft_voortgang}Voortgang: {voortgang_label}{/heeft_voortgang}
+     {#heeft_disciplinepunten}
+       {#disciplinepunten}
+         {nummer}  {tekst_kort}   {%disciplinefoto}
+         {#is_aandachtspunt}Aandachtspunt {aandachtspunt_nummer} - {status_label}{/is_aandachtspunt}
+       {/disciplinepunten}
+     {/heeft_disciplinepunten}
+     {^heeft_disciplinepunten}Geen bijzonderheden.{/heeft_disciplinepunten}
+  {/bezoek.disciplines}
+{/bezoek.heeft_disciplines}
+```
+
+> **Let op de namen.** De loop binnen een discipline heet `{#disciplinepunten}` en
+> niet `{#punten}`, en de naam van de discipline is `{discipline_naam}` en niet
+> `{naam}`. Het blok heeft die twee namen namelijk al op een hoger niveau (de
+> checklist van een kwaliteitsronde, en de ondertekenaars), en de sjabloonmotor
+> lost een tag op in de *binnenste* passende scope. Hergebruik je die namen, dan
+> krijg je geen foutmelding maar wél een rapport dat het verkeerde blok herhaalt.
 
 ### Overige loops
 

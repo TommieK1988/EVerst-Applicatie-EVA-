@@ -397,14 +397,16 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   },
   {
     groep: 'Bezoekrapport - kop en samenvatting',
-    uitleg: 'Een rapportage voor elke controle op locatie: een kwaliteitsronde, een oplevering, '
-      + 'een veiligheidsronde of een ingevuld formulier. Voeg bij "Invoervelden" een veld toe van '
-      + 'het type "Bezoekrapport (bezoek kiezen)" met sleutel "bezoek"; daar kiest de opsteller '
-      + 'welk bezoek het betreft. Hoofdstukken die de gekozen bron niet vult, verdwijnen vanzelf.',
+    uitleg: 'Een rapportage over wat er op locatie is vastgelegd: een projectbezoek, een '
+      + 'kwaliteitsronde of een oplevering. Voeg bij "Invoervelden" een veld toe van het type '
+      + '"Bezoekrapport (bezoek kiezen)" met sleutel "bezoek"; daar kiest de opsteller welk '
+      + 'bezoek het betreft. Hoofdstukken die de gekozen bron niet vult, verdwijnen vanzelf. '
+      + 'VCA-formulieren en gewone formulieren horen hier NIET bij: die houden hun eigen '
+      + 'formulier en hun eigen rapportage.',
     items: [
-      { v: '{bezoek.soort_label}',        label: 'Soort bezoek - "Kwaliteitsronde", "Oplevering", "Veiligheidsronde" of "Inspectie"' },
+      { v: '{bezoek.soort_label}',        label: 'Soort bezoek - "Projectbezoek", "Kwaliteitsronde" of "Oplevering"' },
       { v: '{bezoek.titel}',              label: 'Soort + kenmerk, als een regel' },
-      { v: '{bezoek.kenmerk}',            label: 'Inspectienummer, naam van het oplevermoment of van het formulier' },
+      { v: '{bezoek.kenmerk}',            label: 'Bezoeknummer (PB-03), inspectienummer of de naam van het oplevermoment' },
       { v: '{bezoek.datum}',              label: 'Datum van het bezoek' },
       { v: '{bezoek.tijd}',               label: 'Tijdstip' },
       { v: '{bezoek.uitvoerder}',         label: 'Wie het bezoek deed' },
@@ -417,6 +419,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{bezoek.disclaimer}',         label: 'Vaste toelichting (komt uit de code, niet uit het sjabloon)' },
       { v: '{bezoek.aantal_bevindingen}', label: 'Aantal bevindingen' },
       { v: '{bezoek.aantal_open}',        label: 'Aantal nog openstaande bevindingen' },
+      { v: '{bezoek.disciplines_regel}',  label: 'De uitgevoerde disciplines als een regel. De percentages staan in het hoofdstuk Voortgang' },
       { v: '{#bezoek.heeft_kengetallen}...{/bezoek.heeft_kengetallen}', label: 'Alleen tonen als er kengetallen zijn' },
       { v: '{#bezoek.kengetallen}...{/bezoek.kengetallen}', label: 'Loop over de tellingen (label + waarde)' },
     ],
@@ -425,6 +428,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     // beheerder naar zoekt. Wel bekend maken, anders meldt "Template controleren" ze.
     extraNamen: [
       'bezoek.aanwezig', 'bezoek.soort', 'bezoek.alle_bevindingen', 'bezoek.per_pagina',
+      'bezoek.disciplines', 'bezoek.heeft_disciplines',
     ],
   },
   {
@@ -464,14 +468,43 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
   },
   {
+    groep: 'Bezoekrapport - per onderdeel (projectbezoek)',
+    uitleg: 'Wat er per discipline is gezien, met de voortgang van dat vak. Alleen een '
+      + 'projectbezoek vult dit hoofdstuk; bij een kwaliteitsronde of een oplevering '
+      + 'blijft het leeg en verdwijnt het vanzelf. Let op de namen: de loop binnen een '
+      + 'discipline heet {#disciplinepunten} en niet {#punten}, en de naam van de discipline '
+      + 'is {discipline_naam} - anders pakt de sjabloonmotor het verkeerde blok.',
+    items: [
+      { v: '{#bezoek.heeft_disciplines}...{/bezoek.heeft_disciplines}', label: 'Hoofdstuk Per onderdeel' },
+      { v: '{#bezoek.disciplines}...{/bezoek.disciplines}', label: 'Loop over de uitgevoerde disciplines' },
+      { v: '{discipline_naam}',        label: 'Naam van de discipline, bv. Schilderwerk' },
+      { v: '{voortgang_label}',        label: 'Voortgang als tekst, bv. "60 %", of een streepje als er niets is opgegeven' },
+      { v: '{voortgang_pct}',          label: 'Voortgang als getal' },
+      { v: '{#heeft_voortgang}...{/heeft_voortgang}', label: 'Alleen tonen als er een percentage is ingevuld' },
+      { v: '{aantal_punten}',          label: 'Aantal punten bij deze discipline' },
+      { v: '{#heeft_disciplinepunten}...{/heeft_disciplinepunten}', label: 'Alleen tonen als er punten zijn' },
+      { v: '{^heeft_disciplinepunten}...{/heeft_disciplinepunten}', label: 'Anders: "geen bijzonderheden"' },
+      { v: '{#disciplinepunten}...{/disciplinepunten}', label: 'Loop over de punten van deze discipline' },
+      { v: '{tekst_kort}',             label: 'Wat er is vastgelegd, afgekapt op 220 tekens' },
+      { v: '{%disciplinefoto}',        label: 'Foto bij het punt. Moet alleen in zijn eigen alinea staan' },
+      { v: '{#is_aandachtspunt}...{/is_aandachtspunt}', label: 'Alleen bij een punt dat ook op het dossier staat' },
+      { v: '{aandachtspunt_nummer}',   label: 'Nummer op het dossier, bv. AP-07' },
+    ],
+    binnenLoop: [
+      'disciplines', 'discipline_naam', 'voortgang_pct', 'voortgang_label', 'heeft_voortgang',
+      'disciplinepunten', 'heeft_disciplinepunten', 'aantal_punten',
+      'tekst_kort', 'is_aandachtspunt', 'aandachtspunt_nummer', 'disciplinefoto',
+    ],
+  },
+  {
     groep: 'Bezoekrapport - overige hoofdstukken',
     uitleg: 'Metingen, beoordeelde punten, positieve waarnemingen, opvolging en ondertekening. '
       + 'Zet elk hoofdstuk tussen zijn {#bezoek.heeft_...}-conditie; dan verdwijnt het bij een bron '
       + 'die het niet kent - een oplevering heeft geen metingen, een kwaliteitsronde geen handtekening.',
     items: [
-      { v: '{#bezoek.heeft_metingen}...{/bezoek.heeft_metingen}', label: 'Hoofdstuk Metingen' },
+      { v: '{#bezoek.heeft_metingen}...{/bezoek.heeft_metingen}', label: 'Hoofdstuk Metingen. Staat NIET meer in het standaardsjabloon; zelf toe te voegen' },
       { v: '{#bezoek.metingen}...{/bezoek.metingen}',             label: 'Loop: {code} {onderdeel} {locatie} {meting} {eis} {meetmiddel} {resultaat}' },
-      { v: '{#bezoek.heeft_punten}...{/bezoek.heeft_punten}',     label: 'Hoofdstuk Wat er is beoordeeld' },
+      { v: '{#bezoek.heeft_punten}...{/bezoek.heeft_punten}',     label: 'Hoofdstuk Wat er is beoordeeld (controlepunten van een kwaliteitsronde). Staat NIET meer in het standaardsjabloon; zelf toe te voegen' },
       { v: '{#bezoek.punten}...{/bezoek.punten}',                 label: 'Loop: {code} {groep} {onderdeel} {vraag} {resultaat} {opmerking}' },
       { v: '{#bezoek.heeft_waarnemingen}...{/bezoek.heeft_waarnemingen}', label: 'Hoofdstuk Wat er goed ging' },
       { v: '{#bezoek.waarnemingen}...{/bezoek.waarnemingen}',     label: 'Loop: {omschrijving} {locatie} {groep} {%waarneming_foto}' },

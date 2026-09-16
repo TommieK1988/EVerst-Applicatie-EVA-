@@ -143,7 +143,6 @@ export async function maakTaak(data: {
   // Formulier-koppeling
   formulier_template_id?: string
   /** Deze actie start een kwaliteitsronde (zelfde mechaniek als de formulier-koppeling). */
-  kwaliteit_ronde?: boolean
   /** Deze actie start een projectbezoek; de uitvoerder kiest daar zelf de onderdelen. */
   bezoek_ronde?: boolean
   /** Deze actie start een opname (mutatiewerk); zelfde mechaniek als de kwaliteitsronde. */
@@ -174,7 +173,6 @@ export async function maakTaak(data: {
       herhaling_interval:     data.herhaling_interval     ?? 'geen',
       herhaling_start_offset_dagen: data.herhaling_start_offset_dagen ?? 0,
       formulier_template_id:  data.formulier_template_id  ?? null,
-      kwaliteit_ronde:        data.kwaliteit_ronde        ?? false,
       bezoek_ronde:           data.bezoek_ronde           ?? false,
       opname_ronde:           data.opname_ronde           ?? false,
     })
@@ -228,7 +226,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // Haal dossier_id op (direct of via de lijst) zodat completion-acties het kunnen gebruiken
   const { data: oud } = await admin
     .from('tasks')
-    .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, kwaliteit_ronde, opname_ronde, bezoek_ronde, task_lists(dossier_id)')
+    .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, opname_ronde, bezoek_ronde, task_lists(dossier_id)')
     .eq('id', id)
     .maybeSingle()
   if (!oud) throw new Error('Actie niet gevonden')
@@ -318,17 +316,6 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
         .eq('status', 'definitief')
       if (!count) {
         throw new Error('Deze taak wordt automatisch afgerond zodra het projectbezoek is afgerond.')
-      }
-    }
-
-    if (oud?.kwaliteit_ronde) {
-      const { count } = await admin
-        .from('kwaliteit_inspecties')
-        .select('id', { count: 'exact', head: true })
-        .eq('task_id', id)
-        .eq('status', 'definitief')
-      if (!count) {
-        throw new Error('Deze taak wordt automatisch afgerond zodra de kwaliteitsronde definitief is.')
       }
     }
 
@@ -431,7 +418,6 @@ export async function updateTaak(id: string, data: {
   herhaling_start_offset_dagen?: number
   blocked_by_task_id?: string | null
   formulier_template_id?: string | null
-  kwaliteit_ronde?: boolean
   bezoek_ronde?: boolean
   opname_ronde?: boolean
 }): Promise<void> {
@@ -464,7 +450,6 @@ export async function updateTaak(id: string, data: {
   }
   if (data.blocked_by_task_id      !== undefined) updatePayload.blocked_by_task_id      = data.blocked_by_task_id
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
-  if (data.kwaliteit_ronde        !== undefined) updatePayload.kwaliteit_ronde        = data.kwaliteit_ronde
   if (data.bezoek_ronde           !== undefined) updatePayload.bezoek_ronde           = data.bezoek_ronde
   if (data.opname_ronde           !== undefined) updatePayload.opname_ronde           = data.opname_ronde
 

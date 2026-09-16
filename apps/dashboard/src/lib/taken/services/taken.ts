@@ -909,14 +909,13 @@ export type DossierTaakRegel = {
   /** Platte omschrijving-tekst; null als er geen omschrijving is. */
   omschrijving: string | null
   formulier_template_id: string | null
-  kwaliteit_ronde: boolean
   opname_ronde: boolean
   bezoek_ronde: boolean
   /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
   toolbox_toewijzing_id: string | null
   /**
    * Mag de huidige gebruiker de doorloop van deze actie openen? Spiegelt de check in
-   * `/m/taken/[taakId]/{formulier,kwaliteit,opname}`: toegewezen aan jou, of platform-gebruiker.
+   * `/m/taken/[taakId]/{formulier,opname}`: toegewezen aan jou, of platform-gebruiker.
    * Zonder deze vlag zou de startknop naar een notFound() leiden.
    */
   mag_uitvoeren: boolean
@@ -955,7 +954,7 @@ export async function getTakenVoorDossier(
     .from('tasks')
     .select(
       'id, titel, status, prioriteit, deadline, lijst_id, volgorde, omschrijving, ' +
-      'formulier_template_id, kwaliteit_ronde, opname_ronde, bezoek_ronde, task_assignees(user_id)'
+      'formulier_template_id, opname_ronde, bezoek_ronde, task_assignees(user_id)'
     )
     .or(orFilters.join(','))
     .order('deadline', { ascending: true, nullsFirst: false })
@@ -1014,7 +1013,6 @@ export async function getTakenVoorDossier(
       afgerond:      t.status === 'gereed' || t.status === 'vervallen',
       omschrijving:  tekst || null,
       formulier_template_id: t.formulier_template_id ?? null,
-      kwaliteit_ronde:       !!t.kwaliteit_ronde,
       opname_ronde:          !!t.opname_ronde,
       bezoek_ronde:          !!t.bezoek_ronde,
       toolbox_toewijzing_id: toolboxPerTaak.get(t.id) ?? null,

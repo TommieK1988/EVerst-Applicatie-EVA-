@@ -25,7 +25,6 @@ export type UitvoerActie = {
 export type TaakMetUitvoer = {
   id: string
   formulier_template_id?: string | null
-  kwaliteit_ronde?: boolean | null
   opname_ronde?: boolean | null
   bezoek_ronde?: boolean | null
   /** Id van een nog niet afgeronde toolbox-toewijzing; hangt niet op `tasks` maar ernaast. */
@@ -58,15 +57,6 @@ export function bepaalUitvoerActies(taak: TaakMetUitvoer): UitvoerActie[] {
       label: 'Formulier invullen',
       href: `/m/taken/${taak.id}/formulier`,
       badgeUitleg: 'Deze actie sluit automatisch zodra je het formulier hebt ingediend',
-    })
-  }
-
-  if (taak.kwaliteit_ronde) {
-    acties.push({
-      soort: 'kwaliteit',
-      label: 'Kwaliteitsronde starten',
-      href: `/m/taken/${taak.id}/kwaliteit`,
-      badgeUitleg: 'Deze actie sluit automatisch zodra de kwaliteitsronde definitief is',
     })
   }
 

@@ -938,6 +938,7 @@ function urgenteTaakNaarDetails(t: UrgenteTaak): TaakMetDetails {
     herhaling_index:         null,
     blocked_by_task_id:      null,
     formulier_template_id:   null,
+    // Vervallen koppeling; de kolom bestaat nog tot de opruimmigratie en het type eist hem.
     kwaliteit_ronde:         false,
     bezoek_ronde:            false,
     opname_ronde:            false,

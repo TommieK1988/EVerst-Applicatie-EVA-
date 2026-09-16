@@ -15,8 +15,6 @@ export type MobielTaak = {
   dossier_naam: string | null
   dossier_id: string | null
   formulier_template_id: string | null
-  /** De actie start een kwaliteitsronde (tasks.kwaliteit_ronde). */
-  kwaliteit_ronde?: boolean
   /** De actie start een opname (tasks.opname_ronde). */
   opname_ronde?: boolean
   /** De actie start een projectbezoek (tasks.bezoek_ronde). */

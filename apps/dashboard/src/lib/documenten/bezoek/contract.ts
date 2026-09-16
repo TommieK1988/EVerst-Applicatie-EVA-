@@ -15,15 +15,21 @@
 /** Eén rij in een tabel-loop. Losse alias zodat de dotted parser niets bijzonders ziet. */
 export interface Rij { [k: string]: unknown }
 
-/** Waar het rapport over gaat. Bepaalt de titel op het voorblad en de disclaimer. */
-export type BezoekSoort = 'projectbezoek' | 'kwaliteit' | 'oplevering' | 'veiligheid' | 'formulier'
+/**
+ * Waar het rapport over gaat. Bepaalt de titel op het voorblad en de disclaimer.
+ *
+ * **Een bezoekrapport gaat alleen over wat op locatie in een registratie is vastgelegd.**
+ * `'veiligheid'` (een KAM/VGM-inzending) en `'formulier'` (een gewone inzending) zijn er in
+ * september 2026 uit gehaald: VCA houdt zijn eigen formulier en zijn eigen rapportage, en die
+ * hoort nooit in het bezoekrapport terug te komen. `SOORTEN` in `bezoek-opties.ts` wordt uit
+ * deze lijst afgeleid, dus een verwijderde soort wordt vanzelf geweigerd bij het inlezen.
+ */
+export type BezoekSoort = 'projectbezoek' | 'kwaliteit' | 'oplevering'
 
 export const BEZOEK_SOORT_LABELS: Record<BezoekSoort, string> = {
   projectbezoek: 'Projectbezoek',
   kwaliteit:  'Kwaliteitsronde',
   oplevering: 'Oplevering',
-  veiligheid: 'Veiligheidsronde',
-  formulier:  'Inspectie',
 }
 
 /**
@@ -65,6 +71,28 @@ export interface BezoekBevinding extends Rij {
   heeft_foto_na: boolean
   reacties: Rij[]
   heeft_reacties: boolean
+}
+
+/**
+ * Eén discipline in het hoofdstuk "Per onderdeel" van een projectbezoek.
+ *
+ * De veldnamen zijn met opzet lang. Zie de noot onderaan dit bestand: de dotted parser lost
+ * een tag op in de *binnenste* passende scope, dus een veld dat hier `punten` of `naam` zou
+ * heten kaapt stilzwijgend `{#bezoek.punten}` respectievelijk `{naam}` uit een omliggende loop.
+ */
+export interface BezoekDisciplineRij extends Rij {
+  code: string
+  /** Twee namen voor hetzelfde. `discipline_naam` is de veilige; `naam` staat er voor het gemak. */
+  naam: string
+  discipline_naam: string
+  voortgang_pct: number
+  /** "60 %" — leeg wanneer er niets is ingevuld. */
+  voortgang_label: string
+  heeft_voortgang: boolean
+  /** BEWUST NIET `punten`: dat veld bestaat al op blokniveau. */
+  disciplinepunten: Rij[]
+  heeft_disciplinepunten: boolean
+  aantal_punten: number
 }
 
 export interface BezoekBlok extends Rij {
@@ -112,6 +140,15 @@ export interface BezoekBlok extends Rij {
   handtekeningen: Rij[]
   heeft_handtekeningen: boolean
 
+  /**
+   * Wat er per discipline is gezien, met de voortgang. Alleen een projectbezoek vult dit;
+   * de vier andere bronnen laten het leeg, waardoor het hoofdstuk vanzelf dichtklapt.
+   */
+  disciplines: BezoekDisciplineRij[]
+  heeft_disciplines: boolean
+  /** "Schilderwerk 60 %, Houtrotherstel 40 %" — één regel voor het voorblad. */
+  disciplines_regel: string
+
   opmerkingen: string
   disclaimer: string
   per_pagina: number
@@ -129,6 +166,7 @@ export const LEEG_BEZOEK_BLOK: BezoekBlok = {
   waarnemingen: [], heeft_waarnemingen: false,
   opvolging: [], heeft_opvolging: false, opvolging_regel: '',
   handtekeningen: [], heeft_handtekeningen: false,
+  disciplines: [], heeft_disciplines: false, disciplines_regel: '',
   opmerkingen: '', disclaimer: '', per_pagina: 3,
 }
 
@@ -166,13 +204,6 @@ export function bezoekDisclaimer(soort: BezoekSoort | ''): string {
       return 'Dit rapport legt vast wat op de opleverdatum gezamenlijk is waargenomen aan de op dat '
         + 'moment zichtbare en bereikbare onderdelen. Punten die later worden gemeld, worden behandeld '
         + 'volgens de garantieregeling zoals opgenomen in de opdrachtbevestiging.'
-    case 'veiligheid':
-      return 'Deze veiligheidsronde is een momentopname van de op dat moment waarneembare situatie op '
-        + 'de werkplek. De ronde ontslaat betrokkenen niet van hun eigen verantwoordelijkheid om '
-        + 'onveilige situaties te melden en te verhelpen zodra zij die constateren.'
-    case 'formulier':
-      return 'Dit rapport geeft de antwoorden weer zoals die op locatie zijn vastgelegd. Onderdelen die '
-        + 'niet zijn ingevuld of niet zijn beoordeeld, worden niet automatisch als goedgekeurd beschouwd.'
     default:
       return ''
   }
@@ -186,4 +217,11 @@ export function bezoekDisclaimer(soort: BezoekSoort | ''): string {
  * `{#bezoek.paginas}` stil het verkeerde blok pakken — geen foutmelding, alleen een rapport
  * dat de bevindingen van één pagina herhaalt. Vandaar de afwijkende naam op blokniveau.
  * Zelfde reden als `alle_registraties` in houtrot-rapport.ts.
+ *
+ * Hetzelfde geldt binnen `{#bezoek.disciplines}`. Een disciplinerij mag géén veld `punten`
+ * hebben — dat bestaat al op blokniveau (hoofdstuk "Wat er is beoordeeld") en `{#punten}`
+ * binnen de disciplineloop zou daar stil op uitkomen: geen foutmelding, alleen een rapport
+ * dat per discipline de kwaliteitschecklist herhaalt. Vandaar `disciplinepunten`. Om dezelfde
+ * reden is er naast `naam` een `discipline_naam`: `naam` komt ook voor in de
+ * handtekeningen-loop.
  */

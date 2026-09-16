@@ -10,7 +10,7 @@
  * heeft vastgelegd, is voor hem een implementatiedetail.
  */
 
-import type { BezoekSoort } from './bezoek/contract'
+import { BEZOEK_SOORT_LABELS, type BezoekSoort } from './bezoek/contract'
 
 export interface BezoekOpties {
   /**
@@ -70,7 +70,15 @@ export const BEZOEK_FOTO_MAX = { w: 180, h: 135 }
 /** Kleiner kader voor de strook positieve waarnemingen en voor handtekeningen. */
 export const BEZOEK_FOTO_KLEIN = { w: 120, h: 90 }
 
-const SOORTEN: BezoekSoort[] = ['kwaliteit', 'oplevering', 'veiligheid', 'formulier']
+/**
+ * Afgeleid uit de labels en niet met de hand overgetypt.
+ *
+ * Deze lijst stond hier als losse array en miste `'projectbezoek'`. Gevolg: koos de opsteller
+ * een projectbezoek, dan viel `bron_soort` terug op `null` en rapporteerde het sjabloon
+ * stilzwijgend over "het meest recente bezoek" — een andere bron dan hij aanklikte, zonder
+ * foutmelding. Door hem af te leiden kan een nieuwe soort dit niet meer breken.
+ */
+const SOORTEN = Object.keys(BEZOEK_SOORT_LABELS) as BezoekSoort[]
 
 /**
  * Leest de optie-JSON uit een invoerwaarde. Onleesbaar of afwezig → de standaarden, zodat

@@ -1,13 +1,16 @@
 /**
  * Bouwt `docs/document-sjablonen/Bezoekrapport.docx` — het startsjabloon voor ÉÉN
- * rapportage over een projectbezoek, ongeacht wat er gecontroleerd is.
+ * rapportage over wat er op locatie is vastgelegd.
  *
- * Het idee: er is geen apart opleverrapport, kwaliteitsrapport, veiligheidsrapport of
- * formulierrapport. Er is één document waarin elk hoofdstuk achter een
- * `{#bezoek.heeft_…}`-conditie staat. Een oplevering kent geen metingen, dus verdwijnt
- * dat hoofdstuk; een kwaliteitsronde wordt niet ondertekend, dus verdwijnt de
- * ondertekening. De klant ziet daardoor altijd hetzelfde document, met andere
+ * Het idee: er is geen apart opleverrapport en kwaliteitsrapport. Er is één document waarin
+ * elk hoofdstuk achter een `{#bezoek.heeft_…}`-conditie staat. Een oplevering kent geen
+ * disciplines, dus verdwijnt "Per onderdeel"; een kwaliteitsronde wordt niet ondertekend, dus
+ * verdwijnt de ondertekening. De klant ziet daardoor altijd hetzelfde document, met andere
  * hoofdstukken erin.
+ *
+ * DRIE BRONNEN, niet vijf: projectbezoek, kwaliteitsronde en oplevering. Een VCA-formulier en
+ * een gewoon formulier zijn er in september 2026 uit gehaald — die houden hun eigen formulier
+ * en hun eigen rapportage, en horen nooit in het bezoekrapport terug te komen.
  *
  * De container-onderdelen (Content_Types, rels, styles) komen uit het bestaande
  * `Houtrot-rapportage.docx`: die zijn bewezen door Word te worden geaccepteerd. Alleen
@@ -30,7 +33,23 @@ const PizZip = require('pizzip')
 const hier = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(hier, '../../..')
 const sjabloonMap = path.join(repo, 'docs/document-sjablonen')
-const bron = path.join(sjabloonMap, 'Houtrot-rapportage.docx')
+// Container (Content_Types, rels, styles) uit een bestaand sjabloon: die zijn bewezen door
+// Word te worden geaccepteerd. Het houtrotsjabloon is ooit gesplitst in een variant met en
+// zonder prijzen, waardoor de oude naam verdween en dit script niet meer draaide; vandaar de
+// lijst met kandidaten in plaats van één hardgecodeerde naam.
+const KANDIDATEN = [
+  'Houtrot-rapportage.docx',
+  'Houtrot-rapportage-met-prijzen.docx',
+  'Houtrot-rapportage-zonder-prijzen.docx',
+  'Kwaliteitscontrole.docx',
+]
+const bron = (() => {
+  for (const naam of KANDIDATEN) {
+    const kandidaat = path.join(sjabloonMap, naam)
+    if (fs.existsSync(kandidaat)) return kandidaat
+  }
+  throw new Error(`Geen bronsjabloon gevonden in ${sjabloonMap}; gezocht naar ${KANDIDATEN.join(', ')}`)
+})()
 const doel = path.join(sjabloonMap, 'Bezoekrapport.docx')
 
 const delen = []
@@ -65,7 +84,15 @@ delen.push(spatie(280))
 // -- 2. Inleiding -----------------------------------------------------------
 delen.push(hoofdstuk('Inleiding'))
 delen.push(p('{bezoek.inleiding}', { na: 160 }))
-delen.push(p('Uitgevoerde werkzaamheden: {bezoek.werkzaamheden}', { kleur: GRIJS, na: 200 }))
+delen.push(p('Uitgevoerde werkzaamheden: {bezoek.werkzaamheden}', { kleur: GRIJS, na: 60 }))
+// Bij een projectbezoek het eerste dat een opdrachtgever wil weten. De andere vier bronnen
+// vullen `disciplines_regel` niet, dus dan verdwijnt de hele regel.
+delen.push(tag('{#bezoek.heeft_disciplines}'))
+delen.push(p('Uitgevoerde disciplines: {bezoek.disciplines_regel}', { kleur: GRIJS, na: 200 }))
+delen.push(tag('{/bezoek.heeft_disciplines}'))
+delen.push(tag('{^bezoek.heeft_disciplines}'))
+delen.push(spatie(140))
+delen.push(tag('{/bezoek.heeft_disciplines}'))
 
 // -- 3. Samenvatting --------------------------------------------------------
 // De kengetallen zijn een rij-loop en geen vaste kolommenstrook: elke bron levert
@@ -83,6 +110,27 @@ delen.push(tabel([
 ]))
 delen.push(spatie(200))
 delen.push(tag('{/bezoek.heeft_kengetallen}'))
+
+// -- 3b. Voortgang per discipline -------------------------------------------
+// Vooraan en als eigen tabel, niet als grijze regel bij elke disciplinekop verderop: dit is
+// wat een opdrachtgever het eerst wil weten. Een discipline zonder opgegeven percentage toont
+// een streepje - "niet beoordeeld" is iets anders dan "0 % gereed".
+//
+// Alleen een projectbezoek vult `disciplines`; bij de andere bronnen verdwijnt het hoofdstuk.
+delen.push(tag('{#bezoek.heeft_disciplines}'))
+delen.push(hoofdstuk('Voortgang', { voor: 240 }))
+delen.push(tabel([
+  rij([
+    { inhoud: kop('DISCIPLINE'), breedte: 6460, achtergrond: ARCERING },
+    { inhoud: kop('GEREED'), breedte: 2600, achtergrond: ARCERING },
+  ]),
+  rij([
+    { inhoud: tag('{#bezoek.disciplines}') + cet('{discipline_naam}'), breedte: 6460 },
+    { inhoud: cet('{voortgang_label}') + tag('{/bezoek.disciplines}'), breedte: 2600 },
+  ]),
+]))
+delen.push(spatie(200))
+delen.push(tag('{/bezoek.heeft_disciplines}'))
 
 // -- 4. Bevindingen ---------------------------------------------------------
 // Het hart van elk bezoekrapport: het aandachtspunt, de afwijking, het veiligheidspunt.
@@ -125,49 +173,67 @@ delen.push(tag('{/niet_laatste}'))
 delen.push(tag('{/bezoek.paginas}'))
 delen.push(tag('{/bezoek.heeft_bevindingen}'))
 
-// -- 5. Metingen (alleen als er gemeten is) ---------------------------------
-delen.push(tag('{#bezoek.heeft_metingen}'))
-delen.push(hoofdstuk('Metingen', { breekVoor: true }))
-delen.push(tabel([
-  rij([
-    { inhoud: kop('ONDERDEEL'), breedte: 3200, achtergrond: ARCERING },
-    { inhoud: kop('LOCATIE'), breedte: 2000, achtergrond: ARCERING },
-    { inhoud: kop('METING'), breedte: 1300, achtergrond: ARCERING },
-    { inhoud: kop('EIS'), breedte: 1500, achtergrond: ARCERING },
-    { inhoud: kop('RESULTAAT'), breedte: 1060, achtergrond: ARCERING },
-  ]),
-  rij([
-    { inhoud: tag('{#bezoek.metingen}') + cet('{code}  {onderdeel}'), breedte: 3200 },
-    { inhoud: cet('{locatie}'), breedte: 2000 },
-    { inhoud: cet('{meting}'), breedte: 1300 },
-    { inhoud: cet('{eis}'), breedte: 1500 },
-    { inhoud: cet('{resultaat}') + tag('{/bezoek.metingen}'), breedte: 1060 },
-  ]),
-]))
-delen.push(spatie(200))
-delen.push(tag('{/bezoek.heeft_metingen}'))
+// -- 4b. Per onderdeel (alleen een projectbezoek vult dit) ------------------
+// Het verslag van het bezoek: wat is er per discipline gezien, en hoe ver staat het. Waar
+// "Bevindingen" het actielijstje is (alleen de aandachtspunten, met opvolging), is dit het
+// volledige beeld.
+//
+// De loop heet `disciplinepunten` en niet `punten`, en de naam `discipline_naam` en niet
+// `naam`: de dotted parser lost een tag op in de BINNENSTE passende scope, en het blok heeft
+// zelf al een `punten` (de kwaliteitschecklist) en een `naam` (de handtekeningen). Zou je die
+// namen hier hergebruiken, dan pakt het sjabloon stil het verkeerde blok - geen foutmelding,
+// alleen een rapport dat onzin herhaalt. Zie de noot onderaan bezoek/contract.ts.
+delen.push(tag('{#bezoek.heeft_disciplines}'))
+delen.push(hoofdstuk('Per onderdeel', { breekVoor: true }))
+delen.push(p('{bezoek.disciplines_regel}', { grootte: 17, kleur: GRIJS, na: 160 }))
 
-// -- 6. Beoordeelde punten / checklist --------------------------------------
-// Een kwaliteitsronde levert controlepunten, een formulier levert antwoorden. Zelfde
-// tabel: wat is bekeken en wat kwam eruit.
-delen.push(tag('{#bezoek.heeft_punten}'))
-delen.push(hoofdstuk('Wat er is beoordeeld', { breekVoor: true }))
+delen.push(tag('{#bezoek.disciplines}'))
+delen.push(p('{discipline_naam}', { grootte: 22, vet: true, na: 100, streepOnder: true }))
+
+delen.push(tag('{#heeft_disciplinepunten}'))
 delen.push(tabel([
   rij([
-    { inhoud: kop('ONDERDEEL'), breedte: 2200, achtergrond: ARCERING },
-    { inhoud: kop('OMSCHRIJVING'), breedte: 3660, achtergrond: ARCERING },
-    { inhoud: kop('RESULTAAT'), breedte: 1600, achtergrond: ARCERING },
-    { inhoud: kop('OPMERKING'), breedte: 1600, achtergrond: ARCERING },
-  ]),
-  rij([
-    { inhoud: tag('{#bezoek.punten}') + cet('{groep}'), breedte: 2200 },
-    { inhoud: cet('{onderdeel}'), breedte: 3660 },
-    { inhoud: cet('{resultaat}'), breedte: 1600 },
-    { inhoud: cet('{opmerking}') + tag('{/bezoek.punten}'), breedte: 1600 },
-  ]),
-]))
-delen.push(spatie(200))
-delen.push(tag('{/bezoek.heeft_punten}'))
+    {
+      inhoud: tag('{#disciplinepunten}')
+        + p('{nummer}', { grootte: 16, vet: true, kleur: GRIJS, na: 30 })
+        + cet('{tekst_kort}', { na: 30 })
+        + tag('{#is_aandachtspunt}')
+        + p('Aandachtspunt {aandachtspunt_nummer} - {status_label}',
+            { grootte: 16, kleur: GRIJS, na: 0 })
+        + tag('{/is_aandachtspunt}'),
+      breedte: 5860,
+    },
+    {
+      // Eigen tagnaam: de image-module kiest zijn max-kader op TAGNAAM, dus dit hoofdstuk
+      // mag {%bevinding_foto} niet lenen - dat kader is voor een bewijsfoto.
+      inhoud: p('{%disciplinefoto}', { na: 0 }) + tag('{/disciplinepunten}'),
+      breedte: 3200,
+    },
+  ], { nietSplitsen: true }),
+], { randen: false }))
+delen.push(tag('{/heeft_disciplinepunten}'))
+
+delen.push(tag('{^heeft_disciplinepunten}'))
+delen.push(p('Geen bijzonderheden.', { grootte: 17, kleur: GRIJS, na: 120 }))
+delen.push(tag('{/heeft_disciplinepunten}'))
+
+delen.push(spatie(160))
+delen.push(tag('{/bezoek.disciplines}'))
+delen.push(spatie(120))
+delen.push(tag('{/bezoek.heeft_disciplines}'))
+
+// -- 5 en 6 (Metingen, Wat er is beoordeeld) ZIJN BEWUST WEG ----------------
+// Beide hoorden bij de kwaliteitsronde: laagdiktemetingen en de afgevinkte controlepunten uit
+// de bibliotheek. Die module is in september 2026 geparkeerd - het projectbezoek is de
+// hoofdstroom geworden - en dan zijn twee hoofdstukken die er nooit meer in komen alleen maar
+// ruis in het sjabloon.
+//
+// PRIJS DIE HIERVOOR IS BETAALD, bewust, op verzoek van Tom: `bezoek.punten` werd óók door
+// `uit-formulier.ts` gevuld. Een rapport van een KAM/VGM-formulierinzending toont daardoor
+// zijn vragen-en-antwoordenlijst niet meer. De adapters vullen de velden nog wel, dus wie het
+// terug wil hoeft alleen de tags in zijn eigen sjabloonvariant te zetten:
+//   {#bezoek.heeft_punten} ... {#bezoek.punten}{groep}{onderdeel}{resultaat}{opmerking}{/...}
+// Ze staan nog in de variabelencatalogus, zodat "Template controleren" ze blijft herkennen.
 
 // -- 7. Positieve waarnemingen ----------------------------------------------
 // Een rapport mag niet uitsluitend fouten tonen.

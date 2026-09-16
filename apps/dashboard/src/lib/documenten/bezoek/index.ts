@@ -14,8 +14,6 @@ import { createAdminClient } from '@everts/database/server'
 import { parseBezoekOpties, BEZOEK_OPTIES_SLEUTEL, type BezoekOpties } from '../bezoek-opties'
 import { LEEG_BEZOEK_BLOK, type BezoekBlok, type BezoekSoort } from './contract'
 import { bouwBezoekUitOplevering } from './uit-oplevering'
-import { bouwBezoekUitFormulier } from './uit-formulier'
-import { bouwBezoekUitVeiligheid } from './uit-veiligheid'
 import { kwaliteitNaarBezoek } from './uit-kwaliteit'
 import { bouwBezoekUitProjectbezoek } from './uit-projectbezoek'
 
@@ -41,9 +39,9 @@ export interface BezoekKeuze {
  */
 export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekKeuze[]> {
   const supabase = db()
-  const [bezoeken, inspecties, momenten, inzendingen] = await Promise.all([
+  const [bezoeken, inspecties, momenten] = await Promise.all([
     supabase.from('projectbezoeken')
-      .select('id, volgnummer, datum, locatie, doet_kwaliteit, doet_veiligheid, doet_algemeen, doet_voortgang')
+      .select('id, volgnummer, datum, locatie, projectbezoek_disciplines(kwaliteit_disciplines(naam))')
       .eq('dossier_id', dossierId).eq('status', 'definitief')
       .order('datum', { ascending: false }).limit(50),
     supabase.from('kwaliteit_inspecties')
@@ -52,10 +50,6 @@ export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekK
     supabase.from('oplever_momenten')
       .select('id, titel, type, opgeleverd_op, created_at')
       .eq('dossier_id', dossierId).order('created_at', { ascending: false }).limit(50),
-    supabase.from('form_inzendingen')
-      .select('id, template_id, status, ingediend_op, aangemaakt_op')
-      .eq('dossier_id', dossierId).in('status', ['ingediend', 'goedgekeurd'])
-      .order('ingediend_op', { ascending: false }).limit(50),
   ])
 
   const uit: BezoekKeuze[] = []
@@ -63,15 +57,14 @@ export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekK
   // Een projectbezoek is de brede ingang: het kan meerdere onderdelen tegelijk bevatten en is
   // daarom vrijwel altijd de bron die de opsteller bedoelt.
   for (const r of (bezoeken.data ?? []) as Record<string, unknown>[]) {
-    const onderdelen = [
-      r.doet_kwaliteit && 'kwaliteit',
-      r.doet_veiligheid && 'veiligheid',
-      r.doet_algemeen && 'algemeen',
-      r.doet_voortgang && 'voortgang',
-    ].filter(Boolean) as string[]
+    // De genestelde rijen zijn begrensd door de 50 bezoeken hierboven.
+    const namen = ((r.projectbezoek_disciplines ?? []) as
+      { kwaliteit_disciplines?: { naam?: string } | null }[])
+      .map(d => d.kwaliteit_disciplines?.naam)
+      .filter(Boolean) as string[]
     uit.push({
       soort: 'projectbezoek', id: String(r.id),
-      label: [`PB-${String(r.volgnummer).padStart(2, '0')}`, r.locatie, onderdelen.join(', ')]
+      label: [`PB-${String(r.volgnummer).padStart(2, '0')}`, r.locatie, namen.join(', ')]
         .filter(Boolean).join(' · '),
       datum: (r.datum as string | null) ?? null,
     })
@@ -90,28 +83,6 @@ export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekK
       label: String(r.titel ?? r.type ?? 'Oplevering'),
       datum: (r.opgeleverd_op as string | null) ?? (r.created_at as string | null) ?? null,
     })
-  }
-
-  // Formuliernamen in één keer erbij; anders is dit een query per inzending.
-  const inzRijen = (inzendingen.data ?? []) as Record<string, unknown>[]
-  if (inzRijen.length) {
-    const ids = [...new Set(inzRijen.map(r => String(r.template_id)))]
-    const { data: templates } = await supabase
-      .from('form_templates').select('id, naam, is_kam_vgm').in('id', ids)
-    const perId = new Map<string, { naam: string; kam: boolean }>(
-      ((templates ?? []) as Record<string, unknown>[])
-        .map(t => [String(t.id), { naam: String(t.naam ?? 'Formulier'), kam: t.is_kam_vgm === true }]),
-    )
-    for (const r of inzRijen) {
-      const t = perId.get(String(r.template_id))
-      uit.push({
-        // Een KAM/VGM-formulier ís een veiligheidsronde; dat hoeft de opsteller niet te weten.
-        soort: t?.kam ? 'veiligheid' : 'formulier',
-        id: String(r.id),
-        label: t?.naam ?? 'Formulier',
-        datum: (r.ingediend_op as string | null) ?? (r.aangemaakt_op as string | null) ?? null,
-      })
-    }
   }
 
   return uit.sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''))
@@ -157,16 +128,12 @@ async function bouwVoorBron(
 ): Promise<BezoekBlok> {
   switch (soort) {
     case 'projectbezoek':
-      return bouwBezoekUitProjectbezoek(id, keuze, kwaliteitBlok, opties)
+      return bouwBezoekUitProjectbezoek(id, keuze, opties)
     case 'kwaliteit':
       // Het rekenwerk zit al in bouwKwaliteitBlok; dit is alleen de remap.
       return kwaliteitNaarBezoek(kwaliteitBlok, keuze)
     case 'oplevering':
       return bouwBezoekUitOplevering(id, keuze, opties)
-    case 'veiligheid':
-      return bouwBezoekUitVeiligheid(dossierId, id, keuze)
-    case 'formulier':
-      return bouwBezoekUitFormulier(id, keuze)
     default:
       return { ...LEEG_BEZOEK_BLOK, per_pagina: keuze.per_pagina }
   }

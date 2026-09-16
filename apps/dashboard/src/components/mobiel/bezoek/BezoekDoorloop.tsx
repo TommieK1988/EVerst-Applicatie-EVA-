@@ -4,8 +4,8 @@
  * De mobiele doorloop van een projectbezoek.
  *
  * Eén scherm met secties in plaats van een stappenwizard: een projectleider loopt niet in een
- * vaste volgorde over een bouwplaats. Hij vinkt bovenaan aan wát hij doet, en daaronder klapt
- * per onderdeel open wat daarbij hoort.
+ * vaste volgorde over een bouwplaats. Bovenaan kiest hij de disciplines die worden uitgevoerd,
+ * en daaronder krijgt elk gekozen vak zijn eigen blok: wat valt op, met foto, en hoe ver is het.
  *
  * Alles wordt direct weggeschreven — zelfde afweging als bij de kwaliteitsronde: op een
  * bouwplaats met matig bereik mag een half uur werk niet aan één "opslaan" hangen.
@@ -15,23 +15,24 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
-  setBezoekOnderdeel, updateBezoek, voegBezoekPuntToe, uploadBezoekFoto,
-  verwijderBezoekFoto, startKwaliteitVoorBezoek, rondBezoekAf,
+  zetBezoekDisciplines, zetVoortgang, updateBezoek, voegPuntToe, updatePunt,
+  verwijderPunt, uploadBezoekFoto, verwijderBezoekFoto, rondBezoekAf,
 } from '@/lib/bezoek/bezoeken'
 import {
-  BEZOEK_ONDERDELEN, bezoekOnderdeelLabels, bezoekOnderdeelUitleg,
-  BEZOEK_ONDERDEEL_KOLOM, bezoekKenmerk, bezoekOnvolledig,
-  type BezoekContext, type BezoekOnderdeel,
+  bezoekKenmerk, puntKenmerk, bezoekOnvolledig,
+  type BezoekContext, type BezoekDiscipline, type BezoekPunt,
 } from '@/lib/bezoek/types'
 import {
-  GRIJS, RAND, TEKST, OPPERVLAK, GROEN, ROOD, AMBER,
-  veld, label, primaireKnop, secundaireKnop, kaart,
+  GRIJS, RAND, TEKST, OPPERVLAK, GROEN, AMBER,
+  veld, label, primaireKnop, kaart,
 } from '@/components/mobiel/kwaliteit/stijl'
+import DisciplineKiezer from './DisciplineKiezer'
+import { SectieKop, TekstVeld, FotoStrip } from './velden'
 
 export default function BezoekDoorloop({ context }: { context: BezoekContext }) {
   const router = useRouter()
   const [bezig, startOvergang] = useTransition()
-  const { bezoek, dossier, punten, fotos, kwaliteit } = context
+  const { bezoek, dossier, disciplines, punten, fotos, beschikbareDisciplines } = context
   const definitief = bezoek.status === 'definitief'
 
   const ververs = () => router.refresh()
@@ -43,7 +44,9 @@ export default function BezoekDoorloop({ context }: { context: BezoekContext }) 
     return true
   }
 
-  const aan = (o: BezoekOnderdeel) => bezoek[BEZOEK_ONDERDEEL_KOLOM[o]]
+  // Een discipline waar punten onder hangen mag niet zomaar uit de keuze verdwijnen; de
+  // kiezer vergrendelt hem zodat de gebruiker dat ziet vóór hij tikt.
+  const metPunten = new Set(punten.map(p => p.discipline_code))
 
   return (
     <div style={{ padding: '12px 14px 90px', color: TEKST }}>
@@ -68,41 +71,26 @@ export default function BezoekDoorloop({ context }: { context: BezoekContext }) 
         </div>
       )}
 
-      {/* ── Wat doe je vandaag ───────────────────────────────────────────── */}
-      <SectieKop>Wat doe je tijdens dit bezoek?</SectieKop>
+      {/* ── Disciplines ──────────────────────────────────────────────────── */}
+      <SectieKop>Welke disciplines worden uitgevoerd?</SectieKop>
       <div style={{ marginBottom: 16 }}>
-        {BEZOEK_ONDERDELEN.map(o => (
-          <button
-            key={o}
-            type="button"
-            disabled={definitief || bezig}
-            onClick={() => doe(() => setBezoekOnderdeel(bezoek.id, o, !aan(o)))}
-            style={{
-              ...kaart,
-              marginBottom: 8,
-              display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%',
-              textAlign: 'left', cursor: definitief ? 'default' : 'pointer',
-              borderColor: aan(o) ? GROEN : RAND,
-              background: aan(o) ? 'rgba(0,148,57,0.06)' : OPPERVLAK,
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            <span style={{
-              width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1,
-              border: `2px solid ${aan(o) ? GROEN : RAND}`,
-              background: aan(o) ? GROEN : 'transparent',
-              color: '#fff', fontSize: 14, lineHeight: '19px', textAlign: 'center', fontWeight: 700,
-            }}>{aan(o) ? '✓' : ''}</span>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15.5, fontWeight: 600 }}>
-                {bezoekOnderdeelLabels[o]}
-              </span>
-              <span style={{ display: 'block', fontSize: 12.5, color: GRIJS, marginTop: 2 }}>
-                {bezoekOnderdeelUitleg[o]}
-              </span>
-            </span>
-          </button>
-        ))}
+        <DisciplineKiezer
+          beschikbaar={beschikbareDisciplines}
+          gekozen={disciplines.map(d => d.code)}
+          lezen={definitief}
+          metPunten={metPunten}
+          opslaan={async codes => {
+            const r = await zetBezoekDisciplines(bezoek.id, codes)
+            if (!r.ok) { toast.error(r.error); return r }
+            startOvergang(ververs)
+            return r
+          }}
+        />
+        {disciplines.length === 0 && (
+          <p style={{ fontSize: 12.5, color: GRIJS, margin: '8px 0 0' }}>
+            De keuze van het vorige bezoek staat voor je klaar zodra je er één hebt gedaan.
+          </p>
+        )}
       </div>
 
       {/* ── Omstandigheden ───────────────────────────────────────────────── */}
@@ -126,89 +114,32 @@ export default function BezoekDoorloop({ context }: { context: BezoekContext }) 
         />
       </div>
 
-      {/* ── Kwaliteit ────────────────────────────────────────────────────── */}
-      {aan('kwaliteit') && (
-        <>
-          <SectieKop>Kwaliteit</SectieKop>
-          <div style={{ ...kaart, marginBottom: 16 }}>
-            {kwaliteit ? (
-              <>
-                <div style={{ fontSize: 14, marginBottom: 8 }}>
-                  <strong>{kwaliteit.nummer}</strong> · {kwaliteit.beoordeeld} beoordeeld
-                  {kwaliteit.afwijkend > 0 && (
-                    <span style={{ color: ROOD, fontWeight: 600 }}> · {kwaliteit.afwijkend} afwijkend</span>
-                  )}
-                </div>
-                <a href={`/m/kwaliteit/${kwaliteit.id}`} style={{ ...secundaireKnop, display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-                  {kwaliteit.status === 'definitief' ? 'Ronde bekijken' : 'Verder met de ronde'}
-                </a>
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: 13.5, color: GRIJS, margin: '0 0 10px' }}>
-                  De kwaliteitsronde is een eigen doorloop met controlepunten en metingen. Je kiest
-                  daar zelf welke disciplines je nu beoordeelt.
-                </p>
-                <button
-                  type="button" disabled={definitief || bezig}
-                  onClick={async () => {
-                    const r = await startKwaliteitVoorBezoek(bezoek.id)
-                    if (!r.ok) { toast.error(r.error); return }
-                    router.push(`/m/kwaliteit/${r.id}`)
-                  }}
-                  style={{ ...primaireKnop, width: '100%' }}
-                >
-                  Kwaliteitsronde starten
-                </button>
-              </>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ── Veiligheid ───────────────────────────────────────────────────── */}
-      {aan('veiligheid') && (
-        <PuntenSectie
-          titel="Veiligheid"
-          uitleg="Onveilige situaties die je constateert. Ze komen als veiligheidspunt op het dossier te staan."
-          soort="veiligheid"
-          punten={punten.filter(p => p.soort === 'veiligheid')}
+      {/* ── Per discipline ───────────────────────────────────────────────── */}
+      {disciplines.map(d => (
+        <DisciplineBlok
+          key={d.code}
+          discipline={d}
           bezoekId={bezoek.id}
+          punten={punten.filter(p => p.discipline_code === d.code)}
           lezen={definitief}
-          naOpslaan={ververs}
+          naWijziging={ververs}
         />
-      )}
-
-      {/* ── Algemeen ─────────────────────────────────────────────────────── */}
-      {aan('algemeen') && (
-        <PuntenSectie
-          titel="Algemeen"
-          uitleg="Wat je verder opvalt. Dit wordt een aandachtspunt op het dossier, met opvolging."
-          soort="oplever"
-          punten={punten.filter(p => p.soort === 'oplever')}
-          bezoekId={bezoek.id}
-          lezen={definitief}
-          naOpslaan={ververs}
-        />
-      )}
+      ))}
 
       {/* ── Voortgang ────────────────────────────────────────────────────── */}
-      {aan('voortgang') && (
+      {disciplines.length > 0 && (
         <>
-          <SectieKop>Voortgang</SectieKop>
+          <SectieKop>Voortgang per discipline</SectieKop>
           <div style={{ ...kaart, marginBottom: 16 }}>
-            <TekstVeld
-              titel="Hoe staat het ervoor" waarde={bezoek.voortgang_tekst ?? ''} lezen={definitief}
-              plaatshouder="De noordgevel is af, de oostgevel is in de grondlaag. Op schema."
-              regels={4}
-              opslaan={v => doe(() => updateBezoek(bezoek.id, { voortgang_tekst: v }))}
-              laatste
-            />
-            <FotoStrip
-              bezoekId={bezoek.id} soort="voortgang" lezen={definitief}
-              fotos={fotos.filter(f => f.soort === 'voortgang')}
-              naWijziging={ververs}
-            />
+            {disciplines.map((d, i) => (
+              <VoortgangRegel
+                key={d.code}
+                discipline={d}
+                lezen={definitief}
+                laatste={i === disciplines.length - 1}
+                opslaan={pct => doe(() => zetVoortgang(bezoek.id, d.code, pct))}
+              />
+            ))}
           </div>
         </>
       )}
@@ -221,6 +152,18 @@ export default function BezoekDoorloop({ context }: { context: BezoekContext }) 
           plaatshouder="Optioneel" regels={3}
           opslaan={v => doe(() => updateBezoek(bezoek.id, { algemene_opmerkingen: v }))}
           laatste
+        />
+        <FotoStrip
+          titel="Overzichtsfoto's van dit bezoek"
+          fotos={fotos}
+          lezen={definitief}
+          uploaden={async file => {
+            const fd = new FormData()
+            fd.set('foto', file)
+            return uploadBezoekFoto(bezoek.id, fd)
+          }}
+          verwijderen={id => verwijderBezoekFoto(id)}
+          naWijziging={ververs}
         />
 
         {!definitief && (
@@ -251,200 +194,273 @@ export default function BezoekDoorloop({ context }: { context: BezoekContext }) 
 
 /* ─────────────────────────────── Onderdelen ──────────────────────────────── */
 
-function SectieKop({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 style={{
-      fontSize: 12, fontWeight: 700, color: GRIJS, textTransform: 'uppercase',
-      letterSpacing: 0.4, margin: '0 0 8px',
-    }}>{children}</h2>
-  )
-}
-
-/** Tekstveld dat bij verlaten opslaat — geen opslaanknop per veld op een telefoon. */
-function TekstVeld({
-  titel, waarde, opslaan, plaatshouder, regels = 1, lezen = false, laatste = false,
+/**
+ * Eén discipline: de punten die eronder hangen, plus het invulblok om er een bij te doen.
+ *
+ * Inklapbaar, standaard open. Bij vijf disciplines scheelt dat veel scrollen.
+ */
+function DisciplineBlok({
+  discipline, bezoekId, punten, lezen, naWijziging,
 }: {
-  titel: string
-  waarde: string
-  opslaan: (v: string) => void | Promise<unknown>
-  plaatshouder?: string
-  regels?: number
-  lezen?: boolean
-  laatste?: boolean
+  discipline: BezoekDiscipline
+  bezoekId: string
+  punten: BezoekPunt[]
+  lezen: boolean
+  naWijziging: () => void
 }) {
-  const [lokaal, setLokaal] = useState(waarde)
-  const gedeeld = {
-    style: { ...veld, ...(regels > 1 ? { minHeight: regels * 26 } : {}) },
-    value: lokaal,
-    placeholder: plaatshouder,
-    disabled: lezen,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setLokaal(e.target.value),
-    onBlur: () => { if (lokaal !== waarde) opslaan(lokaal) },
-  }
+  const [open, setOpen] = useState(true)
+  const [tekst, setTekst] = useState('')
+  const [alsAandachtspunt, setAlsAandachtspunt] = useState(false)
+  const [bezig, setBezig] = useState(false)
+
   return (
-    <div style={{ marginBottom: laatste ? 0 : 12 }}>
-      <span style={label}>{titel}</span>
-      {regels > 1 ? <textarea rows={regels} {...gedeeld} /> : <input type="text" {...gedeeld} />}
+    <div style={{ marginBottom: 16 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          padding: 0, border: 'none', background: 'none', textAlign: 'left',
+          fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8,
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: GRIJS,
+          textTransform: 'uppercase', letterSpacing: 0.4,
+        }}>
+          {discipline.naam}
+          {punten.length > 0 && (
+            <span style={{ textTransform: 'none', letterSpacing: 0 }}> · {punten.length}</span>
+          )}
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GRIJS}
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+             style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none' }}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          {punten.map(p => (
+            <PuntKaart
+              key={p.id} punt={p} bezoekId={bezoekId} lezen={lezen} naWijziging={naWijziging}
+            />
+          ))}
+
+          {!lezen && (
+            <div style={{ ...kaart }}>
+              <div style={{ marginBottom: 10 }}>
+                <span style={label}>Wat valt je op?</span>
+                <textarea
+                  rows={2} style={{ ...veld, minHeight: 56 }} value={tekst}
+                  placeholder="Kras op de voordeur van nummer 24"
+                  onChange={e => setTekst(e.target.value)}
+                />
+              </div>
+              <AandachtspuntVinkje
+                aan={alsAandachtspunt}
+                lezen={false}
+                onWissel={() => setAlsAandachtspunt(v => !v)}
+              />
+              <button
+                type="button"
+                disabled={bezig || !tekst.trim()}
+                onClick={async () => {
+                  setBezig(true)
+                  const r = await voegPuntToe(bezoekId, {
+                    discipline_code: discipline.code,
+                    tekst,
+                    is_aandachtspunt: alsAandachtspunt,
+                  })
+                  setBezig(false)
+                  if (!r.ok) { toast.error(r.error); return }
+                  setTekst(''); setAlsAandachtspunt(false)
+                  naWijziging()
+                }}
+                style={{
+                  ...primaireKnop, width: '100%', marginTop: 10,
+                  opacity: tekst.trim() ? 1 : 0.5,
+                }}
+              >
+                Punt toevoegen
+              </button>
+            </div>
+          )}
+
+          {lezen && punten.length === 0 && (
+            <p style={{ fontSize: 13, color: GRIJS, margin: '0 0 10px' }}>
+              Geen bijzonderheden vastgelegd.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }
 
-/**
- * Veiligheids- en aandachtspunten. Eén component voor allebei: het verschil is alleen `soort`,
- * en dat bepaalt in welk register het punt landt.
- */
-function PuntenSectie({
-  titel, uitleg, soort, punten, bezoekId, lezen, naOpslaan,
+/** Eén vastgelegd punt: tekst, foto's en het aandachtspunt-vinkje. */
+function PuntKaart({
+  punt, bezoekId, lezen, naWijziging,
 }: {
-  titel: string
-  uitleg: string
-  soort: 'veiligheid' | 'oplever'
-  punten: BezoekContext['punten']
+  punt: BezoekPunt
   bezoekId: string
-  lezen: boolean
-  naOpslaan: () => void
-}) {
-  const [omschrijving, setOmschrijving] = useState('')
-  const [ruimte, setRuimte] = useState('')
-  const [bezig, setBezig] = useState(false)
-
-  return (
-    <>
-      <SectieKop>{titel}</SectieKop>
-      <div style={{ marginBottom: 16 }}>
-        {punten.map(p => (
-          <div key={p.id} style={{ ...kaart, marginBottom: 8 }}>
-            <div style={{ fontSize: 11.5, color: GRIJS, fontWeight: 600 }}>
-              {soort === 'veiligheid' ? 'VP' : 'AP'}{String(p.volgnummer).padStart(2, '0')}
-              {p.ruimte ? ` · ${p.ruimte}` : ''}
-            </div>
-            <div style={{ fontSize: 14.5, marginTop: 3 }}>{p.omschrijving}</div>
-            {p.fotoUrls.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
-                {p.fotoUrls.map(u => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={u} src={u} alt="" style={{
-                    width: 72, height: 72, objectFit: 'cover', borderRadius: 8, flexShrink: 0,
-                  }} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {punten.length === 0 && (
-          <p style={{ fontSize: 13, color: GRIJS, margin: '0 0 10px' }}>{uitleg}</p>
-        )}
-
-        {!lezen && (
-          <div style={{ ...kaart }}>
-            <div style={{ marginBottom: 10 }}>
-              <span style={label}>Wat is er aan de hand</span>
-              <textarea
-                rows={2} style={{ ...veld, minHeight: 56 }} value={omschrijving}
-                placeholder={soort === 'veiligheid'
-                  ? 'Steiger niet volledig voorzien van leuning'
-                  : 'Kras op de voordeur van nummer 24'}
-                onChange={e => setOmschrijving(e.target.value)}
-              />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <span style={label}>Waar</span>
-              <input
-                type="text" style={veld} value={ruimte} placeholder="Voorgevel, 2e verdieping"
-                onChange={e => setRuimte(e.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              disabled={bezig || !omschrijving.trim()}
-              onClick={async () => {
-                setBezig(true)
-                const r = await voegBezoekPuntToe(bezoekId, {
-                  omschrijving, ruimte: ruimte || null, soort,
-                })
-                setBezig(false)
-                if (!r.ok) { toast.error(r.error); return }
-                setOmschrijving(''); setRuimte('')
-                naOpslaan()
-              }}
-              style={{
-                ...primaireKnop, width: '100%',
-                opacity: omschrijving.trim() ? 1 : 0.5,
-              }}
-            >
-              Punt toevoegen
-            </button>
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
-
-/** Foto's bij het bezoek zelf (voortgang). */
-function FotoStrip({
-  bezoekId, soort, fotos, lezen, naWijziging,
-}: {
-  bezoekId: string
-  soort: 'voortgang' | 'algemeen'
-  fotos: BezoekContext['fotos']
   lezen: boolean
   naWijziging: () => void
 }) {
   const [bezig, setBezig] = useState(false)
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <span style={label}>Foto&apos;s</span>
-      {fotos.length > 0 && (
-        // flexShrink 0 op de tegels: zonder dat perst een strook met overflow-x zichzelf plat.
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 8 }}>
-          {fotos.map(f => (
-            <div key={f.id} style={{ position: 'relative', flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.url} alt="" style={{ width: 92, height: 92, objectFit: 'cover', borderRadius: 10 }} />
-              {!lezen && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const r = await verwijderBezoekFoto(f.id)
-                    if (!r.ok) { toast.error(r.error); return }
-                    naWijziging()
-                  }}
-                  style={{
-                    position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12,
-                    border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 14,
-                    lineHeight: '24px', cursor: 'pointer', padding: 0,
-                  }}
-                  aria-label="Foto verwijderen"
-                >×</button>
-              )}
-            </div>
-          ))}
+    <div style={{ ...kaart }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, color: GRIJS, fontWeight: 600 }}>
+            {puntKenmerk(punt.volgnummer)}
+          </div>
+          <div style={{ fontSize: 14.5, marginTop: 3 }}>{punt.tekst}</div>
         </div>
-      )}
-      {!lezen && (
-        <label style={{ ...secundaireKnop, display: 'block', textAlign: 'center' }}>
-          {bezig ? 'Bezig…' : 'Foto toevoegen'}
-          <input
-            type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-            onChange={async e => {
-              const file = e.target.files?.[0]
-              if (!file) return
+        {!lezen && (
+          <button
+            type="button"
+            disabled={bezig}
+            onClick={async () => {
               setBezig(true)
-              const fd = new FormData()
-              fd.set('foto', file)
-              fd.set('soort', soort)
-              const r = await uploadBezoekFoto(bezoekId, fd)
+              const r = await verwijderPunt(punt.id)
               setBezig(false)
-              e.target.value = ''
               if (!r.ok) { toast.error(r.error); return }
               naWijziging()
             }}
-          />
-        </label>
-      )}
+            aria-label="Punt verwijderen"
+            style={{
+              flexShrink: 0, width: 30, height: 30, borderRadius: 8, padding: 0,
+              border: `1px solid ${RAND}`, background: OPPERVLAK, color: GRIJS,
+              cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            }}
+          >×</button>
+        )}
+      </div>
+
+      <FotoStrip
+        titel=""
+        knop="Foto toevoegen"
+        fotos={punt.fotos}
+        lezen={lezen}
+        uploaden={async file => {
+          const fd = new FormData()
+          fd.set('foto', file)
+          fd.set('punt_id', punt.id)
+          return uploadBezoekFoto(bezoekId, fd)
+        }}
+        verwijderen={id => verwijderBezoekFoto(id)}
+        naWijziging={naWijziging}
+      />
+
+      <div style={{ marginTop: 10 }}>
+        <AandachtspuntVinkje
+          aan={punt.is_aandachtspunt}
+          lezen={lezen || punt.opgepakt}
+          onWissel={async () => {
+            const r = await updatePunt(punt.id, { is_aandachtspunt: !punt.is_aandachtspunt })
+            if (!r.ok) { toast.error(r.error); return }
+            naWijziging()
+          }}
+        />
+        {punt.opgepakt && (
+          <div style={{ fontSize: 11.5, color: GRIJS, marginTop: 4, paddingLeft: 30 }}>
+            Al in behandeling op het dossier — intrekken kan daar.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Het vinkje dat bepaalt of een punt ook als aandachtspunt op het dossier komt. */
+function AandachtspuntVinkje({
+  aan, lezen, onWissel,
+}: {
+  aan: boolean
+  lezen: boolean
+  onWissel: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={lezen}
+      onClick={onWissel}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%',
+        padding: 0, border: 'none', background: 'none', textAlign: 'left',
+        fontFamily: 'inherit', cursor: lezen ? 'default' : 'pointer',
+        opacity: lezen && !aan ? 0.5 : 1,
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <span style={{
+        width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+        border: `2px solid ${aan ? GROEN : RAND}`,
+        background: aan ? GROEN : 'transparent',
+        color: '#fff', fontSize: 13, lineHeight: '17px', textAlign: 'center', fontWeight: 700,
+      }}>{aan ? '✓' : ''}</span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: TEKST }}>
+          Ook als aandachtspunt op het dossier
+        </span>
+        <span style={{ display: 'block', fontSize: 11.5, color: GRIJS, marginTop: 1 }}>
+          Krijgt een nummer en opvolging
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/**
+ * Voortgang van één discipline.
+ *
+ * Schuifbalk én een numeriek veldje: een percentage op een steiger is een schatting, maar wie
+ * precies wil zijn moet dat kunnen. Opslaan gebeurt bij het loslaten en niet bij elke beweging
+ * — anders zijn het tientallen verzoeken per sleep.
+ */
+function VoortgangRegel({
+  discipline, lezen, laatste, opslaan,
+}: {
+  discipline: BezoekDiscipline
+  lezen: boolean
+  laatste: boolean
+  opslaan: (pct: number | null) => void | Promise<unknown>
+}) {
+  const [lokaal, setLokaal] = useState<number | null>(discipline.voortgang_pct)
+
+  const bewaar = (v: number | null) => {
+    if (v !== discipline.voortgang_pct) opslaan(v)
+  }
+
+  return (
+    <div style={{ marginBottom: laatste ? 0 : 14 }}>
+      <span style={label}>{discipline.naam}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input
+          type="range" min={0} max={100} step={5}
+          value={lokaal ?? 0}
+          disabled={lezen}
+          onChange={e => setLokaal(Number(e.target.value))}
+          onPointerUp={() => bewaar(lokaal)}
+          onKeyUp={() => bewaar(lokaal)}
+          style={{ flex: 1, minWidth: 0, accentColor: GROEN }}
+          aria-label={'Voortgang ' + discipline.naam}
+        />
+        <input
+          type="number" inputMode="numeric" min={0} max={100}
+          value={lokaal ?? ''}
+          disabled={lezen}
+          placeholder="—"
+          onChange={e => setLokaal(e.target.value === '' ? null : Number(e.target.value))}
+          onBlur={() => bewaar(lokaal)}
+          style={{ ...veld, width: 72, flexShrink: 0, textAlign: 'right' }}
+        />
+        <span style={{ fontSize: 14, color: GRIJS, flexShrink: 0 }}>%</span>
+      </div>
     </div>
   )
 }

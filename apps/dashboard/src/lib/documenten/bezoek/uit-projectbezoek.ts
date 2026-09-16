@@ -1,13 +1,19 @@
 /**
  * uit-projectbezoek.ts — een projectbezoek als bezoekrapport.
  *
- * Dit is de bron waar de andere vier naartoe werken: één bezoek waarin de projectleider
- * aanvinkte wat hij deed, en dat dus meerdere hoofdstukken tegelijk vult. Een bezoek met
- * Kwaliteit én Veiligheid levert één document met beide erin; de hoofdstukken die hij niet
- * aanvinkte klappen vanzelf dicht.
+ * Een bezoek is opgebouwd rond disciplines: de projectleider koos de vakken die in uitvoering
+ * waren, legde er punten bij vast en gaf per vak een percentage. Dat levert twee hoofdstukken op
+ * die bewust van elkaar verschillen:
  *
- * De kwaliteitskant wordt niet opnieuw berekend: als het bezoek een inspectie heeft, komt dat
- * blok uit `bouwKwaliteitBlok` — dezelfde cijfers als in het losse kwaliteitsrapport.
+ *  * **Bevindingen** — alléén de punten die hij als aandachtspunt heeft aangemerkt. Die staan in
+ *    `oplever_punten` en hebben daarmee een nummer, een status en opvolging. Dit is het
+ *    actielijstje: wat er nog moet gebeuren.
+ *
+ *  * **Per onderdeel** — álle punten, gegroepeerd per discipline, met de voortgang erbij. Dit is
+ *    het verslag: wat er is gezien.
+ *
+ * Alles als bevinding opnemen zou de twee hoofdstukken dubbelop maken, en alleen het verslag
+ * tonen zou de opvolging onzichtbaar maken.
  */
 
 import 'server-only'
@@ -20,10 +26,9 @@ import {
 } from '../rapport-fotos'
 import type { BezoekOpties } from '../bezoek-opties'
 import { MAX_BEVINDINGEN } from '../bezoek-opties'
-import { kwaliteitNaarBezoek } from './uit-kwaliteit'
 import {
   LEEG_BEZOEK_BLOK, LEGE_BEVINDING, BEZOEK_SOORT_LABELS, bezoekDisclaimer,
-  type BezoekBlok, type BezoekBevinding, type Rij,
+  type BezoekBlok, type BezoekBevinding, type BezoekDisciplineRij, type Rij,
 } from './contract'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,8 +44,6 @@ const STANDAARD_INLEIDING =
 export async function bouwBezoekUitProjectbezoek(
   bezoekId: string,
   keuze: BezoekOpties,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  kwaliteitBlok: any,
   opties: { preview?: boolean } = {},
 ): Promise<BezoekBlok> {
   const supabase = db()
@@ -48,112 +51,170 @@ export async function bouwBezoekUitProjectbezoek(
     .from('projectbezoeken').select('*').eq('id', bezoekId).maybeSingle()
   if (!bezoek) return { ...LEEG_BEZOEK_BLOK, per_pagina: keuze.per_pagina }
 
-  const [{ data: punten }, { data: fotos }, { data: medewerker }] = await Promise.all([
-    // Begrensd op één bezoek; geen paginering nodig.
-    supabase.from('oplever_punten')
-      .select('id, volgnummer, omschrijving, ruimte, soort, status, deadline, created_at')
-      .eq('bezoek_id', bezoekId).order('volgnummer'),
-    supabase.from('projectbezoek_fotos')
-      .select('id, soort, url, toelichting').eq('bezoek_id', bezoekId).order('volgorde'),
-    bezoek.uitgevoerd_door
-      ? supabase.from('medewerkers').select('voornaam, tussenvoegsel, achternaam')
-          .eq('id', bezoek.uitgevoerd_door).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
+  // Alles begrensd op dit ene bezoek; geen paginering nodig.
+  const [{ data: gekozen }, { data: puntRijen }, { data: fotos }, { data: medewerker }] =
+    await Promise.all([
+      supabase.from('projectbezoek_disciplines')
+        .select('discipline_code, voortgang_pct, volgorde')
+        .eq('bezoek_id', bezoekId).order('volgorde'),
+      supabase.from('projectbezoek_punten')
+        .select('id, discipline_code, volgnummer, tekst, is_aandachtspunt, oplever_punt_id')
+        .eq('bezoek_id', bezoekId).order('volgnummer'),
+      supabase.from('projectbezoek_fotos')
+        .select('id, soort, punt_id, url, toelichting').eq('bezoek_id', bezoekId).order('volgorde'),
+      bezoek.uitgevoerd_door
+        ? supabase.from('medewerkers').select('voornaam, tussenvoegsel, achternaam')
+            .eq('id', bezoek.uitgevoerd_door).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
 
-  const puntRijen = ((punten ?? []) as Record<string, unknown>[])
-    .filter(p => !NIET_ACTIEF.has(String(p.status)))
-  if (!opties.preview && puntRijen.length > MAX_BEVINDINGEN) {
+  const disciplineRijen = (gekozen ?? []) as {
+    discipline_code: string; voortgang_pct: number | null
+  }[]
+  const punten = (puntRijen ?? []) as Record<string, unknown>[]
+  const bezoekFotos = (fotos ?? []) as Record<string, unknown>[]
+
+  const codes = disciplineRijen.map(d => d.discipline_code)
+  const { data: discData } = codes.length
+    ? await supabase.from('kwaliteit_disciplines').select('code, naam').in('code', codes)
+    : { data: [] }
+  const naamPerCode = new Map(
+    ((discData ?? []) as { code: string; naam: string }[]).map(d => [d.code, d.naam]),
+  )
+
+  // ── De aangevinkte aandachtspunten uit het dossierregister ─────────────
+  const opleverIds = punten
+    .map(p => p.oplever_punt_id as string | null).filter(Boolean) as string[]
+  const { data: opleverData } = opleverIds.length
+    ? await supabase.from('oplever_punten')
+        .select('id, volgnummer, omschrijving, ruimte, status, deadline, created_at')
+        .in('id', opleverIds).order('volgnummer')
+    : { data: [] }
+  const opleverPerId = new Map(
+    ((opleverData ?? []) as Record<string, unknown>[]).map(o => [String(o.id), o]),
+  )
+
+  const aandachtspunten = punten.filter(p => {
+    const o = opleverPerId.get(String(p.oplever_punt_id ?? ''))
+    return o && !NIET_ACTIEF.has(String(o.status))
+  })
+  if (!opties.preview && aandachtspunten.length > MAX_BEVINDINGEN) {
     throw new Error(
-      `Dit bezoek bevat ${puntRijen.length} punten; het maximum is ${MAX_BEVINDINGEN}.`,
+      `Dit bezoek bevat ${aandachtspunten.length} aandachtspunten; het maximum is ${MAX_BEVINDINGEN}.`,
     )
   }
-  const gekozen = opties.preview ? puntRijen.slice(0, keuze.per_pagina * 2) : puntRijen
 
-  // ── Foto's bij de punten ───────────────────────────────────────────────
-  const puntIds = gekozen.map(p => String(p.id))
-  const { data: puntFotos } = puntIds.length && keuze.toon_fotos
-    ? await supabase.from('oplever_fotos').select('punt_id, url, soort').in('punt_id', puntIds)
-    : { data: [] }
-
-  const voorPerPunt = new Map<string, string>()
-  const naPerPunt = new Map<string, string>()
-  for (const f of ((puntFotos ?? []) as { punt_id: string; url: string; soort: string }[])) {
-    const doel = f.soort === 'na' ? naPerPunt : voorPerPunt
-    if (!doel.has(f.punt_id)) doel.set(f.punt_id, f.url)
+  // ── Foto's ─────────────────────────────────────────────────────────────
+  // Eerste foto per punt; de rest valt buiten het rapport. Het fotobudget is één vlakke
+  // array met drie blokken achter elkaar — let op de offsets hieronder.
+  const eersteFotoPerPunt = new Map<string, string>()
+  for (const f of bezoekFotos) {
+    const pid = f.punt_id ? String(f.punt_id) : ''
+    if (pid && !eersteFotoPerPunt.has(pid)) eersteFotoPerPunt.set(pid, String(f.url))
   }
+  const losseFotos = bezoekFotos.filter(f => !f.punt_id)
 
-  const bezoekFotos = ((fotos ?? []) as Record<string, unknown>[])
+  const gekozenAandacht = opties.preview
+    ? aandachtspunten.slice(0, keuze.per_pagina * 2)
+    : aandachtspunten
+
   const teHalen = keuze.toon_fotos
     ? [
-        ...gekozen.map(p => veiligeFotoUrl(voorPerPunt.get(String(p.id)))),
-        ...gekozen.map(p => (keuze.toon_voor_na ? veiligeFotoUrl(naPerPunt.get(String(p.id))) : '')),
-        ...bezoekFotos.map(f => veiligeFotoUrl(String(f.url))),
+        ...gekozenAandacht.map(p => veiligeFotoUrl(eersteFotoPerPunt.get(String(p.id)))),
+        ...punten.map(p => veiligeFotoUrl(eersteFotoPerPunt.get(String(p.id)))),
+        ...losseFotos.map(f => veiligeFotoUrl(String(f.url))),
       ]
     : []
   const opgehaald = await mapMetLimiet(teHalen, FOTO_GRENZEN.PARALLEL, haalRapportFoto)
   // 'laat_vallen': liever een rapport zonder de laatste foto's dan geen rapport.
   const dataUrls = pasFotoBudgetToe(opgehaald, 'laat_vallen')
-  const voorFoto = (i: number) => dataUrls[i] ?? ''
-  const naFoto = (i: number) => dataUrls[gekozen.length + i] ?? ''
-  const bezoekFoto = (i: number) => dataUrls[gekozen.length * 2 + i] ?? ''
+  const aandachtFoto = (i: number) => dataUrls[i] ?? ''
+  const puntFoto = (i: number) => dataUrls[gekozenAandacht.length + i] ?? ''
+  const losseFoto = (i: number) => dataUrls[gekozenAandacht.length + punten.length + i] ?? ''
 
-  // ── Bevindingen ────────────────────────────────────────────────────────
-  const bevindingen: BezoekBevinding[] = gekozen.map((p, i) => {
-    const isVeiligheid = p.soort === 'veiligheid'
-    const status = String(p.status ?? 'open')
+  // ── Bevindingen: de aandachtspunten ────────────────────────────────────
+  const bevindingen: BezoekBevinding[] = gekozenAandacht.map((p, i) => {
+    const o = opleverPerId.get(String(p.oplever_punt_id))!
+    const status = String(o.status ?? 'open')
+    const groep = naamPerCode.get(String(p.discipline_code)) ?? String(p.discipline_code)
     return {
       ...LEGE_BEVINDING,
-      nummer: `${isVeiligheid ? 'VP' : 'AP'}-${String(p.volgnummer).padStart(2, '0')}`,
-      volgnummer: Number(p.volgnummer),
-      titel: String(p.ruimte ?? ''),
-      omschrijving: String(p.omschrijving ?? ''),
-      omschrijving_kort: afkappen(String(p.omschrijving ?? ''), 220),
-      locatie: String(p.ruimte ?? ''),
-      groep: isVeiligheid ? 'Veiligheid' : 'Algemeen',
+      nummer: `AP-${String(o.volgnummer).padStart(2, '0')}`,
+      volgnummer: Number(o.volgnummer),
+      titel: groep,
+      omschrijving: String(o.omschrijving ?? p.tekst ?? ''),
+      omschrijving_kort: afkappen(String(o.omschrijving ?? p.tekst ?? ''), 220),
+      locatie: String(o.ruimte ?? groep),
+      groep,
       status,
       status_label: opleverPuntStatusLabels[status as keyof typeof opleverPuntStatusLabels] ?? status,
       is_open: !AFGEHANDELD.has(status),
       is_opgelost: AFGEHANDELD.has(status),
-      datum: p.created_at ? datumNL(String(p.created_at)) : '',
-      hersteldatum: p.deadline ? datumNL(String(p.deadline)) : '',
-      foto: voorFoto(i),
-      heeft_foto: !!voorFoto(i),
-      foto_na: naFoto(i),
-      heeft_foto_na: !!naFoto(i),
+      datum: o.created_at ? datumNL(String(o.created_at)) : '',
+      hersteldatum: o.deadline ? datumNL(String(o.deadline)) : '',
+      foto: aandachtFoto(i),
+      heeft_foto: !!aandachtFoto(i),
     }
   })
 
-  // ── Kwaliteit erbij ────────────────────────────────────────────────────
-  // Het kwaliteitsblok is al berekend door de contextbouwer; hier wordt het alleen
-  // ingevoegd wanneer dit bezoek daadwerkelijk een inspectie heeft.
-  const heeftKwaliteit = !!bezoek.kwaliteit_inspectie_id && kwaliteitBlok?.aanwezig
-  const kwal = heeftKwaliteit ? kwaliteitNaarBezoek(kwaliteitBlok, keuze) : null
+  // ── Per onderdeel: alle punten, gegroepeerd per discipline ─────────────
+  const puntIndex = new Map(punten.map((p, i) => [String(p.id), i]))
+  const disciplines: BezoekDisciplineRij[] = disciplineRijen.map(d => {
+    const naam = naamPerCode.get(d.discipline_code) ?? d.discipline_code
+    const eigen = punten.filter(p => String(p.discipline_code) === d.discipline_code)
+    const regels: Rij[] = eigen.map(p => {
+      const i = puntIndex.get(String(p.id)) ?? -1
+      const foto = i >= 0 && keuze.toon_fotos ? puntFoto(i) : ''
+      const o = opleverPerId.get(String(p.oplever_punt_id ?? ''))
+      return {
+        nummer: `P-${String(p.volgnummer).padStart(2, '0')}`,
+        tekst: String(p.tekst ?? ''),
+        tekst_kort: afkappen(String(p.tekst ?? ''), 220),
+        is_aandachtspunt: p.is_aandachtspunt === true,
+        aandachtspunt_nummer: o ? `AP-${String(o.volgnummer).padStart(2, '0')}` : '',
+        status_label: o
+          ? (opleverPuntStatusLabels[String(o.status) as keyof typeof opleverPuntStatusLabels] ?? String(o.status))
+          : '',
+        disciplinefoto: foto,
+        heeft_foto: !!foto,
+      }
+    })
+    const pct = d.voortgang_pct
+    return {
+      code: d.discipline_code,
+      naam,
+      discipline_naam: naam,
+      voortgang_pct: pct ?? 0,
+      // Een streepje en geen lege cel: in de voortgangstabel moet te zien zijn dat er níéts is
+      // opgegeven, en dat is iets anders dan 0 % gereed.
+      voortgang_label: pct === null || pct === undefined ? '—' : `${pct} %`,
+      heeft_voortgang: pct !== null && pct !== undefined,
+      disciplinepunten: regels,
+      heeft_disciplinepunten: regels.length > 0,
+      aantal_punten: regels.length,
+    }
+  })
 
-  const alleBevindingen = [...(kwal?.alle_bevindingen ?? []), ...bevindingen]
-    .map((b, i) => ({ ...b, volgnummer: i + 1 }))
+  // Alleen de namen. De percentages staan in de voortgangstabel; ze hier herhalen levert
+  // twee plekken op die uit elkaar kunnen lopen zodra er één verandert.
+  const disciplinesRegel = disciplines.map(d => d.discipline_naam).join(', ')
 
-  // ── Voortgang ──────────────────────────────────────────────────────────
-  // Als eigen "waarneming"-rijen, zodat het sjabloon er geen apart hoofdstuk voor nodig heeft:
-  // tekst plus beeld is precies wat de waarnemingenloop toont.
-  const voortgang: Rij[] = bezoek.doet_voortgang
-    ? bezoekFotos
+  // ── Waarnemingen: de overzichtsfoto's van het bezoek zelf ──────────────
+  const waarnemingen: Rij[] = keuze.toon_waarnemingen
+    ? losseFotos
         .map((f, i) => ({
-          omschrijving: String(f.toelichting ?? '') || 'Voortgang',
-          locatie: '', groep: 'Voortgang',
-          foto: bezoekFoto(i), foto_klein: bezoekFoto(i), heeft_foto: !!bezoekFoto(i),
+          omschrijving: String(f.toelichting ?? '') || 'Overzicht',
+          locatie: '', groep: 'Bezoek',
+          foto: losseFoto(i), foto_klein: losseFoto(i), heeft_foto: !!losseFoto(i),
         }))
-        .filter(r => r.heeft_foto || r.omschrijving !== 'Voortgang')
+        .filter(r => r.heeft_foto)
     : []
 
-  const waarnemingen = keuze.toon_waarnemingen
-    ? [...(kwal?.waarnemingen ?? []), ...voortgang]
-    : []
-
-  const open = alleBevindingen.filter(b => b.is_open).length
+  const open = bevindingen.filter(b => b.is_open).length
   const kengetallen: Rij[] = [
-    ...(kwal?.kengetallen ?? []),
-    { label: 'Vastgelegde punten', waarde: bevindingen.length, is_negatief: bevindingen.length > 0 },
+    { label: 'Bekeken disciplines', waarde: disciplines.length, is_negatief: false },
+    { label: 'Vastgelegde punten', waarde: punten.length, is_negatief: false },
+    { label: 'Als aandachtspunt', waarde: bevindingen.length, is_negatief: bevindingen.length > 0 },
     { label: 'Nog open', waarde: open, is_negatief: true },
   ].filter(k => Number(k.waarde) > 0)
 
@@ -161,17 +222,14 @@ export async function bouwBezoekUitProjectbezoek(
     ? [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' ')
     : ''
 
-  // Het soort-etiket volgt uit wat er tijdens dit bezoek is gedaan: alleen kwaliteit gelopen
-  // levert een "Kwaliteitsronde" op, alleen veiligheid een "Veiligheidsronde", en alles daar
-  // tussenin heet gewoon een projectbezoek.
-  const soortLabel = bepaalSoortLabel(bezoek)
+  const genummerd = bevindingen.map((b, i) => ({ ...b, volgnummer: i + 1 }))
 
   return {
     ...LEEG_BEZOEK_BLOK,
     aanwezig: true,
-    soort: bezoek.doet_veiligheid && !bezoek.doet_kwaliteit ? 'veiligheid' : 'kwaliteit',
-    soort_label: soortLabel,
-    titel: `${soortLabel} PB-${String(bezoek.volgnummer).padStart(2, '0')}`,
+    soort: 'projectbezoek',
+    soort_label: BEZOEK_SOORT_LABELS.projectbezoek,
+    titel: `${BEZOEK_SOORT_LABELS.projectbezoek} PB-${String(bezoek.volgnummer).padStart(2, '0')}`,
     kenmerk: `PB-${String(bezoek.volgnummer).padStart(2, '0')}`,
     datum: datumNL(bezoek.datum),
     tijd: bezoek.tijd ? String(bezoek.tijd).slice(0, 5) : '',
@@ -180,62 +238,42 @@ export async function bouwBezoekUitProjectbezoek(
     werkzaamheden: bezoek.werkzaamheden ?? '',
     omstandigheden: bezoek.weer ?? '',
     inleiding: keuze.inleiding || STANDAARD_INLEIDING,
-    samenvatting_regel: samenvattingsregel(bezoek, alleBevindingen.length, open),
+    samenvatting_regel: samenvattingsregel(disciplines, punten.length, bevindingen.length, open),
     kengetallen,
     heeft_kengetallen: kengetallen.length > 0,
-    alle_bevindingen: alleBevindingen,
-    paginas: knipInPaginas(alleBevindingen, { perPagina: keuze.per_pagina, itemVeld: 'bevindingen' }),
-    heeft_bevindingen: alleBevindingen.length > 0,
-    aantal_bevindingen: alleBevindingen.length,
+    alle_bevindingen: genummerd,
+    paginas: knipInPaginas(genummerd, { perPagina: keuze.per_pagina, itemVeld: 'bevindingen' }),
+    heeft_bevindingen: genummerd.length > 0,
+    aantal_bevindingen: genummerd.length,
     aantal_open: open,
-    metingen: kwal?.metingen ?? [],
-    heeft_metingen: (kwal?.metingen?.length ?? 0) > 0,
-    punten: kwal?.punten ?? [],
-    heeft_punten: (kwal?.punten?.length ?? 0) > 0,
+    disciplines,
+    heeft_disciplines: disciplines.length > 0,
+    disciplines_regel: disciplinesRegel,
     waarnemingen,
     heeft_waarnemingen: waarnemingen.length > 0,
-    opvolging: kwal?.opvolging ?? [],
-    heeft_opvolging: kwal?.heeft_opvolging ?? false,
-    opvolging_regel: kwal?.opvolging_regel ?? '',
-    opmerkingen: [bezoek.voortgang_tekst, bezoek.algemene_opmerkingen].filter(Boolean).join('\n\n'),
-    disclaimer: bezoekDisclaimer(bezoek.doet_veiligheid && !bezoek.doet_kwaliteit ? 'veiligheid' : 'kwaliteit'),
+    opmerkingen: bezoek.algemene_opmerkingen ?? '',
+    disclaimer: bezoekDisclaimer('projectbezoek'),
     per_pagina: keuze.per_pagina,
   }
 }
 
-function bepaalSoortLabel(bezoek: Record<string, unknown>): string {
-  const aan = [
-    bezoek.doet_kwaliteit && 'kwaliteit',
-    bezoek.doet_veiligheid && 'veiligheid',
-    bezoek.doet_algemeen && 'algemeen',
-    bezoek.doet_voortgang && 'voortgang',
-  ].filter(Boolean) as string[]
-
-  if (aan.length === 1 && aan[0] === 'kwaliteit') return BEZOEK_SOORT_LABELS.kwaliteit
-  if (aan.length === 1 && aan[0] === 'veiligheid') return BEZOEK_SOORT_LABELS.veiligheid
-  return 'Projectbezoek'
-}
-
 function samenvattingsregel(
-  bezoek: Record<string, unknown>,
+  disciplines: BezoekDisciplineRij[],
   totaal: number,
+  aandacht: number,
   open: number,
 ): string {
-  const onderdelen = [
-    bezoek.doet_kwaliteit && 'kwaliteit',
-    bezoek.doet_veiligheid && 'veiligheid',
-    bezoek.doet_algemeen && 'algemene indruk',
-    bezoek.doet_voortgang && 'voortgang',
-  ].filter(Boolean) as string[]
-
-  const kop = onderdelen.length
-    ? `Tijdens dit bezoek is gekeken naar ${lijst(onderdelen)}.`
+  const kop = disciplines.length
+    ? `Tijdens dit bezoek is gekeken naar ${lijst(disciplines.map(d => d.discipline_naam.toLowerCase()))}.`
     : 'Tijdens dit bezoek is het werk beoordeeld.'
 
   if (totaal === 0) return `${kop} Er zijn geen punten vastgelegd.`
-  const punten = totaal === 1 ? 'Er is 1 punt vastgelegd.' : `Er zijn ${totaal} punten vastgelegd.`
-  if (open === 0) return `${kop} ${punten} Alle punten zijn afgehandeld.`
-  return `${kop} ${punten} Daarvan ${open === 1 ? 'staat er 1 nog open' : `staan er ${open} nog open`}.`
+  const punten = totaal === 1 ? 'Er is 1 punt vastgelegd' : `Er zijn ${totaal} punten vastgelegd`
+  if (aandacht === 0) return `${kop} ${punten}; geen daarvan vraagt opvolging.`
+  const staart = open === 0
+    ? 'Die zijn allemaal afgehandeld.'
+    : (open === 1 ? 'Daarvan staat er 1 nog open.' : `Daarvan staan er ${open} nog open.`)
+  return `${kop} ${punten}, waarvan ${aandacht} als aandachtspunt op het dossier. ${staart}`
 }
 
 /** "a, b en c" — leest prettiger dan een opsomming met komma's in een klantdocument. */
