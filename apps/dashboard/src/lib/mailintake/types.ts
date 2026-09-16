@@ -110,6 +110,28 @@ export interface PostbusRij {
   laatste_fout: string | null
 }
 
+/**
+ * Wat er van een postbus gewijzigd mag worden vanuit het beheerscherm.
+ * Expliciet, zodat een verkeerd getypeerde waarde uit de browser wordt geweigerd
+ * in plaats van blind weggeschreven.
+ */
+export interface PostbusPatch {
+  naam?: string
+  adres?: string
+  soort?: PostbusSoort
+  map_id?: string
+  actief?: boolean
+  automatisch_aanmaken?: boolean
+  standaard_werkmaatschappij_id?: string | null
+  standaard_bouw7_categorie_id?: number | null
+  standaard_categorie?: string | null
+  notificatie_medewerkers?: string[]
+  dagbudget_cent?: number
+  map_verwerkt_naam?: string
+  map_verwerkt_id?: string | null
+  updated_at?: string
+}
+
 export interface BerichtRij {
   id: string
   postbus_id: string

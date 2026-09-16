@@ -11,7 +11,7 @@ export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
+const db = () => createAdminClient()
 
 /** Twee werkdagen; ruwweg, want een exacte werkdagenkalender is hier overdaad. */
 const BLIJFT_LIGGEN_UREN = 48

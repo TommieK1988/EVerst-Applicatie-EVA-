@@ -20,7 +20,7 @@ export default async function BerichtPage({ params }: { params: Promise<{ id: st
   if (!detail) notFound()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [{ data: werkmaatschappijen }, categorieen] = await Promise.all([
     supabase.from('bedrijfsgegevens').select('id, naam').eq('type', 'werkmaatschappij').order('naam').limit(50),
     getAanvraagCategorieen(),

@@ -11,6 +11,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
+import type { Json } from '@everts/database'
 
 import { cronLogboek } from '@/lib/cron/logboek'
 import { maakNotificatie } from '@/lib/notificaties/maak'
@@ -47,7 +48,7 @@ export interface VerwerkResultaat {
 
 /** Domeinen die van onszelf zijn; nodig om doorgestuurde mail te herkennen. */
 async function eigenDomeinen(): Promise<Set<string>> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('medewerkers').select('email').eq('actief', true).not('email', 'is', null).limit(500)
   const uit = new Set<string>()
@@ -59,7 +60,7 @@ async function eigenDomeinen(): Promise<Set<string>> {
 }
 
 async function witteLijsten(): Promise<WitteLijsten> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [cats, wms] = await Promise.all([
     (async () => {
       try {
@@ -79,7 +80,7 @@ async function witteLijsten(): Promise<WitteLijsten> {
 
 /** Kosten van vandaag voor deze postbus, voor de dagbudget-rem. */
 async function kostenVandaag(postbusId: string): Promise<number> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const begin = new Date(); begin.setHours(0, 0, 0, 0)
   const { data } = await supabase
     .from('mailintake_extracties')
@@ -92,7 +93,7 @@ async function kostenVandaag(postbusId: string): Promise<number> {
 
 /** Bijlagen uit de bucket halen om aan het model te geven. */
 async function bijlagenVoorAI(berichtId: string): Promise<{ voorAI: BijlageVoorAI[]; namen: string[]; ongelezen: boolean }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_bijlagen')
     .select('id, bestandsnaam, content_type, opslag_pad, te_groot')
@@ -126,7 +127,7 @@ async function bijlagenVoorAI(berichtId: string): Promise<{ voorAI: BijlageVoorA
 /** Wie krijgt bericht over deze postbus? Levert auth-user-ids, niet medewerker-ids. */
 async function ontvangers(postbus: PostbusRij): Promise<{ userId: string; medewerkerId: string }[]> {
   if (!postbus.notificatie_medewerkers.length) return []
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('medewerkers')
     .select('id, auth_user_id')
@@ -140,7 +141,7 @@ async function ontvangers(postbus: PostbusRij): Promise<{ userId: string; medewe
 // ─── De verwerking van één bericht ───────────────────────────────────────────
 
 export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaat> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const log = cronLogboek(`mailintake-verwerken:${berichtId.slice(0, 8)}`)
   const uit: VerwerkResultaat = { berichtId, status: 'mislukt', automatisch: false, reden: '', fout: null, kostenCent: 0 }
 
@@ -210,7 +211,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       model: ex.model,
       prompt_versie: ex.promptVersie,
       soort: ex.data?.soort ?? null,
-      velden: ex.data ? (ex.data as unknown as Record<string, unknown>) : {},
+      velden: ex.data ? (ex.data as unknown as Json) : {},
       vertrouwen: ex.data?.vertrouwen ?? {},
       toelichting: ex.data?.toelichting ?? null,
       invoer_tokens: ex.invoerTokens,
@@ -454,7 +455,7 @@ async function meldVoorgelegd(
 
 /** Zet vastgelopen claims terug. Draait vóór elke batch én in de bewakingscron. */
 export async function herstelVastgelopenClaims(): Promise<number> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const grens = new Date(Date.now() - CLAIM_VERVAL_MINUTEN * 60_000).toISOString()
   const { data } = await supabase
     .from('mailintake_berichten')
@@ -466,7 +467,7 @@ export async function herstelVastgelopenClaims(): Promise<number> {
 }
 
 export async function verwerkBatch(max = BATCH): Promise<VerwerkResultaat[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   await herstelVastgelopenClaims()
 
   const { data } = await supabase

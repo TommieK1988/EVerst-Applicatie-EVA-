@@ -7,7 +7,7 @@
  *   import type { Database } from '@everts/database/types'
  *   import type { Bedrijfsgegevens } from '@everts/database/platform-types'
  */
-export type { Database } from './database.types'
+export type { Database, Json } from './database.types'
 export type {
   Bedrijfsgegevens,
   BedrijfsgegevensInput,

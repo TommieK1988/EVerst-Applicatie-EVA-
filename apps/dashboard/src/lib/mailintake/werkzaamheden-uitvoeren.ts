@@ -17,6 +17,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
+import type { Json } from '@everts/database'
 
 import { appGraphFetch } from '@/lib/o365/graph'
 
@@ -29,7 +30,7 @@ const MAX_TOTAAL_BYTES = 20 * 1024 * 1024
 
 /** De bijlagen van één intakebericht, uit de privébucket. */
 async function bijlagenVanBericht(berichtId: string): Promise<{ bestanden: BronBestand[]; gemist: string[] }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_bijlagen')
     .select('bestandsnaam, content_type, opslag_pad, grootte_bytes, te_groot')
@@ -68,7 +69,7 @@ async function bijlagenVanBericht(berichtId: string): Promise<{ bestanden: BronB
 export async function verzamelDossierBronnen(
   dossierId: string,
 ): Promise<{ bestanden: BronBestand[]; gemist: string[] }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const bestanden: BronBestand[] = []
   const gemist: string[] = []
   let totaal = 0
@@ -158,7 +159,7 @@ export async function verzamelDossierBronnen(
 
 /** Kosten van vandaag voor deze postbus; de samenvatting deelt het budget met de veldextractie. */
 async function budgetOp(postbusId: string): Promise<boolean> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const begin = new Date(); begin.setHours(0, 0, 0, 0)
   const [{ data: rijen }, { data: postbus }] = await Promise.all([
     supabase
@@ -183,7 +184,7 @@ async function budgetOp(postbusId: string): Promise<boolean> {
 export async function maakWerkzaamhedenSamenvatting(
   berichtId: string,
 ): Promise<{ ok: boolean; tekst: string | null; fout: string | null; kostenCent: number }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: b } = await supabase
     .from('mailintake_berichten')
@@ -239,7 +240,7 @@ export async function maakWerkzaamhedenSamenvatting(
 
 /** Legt de aanroep vast als tweede soort extractie, zodat de kostenmeter klopt. */
 async function bewaarExtractie(berichtId: string, res: WerkzaamhedenResultaat): Promise<void> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data: laatste } = await supabase
     .from('mailintake_extracties').select('versie')
     .eq('bericht_id', berichtId).eq('ronde', 'werkzaamheden')
@@ -251,7 +252,7 @@ async function bewaarExtractie(berichtId: string, res: WerkzaamhedenResultaat): 
     versie: ((laatste?.versie ?? 0) as number) + 1,
     model: res.model,
     prompt_versie: res.promptVersie,
-    velden: res.data ? (res.data as unknown as Record<string, unknown>) : {},
+    velden: res.data ? (res.data as unknown as Json) : {},
     toelichting: res.kop,
     invoer_tokens: res.invoerTokens,
     uitvoer_tokens: res.uitvoerTokens,
@@ -269,7 +270,7 @@ async function bewaarExtractie(berichtId: string, res: WerkzaamhedenResultaat): 
 export async function stelDossierSamenvattingVoor(
   dossierId: string,
 ): Promise<{ ok: boolean; tekst: string | null; herkomst: string | null; gemist: string[]; fout: string | null }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: d } = await supabase
     .from('dossiers')

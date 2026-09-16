@@ -14,7 +14,7 @@ export default async function MailintakeInstellingenPage() {
   const { rechten } = await vereisRecht('mailintake', 'lezen')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const [postbussen, aliassen, stand, { data: medewerkers }, { data: werkmaatschappijen }] = await Promise.all([
     getPostbussen(),
     getAliassen(),

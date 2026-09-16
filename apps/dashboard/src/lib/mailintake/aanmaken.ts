@@ -73,7 +73,7 @@ export async function zetBijlagenInSharePoint(
   berichtId: string,
   dossierId: string,
 ): Promise<{ geuploaded: number; mislukt: number; fout: string | null }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten').select('ontvangen_op').eq('id', berichtId).maybeSingle()
@@ -125,6 +125,9 @@ export async function zetBijlagenInSharePoint(
   }
 
   for (const r of rijen) {
+    // De query filtert hier al op, maar het pad is in het schema nullable; zonder
+    // deze controle zou een lege waarde stil als "undefined" naar Storage gaan.
+    if (!r.opslag_pad) { mislukt++; continue }
     try {
       const { data: blob, error } = await supabase.storage.from('mail-intake').download(r.opslag_pad)
       if (error || !blob) { mislukt++; continue }
@@ -164,7 +167,7 @@ export async function zetBijlagenInSharePoint(
  * Bouw7-nummer dan een verloren aanvraag. Het komt terug in `bouw7Ok`.
  */
 export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<AanmaakResultaat> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const v = inv.velden
 
   const { maakAanvraag } = await import('@/lib/dossiers/actions')
@@ -257,7 +260,7 @@ export async function koppelAanDossier(
   medewerkerId: string | null,
   besluit: 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen' = 'gekoppeld_bestaand',
 ): Promise<void> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   await supabase.from('mailintake_berichten').update({
     status: 'verwerkt',
@@ -297,7 +300,7 @@ export async function onthoudAlias(opts: {
   const adres = (opts.adres ?? '').trim().toLowerCase()
   if (!adres.includes('@')) return
 
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   await supabase.from('mailintake_aliassen').upsert({
     patroon: adres,
     soort: 'koppel',
@@ -329,7 +332,7 @@ async function meldAutomatischAangemaakt(
   berichtId: string,
   dossiernummer: string | null,
 ): Promise<void> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data: d } = await supabase
     .from('dossiers')
     .select('titel, calculator_id, werkvoorbereider_id, project_manager_id, klant:relaties!dossiers_klant_id_fkey(naam)')
@@ -337,7 +340,8 @@ async function meldAutomatischAangemaakt(
     .maybeSingle()
   if (!d) return
 
-  const rolIds = [d.calculator_id, d.werkvoorbereider_id, d.project_manager_id].filter(Boolean)
+  const rolIds = [d.calculator_id, d.werkvoorbereider_id, d.project_manager_id]
+    .filter((x): x is string => Boolean(x))
   if (!rolIds.length) return
 
   const { data: mw } = await supabase
@@ -345,6 +349,9 @@ async function meldAutomatischAangemaakt(
     .eq('actief', true).not('auth_user_id', 'is', null).limit(10)
 
   for (const m of mw ?? []) {
+    // `.not('auth_user_id','is',null)` staat in de query, maar het schema kent het
+    // veld als nullable -- en een notificatie zonder gebruiker landt nergens.
+    if (!m.auth_user_id) continue
     await maakNotificatie({
       user_id: m.auth_user_id,
       type: 'mailintake_automatisch_aangemaakt',
@@ -369,7 +376,7 @@ async function zetWerkzaamhedenOpDossier(
   berichtId: string,
   tekst: string | null,
 ): Promise<void> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: b } = await supabase
     .from('mailintake_berichten')

@@ -22,6 +22,10 @@ import {
 
 import { triageer } from './triage'
 import { berichtTekst } from './prompt'
+/** Precies wat de ophaler nodig heeft; scheelt een cast bij elke aanroeper. */
+export type PostbusOphaalInvoer =
+  Pick<PostbusRij, 'id' | 'sleutel' | 'adres' | 'map_id' | 'laatste_ophaal_gelukt_op'>
+
 import type { PostbusRij } from './types'
 
 /** Per run per postbus, zodat één volle postbus de andere twee niet blokkeert. */
@@ -37,7 +41,7 @@ export interface OphaalResultaat {
 }
 
 async function haalNegeerlijst(): Promise<Set<string>> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_aliassen').select('patroon').eq('soort', 'negeer').limit(500)
   return new Set((data ?? []).map((r: any) => String(r.patroon).toLowerCase()))
@@ -49,11 +53,11 @@ async function haalNegeerlijst(): Promise<Set<string>> {
  * overlap van de poll wordt opgevangen.
  */
 async function bewaarBericht(
-  postbus: PostbusRij,
+  postbus: PostbusOphaalInvoer,
   bericht: GraphBericht,
   negeerlijst: Set<string>,
 ): Promise<{ id: string; nieuw: boolean } | null> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   // Zonder internetMessageId hebben we geen stabiele sleutel; val terug op een
   // hash van afzender + tijd + onderwerp. Zeldzaam, maar niet onmogelijk.
@@ -115,7 +119,7 @@ async function bewaarBijlagen(
   graphBerichtId: string,
   postbusSleutel: string,
 ): Promise<number> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const meta = await haalBijlageMeta(postbusAdres, graphBerichtId)
   let aantal = 0
 
@@ -164,8 +168,8 @@ async function bewaarBijlagen(
 }
 
 /** Haalt één postbus leeg (tot MAX_PER_POSTBUS). */
-export async function haalPostbusOp(postbus: PostbusRij): Promise<OphaalResultaat> {
-  const supabase = createAdminClient() as any
+export async function haalPostbusOp(postbus: PostbusOphaalInvoer): Promise<OphaalResultaat> {
+  const supabase = createAdminClient()
   const log = cronLogboek(`mailintake-ophalen:${postbus.sleutel}`)
   const uit: OphaalResultaat = { postbus: postbus.sleutel, opgehaald: 0, nieuw: 0, overgeslagen: 0, bijlagen: 0, fout: null }
 
@@ -224,7 +228,7 @@ export async function haalPostbusOp(postbus: PostbusRij): Promise<OphaalResultaa
 
 /** Haalt alle actieve postbussen op. */
 export async function haalAllePostbussenOp(): Promise<OphaalResultaat[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_postbussen').select('*').eq('actief', true).order('sleutel').limit(20)
 

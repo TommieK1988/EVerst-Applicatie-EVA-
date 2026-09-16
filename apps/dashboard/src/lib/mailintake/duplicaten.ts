@@ -78,7 +78,7 @@ function huisnummerKern(hn: string | null | undefined): string | null {
  * navertellen. Vandaar dat elke bijdrage ook als leesbare reden terugkomt.
  */
 export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<DuplicaatResultaat[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const vanaf = vensterVanaf()
   const kandidaten = new Map<string, any>()
 

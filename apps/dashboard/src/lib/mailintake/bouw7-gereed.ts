@@ -53,7 +53,7 @@ export interface Bouw7GereedInvoer {
  * "categorie bestaat niet" stuurt iemand op een verkeerd spoor.
  */
 export async function controleerBouw7Gereed(inv: Bouw7GereedInvoer): Promise<Bouw7Gereedheid> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const ontbreekt: string[] = []
 
   if (!(inv.titel ?? '').trim()) ontbreekt.push('Er is geen omschrijving voor de projectnaam.')

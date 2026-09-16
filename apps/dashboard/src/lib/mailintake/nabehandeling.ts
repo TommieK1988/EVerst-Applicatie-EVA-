@@ -33,7 +33,7 @@ export { MAX_OUTLOOK_POGINGEN }
  * de ingrijpendste stap en gaat pas aan als iemand daar bewust voor kiest.
  */
 export async function haalNabehandelStand(): Promise<NabehandelStand> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
   const v = (data?.overige as Record<string, unknown> | null)?.mailintake_nabehandeling
   return v === 'aan' || v === 'uit' || v === 'alleen_categorie' ? v : 'alleen_categorie'
@@ -92,7 +92,7 @@ export interface NabehandelResultaat {
  * dit punt al een dossier aangemaakt, en dat mag niet sneuvelen op een mailbox.
  */
 export async function voerNabehandelingUit(berichtId: string): Promise<NabehandelResultaat> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten')
@@ -102,7 +102,13 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
 
   if (!bericht) return { gedaan: false, overgeslagen: true, fout: 'Bericht niet gevonden.', nieuwGraphId: null }
 
-  const plan = bepaalNabehandeling(bericht.status, bericht.besluit, bericht.dossier?.dossiernummer ?? null)
+  // Status en besluit zijn in de DB tekst met een CHECK-constraint; TypeScript ziet
+  // daar een kale string. De constraint is de garantie, deze versmalling maakt hem zichtbaar.
+  const plan = bepaalNabehandeling(
+    bericht.status as BerichtStatus,
+    bericht.besluit as BerichtBesluit | null,
+    bericht.dossier?.dossiernummer ?? null,
+  )
   if (!plan) {
     await supabase.from('mailintake_berichten')
       .update({ outlook_nabehandeling: 'nvt', outlook_fout: null }).eq('id', berichtId)
@@ -183,7 +189,7 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
  * eindtoestand krijgt; de daadwerkelijke Graph-calls doet `voerNabehandelingUit`.
  */
 export async function planNabehandeling(berichtId: string): Promise<void> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   await supabase.from('mailintake_berichten')
     .update({ outlook_nabehandeling: 'open', outlook_fout: null })
     .eq('id', berichtId)

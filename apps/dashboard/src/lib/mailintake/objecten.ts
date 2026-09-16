@@ -173,7 +173,7 @@ export interface ObjectZoekInvoer {
  * voorfilter op plaats bij.
  */
 export async function zoekObjectBijAdres(inv: ObjectZoekInvoer): Promise<ObjectTreffer> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data } = await supabase
     .from('vastgoed_objecten')

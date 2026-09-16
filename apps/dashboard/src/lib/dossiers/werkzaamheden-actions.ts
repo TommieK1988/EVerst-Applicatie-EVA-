@@ -29,10 +29,14 @@ export async function bewaarWerkzaamheden(
   await assertDossierBewerkbaar(dossierId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const schoon = tekst.trim()
 
-  const patch: Record<string, unknown> = {
+  const patch: {
+    gevraagde_werkzaamheden: string | null
+    gevraagde_werkzaamheden_op: string
+    gevraagde_werkzaamheden_bron?: string | null
+  } = {
     gevraagde_werkzaamheden: schoon || null,
     gevraagde_werkzaamheden_op: new Date().toISOString(),
   }

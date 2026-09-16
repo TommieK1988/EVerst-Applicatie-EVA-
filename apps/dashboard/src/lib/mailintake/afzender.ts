@@ -78,7 +78,7 @@ export async function herkenAfzender(opts: {
   /** true als de mail door een eigen medewerker is doorgestuurd. */
   doorgestuurd?: boolean
 }): Promise<AfzenderTreffer> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const adres = (opts.vanAdres ?? '').trim().toLowerCase()
   const domein = domeinVan(adres)
 
@@ -150,13 +150,15 @@ export async function herkenAfzender(opts: {
       .ilike('email', adres)
       .eq('actief', true)
       .limit(5)
-    if ((data ?? []).length === 1) {
+    const treffers = data ?? []
+    if (treffers.length === 1) {
+      const relatie = treffers[0]
       return {
-        relatieId: data[0].id, relatieNaam: data[0].naam,
+        relatieId: relatie.id, relatieNaam: relatie.naam,
         contactpersoonId: null, contactpersoonNaam: null,
         score: Math.min(1, plafond), via: 'email_contactpersoon',
-        kandidaten: [{ id: data[0].id, naam: data[0].naam }],
-        toelichting: `Dit is het algemene e-mailadres van ${data[0].naam}.`,
+        kandidaten: [{ id: relatie.id, naam: relatie.naam }],
+        toelichting: `Dit is het algemene e-mailadres van ${relatie.naam}.`,
       }
     }
   }
@@ -255,7 +257,7 @@ export async function herkenAfzender(opts: {
  * gebeurt hierboven.
  */
 export async function hulplijstRelaties(vanAdres: string | null, onderwerp: string | null): Promise<string[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const domein = domeinVan(vanAdres)
   const uit = new Set<string>()
 

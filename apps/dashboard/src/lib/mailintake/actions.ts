@@ -25,11 +25,12 @@ import { verwerkBericht } from './verwerken'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { voerNabehandelingUit, planNabehandeling } from './nabehandeling'
 import type { GekeurdeVelden } from './extractie'
+import type { PostbusPatch } from './types'
 
 /** Kortlopende downloadlink voor één bijlage uit de privébucket. */
 export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; url?: string; error?: string }> {
   await vereisRecht('mailintake', 'lezen')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: b } = await supabase
     .from('mailintake_bijlagen').select('opslag_pad, bestandsnaam').eq('id', bijlageId).maybeSingle()
@@ -60,7 +61,7 @@ export async function maakDossierVanBericht(
   },
 ): Promise<{ ok: boolean; dossierId?: string; dossiernummer?: string | null; bouw7Ok?: boolean; bouw7Fout?: string; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten').select('id, status, van_adres, duplicaat_topscore').eq('id', berichtId).maybeSingle()
@@ -121,7 +122,7 @@ export async function koppelBerichtAanDossier(
  */
 export async function negeerBericht(berichtId: string, reden: string): Promise<{ ok: boolean; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const tekst = (reden ?? '').trim()
   if (tekst.length < 2) return { ok: false, error: 'Geef kort aan waarom dit genegeerd kan worden.' }
@@ -146,7 +147,7 @@ export async function negeerBericht(berichtId: string, reden: string): Promise<{
 /** Zet een bericht terug op de werkvoorraad; het tegenovergestelde van negeren. */
 export async function heropenBericht(berichtId: string): Promise<{ ok: boolean; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: b } = await supabase
     .from('mailintake_berichten').select('status, dossier_id').eq('id', berichtId).maybeSingle()
@@ -169,7 +170,7 @@ export async function heropenBericht(berichtId: string): Promise<{ ok: boolean; 
 
 export async function markeerGeenAanvraag(berichtId: string, reden: string): Promise<{ ok: boolean; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   await supabase.from('mailintake_berichten').update({
     status: 'geen_aanvraag', besluit: 'geen_aanvraag',
@@ -190,7 +191,7 @@ export async function markeerGeenAanvraag(berichtId: string, reden: string): Pro
 
 export async function wijsBerichtToe(berichtId: string, medewerkerId: string | null): Promise<{ ok: boolean }> {
   await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   await supabase.from('mailintake_berichten')
     .update({ toegewezen_medewerker_id: medewerkerId, updated_at: new Date().toISOString() })
     .eq('id', berichtId)
@@ -201,7 +202,7 @@ export async function wijsBerichtToe(berichtId: string, medewerkerId: string | n
 /** Laat de AI het bericht opnieuw lezen (nieuwe extractieversie). */
 export async function leesOpnieuw(berichtId: string): Promise<{ ok: boolean; error?: string }> {
   await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: b } = await supabase.from('mailintake_berichten').select('dossier_id').eq('id', berichtId).maybeSingle()
   if (b?.dossier_id) return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
@@ -237,7 +238,7 @@ export async function bewaarSamenvatting(
   tekst: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { error } = await supabase.from('mailintake_berichten').update({
     gevraagde_werkzaamheden: tekst.trim() || null,
@@ -257,20 +258,34 @@ export async function bewaarSamenvatting(
 
 export async function updatePostbus(id: string, wijziging: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   await vereisRecht('mailintake', 'beheren')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
-  // Alleen velden die hier thuishoren; nooit een doorgegeven object rechtstreeks wegschrijven.
-  const toegestaan = [
-    'naam', 'adres', 'soort', 'map_id', 'actief', 'automatisch_aanmaken',
-    'standaard_werkmaatschappij_id', 'standaard_bouw7_categorie_id', 'standaard_categorie',
-    'notificatie_medewerkers', 'dagbudget_cent', 'map_verwerkt_naam',
-  ]
-  const schoon: Record<string, unknown> = {}
-  for (const k of toegestaan) if (k in wijziging) schoon[k] = wijziging[k]
+  // Alleen velden die hier thuishoren, en alleen als het type klopt. Een losse
+  // doorgifte van het binnengekomen object zou elke kolom beschrijfbaar maken en
+  // een verkeerd type stil wegschrijven.
+  const schoon: PostbusPatch = {}
+  const w = wijziging
+  if (typeof w.naam === 'string') schoon.naam = w.naam.trim()
+  if (typeof w.adres === 'string') schoon.adres = w.adres.trim()
+  if (w.soort === 'offerteaanvraag' || w.soort === 'opdracht' || w.soort === 'servicedesk') schoon.soort = w.soort
+  if (typeof w.map_id === 'string') schoon.map_id = w.map_id
+  if (typeof w.actief === 'boolean') schoon.actief = w.actief
+  if (typeof w.automatisch_aanmaken === 'boolean') schoon.automatisch_aanmaken = w.automatisch_aanmaken
+  if (typeof w.standaard_werkmaatschappij_id === 'string' || w.standaard_werkmaatschappij_id === null)
+    schoon.standaard_werkmaatschappij_id = w.standaard_werkmaatschappij_id
+  if (typeof w.standaard_bouw7_categorie_id === 'number' || w.standaard_bouw7_categorie_id === null)
+    schoon.standaard_bouw7_categorie_id = w.standaard_bouw7_categorie_id
+  if (typeof w.standaard_categorie === 'string' || w.standaard_categorie === null)
+    schoon.standaard_categorie = w.standaard_categorie
+  if (Array.isArray(w.notificatie_medewerkers) && w.notificatie_medewerkers.every(x => typeof x === 'string'))
+    schoon.notificatie_medewerkers = w.notificatie_medewerkers as string[]
+  if (typeof w.dagbudget_cent === 'number' && Number.isFinite(w.dagbudget_cent) && w.dagbudget_cent >= 0)
+    schoon.dagbudget_cent = Math.round(w.dagbudget_cent)
+  if (typeof w.map_verwerkt_naam === 'string') schoon.map_verwerkt_naam = w.map_verwerkt_naam.trim()
   if (!Object.keys(schoon).length) return { ok: true }
 
   // Bij een nieuwe mapnaam is de gecachete folder-id waardeloos.
-  if ('map_verwerkt_naam' in schoon) schoon.map_verwerkt_id = null
+  if (schoon.map_verwerkt_naam !== undefined) schoon.map_verwerkt_id = null
   schoon.updated_at = new Date().toISOString()
 
   const { error } = await supabase.from('mailintake_postbussen').update(schoon).eq('id', id)
@@ -284,9 +299,14 @@ export async function zetNabehandelStand(stand: string): Promise<{ ok: boolean; 
   await vereisRecht('mailintake', 'beheren')
   if (!['aan', 'alleen_categorie', 'uit'].includes(stand)) return { ok: false, error: 'Onbekende stand.' }
 
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
-  const overige = { ...(data?.overige ?? {}), mailintake_nabehandeling: stand }
+  // `overige` is jsonb en kan volgens het type ook een getal of een lijst zijn;
+  // spreaden van zoiets is een typefout die stil een leeg object oplevert.
+  const huidig = data?.overige && typeof data.overige === 'object' && !Array.isArray(data.overige)
+    ? data.overige
+    : {}
+  const overige = { ...huidig, mailintake_nabehandeling: stand }
   const { error } = await supabase.from('bedrijfsinstellingen').update({ overige }).eq('id', 1)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/instellingen/mailintake')
@@ -295,7 +315,7 @@ export async function zetNabehandelStand(stand: string): Promise<{ ok: boolean; 
 
 export async function getNabehandelStand(): Promise<string> {
   await vereisRecht('mailintake', 'lezen')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
   const v = (data?.overige as Record<string, unknown> | null)?.mailintake_nabehandeling
   return v === 'aan' || v === 'uit' ? v : 'alleen_categorie'
@@ -304,7 +324,7 @@ export async function getNabehandelStand(): Promise<string> {
 /** Leest één bericht uit de postbus om de verbinding te toetsen. Schrijft niets. */
 export async function controleerVerbinding(postbusId: string): Promise<{ ok: boolean; onderwerp?: string | null; ontvangenOp?: string | null; error?: string }> {
   await vereisRecht('mailintake', 'beheren')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data: p } = await supabase.from('mailintake_postbussen').select('adres').eq('id', postbusId).maybeSingle()
   if (!p) return { ok: false, error: 'Postbus niet gevonden.' }
 
@@ -317,7 +337,7 @@ export async function controleerVerbinding(postbusId: string): Promise<{ ok: boo
 /** Handmatig ophalen ("Nu ophalen" in het postvak). */
 export async function haalNuOp(): Promise<{ ok: boolean; nieuw: number; fouten: string[] }> {
   await vereisRecht('mailintake', 'beheren')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('mailintake_postbussen').select('*').eq('actief', true).limit(20)
 
   let nieuw = 0
@@ -337,7 +357,7 @@ export async function haalNuOp(): Promise<{ ok: boolean; nieuw: number; fouten: 
 
 export async function verwijderAlias(id: string): Promise<{ ok: boolean }> {
   await vereisRecht('mailintake', 'beheren')
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   await supabase.from('mailintake_aliassen').delete().eq('id', id)
   revalidatePath('/instellingen/mailintake')
   return { ok: true }
@@ -349,7 +369,7 @@ export async function voegNegeerAdresToe(patroon: string): Promise<{ ok: boolean
   if (!p.includes('@')) return { ok: false, error: 'Geef een e-mailadres of @domein.nl op.' }
 
   const medewerker = await getCurrentMedewerker()
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { error } = await supabase.from('mailintake_aliassen').upsert({
     patroon: p, soort: 'negeer', aangemaakt_door: medewerker?.id ?? null,
   }, { onConflict: 'patroon' })

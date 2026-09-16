@@ -34,7 +34,7 @@ function naam(m: { voornaam?: string | null; achternaam?: string | null } | null
 
 /** Het postvak voor één tabblad. */
 export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promise<PostvakRij[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   let q = supabase.from('mailintake_berichten').select(LIJST_SELECT)
 
   switch (tab) {
@@ -102,7 +102,7 @@ export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promis
 
 /** Tellers voor de tabbladen. */
 export async function getPostvakTellers(): Promise<Record<string, number>> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const statussen = ['wacht_op_mens', 'geen_aanvraag', 'genegeerd', 'mislukt']
   const uit: Record<string, number> = {}
   for (const s of statussen) {
@@ -136,7 +136,7 @@ export interface BerichtDetail {
 
 /** Alles wat het behandelscherm nodig heeft, in één keer. */
 export async function getBerichtDetail(id: string): Promise<BerichtDetail | null> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten')
@@ -184,7 +184,7 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
 }
 
 export async function getPostbussen(): Promise<PostbusRij[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('mailintake_postbussen').select('*').order('sleutel').limit(20)
   return (data ?? []) as PostbusRij[]
 }
@@ -199,7 +199,7 @@ export interface AliasRij {
 }
 
 export async function getAliassen(): Promise<AliasRij[]> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_aliassen')
     .select('id, patroon, soort, laatst_gebruikt_op, created_at, relatie:relaties(naam)')

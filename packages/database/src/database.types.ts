@@ -2598,6 +2598,9 @@ export type Database = {
           gearchiveerd: boolean
           geocode_op: string | null
           geocode_status: string | null
+          gevraagde_werkzaamheden: string | null
+          gevraagde_werkzaamheden_bron: string | null
+          gevraagde_werkzaamheden_op: string | null
           handmatige_velden: string[]
           hoofdstatus: Database["public"]["Enums"]["hoofdstatus"]
           id: string
@@ -2694,6 +2697,9 @@ export type Database = {
           gearchiveerd?: boolean
           geocode_op?: string | null
           geocode_status?: string | null
+          gevraagde_werkzaamheden?: string | null
+          gevraagde_werkzaamheden_bron?: string | null
+          gevraagde_werkzaamheden_op?: string | null
           handmatige_velden?: string[]
           hoofdstatus?: Database["public"]["Enums"]["hoofdstatus"]
           id?: string
@@ -2790,6 +2796,9 @@ export type Database = {
           gearchiveerd?: boolean
           geocode_op?: string | null
           geocode_status?: string | null
+          gevraagde_werkzaamheden?: string | null
+          gevraagde_werkzaamheden_bron?: string | null
+          gevraagde_werkzaamheden_op?: string | null
           handmatige_velden?: string[]
           hoofdstatus?: Database["public"]["Enums"]["hoofdstatus"]
           id?: string
@@ -5820,6 +5829,10 @@ export type Database = {
           created_at: string
           dossier_id: string | null
           duplicaat_topscore: number | null
+          gevraagde_werkzaamheden: string | null
+          gevraagde_werkzaamheden_bronnen: string[]
+          gevraagde_werkzaamheden_gemist: string[]
+          gevraagde_werkzaamheden_op: string | null
           graph_message_id: string | null
           heeft_bijlagen: boolean
           herkend_via: string | null
@@ -5865,6 +5878,10 @@ export type Database = {
           created_at?: string
           dossier_id?: string | null
           duplicaat_topscore?: number | null
+          gevraagde_werkzaamheden?: string | null
+          gevraagde_werkzaamheden_bronnen?: string[]
+          gevraagde_werkzaamheden_gemist?: string[]
+          gevraagde_werkzaamheden_op?: string | null
           graph_message_id?: string | null
           heeft_bijlagen?: boolean
           herkend_via?: string | null
@@ -5910,6 +5927,10 @@ export type Database = {
           created_at?: string
           dossier_id?: string | null
           duplicaat_topscore?: number | null
+          gevraagde_werkzaamheden?: string | null
+          gevraagde_werkzaamheden_bronnen?: string[]
+          gevraagde_werkzaamheden_gemist?: string[]
+          gevraagde_werkzaamheden_op?: string | null
           graph_message_id?: string | null
           heeft_bijlagen?: boolean
           herkend_via?: string | null
@@ -6227,6 +6248,7 @@ export type Database = {
           kosten_cent: number | null
           model: string
           prompt_versie: string
+          ronde: string
           ruwe_uitvoer: string | null
           soort: string | null
           status: string
@@ -6246,6 +6268,7 @@ export type Database = {
           kosten_cent?: number | null
           model: string
           prompt_versie: string
+          ronde?: string
           ruwe_uitvoer?: string | null
           soort?: string | null
           status?: string
@@ -6265,6 +6288,7 @@ export type Database = {
           kosten_cent?: number | null
           model?: string
           prompt_versie?: string
+          ronde?: string
           ruwe_uitvoer?: string | null
           soort?: string | null
           status?: string
