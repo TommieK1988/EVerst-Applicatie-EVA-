@@ -17,7 +17,7 @@ import { ChartCard, CHART_COLORS, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS } from '
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@everts/ui'
 import { fEur, fEurK, fPct, pvTh, pvTd } from '@/lib/dashboard/aggregaties'
-import { dossierPad } from '@/components/dossiers/open-dossier'
+import { dossierTabPad } from '@/components/dossiers/open-dossier'
 import { Euro, Hourglass, TrendingUp } from 'lucide-react'
 import type { CommercieCijfers } from '@/lib/commercie/rapportage'
 
@@ -222,7 +222,7 @@ export default function CommercieBlok({ cijfers }: { cijfers: CommercieCijfers }
                 <tr key={s.dossier_id}>
                   <td className={pvTd}>
                     <a
-                      href={`${dossierPad('offerte', s.dossier_id)}/bewaking`}
+                      href={dossierTabPad('offerte', s.dossier_id, 'bewaking')}
                       className="text-brand-600 hover:underline"
                     >
                       {s.titel}

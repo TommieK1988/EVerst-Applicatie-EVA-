@@ -16,7 +16,7 @@ import * as React from 'react'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { StatCard } from '@/components/ui/stat-card'
 import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
-import { dossierPad } from '@/components/dossiers/open-dossier'
+import { dossierTabPad } from '@/components/dossiers/open-dossier'
 import { formatDatumNL } from '@/lib/dossiers/datum-regels'
 import { vandaagNL } from '@/lib/wagenpark/periode'
 import {
@@ -288,7 +288,7 @@ export function BewakingWerklijst(props: Props) {
         eenregelig
         selecteerbaar={false}
         beginSortering={[{ id: 'datum', desc: false }]}
-        onRijKlik={r => { window.location.href = `${dossierPad('offerte', r.id)}/bewaking` }}
+        onRijKlik={r => { window.location.href = dossierTabPad('offerte', r.id, 'bewaking') }}
         groepering={{
           sleutel: r => r._bak,
           standaardOpen: true,

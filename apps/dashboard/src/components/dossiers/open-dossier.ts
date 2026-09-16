@@ -8,9 +8,20 @@ export const SECTIE_ROUTE: Record<DossierSectie, string> = {
   servicedesk: 'servicedesk',
 }
 
+/**
+ * Pad naar één tabblad van een dossier, bv. `/offertes/<id>/bewaking`.
+ *
+ * Gebruik dit wanneer je ergens anders dan op Informatie wilt uitkomen. Plak nooit zelf een
+ * tab achter `dossierPad()`: die geeft het Informatie-tabblad terug, dus dat levert
+ * `/offertes/<id>/informatie/bewaking` op — een 404 die er in code correct uitziet.
+ */
+export function dossierTabPad(sectie: DossierSectie, id: string, tab: string): string {
+  return `/${SECTIE_ROUTE[sectie]}/${id}/${tab}`
+}
+
 /** Pad naar het Informatie-tabblad van een dossier. */
 export function dossierPad(sectie: DossierSectie, id: string): string {
-  return `/${SECTIE_ROUTE[sectie]}/${id}/informatie`
+  return dossierTabPad(sectie, id, 'informatie')
 }
 
 /**
