@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
 
 import { vereisRecht } from '@/lib/auth/rechten'
+// Niet `rechten.mailintake === 'beheren'`: die vergelijking mist de beheerder,
+// die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
+// dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { getAanvraagCategorieen } from '@/lib/dossiers/actions'
 import { getBerichtDetail } from '@/lib/mailintake/data'
 import { zoekObjectBijAdres } from '@/lib/mailintake/objecten'
@@ -45,7 +49,7 @@ export default async function BerichtPage({ params }: { params: Promise<{ id: st
       objectTreffer={objectTreffer ? JSON.parse(JSON.stringify(objectTreffer)) : null}
       werkmaatschappijen={werkmaatschappijen ?? []}
       categorieen={categorieen}
-      magSchrijven={rechten.mailintake === 'schrijven' || rechten.mailintake === 'beheren'}
+      magSchrijven={heeftModuleToegang(rechten, 'mailintake', 'schrijven')}
     />
   )
 }

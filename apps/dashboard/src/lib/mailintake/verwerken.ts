@@ -16,7 +16,10 @@ import type { Json } from '@everts/database'
 import { cronLogboek } from '@/lib/cron/logboek'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 
-import { extraheer, keurEnKalibreer, kernVertrouwen, type BijlageVoorAI, type WitteLijsten } from './extractie'
+import {
+  extraheer, keurEnKalibreer, kernVertrouwen,
+  type BijlageVoorAI, type WitteLijsten, type GekeurdeVelden,
+} from './extractie'
 import { herkenAfzender, hulplijstRelaties } from './afzender'
 import { zoekDuplicaten } from './duplicaten'
 import { beslis, samenvattendeReden } from './beslis'
@@ -29,7 +32,7 @@ import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
 import {
-  AFZENDER_ONBEKEND, SOORT_ONZEKER, DUPLICAAT_HARD,
+  AFZENDER_ONBEKEND, SOORT_ONZEKER, DUPLICAAT_HARD, MAIL_SOORT_LABELS,
   type PostbusRij, type MailSoort,
 } from './types'
 
@@ -409,7 +412,9 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       if (!res.ok) {
         await supabase.from('mailintake_berichten')
           .update({ status: 'wacht_op_mens', laatste_fout: res.error }).eq('id', berichtId)
-        await voorleggen(postbus, berichtId, geclaimd, 'Automatisch aanmaken mislukt; beoordeel dit zelf.')
+        await voorleggen(postbus, berichtId, geclaimd,
+          ['EVA kon het dossier niet zelf aanmaken: ' + (res.error ?? 'onbekende fout')],
+          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error, reden: 'Automatisch aanmaken mislukt; voorgelegd.' }
       }
       uit.status = 'verwerkt'
@@ -434,7 +439,9 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       if (!res.ok) {
         await supabase.from('mailintake_berichten')
           .update({ status: 'wacht_op_mens', laatste_fout: res.error ?? null }).eq('id', berichtId)
-        await voorleggen(postbus, berichtId, geclaimd, `De offerte kon niet op gewonnen: ${res.error ?? 'onbekende fout'}`)
+        await voorleggen(postbus, berichtId, geclaimd,
+          [`De offerte kon niet op gewonnen gezet worden: ${res.error ?? 'onbekende fout'}`],
+          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error ?? null, reden: 'Offerte winnen mislukt; voorgelegd.' }
       }
       uit.status = 'verwerkt'
@@ -443,7 +450,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       uit.status = besluit.status
       await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, ex.data.soort_vertrouwen, besluit.status)
       if (besluit.status === 'wacht_op_mens') {
-        await voorleggen(postbus, berichtId, geclaimd, samenvattendeReden(besluit))
+        await voorleggen(postbus, berichtId, geclaimd, besluit.redenen,
+          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
       }
     }
 
@@ -472,22 +480,80 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
  * Dit is waar "bij twijfel voorleggen" pas echt landt. Zonder deze stap belandde
  * een voorgelegd bericht alleen in het postvak, en de controletaak ging naar de
  * calculator van het dossier -- een rol die bij een vers bericht nog leeg is.
+ *
+ * De tekst is de helft van het nut. Alleen "beoordeel deze mail" dwingt iemand om
+ * eerst het hele bericht open te slaan voordat hij weet of het twee minuten of een
+ * half uur kost. Daarom staat er in: waarom het is voorgelegd, wat EVA al heeft
+ * ingevuld, wat er nog ontbreekt, en waar je het afhandelt.
  */
 async function voorleggen(
   postbus: PostbusRij,
   berichtId: string,
-  bericht: { onderwerp?: string | null; van_naam?: string | null; van_adres?: string | null },
-  reden: string,
+  bericht: { onderwerp?: string | null; van_naam?: string | null; van_adres?: string | null; ontvangen_op?: string | null },
+  redenen: string[],
+  context?: { velden?: GekeurdeVelden; relatieNaam?: string | null; soort?: string | null },
 ): Promise<void> {
   if (!postbus.standaard_behandelaar_id) return
+
   const afzender = bericht.van_naam || bericht.van_adres || 'onbekende afzender'
+  const v = context?.velden
+
+  const regels: string[] = []
+  regels.push(redenen.length > 1 ? 'Waarom dit wordt voorgelegd:' : 'Waarom dit wordt voorgelegd:')
+  for (const r of redenen.slice(0, 4)) regels.push(`- ${r}`)
+
+  regels.push('')
+  regels.push(`Van: ${afzender}${bericht.van_naam && bericht.van_adres ? ` <${bericht.van_adres}>` : ''}`)
+  regels.push(`Onderwerp: ${bericht.onderwerp ?? '(geen onderwerp)'}`)
+  if (context?.soort) regels.push(`EVA denkt: ${MAIL_SOORT_LABELS[context.soort as MailSoort] ?? context.soort}`)
+
+  if (v) {
+    const ingevuld: string[] = []
+    const ontbreekt: string[] = []
+
+    const noteer = (label: string, waarde: unknown, extra = '') => {
+      if (waarde) ingevuld.push(`- ${label}: ${String(waarde)}${extra}`)
+      else ontbreekt.push(`- ${label}`)
+    }
+
+    if (context.relatieNaam) ingevuld.push(`- Opdrachtgever: ${context.relatieNaam}`)
+    else ontbreekt.push('- Opdrachtgever (kies of maak de relatie)')
+
+    noteer('Werk', v.omschrijving)
+    const adres = [v.werkadresStraat, v.werkadresHuisnummer].filter(Boolean).join(' ')
+    noteer('Adres', adres && v.werkadresStad ? `${adres}, ${v.werkadresStad}` : adres || null,
+      v.adresBevestigd ? '' : ' (niet bevestigd door PDOK)')
+    noteer('Categorie', v.categorieNaam)
+    if (v.deadline) {
+      ingevuld.push(`- Deadline: ${v.deadline}${v.deadlineAfgeleid ? ' (afgeleid: aanvraagdatum + 4 weken)' : ''}`)
+    }
+    if (v.referentie) ingevuld.push(`- Referentie klant: ${v.referentie}`)
+    if (v.opdrachtReferentie) ingevuld.push(`- Opdrachtreferentie: ${v.opdrachtReferentie}`)
+    if (v.mandaatBedrag != null) ingevuld.push(`- Mandaat: ${v.mandaatBedrag}`)
+
+    if (ingevuld.length) {
+      regels.push('')
+      regels.push('Dit heeft EVA al ingevuld:')
+      regels.push(...ingevuld)
+    }
+    if (ontbreekt.length) {
+      regels.push('')
+      regels.push('Dit moet je zelf aanvullen of controleren:')
+      regels.push(...ontbreekt)
+    }
+  }
+
+  regels.push('')
+  regels.push(`Afhandelen in EVA: /mailintake/${berichtId}`)
+
   const res = await maakIntakeActie({
     berichtId,
     medewerkerId: postbus.standaard_behandelaar_id,
     titel: `Beoordeel ${postbus.naam.toLowerCase()} van ${afzender}`.slice(0, 200),
-    toelichting: `${reden}\n\nOnderwerp: ${bericht.onderwerp ?? '(geen onderwerp)'}`,
+    toelichting: regels.join('\n'),
     dagen: 2,
   })
+
   // Een behandelaar zonder EVA-account krijgt de actie niet te zien. Dat mag niet
   // stil blijven: het beheerscherm waarschuwt ervoor, en hier blijft het spoor staan.
   if (res.zonderOntvanger && res.taakId) {

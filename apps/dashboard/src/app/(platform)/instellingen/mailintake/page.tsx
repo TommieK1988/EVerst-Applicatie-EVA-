@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 import { createAdminClient } from '@everts/database/server'
 
 import { vereisRecht } from '@/lib/auth/rechten'
+// Niet `rechten.mailintake === 'beheren'`: die vergelijking mist de beheerder,
+// die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
+// dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { getPostbussen, getAliassen } from '@/lib/mailintake/data'
 import { getNabehandelStand } from '@/lib/mailintake/actions'
 
@@ -37,7 +41,7 @@ export default async function MailintakeInstellingenPage() {
         heeftLogin: m.auth_user_id != null,
       }))}
       werkmaatschappijen={werkmaatschappijen ?? []}
-      magBeheren={rechten.mailintake === 'beheren'}
+      magBeheren={heeftModuleToegang(rechten, 'mailintake', 'beheren')}
     />
   )
 }

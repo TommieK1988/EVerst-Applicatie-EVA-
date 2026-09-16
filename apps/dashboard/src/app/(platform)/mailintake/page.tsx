@@ -3,6 +3,10 @@ import { createClient as createServerClient } from '@everts/database/server'
 
 import { laadLayouts } from '@/app/actions/layouts'
 import { vereisRecht } from '@/lib/auth/rechten'
+// Niet `rechten.mailintake === 'beheren'`: die vergelijking mist de beheerder,
+// die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
+// dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { getPostvakRijen, getPostvakTellers, type PostvakTab } from '@/lib/mailintake/data'
 
 import Postvak from './Postvak'
@@ -44,8 +48,8 @@ export default async function MailintakePage({
       actieveTab={tab}
       layouts={layouts}
       user_id={user_id}
-      magSchrijven={rechten.mailintake === 'schrijven' || rechten.mailintake === 'beheren'}
-      magBeheren={rechten.mailintake === 'beheren'}
+      magSchrijven={heeftModuleToegang(rechten, 'mailintake', 'schrijven')}
+      magBeheren={heeftModuleToegang(rechten, 'mailintake', 'beheren')}
     />
   )
 }

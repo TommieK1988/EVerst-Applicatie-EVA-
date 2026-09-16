@@ -106,9 +106,10 @@ export async function maakIntakeActie(inv: IntakeActieInvoer): Promise<IntakeAct
         deadline_handmatig: true,
         assignee_type: 'direct',
         dossier_rollen: [],
-        omschrijving: (inv.toelichting
-          ? { tekst: inv.toelichting, bron: 'mailintake' }
-          : { bron: 'mailintake' }) as Json,
+        // De vorm is { text }: dat is wat omschrijvingNaarTekst leest, en dus wat
+        // het taakscherm en de mobiele popup tonen. Een andere sleutel levert een
+        // taak op met een lege omschrijving -- zichtbaar niets, stil weg.
+        omschrijving: { text: inv.toelichting ?? '' } as Json,
       })
       .select('id')
       .single()

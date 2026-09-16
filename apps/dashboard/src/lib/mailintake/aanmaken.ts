@@ -350,7 +350,19 @@ async function zetControletaak(
     dossierId,
     medewerkerId: behandelaarId,
     titel: `Controleer automatisch aangemaakt dossier${dossiernummer ? ` ${dossiernummer}` : ''}`,
-    toelichting: 'EVA heeft dit dossier zelf aangemaakt uit een binnengekomen e-mail. Loop de klant, het adres en de omschrijving na.',
+    toelichting: [
+      'EVA heeft dit dossier zelf aangemaakt uit een binnengekomen e-mail, zonder dat er',
+      'iemand naar gekeken heeft. Loop na:',
+      '',
+      '- Is dit de juiste opdrachtgever en contactpersoon?',
+      '- Klopt het werkadres, en hangt het dossier onder het juiste object?',
+      '- Dekt de omschrijving wat er echt gevraagd wordt?',
+      '- Klopt de categorie? Die bepaalt op welk bord het dossier verschijnt.',
+      '- Klopt de deadline? Als de mail er geen noemde, staat hij op vier weken.',
+      '- Staan de bijlagen in de dossiermap?',
+      '',
+      `De oorspronkelijke mail: /mailintake/${berichtId}`,
+    ].join('\n'),
     dagen: 1,
   })
 }
