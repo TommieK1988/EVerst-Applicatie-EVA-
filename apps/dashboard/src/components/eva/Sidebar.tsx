@@ -55,11 +55,11 @@ const NAV: NavEntry[] = [
   { href: '/opdrachten',  label: 'Opdrachten',  Icon: IconOpdrachten, separator: true, module: 'dossiers' },
   { href: '/servicedesk', label: 'Servicedesk', Icon: IconServicedesk, module: 'servicedesk' },
   { href: '/afgesloten',   label: 'Afgesloten',  Icon: IconAfgesloten, module: 'dossiers' },
-  // De postbus als werkbak: hier komt binnen wat nog geen dossier is.
-  { href: '/mailintake',  label: 'Postvak',     Icon: IconMailintake, module: 'mailintake' },
 ]
 
 const BEHEER: NavEntry[] = [
+  // De postbus als werkbak: hier komt binnen wat nog geen dossier is.
+  { href: '/mailintake',  label: 'Postvak',     Icon: IconMailintake, module: 'mailintake' },
   { href: '/relaties',    label: 'Relaties',    Icon: IconRelaties,    module: 'relaties'    },
   { href: '/objecten',    label: 'Objecten',    Icon: IconObjecten,    module: 'objectenbeheer' },
   { href: '/medewerkers', label: 'Medewerkers', Icon: IconMedewerkers, module: 'medewerkers' },
