@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import type { OpdrachtOnderdeel, OpdrachtOnderdeelGrondslag } from '@everts/database'
 import { getDossierBewaking } from './actions'
 import { assertDossierBewerkbaar } from './guards'
+import { vereisSessie } from '@/lib/auth/rechten'
 import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk } from './meerwerk'
 import { getServicedeskRegie } from './servicedesk'
@@ -749,6 +750,44 @@ export async function wijsStelpostBewakingscodesToe(
 
   revalidatePath(`/opdrachten/${dossierId}/informatie`)
   return { ok: true, aantal, waarschuwing: waarschuwingen.length ? waarschuwingen.join(' ') : undefined }
+}
+
+/**
+ * De bewakingscodes van de stelposten in deze opdracht, voor de werkbegroting.
+ *
+ * Waarom EVA hier de bron is en niet de Bouw7-snapshot: de werkbegroting leest zijn
+ * bewakingscodes uit `athena_control`, en die snapshot wordt tweemaal per dag ververst. Een
+ * zojuist aangewezen stelpost stond daardoor tot een halve dag níet in de kostengroep-lijst,
+ * precies op het moment dat de calculator hem wil vullen. Erger nog: een code zonder budget en
+ * zonder boekingen komt in de project-control-respons niet altijd voor, waardoor hij er ook later
+ * niet vanzelf in verschijnt. Uit `opdracht_onderdelen` lezen is direct én volledig.
+ *
+ * De omschrijving gaat mee als codenaam — dat is dezelfde naam waarmee de code in Bouw7 is
+ * aangemaakt, zodat de kostengroep-identiteit (code + omschrijving) aan beide kanten gelijk is.
+ */
+export async function getStelpostBewakingscodes(
+  dossierId: string,
+): Promise<{ code: string; naam: string }[]> {
+  await vereisSessie()
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('opdracht_onderdelen')
+    .select('bewakingscode, omschrijving, volgnummer')
+    .eq('dossier_id', dossierId)
+    .eq('soort', 'stelpost')
+    .eq('in_opdracht', true)
+    .not('bewakingscode', 'is', null)
+    .order('volgnummer', { ascending: true })
+
+  const uit: { code: string; naam: string }[] = []
+  const gezien = new Set<string>()
+  for (const r of (data ?? []) as { bewakingscode: string | null; omschrijving: string }[]) {
+    const code = (r.bewakingscode ?? '').trim()
+    if (!code || gezien.has(code.toUpperCase())) continue
+    gezien.add(code.toUpperCase())
+    uit.push({ code, naam: (r.omschrijving ?? '').trim() || code })
+  }
+  return uit
 }
 
 /** Zet/wijzigt handmatig de bewakingscode van één stelpost (kale code, bijv. "SP01"). */

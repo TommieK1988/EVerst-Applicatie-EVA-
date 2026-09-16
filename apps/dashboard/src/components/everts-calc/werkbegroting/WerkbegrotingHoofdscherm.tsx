@@ -13,6 +13,7 @@ import {
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
+import { getStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
@@ -60,6 +61,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   /** Bestaande Bouw7-hoofdstukken + het gekozen doelhoofdstuk voor nieuwe codes (onthouden per dossier). */
   const [hoofdstukken, setHoofdstukken] = useState<Hoofdstuk[]>([])
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
+  /** Bewakingscodes van de stelposten uit de opdracht (EVA-bron, zie `getStelpostBewakingscodes`). */
+  const [stelpostCodes, setStelpostCodes] = useState<{ code: string; naam: string }[]>([])
   /** Kale bewakingscodes waarop al inkoop verbruikt is → regels in de grid worden read-only. */
   const [vergrendeldeCodes, setVergrendeldeCodes] = useState<string[]>([])
   const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
@@ -140,6 +143,17 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     resolveBewakingscodes(dossierId)
       .then(res => { if (actief) setBewakingscodes(res.ok ? res.codes.map(c => ({ code: c.code, naam: c.naam })) : null) })
       .catch(() => { if (actief) setBewakingscodes(null) })
+    return () => { actief = false }
+  }, [dossierId])
+
+  // Stelpost-bewakingscodes uit de opdracht ophalen. Zie `getStelpostBewakingscodes`: Bouw7 kent
+  // een net aangewezen stelpost pas na de volgende sync, en soms helemaal niet.
+  useEffect(() => {
+    if (!dossierId) { setStelpostCodes([]); return }
+    let actief = true
+    getStelpostBewakingscodes(dossierId)
+      .then(codes => { if (actief) setStelpostCodes(codes) })
+      .catch(() => { if (actief) setStelpostCodes([]) })
     return () => { actief = false }
   }, [dossierId])
 
@@ -482,6 +496,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           scenarioId={scenarioId}
           onWijziging={handleWijziging}
           bewakingscodes={bewakingscodes}
+          stelpostCodes={stelpostCodes}
           dossierId={dossierId}
           vergrendeldeCodes={vergrendeldeCodes}
         />

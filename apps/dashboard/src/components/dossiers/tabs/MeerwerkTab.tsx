@@ -10,6 +10,9 @@ import {
   verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
+import { getOpdrachtOverzicht, verrekenStelpost } from '@/lib/dossiers/opdracht-onderdelen'
+import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
+import AfrekenstandBlok from './AfrekenstandBlok'
 import MeerwerkCalculatie from '@/components/everts-calc/calculatie/MeerwerkCalculatie'
 import { parseGetal } from '@/lib/everts-calc/calculations'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
@@ -81,9 +84,14 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
   const [ruw, setRuw] = useState<RuweBedragen>(LEGE_RUW)
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
+  /** Opdracht-samenstelling (aanneemsom + stelposten) voor de afrekenstand; null = niet beschikbaar. */
+  const [overzicht, setOverzicht] = useState<OpdrachtOverzicht | null>(null)
 
   function herlaad() {
     getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdAantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
+    // Stelposten en aanneemsom horen bij hetzelfde beeld, maar mogen het meerwerk niet ophouden:
+    // dit overzicht raakt Bouw7 aan en is daarom trager dan de meerwerkregels zelf.
+    getOpdrachtOverzicht(dossierId).then(setOverzicht).catch(() => setOverzicht(null))
   }
   useEffect(herlaad, [dossierId])
 
@@ -175,6 +183,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     setCalcOpen({ projectId: r.projectId, regelId: regel.id, omschrijving: regel.omschrijving, offerteId: regel.quote_id })
   }
 
+  /** Het verschil tussen stelpost en werkelijk als één meer-/minderwerkregel boeken. */
+  async function verreken(onderdeelId: string) {
+    setBezig(true)
+    const r = await verrekenStelpost(onderdeelId)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success(`Verrekend: ${fmt(r.saldo)} als ${r.saldo < 0 ? 'minderwerk' : 'meerwerk'}`)
+    herlaad(); router.refresh()
+  }
+
   async function verwijder(regel: MeerwerkRegelView) {
     if (!await bevestig({ titel: `Meerwerkregel "${regel.omschrijving}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     setBezig(true)
@@ -205,6 +223,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
 
   return (
     <div className="px-8 py-7 space-y-5">
+      {overzicht && (
+        <AfrekenstandBlok
+          overzicht={overzicht}
+          meerwerkExcl={data.totalen.goedgekeurdExcl}
+          readOnly={readOnly}
+          bezig={bezig}
+          onVerreken={verreken}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex w-full items-center justify-between">
