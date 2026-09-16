@@ -1,6 +1,6 @@
 {
   "budget": {
-    "as_any": 745,
+    "as_any": 762,
     "ongegate_service_role_actions": 513,
     "bestanden_boven_800_regels": 33
   },
@@ -60,6 +60,8 @@
       "apps/dashboard/src/app/(platform)/kam/toolbox/actions.ts": 1,
       "apps/dashboard/src/app/(platform)/kam/toolbox/page.tsx": 1,
       "apps/dashboard/src/app/(platform)/kam/vca-diplomas/actions.ts": 2,
+      "apps/dashboard/src/app/(platform)/mailintake/[id]/page.tsx": 1,
+      "apps/dashboard/src/app/(platform)/mailintake/page.tsx": 1,
       "apps/dashboard/src/app/(platform)/management/(views)/layout.tsx": 1,
       "apps/dashboard/src/app/(platform)/management/actions.ts": 1,
       "apps/dashboard/src/app/(platform)/management/instellingen/actions.ts": 6,
@@ -109,6 +111,7 @@
       "apps/dashboard/src/app/actions/werkstand.ts": 1,
       "apps/dashboard/src/app/api/auth/o365/callback/route.ts": 1,
       "apps/dashboard/src/app/api/cron/fouten-opruimen/route.ts": 1,
+      "apps/dashboard/src/app/api/cron/mailintake/bewaking/route.ts": 1,
       "apps/dashboard/src/app/api/cron/oplevering/route.ts": 3,
       "apps/dashboard/src/app/api/cron/portaal-mail/route.ts": 1,
       "apps/dashboard/src/app/api/cron/toolbox-momenten/route.ts": 1,
@@ -231,6 +234,13 @@
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 1,
       "apps/dashboard/src/lib/mail/ontvangers.ts": 1,
       "apps/dashboard/src/lib/mail/sjabloon-bron.ts": 2,
+      "apps/dashboard/src/lib/mailintake/afzender.ts": 3,
+      "apps/dashboard/src/lib/mailintake/data.ts": 5,
+      "apps/dashboard/src/lib/mailintake/duplicaten.ts": 1,
+      "apps/dashboard/src/lib/mailintake/extractie.ts": 2,
+      "apps/dashboard/src/lib/mailintake/objecten.ts": 1,
+      "apps/dashboard/src/lib/mailintake/verwerken.ts": 1,
+      "apps/dashboard/src/lib/mailintake/werkzaamheden.ts": 1,
       "apps/dashboard/src/lib/materieel/bestanden.ts": 1,
       "apps/dashboard/src/lib/materieel/data.ts": 1,
       "apps/dashboard/src/lib/materieel/historie.ts": 1,
@@ -365,9 +375,9 @@
       "apps/dashboard/src/app/(platform)/instellingen/offerte-layout/[id]/LayoutEditorClient.tsx": 1086,
       "apps/dashboard/src/app/(platform)/planning/actions.ts": 1090,
       "apps/dashboard/src/app/(platform)/relaties/[id]/RelatieDetailView.tsx": 1392,
-      "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 999,
+      "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 1000,
       "apps/dashboard/src/components/dossiers/tabs/FactuurRegelVenster.tsx": 812,
-      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2389,
+      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2405,
       "apps/dashboard/src/components/dossiers/tabs/OpleveringTab.tsx": 1200,
       "apps/dashboard/src/components/everts-calc/bibliotheek/BiblioteekBeheer.tsx": 1273,
       "apps/dashboard/src/components/everts-calc/bibliotheek/SchilderwerkBibliotheek.tsx": 1241,
@@ -379,7 +389,7 @@
       "apps/dashboard/src/components/overzicht/OverzichtTabel.tsx": 1503,
       "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 2238,
       "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1768,
-      "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 865,
+      "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 889,
       "apps/dashboard/src/lib/bouw7/client.ts": 1420,
       "apps/dashboard/src/lib/bouw7/sync.ts": 2649,
       "apps/dashboard/src/lib/dossiers/actions.ts": 3860,
@@ -389,9 +399,9 @@
       "apps/dashboard/src/lib/everts-calc/local-store.ts": 892,
       "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 1380,
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 844,
-      "apps/dashboard/src/lib/page-help.ts": 1589,
+      "apps/dashboard/src/lib/page-help.ts": 1621,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1050,
-      "packages/database/src/platform-types.ts": 1865
+      "packages/database/src/platform-types.ts": 1880
     }
   }
 }
