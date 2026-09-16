@@ -59,8 +59,12 @@ jobs:
         run: npm run lint
 
       - name: Tests
-        # Dekt de rekenkern: berekenCalculatieregel, de BTW-groepering en de formatters.
-        # Bewezen dat hij vangt: een `+ 0.01` in calculations.ts maakt deze stap rood.
+        # Dekt de rekenkern (berekenCalculatieregel, de BTW-groepering, de formatters) en
+        # sinds september de interne links: links.test.ts legt elke href en router.push
+        # naast de routes onder src/app, zodat een pad naar een niet-bestaande pagina hier
+        # rood wordt in plaats van bij de gebruiker.
+        # Bewezen dat hij vangt: een `+ 0.01` in calculations.ts maakt deze stap rood, en
+        # een link naar /dossiers/<id> ook.
         run: npm test
 
       - name: Technische schuld
