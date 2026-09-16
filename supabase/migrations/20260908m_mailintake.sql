@@ -287,7 +287,7 @@ where id = 1
 -- ── 13. De drie postbussen (inactief tot ze zijn ingericht) ─────────────────
 insert into public.mailintake_postbussen (sleutel, naam, adres, soort, actief)
 values
-  ('offerteaanvragen', 'Offerteaanvragen', 'offerte@evertsgroep.nl',     'offerteaanvraag', false),
-  ('opdrachten',       'Opdrachten',       'opdracht@evertsgroep.nl',    'opdracht',        false),
-  ('servicedesk',      'Servicedesk',      'servicedesk@evertsgroep.nl', 'servicedesk',     false)
+  ('offerteaanvragen', 'Offerteaanvragen', 'aanvragen@everts.chat',   'offerteaanvraag', false),
+  ('opdrachten',       'Opdrachten',       'opdrachten@everts.chat',  'opdracht',        false),
+  ('servicedesk',      'Servicedesk',      'servicedesk@everts.chat', 'servicedesk',     false)
 on conflict (sleutel) do nothing;

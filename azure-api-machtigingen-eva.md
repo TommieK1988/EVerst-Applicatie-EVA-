@@ -183,8 +183,8 @@ Je hebt hiervoor een **globale beheerder** (of Privileged Role Administrator)
 nodig: alleen die mag beheerderstoestemming verlenen. Reken op een half uur,
 plus wachttijd voor de Exchange-policy.
 
-Vervang overal `<postbus-1>` … `<postbus-3>` door de echte adressen van de drie
-intakepostbussen.
+De drie intakepostbussen zijn `aanvragen@everts.chat`, `opdrachten@everts.chat` en
+`servicedesk@everts.chat`.
 
 #### 1. App-registratie aanmaken
 
@@ -240,7 +240,7 @@ Connect-ExchangeOnline
 New-DistributionGroup -Name "EVA Mailintake Postbussen" `
   -Alias "eva-mailintake-scope" `
   -Type Security `
-  -Members "<postbus-1>","<postbus-2>","<postbus-3>"
+  -Members "aanvragen@everts.chat","opdrachten@everts.chat","servicedesk@everts.chat"
 
 # Uit het adresboek halen: hij is een afbakening, geen verzendlijst.
 Set-DistributionGroup -Identity "eva-mailintake-scope" `
@@ -249,7 +249,7 @@ Set-DistributionGroup -Identity "eva-mailintake-scope" `
 # De app vastzetten op die groep.
 New-ApplicationAccessPolicy `
   -AppId "<toepassings-id uit stap 1>" `
-  -PolicyScopeGroupId "eva-mailintake-scope@<jouw-domein>" `
+  -PolicyScopeGroupId "eva-mailintake-scope@everts.chat" `
   -AccessRight RestrictAccess `
   -Description "EVA Mailintake mag alleen de drie intakepostbussen lezen"
 ```
@@ -258,10 +258,10 @@ Controleer daarna beide kanten — een policy die alles toestaat ziet er precies
 zo uit als een policy die werkt:
 
 ```powershell
-Test-ApplicationAccessPolicy -Identity <postbus-1> -AppId <toepassings-id>
+Test-ApplicationAccessPolicy -Identity aanvragen@everts.chat -AppId <toepassings-id>
 #   AccessCheckResult : Granted
 
-Test-ApplicationAccessPolicy -Identity <een willekeurige collega> -AppId <toepassings-id>
+Test-ApplicationAccessPolicy -Identity tom@everts.chat -AppId <toepassings-id>
 #   AccessCheckResult : Denied
 ```
 
