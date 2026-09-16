@@ -29,13 +29,26 @@ import {
 import DisciplineKiezer from './DisciplineKiezer'
 import { SectieKop, TekstVeld, FotoStrip } from './velden'
 
-export default function BezoekDoorloop({ context }: { context: BezoekContext }) {
+export default function BezoekDoorloop({
+  context, herlaad,
+}: {
+  context: BezoekContext
+  /**
+   * Alleen nodig wanneer de context géén server component is.
+   *
+   * Op de telefoon komt `context` uit `/m/bezoek/[bezoekId]`, dus `router.refresh()` haalt
+   * hem daar opnieuw op. Draait de doorloop in een venster op de desktop, dan is de context
+   * client-state en verandert die niet mee — vandaar deze haak, die de aanroeper zelf
+   * `getBezoek()` laat herhalen.
+   */
+  herlaad?: () => void | Promise<void>
+}) {
   const router = useRouter()
   const [bezig, startOvergang] = useTransition()
   const { bezoek, dossier, disciplines, punten, fotos, beschikbareDisciplines } = context
   const definitief = bezoek.status === 'definitief'
 
-  const ververs = () => router.refresh()
+  const ververs = () => { router.refresh(); void herlaad?.() }
 
   async function doe<T>(fn: () => Promise<{ ok: true } | { ok: false; error: string } | T>) {
     const r = (await fn()) as { ok: boolean; error?: string }
