@@ -2646,3 +2646,104 @@ export async function syncMeerwerk(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
   return result
 }
 
+
+/**
+ * Spiegelt álle Bouw7-offertes naar `bouw7_offertes` — één rij per offerte.
+ *
+ * WAAROM APART en niet in `syncProjects`: die functie reduceert de offertelijst bewust tot één
+ * offerte per project (de meest recente) plus een telling; dat aggregaat voedt het bord en de
+ * fingerprint waarop de incrementele sync leunt. Die reductie uit elkaar trekken zou de hele
+ * changed-set-logica raken. Hier lezen we de lijst een tweede keer en laten we dat pad ongemoeid.
+ * Kosten: één extra lijst-call per run. Dat is de prijs voor een sync die niet stuk kan door deze
+ * toevoeging.
+ *
+ * Eenrichtingsverkeer: Bouw7 is de bron, EVA schrijft hier niets terug.
+ */
+export async function syncBouw7Offertes(opts?: { onlyBouw7Ids?: string[] }): Promise<SyncResult> {
+  const start = Date.now()
+  const result: SyncResult = { nieuw: 0, bijgewerkt: 0, fouten: 0, overgeslagen: 0 }
+  const scoped = opts?.onlyBouw7Ids ? new Set(opts.onlyBouw7Ids.map(String)) : null
+  try {
+    const bouw7 = await getBouw7Client()
+    const supabase = createAdminClient()
+
+    // Gepagineerd: bij honderden dossiers kapt PostgREST stil af op 1000 rijen, en een
+    // ontbrekend dossier in deze map betekent een offerte die aan niets gekoppeld wordt.
+    // `bouw7_id` is nullable in het schema; het `.not(...is null)`-filter versmalt het type niet,
+    // dus de lege waarden vallen hieronder alsnog weg bij het bouwen van de map.
+    const dossierData = await haalAlleRijen<{ id: string; bouw7_id: string | null }>((van, tot) =>
+      supabase.from('dossiers').select('id,bouw7_id').not('bouw7_id', 'is', null).order('id').range(van, tot))
+    const dossierMap = new Map<string, string>(
+      dossierData
+        .filter((d): d is { id: string; bouw7_id: string } => d.bouw7_id != null)
+        .map(d => [String(d.bouw7_id), d.id]),
+    )
+
+    const quotations = await fetchAllPages<Bouw7Quotation>(bouw7, '/list/quotations')
+
+    const rijen = quotations
+      .filter(q => {
+        const pid = q.project?.id != null ? String(q.project.id) : null
+        return pid != null && (!scoped || scoped.has(pid))
+      })
+      .map(q => {
+        const pid = String(q.project!.id)
+        const medewerker = q.employee
+        const naam = medewerker
+          ? [medewerker.firstName, medewerker.prefix, medewerker.lastName].filter(Boolean).join(' ')
+          : null
+        return {
+          bouw7_quotation_id: String(q.id),
+          bouw7_project_id:   pid,
+          dossier_id:         dossierMap.get(pid) ?? null,
+          nummer:             q.quotationNumber ?? null,
+          onderwerp:          q.subject ?? null,
+          referentie:         q.reference ?? null,
+          datum:              q.quotationDate ? q.quotationDate.slice(0, 10) : null,
+          status:             q.quotationStatus?.name ?? null,
+          subtotaal_excl_btw: Number(q.subtotal ?? 0) || null,
+          totaal_incl_btw:    Number(q.total ?? 0) || null,
+          calculator_naam:    naam || null,
+          synced_op:          new Date().toISOString(),
+        }
+      })
+
+    if (rijen.length === 0) {
+      await logSync('bouw7_offertes', 'in', result, Date.now() - start)
+      return result
+    }
+
+    // In blokken: één upsert van duizenden rijen wordt een verzoek dat PostgREST weigert.
+    const BLOK = 500
+    for (let i = 0; i < rijen.length; i += BLOK) {
+      const blok = rijen.slice(i, i + BLOK)
+      const { error } = await supabase
+        .from('bouw7_offertes')
+        .upsert(blok, { onConflict: 'bouw7_quotation_id' })
+      if (error) {
+        result.fouten += blok.length
+        result.foutMelding = error.message
+      } else {
+        result.bijgewerkt += blok.length
+      }
+    }
+
+    // Offertes die in Bouw7 zijn verwijderd horen hier ook weg te zijn; anders blijft een
+    // ingetrokken offerte voor altijd op de bewakingskaart staan. Alleen bij een volledige
+    // (niet-gescopete) run, want anders zouden we alles buiten de scope opruimen.
+    if (!scoped) {
+      const levend = new Set(rijen.map(r => r.bouw7_quotation_id))
+      const bestaand = await haalAlleRijen<{ id: string; bouw7_quotation_id: string }>((van, tot) =>
+        supabase.from('bouw7_offertes').select('id, bouw7_quotation_id').order('id').range(van, tot))
+      const teVerwijderen = bestaand.filter(b => !levend.has(b.bouw7_quotation_id)).map(b => b.id)
+      for (let i = 0; i < teVerwijderen.length; i += BLOK) {
+        await supabase.from('bouw7_offertes').delete().in('id', teVerwijderen.slice(i, i + BLOK))
+      }
+    }
+  } catch (e: unknown) {
+    result.fouten += 1
+    result.foutMelding = e instanceof Error ? e.message : String(e)
+  }
+  await logSync('bouw7_offertes', 'in', result, Date.now() - start)
+  return result
+}

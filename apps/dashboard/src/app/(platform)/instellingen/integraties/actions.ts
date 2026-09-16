@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Todos, syncDossierNotities, syncMeerwerk, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
+import { syncContacts, syncEmployees, syncDaysOff, syncProjects, syncDebiteuren, syncOfferteHerinneringen, syncBouw7Offertes, syncBouw7Todos, syncDossierNotities, syncMeerwerk, type SyncResult, type SyncContactsResult, type SyncMode } from '@/lib/bouw7/sync'
 import { syncAllPlanning, syncDossierPlanning } from '@/lib/bouw7/sync-planning'
 import { syncInkoopfacturen } from '@/lib/bouw7/sync-inkoopfacturen'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
@@ -129,6 +129,10 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     // Bouw7-aantekeningen op het dossier (koppelen op bouw7_id → ná syncProjects).
     // Herinneringen + to-do's zijn goedkope bulk; notities alleen bij full-sync (detail-call per dossier).
     const herinneringen = await syncOfferteHerinneringen({ mode })
+    // Offertes als losse rijen (spiegel van /list/quotations). Ná syncProjects, want de koppeling
+    // loopt via bouw7_id → dossier. Altijd volledig, ook bij een incrementele run: het is één
+    // lijst-call en zo blijft een in Bouw7 ingetrokken offerte niet op de bewakingskaart staan.
+    const offertes = await syncBouw7Offertes()
     const todos = await syncBouw7Todos({ mode })
     const notities = await syncDossierNotities({ mode })
     const meerwerk = await syncMeerwerk({ mode })
@@ -137,8 +141,8 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     // geboekt worden en is hij achteraf niet af te rekenen.
     const stelpostCodes = await zorgVoorStelpostBewakingscodes()
 
-    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + inkoopfacturen.nieuw + herinneringen.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
-    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + inkoopfacturen.bijgewerkt + herinneringen.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
+    const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + inkoopfacturen.nieuw + herinneringen.nieuw + offertes.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
+    const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + inkoopfacturen.bijgewerkt + herinneringen.bijgewerkt + offertes.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
 
     const supabase = createAdminClient()
     await supabase
@@ -185,6 +189,7 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     const planning = await syncDossierPlanning(dossierId, { mode: 'full' })
     // Bouw7-aantekeningen op dit dossier meepakken (scoped op dit ene bouw7_id).
     await syncOfferteHerinneringen({ onlyBouw7Ids: ids })
+    await syncBouw7Offertes({ onlyBouw7Ids: ids })
     await syncBouw7Todos({ onlyBouw7Ids: ids })
     await syncDossierNotities({ onlyBouw7Ids: ids })
     await syncMeerwerk({ onlyBouw7Ids: ids })

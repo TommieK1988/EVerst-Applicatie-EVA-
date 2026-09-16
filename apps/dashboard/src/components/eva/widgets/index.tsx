@@ -755,7 +755,7 @@ export function AgendaWidget({ items = [], totaal }: { items?: AgendaWidgetItem[
 
 /* ── AddWidgetTile ───────────────────────────────────────── */
 export function AddWidgetTile() {
-  const options = ['Offertes', 'Facturen status', 'Team-activiteit', 'Urenregistratie', 'Social feed', 'Verkeer & reistijd'];
+  const options = ['Facturen status', 'Team-activiteit', 'Urenregistratie', 'Social feed', 'Verkeer & reistijd'];
   return (
     <section style={{
       border: '1.5px dashed var(--border)',
@@ -789,3 +789,5 @@ export function AddWidgetTile() {
     </section>
   );
 }
+
+export { BewakingWidget } from './BewakingWidget';

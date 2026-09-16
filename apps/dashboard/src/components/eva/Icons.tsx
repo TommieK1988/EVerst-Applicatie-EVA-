@@ -158,6 +158,8 @@ export const IconTaken      = (p: IconProps) => <IconBase {...p}><path d="M8 4h8
 export const IconVca        = (p: IconProps) => <IconBase {...p}><path d="M12 3l8 3v6c0 5-3.5 8-8 9.5C7.5 20 4 17 4 12V6z"/><path d="M12 6.5l5 2v3.5c0 3-2 5-5 6.2z" fill="currentColor" stroke="none" opacity="0.9"/></IconBase>;
 export const IconVerkoop    = (p: IconProps) => <IconBase {...p}><path d="M2 3h3l2.2 12.2a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.6-1.3L21 6H6"/><circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="20" r="1.6" fill="currentColor" stroke="none"/></IconBase>;
 export const IconMeerwerk   = (p: IconProps) => <IconBase {...p}><circle cx="12" cy="12" r="9" fill="currentColor"/><path d="M12 7.5v9M7.5 12h9" stroke="white"/></IconBase>;
+/** Bel — offertebewaking: de weergave die zegt wat vandaag aandacht vraagt. */
+export const IconBewaking   = (p: IconProps) => <IconBase {...p}><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></IconBase>;
 export const IconList       = (p: IconProps) => <IconBase {...p}><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></IconBase>;
 
 // Twee-tonige domein-iconen (48x48 viewBox, navy #1f2933 + lime #6cb33f)

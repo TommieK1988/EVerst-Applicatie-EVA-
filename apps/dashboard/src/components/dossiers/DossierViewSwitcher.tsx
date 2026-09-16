@@ -3,15 +3,16 @@ import React from 'react'
 import { DossierKanban } from './DossierKanban'
 import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
+import { BewakingWerklijst } from '@/components/commercie/BewakingWerklijst'
 import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { InternDossiersKnop } from './InternDossiersKnop'
-import { IconGrid, IconList, IconCheck } from '@/components/eva/Icons'
+import { IconGrid, IconList, IconCheck, IconBewaking } from '@/components/eva/Icons'
 import { isServicedeskDossier } from './types'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
 
-type ViewMode = 'kanban' | 'lijst'
+type ViewMode = 'kanban' | 'lijst' | 'bewaking'
 
 type Props = {
   sectie: DossierSectie
@@ -29,6 +30,13 @@ type Props = {
   mijnNaam?: string | null
   /** Toon het soort-filter (Servicedesk / Projecten) in het filtermenu rechtsboven. */
   toonSoortSlicer?: boolean
+  /**
+   * Derde weergave: de commerciële werklijst, gegroepeerd op urgentie in plaats van op
+   * dossier. Alleen zinvol op offertes — daar bestaat een bewakingskaart.
+   */
+  toonBewaking?: boolean
+  /** Medewerker-id van de ingelogde gebruiker, voor het "alleen van mij"-filter. */
+  mijnMedewerkerId?: string | null
 }
 
 type SoortKeuze = 'servicedesk' | 'project'
@@ -101,12 +109,16 @@ function FilterRij({ actief, kleur, label, aantal, initialen, onClick }: {
   )
 }
 
-export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam, toonSoortSlicer }: Props) {
+export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user_id, kanNieuwAanmaken, categorieen, werkmaatschappijen, extraActies, kolomKeyModus, onStatusChange, mijnNaam, toonSoortSlicer, toonBewaking, mijnMedewerkerId }: Props) {
   const storageKey = `dossier-view-${sectie}`
 
   const [view, setView] = React.useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'kanban'
-    return (localStorage.getItem(storageKey) as ViewMode) ?? 'kanban'
+    const bewaard = localStorage.getItem(storageKey) as ViewMode | null
+    // Een eerder gekozen 'bewaking' mag niet blijven hangen op een sectie die hem niet heeft;
+    // je zou dan naar een lege pagina kijken zonder te zien waarom.
+    if (bewaard === 'bewaking' && !toonBewaking) return 'kanban'
+    return bewaard ?? 'kanban'
   })
 
   const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>(
@@ -307,6 +319,22 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       >
         <IconList size={14} />
       </button>
+      {toonBewaking && (
+        <button
+          onClick={() => switchView('bewaking')}
+          title="Bewaking — werklijst op urgentie"
+          style={{
+            width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 4,
+            border: 'none', cursor: 'pointer',
+            background: view === 'bewaking' ? 'white' : 'transparent',
+            color: view === 'bewaking' ? 'var(--brand-600)' : 'var(--neutral-500)',
+            boxShadow: view === 'bewaking' ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+            transition: 'all 120ms',
+          }}
+        >
+          <IconBewaking size={14} />
+        </button>
+      )}
     </div>
     </div>
   )
@@ -526,6 +554,25 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       {filterMenu}
     </div>
   ) : null
+
+  if (view === 'bewaking' && toonBewaking) {
+    // Bewust zónder de slicerbalk: die filtert op projectleider/controller, terwijl deze lijst
+    // om de commerciële actiehouder draait. Twee filterbalken met verschillende betekenis
+    // boven elkaar is precies hoe een scherm onbruikbaar wordt.
+    return (
+      <BewakingWerklijst
+        dossiers={zichtbareDossiers}
+        // Bewust geen `layouts`: die zijn geladen voor de lijstweergave ('dossiers-offerte') en
+        // horen bij andere kolommen. De onthouden werkstand (kolommen, sortering, filters) loopt
+        // los daarvan via de scherm-sleutel en werkt hier dus gewoon.
+        layouts={[]}
+        user_id={user_id}
+        mijnMedewerkerId={mijnMedewerkerId ?? null}
+        viewToggle={toggle}
+        extraActies={extraActies}
+      />
+    )
+  }
 
   if (view === 'lijst') {
     return (

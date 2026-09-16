@@ -7,6 +7,7 @@ import { bedrijfsagendaTypeKleur } from '@everts/database/platform-types'
 import type { BedrijfsagendaType } from '@everts/database/platform-types'
 import HomeView from '@/components/eva/views/HomeView'
 import { getGoedkeurenWidget } from '@/lib/goedkeuren/widget'
+import { getMijnBewaking } from '@/lib/commercie/actions'
 import type { AgendaWidgetItem } from '@/components/eva/widgets'
 
 export const metadata = { title: 'Overzicht' }
@@ -32,7 +33,7 @@ export default async function HomePage() {
   const jaar = new Date().getFullYear()
   const vandaag = localDateStr(0)
 
-  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels, goedkeuren] = await Promise.all([
+  const [taken, aanvragenResult, offertesResult, opdrachtenResult, servicedeskResult, agendaRegels, bewaking, goedkeuren] = await Promise.all([
     user ? getMijnTaken(user.id).catch(() => []) : Promise.resolve([]),
     // Aanvragen gesorteerd op deadline (verwacht_einddatum), opdrachten op startdatum — nulls laatst
     medewerker ? getMijnDossiers(medewerker.id, 'aanvraag', 10, { kolom: 'verwacht_einddatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
@@ -43,6 +44,9 @@ export default async function HomePage() {
     medewerker ? getMijnServicedesk(medewerker.id, 10, { kolom: 'verwacht_startdatum', ascending: true }) : Promise.resolve({ ok: true as const, data: [], totaal: 0 }),
     haalAlleRegels(jaar).catch(() => [] as Awaited<ReturnType<typeof haalAlleRegels>>),
     // Fail-soft: een lege goedkeurwidget is beter dan een startpagina die niet laadt.
+    // Fail-soft, net als de goedkeurwidget: een lege bewakingswidget is beter dan een
+    // startpagina die niet laadt.
+    getMijnBewaking().catch(() => ({ regels: [], verlopen: 0, vandaag: 0, wachtend: 0, totaal: 0 })),
     getGoedkeurenWidget().catch(() => ({
       ligtBijJou: [], afgehandeld: [], inkoopSyncOp: null,
       inkoop: { aantal: 0, bedrag: 0, eersteVervaldatum: null },
@@ -81,6 +85,7 @@ export default async function HomePage() {
       taken={taken}
       aanvragen={aanvragenResult.ok   ? aanvragenResult.data   : []}
       offertes={offertesResult.ok    ? offertesResult.data    : []}
+      bewaking={bewaking}
       opdrachten={opdrachtenResult.ok ? opdrachtenResult.data  : []}
       servicedesk={servicedeskResult.ok ? servicedeskResult.data : []}
       agendaItems={agendaItems}

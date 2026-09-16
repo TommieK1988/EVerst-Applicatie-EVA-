@@ -14,6 +14,8 @@ import { wijzigSubstatusMetConflict } from './substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
 import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
+import { VERLIES_REDENEN } from '@/lib/commercie/types'
+import { legVerliesRedenVastActie } from '@/lib/commercie/actions'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -115,6 +117,9 @@ export function DossierKanban<K extends string>({
   /** Gezet zodra er naar een afsluitende kolom is gesleept; de dialoog bevestigt of annuleert. */
   const [afsluitBevestiging, setAfsluitBevestiging] =
     React.useState<{ dossierId: string; status: K } | null>(null)
+  /** Verliesreden — alleen gevraagd bij een offerte die op Verloren wordt gezet. */
+  const [verliesReden, setVerliesReden] = React.useState('')
+  const [verliesToelichting, setVerliesToelichting] = React.useState('')
 
   const zoekQ = zoek.trim().toLowerCase()
   const gefilterd = zoekQ
@@ -209,6 +214,10 @@ export function DossierKanban<K extends string>({
   const afsluitLabel = afsluitBevestiging
     ? (statussen.find(s => s.key === afsluitBevestiging.status)?.label ?? afsluitBevestiging.status)
     : ''
+  // Alleen bij een verloren offerte: 'vervallen' betekent dat het werk van tafel is, en een
+  // afgewezen aanvraag heeft nog geen offerte gehad om op te verliezen.
+  const vraagtVerliesReden =
+    sectie === 'offerte' && afsluitBevestiging?.status === 'verloren'
 
   return (
     <>
@@ -235,13 +244,56 @@ export function DossierKanban<K extends string>({
             <strong> overal alleen-lezen</strong>; je kunt dit niet meer ongedaan maken in EVA.
             De status wordt ook naar Bouw7 teruggeschreven.
           </AlertDialogDescription>
+          {/* Verlies je een offerte, dan is de reden het enige wat je er commercieel nog aan
+              overhoudt. Hier uitvragen kost vijf seconden; achteraf reconstrueren lukt niet meer.
+              De reden voedt de verliesredenen-tabel onder Management → Verkoop. */}
+          {vraagtVerliesReden && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--neutral-700)' }}>
+                Waarom is de offerte niet doorgegaan?
+              </label>
+              <select
+                value={verliesReden}
+                onChange={e => setVerliesReden(e.target.value)}
+                style={{
+                  height: 32, borderRadius: 6, border: '1px solid var(--border)',
+                  padding: '0 8px', fontSize: 13, background: 'var(--neutral-0)',
+                }}
+              >
+                <option value="">Kies een reden…</option>
+                {VERLIES_REDENEN.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              {verliesReden === 'Anders' && (
+                <Input
+                  placeholder="Licht kort toe"
+                  value={verliesToelichting}
+                  onChange={e => setVerliesToelichting(e.target.value)}
+                />
+              )}
+              <span style={{ fontSize: 11.5, color: 'var(--neutral-500)' }}>
+                Komt het werk later terug? Zet het dossier dan niet op Verloren, maar leg op het
+                tabblad Bewaking een herbenaderdatum vast.
+              </span>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Annuleren</AlertDialogCancel>
             <AlertDialogAction
+              disabled={vraagtVerliesReden && !verliesReden}
               onClick={async () => {
                 const b = afsluitBevestiging
+                const reden = verliesReden
+                const toelichting = verliesToelichting
                 setAfsluitBevestiging(null)
-                if (b) await voerStatuswijzigingUit(b.dossierId, b.status)
+                setVerliesReden('')
+                setVerliesToelichting('')
+                if (!b) return
+                await voerStatuswijzigingUit(b.dossierId, b.status)
+                // Ná de statuswijziging: de DB-trigger moet de historierij eerst hebben
+                // geschreven, anders is er niets om de reden op aan te vullen.
+                if (reden) {
+                  await legVerliesRedenVastActie(b.dossierId, reden, toelichting || null)
+                }
               }}
             >
               Ja, afsluiten

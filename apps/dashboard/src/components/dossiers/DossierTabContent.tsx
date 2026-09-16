@@ -13,6 +13,7 @@ import { getSjablonen, getUrgenteTakenVoorDossier } from '@/lib/taken/services/t
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import { InformatieTab } from './tabs/InformatieTab'
 import ActielijstenTab from './tabs/ActielijstenTab'
+import BewakingTab from '@/components/commercie/BewakingTab'
 import { AanvraagCalculatieTab } from '@/components/everts-calc/calculatie/AanvraagCalculatieTab'
 import { OpdrachtCalculatieTab } from '@/components/everts-calc/calculatie/OpdrachtCalculatieTab'
 import { getQuotesVoorDossier } from '@/lib/everts-calc/services/quotes'
@@ -36,6 +37,7 @@ import { SECTIE_ROUTE } from './open-dossier'
 import type { DossierSectie, DossierRij } from './types'
 
 const TAB_LABELS: Record<string, string> = {
+  bewaking:      'Bewaking',
   bestanden:     'Bestanden',
   calculatie:    'Calculatie',
   werkbegroting: 'Werkbegroting',
@@ -224,6 +226,19 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
       <>
         {titleInjector}
         <ActielijstenTab dossier_id={id} dossier_titel={dossier?.titel} />
+      </>
+    )
+  }
+
+  // Commerciële opvolging: alleen in de offertefase. Op een aanvraag is er nog niets uit, en
+  // op een opdracht is de kans al gewonnen — daar valt niets meer te bewaken.
+  if (tab === 'bewaking' && sectie === 'offerte') {
+    return (
+      <>
+        {titleInjector}
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <BewakingTab id={id} dossier={dossier} />
+        </Suspense>
       </>
     )
   }

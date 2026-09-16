@@ -223,6 +223,69 @@ async function getLijstVerrijking(ids: string[]): Promise<Map<string, LijstVerri
 }
 
 /**
+ * Offertebewaking per dossier, voor de kleurstip en de "volgende stap"-regel op de kaart.
+ *
+ * Bewust náást `dossier_lijst_verrijking` en niet erin: die view voedt álle borden, terwijl
+ * bewaking alleen voor de offertefase bestaat. Een join erbij zou elk bord duurder maken voor
+ * iets wat drie van de vier niet tonen.
+ */
+type BewakingVerrijking = {
+  bewaking_stap_soort: 'actie' | 'wachten' | null
+  bewaking_stap_tekst: string | null
+  bewaking_stap_datum: string | null
+  bewaking_wacht_op: 'klant' | 'intern' | 'extern' | null
+  bewaking_actiehouder: string | null
+  bewaking_actiehouder_id: string | null
+  bewaking_eigenaar_id: string | null
+  bewaking_actief: boolean
+}
+
+async function getBewakingVerrijking(ids: string[]): Promise<Map<string, BewakingVerrijking>> {
+  const uit = new Map<string, BewakingVerrijking>()
+  if (ids.length === 0) return uit
+
+  const supabase = createAdminClient()
+  const blokken: string[][] = []
+  for (let i = 0; i < ids.length; i += ID_BLOK) blokken.push(ids.slice(i, i + ID_BLOK))
+
+  const resultaten = await Promise.all(
+    blokken.map(blok => supabase
+      .from('commercie_bewaking')
+      .select('dossier_id,stap_soort,stap_tekst,stap_datum,wacht_op,actiehouder_id,eigenaar_id')
+      .in('dossier_id', blok)),
+  )
+
+  const rijen = resultaten.flatMap(({ data }) => data ?? [])
+  const houderIds = [...new Set(rijen.map(r => r.actiehouder_id).filter(Boolean))] as string[]
+  const namen = new Map<string, string>()
+  if (houderIds.length > 0) {
+    const { data: mensen } = await supabase
+      .from('medewerkers').select('id,voornaam,tussenvoegsel,achternaam').in('id', houderIds)
+    for (const m of mensen ?? []) {
+      namen.set(m.id, [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '))
+    }
+  }
+
+  for (const r of rijen) {
+    uit.set(r.dossier_id as string, {
+      // De check-constraints bewaken de waarden in de database, maar PostgREST geeft ze als
+      // `text` terug; hier versmallen we ze naar de unions die de kaart verwacht.
+      bewaking_stap_soort:  r.stap_soort === 'actie' || r.stap_soort === 'wachten' ? r.stap_soort : null,
+      bewaking_stap_tekst:  r.stap_tekst ?? null,
+      bewaking_stap_datum:  r.stap_datum ?? null,
+      bewaking_wacht_op:
+        r.wacht_op === 'klant' || r.wacht_op === 'intern' || r.wacht_op === 'extern' ? r.wacht_op : null,
+      bewaking_actiehouder: r.actiehouder_id ? namen.get(r.actiehouder_id) ?? null : null,
+      bewaking_actiehouder_id: r.actiehouder_id ?? null,
+      bewaking_eigenaar_id: r.eigenaar_id ?? null,
+      bewaking_actief:      true,
+    })
+  }
+
+  return uit
+}
+
+/**
  * Verrijkt rijen met de `intern`-vlag (Intern-toggle aan/uit), de taken-tellers, de notitie-
  * samenvatting en de EVA-eigen bedragen (calculatie-offerte, goedgekeurd meerwerk, stelposten,
  * opties). Dat laatste is nodig omdat `bedrag_excl_btw` alleen door de Bouw7-sync wordt
@@ -233,12 +296,15 @@ async function getLijstVerrijking(ids: string[]): Promise<Map<string, LijstVerri
  */
 async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
   const ids = rijen.map(r => r.id)
-  const [verrijking, bedragen] = await Promise.all([
+  // Bewaking alleen ophalen voor dossiers die in de offertefase staan — daar bestaat een kaart.
+  const offerteIds = rijen.filter(r => r.hoofdstatus === 'offerte').map(r => r.id)
+  const [verrijking, bedragen, bewaking] = await Promise.all([
     getLijstVerrijking(ids),
     // Best effort: zonder verrijking valt de kaart terug op het kale Bouw7-bedrag.
     laadKaartBedragen(rijen).catch(() => new Map()),
+    getBewakingVerrijking(offerteIds).catch(() => new Map<string, BewakingVerrijking>()),
   ])
-  if (verrijking.size === 0 && bedragen.size === 0) return rijen
+  if (verrijking.size === 0 && bedragen.size === 0 && bewaking.size === 0) return rijen
 
   return rijen.map(r => {
     const v = verrijking.get(r.id)
@@ -252,6 +318,7 @@ async function verrijkDossiers(rijen: DossierRij[]): Promise<DossierRij[]> {
       notitie_laatste_auteur: v?.notitie_laatste_auteur ?? null,
       notitie_laatste_op:     v?.notitie_laatste_op     ?? null,
       ...(bedragen.get(r.id) ?? {}),
+      ...(bewaking.get(r.id) ?? {}),
     }
   })
 }

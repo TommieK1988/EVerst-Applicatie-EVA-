@@ -5,6 +5,7 @@ import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import { OFFERTE_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersVoorOffertes, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
+import { getCurrentMedewerker } from '@/lib/auth/rechten'
 
 export const metadata: Metadata = { title: 'Offertes' }
 
@@ -19,10 +20,11 @@ export default async function OffertesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [result, layouts, lasteSyncIso] = await Promise.all([
+  const [result, layouts, lasteSyncIso, medewerker] = await Promise.all([
     getDossiersVoorOffertes(),
     user_id ? laadLayouts(user_id, 'dossiers-offerte') : Promise.resolve([]),
     getLastBouw7SyncTijd(),
+    getCurrentMedewerker(),
   ])
   const dossiers = result.ok ? result.data : []
 
@@ -37,6 +39,8 @@ export default async function OffertesPage() {
         layouts={layouts}
         user_id={user_id}
         toonSoortSlicer
+        toonBewaking
+        mijnMedewerkerId={medewerker?.id ?? null}
         extraActies={<BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="offerte" />}
       />
     </>

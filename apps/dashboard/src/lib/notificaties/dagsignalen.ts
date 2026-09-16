@@ -12,6 +12,7 @@ import {
   planningSleutel, planningVerschil, sorteerPlanning, type PlanRegel,
 } from '@/lib/notificaties/planning-verschil'
 import { bepaalTaakMelding } from '@/lib/notificaties/taak-signaal'
+import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import type { CronLogboek } from '@/lib/cron/logboek'
 
 /**
@@ -62,6 +63,7 @@ export type DagsignalenResultaat = {
   planningEersteKeer: number
   urenWeken: number
   urenFiatteren: number
+  offertebewaking: number
   fouten: string[]
 }
 
@@ -454,6 +456,94 @@ async function meldTeFiatteren(
   return verzonden
 }
 
+
+/* ── 5. Offertebewaking ───────────────────────────────────────────── */
+
+/**
+ * Eén melding per medewerker over de offertes waarvan hij actiehouder is en waarvan de
+ * afgesproken datum vandaag is of al voorbij.
+ *
+ * Bewust via `getDossiersVoorOffertes()` en niet via een eigen query op `commercie_bewaking`:
+ * dat is exact dezelfde databron als de werklijst op /offertes, inclusief dezelfde
+ * bedragberekening. Een tweede query zou vroeg of laat een ander bedrag opleveren dan het
+ * scherm, en dan is de melding erger dan geen melding.
+ *
+ * Wat hier NIET in zit: offertes die nog niet beoordeeld zijn. Die hebben per definitie geen
+ * actiehouder — er is niemand om te porren. Ze staan als tegel en als groep in de werklijst,
+ * waar het een teamafspraak is wie ze oppakt, geen persoonlijke achterstand.
+ */
+async function meldOffertebewaking(
+  medewerkers: Medewerker[],
+  vorige: Map<string, VorigSignaal>,
+): Promise<number> {
+  const { getDossiersVoorOffertes } = await import('@/lib/dossiers/actions')
+  const { bewakingsStatus } = await import('@/lib/commercie/types')
+
+  const res = await getDossiersVoorOffertes()
+  if (!res.ok) throw new Error(res.error)
+
+  const vandaag = vandaagLokaal()
+
+  type Emmer = { verlopen: number; vandaag: number; bedrag: number }
+  const perMedewerker = new Map<string, Emmer>()
+
+  for (const d of res.data) {
+    const houder = d.bewaking_actiehouder_id
+    if (!houder) continue
+
+    const status = bewakingsStatus(
+      {
+        stap_soort: d.bewaking_stap_soort ?? null,
+        stap_datum: d.bewaking_stap_datum ?? null,
+        wacht_op:   d.bewaking_wacht_op ?? null,
+      },
+      { vandaag, afgerond: d.hoofdstatus === 'opdracht' },
+    )
+    if (status !== 'verlopen' && status !== 'nu') continue
+
+    const emmer = perMedewerker.get(houder) ?? { verlopen: 0, vandaag: 0, bedrag: 0 }
+    if (status === 'verlopen') emmer.verlopen++
+    else emmer.vandaag++
+    emmer.bedrag += berekenKaartBedrag(d, 'offerte').totaalExclBtw ?? 0
+    perMedewerker.set(houder, emmer)
+  }
+
+  let verzonden = 0
+
+  for (const mw of medewerkers) {
+    const emmer = perMedewerker.get(mw.id)
+    const sleutel = emmer ? `${vandaag}|${emmer.verlopen}|${emmer.vandaag}` : `${vandaag}|stil`
+
+    // Niets te doen: stand wél onthouden, anders geldt dezelfde achterstand morgen als nieuw.
+    if (!emmer || (emmer.verlopen === 0 && emmer.vandaag === 0)) {
+      if (vorige.get(mw.id)) await onthoudSignaal(mw.id, 'offertebewaking', sleutel)
+      continue
+    }
+    if (vorige.get(mw.id)?.sleutel === sleutel) continue
+
+    const delen: string[] = []
+    if (emmer.verlopen > 0) delen.push(`${emmer.verlopen} verlopen`)
+    if (emmer.vandaag > 0) delen.push(`${emmer.vandaag} voor vandaag`)
+    const bedrag = emmer.bedrag > 0
+      ? ` · ${new Intl.NumberFormat('nl-NL', {
+          style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+        }).format(emmer.bedrag)}`
+      : ''
+
+    await maakNotificatie({
+      user_id: mw.auth_user_id,
+      type: 'offertebewaking',
+      titel: emmer.verlopen > 0 ? 'Offertebewaking: actie verlopen' : 'Offertebewaking vandaag',
+      body: `${delen.join(' · ')}${bedrag}`,
+      url: '/offertes',
+    })
+    await onthoudSignaal(mw.id, 'offertebewaking', sleutel)
+    verzonden++
+  }
+
+  return verzonden
+}
+
 /* ── De run ───────────────────────────────────────────────────────── */
 
 export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<DagsignalenResultaat> {
@@ -465,6 +555,7 @@ export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<Dags
     planningEersteKeer: 0,
     urenWeken: 0,
     urenFiatteren: 0,
+    offertebewaking: 0,
     fouten: [],
   }
 
@@ -494,6 +585,13 @@ export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<Dags
       if (run !== 'ochtend') return
       log.stap('uren ter fiattering')
       resultaat.urenFiatteren = await meldTeFiatteren(medewerkers, await haalVorigeSignalen('uren_fiatteren'), log)
+    }],
+    ['offertebewaking', async () => {
+      // Alleen 's ochtends: een offerte die vandaag nagebeld moet worden hoort in het lijstje
+      // waarmee je de dag begint, niet in een tweede melding halverwege de middag.
+      if (run !== 'ochtend') return
+      log.stap('offertebewaking')
+      resultaat.offertebewaking = await meldOffertebewaking(medewerkers, await haalVorigeSignalen('offertebewaking'))
     }],
   ]
 

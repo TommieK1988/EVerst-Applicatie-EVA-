@@ -689,6 +689,82 @@ export type Database = {
         }
         Relationships: []
       }
+      bouw7_offertes: {
+        Row: {
+          bouw7_project_id: string | null
+          bouw7_quotation_id: string
+          calculator_naam: string | null
+          created_at: string
+          datum: string | null
+          dossier_id: string | null
+          id: string
+          nummer: string | null
+          onderwerp: string | null
+          referentie: string | null
+          status: string | null
+          subtotaal_excl_btw: number | null
+          synced_op: string
+          totaal_incl_btw: number | null
+          updated_at: string
+        }
+        Insert: {
+          bouw7_project_id?: string | null
+          bouw7_quotation_id: string
+          calculator_naam?: string | null
+          created_at?: string
+          datum?: string | null
+          dossier_id?: string | null
+          id?: string
+          nummer?: string | null
+          onderwerp?: string | null
+          referentie?: string | null
+          status?: string | null
+          subtotaal_excl_btw?: number | null
+          synced_op?: string
+          totaal_incl_btw?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bouw7_project_id?: string | null
+          bouw7_quotation_id?: string
+          calculator_naam?: string | null
+          created_at?: string
+          datum?: string | null
+          dossier_id?: string | null
+          id?: string
+          nummer?: string | null
+          onderwerp?: string | null
+          referentie?: string | null
+          status?: string | null
+          subtotaal_excl_btw?: number | null
+          synced_op?: string
+          totaal_incl_btw?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       btw_tarieven: {
         Row: {
           actief: boolean
@@ -1112,6 +1188,164 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      commercie_bewaking: {
+        Row: {
+          actiehouder_id: string | null
+          created_at: string
+          dossier_id: string | null
+          eigenaar_id: string | null
+          getrieerd_door: string | null
+          getrieerd_op: string | null
+          id: string
+          kans_pct: number | null
+          soort: string
+          stap_datum: string | null
+          stap_soort: string | null
+          stap_tekst: string | null
+          titel: string | null
+          updated_at: string
+          verwachte_opdracht: string | null
+          wacht_op: string | null
+        }
+        Insert: {
+          actiehouder_id?: string | null
+          created_at?: string
+          dossier_id?: string | null
+          eigenaar_id?: string | null
+          getrieerd_door?: string | null
+          getrieerd_op?: string | null
+          id?: string
+          kans_pct?: number | null
+          soort?: string
+          stap_datum?: string | null
+          stap_soort?: string | null
+          stap_tekst?: string | null
+          titel?: string | null
+          updated_at?: string
+          verwachte_opdracht?: string | null
+          wacht_op?: string | null
+        }
+        Update: {
+          actiehouder_id?: string | null
+          created_at?: string
+          dossier_id?: string | null
+          eigenaar_id?: string | null
+          getrieerd_door?: string | null
+          getrieerd_op?: string | null
+          id?: string
+          kans_pct?: number | null
+          soort?: string
+          stap_datum?: string | null
+          stap_soort?: string | null
+          stap_tekst?: string | null
+          titel?: string | null
+          updated_at?: string
+          verwachte_opdracht?: string | null
+          wacht_op?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercie_bewaking_actiehouder_id_fkey"
+            columns: ["actiehouder_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_eigenaar_id_fkey"
+            columns: ["eigenaar_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_getrieerd_door_fkey"
+            columns: ["getrieerd_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercie_gebeurtenissen: {
+        Row: {
+          bewaking_id: string
+          created_at: string
+          door: string | null
+          id: string
+          naar_actiehouder_id: string | null
+          op: string
+          soort: string
+          tekst: string | null
+          uitkomst: string | null
+        }
+        Insert: {
+          bewaking_id: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          naar_actiehouder_id?: string | null
+          op?: string
+          soort: string
+          tekst?: string | null
+          uitkomst?: string | null
+        }
+        Update: {
+          bewaking_id?: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          naar_actiehouder_id?: string | null
+          op?: string
+          soort?: string
+          tekst?: string | null
+          uitkomst?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercie_gebeurtenissen_bewaking_id_fkey"
+            columns: ["bewaking_id"]
+            isOneToOne: false
+            referencedRelation: "commercie_bewaking"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_gebeurtenissen_door_fkey"
+            columns: ["door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_gebeurtenissen_naar_actiehouder_id_fkey"
+            columns: ["naar_actiehouder_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       compliance_allowances: {
         Row: {

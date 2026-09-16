@@ -12,6 +12,7 @@ import type {
   ManagementProject, ManagementAK, ManagementDoelstelling,
   FunnelData, CalculatorStat, MaandSnapshotSamenvatting,
 } from '@/lib/dashboard/aggregaties'
+import type { CommercieCijfers } from '@/lib/commercie/rapportage'
 import MaandcijfersModal from './MaandcijfersModal'
 
 type ManagementLayouts = {
@@ -28,6 +29,7 @@ export type ManagementData = {
   gereed: ManagementProject[]
   servicedesk: ManagementProject[]
   funnel: FunnelData
+  commercie: CommercieCijfers
   calculators: CalculatorStat[]
   snapshots: MaandSnapshotSamenvatting[]
   layouts: ManagementLayouts
@@ -47,6 +49,7 @@ type Props = {
   akData: ManagementAK[]
   doelstellingen: ManagementDoelstelling[]
   funnel: FunnelData
+  commercie: CommercieCijfers
   calculators: CalculatorStat[]
   snapshots: MaandSnapshotSamenvatting[]
   laatstGesynchroniseerd: string | null
@@ -56,7 +59,7 @@ type Props = {
 }
 
 export default function ManagementShell({
-  projecten, akData, doelstellingen, funnel, calculators, snapshots,
+  projecten, akData, doelstellingen, funnel, commercie, calculators, snapshots,
   laatstGesynchroniseerd, user_id, layouts, children,
 }: Props) {
   const pathname = usePathname()
@@ -69,8 +72,8 @@ export default function ManagementShell({
 
   const data = useMemo<ManagementData>(() => ({
     projecten, akData, doelstellingen, lopend, gereed, servicedesk,
-    funnel, calculators, snapshots, layouts, user_id,
-  }), [projecten, akData, doelstellingen, lopend, gereed, servicedesk, funnel, calculators, snapshots, layouts, user_id])
+    funnel, commercie, calculators, snapshots, layouts, user_id,
+  }), [projecten, akData, doelstellingen, lopend, gereed, servicedesk, funnel, commercie, calculators, snapshots, layouts, user_id])
 
   const opDashboard = pathname === '/management/dashboard'
   const opWerkvoorraad = pathname === '/management/werkvoorraad'

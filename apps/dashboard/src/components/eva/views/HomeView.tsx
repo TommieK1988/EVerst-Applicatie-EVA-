@@ -13,11 +13,12 @@ import { IconArrowRight } from '../Icons';
 import { EvaSearchField } from '../GlobalSearch';
 import {
   TasksWidget, WeatherWidget,
-  ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget,
+  ProjectsWidget, AgendaWidget, DossierWidget, NewsWidget, ServicedeskWidget, BewakingWidget,
 } from '../widgets';
 import type { AgendaWidgetItem } from '../widgets';
 import GoedkeurenWidget from '../widgets/GoedkeurenWidget';
 import type { GoedkeurenData } from '@/lib/goedkeuren/widget';
+import type { BewakingWidgetData } from '@/lib/commercie/actions';
 import type { TaakMetDetails } from '@/lib/taken/supabase/database.types';
 import type { DossierRij } from '@/components/dossiers/types';
 
@@ -80,18 +81,18 @@ function getWeekNumber(): number {
 
 /* ── Widget config ────────────────────────────────────────── */
 
-type WidgetId = 'tasks' | 'goedkeuren' | 'weather' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'news' | 'summary';
+type WidgetId = 'tasks' | 'goedkeuren' | 'weather' | 'projects' | 'agenda' | 'dossier' | 'servicedesk' | 'bewaking' | 'news' | 'summary';
 
 const DEFAULT_SPANS: Record<WidgetId, number> = {
   tasks: 5, goedkeuren: 4, weather: 4,
   projects: 4, dossier: 4, servicedesk: 4,
-  agenda: 4, news: 4, summary: 4,
+  agenda: 4, bewaking: 4, news: 4, summary: 4,
 };
 
 const DEFAULT_ORDER: WidgetId[] = [
   'tasks', 'goedkeuren', 'weather',
   'projects', 'dossier', 'servicedesk',
-  'agenda', 'news', 'summary',
+  'bewaking', 'agenda', 'news', 'summary',
 ];
 
 const MIN_COLS = 3; // 3/12 = 25% ≥ 20% minimum
@@ -290,6 +291,7 @@ export interface HomeViewProps {
   servicedesk: DossierRij[];
   agendaItems: AgendaWidgetItem[];
   goedkeuren: GoedkeurenData;
+  bewaking: BewakingWidgetData;
   /* Totalen achter de afgekapte lijsten hierboven; vallen terug op de lijstlengte. */
   aanvragenTotaal?: number;
   offertesTotaal?: number;
@@ -300,6 +302,7 @@ export interface HomeViewProps {
 
 export default function HomeView({
   displayName, taken, aanvragen, offertes, opdrachten, servicedesk, agendaItems, goedkeuren,
+  bewaking,
   aanvragenTotaal, offertesTotaal, opdrachtenTotaal, servicedeskTotaal, agendaTotaal,
 }: HomeViewProps) {
   const router = useRouter();
@@ -408,6 +411,7 @@ export default function HomeView({
       case 'agenda':   return <AgendaWidget items={agendaItems} totaal={agendaTotaal}/>;
       case 'dossier':  return <DossierWidget aanvragen={aanvragen} totaal={aanvragenN}/>;
       case 'servicedesk': return <ServicedeskWidget dossiers={servicedesk} totaal={servicedeskN}/>;
+      case 'bewaking': return <BewakingWidget data={bewaking}/>;
       case 'news':     return <NewsWidget/>;
       case 'summary':  return (
         <SummaryCard

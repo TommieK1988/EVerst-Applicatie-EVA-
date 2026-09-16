@@ -8,6 +8,8 @@ import {
   getKaartIndicatoren, heeftKaartDetail, IndicatorIcoon, TONE_KLEUREN,
   type KaartIndicator,
 } from './kaart-indicatoren'
+import { bewakingsStatus, stapOmschrijving, STATUS_PRESENTATIE } from '@/lib/commercie/types'
+import { vandaagNL } from '@/lib/wagenpark/periode'
 
 /** Hoe lang de muis moet blijven hangen voordat het detailpaneel uitschuift. */
 const OPEN_VERTRAGING_MS = 400
@@ -152,6 +154,35 @@ export const DossierKaart = React.memo(function DossierKaart({
     ? (dossier.verzonden_op ?? dossier.created_at)
     : dossier.created_at
 
+  // Offertebewaking. De status wordt hier afgeleid en niet gelezen: hij hangt van de dag af,
+  // dus opslaan zou hem elke nacht onwaar maken. Alleen op het offertebord — daar hoort hij.
+  const bewaking = React.useMemo(() => {
+    if (sectie !== 'offerte' || !dossier.bewaking_actief) return null
+    const status = bewakingsStatus(
+      {
+        stap_soort: dossier.bewaking_stap_soort ?? null,
+        stap_datum: dossier.bewaking_stap_datum ?? null,
+        wacht_op:   dossier.bewaking_wacht_op ?? null,
+      },
+      { vandaag: vandaagNL(), afgerond: dossier.hoofdstatus === 'opdracht' },
+    )
+    if (status === 'afgerond') return null
+    const regel = stapOmschrijving({
+      stap_soort: dossier.bewaking_stap_soort ?? null,
+      stap_tekst: dossier.bewaking_stap_tekst ?? null,
+      stap_datum: dossier.bewaking_stap_datum ?? null,
+      wacht_op:   dossier.bewaking_wacht_op ?? null,
+    })
+    return {
+      status,
+      pres: STATUS_PRESENTATIE[status],
+      regel: regel ?? 'Nog geen vervolgstap afgesproken',
+    }
+  }, [
+    sectie, dossier.hoofdstatus, dossier.bewaking_actief, dossier.bewaking_stap_soort,
+    dossier.bewaking_stap_tekst, dossier.bewaking_stap_datum, dossier.bewaking_wacht_op,
+  ])
+
   return (
     <div
       ref={kaartRef}
@@ -231,6 +262,31 @@ export const DossierKaart = React.memo(function DossierKaart({
         }}>
           {dossier.titel}
         </div>
+
+        {/* Offertebewaking: wat is er afgesproken en wie is aan zet. Deze twee regels zijn de
+            hele anti-dubbelwerk-maatregel — wie ziet dat een collega tot 28 augustus op de klant
+            wacht, belt niet zelf nog eens. */}
+        {bewaking && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span
+              title={bewaking.pres.uitleg}
+              style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 4,
+                background: bewaking.pres.cssKleur,
+              }}
+            />
+            <span style={{
+              fontSize: 11.5, lineHeight: 1.35,
+              color: bewaking.status === 'verlopen' ? 'var(--error-500)' : 'var(--neutral-600)',
+              fontWeight: bewaking.status === 'verlopen' ? 600 : 400,
+            }}>
+              {bewaking.regel}
+              {dossier.bewaking_actiehouder && (
+                <span style={{ color: 'var(--neutral-400)' }}> · {dossier.bewaking_actiehouder}</span>
+              )}
+            </span>
+          </div>
+        )}
 
         {/* Footer: persoons-badge + indicator-chips + datum */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 2 }}>

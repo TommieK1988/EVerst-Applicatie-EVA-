@@ -232,24 +232,47 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 
   // ── Hoofdproces: Offertes ─────────────────────────────────────────────
   [/^\/offertes$/, {
-    title: 'Offertes',
-    description: 'Kanbanbord met alle offertes gegroepeerd per status. Offertes ontstaan vanuit een aanvraag en doorlopen hun eigen traject van concept tot geaccepteerde opdracht.',
+    title: 'Offertes & bewaking',
+    description: 'Alle lopende offertes met daarbij de commerciële opvolging: wie is eigenaar, wie is nu aan zet, wat is de volgende stap en wanneer moet die plaatsvinden. Het bord laat zien waar een offerte commercieel staat; de werklijst laat zien wat vandaag aandacht vraagt.',
     sections: [
-      { title: 'Kanban-kolommen', body: 'De kolommen tonen: Concept, Verzonden, Bekeken, Geaccepteerd, Afgewezen, In onderhandeling en Verlopen. Sleep een kaart om de status te wijzigen. Verlopen offertes worden automatisch verplaatst na de geldigheidsdatum.' },
-      { title: 'Offerte aanmaken', body: 'Offertes worden aangemaakt vanuit de aanvraagpagina, niet direct hier. Navigeer naar de bijbehorende aanvraag en gebruik het tabblad Calculatie om een offerte te genereren.' },
-      { title: 'Opvolging', body: 'Offertes met status "Verzonden" langer dan 7 dagen zonder reactie worden gemarkeerd. Klik op de kaart om een herinnering te versturen of de geldigheidsdatum te verlengen.' },
-      { title: 'Versies', body: 'Elke offerte kan meerdere versies hebben. De geaccepteerde versie blijft juridisch bindend bewaard, ook als er later revisies zijn gemaakt.' },
+      { title: 'Drie weergaven', body: 'Rechtsboven wissel je tussen Bord, Lijst en Bewaking. Het Bord groepeert per fase en is het totaalbeeld. De Lijst is de tabel met alle kolommen, filters en export. Bewaking is je dagelijkse werklijst: gegroepeerd op urgentie in plaats van op dossier, met bovenaan wat verlopen is en wat vandaag moet. Je kolommen, sortering en filters worden per weergave onthouden.' },
+      { title: 'De werklijst lezen', body: 'De groepen staan op volgorde van urgentie: Verlopen, Vandaag, Nog niet beoordeeld, Deze week en Hercontrole nadert. Wie bovenaan begint en naar beneden werkt, laat niets liggen. Offertes die pas over weken spelen en uitgesteld werk staan er standaard niet in; zet "Ook wat later speelt" aan om ze erbij te halen. Met "Alleen van mij" beperk je de lijst tot de offertes waarvan jij eigenaar of actiehouder bent.' },
+      { title: 'De fase (de kolommen)', body: 'De kolommen zijn de commerciële fase: Verzonden, Nabellen, In behandeling, Mondelinge toezegging, Gewonnen, Verloren en Vervallen. Sleep een kaart om de fase te wijzigen. De fase is gekoppeld aan het veld "Offerte Sub-status" in Bouw7 en wordt in beide richtingen bijgewerkt: wijzig je hem in Bouw7, dan volgt EVA bij de eerstvolgende synchronisatie, en andersom. Staat er in Bouw7 inmiddels iets anders, dan vraagt EVA wie er wint in plaats van stilletjes te overschrijven.' },
+      { title: 'De volgende stap — het enige dat je bijhoudt', body: 'Elke lopende offerte heeft precies één volgende stap. Die heeft twee vormen. Actie: wij zijn aan zet — je legt vast wát er moet gebeuren, wie het doet en wanneer. Wachten: de bal ligt bij een ander — je legt vast waarop je wacht, bij wie (klant, collega of derde partij) en wanneer je opnieuw controleert. Alle kleuren en meldingen in EVA komen hieruit voort; meer hoef je niet in te vullen. Je stelt de stap in op het tabblad Bewaking van de offerte.' },
+      { title: 'Wat de kleuren betekenen', body: 'Grijs = nog niet beoordeeld: de offerte is verzonden maar er is nog geen eigenaar of volgende stap. Rood = actie verlopen: de afgesproken datum is voorbij. Blauw = vandaag aan de beurt. Groen = op schema, er staat iets klaar voor later. Oranje = wachten op de klant. Paars = wachten op een collega. Amber = wachten op een derde partij. Grijs/slapend = uitgesteld werk dat pas over langere tijd terugkomt.' },
+      { title: 'Na een klantcontact: één knop', body: 'Open de offerte, ga naar het tabblad Bewaking en klik op "Uitkomst vastleggen". Kies wat er gebeurd is: geen gehoor, klant komt erop terug, ligt bij de ALV, vraag voor een collega, aangepaste offerte nodig, waarschijnlijk opdracht, uitgesteld of verloren. EVA vult daarna zelf de fase, de volgende stap, de actiehouder en de datum in. Je hoeft alleen te bevestigen of een datum aan te passen.' },
+      { title: 'Dubbel nabellen voorkomen', body: 'Op elke kaart staat wat er is afgesproken, tot wanneer er gewacht wordt en wie er nu aan zet is. Staat er "Wachten op klant tot 28 augustus · Bas", dan weet je dat je die klant niet zelf hoeft te bellen. Dat is precies waarvoor deze regel op de kaart staat.' },
+      { title: 'Uitstel in plaats van verlies', body: 'Wordt werk een jaar uitgesteld — een VvE die opnieuw gaat aanbesteden — zet het dossier dan niet op Verloren. Leg op het tabblad Bewaking een hercontroledatum vast, ruim vóór de verwachte aanbesteding. De offerte verdwijnt dan uit je dagelijkse beeld en komt vanzelf terug zodra die datum nadert. Je hoeft er zelf niets voor te onthouden.' },
+      { title: 'Verloren: reden verplicht', body: 'Sleep je een offerte naar Verloren, dan vraagt EVA waarom. Dat kost vijf seconden en levert het overzicht op onder Management → Verkoop, waar je ziet waaróp je verliest: prijs, planning, budget of een bestaande relatie van de klant.' },
+      { title: 'Wat EVA automatisch doet', body: 'Een nieuwe offerte die in Bouw7 op Verstuurd komt verschijnt vanzelf op het bord als "nog niet beoordeeld". Een actie waarvan de datum verstrijkt wordt vanzelf rood. Een wachtende offerte komt vanzelf terug op de hercontroledatum, ook als die een jaar vooruit ligt. Fasewijzigingen worden automatisch gelogd, zodat je later kunt zien hoe lang een offerte in elke fase stond. En offertes vanaf € 20.000 zonder eigenaar of vervolgstap krijgen een uitroepteken achter het bedrag.' },
+      { title: 'Meldingen die je krijgt', body: 'Twee, meer niet. Je krijgt direct bericht wanneer iemand jóú als actiehouder aanwijst. En één keer per werkdag om 07:00 een samenvatting van wat er op jouw naam verlopen is of vandaag moet, met het bedrag dat daarmee gemoeid is. Bij elke losse wijziging een melding sturen werkt averechts, dus dat doen we bewust niet. Op je startpagina staat daarnaast de widget Offertebewaking met dezelfde lijst.' },
+      { title: 'Offerte aanmaken', body: 'Offertes ontstaan vanuit de aanvraag, niet hier. Ga naar de bijbehorende aanvraag en gebruik het tabblad Calculatie.' },
+      { title: 'Versies', body: 'Een calculatie en haar offerte vormen samen één versie. Reviseren maakt een nieuwe versie; de verzonden versie blijft bewaard zoals hij de deur uit ging.' },
+    ],
+  }],
+
+  // Vóór de generieke tab-entry hieronder: het array matcht op eerste treffer.
+  [/^\/offertes\/[^/]+\/bewaking$/, {
+    title: 'Bewaking',
+    description: 'De commerciële opvolging van dit dossier: eigenaar, huidige actiehouder, volgende stap en de volledige tijdlijn van wat er tot nu toe is gebeurd.',
+    sections: [
+      { title: 'De kaart', body: 'Bovenaan staat in één oogopslag het offertebedrag, de klant, de eigenaar, de bewakingsstatus, de volgende stap met datum en wie er nu aan zet is. Een collega moet hieraan genoeg hebben om te bepalen of hij zelf nog iets moet doen.' },
+      { title: 'Eigenaar en actiehouder', body: 'Twee verschillende rollen. De eigenaar blijft commercieel verantwoordelijk voor de kans en verandert zelden. De actiehouder voert de eerstvolgende stap uit en wisselt voortdurend. Belt een collega een offerte na voor jou, dan is zij actiehouder en blijf jij eigenaar — de kans komt dus niet op haar naam te staan. Wie je als actiehouder aanwijst krijgt daar meteen een melding van.' },
+      { title: 'Kans en verwachte opdracht', body: 'Twee optionele velden voor grotere trajecten. De kans (0–100%) en de maand waarin je de opdracht verwacht voeden samen de verwachte omzet onder Management → Verkoop. Laat ze leeg als je het niet weet: een gok die je niet kunt onderbouwen maakt de prognose slechter, niet beter.' },
+      { title: 'De tijdlijn', body: 'Alles op één rij, nieuwste bovenaan: klantcontacten met hun uitkomst, fasewijzigingen, overdrachten tussen collega\'s, notities en de offerte-herinneringen die uit Bouw7 binnenkomen. Zo hoef je nooit te reconstrueren wat er speelde.' },
+      { title: 'Offertes in Bouw7', body: 'Onder één project kunnen meerdere offertes hangen. Staan die er, dan zie je ze hier allemaal met nummer, onderwerp, datum, status en bedrag, zodat duidelijk is welke offerte je precies bewaakt. Deze lijst komt rechtstreeks uit Bouw7 en wordt bij elke synchronisatie bijgewerkt.' },
+      { title: 'Kort en feitelijk', body: 'Dit is geen gespreksdagboek. Leg vast wat er gezegd is en wat dat betekent voor de offerte. Vuistregel: een notitie die niets verandert aan de fase, de actie of de timing voegt hier weinig toe.' },
     ],
   }],
 
   [/^\/offertes\/[^/]+\/[^/]+$/, {
     title: 'Offerte — detail',
-    description: 'Detailpagina van een offerte met alle posten, versiegeschiedenis en communicatie met de klant. Hier beheer je de volledige levenscyclus van een offerte.',
+    description: 'Het dossier van een uitgebrachte offerte. Links kies je een tabblad: Informatie, Bewaking, Bestanden, Calculatie, Uitvraag en Acties.',
     sections: [
-      { title: 'Tabblad Informatie', body: 'Overzicht van klant, locatie, totaalbedrag, geldigheidsdatum en huidige status. Klik op "Offerte PDF" om een preview of download te genereren voor de klant.' },
-      { title: 'Tabblad Meerwerk', body: 'Voeg meer- of minderwerk toe dat na de originele offerte is overeengekomen. Voor bedragen boven de drempel (€500 of 10% contractsom) is schriftelijk klantakkoord verplicht voordat je de post op "Geaccepteerd" zet.' },
-      { title: 'Tabblad Bestanden', body: 'Alle bijlagen bij de offerte: tekeningen, foto\'s, correspondentie. Bestanden die je hier uploadt zijn beschikbaar in het klantportaal (indien actief).' },
-      { title: 'Acceptatie verwerken', body: 'Na akkoord van de klant klik je op "Offerte accepteren". Vul de acceptatiemethode (digitaal/telefonisch/schriftelijk), datum en naam van de tekenbevoegde in. De offerte wordt automatisch omgezet naar een opdracht.' },
+      { title: 'Tabblad Informatie', body: 'Klant, werkadres, bedragen, rollen en de procesdatums van dit dossier. Ook het blok Notities staat hier.' },
+      { title: 'Tabblad Bewaking', body: 'De commerciële opvolging: wie is eigenaar, wie is nu aan zet, wat is de volgende stap en wanneer. Hier leg je na een klantcontact de uitkomst vast.' },
+      { title: 'Tabblad Calculatie', body: 'De calculaties en offertes bij dit dossier, met hun versies. Van hieruit maak je een revisie of een nieuwe offerteversie.' },
+      { title: 'Opdracht geworden', body: 'Zet je de fase op Gewonnen, dan wordt het dossier automatisch een opdracht en verhuist het naar Opdrachten. De offerteversie waarop dat akkoord is gegeven blijft bewaard.' },
     ],
   }],
 
@@ -1304,6 +1327,11 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     sections: [
       { title: 'Pijplijn & dit jaar', body: 'Bovenaan zie je de huidige pijplijn (open aanvragen, open offertes, gewonnen) en de jaarcijfers: instroom, verstuurde offertes, gemiddelde offertewaarde en doorlooptijd. De trendgrafiek zet instroom af tegen verstuurde offertes per maand.' },
       { title: 'Conversie & verliesredenen', body: 'De conversietabellen tonen per werkmaatschappij en categorie het aantal offertes, gewonnen, verloren, win-rate en waarde. De tabel Verliesredenen laat zien waarom offertes zijn afgewezen.' },
+      { title: 'Verwachte omzet', body: 'De kans-gewogen pijplijn telt elke open offerte mee naar rato van het kanspercentage dat op de bewakingstab is ingevuld, verdeeld over de maand waarin de opdracht wordt verwacht. Offertes zonder kanspercentage tellen voor niets mee — dit bedrag is dus altijd een ondergrens, en de tegel "Zonder kanspercentage" laat zien hoe groot dat gat is.' },
+      { title: 'Tijd per fase', body: 'Hoe lang een offerte gemiddeld in elke fase staat, berekend uit de fasehistorie die EVA automatisch bijhoudt. Alleen afgeronde verblijven tellen mee: de fase waar een offerte nú in zit is nog niet klaar. Loopt Nabellen op, dan blijven offertes te lang liggen ná verzending; loopt In behandeling op, dan wachten klanten te lang op antwoord van ons. Kijk bij weinig metingen naar de mediaan, niet naar het gemiddelde.' },
+      { title: 'Conversie per eigenaar', body: 'Per commercieel eigenaar het aantal trajecten, gewonnen, verloren en de win-rate. Die win-rate rekent alleen over besliste trajecten — een offerte die nog loopt is nog geen uitkomst en drukt het percentage dus niet. Daarnaast zie je wat er bij die eigenaar nog openstaat, ongewogen en kans-gewogen.' },
+      { title: 'Offertes zonder beweging', body: 'Open offertes waar al veertien dagen of langer geen klantcontact, fasewissel of nieuwe afspraak op is geweest. Dit is de lijst waar kansen stilletjes doodbloeden. Klik een regel om direct naar de bewaking van dat dossier te gaan.' },
+      { title: 'Welk bedrag je ziet', body: 'Dit scherm rekent met het offertebedrag uit Bouw7. De werklijst op Offertes telt daar goedgekeurd meerwerk, stelposten en gekozen opties bij op en kan daardoor hoger uitkomen. Binnen één scherm tellen de getallen dus op; tussen de twee schermen kunnen ze verschillen.' },
       { title: 'Let op de databasis', body: 'De win-rate is nog indicatief: de volledige trechter is pas recent in EVA vastgelegd. Oudere verloren offertes en opdrachten van vóór die registratie kunnen ontbreken; de cijfers worden nauwkeuriger naarmate meer trajecten volledig zijn vastgelegd.' },
     ],
   }],

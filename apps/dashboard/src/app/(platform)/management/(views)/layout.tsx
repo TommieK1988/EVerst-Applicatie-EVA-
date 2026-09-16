@@ -7,6 +7,7 @@ import {
   getManagementDoelstellingen,
   getManagementLaatsteSync,
   getFunnelData,
+  getCommercieCijfers,
   getCalculatorStats,
   getMaandSnapshots,
 } from '@/lib/dashboard/queries'
@@ -30,7 +31,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
 
   const [
     projecten, akData, doelstellingen, laatstGesynchroniseerd,
-    funnel, calculators, snapshots,
+    funnel, commercie, calculators, snapshots,
     lopend, gereed, servicedesk,
   ] = await Promise.all([
     getManagementProjecten(),
@@ -38,6 +39,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
     getManagementDoelstellingen(),
     getManagementLaatsteSync(),
     getFunnelData(),
+    getCommercieCijfers(),
     getCalculatorStats(),
     getMaandSnapshots(),
     user_id ? laadLayouts(user_id, 'management-lopend') : [],
@@ -52,6 +54,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
         akData={akData}
         doelstellingen={doelstellingen}
         funnel={funnel}
+        commercie={commercie}
         calculators={calculators}
         snapshots={snapshots}
         laatstGesynchroniseerd={laatstGesynchroniseerd}

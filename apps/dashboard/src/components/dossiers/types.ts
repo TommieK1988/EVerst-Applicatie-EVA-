@@ -67,6 +67,21 @@ export type DossierRij = Dossier & {
   stelposten_apart_excl_btw?: number
   /** Gekozen opties — extra omzet. */
   gekozen_opties_excl_btw?: number
+  /* ── Offertebewaking (zie lib/commercie) ───────────────────────────────────
+     Alleen gevuld voor dossiers in de offertefase die een bewakingskaart hebben. De kleur op
+     de kaart wordt niet opgeslagen maar afgeleid met `bewakingsStatus()` uit lib/commercie. */
+  bewaking_stap_soort?: 'actie' | 'wachten' | null
+  bewaking_stap_tekst?: string | null
+  bewaking_stap_datum?: string | null
+  bewaking_wacht_op?: 'klant' | 'intern' | 'extern' | null
+  /** Naam van wie nu aan zet is — voorkomt dat twee collega's dezelfde klant nabellen. */
+  bewaking_actiehouder?: string | null
+  /** Id van de actiehouder; draagt het "alleen van mij"-filter op de werklijst. */
+  bewaking_actiehouder_id?: string | null
+  /** Id van de commercieel eigenaar. */
+  bewaking_eigenaar_id?: string | null
+  /** True zodra er een bewakingskaart bestaat; onderscheidt "niets afgesproken" van "geen kaart". */
+  bewaking_actief?: boolean
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
   intern: boolean
 }

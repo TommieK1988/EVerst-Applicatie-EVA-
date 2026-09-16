@@ -1,7 +1,7 @@
 {
   "budget": {
     "as_any": 762,
-    "ongegate_service_role_actions": 513,
+    "ongegate_service_role_actions": 514,
     "bestanden_boven_800_regels": 33
   },
   "per_bestand": {
@@ -333,7 +333,7 @@
       "apps/dashboard/src/lib/bouw7/property-assets.ts": 2,
       "apps/dashboard/src/lib/bouw7/sync-inkoopfacturen.ts": 2,
       "apps/dashboard/src/lib/bouw7/sync-planning.ts": 4,
-      "apps/dashboard/src/lib/bouw7/sync.ts": 12,
+      "apps/dashboard/src/lib/bouw7/sync.ts": 13,
       "apps/dashboard/src/lib/debiteuren/actions.ts": 11,
       "apps/dashboard/src/lib/dossiers/actions.ts": 61,
       "apps/dashboard/src/lib/dossiers/bestanden.ts": 3,

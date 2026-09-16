@@ -13,7 +13,8 @@ import { createAdminClient } from '@everts/database/server'
  * Zie `supabase/migrations/20260914d_melding_signalen.sql`.
  */
 
-export type SignaalSoort = 'taak_deadline' | 'planning' | 'uren_week' | 'uren_fiatteren'
+export type SignaalSoort =
+  | 'taak_deadline' | 'planning' | 'uren_week' | 'uren_fiatteren' | 'offertebewaking'
 
 export type VorigSignaal = {
   sleutel: string

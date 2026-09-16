@@ -213,6 +213,17 @@ const AANVRAAG_TABS: DossierTab[] = [
   { slug: 'taken',      label: 'Acties',     d:'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
 ]
 
+/**
+ * Offertes = de aanvraagtabs plus Bewaking. Bewust een eigen array en geen gedeelde tab met
+ * de aanvraag: commerciële opvolging begint pas als er een offerte de deur uit is. Op een
+ * aanvraag zou de tab alleen maar leeg staan.
+ */
+const OFFERTE_TABS: DossierTab[] = [
+  AANVRAAG_TABS[0], // Informatie
+  { slug: 'bewaking', label: 'Bewaking', d: 'M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9' },
+  ...AANVRAAG_TABS.slice(1),
+]
+
 const OPDRACHT_TABS: DossierTab[] = [
   { groep: 'Dossier', slug: 'informatie',    label: 'Informatie',    d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { groep: 'Dossier', slug: 'bestanden',     label: 'Bestanden',     d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
@@ -320,6 +331,7 @@ export default function Sidebar({
   const dossierTabs   =
     dossierSectie === 'opdrachten'  ? OPDRACHT_TABS :
     dossierSectie === 'servicedesk' ? SERVICEDESK_TABS :
+    dossierSectie === 'offertes'    ? OFFERTE_TABS :
     AANVRAAG_TABS
 
   // Aan-staande toggle-sleutels voor het huidige dossier; stuurt de zichtbaarheid
