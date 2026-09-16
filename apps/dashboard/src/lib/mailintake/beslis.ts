@@ -40,6 +40,8 @@ export interface BeslisInvoer {
   duplicaatTopscore: number
   /** Is er een dossier in de offertefase gevonden dat hierbij hoort? */
   offerteMatchGevonden: boolean
+  /** De opdracht wordt op nacalculatie afgerekend; er hoort geen offerte bij. */
+  regie: boolean
   /**
    * Eén enkele offertetreffer die zó sterk is dat er niets te kiezen valt: ons
    * nummer staat letterlijk in de mail, het is dezelfde conversatie, of dezelfde
@@ -118,7 +120,7 @@ export function beslis(inv: BeslisInvoer): Besluit {
         : `EVA denkt aan "${inv.soort}", maar niet zeker genoeg om zelf te handelen.`)
   }
 
-  const route = bepaalRoute(inv.soort, inv.offerteMatchGevonden)
+  const route = bepaalRoute(inv.soort, inv.offerteMatchGevonden, inv.regie)
 
   // Meerwerk raakt een lopende opdracht en kent geen eigen route: altijd een mens.
   if (route === 'geen') {

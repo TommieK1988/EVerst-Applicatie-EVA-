@@ -26,7 +26,7 @@ import { zoekAdres, eersteHuisnummer } from '@/lib/adres/pdok'
 
 import { LEVER_EXTRACTIE_TOOL, PROMPT_VERSIE, veiligParse, type Extractie } from './schema'
 import {
-  kiesWerkmaatschappij, noemtMandaat, datumPlusDagen, SERVICEDESK_CATEGORIEEN,
+  kiesWerkmaatschappij, noemtMandaat, noemtRegie, datumPlusDagen, SERVICEDESK_CATEGORIEEN,
 } from './regels'
 import { SYSTEM_PROMPT, bouwTekstBlok, type PromptContext } from './prompt'
 import { VELD_BETROUWBAAR } from './types'
@@ -251,6 +251,11 @@ export interface GekeurdeVelden {
   opdrachtdatum: string | null
   opdrachtReferentie: string | null
   mandaatBedrag: number | null
+  /** Afrekenen op nacalculatie: geen aanneemsom, geen offerte. */
+  regie: boolean
+  regieAanwijzing: string | null
+  /** Een afwijkend factuuradres uit de opdracht; nog niet vastgelegd. */
+  factuuradres: { naam: string | null; straat: string | null; postcode: string | null; plaats: string | null } | null
   klantOpmerkingen: string | null
   bedragExclBtw: number | null
   spoed: boolean
@@ -361,6 +366,11 @@ export async function keurEnKalibreer(
   let cat = lijsten.categorieen.find(c => c.naam.toLowerCase() === catNaam)
     ?? lijsten.categorieen.find(c => catNaam.length >= 4 && c.naam.toLowerCase().includes(catNaam))
 
+  // Regie alleen overnemen als het er ook staat. Een opdracht ten onrechte als regie
+  // wegzetten betekent een dossier zonder aanneemsom, en dat valt pas bij de
+  // facturatie op.
+  const regie = Boolean(data.regie) && noemtRegie(brontekst)
+
   // Op de servicedesk-postbus is de categorie geen vrije keuze. Een servicedeskdossier
   // wordt herkend aan exact 'Dagelijks onderhoud' of 'Mutatie'; kiest het model iets
   // anders, dan verdwijnt de bon van het servicedeskbord zonder dat iemand dat merkt.
@@ -371,6 +381,13 @@ export async function keurEnKalibreer(
         ?? toegestaan.find(c => c.naam === 'Dagelijks onderhoud')
         ?? toegestaan[0]
     }
+  }
+  // Regiewerk is geen servicedeskwerk. Kiest het model toch 'Dagelijks onderhoud' of
+  // 'Mutatie' bij een regie-opdracht, dan zou het dossier op het servicedeskbord
+  // belanden terwijl het daar niet hoort.
+  if (regie && cat && SERVICEDESK_CATEGORIEEN.includes(cat.naam)) {
+    cat = lijsten.categorieen.find(c => c.naam === 'Bouwkundig Onderhoud')
+      ?? lijsten.categorieen.find(c => !SERVICEDESK_CATEGORIEEN.includes(c.naam))
   }
   zet('categorie_voorstel', cat?.naam ?? null, cat ? 1 : 0)
 
@@ -427,6 +444,9 @@ export async function keurEnKalibreer(
       ? data.mandaat_bedrag
       : null
   zet('mandaat_bedrag', mandaat, mandaat != null ? modelScore('mandaat_bedrag') : 0)
+  zet('regie', regie || null, regie ? 1 : 0)
+  zet('factuuradres_straat', data.factuuradres_straat,
+    komtLetterlijkVoor(data.factuuradres_straat, brontekst) ? 1 : 0.4)
 
   const bedrag = data.bedrag_excl_btw != null && data.bedrag_excl_btw >= 0 && data.bedrag_excl_btw < 10_000_000
     ? data.bedrag_excl_btw
@@ -459,6 +479,17 @@ export async function keurEnKalibreer(
     opdrachtdatum,
     opdrachtReferentie,
     mandaatBedrag: mandaat,
+    regie,
+    regieAanwijzing: regie ? data.regie_aanwijzing : null,
+    // Alleen aanbieden als er een adres in staat; een losse naam zegt niets.
+    factuuradres: (data.factuuradres_straat || data.factuuradres_postcode)
+      ? {
+          naam: data.factuuradres_naam,
+          straat: data.factuuradres_straat,
+          postcode: data.factuuradres_postcode,
+          plaats: data.factuuradres_plaats,
+        }
+      : null,
     klantOpmerkingen: data.klant_opmerkingen,
     bedragExclBtw: bedrag,
     spoed: Boolean(data.spoed),

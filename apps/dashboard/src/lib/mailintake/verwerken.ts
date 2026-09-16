@@ -351,6 +351,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       duplicaatTopscore: topscore,
       offerteMatchGevonden,
       offerteMatchHard,
+      regie: velden.regie,
       isAntwoord: Boolean(geclaimd.is_antwoord),
       meerdereWerkadressen: velden.meerdereWerkadressen,
       ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.length > 0,

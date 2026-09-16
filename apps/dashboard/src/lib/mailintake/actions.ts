@@ -167,6 +167,46 @@ export async function bevestigOpdrachtOpDossier(
   return res
 }
 
+/**
+ * De lopende offertes van deze opdrachtgever.
+ *
+ * Nodig omdat de duplicaatzoeker hier niet voor bedoeld is. Die scoort op sterke
+ * signalen -- zelfde conversatie, zelfde bijlage, ons nummer in de tekst -- en geeft
+ * een kandidaat zonder zo'n signaal nul punten, waarna hij helemaal afvalt. Voor
+ * "bij welke offerte hoort deze opdracht?" is de juiste verzameling gewoon: alle
+ * offertes van deze klant. De score bepaalt hooguit de volgorde.
+ *
+ * Dat verschil kostte de eerste echte opdrachtbon: het bijbehorende dossier stond
+ * keurig op verzonden, maar had geen postcode en geen huisnummer, dus er viel niets
+ * te scoren en het werd weggegooid.
+ */
+export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
+  { dossierId: string; dossiernummer: string | null; titel: string | null; substatus: string | null; aangemaakt: string }[]
+> {
+  await vereisRecht('mailintake', 'lezen')
+  const supabase = createAdminClient()
+
+  const vanaf = new Date()
+  vanaf.setMonth(vanaf.getMonth() - 18)
+
+  const { data } = await supabase
+    .from('dossiers')
+    .select('id, dossiernummer, titel, offerte_substatus, created_at')
+    .eq('klant_id', relatieId)
+    .eq('hoofdstatus', 'offerte')
+    .gte('created_at', vanaf.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  return (data ?? []).map(d => ({
+    dossierId: d.id,
+    dossiernummer: d.dossiernummer ?? null,
+    titel: d.titel ?? null,
+    substatus: d.offerte_substatus ?? null,
+    aangemaakt: d.created_at,
+  }))
+}
+
 /** Kan deze offerte gewonnen worden? Voor de knop in het behandelscherm. */
 export async function toetsOfferteVoorOpdracht(dossierId: string): Promise<
   { ok: true; dossiernummer: string | null; titel: string | null } | { ok: false; error: string }

@@ -204,13 +204,23 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // opgesteld als de behandelaar hem niet heeft aangepast.
   await zetWerkzaamhedenOpDossier(dossierId, inv.berichtId, inv.gevraagdeWerkzaamheden ?? null).catch(() => {})
 
-  // Het mandaat hoort bij een servicedeskbon en kan niet mee in maakAanvraag --
-  // dat veld kent de aanvraagmodal niet. Zonder deze stap zou het bedrag uit de bon
-  // wel gelezen zijn en nergens terechtkomen.
-  if (v.mandaatBedrag != null) {
+  // Mandaat en facturatiemethode kunnen niet mee in maakAanvraag -- die velden kent
+  // de aanvraagmodal niet. Zonder deze stap zou het bedrag uit de bon wel gelezen
+  // zijn en nergens terechtkomen.
+  if (v.mandaatBedrag != null || v.regie) {
     const { updateServicedeskInstellingen } = await import('@/lib/dossiers/servicedesk')
-    await updateServicedeskInstellingen(dossierId, { mandaat_bedrag: v.mandaatBedrag })
-      .catch(() => undefined)
+    await updateServicedeskInstellingen(dossierId, {
+      ...(v.mandaatBedrag != null ? { mandaat_bedrag: v.mandaatBedrag } : {}),
+      // Regie betekent: afrekenen op nacalculatie, dus geen aanneemsom vooraf.
+      ...(v.regie ? { facturatiemethode: 'regie' as const } : {}),
+    }).catch(() => undefined)
+  }
+
+  // Een afwijkend factuuradres uit de opdracht vastleggen bij de opdrachtgever, en
+  // aan het dossier hangen. De opdrachtgever zelf verandert niet -- dit gaat alleen
+  // over waar de factuur heen gaat.
+  if (v.factuuradres?.straat) {
+    await zetFactuuradres(dossierId, inv.relatieId, v.factuuradres).catch(() => undefined)
   }
 
   // Herkomst vastleggen. Dit is wat de nacontroles later leesbaar maakt:
@@ -334,6 +344,50 @@ export async function onthoudAlias(opts: {
 }
 
 // ─── Meldingen bij een automatisch dossier ───────────────────────────────────
+
+/**
+ * Legt een factuuradres vast bij de opdrachtgever en koppelt het aan het dossier.
+ *
+ * Bestaat er al een adres met dezelfde straat, dan wordt dat hergebruikt; anders zou
+ * elke bon van dezelfde VvE een nieuw adres opleveren.
+ */
+async function zetFactuuradres(
+  dossierId: string,
+  relatieId: string,
+  adres: { naam: string | null; straat: string | null; postcode: string | null; plaats: string | null },
+): Promise<void> {
+  const supabase = createAdminClient()
+  const straat = (adres.straat ?? '').trim()
+  if (!straat) return
+
+  const label = (adres.naam ?? '').trim() || 'Factuuradres uit de opdracht'
+
+  const { data: bestaand } = await supabase
+    .from('relatie_factuuradressen')
+    .select('id')
+    .eq('relatie_id', relatieId)
+    .ilike('straat', straat)
+    .limit(1)
+    .maybeSingle()
+
+  let id = bestaand?.id ?? null
+  if (!id) {
+    const { data } = await supabase
+      .from('relatie_factuuradressen')
+      .insert({
+        relatie_id: relatieId,
+        label: label.slice(0, 120),
+        straat,
+        postcode: (adres.postcode ?? '').trim() || null,
+        plaats: (adres.plaats ?? '').trim() || null,
+      })
+      .select('id')
+      .single()
+    id = data?.id ?? null
+  }
+
+  if (id) await supabase.from('dossiers').update({ factuuradres_id: id }).eq('id', dossierId)
+}
 
 async function zetControletaak(
   dossierId: string,

@@ -30,6 +30,7 @@ import {
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import MailPaneel from './panelen/MailPaneel'
+import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
@@ -130,6 +131,9 @@ export default function BerichtBehandelen({
   const [stad, setStad] = useState(velden.werkadres_stad ?? '')
   const [adresBevestigd, setAdresBevestigd] = useState(false)
 
+  const [regie, setRegie] = useState<boolean>(Boolean(velden.regie))
+  const [factuuradresOvernemen, setFactuuradresOvernemen] = useState(true)
+
   const [mandaat, setMandaat] = useState<string>(
     velden.mandaat_bedrag != null ? String(velden.mandaat_bedrag) : '',
   )
@@ -206,6 +210,17 @@ export default function BerichtBehandelen({
   const route = bepaalRoute(b.soort, offerteKandidaten.length > 0)
   const isServicedesk = b.soort === 'servicedeskbon'
 
+  // Het factuuradres uit de opdracht. Alleen aanbieden als er ook een adres bij staat;
+  // een losse naam zegt niets over waar de factuur heen moet.
+  const factuuradresVoorstel = (velden.factuuradres_straat || velden.factuuradres_postcode)
+    ? {
+        naam: velden.factuuradres_naam ?? null,
+        straat: velden.factuuradres_straat ?? null,
+        postcode: velden.factuuradres_postcode ?? null,
+        plaats: velden.factuuradres_plaats ?? null,
+      }
+    : null
+
   const compleet = Boolean(klantId && omschrijving.trim() && werkmaatschappijId && categorieId && straat && huisnummer && postcode && stad)
   const topDuplicaat = detail.duplicaten[0]
   const heeftDuplicaatWaarschuwing = (topDuplicaat?.score ?? 0) >= DUPLICAAT_TWIJFEL
@@ -261,6 +276,9 @@ export default function BerichtBehandelen({
         opdrachtdatum: velden.opdrachtdatum ?? null,
         opdrachtReferentie: velden.opdracht_referentie ?? null,
         mandaatBedrag: mandaat.trim() ? Number(mandaat.replace(',', '.')) : null,
+        regie,
+        regieAanwijzing: velden.regie_aanwijzing ?? null,
+        factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
         klantOpmerkingen: velden.klant_opmerkingen ?? null,
         bedragExclBtw: velden.bedrag_excl_btw ?? null,
         spoed: Boolean(velden.spoed),
@@ -650,14 +668,48 @@ export default function BerichtBehandelen({
             <textarea style={{ ...veldStijl, minHeight: 60 }} value={opmerkingen} onChange={e => setOpmerkingen(e.target.value)} disabled={!bewerkbaar} />
           </Veld>
 
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+            <input
+              type="checkbox" checked={regie} disabled={!bewerkbaar}
+              onChange={e => setRegie(e.target.checked)} style={{ marginTop: 3 }}
+            />
+            <span>
+              Regie — afrekenen op nacalculatie, geen aanneemsom
+              {velden.regie_aanwijzing && (
+                <span style={{ ...klein, display: 'block' }}>
+                  Uit de opdracht: “{velden.regie_aanwijzing}”
+                </span>
+              )}
+              {!velden.regie && (
+                <span style={{ ...klein, display: 'block' }}>
+                  EVA vond hier geen aanwijzing voor; zet het zelf aan als het toch regiewerk is.
+                </span>
+              )}
+            </span>
+          </label>
+
+          {factuuradresVoorstel && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+              <input
+                type="checkbox" checked={factuuradresOvernemen} disabled={!bewerkbaar}
+                onChange={e => setFactuuradresOvernemen(e.target.checked)} style={{ marginTop: 3 }}
+              />
+              <span>
+                Factuuradres uit de opdracht vastleggen bij deze opdrachtgever
+                <span style={{ ...klein, display: 'block' }}>
+                  {[factuuradresVoorstel.naam, factuuradresVoorstel.straat,
+                    [factuuradresVoorstel.postcode, factuuradresVoorstel.plaats].filter(Boolean).join(' ')]
+                    .filter(Boolean).join(' · ')}
+                </span>
+              </span>
+            </label>
+          )}
+
           {bewerkbaar && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
               <Button onClick={aanmaken} disabled={!compleet || bezig}>
                 {bezig ? 'Bezig…' : 'Dossier aanmaken'}
               </Button>
-              <Button variant="outline" onClick={geenAanvraag} disabled={bezig}>Geen aanvraag</Button>
-              <Button variant="outline" onClick={negeren} disabled={bezig}>Negeren</Button>
-              <Button variant="ghost" onClick={opnieuwLezen} disabled={bezig}>Opnieuw laten lezen</Button>
             </div>
           )}
           {bewerkbaar && !compleet && (
@@ -666,131 +718,29 @@ export default function BerichtBehandelen({
         </Card>
         )}
 
+        {/* Wegleggen kan altijd, welke route dit bericht ook heeft. Stonden eerst in
+            het aanvraagformulier, waardoor ze op de opdrachtroute verdwenen -- en dan
+            kun je een mail die geen aanvraag blijkt nergens meer wegzetten. */}
+        {bewerkbaar && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: -4 }}>
+            <Button variant="outline" onClick={geenAanvraag} disabled={bezig}>Geen aanvraag</Button>
+            <Button variant="outline" onClick={negeren} disabled={bezig}>Negeren</Button>
+            <Button variant="ghost" onClick={opnieuwLezen} disabled={bezig}>Opnieuw laten lezen</Button>
+          </div>
+        )}
+
         {/* ── Rechts: waarop berust dit ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Card style={{ padding: 14 }}>
-            <div style={kop}>Beoordeling</div>
-            <div style={{ fontSize: 13, marginBottom: 6 }}>
-              {b.soort ? MAIL_SOORT_LABELS[b.soort as keyof typeof MAIL_SOORT_LABELS] : 'Nog niet beoordeeld'}
-              {b.soort_vertrouwen != null && (
-                <span style={klein}> · {Math.round(Number(b.soort_vertrouwen) * 100)}% zeker</span>
-              )}
-            </div>
-            {b.samenvatting && <p style={zacht}>{b.samenvatting}</p>}
-            {detail.extractie?.toelichting && (
-              <p style={{ ...klein, marginTop: 6 }}>{detail.extractie.toelichting}</p>
-            )}
-          </Card>
-
-          <Card style={{ padding: 14 }}>
-            <div style={kop}>Herkenning</div>
-            {b.relatie ? (
-              <p style={zacht}>
-                Herkend via {b.herkend_via ? HERKEND_VIA_LABELS[b.herkend_via as keyof typeof HERKEND_VIA_LABELS] : 'onbekend'} →{' '}
-                <strong>{b.relatie.naam}</strong>
-                {b.herkenning_score != null && <span style={klein}> ({Math.round(Number(b.herkenning_score) * 100)}%)</span>}
-              </p>
-            ) : (
-              <p style={{ ...zacht, color: 'var(--wa-800, #92400e)' }}>
-                De afzender is niet herkend als bestaande klant. Kies zelf de opdrachtgever, of maak er een nieuwe aan
-                via Relaties.
-              </p>
-            )}
-          </Card>
-
-          <Card style={{ padding: 14 }}>
-            <div style={kop}>Object</div>
-            {objectTreffer?.kandidaten?.length ? (
-              <>
-                <p style={{ ...zacht, marginBottom: 8 }}>{objectTreffer.toelichting}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {objectTreffer.kandidaten.map(k => (
-                    <label key={k.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                      <input
-                        type="radio"
-                        name="object"
-                        checked={objectId === k.id}
-                        disabled={!bewerkbaar}
-                        onChange={() => setObjectId(k.id)}
-                        style={{ marginTop: 3 }}
-                      />
-                      <span>
-                        <span style={{ fontWeight: objectId === k.id ? 600 : 400 }}>{k.naam}</span>
-                        <span style={klein}> · {Math.round(k.score * 100)}%</span>
-                        <br />
-                        <span style={klein}>{k.adres}</span>
-                      </span>
-                    </label>
-                  ))}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                    <input
-                      type="radio" name="object" checked={objectId === null}
-                      disabled={!bewerkbaar} onChange={() => setObjectId(null)}
-                    />
-                    <span style={klein}>Geen object koppelen</span>
-                  </label>
-                </div>
-              </>
-            ) : (
-              <p style={klein}>
-                Geen object gevonden op dit adres. Het dossier wordt dan zonder objectkoppeling
-                aangemaakt; dat kan later alsnog vanuit het dossier.
-              </p>
-            )}
-          </Card>
-
-          <Card style={{ padding: 14 }}>
-            <div style={kop}>Mogelijke duplicaten</div>
-            {detail.duplicaten.length === 0 ? (
-              <p style={klein}>Geen vergelijkbaar dossier gevonden.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {detail.duplicaten.map(d => (
-                  <div key={d.id} style={{
-                    padding: 8, borderRadius: 6,
-                    border: `1px solid ${d.score >= DUPLICAAT_HARD ? 'var(--da-300, #fca5a5)' : 'var(--border)'}`,
-                    background: d.score >= DUPLICAAT_HARD ? 'var(--da-50, #fef2f2)' : 'transparent',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                      <strong style={{ fontSize: 13 }}>{d.dossiernummer ?? 'dossier'}</strong>
-                      <Badge tone={d.score >= DUPLICAAT_HARD ? 'error' : 'warning'}>
-                        {Math.round(d.score * 100)}%
-                      </Badge>
-                    </div>
-                    <div style={zacht}>{d.titel}</div>
-                    {d.klantnaam && <div style={klein}>{d.klantnaam}</div>}
-                    <ul style={{ ...klein, margin: '4px 0 0', paddingLeft: 16 }}>
-                      {d.redenen.map((r: string, i: number) => <li key={i}>{r}</li>)}
-                    </ul>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                      <a href={dossierHref(d.dossierId, d.hoofdstatus)} target="_blank" rel="noopener noreferrer"
-                         style={{ fontSize: 12, color: 'hsl(var(--primary))' }}>
-                        Bekijk dossier
-                      </a>
-                      {bewerkbaar && (
-                        <>
-                          <Button variant="ghost" onClick={() => koppelen(d.dossierId, 'gekoppeld_bestaand', 'Koppelen aan dit dossier')} disabled={bezig}>
-                            Koppelen
-                          </Button>
-                          {d.soort === 'offerte_match' && (
-                            <Button variant="ghost" onClick={() => koppelen(d.dossierId, 'offerte_gewonnen', 'Hoort bij deze offerte')} disabled={bezig}>
-                              Hoort bij deze offerte
-                            </Button>
-                          )}
-                          {d.soort === 'meerwerk_kandidaat' && (
-                            <Button variant="ghost" onClick={() => koppelen(d.dossierId, 'meerwerk', 'Meerwerk op dit dossier')} disabled={bezig}>
-                              Meerwerk
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
+        <BeoordelingPaneel
+          bericht={b}
+          toelichting={detail.extractie?.toelichting ?? null}
+          duplicaten={detail.duplicaten}
+          bewerkbaar={bewerkbaar}
+          bezig={bezig}
+          onKoppel={koppelen}
+          objectTreffer={objectTreffer}
+          objectId={objectId}
+          setObjectId={setObjectId}
+        />
       </div>
     </div>
   )

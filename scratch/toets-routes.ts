@@ -39,6 +39,7 @@ function basis(patch: Partial<BeslisInvoer> = {}): BeslisInvoer {
     duplicaatTopscore: 0,
     offerteMatchGevonden: false,
     offerteMatchHard: false,
+    regie: false,
     isAntwoord: false,
     meerdereWerkadressen: false,
     ongelezenBijlage: false,
@@ -128,5 +129,22 @@ toets('aanvullende informatie → een mens, nooit geparkeerd',
 const meerwerk = beslis(basis({ soort: 'meerwerk', offerteMatchGevonden: true, offerteMatchHard: true }))
 toets('meerwerk gaat nooit automatisch', !meerwerk.automatisch, meerwerk.redenen[0])
 
-console.log(`\n${gedaan - fouten}/${gedaan} geslaagd\n`)
+
+// ── Regie ────────────────────────────────────────────────────────────────────
+// Bij regie staat de prijs juist niet vast, dus er is geen offerte om te winnen.
+console.log('\n── Regie ────────────────────────────────────────────────────')
+toets('opdrachtbon met regie → nieuw dossier',
+  bepaalRoute('opdrachtbon', false, true) === 'nieuw_dossier')
+toets('opdrachtbon met regie én een offertetreffer → tóch nieuw dossier',
+  bepaalRoute('opdrachtbon', true, true) === 'nieuw_dossier')
+toets('opdrachtbon zonder regie → offerte winnen',
+  bepaalRoute('opdrachtbon', true, false) === 'offerte_winnen')
+toets('servicedeskbon met regie → nieuw dossier',
+  bepaalRoute('servicedeskbon', true, true) === 'nieuw_dossier')
+
+const regieBesluit = beslis(basis({ soort: 'opdrachtbon', regie: true }))
+toets('regie-opdracht loopt de aanmaakroute, niet de offerteroute',
+  regieBesluit.route === 'nieuw_dossier', regieBesluit.route)
+
+console.log(`\n${gedaan - fouten}/${gedaan} geslaagd (inclusief regie)\n`)
 process.exit(fouten === 0 ? 0 : 1)

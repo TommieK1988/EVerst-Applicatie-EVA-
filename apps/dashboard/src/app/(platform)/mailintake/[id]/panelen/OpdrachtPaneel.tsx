@@ -21,6 +21,7 @@ import { Button, Card, useDialogen } from '@/components/ui'
 import {
   bevestigOpdrachtOpDossier, toetsOfferteVoorOpdracht,
   getFactuuradressenVoorIntake, bewaarFactuuradresVoorIntake,
+  getOfferteDossiersVoorRelatie,
 } from '@/lib/mailintake/actions'
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { DUPLICAAT_HARD } from '@/lib/mailintake/types'
@@ -106,6 +107,34 @@ export default function OpdrachtPaneel({
     })
     return () => { weg = true }
   }, [dossierId])
+
+  // Alle lopende offertes van deze opdrachtgever erbij halen. De duplicaatscore is
+  // hier niet leidend: die geeft een kandidaat zonder sterk signaal nul punten,
+  // waarna hij afvalt -- terwijl "alle offertes van deze klant" precies de goede
+  // verzameling is om uit te kiezen.
+  React.useEffect(() => {
+    if (!relatieId) return
+    void getOfferteDossiersVoorRelatie(relatieId).then(lijst => {
+      setExtra(e => {
+        const bekend = new Set([...offertes.map(k => k.dossierId), ...e.map(k => k.dossierId)])
+        const nieuw = lijst
+          .filter(d => !bekend.has(d.dossierId))
+          .map(d => ({
+            dossierId: d.dossierId,
+            dossiernummer: d.dossiernummer,
+            titel: d.titel,
+            klantnaam: null,
+            hoofdstatus: 'offerte',
+            score: 0,
+            redenen: [`Lopende offerte van deze opdrachtgever${d.substatus ? ` (${d.substatus})` : ''}`],
+            soort: 'offerte_match',
+          }))
+        return nieuw.length ? [...e, ...nieuw] : e
+      })
+    })
+    // offertes komt uit props en verandert niet tijdens de levensduur van dit paneel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relatieId])
 
   // Factuuradressen van de opdrachtgever, pas ophalen als het paneel er is.
   React.useEffect(() => {
@@ -210,7 +239,8 @@ export default function OpdrachtPaneel({
         <div style={kop}>Bij welke offerte hoort deze opdracht?</div>
         {alleKandidaten.length === 0 && (
           <p style={klein}>
-            EVA heeft geen offerte gevonden die hierbij past. Zoek het dossier hieronder op.
+            Deze opdrachtgever heeft geen lopende offerte in EVA. Zoek het dossier hieronder op,
+            of leg de mail weg als er geen offerte bij hoort.
           </p>
         )}
         {harde.length > 1 && (

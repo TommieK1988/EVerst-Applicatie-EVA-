@@ -28,8 +28,26 @@ export const SERVICEDESK_CATEGORIEEN = ['Dagelijks onderhoud', 'Mutatie']
 
 /** Woorden die een bedrag tot een mandaat maken in plaats van tot een prijsindicatie. */
 export const MANDAAT_WOORDEN = [
-  'mandaat', 'budget', 'tot maximaal', 'kostenlimiet', 'plafond', 'maximaal bedrag',
-  'niet overschrijden', 'bestedingsruimte',
+  'mandaat', 'budget', 'tot maximaal', 'kostenlimiet', 'plafond',
+  // Opdrachtbonnen van beheerders schrijven dit op allerlei manieren. "maximaal
+  // factuurbedrag" stond in de eerste echte bon die binnenkwam en viel buiten de
+  // lijst omdat daar 'maximaal bedrag' stond -- met 'factuur' ertussen.
+  'maximaal bedrag', 'maximaal factuurbedrag', 'maximale factuurbedrag',
+  'factuurbedrag', 'tot een maximum', 'niet overschrijden', 'bestedingsruimte',
+]
+
+/**
+ * Woorden waaraan je een regie-opdracht herkent.
+ *
+ * Regie betekent: geen aanneemsom vooraf, afrekenen op basis van wat het werkelijk
+ * is geworden. Dat is niet hetzelfde als servicedeskwerk -- het kan net zo goed een
+ * bouwkundige klus zijn -- en er hoort per definitie geen offerte bij, want de prijs
+ * staat nog niet vast.
+ */
+export const REGIE_WOORDEN = [
+  'regie', 'regiebasis', 'op regiebasis', 'in regie',
+  'uurbasis', 'op uurbasis', 'nacalculatie', 'nacalculatorisch',
+  'verrekenbare uren', 'werkelijk bestede uren', 'uurtarief',
 ]
 
 export type WerkmaatschappijVia = 'mail' | 'categorie' | 'standaard' | 'geen'
@@ -97,6 +115,17 @@ export function datumPlusDagen(iso: string, dagen: number): string {
   const d = new Date(iso + 'T00:00:00Z')
   d.setUTCDate(d.getUTCDate() + dagen)
   return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Noemt de brontekst regiewerk?
+ *
+ * Bewust op hele woorden: "regie" zit ook in "regio" en "regisseur", en een valse
+ * treffer zou een aangenomen opdracht ten onrechte zonder aanneemsom wegzetten.
+ */
+export function noemtRegie(brontekst: string): boolean {
+  const laag = ' ' + brontekst.toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' '
+  return REGIE_WOORDEN.some(w => laag.includes(' ' + w.replace(/[^a-z0-9]+/g, ' ') + ' '))
 }
 
 /** Noemt de brontekst een mandaat, of is dat losse bedrag gewoon een prijs? */

@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-16.1'
+export const PROMPT_VERSIE = '2026-09-16.2'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -70,6 +70,17 @@ export const extractieSchema = z.object({
   klant_opmerkingen: tekst,
   /** Servicedesk: het bedrag waarbinnen wij zonder nadere goedkeuring mogen werken. */
   mandaat_bedrag: z.number().nullable().catch(null),
+
+  /** Wordt er op nacalculatie afgerekend in plaats van voor een vaste prijs? */
+  regie: z.boolean().catch(false),
+  /** De zinsnede waaruit dat blijkt; zonder bewijs nemen we het niet over. */
+  regie_aanwijzing: korteTekst,
+
+  // Waar de factuur heen moet als dat afwijkt van het adres van de opdrachtgever.
+  factuuradres_naam: korteTekst,
+  factuuradres_straat: korteTekst,
+  factuuradres_postcode: korteTekst,
+  factuuradres_plaats: korteTekst,
   meerdere_werkadressen: z.boolean().catch(false),
 
   bijlage_rollen: z.array(z.object({
@@ -107,6 +118,11 @@ export const VELD_LABELS: Record<string, string> = {
   opdrachtdatum:             'Opdrachtdatum',
   klant_opmerkingen:         'Opmerkingen van de klant',
   mandaat_bedrag:            'Mandaat (excl. btw)',
+  regie:                     'Regie (nacalculatie)',
+  factuuradres_naam:         'Factuuradres — naam',
+  factuuradres_straat:       'Factuuradres — straat of postbus',
+  factuuradres_postcode:     'Factuuradres — postcode',
+  factuuradres_plaats:       'Factuuradres — plaats',
   vve_code:                  'VvE-code',
   categorie_voorstel:        'Categorie',
   werkmaatschappij_voorstel: 'Werkmaatschappij',
@@ -211,6 +227,31 @@ export const LEVER_EXTRACTIE_TOOL = {
           'kostenlimiet. Alleen invullen als de mail dat ook zo benoemt - een los bedrag is meestal ' +
           'de geschatte prijs, niet het mandaat.',
       },
+      regie: {
+        type: 'boolean',
+        description:
+          'true als het werk op nacalculatie wordt afgerekend in plaats van voor een vaste prijs: ' +
+          'regie, regiebasis, op uurbasis, verrekenbare uren, nacalculatie. Bij regie hoort geen ' +
+          'aanneemsom en geen offerte.',
+      },
+      regie_aanwijzing: {
+        type: 'string',
+        description:
+          'De zinsnede uit de mail of de bon waaruit blijkt dat het regiewerk is, zo letterlijk ' +
+          'mogelijk. Laat leeg als je het niet kunt aanwijzen.',
+      },
+      factuuradres_naam: {
+        type: 'string',
+        description:
+          'Aan wie de factuur gericht moet worden, als de opdracht dat apart noemt. Bijvoorbeeld ' +
+          'de VvE waarvoor de beheerder optreedt. Laat leeg als er geen apart factuuradres staat.',
+      },
+      factuuradres_straat: {
+        type: 'string',
+        description: 'Straat en huisnummer of postbus van het factuuradres.',
+      },
+      factuuradres_postcode: { type: 'string', description: 'Postcode van het factuuradres.' },
+      factuuradres_plaats: { type: 'string', description: 'Plaats van het factuuradres.' },
       meerdere_werkadressen: {
         type: 'boolean',
         description: 'true als de mail werk op meerdere adressen tegelijk betreft (verzamelopdracht).',

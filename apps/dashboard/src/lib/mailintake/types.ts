@@ -85,10 +85,23 @@ export const ROUTE_LABELS: Record<IntakeRoute, string> = {
  * afhangt: is er een offerte, dan is het een opdracht; is die er niet, dan is het
  * nieuw werk.
  */
-export function bepaalRoute(soort: MailSoort | null, offerteMatchGevonden: boolean): IntakeRoute {
+export function bepaalRoute(
+  soort: MailSoort | null,
+  offerteMatchGevonden: boolean,
+  regie = false,
+): IntakeRoute {
   if (soort === 'offerteaanvraag') return 'nieuw_dossier'
+
+  // Regie gaat nooit langs een offerte. Bij een regie-opdracht staat de prijs juist
+  // niet vast -- er wordt afgerekend op nacalculatie -- dus er is geen aanneemsom om
+  // te winnen. Zoeken naar een offerte levert dan hooguit de verkeerde op.
+  if (regie && soort != null && OPDRACHT_SOORTEN.includes(soort)) return 'nieuw_dossier'
+
   if (soort != null && OPDRACHT_SOORTEN.includes(soort)) return 'offerte_winnen'
-  if (soort === 'servicedeskbon') return offerteMatchGevonden ? 'offerte_winnen' : 'nieuw_dossier'
+  if (soort === 'servicedeskbon') {
+    if (regie) return 'nieuw_dossier'
+    return offerteMatchGevonden ? 'offerte_winnen' : 'nieuw_dossier'
+  }
   return 'geen'
 }
 
