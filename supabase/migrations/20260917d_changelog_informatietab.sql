@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-17','verbeterd','Dossiers','Opdrachtgever en werkadres meteen in beeld',
+   'Het tabblad Informatie begint nu met alles wat je als eerste wilt weten. Naast de projectgegevens staan direct de opdrachtgever met telefoon en e-mail, de contactpersoon en het eventuele afwijkende factuuradres — het losse blok Opdrachtgever verderop is daarmee vervallen. Daaronder volgen het werkadres en de financiële totalen. De bovenste twee blokken staan altijd helemaal open, dus postcode en plaats verdwijnen niet meer achter Meer tonen.');
