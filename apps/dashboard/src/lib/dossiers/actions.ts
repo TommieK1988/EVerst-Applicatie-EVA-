@@ -3212,6 +3212,12 @@ export type OpdrachtgeverZoekResultaat = {
   id: string
   naam: string
   types: string[]
+  /**
+   * Vestigingsplaats. Onmisbaar bij het kiezen: het adresboek bevat meerdere relaties met
+   * dezelfde naam maar een andere vestiging (VvE Beheer Rijswijk naast VvE Beheer Groep), en
+   * op naam alleen kies je vroeg of laat de verkeerde.
+   */
+  plaats?: string | null
   contactpersoon?: { id: string; naam: string } | null
 }
 
@@ -3233,7 +3239,7 @@ export async function zoekRelaties(
   // 1. Relaties op naam of adres/plaats.
   let relQ = supabase
     .from('relaties')
-    .select('id, naam, types')
+    .select('id, naam, types, adres_plaats')
     .or(`naam.ilike.${like},adres_straat.ilike.${like},adres_plaats.ilike.${like}`)
     .eq('actief', true)
   if (opts?.type) relQ = relQ.contains('types', [opts.type])
@@ -3242,14 +3248,17 @@ export async function zoekRelaties(
   // 2. Contactpersonen op naam/e-mail → hun (primaire) organisatie.
   const cpRes = await supabase
     .from('contactpersonen')
-    .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief))')
+    .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief, adres_plaats))')
     .or(`voornaam.ilike.${like},achternaam.ilike.${like},email.ilike.${like}`)
     .eq('actief', true)
     .limit(8)
 
   const resultaten = new Map<string, OpdrachtgeverZoekResultaat>()
-  for (const r of (relRes.data ?? []) as { id: string; naam: string; types: string[] }[]) {
-    resultaten.set(r.id, { id: r.id, naam: r.naam, types: r.types ?? [], contactpersoon: null })
+  for (const r of (relRes.data ?? []) as { id: string; naam: string; types: string[]; adres_plaats: string | null }[]) {
+    resultaten.set(r.id, {
+      id: r.id, naam: r.naam, types: r.types ?? [],
+      plaats: r.adres_plaats ?? null, contactpersoon: null,
+    })
   }
   for (const cp of (cpRes.data ?? []) as any[]) {
     const koppelingen = (cp.koppelingen ?? []).filter((k: any) => k.organisatie?.actief !== false)
@@ -3261,6 +3270,7 @@ export async function zoekRelaties(
     // Contactpersoon-match wint van een kale relatie-match (voegt de persoon toe).
     resultaten.set(org.id, {
       id: org.id, naam: org.naam, types: org.types ?? [],
+      plaats: org.adres_plaats ?? null,
       contactpersoon: { id: cp.id, naam },
     })
   }

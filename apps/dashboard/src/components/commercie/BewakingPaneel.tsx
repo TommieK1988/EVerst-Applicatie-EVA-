@@ -353,7 +353,8 @@ function UitkomstDialoog(props: {
                     />
                     <p className="mt-2 text-xs text-neutral-500">
                       De kans blijft aan dit dossier gekoppeld en staat op het Aanvragen-tab onder
-                      &ldquo;Verkoopkansen&rdquo;.
+                      &ldquo;Verkoopkansen&rdquo;. Laat je de klant leeg, dan nemen we de
+                      opdrachtgever van dit dossier over.
                     </p>
                   </div>
                 ) : (

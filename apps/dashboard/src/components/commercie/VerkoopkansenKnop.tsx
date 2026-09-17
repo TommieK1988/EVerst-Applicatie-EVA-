@@ -234,6 +234,10 @@ function BewerkDialoog({ bewerking, medewerkers, onSluit, onOpgeslagen }: {
           actiehouderId: bestaand.actiehouderId ?? '',
           deadline: bestaand.deadline ?? '',
           bronDossierId: bestaand.bronDossierId,
+          relatieId: bestaand.relatieId,
+          // De naam komt mee zodat de kiezer de gekozen klant meteen toont; zonder dit zou
+          // hij "Geen klant gekoppeld" tonen tot je zelf opnieuw gaat zoeken.
+          relatieNaam: bestaand.klantNaam,
         }
       : LEGE_VERKOOPKANS,
   )

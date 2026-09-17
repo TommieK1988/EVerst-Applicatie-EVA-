@@ -457,6 +457,15 @@ export type VerkoopkansInvoer = {
   deadline: string
   /** Het dossier waar de kans uit voortkomt; blijft als link op de kaart staan. */
   bronDossierId?: string | null
+  /**
+   * De klant/opdrachtgever. Los van het brondossier, want een kans kan ook zonder dossier
+   * beginnen — en dan is de klant het enige aanknopingspunt om te weten wie je belt.
+   * Ontstaat de kans wél bij een dossier en blijft dit leeg, dan vult de server hem met de
+   * opdrachtgever van dat dossier.
+   */
+  relatieId?: string | null
+  /** Alleen voor het formulier: de naam bij `relatieId`, zodat de keuze zichtbaar blijft. */
+  relatieNaam?: string | null
 }
 
 export type Verkoopkans = {
@@ -470,6 +479,9 @@ export type Verkoopkans = {
   bronDossierTitel: string | null
   /** In welke sectie het brondossier nu staat — bepaalt de link. */
   bronSectie: 'aanvraag' | 'offerte' | 'opdracht' | 'servicedesk' | null
+  /** De gekoppelde klant; leeg wanneer de kans er (nog) geen heeft. */
+  relatieId: string | null
+  /** Naam van die klant, met het brondossier als terugval voor oudere kansen. */
   klantNaam: string | null
   afgerondOp: string | null
   afgerondReden: string | null
@@ -479,6 +491,7 @@ export type Verkoopkans = {
 /** Lege invoer voor het formulier; één plek zodat elk scherm dezelfde startwaarden heeft. */
 export const LEGE_VERKOOPKANS: VerkoopkansInvoer = {
   uitleg: '', actiehouderId: '', deadline: '', bronDossierId: null,
+  relatieId: null, relatieNaam: null,
 }
 
 /** Is deze invoer compleet genoeg om op te slaan? De database bewaakt hetzelfde. */

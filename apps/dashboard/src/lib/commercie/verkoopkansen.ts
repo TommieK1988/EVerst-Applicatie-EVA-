@@ -50,6 +50,7 @@ async function schrijfVerkoopkans(
       soort: 'signaal',
       titel: uitleg,
       bron_dossier_id: invoer.bronDossierId ?? null,
+      relatie_id: await klantVoorKans(supabase, invoer),
       eigenaar_id: medewerker.id,
       actiehouder_id: invoer.actiehouderId,
       stap_soort: 'actie',
@@ -66,6 +67,25 @@ async function schrijfVerkoopkans(
 
   if (error || !data) return { ok: false, error: vertaalDbFout(error?.message ?? 'onbekende fout') }
   return { ok: true, id: data.id }
+}
+
+/**
+ * De klant die bij deze kans hoort.
+ *
+ * Wie er zelf een kiest, krijgt die. Doet niemand dat maar komt de kans uit een dossier, dan
+ * nemen we de opdrachtgever van dat dossier over. Dat scheelt een keuze op het moment dat je
+ * net een offerte aan het afsluiten bent, en het maakt de kans meteen vindbaar op klantnaam —
+ * zonder deze terugval zou elke kans uit de afsluitdialoog klantloos blijven.
+ */
+async function klantVoorKans(
+  supabase: AdminClient,
+  invoer: VerkoopkansInvoer,
+): Promise<string | null> {
+  if (invoer.relatieId) return invoer.relatieId
+  if (!invoer.bronDossierId) return null
+  const { data } = await supabase.from('dossiers')
+    .select('klant_id').eq('id', invoer.bronDossierId).maybeSingle()
+  return data?.klant_id ?? null
 }
 
 export async function maakVerkoopkans(invoer: VerkoopkansInvoer): Promise<ActieResultaat> {
@@ -115,6 +135,8 @@ export async function wijzigVerkoopkans(
       stap_datum: invoer.deadline,
       actiehouder_id: invoer.actiehouderId,
       bron_dossier_id: invoer.bronDossierId ?? null,
+      // Hier bewust géén terugval op het dossier: wie de klant leegmaakt, bedoelt dat.
+      relatie_id: invoer.relatieId ?? null,
       // Afronden en heropenen zijn dezelfde knop: een kans die per ongeluk is afgevinkt moet
       // terug kunnen zonder dat iemand hem opnieuw moet intypen. Het oorspronkelijke moment
       // blijft staan zodra hij er is, zodat heropenen-en-weer-afronden de datum niet verschuift.
@@ -167,6 +189,7 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
     actiehouder_id: string | null
     stap_datum: string | null
     bron_dossier_id: string | null
+    relatie_id: string | null
     afgerond_op: string | null
     afgerond_reden: string | null
     created_at: string
@@ -181,7 +204,7 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
 
   const rijen = await haalAlleRijen<SignaalRij>((van, tot) =>
     supabase.from('commercie_bewaking')
-      .select('id,titel,actiehouder_id,stap_datum,bron_dossier_id,afgerond_op,afgerond_reden,created_at')
+      .select('id,titel,actiehouder_id,stap_datum,bron_dossier_id,relatie_id,afgerond_op,afgerond_reden,created_at')
       .eq('soort', 'signaal')
       .order('id')
       .range(van, tot),
@@ -204,7 +227,12 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
   const dossiers = (dossierRes.data ?? []) as DossierMini[]
   const mensen = (mensenRes.data ?? []) as MedewerkerNaam[]
 
-  const klantIds = [...new Set(dossiers.map(d => d.klant_id).filter(Boolean) as string[])]
+  // Zowel de eigen klant van de kans als die van het brondossier, in één ronde: oudere kansen
+  // (van vóór `relatie_id`) hebben alleen het dossier om op terug te vallen.
+  const klantIds = [...new Set([
+    ...rijen.map(r => r.relatie_id),
+    ...dossiers.map(d => d.klant_id),
+  ].filter(Boolean) as string[])]
   const relatieRes = klantIds.length
     ? await supabase.from('relaties').select('id, naam').in('id', klantIds)
     : { data: [] as { id: string; naam: string | null }[] }
@@ -227,7 +255,11 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
         bronDossiernummer: d?.dossiernummer ?? null,
         bronDossierTitel: d?.titel ?? null,
         bronSectie: fase === 'aanvraag' || fase === 'offerte' || fase === 'opdracht' ? fase : null,
-        klantNaam: d?.klant_id ? klantPerId.get(d.klant_id) ?? null : null,
+        relatieId: r.relatie_id,
+        // De eigen klant wint; het dossier is de terugval voor kansen van vóór `relatie_id`.
+        klantNaam:
+          (r.relatie_id ? klantPerId.get(r.relatie_id) : null)
+          ?? (d?.klant_id ? klantPerId.get(d.klant_id) ?? null : null),
         afgerondOp: r.afgerond_op,
         afgerondReden: r.afgerond_reden,
         aangemaaktOp: r.created_at,
