@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useMemo, useState, useTransition } from 'react'
+import React, { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, FolderTree, List } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
@@ -77,6 +77,15 @@ function Badge({ meta }: { meta?: { label: string; bg: string; color: string } }
 
 const NIET_TOEGEWEZEN = '__none__'
 
+/**
+ * Groeperen aan/uit is een voorkeur per gebruiker én per scherm — op een gedeelde
+ * pc mag de ene collega de weergave van de andere niet erven. Zelfde sleutelvorm
+ * als de tabel-werkstand.
+ */
+function groepeerSleutel(user_id: string | null, scherm: string): string {
+  return `eva-taken-groeperen:${user_id ?? 'anoniem'}:${scherm}`
+}
+
 export default function TakenActieveDossiers({
   data, layouts, user_id,
   titel = 'Acties — actieve dossiers',
@@ -101,6 +110,29 @@ export default function TakenActieveDossiers({
   const router = useRouter()
   const isMijnTaken = variant === 'mijn-taken'
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
+
+  // Gebundeld per dossier, of alles plat onder elkaar. Standaard gebundeld; de
+  // keuze wordt na de eerste render uit localStorage gehaald, want tijdens het
+  // serveren bestaat die opslag niet en zou de HTML anders niet matchen.
+  const [groeperen, setGroeperen] = useState(true)
+  useEffect(() => {
+    try {
+      const ruw = window.localStorage.getItem(groepeerSleutel(user_id, scherm))
+      if (ruw !== null) setGroeperen(ruw === '1')
+    } catch {
+      /* geblokkeerde opslag mag het scherm niet breken */
+    }
+  }, [user_id, scherm])
+
+  function wisselGroeperen() {
+    const nu = !groeperen
+    setGroeperen(nu)
+    try {
+      window.localStorage.setItem(groepeerSleutel(user_id, scherm), nu ? '1' : '0')
+    } catch {
+      /* voorkeur gaat verloren, de weergave zelf klopt wel */
+    }
+  }
 
   // Detailpaneel (klik op een taaknaam) — lazy geladen volledige taak.
   const [paneelTaak, setPaneelTaak] = useState<TaakMetDetails | null>(null)
@@ -355,7 +387,7 @@ export default function TakenActieveDossiers({
           {titel}
         </h1>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-          {subtitel}
+          {subtitel} {groeperen ? 'Per dossier gebundeld.' : 'Alles onder elkaar.'}
         </p>
       </div>
 
@@ -377,6 +409,27 @@ export default function TakenActieveDossiers({
         toonRijActie={false}
         dicht
         eenregelig
+        acties={
+          <button
+            onClick={wisselGroeperen}
+            aria-pressed={groeperen}
+            title={groeperen
+              ? 'Zet uit om alle acties los onder elkaar te zien'
+              : 'Zet aan om de acties per dossier te bundelen'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              height: 32, padding: '0 10px',
+              border: '1px solid var(--border)', borderRadius: 6,
+              background: groeperen ? 'var(--neutral-100, #f1f4f5)' : 'var(--bg)',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--fg)',
+            }}
+          >
+            {groeperen
+              ? <><FolderTree size={13} strokeWidth={2} />Per dossier</>
+              : <><List size={13} strokeWidth={2} />Losse lijst</>}
+          </button>
+        }
         afvinkKolom={{
           status: r =>
             BEOORDEEL_TITELS.has(r.titel) ? 'verborgen'
@@ -386,12 +439,12 @@ export default function TakenActieveDossiers({
           onKlik: toggleAfvink,
           bezigId: afvinkBezigId,
         }}
-        groepering={{
+        groepering={groeperen ? {
           // Medewerker-taken hebben geen dossier_id; zonder eigen sleutel zouden ze
           // allemaal in één naamloze groep vallen.
           sleutel: r => r.medewerker_id ? `medewerker:${r.medewerker_id}` : r.dossier_id,
           kop: groepKop,
-        }}
+        } : undefined}
       />
 
       {paneelTaak && (

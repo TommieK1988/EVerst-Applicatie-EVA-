@@ -37,7 +37,7 @@ export default async function MijnTakenPage() {
       layouts={layouts}
       user_id={user_id}
       titel="Mijn acties"
-      subtitel={magAlleTaken ? 'Open acties, per dossier gebundeld.' : 'Al jouw toegewezen open acties, per dossier gebundeld.'}
+      subtitel={magAlleTaken ? 'Open acties.' : 'Al jouw toegewezen open acties.'}
       scherm="mijn-taken"
       variant="mijn-taken"
       magAlleTaken={magAlleTaken}
