@@ -13,7 +13,7 @@ import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-import { Button, Badge, Card, BulletTextarea, useDialogen } from '@/components/ui'
+import { Button, Badge, Card, useDialogen } from '@/components/ui'
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres } from '@/lib/adres/pdok'
@@ -22,7 +22,6 @@ import { dossierHref } from '@/lib/dossiers/href'
 import {
   maakDossierVanBericht, koppelBerichtAanDossier, negeerBericht,
   markeerGeenAanvraag, leesOpnieuw, getBijlageUrl, heropenBericht,
-  hervatSamenvatting, bewaarSamenvatting,
 } from '@/lib/mailintake/actions'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL,
@@ -31,6 +30,7 @@ import {
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
+import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
@@ -143,7 +143,6 @@ export default function BerichtBehandelen({
   )
 
   const [werkzaamheden, setWerkzaamheden] = useState<string>(b.gevraagde_werkzaamheden ?? '')
-  const [samenvatBezig, setSamenvatBezig] = useState(false)
 
   // Voorkeur: wat er al aan het bericht hangt; anders de verse treffer.
   const [objectId, setObjectId] = useState<string | null>(
@@ -219,7 +218,20 @@ export default function BerichtBehandelen({
   // aanneemsom om te winnen. Soms is zo'n bon tóch het akkoord op een offerte --
   // dan hoort dat te kunnen, maar niet als standaard. Vandaar een uitklapblok,
   // alleen als er ook werkelijk een offerte bij past.
-  const kanTochOfferte = route === 'nieuw_dossier'
+  // Een offerte die vanuit de duplicatenlijst wordt aangewezen: het opdrachtpaneel
+  // springt er dan op open, want dáár wordt hij werkelijk gewonnen.
+  // Geen offerte die past? Dan tóch een nieuw dossier. De route blijft wat hij is;
+  // dit is de menselijke correctie erop, en met de link eronder draai je hem terug.
+  const [forceerNieuw, setForceerNieuw] = useState(false)
+  const [gekozenOfferte, setGekozenOfferte] = useState<string | null>(null)
+  const [offerteOpen, setOfferteOpen] = useState(false)
+  const kiesOfferte = (dossierId: string) => {
+    setGekozenOfferte(dossierId)
+    setOfferteOpen(true)
+    setForceerNieuw(false)
+  }
+
+  const kanTochOfferte = (route === 'nieuw_dossier' || forceerNieuw)
     && klantId != null
     && (offerteKandidaten.length > 0 || b.soort === 'opdrachtbon' || b.soort === 'opdracht_op_offerte')
 
@@ -409,33 +421,6 @@ export default function BerichtBehandelen({
   }
 
   /** Laat EVA de mail en de bijlagen opnieuw lezen voor de scope-samenvatting. */
-  async function opnieuwSamenvatten() {
-    // Stond er al tekst, dan is die mogelijk met de hand aangescherpt. Niet zomaar weg.
-    if (werkzaamheden.trim()) {
-      const ok = await bevestig({
-        titel: 'Samenvatting opnieuw opstellen?',
-        omschrijving: 'De huidige tekst wordt vervangen door een nieuwe samenvatting uit de mail en de bijlagen.',
-        bevestigLabel: 'Opnieuw samenvatten',
-      })
-      if (!ok) return
-    }
-    setSamenvatBezig(true)
-    try {
-      const res = await hervatSamenvatting(b.id)
-      if (!res.ok) { toast.error(res.error ?? 'Samenvatten mislukt'); return }
-      setWerkzaamheden(res.tekst ?? '')
-      toast.success('Samenvatting bijgewerkt')
-    } finally {
-      setSamenvatBezig(false)
-    }
-  }
-
-  /** Bewaart een handmatige aanscherping alvast bij het bericht. */
-  async function bewaarWerkzaamhedenTekst() {
-    if ((b.gevraagde_werkzaamheden ?? '') === werkzaamheden) return
-    await bewaarSamenvatting(b.id, werkzaamheden).catch(() => {})
-  }
-
   async function openBijlage(id: string) {
     const res = await getBijlageUrl(id)
     if (!res.ok || !res.url) { toast.error(res.error ?? 'Bijlage niet beschikbaar'); return }
@@ -493,7 +478,15 @@ export default function BerichtBehandelen({
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.1fr) minmax(260px, 0.9fr)', gap: 12, alignItems: 'start' }}>
+      {/* Drie kolommen, en alles wat bij een kolom hoort zit ook in die kolom. Stond
+          het uitklapblok en de knoppenrij eerder los in de grid, dan vielen ze in een
+          eigen cel: het blok belandde rechtsboven, de knoppen op een nieuwe regel
+          linksonder, en de rechterkolom schoof onder het formulier. */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(300px, 0.85fr) minmax(400px, 1.25fr) minmax(320px, 1fr)',
+        gap: 14, alignItems: 'start',
+      }}>
 
         {/* ── Links: de mail ── */}
         <MailPaneel
@@ -502,8 +495,9 @@ export default function BerichtBehandelen({
           onOpenBijlage={openBijlage}
         />
 
-        {/* ── Midden: het voorstel ── */}
-        {route === 'offerte_winnen' ? (
+        {/* ── Midden: wat ermee gebeurt ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {route === 'offerte_winnen' && !forceerNieuw ? (
           <OpdrachtPaneel
             berichtId={b.id}
             kandidaten={detail.duplicaten}
@@ -517,9 +511,38 @@ export default function BerichtBehandelen({
             // Deze route wint een offerte; het dossier is daarna een opdracht.
             onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
           />
-        ) : (
+        ) : null}
+
+        {route === 'offerte_winnen' && !forceerNieuw && bewerkbaar && (
+          <p style={klein}>
+            Hoort deze opdracht bij geen enkele offerte van ons?{' '}
+            <button
+              onClick={() => setForceerNieuw(true)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
+            >
+              Maak er een nieuw dossier van
+            </button>
+          </p>
+        )}
+
+        {(route !== 'offerte_winnen' || forceerNieuw) ? (
         <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={kop}>Voorstel</div>
+
+          {forceerNieuw && (
+            <p style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
+              EVA stelde voor om een bestaande offerte te winnen. Je maakt hier in plaats
+              daarvan een nieuw dossier.{' '}
+              <button
+                onClick={() => setForceerNieuw(false)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                         color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
+              >
+                Terug naar de offerte
+              </button>
+            </p>
+          )}
 
           <Veld label="Opdrachtgever" score={zekerheid.klant_naam}>
             {klantId ? (
@@ -579,40 +602,15 @@ export default function BerichtBehandelen({
             </Veld>
           )}
 
-          {/* Scope-samenvatting: wát wordt er gevraagd. Staat boven de losse velden,
-              want dit is waar een calculator als eerste naar kijkt. De tekst is een
-              voorstel — wie hem bijschaaft, slaat dát op bij het aanmaken. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={klein}>Gevraagde werkzaamheden</span>
-              {bewerkbaar && (
-                <Button variant="ghost" onClick={opnieuwSamenvatten} disabled={samenvatBezig}>
-                  {samenvatBezig ? 'Bezig…' : 'Opnieuw samenvatten'}
-                </Button>
-              )}
-            </div>
-            <BulletTextarea
-              value={werkzaamheden}
-              onChange={setWerkzaamheden}
-              onBlur={bewaarWerkzaamhedenTekst}
-              minRows={4}
-              maxRows={14}
-              toonKnop={bewerkbaar}
-              disabled={!bewerkbaar}
-              placeholder="Nog geen samenvatting opgesteld."
-            />
-            {(b.gevraagde_werkzaamheden_bronnen?.length ?? 0) > 0 && (
-              <span style={klein}>
-                Uit de mail en {b.gevraagde_werkzaamheden_bronnen.length}{' '}
-                {b.gevraagde_werkzaamheden_bronnen.length === 1 ? 'bijlage' : 'bijlagen'}.
-              </span>
-            )}
-            {(b.gevraagde_werkzaamheden_gemist?.length ?? 0) > 0 && (
-              <span style={{ ...klein, color: 'var(--wa-800, #92400e)' }}>
-                Niet meegelezen: {(b.gevraagde_werkzaamheden_gemist as string[]).join(', ')}.
-              </span>
-            )}
-          </div>
+          <WerkzaamhedenBlok
+            berichtId={b.id}
+            opgeslagen={b.gevraagde_werkzaamheden ?? null}
+            bronnen={b.gevraagde_werkzaamheden_bronnen ?? null}
+            gemist={b.gevraagde_werkzaamheden_gemist ?? null}
+            waarde={werkzaamheden}
+            opWijzig={setWerkzaamheden}
+            bewerkbaar={bewerkbaar}
+          />
 
           <Veld label="Omschrijving van het werk" score={zekerheid.omschrijving}>
             <input style={veldStijl} value={omschrijving} onChange={e => setOmschrijving(e.target.value)} disabled={!bewerkbaar} />
@@ -729,10 +727,13 @@ export default function BerichtBehandelen({
             <span style={klein}>Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het volledige werkadres in.</span>
           )}
         </Card>
-        )}
+        ) : null}
 
         {kanTochOfferte && (
-          <details style={{
+          <details
+            open={offerteOpen}
+            onToggle={e => setOfferteOpen((e.target as HTMLDetailsElement).open)}
+            style={{
             border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px',
             background: 'var(--surface)',
           }}>
@@ -749,6 +750,7 @@ export default function BerichtBehandelen({
               kandidaten={detail.duplicaten}
               relatieId={klantId}
               bewerkbaar={bewerkbaar}
+              voorgekozenDossierId={gekozenOfferte}
               voorstel={{
                 opdrachtReferentie: velden.opdracht_referentie ?? null,
                 opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
@@ -770,6 +772,8 @@ export default function BerichtBehandelen({
           </div>
         )}
 
+        </div>
+
         {/* ── Rechts: waarop berust dit ── */}
         <BeoordelingPaneel
           bericht={b}
@@ -778,6 +782,7 @@ export default function BerichtBehandelen({
           bewerkbaar={bewerkbaar}
           bezig={bezig}
           onKoppel={koppelen}
+          onKiesOfferte={kiesOfferte}
           objectTreffer={objectTreffer}
           objectId={objectId}
           setObjectId={setObjectId}

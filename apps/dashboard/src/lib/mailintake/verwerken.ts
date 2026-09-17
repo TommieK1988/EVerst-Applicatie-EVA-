@@ -452,6 +452,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
             opdrachtReferentie: velden.opdrachtReferentie,
             opdrachtdatum: velden.opdrachtdatum ?? geclaimd.ontvangen_op.slice(0, 10),
             klantOpmerkingen: velden.klantOpmerkingen,
+            regie: velden.regie,
             relatieId: afz.relatieId,
             contactpersoonId: afz.contactpersoonId,
           })

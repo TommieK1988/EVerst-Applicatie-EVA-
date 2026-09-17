@@ -135,16 +135,32 @@ toets('meerwerk gaat nooit automatisch', !meerwerk.automatisch, meerwerk.redenen
 console.log('\n── Regie ────────────────────────────────────────────────────')
 toets('opdrachtbon met regie → nieuw dossier',
   bepaalRoute('opdrachtbon', false, true) === 'nieuw_dossier')
-toets('opdrachtbon met regie én een offertetreffer → tóch nieuw dossier',
-  bepaalRoute('opdrachtbon', true, true) === 'nieuw_dossier')
+toets('opdrachtbon met regie én een offertetreffer → offerte winnen',
+  bepaalRoute('opdrachtbon', true, true) === 'offerte_winnen')
 toets('opdrachtbon zonder regie → offerte winnen',
   bepaalRoute('opdrachtbon', true, false) === 'offerte_winnen')
-toets('servicedeskbon met regie → nieuw dossier',
-  bepaalRoute('servicedeskbon', true, true) === 'nieuw_dossier')
+toets('servicedeskbon met regie én offerte → offerte winnen',
+  bepaalRoute('servicedeskbon', true, true) === 'offerte_winnen')
 
 const regieBesluit = beslis(basis({ soort: 'opdrachtbon', regie: true }))
-toets('regie-opdracht loopt de aanmaakroute, niet de offerteroute',
+toets('regie zonder offerte loopt de aanmaakroute',
   regieBesluit.route === 'nieuw_dossier', regieBesluit.route)
 
-console.log(`\n${gedaan - fouten}/${gedaan} geslaagd (inclusief regie)\n`)
+
+// ── Regie mét een offerte ────────────────────────────────────────────────────
+// Er wordt wel degelijk een offerte uitgebracht om een uurtarief vast te leggen.
+// De opdracht die daarop volgt verwijst er lang niet altijd naar, maar het blijft
+// een opdracht op die offerte.
+console.log('\n── Regie mét een offerte ────────────────────────────────────')
+toets('regie + offerte gevonden → offerte winnen',
+  bepaalRoute('opdrachtbon', true, true) === 'offerte_winnen')
+toets('regie zónder offerte → nieuw dossier',
+  bepaalRoute('opdrachtbon', false, true) === 'nieuw_dossier')
+toets('geen regie, geen offerte → toch de offerteroute (mens wijst aan)',
+  bepaalRoute('opdrachtbon', false, false) === 'offerte_winnen')
+toets('servicedeskbon met regie én offerte → offerte winnen',
+  bepaalRoute('servicedeskbon', true, true) === 'offerte_winnen')
+
+console.log(`\n${gedaan - fouten}/${gedaan} geslaagd\n`)
+
 process.exit(fouten === 0 ? 0 : 1)

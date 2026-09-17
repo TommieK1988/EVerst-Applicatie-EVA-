@@ -55,7 +55,7 @@ type Factuuradres = {
 
 export default function OpdrachtPaneel({
   berichtId, kandidaten, relatieId, bewerkbaar,
-  voorstel, onKlaar,
+  voorstel, onKlaar, voorgekozenDossierId,
 }: {
   berichtId: string
   kandidaten: OfferteKandidaat[]
@@ -68,15 +68,21 @@ export default function OpdrachtPaneel({
     klantOpmerkingen: string | null
   }
   onKlaar: (dossierId: string) => void
+  /** Vanuit de duplicatenlijst aangewezen offerte. */
+  voorgekozenDossierId?: string | null
 }) {
   const { bevestig, meld } = useDialogen()
 
   const offertes = kandidaten.filter(k => k.soort === 'offerte_match')
   const harde = offertes.filter(k => k.score >= DUPLICAAT_HARD)
-  // Alleen voorselecteren als er niets te kiezen valt.
+  // Alleen voorselecteren als er niets te kiezen valt -- of als iemand er zelf een
+  // heeft aangewezen in de duplicatenlijst.
   const [dossierId, setDossierId] = useState<string | null>(
-    harde.length === 1 ? harde[0].dossierId : null,
+    voorgekozenDossierId ?? (harde.length === 1 ? harde[0].dossierId : null),
   )
+  React.useEffect(() => {
+    if (voorgekozenDossierId) setDossierId(voorgekozenDossierId)
+  }, [voorgekozenDossierId])
 
   const [zoek, setZoek] = useState('')
   const [gevonden, setGevonden] = useState<{ id: string; titel: string; klant_naam: string | null }[]>([])

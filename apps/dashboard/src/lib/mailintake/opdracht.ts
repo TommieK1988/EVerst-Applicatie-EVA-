@@ -41,6 +41,12 @@ export interface OpdrachtInvoer {
   klantOpmerkingen?: string | null
   /** Een afwijkend factuuradres bij dezelfde opdrachtgever. */
   factuuradresId?: string | null
+  /**
+   * De opdracht wordt op nacalculatie afgerekend. Zet de facturatiemethode op regie
+   * en houdt de aanneemsom uit Bouw7 -- een vaste prijs zou daar een bedrag
+   * suggereren dat niemand heeft afgesproken.
+   */
+  regie?: boolean
   relatieId?: string | null
   contactpersoonId?: string | null
   /**
@@ -125,6 +131,7 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
     wissel = await updateDossierSubstatus(inv.dossierId, 'gewonnen', {
       schrijfBouw7: true,
       forceerBouw7: inv.forceerBouw7 === true,
+      slaAanneemsomOver: inv.regie === true,
     })
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
@@ -141,6 +148,13 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   // niet teruggedraaid.
   const nazorg: NonNullable<OpdrachtResultaat['nazorg']> = {
     termijnen: 'overgeslagen', bijlagen: 0, notitie: false,
+  }
+
+  // ── 2b. Regie ─────────────────────────────────────────────────────────────
+  if (inv.regie) {
+    const { updateServicedeskInstellingen } = await import('@/lib/dossiers/servicedesk')
+    await updateServicedeskInstellingen(inv.dossierId, { facturatiemethode: 'regie' })
+      .catch(() => undefined)
   }
 
   // ── 3. Opdrachtdatum ──────────────────────────────────────────────────────
