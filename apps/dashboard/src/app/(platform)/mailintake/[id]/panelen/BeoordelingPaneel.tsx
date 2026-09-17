@@ -9,10 +9,11 @@
  * -- het leest alleen.
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 
 import { Button, Badge, Card } from '@/components/ui'
 import { dossierHref } from '@/lib/dossiers/href'
+import { zoekDossierVoorIntake } from '@/lib/mailintake/actions'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD,
 } from '@/lib/mailintake/types'
@@ -20,6 +21,96 @@ import {
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
 const kop = { fontSize: 13, fontWeight: 600, marginBottom: 6 } as const
+
+const veldStijl: React.CSSProperties = {
+  width: '100%', padding: '7px 9px', borderRadius: 6, fontSize: 13,
+  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
+}
+
+type Gevonden = Awaited<ReturnType<typeof zoekDossierVoorIntake>>[number]
+
+/**
+ * Zelf een dossier opzoeken om aan te koppelen.
+ *
+ * Staat in de rechterkolom en dus op élke route: ook een aanvraag of een
+ * regie-opdracht kan bij werk horen dat al in EVA staat. Zoekt op dossier- en
+ * offertenummer, op titel en op werkadres -- dat nummer is het punt, want wie het
+ * offertenummer uit de mail overtikte vond daarvoor niets.
+ */
+function DossierZoeker({
+  bewerkbaar, bezig, onKoppel,
+}: {
+  bewerkbaar: boolean
+  bezig: boolean
+  onKoppel: (dossierId: string, soort: KoppelSoort, label: string) => void
+}) {
+  const [term, setTerm] = useState('')
+  const [zoekt, setZoekt] = useState(false)
+  const [gevonden, setGevonden] = useState<Gevonden[] | null>(null)
+
+  async function zoeken() {
+    if (term.trim().length < 2) return
+    setZoekt(true)
+    try {
+      setGevonden(await zoekDossierVoorIntake(term))
+    } finally {
+      setZoekt(false)
+    }
+  }
+
+  if (!bewerkbaar) return null
+
+  return (
+    <Card style={{ padding: 14 }}>
+      <div style={kop}>Koppelen aan een bestaand dossier</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          style={{ ...veldStijl, flex: 1 }}
+          placeholder="Offertenummer, titel of adres…"
+          value={term}
+          onChange={e => setTerm(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void zoeken() } }}
+        />
+        <Button variant="outline" onClick={() => void zoeken()} disabled={zoekt}>
+          {zoekt ? '…' : 'Zoeken'}
+        </Button>
+      </div>
+
+      {gevonden != null && gevonden.length === 0 && (
+        <p style={{ ...klein, marginTop: 8 }}>Niets gevonden op “{term}”.</p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {(gevonden ?? []).map(d => (
+          <div key={d.dossierId} style={{ padding: 8, borderRadius: 6, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13 }}>
+              <strong>{d.dossiernummer ?? 'zonder nummer'}</strong>
+              {d.hoofdstatus && (
+                <span style={klein}> · {d.hoofdstatus}{d.substatus ? ` / ${d.substatus}` : ''}</span>
+              )}
+            </div>
+            <div style={zacht}>{d.titel}</div>
+            {(d.klantnaam || d.werkadres) && (
+              <div style={klein}>{[d.klantnaam, d.werkadres].filter(Boolean).join(' · ')}</div>
+            )}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <a href={dossierHref(d.dossierId, d.hoofdstatus)} target="_blank" rel="noopener noreferrer"
+                 style={{ fontSize: 12, color: 'hsl(var(--primary))' }}>
+                Bekijk dossier
+              </a>
+              <Button
+                variant="ghost" disabled={bezig}
+                onClick={() => onKoppel(d.dossierId, 'gekoppeld_bestaand', 'Koppelen aan dit dossier')}
+              >
+                Koppelen
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 type KoppelSoort = 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen'
 
@@ -165,6 +256,8 @@ export default function BeoordelingPaneel({
             </div>
           )}
         </Card>
+
+        <DossierZoeker bewerkbaar={bewerkbaar} bezig={bezig} onKoppel={onKoppel} />
       </div>
   )
 }
