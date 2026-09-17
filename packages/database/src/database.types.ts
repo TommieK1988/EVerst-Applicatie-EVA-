@@ -1192,6 +1192,10 @@ export type Database = {
       commercie_bewaking: {
         Row: {
           actiehouder_id: string | null
+          afgerond_door: string | null
+          afgerond_op: string | null
+          afgerond_reden: string | null
+          bron_dossier_id: string | null
           created_at: string
           dossier_id: string | null
           eigenaar_id: string | null
@@ -1212,6 +1216,10 @@ export type Database = {
         }
         Insert: {
           actiehouder_id?: string | null
+          afgerond_door?: string | null
+          afgerond_op?: string | null
+          afgerond_reden?: string | null
+          bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
           eigenaar_id?: string | null
@@ -1232,6 +1240,10 @@ export type Database = {
         }
         Update: {
           actiehouder_id?: string | null
+          afgerond_door?: string | null
+          afgerond_op?: string | null
+          afgerond_reden?: string | null
+          bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
           eigenaar_id?: string | null
@@ -1275,6 +1287,34 @@ export type Database = {
           {
             foreignKeyName: "commercie_bewaking_dossier_id_fkey"
             columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_afgerond_door_fkey"
+            columns: ["afgerond_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_bron_dossier_id_fkey"
+            columns: ["bron_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_bron_dossier_id_fkey"
+            columns: ["bron_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_bron_dossier_id_fkey"
+            columns: ["bron_dossier_id"]
             isOneToOne: false
             referencedRelation: "v_dossier_actief"
             referencedColumns: ["id"]

@@ -54,11 +54,9 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverItem,
   Separator,
-  AlertDialog, AlertDialogContent,
-  AlertDialogTitle, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogAction, AlertDialogCancel,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
 } from '@/components/ui'
+import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_ALLE_STATUSSEN]
@@ -1674,36 +1672,24 @@ export function InformatieTab({
           </div>
         </div>
 
-        {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. */}
-        <AlertDialog
-          open={afsluitBevestiging != null}
-          onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
-        >
-          <AlertDialogContent>
-            <AlertDialogTitle>
-              Dossier op &ldquo;
-              {beschikbareStatussen.find(s => s.key === afsluitBevestiging)?.label ?? afsluitBevestiging}
-              &rdquo; zetten?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Dit dossier wordt hiermee afgesloten en is daarna <strong>overal alleen-lezen</strong>;
-              je kunt dit niet meer ongedaan maken in EVA. De status wordt ook naar Bouw7
-              teruggeschreven.
-            </AlertDialogDescription>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Annuleren</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={async () => {
-                  const next = afsluitBevestiging
-                  setAfsluitBevestiging(null)
-                  if (next) await voerSubstatusUit(next)
-                }}
-              >
-                Ja, afsluiten
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. Dezelfde
+            dialoog als op het bord, zodat de reden en de eventuele verkoopkans langs beide wegen
+            op dezelfde manier worden uitgevraagd. */}
+        {afsluitBevestiging && (
+          <AfsluitenDialoog
+            open
+            onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
+            substatus={afsluitBevestiging}
+            label={
+              beschikbareStatussen.find(s => s.key === afsluitBevestiging)?.label
+              ?? afsluitBevestiging
+            }
+            dossierId={dossier.id}
+            dossierOmschrijving={[dossier.dossiernummer, dossier.titel].filter(Boolean).join(' — ') || null}
+            commercieel={sectie === 'offerte'}
+            onBevestigd={() => voerSubstatusUit(afsluitBevestiging)}
+          />
+        )}
 
         {/* Gereedmelden met compleetheidscontrole. Staat buiten de knop-render: de statuskeuze
             hierboven opent dezelfde dialoog, ook vanuit een andere substatus. */}

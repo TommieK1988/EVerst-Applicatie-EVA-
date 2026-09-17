@@ -25,6 +25,23 @@ export function dossierPad(sectie: DossierSectie, id: string): string {
 }
 
 /**
+ * Pad waar je uitkomt als je een dossier **vanaf een overzicht** aanklikt (bord, lijst, popup).
+ *
+ * Voor een offerte is dat **Bewaking** en niet Informatie. Wie vanaf het offertebord een dossier
+ * opent, doet dat om het commercieel op te volgen: wat is de stand, wie is aan zet, wanneer
+ * bellen we. Die vraag staat op Bewaking; op Informatie staan de projectgegevens, die in deze
+ * fase zelden nodig zijn. Elders blijft Informatie de logische landingsplek.
+ *
+ * Bewust een aparte functie en niet een andere uitkomst van `dossierPad()`: die wordt óók
+ * gebruikt om meldings-URL's te bouwen, waarbij het `/informatie`-segment door een ander
+ * tabblad wordt vervangen (`lib/portaal/meldingen.ts`). Die vervanging zou stilletjes niets
+ * doen zodra het laatste segment ineens `bewaking` heet.
+ */
+export function dossierOpenPad(sectie: DossierSectie, id: string): string {
+  return dossierTabPad(sectie, id, sectie === 'offerte' ? 'bewaking' : 'informatie')
+}
+
+/**
  * Opent een dossier standaard in een **nieuw browsertabblad**, zodat het overzicht
  * (filters, slicers, scrollpositie, kanban-stand) blijft staan en er meerdere
  * dossiers naast elkaar open kunnen.

@@ -68,8 +68,8 @@ const SUBSTATUSSEN_PER_FASE: Record<string, { value: string; label: string }[]> 
     { value: 'verzonden', label: 'Verzonden' }, { value: 'afgewezen', label: 'Afgewezen' }, { value: 'vervallen', label: 'Vervallen' },
   ],
   offerte: [
-    { value: 'verzonden', label: 'Verzonden' }, { value: 'nabellen', label: 'Nabellen' },
-    { value: 'in_behandeling', label: 'In behandeling' }, { value: 'mondelinge_toezegging', label: 'Mondelinge toezegging' },
+    { value: 'verzonden', label: 'Verzonden' }, { value: 'nabellen', label: 'Actie' },
+    { value: 'in_behandeling', label: 'Wachten' }, { value: 'mondelinge_toezegging', label: 'Mondelinge toezegging' },
     { value: 'gewonnen', label: 'Gewonnen' }, { value: 'verloren', label: 'Verloren' }, { value: 'vervallen', label: 'Vervallen' },
   ],
   opdracht: [

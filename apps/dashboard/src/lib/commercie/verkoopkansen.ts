@@ -1,0 +1,242 @@
+'use server'
+
+/**
+ * Server-actions voor verkoopkansen: wat er overblijft als een offerte verloren gaat, vervalt
+ * of wordt uitgesteld.
+ *
+ * Een eigen module en niet een hoofdstuk in `actions.ts`, om twee redenen. De verkoopkans is
+ * een andere entiteit dan de offertekaart — hij hangt niet aan één dossier maar verwijst
+ * ernaar — en `actions.ts` was met dit hoofdstuk erbij over de 800 regels gegaan, wat de
+ * schuldteller (terecht) afkeurde.
+ *
+ * Pure helpers die beide modules delen (`naamVan`, `vertaalDbFout`, `ActieResultaat`) staan in
+ * `types.ts`: een `'use server'`-module mag alleen async functies exporteren, dus ze konden
+ * niet vanuit `actions.ts` komen.
+ */
+
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@everts/database/server'
+import { vereisRecht, type CurrentMedewerker } from '@/lib/auth/rechten'
+import { maakNotificatie } from '@/lib/notificaties/maak'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
+import {
+  verkoopkansCompleet, naamVan, vertaalDbFout,
+  type ActieResultaat, type MedewerkerNaam, type Verkoopkans, type VerkoopkansInvoer,
+} from './types'
+
+/** De service-role-client; los getypeerd zodat de helpers hieronder hem kunnen aannemen. */
+type AdminClient = ReturnType<typeof createAdminClient>
+
+/**
+ * De kans die overblijft als een offerte verloren gaat, vervalt of wordt uitgesteld.
+ *
+ * Technisch een rij in dezelfde tabel als de offertekaart (`soort = 'signaal'`, zonder
+ * `dossier_id` maar met `bron_dossier_id`); zie `lib/commercie/types.ts` en de migratie
+ * `20260917a_verkoopkansen.sql` voor waarom dat geen tweede tabel is geworden.
+ *
+ * De drie verplichte velden landen zo: uitleg → `titel` én `stap_tekst`, actiehouder →
+ * `actiehouder_id`, deadline → `stap_datum`. Dat `stap_tekst` de uitleg herhaalt is geen
+ * slordigheid maar het schema: een kaart met een stap moet van de check-constraint een tekst,
+ * een datum én een houder hebben, en de uitleg ís hier de afspraak.
+ */
+async function schrijfVerkoopkans(
+  supabase: AdminClient,
+  medewerker: CurrentMedewerker,
+  invoer: VerkoopkansInvoer,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const uitleg = invoer.uitleg.trim()
+  const { data, error } = await supabase.from('commercie_bewaking')
+    .insert({
+      soort: 'signaal',
+      titel: uitleg,
+      bron_dossier_id: invoer.bronDossierId ?? null,
+      eigenaar_id: medewerker.id,
+      actiehouder_id: invoer.actiehouderId,
+      stap_soort: 'actie',
+      stap_tekst: uitleg,
+      stap_datum: invoer.deadline,
+      stap_bron: 'handmatig',
+      // Een kans die iemand bewust vastlegt is per definitie beoordeeld; bleef dit leeg, dan
+      // zou hij zichzelf als "nog niet beoordeeld" tonen.
+      getrieerd_op: new Date().toISOString(),
+      getrieerd_door: medewerker.id,
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) return { ok: false, error: vertaalDbFout(error?.message ?? 'onbekende fout') }
+  return { ok: true, id: data.id }
+}
+
+export async function maakVerkoopkans(invoer: VerkoopkansInvoer): Promise<ActieResultaat> {
+  const { medewerker } = await vereisRecht('dossiers', 'schrijven')
+  if (!verkoopkansCompleet(invoer)) {
+    return { ok: false, error: 'Vul de uitleg, de actiehouder en de deadline in.' }
+  }
+  const supabase = createAdminClient()
+  const res = await schrijfVerkoopkans(supabase, medewerker, invoer)
+  if (!res.ok) return res
+
+  if (invoer.actiehouderId !== medewerker.id) {
+    await meldVerkoopkansActiehouder(supabase, {
+      actiehouderId: invoer.actiehouderId,
+      uitleg: invoer.uitleg.trim(),
+      deadline: invoer.deadline,
+      bronDossierId: invoer.bronDossierId ?? null,
+    })
+  }
+
+  revalidatePath('/aanvragen')
+  return { ok: true }
+}
+
+/** Bewerken vanuit het overzicht: dezelfde drie velden, plus afronden. */
+export async function wijzigVerkoopkans(
+  id: string,
+  invoer: VerkoopkansInvoer & { afgerond?: boolean; afgerondReden?: string | null },
+): Promise<ActieResultaat> {
+  const { medewerker } = await vereisRecht('dossiers', 'schrijven')
+  if (!verkoopkansCompleet(invoer)) {
+    return { ok: false, error: 'Vul de uitleg, de actiehouder en de deadline in.' }
+  }
+  const supabase = createAdminClient()
+
+  const { data: bestaand } = await supabase.from('commercie_bewaking')
+    .select('id,soort,afgerond_op').eq('id', id).maybeSingle()
+  if (!bestaand || bestaand.soort !== 'signaal') {
+    return { ok: false, error: 'Deze verkoopkans bestaat niet meer.' }
+  }
+
+  const uitleg = invoer.uitleg.trim()
+  const { error } = await supabase.from('commercie_bewaking')
+    .update({
+      titel: uitleg,
+      stap_tekst: uitleg,
+      stap_datum: invoer.deadline,
+      actiehouder_id: invoer.actiehouderId,
+      bron_dossier_id: invoer.bronDossierId ?? null,
+      // Afronden en heropenen zijn dezelfde knop: een kans die per ongeluk is afgevinkt moet
+      // terug kunnen zonder dat iemand hem opnieuw moet intypen. Het oorspronkelijke moment
+      // blijft staan zodra hij er is, zodat heropenen-en-weer-afronden de datum niet verschuift.
+      afgerond_op: invoer.afgerond ? (bestaand.afgerond_op ?? new Date().toISOString()) : null,
+      afgerond_door: invoer.afgerond ? medewerker.id : null,
+      afgerond_reden: invoer.afgerond ? (invoer.afgerondReden?.trim() || null) : null,
+    })
+    .eq('id', id)
+
+  if (error) return { ok: false, error: vertaalDbFout(error.message) }
+  revalidatePath('/aanvragen')
+  return { ok: true }
+}
+
+/** Stil bij fouten — zie maak.ts; een mislukte melding mag de kans niet tegenhouden. */
+async function meldVerkoopkansActiehouder(
+  supabase: AdminClient,
+  opts: { actiehouderId: string; uitleg: string; deadline: string; bronDossierId: string | null },
+): Promise<void> {
+  const { data: mw } = await supabase.from('medewerkers')
+    .select('auth_user_id').eq('id', opts.actiehouderId).maybeSingle()
+  if (!mw?.auth_user_id) return
+
+  await maakNotificatie({
+    user_id: mw.auth_user_id,
+    type: 'offertebewaking',
+    titel: 'Verkoopkans voor jou',
+    body: `${opts.uitleg} · uiterlijk ${opts.deadline}`,
+    url: '/aanvragen',
+    dossier_id: opts.bronDossierId ?? undefined,
+  })
+}
+
+/**
+ * Alle verkoopkansen. Gepagineerd omdat dit geen per-dossier-query is: de lijst groeit met elke
+ * verloren offerte en zou stil op 1000 rijen worden afgekapt.
+ *
+ * De brondossiers komen in een tweede ronde in plaats van via een PostgREST-embed:
+ * `commercie_bewaking` heeft twee verwijzingen naar `dossiers` (`dossier_id` en
+ * `bron_dossier_id`), en een embed moet dan op FK-naam worden gekozen — een naam die bij een
+ * toekomstige migratie kan wijzigen zonder dat iets faalt tot het scherm leeg blijft.
+ */
+export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
+  await vereisRecht('dossiers', 'lezen')
+  const supabase = createAdminClient()
+
+  type SignaalRij = {
+    id: string
+    titel: string | null
+    actiehouder_id: string | null
+    stap_datum: string | null
+    bron_dossier_id: string | null
+    afgerond_op: string | null
+    afgerond_reden: string | null
+    created_at: string
+  }
+  type DossierMini = {
+    id: string
+    dossiernummer: string | null
+    titel: string | null
+    hoofdstatus: string | null
+    klant_id: string | null
+  }
+
+  const rijen = await haalAlleRijen<SignaalRij>((van, tot) =>
+    supabase.from('commercie_bewaking')
+      .select('id,titel,actiehouder_id,stap_datum,bron_dossier_id,afgerond_op,afgerond_reden,created_at')
+      .eq('soort', 'signaal')
+      .order('id')
+      .range(van, tot),
+  )
+
+  if (rijen.length === 0) return []
+
+  const dossierIds = [...new Set(rijen.map(r => r.bron_dossier_id).filter(Boolean) as string[])]
+  const medewerkerIds = [...new Set(rijen.map(r => r.actiehouder_id).filter(Boolean) as string[])]
+
+  // Beide begrensd met `.in()` op de ids die we net hebben — ruim onder de PostgREST-grens.
+  const [dossierRes, mensenRes] = await Promise.all([
+    dossierIds.length
+      ? supabase.from('dossiers').select('id,dossiernummer,titel,hoofdstatus,klant_id').in('id', dossierIds)
+      : Promise.resolve({ data: [] as DossierMini[] }),
+    medewerkerIds.length
+      ? supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam').in('id', medewerkerIds)
+      : Promise.resolve({ data: [] as MedewerkerNaam[] }),
+  ])
+  const dossiers = (dossierRes.data ?? []) as DossierMini[]
+  const mensen = (mensenRes.data ?? []) as MedewerkerNaam[]
+
+  const klantIds = [...new Set(dossiers.map(d => d.klant_id).filter(Boolean) as string[])]
+  const relatieRes = klantIds.length
+    ? await supabase.from('relaties').select('id, naam').in('id', klantIds)
+    : { data: [] as { id: string; naam: string | null }[] }
+
+  const klantPerId = new Map((relatieRes.data ?? []).map(r => [r.id, r.naam ?? null]))
+  const dossierPerId = new Map(dossiers.map(d => [d.id, d]))
+  const naamPerId = new Map(mensen.map(m => [m.id, naamVan(m)]))
+
+  return rijen
+    .map<Verkoopkans>(r => {
+      const d = r.bron_dossier_id ? dossierPerId.get(r.bron_dossier_id) ?? null : null
+      const fase = d?.hoofdstatus
+      return {
+        id: r.id,
+        uitleg: r.titel ?? '',
+        actiehouderId: r.actiehouder_id,
+        actiehouderNaam: r.actiehouder_id ? naamPerId.get(r.actiehouder_id) ?? null : null,
+        deadline: r.stap_datum,
+        bronDossierId: r.bron_dossier_id,
+        bronDossiernummer: d?.dossiernummer ?? null,
+        bronDossierTitel: d?.titel ?? null,
+        bronSectie: fase === 'aanvraag' || fase === 'offerte' || fase === 'opdracht' ? fase : null,
+        klantNaam: d?.klant_id ? klantPerId.get(d.klant_id) ?? null : null,
+        afgerondOp: r.afgerond_op,
+        afgerondReden: r.afgerond_reden,
+        aangemaaktOp: r.created_at,
+      }
+    })
+    // Open kansen eerst, daarbinnen de dichtstbijzijnde deadline bovenaan: dat is de volgorde
+    // waarin je ze afwerkt, niet de volgorde waarin ze zijn ontstaan.
+    .sort((a, b) => {
+      if (!!a.afgerondOp !== !!b.afgerondOp) return a.afgerondOp ? 1 : -1
+      return (a.deadline ?? '9999') < (b.deadline ?? '9999') ? -1 : 1
+    })
+}

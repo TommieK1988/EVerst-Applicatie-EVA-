@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { EyeOff, Undo2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui'
 import { zetDossierIntern } from '@/lib/dossiers/actions'
-import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
+import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierRij, DossierSectie } from './types'
 
 /**
@@ -26,7 +26,7 @@ export function InternDossiersKnop({
 
   function open_dossier(id: string) {
     setOpen(false)
-    openDossierInNieuwTabblad(dossierPad(sectie, id))
+    openDossierInNieuwTabblad(dossierOpenPad(sectie, id))
   }
 
   async function terugzetten(id: string) {

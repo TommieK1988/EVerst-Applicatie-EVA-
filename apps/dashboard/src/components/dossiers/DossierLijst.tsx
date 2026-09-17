@@ -6,7 +6,7 @@ import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschap
 import { FACTURATIE_LABELS, getDossierSubstatus } from './types'
 import { isVerlopen } from './kaart-indicatoren'
 import { berekenKaartBedrag } from './kaart-bedrag'
-import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
+import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { IconPlusDS } from '@/components/eva/Icons'
@@ -738,7 +738,7 @@ export function DossierLijst({
     if (onDossierKlik) {
       onDossierKlik(d)
     } else if (sectie) {
-      openDossierInNieuwTabblad(dossierPad(sectie, d.id))
+      openDossierInNieuwTabblad(dossierOpenPad(sectie, d.id))
     }
   }
 

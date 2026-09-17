@@ -4,6 +4,7 @@ import { laadLayouts } from '@/app/actions/layouts'
 import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import OpenstaandeUitvragenKnop from '@/components/dossiers/OpenstaandeUitvragenKnop'
+import VerkoopkansenKnop from '@/components/commercie/VerkoopkansenKnop'
 import { AANVRAAG_STATUSSEN } from '@/components/dossiers/types'
 import { getDossiersVoorAanvragen, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
@@ -58,6 +59,7 @@ export default async function AanvragenPage({
         extraActies={<>
           <BouwSyncKnop key="bouw7-sync" lasteSyncIso={lasteSyncIso} scope="aanvraag" />
           <OpenstaandeUitvragenKnop key="uitvragen-open" />
+          <VerkoopkansenKnop key="verkoopkansen" />
         </>}
       />
     </>

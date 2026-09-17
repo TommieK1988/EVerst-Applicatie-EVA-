@@ -142,8 +142,8 @@ export default function CommercieBlok({ cijfers }: { cijfers: CommercieCijfers }
           </table>
         )}
         <p className="mt-2 text-[11px] italic text-neutral-500">
-          Loopt Nabellen op, dan blijven offertes te lang liggen ná verzending. Loopt In
-          behandeling op, dan wachten klanten te lang op antwoord van ons. De mediaan is
+          Loopt Actie op, dan blijven offertes te lang liggen ná verzending. Loopt Wachten
+          op, dan wachten klanten te lang op antwoord van ons. De mediaan is
           betrouwbaarder dan het gemiddelde zolang het aantal metingen klein is.
         </p>
       </ChartCard>

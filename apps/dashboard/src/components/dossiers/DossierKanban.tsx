@@ -2,20 +2,15 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { IconPlus, IconSearch, IconDomeinOnderhoud } from '../eva/Icons'
-import {
-  Button, Input, EmptyState,
-  AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
-} from '@/components/ui'
+import { Button, Input, EmptyState } from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
 import { wijzigSubstatusMetConflict } from './substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
-import { dossierPad, openDossierInNieuwTabblad } from './open-dossier'
-import { VERLIES_REDENEN } from '@/lib/commercie/types'
-import { legVerliesRedenVastActie } from '@/lib/commercie/actions'
+import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
+import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -106,7 +101,7 @@ export function DossierKanban<K extends string>({
 
   const openKaart = React.useCallback((dossierId: string) => {
     if (draggingRef.current) return
-    openDossierInNieuwTabblad(dossierPad(sectie, dossierId))
+    openDossierInNieuwTabblad(dossierOpenPad(sectie, dossierId))
   }, [sectie])
 
   const startSlepen = React.useCallback((dossierId: string) => setDraggingId(dossierId), [])
@@ -117,9 +112,6 @@ export function DossierKanban<K extends string>({
   /** Gezet zodra er naar een afsluitende kolom is gesleept; de dialoog bevestigt of annuleert. */
   const [afsluitBevestiging, setAfsluitBevestiging] =
     React.useState<{ dossierId: string; status: K } | null>(null)
-  /** Verliesreden — alleen gevraagd bij een offerte die op Verloren wordt gezet. */
-  const [verliesReden, setVerliesReden] = React.useState('')
-  const [verliesToelichting, setVerliesToelichting] = React.useState('')
 
   const zoekQ = zoek.trim().toLowerCase()
   const gefilterd = zoekQ
@@ -214,10 +206,6 @@ export function DossierKanban<K extends string>({
   const afsluitLabel = afsluitBevestiging
     ? (statussen.find(s => s.key === afsluitBevestiging.status)?.label ?? afsluitBevestiging.status)
     : ''
-  // Alleen bij een verloren offerte: 'vervallen' betekent dat het werk van tafel is, en een
-  // afgewezen aanvraag heeft nog geen offerte gehad om op te verliezen.
-  const vraagtVerliesReden =
-    sectie === 'offerte' && afsluitBevestiging?.status === 'verloren'
 
   return (
     <>
@@ -231,76 +219,24 @@ export function DossierKanban<K extends string>({
         />
       )}
 
-      {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. */}
-      <AlertDialog
-        open={afsluitBevestiging != null}
-        onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
-      >
-        <AlertDialogContent>
-          <AlertDialogTitle>Dossier op &ldquo;{afsluitLabel}&rdquo; zetten?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {afsluitDossier?.dossiernummer ? `${afsluitDossier.dossiernummer} — ` : ''}
-            {afsluitDossier?.titel ?? 'Dit dossier'} wordt hiermee afgesloten en is daarna
-            <strong> overal alleen-lezen</strong>; je kunt dit niet meer ongedaan maken in EVA.
-            De status wordt ook naar Bouw7 teruggeschreven.
-          </AlertDialogDescription>
-          {/* Verlies je een offerte, dan is de reden het enige wat je er commercieel nog aan
-              overhoudt. Hier uitvragen kost vijf seconden; achteraf reconstrueren lukt niet meer.
-              De reden voedt de verliesredenen-tabel onder Management → Verkoop. */}
-          {vraagtVerliesReden && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--neutral-700)' }}>
-                Waarom is de offerte niet doorgegaan?
-              </label>
-              <select
-                value={verliesReden}
-                onChange={e => setVerliesReden(e.target.value)}
-                style={{
-                  height: 32, borderRadius: 6, border: '1px solid var(--border)',
-                  padding: '0 8px', fontSize: 13, background: 'var(--neutral-0)',
-                }}
-              >
-                <option value="">Kies een reden…</option>
-                {VERLIES_REDENEN.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              {verliesReden === 'Anders' && (
-                <Input
-                  placeholder="Licht kort toe"
-                  value={verliesToelichting}
-                  onChange={e => setVerliesToelichting(e.target.value)}
-                />
-              )}
-              <span style={{ fontSize: 11.5, color: 'var(--neutral-500)' }}>
-                Komt het werk later terug? Zet het dossier dan niet op Verloren, maar leg op het
-                tabblad Bewaking een herbenaderdatum vast.
-              </span>
-            </div>
+      {/* Bevestiging vóór een afsluitende status: daarna is het dossier alleen-lezen. Bij een
+          offerte vraagt de dialoog ook de reden uit en biedt hij aan de kans te bewaren — zie
+          AfsluitenDialoog voor waarom die drie dingen bij elkaar horen. */}
+      {afsluitBevestiging && (
+        <AfsluitenDialoog
+          open
+          onOpenChange={open => { if (!open) setAfsluitBevestiging(null) }}
+          substatus={afsluitBevestiging.status}
+          label={afsluitLabel}
+          dossierId={afsluitBevestiging.dossierId}
+          dossierOmschrijving={[afsluitDossier?.dossiernummer, afsluitDossier?.titel]
+            .filter(Boolean).join(' — ') || null}
+          commercieel={sectie === 'offerte'}
+          onBevestigd={() => voerStatuswijzigingUit(
+            afsluitBevestiging.dossierId, afsluitBevestiging.status,
           )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={vraagtVerliesReden && !verliesReden}
-              onClick={async () => {
-                const b = afsluitBevestiging
-                const reden = verliesReden
-                const toelichting = verliesToelichting
-                setAfsluitBevestiging(null)
-                setVerliesReden('')
-                setVerliesToelichting('')
-                if (!b) return
-                await voerStatuswijzigingUit(b.dossierId, b.status)
-                // Ná de statuswijziging: de DB-trigger moet de historierij eerst hebben
-                // geschreven, anders is er niets om de reden op aan te vullen.
-                if (reden) {
-                  await legVerliesRedenVastActie(b.dossierId, reden, toelichting || null)
-                }
-              }}
-            >
-              Ja, afsluiten
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        />
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', background: 'var(--bg)' }}>
 

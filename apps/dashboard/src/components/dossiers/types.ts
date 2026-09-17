@@ -146,10 +146,20 @@ export const AANVRAAG_STATUSSEN: StatusDef<AanvraagSubstatus>[] = [
   { key: 'vervallen',           label: 'Vervallen'           },
 ]
 
+/**
+ * De offertefase. Let op het verschil tussen sleutel en label: `nabellen` heet op het scherm
+ * **Actie** (wij zijn aan zet) en `in_behandeling` heet **Wachten** (de bal ligt bij de klant).
+ * Het bedrijf denkt in die twee woorden; "nabellen" bleek te smal (er wordt ook gemaild en
+ * langsgegaan) en "in behandeling" zei niet bij wie het lag.
+ *
+ * De sleutels blijven ongewijzigd — ze staan in de database, in `dossier_status_historie`, in
+ * actielijst-triggers en in de Bouw7-ladder ("08. Nabellen", "09. In behandeling", zie
+ * `lib/bouw7/substatus-map.ts`). Hernoemen daarvan zou de two-way koppeling breken voor één woord.
+ */
 export const OFFERTE_STATUSSEN: StatusDef<OfferteSubstatus>[] = [
   { key: 'verzonden',             label: 'Verzonden'             },
-  { key: 'nabellen',              label: 'Nabellen'              },
-  { key: 'in_behandeling',        label: 'In behandeling'        },
+  { key: 'nabellen',              label: 'Actie'                 },
+  { key: 'in_behandeling',        label: 'Wachten'               },
   { key: 'mondelinge_toezegging', label: 'Mondelinge toezegging' },
   { key: 'gewonnen',              label: 'Gewonnen'              },
   { key: 'verloren',              label: 'Verloren'              },

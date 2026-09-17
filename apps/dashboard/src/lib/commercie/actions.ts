@@ -28,17 +28,17 @@ import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 // Nederlandse tijd wordt afgerond op de vorige kalenderdag worden gezet.
 import { vandaagNL } from '@/lib/wagenpark/periode'
 import {
-  bewakingsStatus, stapOmschrijving, werkdagenVooruit, UITKOMSTEN, UITKOMST_LABELS,
-  type BewakingKaart, type BewakingStatus, type UitkomstSleutel,
-  type StapSoort, type WachtOp,
+  bewakingsStatus, stapOmschrijving, werkdagenVooruit, verkoopkansCompleet,
+  naamVan, vertaalDbFout, UITKOMSTEN, UITKOMST_LABELS,
+  type ActieResultaat, type BewakingKaart, type BewakingStatus, type MedewerkerNaam,
+  type UitkomstSleutel, type StapSoort, type WachtOp, type VerkoopkansInvoer,
 } from './types'
+// De verkoopkans woont in een eigen module: hij is een andere entiteit dan de offertekaart,
+// en `actions.ts` was zonder die scheiding voorbij de 800 regels gegroeid.
+import { maakVerkoopkans } from './verkoopkansen'
 
 /** De service-role-client; los getypeerd zodat de helpers hieronder hem kunnen aannemen. */
 type AdminClient = ReturnType<typeof createAdminClient>
-
-export type ActieResultaat =
-  | { ok: true }
-  | { ok: false; error: string; conflict?: { bouw7Label: string } }
 
 // Eén literal, geen `.join()`: supabase-js leidt het rijtype af uit de letterlijke
 // select-string. Een samengestelde string maakt daar `string` van en dan valt de hele
@@ -129,19 +129,6 @@ function isAfgerond(hoofdstatus: string | null, offerteSubstatus: string | null)
   return offerteSubstatus != null && AFGEROND_SUBSTATUS.includes(offerteSubstatus)
 }
 
-type MedewerkerNaam = {
-  id: string
-  voornaam?: string | null
-  tussenvoegsel?: string | null
-  achternaam?: string | null
-}
-
-function naamVan(m: { voornaam?: string | null; tussenvoegsel?: string | null; achternaam?: string | null } | null): string | null {
-  if (!m) return null
-  const naam = [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
-  return naam || null
-}
-
 export async function getBewaking(dossierId: string): Promise<BewakingWeergave> {
   await vereisRecht('dossiers', 'lezen')
   const supabase = createAdminClient()
@@ -191,7 +178,7 @@ export type TijdlijnRegel = {
   id: string
   op: string
   soort: 'contact' | 'stap' | 'overdracht' | 'notitie' | 'fase'
-  /** Kopregel, bv. 'Gebeld — geen gehoor' of 'Fase: Nabellen → In behandeling'. */
+  /** Kopregel, bv. 'Gebeld — geen gehoor' of 'Fase: Actie → Wachten'. */
   kop: string
   tekst: string | null
   door: string | null
@@ -289,11 +276,13 @@ export async function getTijdlijn(dossierId: string): Promise<TijdlijnRegel[]> {
   return regels.sort((a, b) => (a.op < b.op ? 1 : a.op > b.op ? -1 : 0))
 }
 
+// Labels zoals het bedrijf ze leest; de sleutels blijven de DB-waarden. Gelijkhouden met
+// OFFERTE_STATUSSEN in components/dossiers/types.ts — daar staat waarom 'nabellen' Actie heet.
 const FASE_LABELS: Record<string, string> = {
   concept: 'Concept',
   verzonden: 'Verzonden',
-  nabellen: 'Nabellen',
-  in_behandeling: 'In behandeling',
+  nabellen: 'Actie',
+  in_behandeling: 'Wachten',
   mondelinge_toezegging: 'Mondelinge toezegging',
   gewonnen: 'Gewonnen',
   verloren: 'Verloren',
@@ -445,6 +434,11 @@ export type UitkomstInvoer = {
   /** Verplicht bij 'verloren'. */
   reden?: string | null
   redenToelichting?: string | null
+  /**
+   * De kans die overblijft. Verplicht bij 'uitgesteld' (uitgesteld werk zonder houder en datum
+   * is vergeten werk), optioneel bij 'verloren'.
+   */
+  verkoopkans?: VerkoopkansInvoer | null
   /** Tweede poging na een Bouw7-conflict: tóch overschrijven. */
   forceerBouw7?: boolean
 }
@@ -471,6 +465,12 @@ export async function legUitkomstVast(
   if (def.vraagtActiehouder && !invoer.actiehouderId) {
     return { ok: false, error: 'Kies wie deze stap oppakt.' }
   }
+  if (def.vraagtVerkoopkans && !(invoer.verkoopkans && verkoopkansCompleet(invoer.verkoopkans))) {
+    return {
+      ok: false,
+      error: 'Leg de verkoopkans vast: waar het over gaat, wie erachteraan gaat en wanneer.',
+    }
+  }
 
   const supabase = createAdminClient()
   const kaart = await kaartVoorDossier(supabase, dossierId)
@@ -486,7 +486,7 @@ export async function legUitkomstVast(
     if (!res.ok) return { ok: false, error: res.error, conflict: res.conflict }
 
     if (def.vraagtReden && invoer.reden) {
-      await legVerliesRedenVast(supabase, dossierId, invoer.reden, invoer.redenToelichting)
+      await legAfsluitRedenVast(supabase, dossierId, def.fase, invoer.reden, invoer.redenToelichting)
     }
   }
 
@@ -550,27 +550,44 @@ export async function legUitkomstVast(
     })
   }
 
+  // 5. De kans die overblijft. Als laatste, en bewust niet fataal: de uitkomst zelf is dan al
+  //    opgeslagen, en die terugdraaien om een mislukte vervolgkaart zou de gebruiker een
+  //    vastgelegd telefoongesprek kosten. Mislukt hij, dan zegt het resultaat dat erbij.
+  if (invoer.verkoopkans && verkoopkansCompleet(invoer.verkoopkans)) {
+    const kans = await maakVerkoopkans({
+      ...invoer.verkoopkans,
+      bronDossierId: invoer.verkoopkans.bronDossierId ?? dossierId,
+    })
+    if (!kans.ok) {
+      return { ok: false, error: `Uitkomst vastgelegd, maar de verkoopkans niet: ${kans.error}` }
+    }
+  }
+
   revalidatePath(`/offertes/${dossierId}/bewaking`)
   revalidatePath('/offertes')
+  revalidatePath('/aanvragen')
   return { ok: true }
 }
 
 /**
- * Legt de verliesreden vast nádat de fase al op 'verloren' is gezet — het pad dat het
- * offertebord gebruikt, waar het slepen naar de kolom de statuswijziging al heeft gedaan.
+ * Legt de reden van een afsluiting vast nádat de status al is gezet — het pad dat het
+ * offertebord en de statuskiezer gebruiken, waar het slepen of kiezen de statuswijziging al
+ * heeft gedaan.
  *
  * Roep dit dus altijd ná de statuswijziging aan: de DB-trigger moet de historierij hebben
  * geschreven voordat er iets aan te vullen valt.
  */
-export async function legVerliesRedenVastActie(
+export async function legAfsluitRedenVastActie(
   dossierId: string,
+  substatus: string,
   reden: string,
   toelichting?: string | null,
 ): Promise<ActieResultaat> {
   await vereisRecht('dossiers', 'schrijven')
   const supabase = createAdminClient()
-  await legVerliesRedenVast(supabase, dossierId, reden, toelichting)
+  await legAfsluitRedenVast(supabase, dossierId, substatus, reden, toelichting)
   revalidatePath('/offertes')
+  revalidatePath('/aanvragen')
   return { ok: true }
 }
 
@@ -580,17 +597,22 @@ export async function legVerliesRedenVastActie(
  * Waarom aanvullen en niet zelf een rij maken: `dossier_status_historie` is de bron voor
  * doorlooptijd per fase. Een extra rij zou daar als een tweede fasewissel tellen en de
  * cijfers vervuilen.
+ *
+ * `substatus` is de afsluitende waarde ('verloren', 'vervallen' of 'afgewezen'). Vervallen
+ * bestaat in beide fases en de aanvraag- en offertefase hebben elk hun eigen historiekolom;
+ * `.or()` pakt daarom de juiste zonder dat de aanroeper de fase hoeft mee te geven.
  */
-async function legVerliesRedenVast(
+async function legAfsluitRedenVast(
   supabase: AdminClient,
   dossierId: string,
+  substatus: string,
   reden: string,
   toelichting?: string | null,
 ): Promise<void> {
   const { data } = await supabase.from('dossier_status_historie')
     .select('id')
     .eq('dossier_id', dossierId)
-    .eq('naar_offerte_substatus', 'verloren')
+    .or(`naar_offerte_substatus.eq.${substatus},naar_aanvraag_substatus.eq.${substatus}`)
     .is('reden', null)
     .order('op', { ascending: false })
     .limit(1)
@@ -599,21 +621,6 @@ async function legVerliesRedenVast(
   if (!rij) return
   const volledig = toelichting ? `${reden} — ${toelichting}` : reden
   await supabase.from('dossier_status_historie').update({ reden: volledig }).eq('id', rij.id)
-}
-
-/**
- * Databasefouten die een gebruiker kan veroorzaken, in gewone taal. De check-constraints zijn
- * het vangnet onder de formuliervalidatie; als er één afgaat, moet de gebruiker weten wat
- * eraan ontbreekt in plaats van een Postgres-melding te zien.
- */
-function vertaalDbFout(bericht: string): string {
-  if (bericht.includes('commercie_bewaking_stap_compleet')) {
-    return 'Een volgende stap heeft altijd een omschrijving, een datum en iemand die hem oppakt.'
-  }
-  if (bericht.includes('commercie_bewaking_wacht_op')) {
-    return 'Geef aan bij wie de bal ligt: de klant, een collega of een derde partij.'
-  }
-  return bericht
 }
 
 // ── Home-widget ──────────────────────────────────────────────────────────────

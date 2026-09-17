@@ -277,6 +277,14 @@ export type UitkomstDefinitie = {
   vraagtDatum?: boolean
   /** Vraagt de dialoog om een verliesreden? */
   vraagtReden?: boolean
+  /**
+   * Dwingt de dialoog een verkoopkans af. Bij uitstel is dat geen extraatje: het werk komt
+   * terug, en zonder iemand met een datum erachter is "uitgesteld" een ander woord voor
+   * vergeten. De herbenaderdatum is meteen de deadline van die kans.
+   */
+  vraagtVerkoopkans?: boolean
+  /** Biedt de dialoog een verkoopkans aan, zonder hem te verplichten. */
+  biedtVerkoopkans?: boolean
   /** Voorstel voor het kanspercentage. */
   kans?: number
 }
@@ -356,6 +364,7 @@ export const UITKOMSTEN: UitkomstDefinitie[] = [
     stapTekst: 'Werk uitgesteld — opnieuw benaderen',
     werkdagen: null,
     vraagtDatum: true,
+    vraagtVerkoopkans: true,
     kans: 10,
   },
   {
@@ -368,6 +377,7 @@ export const UITKOMSTEN: UitkomstDefinitie[] = [
     stapTekst: '',
     werkdagen: null,
     vraagtReden: true,
+    biedtVerkoopkans: true,
   },
 ]
 
@@ -392,6 +402,90 @@ export const VERLIES_REDENEN = [
 
 export type VerliesReden = (typeof VERLIES_REDENEN)[number]
 
+/**
+ * Waarom een dossier vervalt. Een andere vraag dan "waarom verloren": bij vervallen is er
+ * niemand die de klus wint — hij gaat gewoon niet door, of hij is nooit een echte aanvraag
+ * geweest. Die twee door elkaar halen maakt de verkooprapportage onbruikbaar, want dan lijkt
+ * elk geannuleerd project op een verloren strijd met een concurrent.
+ */
+export const VERVAL_REDENEN = [
+  'Werk gaat niet door',
+  'Opdrachtgever stelt het werk uit',
+  'Budget niet vrijgegeven',
+  'Geen reactie meer van klant',
+  'Dubbele aanvraag',
+  'Wij zien ervan af',
+  'Anders',
+] as const
+
+export type VervalReden = (typeof VERVAL_REDENEN)[number]
+
+/**
+ * De redenenlijst die bij een afsluitende substatus hoort. Eén plek, zodat het offertebord, de
+ * statuskiezer op het Informatie-tab en de uitkomstdialoog dezelfde vraag stellen — anders
+ * krijg je per scherm een andere set antwoorden in dezelfde rapportagekolom.
+ */
+export function redenenVoorAfsluiten(substatus: string): readonly string[] {
+  return substatus === 'vervallen' ? VERVAL_REDENEN : VERLIES_REDENEN
+}
+
+/** De vraag boven die lijst, in de taal van de betreffende afsluiting. */
+export function redenVraagVoorAfsluiten(substatus: string): string {
+  if (substatus === 'vervallen') return 'Waarom vervalt dit dossier?'
+  if (substatus === 'afgewezen') return 'Waarom is de aanvraag afgewezen?'
+  return 'Waarom is de offerte niet doorgegaan?'
+}
+
+// ── Verkoopkansen ────────────────────────────────────────────────────────────
+
+/**
+ * Een verkoopkans is wat er ná een verloren, vervallen of uitgestelde offerte overblijft: het
+ * werk komt over een jaar terug, de VvE besluit alsnog, de beheerder belt opnieuw. Zonder deze
+ * kaart verdwijnt dat met het dossier in de alleen-lezen-stapel.
+ *
+ * Hij leeft in dezelfde tabel als de offertekaart (`commercie_bewaking`, `soort = 'signaal'`) —
+ * zie de migratie `20260917a_verkoopkansen.sql` voor waarom dat geen tweede tabel is geworden.
+ * Drie dingen zijn verplicht en dat is het hele ontwerp: **uitleg** (waar gaat het over),
+ * **actiehouder** (wie belt) en **deadline** (wanneer). Een kans zonder één daarvan is een
+ * aantekening, geen kans.
+ */
+export type VerkoopkansInvoer = {
+  /** Waar gaat de kans over? Landt op `titel` én op `stap_tekst`. */
+  uitleg: string
+  actiehouderId: string
+  /** YYYY-MM-DD. */
+  deadline: string
+  /** Het dossier waar de kans uit voortkomt; blijft als link op de kaart staan. */
+  bronDossierId?: string | null
+}
+
+export type Verkoopkans = {
+  id: string
+  uitleg: string
+  actiehouderId: string | null
+  actiehouderNaam: string | null
+  deadline: string | null
+  bronDossierId: string | null
+  bronDossiernummer: string | null
+  bronDossierTitel: string | null
+  /** In welke sectie het brondossier nu staat — bepaalt de link. */
+  bronSectie: 'aanvraag' | 'offerte' | 'opdracht' | 'servicedesk' | null
+  klantNaam: string | null
+  afgerondOp: string | null
+  afgerondReden: string | null
+  aangemaaktOp: string
+}
+
+/** Lege invoer voor het formulier; één plek zodat elk scherm dezelfde startwaarden heeft. */
+export const LEGE_VERKOOPKANS: VerkoopkansInvoer = {
+  uitleg: '', actiehouderId: '', deadline: '', bronDossierId: null,
+}
+
+/** Is deze invoer compleet genoeg om op te slaan? De database bewaakt hetzelfde. */
+export function verkoopkansCompleet(v: VerkoopkansInvoer): boolean {
+  return v.uitleg.trim().length > 0 && v.actiehouderId.length > 0 && v.deadline.length > 0
+}
+
 // ── Werkdagen ────────────────────────────────────────────────────────────────
 
 /**
@@ -410,4 +504,44 @@ export function werkdagenVooruit(vanafISO: string, dagen: number): string {
     if (dag !== 0 && dag !== 6) over--
   }
   return datum.toISOString().slice(0, 10)
+}
+
+// ── Gedeeld tussen de server-actions ────────────────────────────────
+
+/**
+ * De uitkomst van een muterende actie. Hier en niet in `actions.ts`, omdat een
+ * `'use server'`-module alleen async functies mag exporteren en zowel `actions.ts` als
+ * `verkoopkansen.ts` dit type nodig heeft.
+ */
+export type ActieResultaat =
+  | { ok: true }
+  | { ok: false; error: string; conflict?: { bouw7Label: string } }
+
+export type MedewerkerNaam = {
+  id: string
+  voornaam?: string | null
+  tussenvoegsel?: string | null
+  achternaam?: string | null
+}
+
+/** Volledige naam uit de losse naamvelden; leeg wordt null in plaats van een spatie. */
+export function naamVan(m: { voornaam?: string | null; tussenvoegsel?: string | null; achternaam?: string | null } | null): string | null {
+  if (!m) return null
+  const naam = [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
+  return naam || null
+}
+
+/**
+ * Databasefouten die een gebruiker kan veroorzaken, in gewone taal. De check-constraints zijn
+ * het vangnet onder de formuliervalidatie; als er één afgaat, moet de gebruiker weten wat
+ * eraan ontbreekt in plaats van een Postgres-melding te zien.
+ */
+export function vertaalDbFout(bericht: string): string {
+  if (bericht.includes('commercie_bewaking_stap_compleet')) {
+    return 'Een volgende stap heeft altijd een omschrijving, een datum en iemand die hem oppakt.'
+  }
+  if (bericht.includes('commercie_bewaking_wacht_op')) {
+    return 'Geef aan bij wie de bal ligt: de klant, een collega of een derde partij.'
+  }
+  return bericht
 }

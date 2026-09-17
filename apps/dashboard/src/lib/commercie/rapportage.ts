@@ -112,8 +112,8 @@ export const STILSTAND_DAGEN = 14
 
 const FASE_LABELS: Record<string, string> = {
   verzonden: 'Verzonden',
-  nabellen: 'Nabellen',
-  in_behandeling: 'In behandeling',
+  nabellen: 'Actie',
+  in_behandeling: 'Wachten',
   mondelinge_toezegging: 'Mondelinge toezegging',
 }
 

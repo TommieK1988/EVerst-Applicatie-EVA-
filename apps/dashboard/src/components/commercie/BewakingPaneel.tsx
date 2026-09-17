@@ -5,7 +5,7 @@
  *
  * De kaart is bewust de énige plek waar de volgende stap wordt onderhouden. Daarom zitten er
  * precies twee knoppen op: "Uitkomst vastleggen" (na een klantcontact — het pad dat 95% van
- * de tijd gebruikt wordt) en "Aanpassen" (voor de losse velden). Meer keuzes maken het
+ * de tijd gebruikt wordt) en "Volgende actie" (voor de losse velden). Meer keuzes maken het
  * langzamer, niet completer.
  */
 
@@ -23,11 +23,17 @@ import { cn } from '@everts/ui'
 import { formatDatumNL, datumNaarISO } from '@/lib/dossiers/datum-regels'
 import {
   STATUS_PRESENTATIE, UITKOMSTEN, VERLIES_REDENEN, stapOmschrijving,
+  verkoopkansCompleet, LEGE_VERKOOPKANS,
   type BewakingKaart, type BewakingStatus, type UitkomstDefinitie,
+  type VerkoopkansInvoer,
 } from '@/lib/commercie/types'
 import { legUitkomstVast, slaStapOp } from '@/lib/commercie/actions'
+import { VerkoopkansVelden } from './VerkoopkansVelden'
 
 type Medewerker = { id: string; naam: string }
+
+/** De keuzes bij "kans op opdracht". Stappen van 5%; 0 en 100 horen erbij als bewuste uitersten. */
+const KANS_STAPPEN = Array.from({ length: 21 }, (_, i) => i * 5)
 
 type Props = {
   dossierId: string
@@ -70,7 +76,7 @@ export function BewakingPaneel(props: Props) {
           {!afgerond && (
             <div className="flex gap-2">
               <Button size="sm" onClick={() => setUitkomstOpen(true)}>Uitkomst vastleggen</Button>
-              <Button size="sm" variant="outline" onClick={() => setAanpassenOpen(true)}>Aanpassen</Button>
+              <Button size="sm" variant="outline" onClick={() => setAanpassenOpen(true)}>Volgende actie</Button>
             </div>
           )}
         </CardHeader>
@@ -156,6 +162,12 @@ function UitkomstDialoog(props: {
   const [actiehouder, setActiehouder] = React.useState('')
   const [reden, setReden] = React.useState('')
   const [toelichting, setToelichting] = React.useState('')
+  /**
+   * De kans die overblijft. Bij 'uitgesteld' verplicht — uitgesteld werk zonder houder en datum
+   * is een ander woord voor vergeten werk — en bij 'verloren' aangeboden achter een knop.
+   */
+  const [kansOpen, setKansOpen] = React.useState(false)
+  const [kans, setKans] = React.useState<VerkoopkansInvoer>(LEGE_VERKOOPKANS)
   const [bezig, setBezig] = React.useState(false)
   const { bevestig: bevestigDialoog } = useDialogen()
 
@@ -165,7 +177,22 @@ function UitkomstDialoog(props: {
     if (props.open) return
     setGekozen(null); setTekst(''); setDatum(undefined)
     setActiehouder(''); setReden(''); setToelichting('')
+    setKansOpen(false); setKans(LEGE_VERKOOPKANS)
   }, [props.open])
+
+  // De herbenaderdatum is meteen de deadline van de kans: bij uitstel is dat per definitie
+  // hetzelfde moment, en twee keer dezelfde datum laten kiezen nodigt uit tot verschillen.
+  React.useEffect(() => {
+    if (!datum) return
+    setKans(k => (k.deadline ? k : { ...k, deadline: datumNaarISO(datum) }))
+  }, [datum])
+
+  // Bij een uitkomst die een kans afdwingt staat het blok meteen open; hem eerst moeten
+  // opzoeken achter een knop zou de verplichting onzichtbaar maken.
+  React.useEffect(() => {
+    setKansOpen(gekozen?.vraagtVerkoopkans === true)
+    setKans(LEGE_VERKOOPKANS)
+  }, [gekozen])
 
   async function bevestig(forceerBouw7 = false) {
     if (!gekozen) return
@@ -177,6 +204,7 @@ function UitkomstDialoog(props: {
       actiehouderId: actiehouder || null,
       reden: reden || null,
       redenToelichting: toelichting || null,
+      verkoopkans: kansOpen && verkoopkansCompleet(kans) ? kans : null,
       forceerBouw7,
     })
     setBezig(false)
@@ -296,9 +324,49 @@ function UitkomstDialoog(props: {
                   )}
                   <p className="text-xs text-neutral-500">
                     Komt het werk later terug? Kies dan <strong>Uitgesteld</strong> in plaats van
-                    Verloren — dan blijft de kans bewaard.
+                    Verloren — dan blijft de offerte zelf in bewaking. Gaat het werk wél van tafel
+                    maar komt de klant later terug, leg dan hieronder een verkoopkans vast.
                   </p>
                 </>
+              )}
+
+              {/* De kans die overblijft. Verplicht bij uitstel, aangeboden bij verlies. */}
+              {(gekozen.vraagtVerkoopkans || gekozen.biedtVerkoopkans) && (
+                kansOpen ? (
+                  <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[13px] font-medium text-neutral-900">Verkoopkans</span>
+                      {!gekozen.vraagtVerkoopkans && (
+                        <button
+                          type="button"
+                          className="text-xs text-neutral-500 underline"
+                          onClick={() => { setKansOpen(false); setKans(LEGE_VERKOOPKANS) }}
+                        >
+                          Toch niet
+                        </button>
+                      )}
+                    </div>
+                    <VerkoopkansVelden
+                      waarde={kans}
+                      onChange={setKans}
+                      medewerkers={props.medewerkers}
+                    />
+                    <p className="mt-2 text-xs text-neutral-500">
+                      De kans blijft aan dit dossier gekoppeld en staat op het Aanvragen-tab onder
+                      &ldquo;Verkoopkansen&rdquo;.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-2.5">
+                    <p className="text-xs text-neutral-600">
+                      Komt dit werk later terug? Leg het nu vast, anders verdwijnt het met dit
+                      dossier.
+                    </p>
+                    <Button size="sm" variant="outline" className="mt-2" onClick={() => setKansOpen(true)}>
+                      Verkoopkans aanmaken
+                    </Button>
+                  </div>
+                )
               )}
             </div>
           )}
@@ -306,7 +374,10 @@ function UitkomstDialoog(props: {
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => props.onOpenChange(false)}>Annuleren</Button>
-          <Button disabled={!gekozen || bezig} onClick={() => bevestig()}>
+          <Button
+            disabled={!gekozen || bezig || (kansOpen && !verkoopkansCompleet(kans))}
+            onClick={() => bevestig()}
+          >
             {bezig ? 'Bezig…' : 'Vastleggen'}
           </Button>
         </DialogFooter>
@@ -376,7 +447,7 @@ function AanpassenDialoog(props: {
       <DialogContent size="md">
         <DialogHeader>
           <div className="pr-8">
-            <DialogTitle>Bewaking aanpassen</DialogTitle>
+            <DialogTitle>Volgende actie</DialogTitle>
             <DialogDescription>
               Iedere lopende offerte heeft een eigenaar, een volgende beweging en een datum.
             </DialogDescription>
@@ -450,12 +521,23 @@ function AanpassenDialoog(props: {
             </select>
           </Label>
 
+          {/* Een percentage, geen los getal: het voedt de kans-gewogen pijplijn onder
+              Management → Verkoop (bedrag × kans). Vaste stappen van 5%, want de schijnprecisie
+              van "37%" helpt niemand — en het scheelt tikwerk. */}
           <Label tekst="Kans op opdracht (optioneel)">
-            <Input
-              type="number" min={0} max={100} value={kans}
-              onChange={e => setKans(e.target.value)}
-              placeholder="Laat leeg als je het niet weet"
-            />
+            <div className="flex items-center gap-2">
+              <select
+                className="h-8 w-32 rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
+                value={kans}
+                onChange={e => setKans(e.target.value)}
+              >
+                <option value="">Onbekend</option>
+                {KANS_STAPPEN.map(p => <option key={p} value={String(p)}>{p}%</option>)}
+              </select>
+              <span className="text-xs text-neutral-500">
+                {kans === '' ? 'Laat op Onbekend als je het niet weet' : 'Telt mee in de gewogen pijplijn'}
+              </span>
+            </div>
           </Label>
         </DialogBody>
 
