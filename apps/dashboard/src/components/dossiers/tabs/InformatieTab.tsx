@@ -1826,64 +1826,156 @@ export function InformatieTab({
         )}
 
         {/* Projectinformatie */}
-        <InklapbareCard titel="Projectinformatie">
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <InfoVeld label="Dossiernummer"  waarde={dossier.dossiernummer} mono />
-              <InfoVeld
-                label="Opdrachtgever"
-                waarde={dossier.klant_naam}
-                href={dossier.klant_id ? `/relaties/${dossier.klant_id}` : null}
-                hrefTitel="Open de relatiegegevens"
-              />
-              <TekstVeld
-                label="Projectnaam"
-                waarde={form.titel}
-                placeholder="naam van het project"
-                readOnly={readOnly}
-                onBewaar={v => { if (v.trim()) bewaarInfo({ titel: v.trim() }) }}
-              />
-              {/* De fase wijzig je via de statuskeuze in de kop: die bewaakt de
-                  bevestiging bij afsluiten en de controle bij financieel gereed. */}
-              <InfoVeld label="Fase"           waarde={huidigStatusLabel} />
-              <KeuzeVeld
-                label="Categorie"
-                waarde={form.categorie}
-                opties={categorieOpties}
-                placeholder="— Kies categorie —"
-                readOnly={!magBouw7Veld}
-                onBewaar={v => bewaarInfo({ categorie: v })}
-              />
-              <TekstVeld
-                label="Referentie"
-                waarde={form.referentie}
-                placeholder="kenmerk van opdrachtgever"
-                readOnly={!magBouw7Veld}
-                onBewaar={v => bewaarInfo({ referentie: v })}
-              />
-              <TekstVeld
-                label="VvE-code"
-                waarde={form.vve_code}
-                placeholder="bijv. VVE-1234"
-                readOnly={readOnly}
-                onBewaar={v => bewaarInfo({ vve_code: v })}
-              />
-              <KeuzeVeld
-                label="Werkmaatschappij"
-                waarde={form.werkmaatschappij_id}
-                opties={werkmaatschappijOpties}
-                placeholder="— Kies werkmaatschappij —"
-                readOnly={readOnly}
-                onBewaar={v => bewaarInfo({ werkmaatschappij_id: v })}
-              />
-              {sectie === 'opdracht' && (
-                <TekstVeld
-                  label="Opdracht referentie"
-                  waarde={form.opdracht_referentie}
-                  placeholder="Referentie opdrachtgever"
+        {/* Altijd open: dit blok is de identiteit van het dossier — wie de opdrachtgever
+            is en met wie je belt. Half afgekapt achter "Meer tonen" kost dat elke keer
+            een extra klik op precies de gegevens waarvoor je het dossier opent. */}
+        <InklapbareCard titel="Projectinformatie" altijdOpen>
+            {/* Twee helften. Links de kenmerken van het project zelf, rechts alles wat bij de
+                opdrachtgever hoort: de relatie, de contactpersoon en het factuuradres. Die
+                gegevens stonden eerder in een eigen kaart verderop op de pagina — wie een
+                dossier opent kijkt eerst naar wie het is en pas daarna naar de rest, dus
+                horen ze in de kop. Het losse blok "Opdrachtgever" is daarmee vervallen.
+                De fase staat hier niet meer: die wijzig je via de statuskeuze in de kop. */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+
+              {/* ── Links: het project ── */}
+              <div className="flex flex-col gap-3">
+                <InfoVeld label="Dossiernummer" waarde={dossier.dossiernummer} mono />
+                <KeuzeVeld
+                  label="Werkmaatschappij"
+                  waarde={form.werkmaatschappij_id}
+                  opties={werkmaatschappijOpties}
+                  placeholder="— Kies werkmaatschappij —"
                   readOnly={readOnly}
-                  onBewaar={v => bewaarInfo({ opdracht_referentie: v })}
+                  onBewaar={v => bewaarInfo({ werkmaatschappij_id: v })}
                 />
-              )}
+                <TekstVeld
+                  label="Projectnaam"
+                  waarde={form.titel}
+                  placeholder="naam van het project"
+                  readOnly={readOnly}
+                  onBewaar={v => { if (v.trim()) bewaarInfo({ titel: v.trim() }) }}
+                />
+                <KeuzeVeld
+                  label="Categorie"
+                  waarde={form.categorie}
+                  opties={categorieOpties}
+                  placeholder="— Kies categorie —"
+                  readOnly={!magBouw7Veld}
+                  onBewaar={v => bewaarInfo({ categorie: v })}
+                />
+                <TekstVeld
+                  label="Referentie"
+                  waarde={form.referentie}
+                  placeholder="kenmerk van opdrachtgever"
+                  readOnly={!magBouw7Veld}
+                  onBewaar={v => bewaarInfo({ referentie: v })}
+                />
+                <TekstVeld
+                  label="VvE-code"
+                  waarde={form.vve_code}
+                  placeholder="bijv. VVE-1234"
+                  readOnly={readOnly}
+                  onBewaar={v => bewaarInfo({ vve_code: v })}
+                />
+                {sectie === 'opdracht' && (
+                  <TekstVeld
+                    label="Opdracht referentie"
+                    waarde={form.opdracht_referentie}
+                    placeholder="Referentie opdrachtgever"
+                    readOnly={readOnly}
+                    onBewaar={v => bewaarInfo({ opdracht_referentie: v })}
+                  />
+                )}
+              </div>
+
+              {/* ── Rechts: de opdrachtgever ── */}
+              <div className="flex flex-col gap-3">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                  Opdrachtgever
+                </p>
+                <InfoVeld
+                  label="Naam"
+                  waarde={relatie?.naam ?? dossier.klant_naam}
+                  href={relatie ? `/relaties/${relatie.id}` : dossier.klant_id ? `/relaties/${dossier.klant_id}` : null}
+                  hrefTitel="Open de relatiegegevens"
+                />
+                <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                  <InfoVeld label="Telefoon" waarde={relatie?.telefoon} mono />
+                  <InfoVeld label="E-mail"   waarde={relatie?.email} />
+                </div>
+
+                <Separator />
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                  Contactpersoon
+                </p>
+                {(() => {
+                  const geselecteerd = contactpersoonOpties.find(cp => cp.id === form.contactpersoon_id)
+                  const naam     = geselecteerd?.naam     ?? (dossier as any).contactpersoon_naam     ?? null
+                  const telefoon = geselecteerd?.telefoon ?? (dossier as any).contactpersoon_telefoon ?? null
+                  const email    = geselecteerd?.email    ?? (dossier as any).contactpersoon_email    ?? null
+                  const href     = form.contactpersoon_id ? `/relaties/contactpersonen/${form.contactpersoon_id}` : null
+                  return (
+                    <div className="flex flex-col gap-3">
+                      {magBouw7Veld ? (
+                        <KeuzeVeld
+                          label="Naam"
+                          waarde={form.contactpersoon_id}
+                          opties={contactpersoonOpties.map(cp => ({ value: cp.id, label: cp.naam }))}
+                          placeholder="Selecteer contactpersoon"
+                          href={href}
+                          hrefTitel="Open de contactpersoongegevens"
+                          onBewaar={v => bewaarInfo({ contactpersoon_id: v })}
+                        />
+                      ) : (
+                        <InfoVeld
+                          label="Naam"
+                          waarde={naam}
+                          href={href}
+                          hrefTitel="Open de contactpersoongegevens"
+                        />
+                      )}
+                      <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                        <InfoVeld label="Telefoon" waarde={telefoon} mono />
+                        <InfoVeld label="E-mail"   waarde={email} />
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <Separator />
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                  Afwijkend factuuradres
+                </p>
+                <div>
+                  <KeuzeVeld
+                    label="Factuuradres"
+                    waarde={form.factuuradres_id}
+                    opties={factuuradresOpties}
+                    placeholder="Zelfde als werkadres"
+                    readOnly={readOnly}
+                    onBewaar={v => bewaarInfo({ factuuradres_id: v })}
+                  />
+                  {geselecteerdFa && (
+                    <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-neutral-500">
+                      {[
+                        geselecteerdFa.straat,
+                        [geselecteerdFa.postcode, geselecteerdFa.plaats].filter(Boolean).join('  '),
+                        geselecteerdFa.land !== 'Nederland' ? geselecteerdFa.land : null,
+                      ].filter(Boolean).join('\n')}
+                    </p>
+                  )}
+                  {!geselecteerdFa && factuuradressen.length === 0 && (
+                    <p className="mt-1 text-[12px] italic text-neutral-400">
+                      Geen factuuradressen beschikbaar.{' '}
+                      {dossier.klant_naam
+                        ? <Link href="/relaties" className="text-brand-600 no-underline">Voeg toe in Relatiebeheer</Link>
+                        : 'Voeg toe via Relatiebeheer'
+                      }.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {bouw7Vergrendeld && !readOnly && (
@@ -1926,71 +2018,10 @@ export function InformatieTab({
           <PortaalChatBlok dossierId={dossier.id} />
         </div>
 
-        {/* Gevraagde werkzaamheden — de scope-samenvatting uit de aanvraagmail en de
-            bijlagen. Staat bewust hier, pal onder Projectinformatie: dit is wat een
-            calculator als eerste wil lezen. Verbergt zichzelf als er niets is en er
-            niets bewerkt mag worden. */}
-        {(dossier.gevraagde_werkzaamheden || !readOnly) && (
-          <GevraagdeWerkzaamhedenBlok
-            dossierId={dossier.id}
-            tekst={dossier.gevraagde_werkzaamheden ?? null}
-            herkomst={dossier.gevraagde_werkzaamheden_bron ?? null}
-            bijgewerktOp={dossier.gevraagde_werkzaamheden_op ?? null}
-            bewerkbaar={!readOnly}
-          />
-        )}
-
-        {/* Datums — eigen blok, direct onder Projectinformatie. Zat eerder als lijstje
-            onderin Projectinformatie, tussen velden waar het niets mee te maken heeft. */}
-        <DatumsBlok
-          regels={datumRegels}
-          deadlineUrgent={deadlineUrgent}
-         
-          bewerkbaar={!readOnly}
-          form={{
-            aanvraagdatum:    form.aanvraagdatum,
-            deadline:         form.deadline,
-            voorlopige_start: form.voorlopige_start,
-            voorlopige_eind:  form.voorlopige_eind,
-          }}
-          onBewaar={bewaarDatum}
-        />
-
-        {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): een rolwissel
-            wordt meteen naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider"
-            (workPlanner), Controller → custom attribute "Eindverantwoordelijke offerte". */}
-        <InklapbareCard titel="Rollen">
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              <RolVeld
-                label="Projectleider" waarde={form.projectleider_id} naam={dossier.projectleider_naam}
-                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer projectleider"
-                onBewaar={v => bewaarRol('projectleider_id', v)}
-              />
-              <RolVeld
-                label="Calculator" waarde={form.calculator_id} naam={dossier.calculator_naam}
-                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer calculator"
-                onBewaar={v => bewaarRol('calculator_id', v)}
-              />
-              <RolVeld
-                label="Uitvoerder" waarde={form.uitvoerder_id} naam={dossier.uitvoerder_naam}
-                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer uitvoerder"
-                onBewaar={v => bewaarRol('uitvoerder_id', v)}
-              />
-              <RolVeld
-                label="Teamleider" waarde={form.teamleider_id} naam={dossier.teamleider_naam}
-                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer teamleider"
-                onBewaar={v => bewaarRol('teamleider_id', v)}
-              />
-              <RolVeld
-                label="Controller" waarde={form.controller_id} naam={dossier.controller_naam}
-                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer controller"
-                onBewaar={v => bewaarRol('controller_id', v)}
-              />
-            </div>
-        </InklapbareCard>
-
-        {/* Werkadres — eigen blok, alle velden zichtbaar. */}
-        <InklapbareCard titel="Werkadres">
+        {/* Werkadres — eigen blok, altijd open. Het adres paste net niet in de gridrij,
+            waardoor postcode en plaats achter "Meer tonen" verdwenen: precies de twee
+            velden die je nodig hebt om te weten waar de monteur naartoe rijdt. */}
+        <InklapbareCard titel="Werkadres" altijdOpen>
             {/* Objectkoppeling (VvE/complex). Vult zichzelf en staat los van de velden eronder. */}
             <div className="mb-4 border-b border-[var(--border)] pb-3">
               <ObjectKoppeling dossierId={dossier.id} readOnly={readOnly} />
@@ -2023,125 +2054,6 @@ export function InformatieTab({
               />
             </div>
         </InklapbareCard>
-
-        {/* Opdrachtgever */}
-        <InklapbareCard
-          titel="Opdrachtgever"
-         
-          bodyClassName="flex flex-col gap-3.5"
-        >
-            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-              {relatie ? (
-                <>
-                  <div className="col-span-2">
-                    <InfoVeld
-                      label="Naam"
-                      waarde={relatie.naam}
-                      href={`/relaties/${relatie.id}`}
-                      hrefTitel="Open de relatiegegevens"
-                    />
-                  </div>
-                  <InfoVeld label="KvK nummer" waarde={relatie.kvk_nummer} />
-                  <InfoVeld label="BTW nummer" waarde={relatie.btw_nummer} />
-                  <InfoVeld label="Telefoon"   waarde={relatie.telefoon} />
-                  <InfoVeld label="E-mail"     waarde={relatie.email} />
-                  {(relatie.adres_straat || relatie.adres_postcode || relatie.adres_plaats) && (
-                    <div className="col-span-2">
-                      <InfoVeld
-                        label="Adres"
-                        waarde={[
-                          relatie.adres_straat,
-                          [relatie.adres_postcode, relatie.adres_plaats].filter(Boolean).join('  '),
-                        ].filter(Boolean).join(', ')}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="col-span-2"><InfoVeld label="Naam" waarde={dossier.klant_naam} /></div>
-              )}
-            </div>
-
-            <Separator />
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
-              Contactpersoon
-            </p>
-            {(() => {
-              const geselecteerd = contactpersoonOpties.find(cp => cp.id === form.contactpersoon_id)
-              const naam     = geselecteerd?.naam     ?? (dossier as any).contactpersoon_naam     ?? null
-              const telefoon = geselecteerd?.telefoon ?? (dossier as any).contactpersoon_telefoon ?? null
-              const email    = geselecteerd?.email    ?? (dossier as any).contactpersoon_email    ?? null
-              const href     = form.contactpersoon_id ? `/relaties/contactpersonen/${form.contactpersoon_id}` : null
-              return (
-                <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  {magBouw7Veld ? (
-                    <KeuzeVeld
-                      className="col-span-2"
-                      label="Naam"
-                      waarde={form.contactpersoon_id}
-                      opties={contactpersoonOpties.map(cp => ({ value: cp.id, label: cp.naam }))}
-                      placeholder="Selecteer contactpersoon"
-                      href={href}
-                      hrefTitel="Open de contactpersoongegevens"
-                      onBewaar={v => bewaarInfo({ contactpersoon_id: v })}
-                    />
-                  ) : (
-                    <InfoVeld
-                      className="col-span-2"
-                      label="Naam"
-                      waarde={naam}
-                      href={href}
-                      hrefTitel="Open de contactpersoongegevens"
-                    />
-                  )}
-                  <InfoVeld label="Telefoon" waarde={telefoon} mono />
-                  <InfoVeld className="col-span-2" label="E-mail" waarde={email} />
-                </div>
-              )
-            })()}
-
-            <Separator />
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
-              Afwijkend factuuradres
-            </p>
-            <div>
-              <KeuzeVeld
-                label="Factuuradres"
-                waarde={form.factuuradres_id}
-                opties={factuuradresOpties}
-                placeholder="Zelfde als werkadres"
-                readOnly={readOnly}
-                onBewaar={v => bewaarInfo({ factuuradres_id: v })}
-              />
-              {geselecteerdFa && (
-                <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-neutral-500">
-                  {[
-                    geselecteerdFa.straat,
-                    [geselecteerdFa.postcode, geselecteerdFa.plaats].filter(Boolean).join('  '),
-                    geselecteerdFa.land !== 'Nederland' ? geselecteerdFa.land : null,
-                  ].filter(Boolean).join('\n')}
-                </p>
-              )}
-              {!geselecteerdFa && factuuradressen.length === 0 && (
-                <p className="mt-1 text-[12px] italic text-neutral-400">
-                  Geen factuuradressen beschikbaar.{' '}
-                  {dossier.klant_naam
-                    ? <Link href="/relaties" className="text-brand-600 no-underline">Voeg toe in Relatiebeheer</Link>
-                    : 'Voeg toe via Relatiebeheer'
-                  }.
-                </p>
-              )}
-            </div>
-        </InklapbareCard>
-
-        {/* Dossier-toggles */}
-        <DossierTogglesPaneel dossierId={dossier.id} />
-
-        {/* Klantportaal — stand van zaken hier, instellen achter de knop. Stond eerder op
-            een eigen tab; die is opgeheven om de sidebar korter te maken. Naast de toggles
-            omdat het allebei beheer van dit dossier is. Het blok verbergt zichzelf als je
-            geen klantportaal-recht hebt. */}
-        <KlantportaalBlok dossierId={dossier.id} />
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}
         {sectie !== 'servicedesk' && (
@@ -2294,6 +2206,80 @@ export function InformatieTab({
             )}
         </InklapbareCard>
         )}
+
+        {/* Gevraagde werkzaamheden — de scope-samenvatting uit de aanvraagmail en de
+            bijlagen. Dit is wat een calculator als eerste wil lezen, dus staat het boven
+            de datums en de rollen. Verbergt zichzelf als er niets is en er niets bewerkt
+            mag worden. */}
+        {(dossier.gevraagde_werkzaamheden || !readOnly) && (
+          <GevraagdeWerkzaamhedenBlok
+            dossierId={dossier.id}
+            tekst={dossier.gevraagde_werkzaamheden ?? null}
+            herkomst={dossier.gevraagde_werkzaamheden_bron ?? null}
+            bijgewerktOp={dossier.gevraagde_werkzaamheden_op ?? null}
+            bewerkbaar={!readOnly}
+          />
+        )}
+
+        {/* Datums — eigen blok, direct onder Projectinformatie. Zat eerder als lijstje
+            onderin Projectinformatie, tussen velden waar het niets mee te maken heeft. */}
+        <DatumsBlok
+          regels={datumRegels}
+          deadlineUrgent={deadlineUrgent}
+         
+          bewerkbaar={!readOnly}
+          form={{
+            aanvraagdatum:    form.aanvraagdatum,
+            deadline:         form.deadline,
+            voorlopige_start: form.voorlopige_start,
+            voorlopige_eind:  form.voorlopige_eind,
+          }}
+          onBewaar={bewaarDatum}
+        />
+
+        {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): een rolwissel
+            wordt meteen naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider"
+            (workPlanner), Controller → custom attribute "Eindverantwoordelijke offerte". */}
+        <InklapbareCard titel="Rollen">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+              <RolVeld
+                label="Projectleider" waarde={form.projectleider_id} naam={dossier.projectleider_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer projectleider"
+                onBewaar={v => bewaarRol('projectleider_id', v)}
+              />
+              <RolVeld
+                label="Calculator" waarde={form.calculator_id} naam={dossier.calculator_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer calculator"
+                onBewaar={v => bewaarRol('calculator_id', v)}
+              />
+              <RolVeld
+                label="Uitvoerder" waarde={form.uitvoerder_id} naam={dossier.uitvoerder_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer uitvoerder"
+                onBewaar={v => bewaarRol('uitvoerder_id', v)}
+              />
+              <RolVeld
+                label="Teamleider" waarde={form.teamleider_id} naam={dossier.teamleider_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer teamleider"
+                onBewaar={v => bewaarRol('teamleider_id', v)}
+              />
+              <RolVeld
+                label="Controller" waarde={form.controller_id} naam={dossier.controller_naam}
+                opties={medewerkersOpties} readOnly={readOnly} placeholder="Selecteer controller"
+                onBewaar={v => bewaarRol('controller_id', v)}
+              />
+            </div>
+        </InklapbareCard>
+
+
+        {/* Dossier-toggles */}
+        <DossierTogglesPaneel dossierId={dossier.id} />
+
+        {/* Klantportaal — stand van zaken hier, instellen achter de knop. Stond eerder op
+            een eigen tab; die is opgeheven om de sidebar korter te maken. Naast de toggles
+            omdat het allebei beheer van dit dossier is. Het blok verbergt zichzelf als je
+            geen klantportaal-recht hebt. */}
+        <KlantportaalBlok dossierId={dossier.id} />
+
 
         {/* Calculatie importeren (.c4y) — niet voor servicedesk, niet bij alleen-lezen */}
         {sectie !== 'servicedesk' && !readOnly && (
