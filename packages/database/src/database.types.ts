@@ -1203,6 +1203,7 @@ export type Database = {
           getrieerd_op: string | null
           id: string
           kans_pct: number | null
+          object_id: string | null
           relatie_id: string | null
           soort: string
           stap_bron: string
@@ -1228,6 +1229,7 @@ export type Database = {
           getrieerd_op?: string | null
           id?: string
           kans_pct?: number | null
+          object_id?: string | null
           relatie_id?: string | null
           soort?: string
           stap_bron?: string
@@ -1253,6 +1255,7 @@ export type Database = {
           getrieerd_op?: string | null
           id?: string
           kans_pct?: number | null
+          object_id?: string | null
           relatie_id?: string | null
           soort?: string
           stap_bron?: string
@@ -1327,6 +1330,13 @@ export type Database = {
             columns: ["eigenaar_id"]
             isOneToOne: false
             referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_object_id_fkey"
+            columns: ["object_id"]
+            isOneToOne: false
+            referencedRelation: "vastgoed_objecten"
             referencedColumns: ["id"]
           },
           {

@@ -19,6 +19,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { objectAdresRegel } from '@/lib/objecten/adres'
 import {
   verkoopkansCompleet, naamVan, vertaalDbFout,
   type ActieResultaat, type MedewerkerNaam, type Verkoopkans, type VerkoopkansInvoer,
@@ -51,6 +52,7 @@ async function schrijfVerkoopkans(
       titel: uitleg,
       bron_dossier_id: invoer.bronDossierId ?? null,
       relatie_id: await klantVoorKans(supabase, invoer),
+      object_id: await objectVoorKans(supabase, invoer),
       eigenaar_id: medewerker.id,
       actiehouder_id: invoer.actiehouderId,
       stap_soort: 'actie',
@@ -86,6 +88,18 @@ async function klantVoorKans(
   const { data } = await supabase.from('dossiers')
     .select('klant_id').eq('id', invoer.bronDossierId).maybeSingle()
   return data?.klant_id ?? null
+}
+
+/** Zelfde terugval als bij de klant, maar dan voor het object van het brondossier. */
+async function objectVoorKans(
+  supabase: AdminClient,
+  invoer: VerkoopkansInvoer,
+): Promise<string | null> {
+  if (invoer.objectId) return invoer.objectId
+  if (!invoer.bronDossierId) return null
+  const { data } = await supabase.from('dossiers')
+    .select('object_id').eq('id', invoer.bronDossierId).maybeSingle()
+  return data?.object_id ?? null
 }
 
 export async function maakVerkoopkans(invoer: VerkoopkansInvoer): Promise<ActieResultaat> {
@@ -135,8 +149,10 @@ export async function wijzigVerkoopkans(
       stap_datum: invoer.deadline,
       actiehouder_id: invoer.actiehouderId,
       bron_dossier_id: invoer.bronDossierId ?? null,
-      // Hier bewust géén terugval op het dossier: wie de klant leegmaakt, bedoelt dat.
+      // Hier bewust géén terugval op het dossier: wie de klant of het object leegmaakt,
+      // bedoelt dat.
       relatie_id: invoer.relatieId ?? null,
+      object_id: invoer.objectId ?? null,
       // Afronden en heropenen zijn dezelfde knop: een kans die per ongeluk is afgevinkt moet
       // terug kunnen zonder dat iemand hem opnieuw moet intypen. Het oorspronkelijke moment
       // blijft staan zodra hij er is, zodat heropenen-en-weer-afronden de datum niet verschuift.
@@ -190,6 +206,7 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
     stap_datum: string | null
     bron_dossier_id: string | null
     relatie_id: string | null
+    object_id: string | null
     afgerond_op: string | null
     afgerond_reden: string | null
     created_at: string
@@ -201,10 +218,19 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
     hoofdstatus: string | null
     klant_id: string | null
   }
+  type ObjectMini = {
+    id: string
+    naam: string | null
+    objectnummer: string | null
+    adres_straat: string | null
+    adres_huisnummer: string | null
+    adres_postcode: string | null
+    adres_plaats: string | null
+  }
 
   const rijen = await haalAlleRijen<SignaalRij>((van, tot) =>
     supabase.from('commercie_bewaking')
-      .select('id,titel,actiehouder_id,stap_datum,bron_dossier_id,relatie_id,afgerond_op,afgerond_reden,created_at')
+      .select('id,titel,actiehouder_id,stap_datum,bron_dossier_id,relatie_id,object_id,afgerond_op,afgerond_reden,created_at')
       .eq('soort', 'signaal')
       .order('id')
       .range(van, tot),
@@ -237,9 +263,19 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
     ? await supabase.from('relaties').select('id, naam').in('id', klantIds)
     : { data: [] as { id: string; naam: string | null }[] }
 
+  const objectIds = [...new Set(rijen.map(r => r.object_id).filter(Boolean) as string[])]
+  const objectRes = objectIds.length
+    ? await supabase.from('vastgoed_objecten')
+        .select('id, naam, objectnummer, adres_straat, adres_huisnummer, adres_postcode, adres_plaats')
+        .in('id', objectIds)
+    : { data: [] as ObjectMini[] }
+
   const klantPerId = new Map((relatieRes.data ?? []).map(r => [r.id, r.naam ?? null]))
   const dossierPerId = new Map(dossiers.map(d => [d.id, d]))
   const naamPerId = new Map(mensen.map(m => [m.id, naamVan(m)]))
+  const objectPerId = new Map(
+    ((objectRes.data ?? []) as ObjectMini[]).map(o => [o.id, objectOmschrijving(o)]),
+  )
 
   return rijen
     .map<Verkoopkans>(r => {
@@ -260,6 +296,8 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
         klantNaam:
           (r.relatie_id ? klantPerId.get(r.relatie_id) : null)
           ?? (d?.klant_id ? klantPerId.get(d.klant_id) ?? null : null),
+        objectId: r.object_id,
+        objectNaam: r.object_id ? objectPerId.get(r.object_id) ?? null : null,
         afgerondOp: r.afgerond_op,
         afgerondReden: r.afgerond_reden,
         aangemaaktOp: r.created_at,
@@ -271,4 +309,22 @@ export async function getVerkoopkansen(): Promise<Verkoopkans[]> {
       if (!!a.afgerondOp !== !!b.afgerondOp) return a.afgerondOp ? 1 : -1
       return (a.deadline ?? '9999') < (b.deadline ?? '9999') ? -1 : 1
     })
+}
+
+/**
+ * Eén regel die een object herkenbaar maakt: naam, en daarachter het adres wanneer dat iets
+ * toevoegt. Objecten heten vaak "Complex 1013" — zonder straat en plaats zegt dat niemand iets.
+ * Het adres komt uit `objectAdresRegel`, dezelfde opmaak als de objectenlijst en de kiezer.
+ */
+function objectOmschrijving(o: {
+  naam: string | null
+  objectnummer: string | null
+  adres_straat: string | null
+  adres_huisnummer: string | null
+  adres_postcode: string | null
+  adres_plaats: string | null
+}): string {
+  const kop = o.naam || o.objectnummer || 'Object'
+  const adres = objectAdresRegel(o)
+  return adres ? `${kop} · ${adres}` : kop
 }

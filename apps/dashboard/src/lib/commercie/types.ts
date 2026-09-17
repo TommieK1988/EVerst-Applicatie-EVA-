@@ -466,6 +466,14 @@ export type VerkoopkansInvoer = {
   relatieId?: string | null
   /** Alleen voor het formulier: de naam bij `relatieId`, zodat de keuze zichtbaar blijft. */
   relatieNaam?: string | null
+  /**
+   * Het vastgoedobject waar de kans over gaat. Andere vraag dan de klant: die is wie je belt,
+   * dit is waar het werk zit. Bij een beheerder met dertig complexen is de klantnaam alleen
+   * niet genoeg om een jaar later te weten waar het over ging.
+   */
+  objectId?: string | null
+  /** Alleen voor het formulier: de omschrijving bij `objectId`. */
+  objectNaam?: string | null
 }
 
 export type Verkoopkans = {
@@ -483,6 +491,10 @@ export type Verkoopkans = {
   relatieId: string | null
   /** Naam van die klant, met het brondossier als terugval voor oudere kansen. */
   klantNaam: string | null
+  /** Het gekoppelde object; leeg wanneer de kans er geen heeft. */
+  objectId: string | null
+  /** "Complex 1013 · Parkdreef 135, Zoetermeer", of alleen de naam. */
+  objectNaam: string | null
   afgerondOp: string | null
   afgerondReden: string | null
   aangemaaktOp: string
@@ -491,7 +503,7 @@ export type Verkoopkans = {
 /** Lege invoer voor het formulier; één plek zodat elk scherm dezelfde startwaarden heeft. */
 export const LEGE_VERKOOPKANS: VerkoopkansInvoer = {
   uitleg: '', actiehouderId: '', deadline: '', bronDossierId: null,
-  relatieId: null, relatieNaam: null,
+  relatieId: null, relatieNaam: null, objectId: null, objectNaam: null,
 }
 
 /** Is deze invoer compleet genoeg om op te slaan? De database bewaakt hetzelfde. */

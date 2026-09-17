@@ -11,10 +11,11 @@
  *   * **Actiehouder** — één naam, anders is het van niemand;
  *   * **Deadline** — zonder datum komt hij nooit vanzelf terug in beeld.
  *
- * De **klant** staat er los van en is optioneel. Ontstaat de kans bij het afsluiten van een
- * dossier, dan neemt de server de opdrachtgever van dat dossier over en hoef je hier niets te
- * doen. Begin je een kans zonder dossier, dan is de klant juist het enige aanknopingspunt om
- * te weten wie je straks belt — vandaar dat je hem hier kunt kiezen.
+ * **Klant** en **object** staan daar los van en zijn optioneel. Ze beantwoorden verschillende
+ * vragen: de klant is wie je belt, het object is waar het werk zit. Bij een beheerder met
+ * dertig complexen is de klantnaam alleen niet genoeg om een jaar later te weten waar de kans
+ * over ging. Ontstaat de kans bij het afsluiten van een dossier, dan neemt de server allebei
+ * over van dat dossier en hoef je hier niets te doen.
  *
  * Bewust gedeeld tussen de uitkomstdialoog, de afsluitdialoog op het bord en het
  * verkoopkansen-overzicht: drie plekken die dezelfde kans aanmaken horen dezelfde vragen te
@@ -27,6 +28,8 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { datumNaarISO } from '@/lib/dossiers/datum-regels'
 import { zoekRelaties } from '@/lib/dossiers/actions'
+import { zoekObjecten } from '@/lib/objecten/data'
+import { objectAdresRegel } from '@/lib/objecten/adres'
 import type { VerkoopkansInvoer } from '@/lib/commercie/types'
 
 export type MedewerkerKeuze = { id: string; naam: string }
@@ -58,6 +61,15 @@ export function VerkoopkansVelden({
           relatieNaam={waarde.relatieNaam ?? null}
           uitgeschakeld={uitgeschakeld}
           onKies={(id, naam) => onChange({ ...waarde, relatieId: id, relatieNaam: naam })}
+        />
+      </Veld>
+
+      <Veld tekst="Object (optioneel)">
+        <ObjectKiezer
+          objectId={waarde.objectId ?? null}
+          objectNaam={waarde.objectNaam ?? null}
+          uitgeschakeld={uitgeschakeld}
+          onKies={(id, naam) => onChange({ ...waarde, objectId: id, objectNaam: naam })}
         />
       </Veld>
 
@@ -141,6 +153,76 @@ function KlantKiezer({ relatieId, relatieNaam, onKies, uitgeschakeld }: {
         />
       </div>
       {relatieId && !uitgeschakeld && (
+        <button
+          type="button"
+          className="shrink-0 text-xs text-neutral-500 underline"
+          onClick={() => onKies(null, null)}
+        >
+          Wissen
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Zoekveld voor het vastgoedobject. Zelfde opzet als de klantkiezer hierboven, met één verschil:
+ * `zoekObjecten` zit achter het recht `objectenbeheer`. Wie dat niet heeft krijgt een lege lijst
+ * in plaats van een foutmelding — het veld is optioneel, dus daar hoeft niemand op vast te lopen.
+ */
+function ObjectKiezer({ objectId, objectNaam, onKies, uitgeschakeld }: {
+  objectId: string | null
+  objectNaam: string | null
+  onKies: (id: string | null, naam: string | null) => void
+  uitgeschakeld?: boolean
+}) {
+  const [opties, setOpties] = React.useState<ComboboxOption[]>([])
+  /**
+   * Of de zoekactie zelf faalde. Bijna altijd betekent dat: geen recht op objectenbeheer. Dat
+   * onderscheid maken is de moeite waard — zonder deze vlag blijft er "Typ minimaal twee
+   * letters" staan terwijl je al twintig letters hebt getypt, en dat leest als een kapot veld.
+   */
+  const [geblokkeerd, setGeblokkeerd] = React.useState(false)
+
+  const gekozen: ComboboxOption[] = objectId
+    ? [{ value: objectId, label: objectNaam ?? 'Gekozen object' }]
+    : []
+  const alle = [...gekozen, ...opties.filter(o => o.value !== objectId)]
+
+  async function zoek(term: string) {
+    if (term.trim().length < 2) { setOpties([]); return }
+    try {
+      const treffers = await zoekObjecten(term)
+      setGeblokkeerd(false)
+      setOpties(treffers.map(o => ({
+        value: o.id,
+        label: o.naam || o.objectnummer || 'Object',
+        sub: [o.objectnummer, objectAdresRegel(o)].filter(Boolean).join(' · ') || undefined,
+      })))
+    } catch {
+      setGeblokkeerd(true)
+      setOpties([])
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <Combobox
+          options={alle}
+          value={objectId ?? undefined}
+          onChange={v => onKies(v, alle.find(o => o.value === v)?.label ?? null)}
+          onSearch={zoek}
+          disabled={uitgeschakeld}
+          placeholder="Geen object gekoppeld"
+          searchPlaceholder="Zoek op naam, objectnummer, VvE-code of adres…"
+          emptyText={geblokkeerd
+            ? 'Je hebt geen toegang tot het objectenregister.'
+            : 'Typ minimaal twee letters.'}
+          contentClassName="z-[110]"
+        />
+      </div>
+      {objectId && !uitgeschakeld && (
         <button
           type="button"
           className="shrink-0 text-xs text-neutral-500 underline"

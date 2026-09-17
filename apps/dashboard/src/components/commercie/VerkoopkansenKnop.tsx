@@ -159,14 +159,17 @@ export function VerkoopkansenTabel({ kansen, onKies }: {
   onKies: (kans: Verkoopkans) => void
 }) {
   return (
-    <table className="w-full text-[12.5px]">
+    // `table-fixed`: zonder dat zijn de `w-*`-klassen op de koppen slechts een suggestie en
+    // rekt één lange objectnaam de kolom op tot de tabel buiten het venster steekt. Met een
+    // vaste indeling gelden de breedtes wél en knipt `truncate` af wat niet past.
+    <table className="w-full table-fixed text-[12.5px]">
       <thead className="sticky top-0 bg-white">
         <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-500">
           <th className="py-1.5 pr-2 font-semibold">Kans</th>
-          <th className="w-44 py-1.5 pr-2 font-semibold">Uit dossier</th>
-          <th className="w-40 py-1.5 pr-2 font-semibold">Klant</th>
-          <th className="w-36 py-1.5 pr-2 font-semibold">Actiehouder</th>
-          <th className="w-32 py-1.5 font-semibold">Deadline</th>
+          <th className="w-40 py-1.5 pr-2 font-semibold">Uit dossier</th>
+          <th className="w-48 py-1.5 pr-2 font-semibold">Klant en object</th>
+          <th className="w-32 py-1.5 pr-2 font-semibold">Actiehouder</th>
+          <th className="w-28 py-1.5 font-semibold">Deadline</th>
         </tr>
       </thead>
       <tbody>
@@ -200,7 +203,8 @@ function KansRij({ kans, onKlik }: { kans: Verkoopkans; onKlik: () => void }) {
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="text-neutral-700 hover:underline"
+            title={[kans.bronDossiernummer, kans.bronDossierTitel].filter(Boolean).join(' ')}
+            className="block truncate text-neutral-700 hover:underline"
           >
             <span className="tabular-nums text-neutral-500">{kans.bronDossiernummer ?? '—'}</span>
             {kans.bronDossierTitel ? ` ${kans.bronDossierTitel}` : ''}
@@ -209,8 +213,21 @@ function KansRij({ kans, onKlik }: { kans: Verkoopkans; onKlik: () => void }) {
           <span className="text-neutral-400">—</span>
         )}
       </td>
-      <td className="py-1.5 pr-2 text-neutral-600">{kans.klantNaam ?? '—'}</td>
-      <td className="py-1.5 pr-2 text-neutral-600">{kans.actiehouderNaam ?? '—'}</td>
+      {/* Klant en object in één cel: ze horen bij elkaar (wie je belt, waar het werk zit) en
+          een zesde kolom zou de tabel onleesbaar smal maken. */}
+      <td className="py-1.5 pr-2 text-neutral-600">
+        <span className="block truncate" title={kans.klantNaam ?? undefined}>
+          {kans.klantNaam ?? '—'}
+        </span>
+        {kans.objectNaam && (
+          <span className="block truncate text-[11.5px] text-neutral-500" title={kans.objectNaam}>
+            {kans.objectNaam}
+          </span>
+        )}
+      </td>
+      <td className="truncate py-1.5 pr-2 text-neutral-600" title={kans.actiehouderNaam ?? undefined}>
+        {kans.actiehouderNaam ?? '—'}
+      </td>
       <td className={`py-1.5 whitespace-nowrap tabular-nums ${teLaat ? 'font-semibold text-error-600' : 'text-neutral-600'}`}>
         {kans.deadline ? formatDatumNL(kans.deadline) : '—'}
       </td>
@@ -235,9 +252,11 @@ function BewerkDialoog({ bewerking, medewerkers, onSluit, onOpgeslagen }: {
           deadline: bestaand.deadline ?? '',
           bronDossierId: bestaand.bronDossierId,
           relatieId: bestaand.relatieId,
-          // De naam komt mee zodat de kiezer de gekozen klant meteen toont; zonder dit zou
-          // hij "Geen klant gekoppeld" tonen tot je zelf opnieuw gaat zoeken.
+          // De namen komen mee zodat de kiezers de gekozen klant en het gekozen object meteen
+          // tonen; zonder dit zouden ze "Geen … gekoppeld" tonen tot je zelf opnieuw gaat zoeken.
           relatieNaam: bestaand.klantNaam,
+          objectId: bestaand.objectId,
+          objectNaam: bestaand.objectNaam,
         }
       : LEGE_VERKOOPKANS,
   )
