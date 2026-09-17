@@ -162,6 +162,16 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'QR-code', body: 'De QR-code wordt automatisch gegenereerd en verwijst naar het digitale paspoort. Scannen opent direct de gegevens, status en toewijzing.' },
     ],
   }],
+  [/^\/materieelbeheer\/factuur-import$/, {
+    title: 'Factuur inlezen',
+    description: 'Upload de PDF van een inkoopfactuur; EVA leest hem en stelt voor welke regels als materieel in het register horen. Niets wordt opgeslagen voordat jij het voorstel hebt nagekeken.',
+    sections: [
+      { title: 'Alle regels in beeld', body: 'Je ziet élke factuurregel, ook wat niet als materieel is voorgesteld. Verbruik (schuurpapier, nagels, frezen, slijtdelen) staat ongevinkt in de lijst met de reden erbij, zodat je kunt ingrijpen als dat oordeel niet klopt. Aanvinken kan altijd.' },
+      { title: 'Aantallen', body: 'Een regel van 6 stuks wordt 6 losse objecten, zodat je per stuk kunt zien wie het heeft en wat er gekeurd is. Een serienummer wordt alleen overgenomen bij één stuk — bij meerdere is niet te zeggen welk nummer bij welk exemplaar hoort.' },
+      { title: 'Bij wie het komt te staan', body: 'Staat er "afgehaald door" met een naam die precies één medewerker is, dan wordt die meteen als houder ingevuld. Een naam die op meerdere collega\'s past, of iemand die alleen besteld heeft, wordt bewust niet gekoppeld — dat lees je terug in de waarschuwingen bovenaan. Je kunt per regel zelf iemand kiezen.' },
+      { title: 'De factuur blijft bewaard', body: 'De PDF wordt als bijlage aan elk aangemaakt object gehangen, zodat je later bij het paspoort kunt terugzien wat er precies gekocht is en voor welk bedrag.' },
+    ],
+  }],
   [/^\/materieelbeheer\/[^/]+$/, {
     title: 'Digitaal paspoort',
     description: 'Het volledige paspoort van dit stuk materieel: identificatie, aanschafwaarde, status, toewijzing en de QR-code. Vanaf hier beheer je alles rond dit object.',

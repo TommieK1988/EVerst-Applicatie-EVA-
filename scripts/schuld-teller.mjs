@@ -126,6 +126,17 @@ function telAsAny(paden) {
  * dekt het gangbare patroon; een gate die twéé bestanden verderop zit telt als ongegate
  * en dat is de veilige kant om op te falen (liever te streng dan een gat missen).
  */
+/**
+ * Hoe een bestand aan de service-role-client komt.
+ *
+ * Naast de rechtstreekse `createAdminClient` staan hier de modules die zo'n
+ * client dóórgeven. Zonder die tweede vorm zou een action die zijn client via
+ * een helper haalt buiten de telling vallen — en dan is het ontwijken van deze
+ * teller precies één import ver, terwijl de blootstelling dezelfde is.
+ * Nieuwe helper van dit soort erbij? Dan ook hier erbij.
+ */
+const ADMIN_CLIENT = /createAdminClient|from '@\/lib\/materieel\/db'/
+
 function telOngegate(paden) {
   let totaal = 0
   const perBestand = new Map()
@@ -133,7 +144,7 @@ function telOngegate(paden) {
   for (const p of paden) {
     const tekst = readFileSync(p, 'utf8')
     if (!/^\s*['"]use server['"]/m.test(tekst)) continue
-    if (!tekst.includes('createAdminClient')) continue
+    if (!ADMIN_CLIENT.test(tekst)) continue
 
     const bron = ts.createSourceFile(p, tekst, ts.ScriptTarget.Latest, true)
 

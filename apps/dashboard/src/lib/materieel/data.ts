@@ -1,9 +1,6 @@
 import 'server-only'
-import { createAdminClient } from '@everts/database/server'
+import { db } from './db'
 import type { MaterieelInstellingen, MaterieelTeam, Optie } from './types'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
 
 type MedewerkerNaam = { id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null }
 

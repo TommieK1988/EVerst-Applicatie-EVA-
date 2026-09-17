@@ -1,13 +1,10 @@
 import 'server-only'
-import { createAdminClient } from '@everts/database/server'
+import { db } from './db'
 import { volledigeNaam } from './data'
 import {
   STATUS_META, UITKOMST_META, NIVEAU_LABELS, ALGEMEEN_GEBRUIK,
   type HistorieItem, type KeuringUitkomst, type MaterieelStatus, type ToewijzingNiveau,
 } from './types'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
 
 type MedewerkerNaam = { id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null }
 

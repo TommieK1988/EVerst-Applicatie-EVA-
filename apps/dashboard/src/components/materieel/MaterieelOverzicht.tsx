@@ -220,9 +220,14 @@ export default function MaterieelOverzicht({ objecten, layouts, user_id }: Props
           user_id={user_id}
           onRijKlik={(r) => router.push(`/materieelbeheer/${r.id}`)}
           acties={
-            <Link href="/materieelbeheer/nieuw">
-              <Button variant="primary"><IconPlus size={14} /> Nieuw materieel</Button>
-            </Link>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Link href="/materieelbeheer/factuur-import">
+                <Button variant="outline">Factuur inlezen</Button>
+              </Link>
+              <Link href="/materieelbeheer/nieuw">
+                <Button variant="primary"><IconPlus size={14} /> Nieuw materieel</Button>
+              </Link>
+            </div>
           }
         />
       )}

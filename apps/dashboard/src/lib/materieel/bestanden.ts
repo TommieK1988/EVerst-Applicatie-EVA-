@@ -1,10 +1,7 @@
 import 'server-only'
-import { createAdminClient } from '@everts/database/server'
+import { db } from './db'
 import { volledigeNaam } from './data'
 import type { MaterieelDocument, MaterieelDocumentRij } from './types'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
 
 /** Bucket is privé; alles wordt getoond via kortstondige signed URLs. */
 export const MATERIEEL_BUCKET = 'materieel-bestanden'

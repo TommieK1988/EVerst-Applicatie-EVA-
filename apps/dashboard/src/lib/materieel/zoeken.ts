@@ -1,5 +1,5 @@
 import 'server-only'
-import { createAdminClient } from '@everts/database/server'
+import { db } from './db'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { signPaden } from './bestanden'
 import { leesScan, zoektermen } from './qr'
@@ -7,9 +7,6 @@ import {
   ALGEMEEN_GEBRUIK, CATEGORIE_LABELS, MATERIEEL_CATEGORIEEN, MATERIEEL_STATUSSEN, STATUS_META,
   type MaterieelObject,
 } from './types'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
 
 /** Kolommen die de mobiele schermen nodig hebben — niet de hele rij. */
 const KORT =
