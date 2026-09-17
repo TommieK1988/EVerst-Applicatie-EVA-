@@ -26,7 +26,8 @@ import { zoekAdres, eersteHuisnummer } from '@/lib/adres/pdok'
 
 import { LEVER_EXTRACTIE_TOOL, PROMPT_VERSIE, veiligParse, type Extractie } from './schema'
 import {
-  kiesWerkmaatschappij, noemtMandaat, noemtRegie, datumPlusDagen, SERVICEDESK_CATEGORIEEN,
+  kiesWerkmaatschappij, noemtMandaat, noemtRegie, komtVoorInBron, datumPlusDagen,
+  SERVICEDESK_CATEGORIEEN,
 } from './regels'
 import { SYSTEM_PROMPT, bouwTekstBlok, type PromptContext } from './prompt'
 import { VELD_BETROUWBAAR } from './types'
@@ -282,10 +283,19 @@ function normaliseerPostcode(pc: string | null): string | null {
   return m ? `${m[1]} ${m[2]}` : null
 }
 
-/** true als de waarde letterlijk in de brontekst voorkomt. */
+/**
+ * true als de waarde in de brontekst voorkomt.
+ *
+ * Vergelijkt op genormaliseerde tekst, zodat een waarde die in de mail over een
+ * regeleinde loopt of tussen aanhalingstekens staat toch herkend wordt. Een kale
+ * `includes` zei daar ten onrechte "staat er niet", en dat drukte het vertrouwen
+ * omlaag op velden die er gewoon stonden.
+ */
 function komtLetterlijkVoor(waarde: string | null, bron: string): boolean {
-  const v = (waarde ?? '').trim().toLowerCase()
-  return v.length >= 3 && bron.toLowerCase().includes(v)
+  const v = (waarde ?? '').trim()
+  if (v.length < 3) return false
+  if (bron.toLowerCase().includes(v.toLowerCase())) return true
+  return komtVoorInBron(v, bron)
 }
 
 /**
@@ -366,10 +376,14 @@ export async function keurEnKalibreer(
   let cat = lijsten.categorieen.find(c => c.naam.toLowerCase() === catNaam)
     ?? lijsten.categorieen.find(c => catNaam.length >= 4 && c.naam.toLowerCase().includes(catNaam))
 
-  // Regie alleen overnemen als het er ook staat. Een opdracht ten onrechte als regie
-  // wegzetten betekent een dossier zonder aanneemsom, en dat valt pas bij de
-  // facturatie op.
-  const regie = Boolean(data.regie) && noemtRegie(brontekst)
+  // Regie alleen overnemen als het model kan aanwijzen wáár het staat, of als de
+  // brontekst een van de bekende termen noemt. De onderbouwing weegt zwaarder dan de
+  // woordenlijst: de eerste echte opdrachtbon zei "dit is op basis van uur werk en
+  // zal geen mandaat afgegeven worden" -- inhoudelijk glashelder, maar zonder een
+  // enkel woord uit welke lijst dan ook. Alleen op de lijst controleren betekent dat
+  // je elke schrijfwijze vooraf moet raden, en dat lukt niet.
+  const regie = Boolean(data.regie)
+    && (komtVoorInBron(data.regie_aanwijzing, brontekst) || noemtRegie(brontekst))
 
   // Op de servicedesk-postbus is de categorie geen vrije keuze. Een servicedeskdossier
   // wordt herkend aan exact 'Dagelijks onderhoud' of 'Mutatie'; kiest het model iets

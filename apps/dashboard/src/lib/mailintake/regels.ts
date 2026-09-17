@@ -118,14 +118,41 @@ export function datumPlusDagen(iso: string, dagen: number): string {
 }
 
 /**
+ * Maakt tekst vergelijkbaar: kleine letters, en alles wat geen letter of cijfer is
+ * wordt een spatie.
+ *
+ * Nodig omdat een zinsnede uit een mail zelden letterlijk terugkomt zoals het model
+ * hem aanhaalt: er zitten aanhalingstekens omheen, hij loopt over een regeleinde,
+ * of er staat een niet-brekende spatie in. Een kale `includes` mist dat allemaal en
+ * zegt dan ten onrechte "dit staat er niet".
+ */
+export function normaliseerVoorVergelijking(s: string): string {
+  return ' ' + s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' '
+}
+
+/**
+ * Staat dit fragment in de brontekst?
+ *
+ * Dit is de controle die telt bij een oordeel van het model: niet "kent mijn
+ * woordenlijst deze term", maar "kan het model aanwijzen waar het staat". Dat
+ * verschil kostte de eerste echte opdrachtbon -- daar stond "op basis van uur werk",
+ * en dat komt in geen enkele lijst voor die je vooraf verzint.
+ */
+export function komtVoorInBron(fragment: string | null | undefined, bron: string): boolean {
+  const f = normaliseerVoorVergelijking(String(fragment ?? '')).trim()
+  if (f.length < 8) return false
+  return normaliseerVoorVergelijking(bron).includes(' ' + f + ' ')
+}
+
+/**
  * Noemt de brontekst regiewerk?
  *
  * Bewust op hele woorden: "regie" zit ook in "regio" en "regisseur", en een valse
  * treffer zou een aangenomen opdracht ten onrechte zonder aanneemsom wegzetten.
  */
 export function noemtRegie(brontekst: string): boolean {
-  const laag = ' ' + brontekst.toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' '
-  return REGIE_WOORDEN.some(w => laag.includes(' ' + w.replace(/[^a-z0-9]+/g, ' ') + ' '))
+  const laag = normaliseerVoorVergelijking(brontekst)
+  return REGIE_WOORDEN.some(w => laag.includes(normaliseerVoorVergelijking(w)))
 }
 
 /** Noemt de brontekst een mandaat, of is dat losse bedrag gewoon een prijs? */

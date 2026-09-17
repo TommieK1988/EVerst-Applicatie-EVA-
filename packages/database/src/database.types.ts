@@ -6523,6 +6523,7 @@ export type Database = {
           bericht_id: string
           created_at: string
           fout: string | null
+          gekeurde_velden: Json | null
           id: string
           invoer_tokens: number | null
           kosten_cent: number | null
@@ -6543,6 +6544,7 @@ export type Database = {
           bericht_id: string
           created_at?: string
           fout?: string | null
+          gekeurde_velden?: Json | null
           id?: string
           invoer_tokens?: number | null
           kosten_cent?: number | null
@@ -6563,6 +6565,7 @@ export type Database = {
           bericht_id?: string
           created_at?: string
           fout?: string | null
+          gekeurde_velden?: Json | null
           id?: string
           invoer_tokens?: number | null
           kosten_cent?: number | null
