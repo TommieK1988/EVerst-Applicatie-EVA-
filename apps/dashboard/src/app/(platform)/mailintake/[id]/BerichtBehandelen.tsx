@@ -104,6 +104,10 @@ export default function BerichtBehandelen({
   const { bevestig, meld, vraagTekst } = useDialogen()
   const b = detail.bericht
   const velden = (detail.extractie?.velden ?? {}) as Record<string, any>
+  // Wat EVA er na de keuring van maakte. `velden` is de ruwe uitvoer van het model;
+  // voor alles wat de route bepaalt telt het gekeurde resultaat, anders toont het
+  // scherm een andere route dan de server heeft gelopen.
+  const gekeurd = (detail.extractie?.gekeurde_velden ?? null) as Record<string, any> | null
   const zekerheid = (detail.extractie?.vertrouwen ?? {}) as Record<string, number>
 
   const afgehandeld = ['verwerkt', 'genegeerd'].includes(b.status)
@@ -207,8 +211,17 @@ export default function BerichtBehandelen({
   // Welke route hoort bij dit bericht? Een opdracht maakt geen nieuw dossier maar
   // wint een bestaande offerte; het scherm toont dan een ander paneel.
   const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
-  const route = bepaalRoute(b.soort, offerteKandidaten.length > 0)
+  const isRegie = gekeurd ? Boolean(gekeurd.regie) : Boolean(velden.regie)
+  const route = bepaalRoute(b.soort, offerteKandidaten.length > 0, isRegie)
   const isServicedesk = b.soort === 'servicedeskbon'
+
+  // Bij regie maakt EVA een nieuw dossier: de prijs staat niet vast, dus er is geen
+  // aanneemsom om te winnen. Soms is zo'n bon tóch het akkoord op een offerte --
+  // dan hoort dat te kunnen, maar niet als standaard. Vandaar een uitklapblok,
+  // alleen als er ook werkelijk een offerte bij past.
+  const kanTochOfferte = route === 'nieuw_dossier'
+    && klantId != null
+    && (offerteKandidaten.length > 0 || b.soort === 'opdrachtbon' || b.soort === 'opdracht_op_offerte')
 
   // Het factuuradres uit de opdracht. Alleen aanbieden als er ook een adres bij staat;
   // een losse naam zegt niets over waar de factuur heen moet.
@@ -716,6 +729,34 @@ export default function BerichtBehandelen({
             <span style={klein}>Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het volledige werkadres in.</span>
           )}
         </Card>
+        )}
+
+        {kanTochOfferte && (
+          <details style={{
+            border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px',
+            background: 'var(--surface)',
+          }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              Hoort dit toch bij een offerte van ons?
+            </summary>
+            <p style={{ ...klein, margin: '6px 0 10px' }}>
+              {isRegie
+                ? 'Deze opdracht wordt op nacalculatie afgerekend, dus EVA maakt er een nieuw dossier van. Blijkt het tóch het akkoord op een offerte, dan zet je die hier op gewonnen.'
+                : 'EVA stelt een nieuw dossier voor. Hoort deze opdracht bij een offerte die wij al hebben uitgebracht, zet die dan hier op gewonnen.'}
+            </p>
+            <OpdrachtPaneel
+              berichtId={b.id}
+              kandidaten={detail.duplicaten}
+              relatieId={klantId}
+              bewerkbaar={bewerkbaar}
+              voorstel={{
+                opdrachtReferentie: velden.opdracht_referentie ?? null,
+                opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
+                klantOpmerkingen: velden.klant_opmerkingen ?? null,
+              }}
+              onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
+            />
+          </details>
         )}
 
         {/* Wegleggen kan altijd, welke route dit bericht ook heeft. Stonden eerst in
