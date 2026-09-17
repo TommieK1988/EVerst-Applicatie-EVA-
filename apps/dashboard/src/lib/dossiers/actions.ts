@@ -29,6 +29,7 @@ import {
   BOUW7_DOSSIER_VELDEN, BOUW7_DOSSIER_ROL_VELDEN, BOUW7_DOSSIER_STATUS_VELDEN,
 } from '@/lib/bouw7/handmatige-velden'
 import { schrijfBouw7Projectvelden, schrijfBouw7Aanneemsom, BOUW7_PROJECT_SCHRIJFVELDEN } from '@/lib/bouw7/project-velden'
+import { mapBouw7NaarEvaStatus } from '@/lib/bouw7/status-afleiding'
 import { assertDossierBewerkbaar } from './guards'
 import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
@@ -3340,10 +3341,75 @@ export async function updateDossierInfo(
   // aankomt blijft beschermd en krijgt via de cron een herkansing.
   const bouw7 = await schrijfDossierVeldenNaarBouw7(supabase, id, gewijzigd)
 
+  // De categorie bepaalt in welke sectie het dossier hoort — meteen doorvoeren, niet pas bij de
+  // volgende sync. Ná de write-back, want die spiegelt `bouw7_categorie_naam` en daar kijkt de
+  // afleiding naar.
+  if (gewijzigd.includes('categorie')) await herleidSectieUitCategorie(supabase, id)
+
   revalidatePath('/aanvragen')
   revalidatePath('/offertes')
   revalidatePath('/opdrachten')
+  revalidatePath('/servicedesk')
   return { ok: true, bouw7 }
+}
+
+/**
+ * Trekt hoofdstatus en substatussen gelijk met de (zojuist gewijzigde) categorie.
+ *
+ * De categorie beslist mee over de sectie: "Dagelijks onderhoud" en "Mutatie" horen op het
+ * servicedeskbord, elke andere categorie op Aanvragen/Offertes/Opdrachten. De Bouw7-sync leidt die
+ * velden af met `mapBouw7NaarEvaStatus`, maar draait twee keer per dag. Zonder deze stap blijft een
+ * dossier dat je nu op Dagelijks onderhoud zet tot die tijd een opdracht — en verschijnt het op de
+ * servicedesk hooguit in de kolom Nieuw, want `servicedesk_substatus` is dan nog leeg.
+ *
+ * Dezelfde afleiding als de sync, met één beperking: het Bouw7-maatwerkveld "Offerte Sub-status"
+ * wordt niet in EVA gespiegeld, dus dat kan hier niet meewegen. Gaat een dossier de servicedesk
+ * juist *uit*, dan volgt de substatus dus de projectstatus; de eerstvolgende sync zet hem alsnog
+ * naar de waarde van het maatwerkveld als dat gevuld is.
+ */
+async function herleidSectieUitCategorie(supabase: any, dossierId: string): Promise<void> {
+  const { data: d } = await supabase
+    .from('dossiers')
+    .select('hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, verzonden_op, categorie, bouw7_categorie_naam, bouw7_projectstatus_naam, bouw7_quotation_status, handmatige_velden')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (!d) return
+
+  const nieuw = mapBouw7NaarEvaStatus(
+    d.bouw7_projectstatus_naam,
+    // Zonder Bouw7-koppeling is de EVA-categorie het enige dat er is (zelfde terugval als
+    // `isMutatieDossier` in components/dossiers/types.ts).
+    d.bouw7_categorie_naam ?? d.categorie,
+    d.aanvraag_substatus ?? null,
+    d.offerte_substatus ?? null,
+    d.verzonden_op ?? null,
+    d.bouw7_quotation_status ?? null,
+  )
+
+  const ongewijzigd =
+    d.hoofdstatus === nieuw.hoofdstatus
+    && (d.aanvraag_substatus ?? null) === nieuw.aanvraag_substatus
+    && (d.offerte_substatus ?? null) === nieuw.offerte_substatus
+    && (d.opdracht_substatus ?? null) === nieuw.opdracht_substatus
+    && (d.servicedesk_substatus ?? null) === nieuw.servicedesk_substatus
+  if (ongewijzigd) return
+
+  // Een handmatig versleepte servicedesk-kolom geldt tot de sectie écht wisselt — net als bij een
+  // echte Bouw7-statuswissel in de sync vervalt die markering hier.
+  const handmatig = ((d.handmatige_velden as string[] | null) ?? []).filter(v => v !== 'servicedesk_substatus')
+
+  const { error } = await supabase
+    .from('dossiers')
+    .update({ ...nieuw, handmatige_velden: handmatig })
+    .eq('id', dossierId)
+  if (error) return
+
+  if (nieuw.servicedesk_substatus && nieuw.servicedesk_substatus !== (d.servicedesk_substatus ?? null)) {
+    await logSubstatusHistorie(dossierId, nieuw.servicedesk_substatus, 'handmatig').catch(() => {})
+  }
+
+  // De substatus is een gevolgd triggerveld; opnieuw evalueren nu hij verschoven is.
+  await verwerkDossierTriggers(dossierId).catch(() => {})
 }
 
 /**
