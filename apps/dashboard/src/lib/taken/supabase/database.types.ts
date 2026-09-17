@@ -805,6 +805,8 @@ export interface TaakMetDetails extends DbTask {
   comments_count: number
   attachments_count: number
   lijst?: Pick<DbTaskList, 'id' | 'naam'>
+  /** Wie de actie aanmaakte, of de bron (Bouw7/Postvak/Automatisch) als dat geen mens was. */
+  aangemaakt_door_naam?: string | null
   // dossier_id zit al op DbTask; hier alleen de afgeleide weergavevelden
   dossier_naam?: string | null
   dossier_sectie?: string | null

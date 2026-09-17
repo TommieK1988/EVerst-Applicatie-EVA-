@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { X, Calendar, Trash2, MessageSquare, ChevronDown, Plus, Check, Clock, UserPlus, Lock, FileText, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/taken/utils'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
+import { aanmakerZin } from '@/lib/taken/herkomst'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee, getToolboxToewijzingVoorTaak } from '@/app/(platform)/taken/actions/taken'
@@ -256,6 +257,14 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
     m => m.auth_user_id && !taak.assignees.find(a => a.user_id === m.auth_user_id)
   )
 
+  // Herkomstregel onder de titel: uit welke actielijst de actie komt en wie hem
+  // aanmaakte. Stond hier eerder alleen de lijstnaam.
+  const herkomst = [
+    taak.lijst ? `Uit actielijst ${taak.lijst.naam}` : null,
+    aanmakerZin(taak.aangemaakt_door_naam ?? null),
+    taak.created_at ? format(parseISO(taak.created_at), 'd MMM yyyy', { locale: nl }) : null,
+  ].filter(Boolean) as string[]
+
   return (
     <div className="w-96 flex-shrink-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col max-h-[calc(100vh-8rem)]">
       {/* Header */}
@@ -281,8 +290,8 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
               </h3>
             </button>
           )}
-          {taak.lijst && (
-            <p className="text-xs text-slate-400 mt-0.5">{taak.lijst.naam}</p>
+          {herkomst.length > 0 && (
+            <p className="text-xs text-slate-400 mt-0.5">{herkomst.join(' · ')}</p>
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">

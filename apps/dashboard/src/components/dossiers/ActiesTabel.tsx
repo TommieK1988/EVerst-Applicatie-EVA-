@@ -108,6 +108,11 @@ export default function ActiesTabel({
     }
   }
 
+  const aanmakerOpties = useMemo(
+    () => [...new Set(data.map(r => r.aangemaakt_door_naam).filter(Boolean) as string[])].sort(),
+    [data],
+  )
+
   const lijstOpties = useMemo(() => {
     const namen = [...new Set(data.map(r => r.lijst_naam).filter(Boolean) as string[])].sort()
     return data.some(r => !r.lijst_naam) ? [...namen, LOSSE_ACTIE] : namen
@@ -166,6 +171,11 @@ export default function ActiesTabel({
       { key: 'toegewezen', label: 'Toegewezen aan', breedte: 190,
         sorteerWaarde: r => r.toegewezen_namen.join(', '),
         render: r => r.toegewezen_namen.length ? r.toegewezen_namen.join(', ') : '—' },
+      { key: 'aangemaakt_door_naam', label: 'Aangemaakt door', breedte: 170,
+        filterType: 'select', filterOpties: aanmakerOpties,
+        sorteerWaarde: r => r.aangemaakt_door_naam ?? '',
+        filterWaarde: r => r.aangemaakt_door_naam ?? '—',
+        render: r => r.aangemaakt_door_naam ?? '—' },
       { key: 'subtaken', label: 'Subacties', breedte: 100, standaard_zichtbaar: false,
         sorteerWaarde: r => r.subtaken_totaal,
         render: r => r.subtaken_totaal === 0 ? '—' : `${r.subtaken_gereed}/${r.subtaken_totaal} gereed` },
@@ -180,7 +190,7 @@ export default function ActiesTabel({
         render: r => fmtDatum(r.created_at) },
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lijstOpties, paneelBezig, pathname])
+  }, [lijstOpties, aanmakerOpties, paneelBezig, pathname])
 
   if (data.length === 0) {
     return (

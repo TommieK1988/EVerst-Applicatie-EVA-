@@ -11,6 +11,7 @@ import {
   getActieveDossierContext, getDossierContextVoorIds, type DossierContext,
 } from '@/lib/dossiers/actief'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
+import { aanmakerLabel, type HerkomstBron } from '@/lib/taken/herkomst'
 
 export type { UrgenteTaak }
 
@@ -22,6 +23,8 @@ export type TaakRij = {
   prioriteit: string
   deadline: string | null
   lijst_naam: string | null
+  /** Wie de actie aanmaakte, of de bron (Bouw7/Postvak/Automatisch) als dat geen mens was. */
+  aangemaakt_door_naam: string | null
   toegewezen_namen: string[]
   toegewezen_ids: string[]
   // Dossier-context (afgevlakt voor kolommen/slicers)
@@ -297,6 +300,20 @@ export async function getTaak(id: string): Promise<TaakMetDetails | null> {
     throw new Error(`Fout bij ophalen taak: ${error.message}`)
   }
 
+  // Naam van de aanmaker erbij, zodat het detailpaneel de herkomst kan tonen.
+  // Via de admin-client: `medewerkers` valt buiten de RLS-scope van deze query en
+  // een uit dienst gemelde collega moet net zo goed een naam houden.
+  const herkomst = data as unknown as HerkomstBron
+  let aanmakerNaam: string | null = null
+  if (herkomst.aangemaakt_door) {
+    const { data: mw } = await createAdminClient()
+      .from('medewerkers')
+      .select('voornaam, tussenvoegsel, achternaam')
+      .eq('auth_user_id', herkomst.aangemaakt_door)
+      .maybeSingle()
+    if (mw) aanmakerNaam = [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ')
+  }
+
   return {
     ...(data as any),
     assignees: (data as any).task_assignees ?? [],
@@ -304,6 +321,7 @@ export async function getTaak(id: string): Promise<TaakMetDetails | null> {
     comments_count: ((data as any).task_comments ?? []).length,
     attachments_count: ((data as any).task_attachments ?? []).length,
     lijst: (data as any).lijst ?? undefined,
+    aangemaakt_door_naam: aanmakerLabel(herkomst, aanmakerNaam),
   }
 }
 
@@ -443,6 +461,8 @@ export type DossierActieRij = {
   lijst_id: string | null
   /** Naam van de actielijst waaruit de actie komt; null bij een losse actie. */
   lijst_naam: string | null
+  /** Wie de actie aanmaakte, of de bron (Bouw7/Postvak/Automatisch) als dat geen mens was. */
+  aangemaakt_door_naam: string | null
   toegewezen_namen: string[]
   toegewezen_ids: string[]
   subtaken_totaal: number
@@ -499,9 +519,12 @@ export async function getActieRijenVoorDossier(dossier_id: string): Promise<Doss
   if (taken.length === 0) return []
 
   // Namen van de toegewezen medewerkers in één slag.
-  const userIds = [...new Set(
-    taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
-  )]
+  // Ook `aangemaakt_door` erbij: dat is net zo goed een auth-user-id en heeft
+  // dezelfde naamopzoeking nodig als de toegewezenen.
+  const userIds = [...new Set([
+    ...taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
+    ...(taken.map(t => t.aangemaakt_door as string | null).filter(Boolean) as string[]),
+  ])]
   let namenMap: Record<string, string> = {}
   if (userIds.length > 0) {
     const { data: meds } = await supabase
@@ -529,6 +552,10 @@ export async function getActieRijenVoorDossier(dossier_id: string): Promise<Doss
       deadline: (t.deadline as string | null) ?? null,
       lijst_id: lijstId,
       lijst_naam: lijstId ? lijstNaam.get(lijstId) ?? null : null,
+      aangemaakt_door_naam: aanmakerLabel(
+        t as unknown as HerkomstBron,
+        namenMap[t.aangemaakt_door as string],
+      ),
       toegewezen_ids,
       toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
       subtaken_totaal: subtaken.length,
@@ -585,9 +612,12 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
   if (taken.length === 0) return []
 
   // Namen van toegewezen medewerkers ophalen.
-  const userIds = [...new Set(
-    taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
-  )]
+  // Ook `aangemaakt_door` erbij: dat is net zo goed een auth-user-id en heeft
+  // dezelfde naamopzoeking nodig als de toegewezenen.
+  const userIds = [...new Set([
+    ...taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
+    ...(taken.map(t => t.aangemaakt_door as string | null).filter(Boolean) as string[]),
+  ])]
   let namenMap: Record<string, string> = {}
   if (userIds.length > 0) {
     const { data: meds } = await supabase
@@ -623,6 +653,10 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
       prioriteit: t.prioriteit as string,
       deadline: (t.deadline as string | null) ?? null,
       lijst_naam: lijst?.naam ?? null,
+      aangemaakt_door_naam: aanmakerLabel(
+        t as unknown as HerkomstBron,
+        namenMap[t.aangemaakt_door as string],
+      ),
       toegewezen_ids,
       // Geen filter(Boolean): index-voor-index uitgelijnd met toegewezen_ids.
       toegewezen_namen: toegewezen_ids.map(id => namenMap[id] ?? 'Onbekend'),
@@ -697,9 +731,12 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
   }
 
   // Namen van toegewezen medewerkers.
-  const userIds = [...new Set(
-    taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
-  )]
+  // Ook `aangemaakt_door` erbij: dat is net zo goed een auth-user-id en heeft
+  // dezelfde naamopzoeking nodig als de toegewezenen.
+  const userIds = [...new Set([
+    ...taken.flatMap(t => ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)),
+    ...(taken.map(t => t.aangemaakt_door as string | null).filter(Boolean) as string[]),
+  ])]
   let namenMap: Record<string, string> = {}
   if (userIds.length > 0) {
     const { data: meds } = await supabase
@@ -731,6 +768,10 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
       prioriteit: t.prioriteit as string,
       deadline: (t.deadline as string | null) ?? null,
       lijst_naam: lijst?.naam ?? null,
+      aangemaakt_door_naam: aanmakerLabel(
+        t as unknown as HerkomstBron,
+        namenMap[t.aangemaakt_door as string],
+      ),
       toegewezen_ids,
       // Geen filter(Boolean): de arrays moeten index-voor-index uitlijnen met
       // toegewezen_ids, zodat de client zichzelf eruit kan filteren.

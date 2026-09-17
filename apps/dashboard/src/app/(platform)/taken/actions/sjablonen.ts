@@ -171,7 +171,9 @@ export async function activeerSjabloon(input: {
         formulier_template_id: taak.formulier_template_id ?? null,
         bezoek_ronde:          taak.bezoek_ronde ?? false,
         opname_ronde:          taak.opname_ronde ?? false,
-        aangemaakt_door:       null,
+        // Wie de lijst activeerde telt als aanmaker; op de trigger-route is dat
+        // niemand en blijft het leeg — dan toont het scherm "Automatisch".
+        aangemaakt_door:       activeerder,
       })
       .select('id')
       .single()
