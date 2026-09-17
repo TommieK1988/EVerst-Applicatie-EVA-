@@ -220,6 +220,9 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       model: ex.model,
       prompt_versie: ex.promptVersie,
       soort: ex.data?.soort ?? null,
+      // De ruwe uitvoer van het model. Wat EVA er daarna van maakte komt hieronder
+      // in `gekeurde_velden` -- zonder dat onderscheid is achteraf niet te zien
+      // waarom een bericht de route nam die het nam.
       velden: ex.data ? (ex.data as unknown as Json) : {},
       vertrouwen: ex.data?.vertrouwen ?? {},
       toelichting: ex.data?.toelichting ?? null,
@@ -261,6 +264,14 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       isServicedesk: ex.data.soort === 'servicedeskbon',
       standaardCategorieId: postbus.standaard_bouw7_categorie_id,
     })
+
+    // Vastleggen wat de deterministische poort ervan maakte. Het gekalibreerde
+    // vertrouwen vervangt de zelfrapportage van het model: dat laatste is wat het
+    // model dénkt, dit is wat we hebben kunnen controleren.
+    await supabase.from('mailintake_extracties').update({
+      gekeurde_velden: velden as unknown as Json,
+      vertrouwen: velden.vertrouwen,
+    }).eq('bericht_id', berichtId).eq('ronde', 'velden').eq('versie', volgende)
 
     // ── Wie hoort dit te behandelen? ────────────────────────────────────────
     // De bus waar het binnenkwam zegt niets als de afzender zich vergist heeft.
