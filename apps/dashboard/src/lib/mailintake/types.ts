@@ -92,15 +92,20 @@ export function bepaalRoute(
 ): IntakeRoute {
   if (soort === 'offerteaanvraag') return 'nieuw_dossier'
 
-  // Regie gaat nooit langs een offerte. Bij een regie-opdracht staat de prijs juist
-  // niet vast -- er wordt afgerekend op nacalculatie -- dus er is geen aanneemsom om
-  // te winnen. Zoeken naar een offerte levert dan hooguit de verkeerde op.
-  if (regie && soort != null && OPDRACHT_SOORTEN.includes(soort)) return 'nieuw_dossier'
-
-  if (soort != null && OPDRACHT_SOORTEN.includes(soort)) return 'offerte_winnen'
+  // Regie en een offerte sluiten elkaar niet uit. Er wordt wel degelijk een offerte
+  // uitgebracht om bijvoorbeeld het uurtarief vast te leggen, en de opdracht die
+  // daarop volgt verwijst er lang niet altijd naar. Regie zegt dus iets over hóé er
+  // wordt afgerekend -- nacalculatie, geen aanneemsom -- en niet over de vraag of er
+  // een offerte te winnen valt.
+  //
+  // Alleen als er niets te winnen is, wordt een regie-opdracht een nieuw dossier.
+  if (soort != null && OPDRACHT_SOORTEN.includes(soort)) {
+    if (offerteMatchGevonden) return 'offerte_winnen'
+    return regie ? 'nieuw_dossier' : 'offerte_winnen'
+  }
   if (soort === 'servicedeskbon') {
-    if (regie) return 'nieuw_dossier'
-    return offerteMatchGevonden ? 'offerte_winnen' : 'nieuw_dossier'
+    if (offerteMatchGevonden) return 'offerte_winnen'
+    return 'nieuw_dossier'
   }
   return 'geen'
 }

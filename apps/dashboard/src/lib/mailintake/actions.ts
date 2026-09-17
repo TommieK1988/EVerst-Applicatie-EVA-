@@ -126,6 +126,8 @@ export async function bevestigOpdrachtOpDossier(
     opdrachtdatum?: string | null
     klantOpmerkingen?: string | null
     factuuradresId?: string | null
+    /** Afrekenen op nacalculatie: geen aanneemsom naar Bouw7. */
+    regie?: boolean
     /** Alleen na een expliciete tweede klik bij een Bouw7-conflict. */
     forceerBouw7?: boolean
   },
@@ -156,6 +158,7 @@ export async function bevestigOpdrachtOpDossier(
     opdrachtdatum: invoer?.opdrachtdatum ?? bericht.ontvangen_op?.slice(0, 10) ?? null,
     klantOpmerkingen: invoer?.klantOpmerkingen ?? null,
     factuuradresId: invoer?.factuuradresId,
+    regie: invoer?.regie === true,
     relatieId: bericht.relatie_id,
     contactpersoonId: bericht.contactpersoon_id,
     forceerBouw7: invoer?.forceerBouw7 === true,

@@ -1062,7 +1062,16 @@ export async function getDossierById(id: string): Promise<{ ok: true; data: Doss
 export async function updateDossierSubstatus(
   id: string,
   nieuweSubstatus: DossierSubstatus,
-  opts?: { schrijfBouw7?: boolean; forceerBouw7?: boolean }
+  opts?: {
+    schrijfBouw7?: boolean
+    forceerBouw7?: boolean
+    /**
+     * Sla de aanneemsom-push naar Bouw7 over. Voor een regie-opdracht: die wordt op
+     * nacalculatie afgerekend, dus een vaste prijs op het Bouw7-project zou een
+     * bedrag suggereren dat niemand heeft afgesproken.
+     */
+     slaAanneemsomOver?: boolean
+  }
 ): Promise<
   | { ok: true; bouw7?: Bouw7WriteResult; aanneemsom?: Bouw7WriteResult & { bedrag?: number } }
   | { ok: false; error: string; conflict?: { bouw7Label: string } }
@@ -1152,7 +1161,7 @@ export async function updateDossierSubstatus(
     // De aanneemsom van de gewonnen EVA-offerte naar het Bouw7-project, zodat de Bouw7-
     // projectbewaking en de termijnstaat met hetzelfde bedrag rekenen. Mislukt dat, dan
     // blijft 'aanneemsom' gemarkeerd en probeert de cron het opnieuw.
-    if (huidig.bouw7_id != null) {
+    if (huidig.bouw7_id != null && !opts?.slaAanneemsomOver) {
       aanneemsom = await stuurAanneemsomNaarBouw7Intern(supabase, id)
         .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
     }

@@ -115,7 +115,7 @@ function DossierZoeker({
 type KoppelSoort = 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen'
 
 export default function BeoordelingPaneel({
-  bericht: b, toelichting, duplicaten, bewerkbaar, bezig, onKoppel,
+  bericht: b, toelichting, duplicaten, bewerkbaar, bezig, onKoppel, onKiesOfferte,
   objectTreffer, objectId, setObjectId,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,6 +126,13 @@ export default function BeoordelingPaneel({
   bewerkbaar: boolean
   bezig: boolean
   onKoppel: (dossierId: string, soort: KoppelSoort, label: string) => void
+  /**
+   * Kies deze offerte in het opdrachtpaneel. Dat paneel is de enige plek waar een
+   * offerte werkelijk gewonnen wordt; hier stond eerder een knop "Hoort bij deze
+   * offerte" die alleen het besluitenlogboek vulde en verder niets deed -- het
+   * dossier bleef in de offertefase staan en Bouw7 wist van niets.
+   */
+  onKiesOfferte: (dossierId: string) => void
   /** De objecttreffer op het werkadres; het koppelen gebeurt hier. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   objectTreffer: any
@@ -239,8 +246,8 @@ export default function BeoordelingPaneel({
                           Koppelen
                         </Button>
                         {d.soort === 'offerte_match' && (
-                          <Button variant="ghost" onClick={() => onKoppel(d.dossierId, 'offerte_gewonnen', 'Hoort bij deze offerte')} disabled={bezig}>
-                            Hoort bij deze offerte
+                          <Button variant="ghost" onClick={() => onKiesOfferte(d.dossierId)} disabled={bezig}>
+                            Opdracht op deze offerte
                           </Button>
                         )}
                         {d.soort === 'meerwerk_kandidaat' && (
