@@ -20,6 +20,7 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
 import { gelijkenis, normaliseerNaam } from './afzender'
+import { adresOvereenkomst } from './regels'
 import { DUPLICAAT_HARD, DUPLICAAT_TWIJFEL, type DuplicaatSoort } from './types'
 
 export interface DuplicaatInvoer {
@@ -27,6 +28,7 @@ export interface DuplicaatInvoer {
   relatieId: string | null
   onderwerp: string | null
   omschrijving: string | null
+  straat: string | null
   postcode: string | null
   huisnummer: string | null
   referentie: string | null
@@ -211,6 +213,25 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
       score += 0.45
       redenen.push('Zelfde werkadres')
     }
+    // Adres op tekst, voor als de postcode ontbreekt of het huisnummer in het
+    // straatveld is beland. Zonder deze regel viel het dossier dat bij de eerste
+    // echte opdrachtbon hoorde volledig af: zelfde straat, zelfde huisnummers,
+    // en nul punten omdat er aan beide kanten geen postcode stond.
+    const adresTekst = [d.werkadres_straat, d.werkadres_huisnummer, d.titel]
+      .filter(Boolean).join(' ')
+    const adresMatch = adresOvereenkomst(invoer.straat, invoer.huisnummer, adresTekst)
+    if (adresMatch === 'straat_en_nummer') {
+      score += 0.4
+      redenen.push('Zelfde straat en huisnummer')
+    } else if (adresMatch === 'straat') {
+      score += 0.15
+      redenen.push('Zelfde straat')
+    }
+    if (invoer.relatieId && d.klant_id === invoer.relatieId && adresMatch === 'straat_en_nummer') {
+      score += 0.15
+      redenen.push('Zelfde opdrachtgever op dit adres')
+    }
+
     if (invoer.relatieId && d.klant_id === invoer.relatieId && pc && d.werkadres_postcode === pc) {
       score += 0.1
       redenen.push('Zelfde opdrachtgever op dit adres')

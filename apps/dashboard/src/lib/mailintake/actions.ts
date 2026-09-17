@@ -207,6 +207,71 @@ export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
   }))
 }
 
+/**
+ * Zoekt een dossier om een bericht aan te koppelen.
+ *
+ * Zoekt op dossier-/offertenummer, op titel en op werkadres. Dat nummer is het punt:
+ * `zoekDossiers` kijkt alleen naar de titel, dus wie het offertenummer uit de mail
+ * overtikte vond niets. Er wordt ook op alleen de cijfers gezocht, want klanten
+ * schrijven ons nummer zelden over zoals wij het noteren -- "20267.00748",
+ * "2026700748" en "offerte 748" horen hetzelfde dossier te vinden.
+ */
+export async function zoekDossierVoorIntake(term: string): Promise<
+  {
+    dossierId: string
+    dossiernummer: string | null
+    titel: string | null
+    hoofdstatus: string | null
+    substatus: string | null
+    klantnaam: string | null
+    werkadres: string | null
+  }[]
+> {
+  await vereisRecht('mailintake', 'lezen')
+  const zoek = term.trim()
+  if (zoek.length < 2) return []
+
+  const supabase = createAdminClient()
+  const SELECT =
+    'id, dossiernummer, titel, hoofdstatus, aanvraag_substatus, offerte_substatus, ' +
+    'opdracht_substatus, werkadres_straat, werkadres_huisnummer, werkadres_stad, ' +
+    'klant:relaties!dossiers_klant_id_fkey(naam)'
+
+  // Twee losse queries in plaats van een `or` met een gebruikerswaarde erin: een
+  // PostgREST-filterstring is geen plek voor vrije invoer.
+  const veilig = zoek.replace(/[^A-Za-z0-9.\- ]/g, '').slice(0, 60)
+  const cijfers = veilig.replace(/\D/g, '')
+
+  const [opNummer, opTekst] = await Promise.all([
+    cijfers.length >= 3
+      ? supabase.from('dossiers').select(SELECT).ilike('dossiernummer', `%${cijfers}%`).limit(15)
+      : Promise.resolve({ data: [] as unknown[] }),
+    supabase.from('dossiers').select(SELECT)
+      .or(`titel.ilike.%${veilig}%,werkadres_straat.ilike.%${veilig}%`)
+      .limit(15),
+  ])
+
+  const gezien = new Set<string>()
+  const uit: Awaited<ReturnType<typeof zoekDossierVoorIntake>> = []
+  for (const rij of [...(opNummer.data ?? []), ...(opTekst.data ?? [])] as Record<string, unknown>[]) {
+    const id = String(rij.id)
+    if (gezien.has(id)) continue
+    gezien.add(id)
+    const klant = rij.klant as { naam?: string } | null
+    uit.push({
+      dossierId: id,
+      dossiernummer: (rij.dossiernummer as string) ?? null,
+      titel: (rij.titel as string) ?? null,
+      hoofdstatus: (rij.hoofdstatus as string) ?? null,
+      substatus: (rij.opdracht_substatus ?? rij.offerte_substatus ?? rij.aanvraag_substatus) as string ?? null,
+      klantnaam: klant?.naam ?? null,
+      werkadres: [rij.werkadres_straat, rij.werkadres_huisnummer, rij.werkadres_stad]
+        .filter(Boolean).join(' ') || null,
+    })
+  }
+  return uit.slice(0, 20)
+}
+
 /** Kan deze offerte gewonnen worden? Voor de knop in het behandelscherm. */
 export async function toetsOfferteVoorOpdracht(dossierId: string): Promise<
   { ok: true; dossiernummer: string | null; titel: string | null } | { ok: false; error: string }

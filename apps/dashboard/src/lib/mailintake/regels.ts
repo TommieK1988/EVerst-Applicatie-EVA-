@@ -160,3 +160,59 @@ export function noemtMandaat(brontekst: string): boolean {
   const laag = brontekst.toLowerCase()
   return MANDAAT_WOORDEN.some(w => laag.includes(w))
 }
+
+// ─── Adressen vergelijken ─────────────────────────────────────────────────────
+
+/**
+ * Straatnaam en huisnummers uit een vrije adresnotatie.
+ *
+ * "Vrij" is hier het sleutelwoord: in de praktijk staat een adres zelden netjes in
+ * de velden waar het hoort. Het dossier dat bij de eerste echte opdrachtbon hoorde
+ * had "Steenlaan 32, 34 en 36" volledig in het straatveld staan, met een leeg
+ * huisnummer en een lege postcode. Elke vergelijking die op die velden vertrouwt
+ * vindt zo'n dossier nooit.
+ *
+ * Postcodes worden overgeslagen: "2700 AP" zou anders als huisnummer 2700 tellen.
+ */
+export function adresKern(vrij: string): { straat: string; nummers: string[] } {
+  const zonderPostcode = vrij.replace(/\b\d{4}\s*[a-zA-Z]{2}\b/g, ' ')
+  const genormaliseerd = zonderPostcode.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+  const straatWoorden: string[] = []
+  for (const woord of genormaliseerd.split(' ')) {
+    if (/^\d/.test(woord)) break
+    straatWoorden.push(woord)
+  }
+
+  const nummers = (genormaliseerd.match(/\b\d{1,4}\b/g) ?? [])
+    .filter(n => Number(n) > 0 && Number(n) < 10000)
+
+  return { straat: straatWoorden.join(' ').trim(), nummers: [...new Set(nummers)] }
+}
+
+/**
+ * Hoe sterk lijkt dit adres op wat er van een dossier bekend is?
+ *
+ * `dossierTekst` is bewust alles bij elkaar — straatveld, huisnummerveld én titel.
+ * De titel draagt het adres namelijk vaak wél correct ("Steenlaan 32, 34 en 36
+ * Rijswijk, bouwkundige werkzaamheden…") terwijl de velden eromheen half gevuld zijn.
+ *
+ * Een gedeelde straat zonder gedeeld huisnummer is expres zwak: bij een VvE-complex
+ * ligt al het werk aan dezelfde straat, en dan zou elke nieuwe aanvraag als mogelijk
+ * duplicaat worden aangemerkt.
+ */
+export function adresOvereenkomst(
+  straat: string | null,
+  huisnummer: string | null,
+  dossierTekst: string,
+): 'straat_en_nummer' | 'straat' | null {
+  const mail = adresKern([straat, huisnummer].filter(Boolean).join(' '))
+  if (mail.straat.length < 4) return null
+
+  const dossier = adresKern(dossierTekst)
+  const dossierPlat = ' ' + dossierTekst.toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' '
+  if (!dossierPlat.includes(' ' + mail.straat + ' ')) return null
+
+  const gedeeld = mail.nummers.some(n => dossier.nummers.includes(n))
+  return gedeeld ? 'straat_en_nummer' : 'straat'
+}

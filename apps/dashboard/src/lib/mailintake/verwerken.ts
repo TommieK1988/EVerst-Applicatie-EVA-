@@ -313,6 +313,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       relatieId: afz.relatieId,
       onderwerp: geclaimd.onderwerp,
       omschrijving: velden.omschrijving,
+      straat: velden.werkadresStraat,
       postcode: velden.werkadresPostcode,
       huisnummer: velden.werkadresHuisnummer,
       referentie: velden.referentie,
