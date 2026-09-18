@@ -49,10 +49,56 @@ op het ontbreken van bijlagen — een echte aanvraag kan dat allemaal ook hebben
 
 ---
 
+## 1b. Mails over dezelfde klus worden één intake
+
+Een opdracht komt lang niet altijd in één mail binnen. Het komt voor dat de bon in de ene mail
+zit — met het bonnummer en het factuuradres — en de afspraak erover in een andere, doorgestuurd
+door een collega, met een eigen gesprek. Wie die twee los leest, vult twee halve formulieren.
+
+EVA knoopt ze daarom aan elkaar. Dat gebeurt op twee momenten:
+
+**Vóór het lezen**, op signalen die meteen te zien zijn:
+
+| Signaal | Toelichting |
+|---|---|
+| Zelfde e-mailgesprek | Antwoorden en doorsturen binnen één thread |
+| Dezelfde bijlage | Op de inhoud van het bestand, niet op de naam — dezelfde bon die twee keer wordt doorgestuurd |
+| Hetzelfde onderwerp | Zonder "Re:", "FW:" of "Antw:" ervoor, en alleen als het onderwerp lang genoeg is om iets te betekenen |
+
+**Ná het lezen**, op wat er uit de mail kwam:
+
+| Signaal | Toelichting |
+|---|---|
+| Dezelfde opdrachtgever op hetzelfde werkadres | Straat én huisnummer moeten overeenkomen |
+| Hetzelfde bon- of ordernummer | Letterlijk dezelfde referentie |
+
+Blijkt een mail er pas achteraf bij te horen, dan leest EVA één keer opnieuw — nu over het
+geheel. Daarna niet meer; die tweede ronde kijkt zelf niet naar groepen.
+
+Er wordt **nooit** samengevoegd op alleen de klantnaam. Een vastgoedbeheerder heeft tientallen
+klussen tegelijk lopen; het adres of een letterlijk nummer moet er altijd bij. Twee klussen ten
+onrechte samenvoegen is erger dan ze uit elkaar laten, want dan belandt een bon op het
+verkeerde dossier.
+
+Wat je ervan ziet: in het Postvak staat één regel met **"2 mails"** erachter, en in het
+behandelscherm staan de andere mails uitklapbaar onder de hoofdmail, met hun bijlagen erbij.
+Alles wat EVA als geheel heeft gelezen, staat dus ook als geheel in beeld.
+
+---
+
 ## 2. Welke velden EVA uit de mail en de bijlagen haalt
 
-De AI leest de mailtekst én de bijlagen (PDF's en foto's) en vult daarmee een formulier in.
-Hij mag niets uitvoeren; hij kan alleen dat formulier invullen.
+De AI leest de mailtekst én de bijlagen (PDF's en foto's) van alle mails over deze klus, en
+vult daarmee één formulier in. Hij mag niets uitvoeren; hij kan alleen dat formulier invullen.
+
+De grenzen staan ruim: PDF's tot 20 MB per stuk, tot tien documenten en zes foto's, met een
+totaal van 20 MB over alles samen (daarboven past het verzoek niet meer). Wat er niet bij kon,
+wordt bij naam genoemd onder het voorstel. Dat is belangrijker dan het lijkt: het bestek is
+altijd het dikste bestand, dus een krappe grens laat juist het document weg dat de scope draagt.
+
+Komt het antwoord niet uit met de ruimte die ervoor staat, dan geldt de leesronde als
+**mislukt** en gaat het bericht naar een mens. Een half ingevuld formulier dat er compleet
+uitziet is gevaarlijker dan geen formulier.
 
 **Wat voor bericht is dit**
 
@@ -208,11 +254,16 @@ aan, maar zónder klant of met een nummer uit de verkeerde reeks.
 
 ### De gevraagde werkzaamheden
 
-Alleen bij een **offerteaanvraag** draait een tweede leesronde over de mail en de bijlagen,
-met een ruimer budget (PDF's tot 20 MB, tot 10 documenten). Die levert een korte opsomming van
-het gevraagde werk op, in de taal van een calculator. Veel kleine verspreide punten worden
+Bij elke mail die over werk gaat — een aanvraag, een opdracht of een servicedeskbon — draait
+een tweede leesronde over de mail en álle bijlagen. Die levert een korte opsomming van het
+gevraagde werk op, in de taal van een calculator. Veel kleine verspreide punten worden
 samengevat in één regel, niet overgetikt. Wat onduidelijk is krijgt een regel die met
 "Onduidelijk:" begint.
+
+Deze ronde draaide eerst alleen bij een offerteaanvraag, omdat een opdrachtbon "toch maar één
+regel" zou zijn. Dat bleek niet te kloppen: een bon verwijst naar een bestek, stelt eisen aan
+de uitvoering en noemt voorwaarden. Bij een opdracht zag EVA daardoor alleen de krappe
+veldextractie — en ging op die halve lezing beslissen.
 
 ---
 
@@ -253,11 +304,19 @@ gewonnen, waarna het dossier vanzelf naar **fase Opdracht, substatus Nieuwe opdr
 
 ### Welke offerte?
 
-EVA zet de kandidaten op volgorde met de redenen erbij. Voorselecteren gebeurt alleen als er
-niets te kiezen valt: precies één treffer boven de 0,80. Zijn er meerdere, dan staat er niets
-aangevinkt en verschijnt de waarschuwing dat er meerdere offertes passen. Is er geen enkele,
-dan staat er een zoekveld om zelf het dossier aan te wijzen. **EVA maakt voor een opdracht
-nooit zelf een dossier aan.**
+EVA zet de kandidaten op volgorde met de redenen erbij. Bovenaan staat wat op dit werkadres
+slaat of een eigen aanwijzing heeft; alle andere lopende offertes van deze opdrachtgever staan
+achter een uitklapper. Bij een vastgoedbeheerder met tientallen lopende offertes is een lange
+lijst namelijk geen hulp.
+
+Voorselecteren gebeurt alleen als er niets te kiezen valt: precies één treffer boven de 0,80.
+Zijn er meerdere, dan staat er niets aangevinkt en verschijnt de waarschuwing dat er meerdere
+offertes passen. Is er geen enkele, dan staat er een zoekveld om zelf het dossier aan te
+wijzen. **EVA maakt voor een opdracht nooit zelf een dossier aan.**
+
+Boven de keuze staat wat EVA uit de mail heeft herkend — opdrachtgever, contactpersoon en
+werkadres — met daaronder wat er op het gekozen dossier staat. Zo zie je in één oogopslag of
+de opdracht bij een ander aanspreekpunt of een ander factuuradres hoort dan de offerte.
 
 Het gekozen dossier moet in de **offertefase** staan. Staat het nog op aanvraag of al op
 opdracht, dan weigert de knop met die reden erbij.
@@ -270,9 +329,14 @@ opdracht, dan weigert de knop met die reden erbij.
    EVA en vraagt of je dat wilt volgen of tóch wilt doorzetten.
 2. **De opdrachtdatum** wordt op de datum van de bon gezet.
 3. **De opdrachtreferentie** wordt ingevuld.
-4. **Het factuuradres** wordt gecontroleerd: zoals op de offerte, een ander adres dat al bij
-   deze klant staat, of een nieuw adres dat ter plekke wordt vastgelegd. De opdrachtgever zelf
-   verandert niet — dit gaat alleen over waar de factuur heen gaat.
+4. **Het factuuradres** wordt gecontroleerd. Stond er een factuuradres op de opdracht, dan is
+   dát de beginstand — de klant heeft het er niet voor niets bij gezet. Verder kun je kiezen
+   voor het adres van de offerte, een ander adres dat al bij deze klant staat, of een nieuw
+   adres dat ter plekke wordt vastgelegd. De opdrachtgever zelf verandert niet; dit gaat
+   alleen over waar de factuur heen gaat.
+4b. **De contactpersoon** van de offerte blijft staan, tenzij je aanvinkt dat de persoon uit
+   de opdracht die moet vervangen. Wie de bon stuurt is lang niet altijd het aanspreekpunt —
+   soms is het de administratie — dus dit gebeurt nooit vanzelf.
 5. **De opmerking van de klant** wordt een notitie op het dossier.
 6. **De bijlagen gaan naar de SharePoint-dossiermap.**
 7. **De verkooptermijnen worden aangemaakt** volgens de betalingsconditie van de offerte, in
