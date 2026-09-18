@@ -208,8 +208,17 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
     supabase.from('mailintake_bijlagen').select('*')
       .in('bericht_id', groepsIds.length ? groepsIds : [id])
       .eq('is_inline', false).order('bestandsnaam').limit(100),
+    // De meest recente gekeurde lezing binnen de hele klus, niet per se die van dit
+    // bericht. Zodra een tweede mail erbij komt wordt er één keer over het geheel
+    // gelezen, en die lezing hangt aan het bericht dat als laatste is verwerkt. De
+    // andere mails dragen dan nog hun eigen halve formulier -- en juist dat gaf een
+    // scherm zonder opdrachtreferentie en zonder factuuradres.
     supabase.from('mailintake_extracties').select('*')
-      .eq('bericht_id', id).order('versie', { ascending: false }).limit(1).maybeSingle(),
+      .in('bericht_id', groepsIds.length ? groepsIds : [id])
+      .eq('ronde', 'velden')
+      .not('gekeurde_velden', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle(),
     supabase.from('mailintake_duplicaat_kandidaten')
       .select('*, dossier:dossiers(id, dossiernummer, titel, hoofdstatus, klant:relaties!dossiers_klant_id_fkey(naam))')
       .eq('bericht_id', id).order('score', { ascending: false }).limit(10),

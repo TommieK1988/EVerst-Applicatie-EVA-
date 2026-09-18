@@ -359,6 +359,12 @@ export async function keurEnKalibreer(
     isServicedesk?: boolean
     /** De standaardcategorie van de postbus, als terugval binnen die klem. */
     standaardCategorieId?: number | null
+    /**
+     * Hoeveel bijlagen het model werkelijk gelezen heeft. Nodig omdat de tekst van
+     * een PDF nergens in `brontekst` staat: een waarde die het model daaruit haalt
+     * is niet te verifiëren, maar daarom nog niet verzonnen.
+     */
+    bijlagenGelezen?: number
   },
 ): Promise<GekeurdeVelden> {
   const v: Record<string, number> = {}
@@ -423,8 +429,20 @@ export async function keurEnKalibreer(
   // zal geen mandaat afgegeven worden" -- inhoudelijk glashelder, maar zonder een
   // enkel woord uit welke lijst dan ook. Alleen op de lijst controleren betekent dat
   // je elke schrijfwijze vooraf moet raden, en dat lukt niet.
-  const regie = Boolean(data.regie)
-    && (komtVoorInBron(data.regie_aanwijzing, brontekst) || noemtRegie(brontekst))
+  const regieUitTekst = komtVoorInBron(data.regie_aanwijzing, brontekst) || noemtRegie(brontekst)
+
+  // De onderbouwing kan ook uit een bijlage komen -- de bon zelf. Die tekst zit niet
+  // in `brontekst`: het PDF gaat als document naar het model, wij hebben de woorden
+  // ervan nergens staan. Dat trof precies dit geval: het model citeerde "op basis van
+  // uur werk" uit de bon, en mijn poort verwierp regie omdat die zin niet in de
+  // mailtekst stond. Verwerpen is hier het verkeerde antwoord -- dan verliest een
+  // regie-opdracht zijn kenmerk door een gat in de controle, niet door de inhoud.
+  // Dus wel overnemen, maar met minder zekerheid; zo'n bericht gaat toch naar een mens.
+  const regieUitBijlage = !regieUitTekst
+    && (data.regie_aanwijzing ?? '').trim().length >= 12
+    && (opties.bijlagenGelezen ?? 0) > 0
+
+  const regie = Boolean(data.regie) && (regieUitTekst || regieUitBijlage)
 
   // Op de servicedesk-postbus is de categorie geen vrije keuze. Een servicedeskdossier
   // wordt herkend aan exact 'Dagelijks onderhoud' of 'Mutatie'; kiest het model iets
@@ -499,7 +517,7 @@ export async function keurEnKalibreer(
       ? data.mandaat_bedrag
       : null
   zet('mandaat_bedrag', mandaat, mandaat != null ? modelScore('mandaat_bedrag') : 0)
-  zet('regie', regie || null, regie ? 1 : 0)
+  zet('regie', regie || null, regie ? (regieUitTekst ? 1 : 0.6) : 0)
   zet('factuuradres_straat', data.factuuradres_straat,
     komtLetterlijkVoor(data.factuuradres_straat, brontekst) ? 1 : 0.4)
 
