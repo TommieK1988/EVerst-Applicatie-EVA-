@@ -30,6 +30,7 @@ import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { postbusSoortVoorMail } from './regels'
+import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
 import {
@@ -100,21 +101,33 @@ async function kostenVandaag(postbusId: string): Promise<number> {
   return (data ?? []).reduce((som: number, r: any) => som + (r.kosten_cent ?? 0), 0)
 }
 
-/** Bijlagen uit de bucket halen om aan het model te geven. */
-async function bijlagenVoorAI(berichtId: string): Promise<{ voorAI: BijlageVoorAI[]; namen: string[]; ongelezen: boolean }> {
+/**
+ * De bijlagen van één of meer berichten, klaar om mee te sturen.
+ *
+ * Meer dan één, want mails over dezelfde klus horen als geheel gelezen te worden:
+ * de bon zit vaak in een ander bericht dan de afspraak erover. Een dubbele bijlage
+ * (dezelfde bon twee keer doorgestuurd) gaat er één keer in -- ontdubbeld op
+ * `sha256`, want twee keer hetzelfde bestand meesturen kost geld en helpt niets.
+ */
+async function bijlagenVoorAI(berichtIds: string[]): Promise<{ voorAI: BijlageVoorAI[]; namen: string[]; ongelezen: boolean }> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_bijlagen')
-    .select('id, bestandsnaam, content_type, opslag_pad, te_groot')
-    .eq('bericht_id', berichtId)
+    .select('id, bestandsnaam, content_type, opslag_pad, te_groot, sha256')
+    .in('bericht_id', berichtIds)
     .eq('is_inline', false)
-    .limit(50)
+    .limit(100)
 
   const voorAI: BijlageVoorAI[] = []
   const namen: string[] = []
+  const gezien = new Set<string>()
   let ongelezen = false
 
   for (const b of data ?? []) {
+    if (b.sha256) {
+      if (gezien.has(b.sha256)) continue
+      gezien.add(b.sha256)
+    }
     namen.push(b.bestandsnaam)
     if (b.te_groot || !b.opslag_pad) { ongelezen = true; continue }
     try {
@@ -172,9 +185,22 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
   const pogingen = (geclaimd.pogingen ?? 0) + 1
 
   try {
+    // ── Hoort dit bij een klus die al binnen is? ─────────────────────────────
+    // Vóór de leesronde, want als het antwoord ja is moet die ronde meteen over
+    // het geheel gaan. Dit zijn alleen de harde signalen (gesprek, dezelfde
+    // bijlage, hetzelfde onderwerp); de zachte volgen na de extractie, omdat
+    // daar het werkadres voor nodig is.
+    log.stap('groep bepalen')
+    const vooraf = await zoekGroepVooraf(berichtId).catch(() => null)
+    let groepId = await zetGroep(berichtId, vooraf?.groepId ?? null)
+    let groepReden = vooraf?.reden ?? null
+    let eerdere = vooraf ? await andereLeden(groepId, berichtId).catch(() => []) : []
+
     // ── Bijlagen ────────────────────────────────────────────────────────────
     log.stap('bijlagen laden')
-    const { voorAI, namen, ongelezen } = await bijlagenVoorAI(berichtId)
+    const { voorAI, namen, ongelezen } = await bijlagenVoorAI(
+      [berichtId, ...eerdere.map(m => m.id)],
+    )
 
     // ── Budget ──────────────────────────────────────────────────────────────
     const budgetOp = (await kostenVandaag(postbus.id)) >= postbus.dagbudget_cent
@@ -191,8 +217,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     log.stap('hulplijst relaties')
     const hulplijst = await hulplijstRelaties(echteAfzender, geclaimd.onderwerp)
 
-    log.stap('AI-extractie', { bijlagen: voorAI.length })
-    const ex = await extraheer({
+    const basisContext = {
       postbusSoort: postbus.soort,
       postbusAdres: postbus.adres,
       onderwerp: geclaimd.onderwerp,
@@ -202,37 +227,47 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       cc: geclaimd.cc ?? [],
       ontvangenOp: geclaimd.ontvangen_op,
       bodyTekst: geclaimd.body_tekst ?? '',
-      bijlagenamen: namen,
       bekendeRelaties: hulplijst,
-    }, voorAI)
+    }
+
+    log.stap('AI-extractie', { bijlagen: voorAI.length, eerdereMails: eerdere.length })
+    let ex = await extraheer(
+      { ...basisContext, bijlagenamen: namen, eerdereMails: eerdere },
+      voorAI,
+    )
 
     uit.kostenCent = ex.kostenCent
 
-    const { data: laatste } = await supabase
-      .from('mailintake_extracties').select('versie')
-      .eq('bericht_id', berichtId).eq('ronde', 'velden')
-      .order('versie', { ascending: false }).limit(1).maybeSingle()
-    const volgende = ((laatste?.versie ?? 0) as number) + 1
-    await supabase.from('mailintake_extracties').insert({
-      bericht_id: berichtId,
-      ronde: 'velden',
-      versie: volgende,
-      model: ex.model,
-      prompt_versie: ex.promptVersie,
-      soort: ex.data?.soort ?? null,
-      // De ruwe uitvoer van het model. Wat EVA er daarna van maakte komt hieronder
-      // in `gekeurde_velden` -- zonder dat onderscheid is achteraf niet te zien
-      // waarom een bericht de route nam die het nam.
-      velden: ex.data ? (ex.data as unknown as Json) : {},
-      vertrouwen: ex.data?.vertrouwen ?? {},
-      toelichting: ex.data?.toelichting ?? null,
-      invoer_tokens: ex.invoerTokens,
-      uitvoer_tokens: ex.uitvoerTokens,
-      kosten_cent: ex.kostenCent,
-      status: ex.ok ? 'gereed' : 'mislukt',
-      fout: ex.fout,
-      ruwe_uitvoer: ex.ruweUitvoer,
-    })
+    async function bewaarExtractie(res: typeof ex): Promise<number> {
+      const { data: laatste } = await supabase
+        .from('mailintake_extracties').select('versie')
+        .eq('bericht_id', berichtId).eq('ronde', 'velden')
+        .order('versie', { ascending: false }).limit(1).maybeSingle()
+      const nr = ((laatste?.versie ?? 0) as number) + 1
+      await supabase.from('mailintake_extracties').insert({
+        bericht_id: berichtId,
+        ronde: 'velden',
+        versie: nr,
+        model: res.model,
+        prompt_versie: res.promptVersie,
+        soort: res.data?.soort ?? null,
+        // De ruwe uitvoer van het model. Wat EVA er daarna van maakte komt hieronder
+        // in `gekeurde_velden` -- zonder dat onderscheid is achteraf niet te zien
+        // waarom een bericht de route nam die het nam.
+        velden: res.data ? (res.data as unknown as Json) : {},
+        vertrouwen: res.data?.vertrouwen ?? {},
+        toelichting: res.data?.toelichting ?? null,
+        invoer_tokens: res.invoerTokens,
+        uitvoer_tokens: res.uitvoerTokens,
+        kosten_cent: res.kostenCent,
+        status: res.ok ? 'gereed' : 'mislukt',
+        fout: res.fout,
+        ruwe_uitvoer: res.ruweUitvoer,
+      })
+      return nr
+    }
+
+    let volgende = await bewaarExtractie(ex)
 
     // Vastleggen wélke bijlagen het model werkelijk onder ogen kreeg. Dit stond in
     // het datamodel maar werd nergens geschreven, dus `aan_ai_gegeven` was altijd
@@ -258,9 +293,14 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
 
     // ── Afzender ────────────────────────────────────────────────────────────
     log.stap('afzender herkennen')
+    // Na de wacht hierboven staat vast dat er een formulier is. Het in een eigen
+    // variabele zetten is nodig omdat `ex` verderop vervangen kan worden door de
+    // ronde over de hele klus -- TypeScript laat de zekerheid dan los.
+    let gelezen: NonNullable<typeof ex.data> = ex.data
+
     const afz = await herkenAfzender({
       vanAdres: echteAfzender,
-      klantNaamUitMail: ex.data.klant_naam,
+      klantNaamUitMail: gelezen.klant_naam,
       doorgestuurd: isDoorstuur,
     })
 
@@ -268,13 +308,62 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     log.stap('velden keuren')
     const lijsten = await witteLijsten()
     const brontekst = `${geclaimd.onderwerp ?? ''}\n${geclaimd.body_tekst ?? ''}`
-    const velden = await keurEnKalibreer(ex.data, lijsten, brontekst, postbus.standaard_werkmaatschappij_id, {
-      ontvangenOp: geclaimd.ontvangen_op,
-      // Op de inhoud en niet op de bus: een offerteaanvraag die per ongeluk naar
-      // servicedesk@ is gestuurd hoort geen servicedeskcategorie te krijgen.
-      isServicedesk: ex.data.soort === 'servicedeskbon',
-      standaardCategorieId: postbus.standaard_bouw7_categorie_id,
-    })
+    const ontvangenOp = geclaimd.ontvangen_op
+    async function keur(res: typeof gelezen) {
+      return keurEnKalibreer(res, lijsten, brontekst, postbus.standaard_werkmaatschappij_id, {
+        ontvangenOp,
+        // Op de inhoud en niet op de bus: een offerteaanvraag die per ongeluk naar
+        // servicedesk@ is gestuurd hoort geen servicedeskcategorie te krijgen.
+        isServicedesk: res.soort === 'servicedeskbon',
+        standaardCategorieId: postbus.standaard_bouw7_categorie_id,
+      })
+    }
+
+    let velden = await keur(gelezen)
+
+    // ── Hoort dit tóch bij een klus die al binnen is? ────────────────────────
+    // Nu pas bruikbaar: deze signalen leunen op het werkadres en de
+    // opdrachtreferentie, en die zijn er voor de leesronde nog niet. Blijkt het
+    // bericht bij een bestaande groep te horen, dan is het formulier hierboven op
+    // de halve gegevens ingevuld en wordt er één keer opnieuw gelezen -- nu over
+    // het geheel. Eén keer, niet in een lus: deze tweede ronde kijkt zelf niet
+    // meer naar groepen.
+    if (!vooraf && !budgetOp) {
+      const achteraf = await zoekGroepAchteraf(berichtId, {
+        relatieId: afz.relatieId,
+        straat: velden.werkadresStraat,
+        huisnummer: velden.werkadresHuisnummer,
+        opdrachtReferentie: velden.opdrachtReferentie,
+      }).catch(() => null)
+
+      if (achteraf) {
+        log.stap('opnieuw lezen over de hele klus', { reden: achteraf.reden })
+        groepId = await zetGroep(berichtId, achteraf.groepId)
+        groepReden = achteraf.reden
+        eerdere = await andereLeden(groepId, berichtId).catch(() => [])
+        const samen = await bijlagenVoorAI([berichtId, ...eerdere.map(m => m.id)])
+        const opnieuw = await extraheer(
+          { ...basisContext, bijlagenamen: samen.namen, eerdereMails: eerdere },
+          samen.voorAI,
+        )
+        uit.kostenCent += opnieuw.kostenCent
+        // Alleen overnemen als het gelukt is. Een mislukte tweede ronde mag de
+        // eerste lezing niet wissen -- half is nog altijd beter dan niets.
+        if (opnieuw.ok && opnieuw.data) {
+          ex = opnieuw
+          gelezen = opnieuw.data
+          volgende = await bewaarExtractie(opnieuw)
+          velden = await keur(gelezen)
+        }
+      }
+    }
+
+    if (groepReden) {
+      await supabase.from('mailintake_besluiten').insert({
+        bericht_id: berichtId, actor: 'systeem', actie: 'gegroepeerd',
+        details: { groep_id: groepId, reden: groepReden, aantal_mails: eerdere.length + 1 },
+      })
+    }
 
     // Vastleggen wat de deterministische poort ervan maakte. Het gekalibreerde
     // vertrouwen vervangt de zelfrapportage van het model: dat laatste is wat het
@@ -287,7 +376,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     // ── Wie hoort dit te behandelen? ────────────────────────────────────────
     // De bus waar het binnenkwam zegt niets als de afzender zich vergist heeft.
     // Een servicedeskbon in opdrachten@ hoort bij de servicedeskbehandelaar.
-    const behandelaarId = await behandelaarVoorMail(postbus, ex.data.soort as MailSoort)
+    const behandelaarId = await behandelaarVoorMail(postbus, gelezen.soort as MailSoort)
 
     // ── Object bij het werkadres ────────────────────────────────────────────
     // Een aanvraag hoort bij een complex of pand dat we vaak al kennen. Koppelen
@@ -364,8 +453,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
 
     const besluit = beslis({
       automatischToegestaan: postbus.automatisch_aanmaken,
-      soort: ex.data.soort as MailSoort,
-      soortVertrouwen: ex.data.soort_vertrouwen,
+      soort: gelezen.soort as MailSoort,
+      soortVertrouwen: gelezen.soort_vertrouwen,
       afzenderScore: afz.score,
       aantalRelatieKandidaten: afz.relatieId ? 1 : afz.kandidaten.length,
       veldenCompleet,
@@ -386,9 +475,9 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     uit.reden = samenvattendeReden(besluit)
 
     await supabase.from('mailintake_berichten').update({
-      soort: ex.data.soort,
-      soort_vertrouwen: ex.data.soort_vertrouwen,
-      samenvatting: ex.data.samenvatting,
+      soort: gelezen.soort,
+      soort_vertrouwen: gelezen.soort_vertrouwen,
+      samenvatting: gelezen.samenvatting,
       relatie_id: afz.relatieId,
       contactpersoon_id: afz.contactpersoonId,
       herkend_via: afz.via,
@@ -407,7 +496,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     await supabase.from('mailintake_besluiten').insert({
       bericht_id: berichtId, actor: 'systeem', actie: 'beoordeeld',
       details: {
-        soort: ex.data.soort, soort_vertrouwen: ex.data.soort_vertrouwen,
+        soort: gelezen.soort, soort_vertrouwen: gelezen.soort_vertrouwen,
         afzender_score: afz.score, herkend_via: afz.via,
         duplicaat_topscore: topscore, redenen: besluit.redenen,
         object_id: objectTreffer.objectId, object_via: objectTreffer.via,
@@ -425,7 +514,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     //
     // Faalt de samenvatting, dan gaat het bericht gewoon door — een scope is nooit
     // belangrijk genoeg om een aanvraag op te laten sneuvelen.
-    if (ex.data.soort != null && WERK_SOORTEN.includes(ex.data.soort)) {
+    if (gelezen.soort != null && WERK_SOORTEN.includes(gelezen.soort)) {
       log.stap('werkzaamheden samenvatten')
       const wz = await maakWerkzaamhedenSamenvatting(berichtId).catch(() => null)
       if (wz) uit.kostenCent += wz.kostenCent
@@ -449,7 +538,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
           .update({ status: 'wacht_op_mens', laatste_fout: res.error }).eq('id', berichtId)
         await voorleggen(postbus, behandelaarId, berichtId, geclaimd,
           ['EVA kon het dossier niet zelf aanmaken: ' + (res.error ?? 'onbekende fout')],
-          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
+          { velden, relatieNaam: afz.relatieNaam, soort: gelezen.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error, reden: 'Automatisch aanmaken mislukt; voorgelegd.' }
       }
       uit.status = 'verwerkt'
@@ -477,17 +566,17 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
           .update({ status: 'wacht_op_mens', laatste_fout: res.error ?? null }).eq('id', berichtId)
         await voorleggen(postbus, behandelaarId, berichtId, geclaimd,
           [`De offerte kon niet op gewonnen gezet worden: ${res.error ?? 'onbekende fout'}`],
-          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
+          { velden, relatieNaam: afz.relatieNaam, soort: gelezen.soort })
         return { ...uit, status: 'wacht_op_mens', fout: res.error ?? null, reden: 'Offerte winnen mislukt; voorgelegd.' }
       }
       uit.status = 'verwerkt'
       uit.automatisch = true
     } else {
       uit.status = besluit.status
-      await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, ex.data.soort_vertrouwen, besluit.status)
+      await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, gelezen.soort_vertrouwen, besluit.status)
       if (besluit.status === 'wacht_op_mens') {
         await voorleggen(postbus, behandelaarId, berichtId, geclaimd, besluit.redenen,
-          { velden, relatieNaam: afz.relatieNaam, soort: ex.data.soort })
+          { velden, relatieNaam: afz.relatieNaam, soort: gelezen.soort })
       }
     }
 

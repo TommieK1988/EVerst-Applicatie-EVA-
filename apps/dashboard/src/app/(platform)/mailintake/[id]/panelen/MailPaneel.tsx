@@ -31,7 +31,7 @@ export interface MailBijlage {
 }
 
 export default function MailPaneel({
-  bericht, bijlagen, onOpenBijlage,
+  bericht, bijlagen, groepsMails = [], onOpenBijlage,
 }: {
   bericht: {
     onderwerp: string | null
@@ -44,6 +44,20 @@ export default function MailPaneel({
     postbus?: { naam?: string | null } | null
   }
   bijlagen: MailBijlage[]
+  /**
+   * De andere mails over dezelfde klus. EVA heeft ze als geheel gelezen, dus ze
+   * horen ook als geheel in beeld: anders kijkt de behandelaar naar een formulier
+   * dat gevuld is uit tekst die hij nergens ziet staan.
+   */
+  groepsMails?: {
+    id: string
+    onderwerp: string | null
+    ontvangenOp: string
+    vanNaam: string | null
+    vanAdres: string | null
+    bodyTekst: string | null
+    aantalBijlagen: number
+  }[]
   onOpenBijlage: (id: string) => void
 }) {
   return (
@@ -65,6 +79,46 @@ export default function MailPaneel({
       }}>
         {bericht.body_tekst || '(lege mail)'}
       </div>
+
+      {groepsMails.length > 0 && (
+        <div>
+          <div style={kop}>
+            Ook over deze klus
+            <span style={{ ...klein, fontWeight: 400 }}>
+              {' '}— meegelezen bij het invullen
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {groepsMails.map(m => (
+              <details
+                key={m.id}
+                style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '6px 9px' }}
+              >
+                <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+                  {m.onderwerp ?? '(geen onderwerp)'}
+                  <span style={{ ...klein, display: 'block' }}>
+                    {m.vanNaam ?? m.vanAdres ?? 'onbekend'} ·{' '}
+                    {new Date(m.ontvangenOp).toLocaleString('nl-NL')}
+                    {m.aantalBijlagen > 0 && ` · ${m.aantalBijlagen} bijlage${m.aantalBijlagen === 1 ? '' : 'n'}`}
+                  </span>
+                </summary>
+                <div style={{
+                  whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, marginTop: 6,
+                  maxHeight: 260, overflowY: 'auto',
+                }}>
+                  {m.bodyTekst || '(lege mail)'}
+                </div>
+                <a
+                  href={`/mailintake/${m.id}`}
+                  style={{ fontSize: 12, color: 'hsl(var(--primary))' }}
+                >
+                  Deze mail openen
+                </a>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
 
       {bijlagen.length > 0 && (
         <div>

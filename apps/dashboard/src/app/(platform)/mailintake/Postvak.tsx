@@ -103,6 +103,17 @@ const KOLOMMEN: KolomDefinitie<PostvakRij>[] = [
         <span>
           {r.heeftBijlagen && <span title="Bevat bijlagen" style={{ marginRight: 5 }}>📎</span>}
           {r.onderwerp ?? '(geen onderwerp)'}
+          {r.aantalInGroep > 1 && (
+            <span
+              title="Meerdere mails over dezelfde klus; EVA leest ze als geheel"
+              style={{
+                ...klein, marginLeft: 6, padding: '1px 5px', borderRadius: 4,
+                background: 'var(--n-100, #f1f5f9)',
+              }}
+            >
+              {r.aantalInGroep} mails
+            </span>
+          )}
         </span>
         {r.samenvatting && <span style={klein}>{r.samenvatting}</span>}
       </div>

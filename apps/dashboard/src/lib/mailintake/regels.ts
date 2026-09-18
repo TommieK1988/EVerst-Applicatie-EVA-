@@ -216,3 +216,18 @@ export function adresOvereenkomst(
   const gedeeld = mail.nummers.some(n => dossier.nummers.includes(n))
   return gedeeld ? 'straat_en_nummer' : 'straat'
 }
+
+/** Het onderwerp zonder Re:/Fw:-aanloop, om twee kanten van een gesprek te herkennen. */
+export function kaalOnderwerp(onderwerp: string | null): string {
+  if (!onderwerp) return ''
+  let t = onderwerp
+  // Herhaald, want "Re: FW: Antw: ..." komt echt voor.
+  for (let i = 0; i < 5; i++) {
+    const korter = t.replace(/^\s*(re|fw|fwd|antw|doorst|aw)\s*(\[\d+\])?\s*:\s*/i, '')
+    if (korter === t) break
+    t = korter
+  }
+  // Getrimd: `normaliseerVoorVergelijking` omhult met spaties voor woordgrenzen,
+  // en die twee tekens zouden hier meetellen in de lengtedrempel.
+  return normaliseerVoorVergelijking(t).trim()
+}

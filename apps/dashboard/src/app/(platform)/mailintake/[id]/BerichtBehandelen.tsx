@@ -37,6 +37,7 @@ type Detail = {
   bericht: any
   postbus: any
   bijlagen: any[]
+  groepsMails: any[]
   extractie: any
   duplicaten: any[]
   log: any[]
@@ -462,6 +463,7 @@ export default function BerichtBehandelen({
         <MailPaneel
           bericht={b}
           bijlagen={detail.bijlagen}
+          groepsMails={detail.groepsMails}
           onOpenBijlage={openBijlage}
         />
 

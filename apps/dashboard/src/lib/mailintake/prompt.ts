@@ -121,6 +121,18 @@ export interface PromptContext {
   bijlagenamen: string[]
   /** Kandidaat-relaties als hulplijst; het model kiest niet, het herkent alleen. */
   bekendeRelaties: string[]
+  /**
+   * Eerdere mail over dezelfde klus. Een opdracht komt lang niet altijd in één mail
+   * binnen: de bon zit in de ene en de afspraak erover in de andere. Zonder deze
+   * blokken vult het model een formulier in op de helft van de gegevens.
+   */
+  eerdereMails?: {
+    ontvangenOp: string
+    vanNaam: string | null
+    vanAdres: string | null
+    onderwerp: string | null
+    bodyTekst: string | null
+  }[]
 }
 
 /** Het tekstblok dat vóór de bijlagen komt. */
@@ -145,6 +157,25 @@ export function bouwTekstBlok(ctx: PromptContext): string {
   )
 
   delen.push(`<email_body>\n${ctx.bodyTekst || '(lege mail)'}\n</email_body>`)
+
+  if (ctx.eerdereMails?.length) {
+    delen.push(
+      `<eerdere_mail_over_dezelfde_klus>\n` +
+      `Deze berichten gaan over hetzelfde werk en kwamen eerder binnen. De bijlagen\n` +
+      `hieronder horen bij alle mails samen. Vul het formulier in op grond van het\n` +
+      `geheel: wat in de ene mail ontbreekt staat vaak in de andere. Spreken ze elkaar\n` +
+      `tegen, dan wint het laatste bericht -- dat is de meest recente afspraak.\n\n` +
+      ctx.eerdereMails.map((m, i) =>
+        `<mail nummer="${i + 1}">\n` +
+        `Van: ${m.vanNaam ?? ''} <${m.vanAdres ?? 'onbekend'}>\n` +
+        `Ontvangen: ${m.ontvangenOp}\n` +
+        `Onderwerp: ${m.onderwerp ?? '(geen onderwerp)'}\n\n` +
+        `${(m.bodyTekst ?? '').slice(0, 20_000) || '(lege mail)'}\n` +
+        `</mail>`,
+      ).join('\n\n') +
+      `\n</eerdere_mail_over_dezelfde_klus>`,
+    )
+  }
 
   if (ctx.bekendeRelaties.length) {
     delen.push(

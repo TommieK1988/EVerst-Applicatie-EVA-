@@ -6134,6 +6134,7 @@ export type Database = {
           gevraagde_werkzaamheden_gemist: string[]
           gevraagde_werkzaamheden_op: string | null
           graph_message_id: string | null
+          groep_id: string | null
           heeft_bijlagen: boolean
           herkend_via: string | null
           herkenning_score: number | null
@@ -6183,6 +6184,7 @@ export type Database = {
           gevraagde_werkzaamheden_gemist?: string[]
           gevraagde_werkzaamheden_op?: string | null
           graph_message_id?: string | null
+          groep_id?: string | null
           heeft_bijlagen?: boolean
           herkend_via?: string | null
           herkenning_score?: number | null
@@ -6232,6 +6234,7 @@ export type Database = {
           gevraagde_werkzaamheden_gemist?: string[]
           gevraagde_werkzaamheden_op?: string | null
           graph_message_id?: string | null
+          groep_id?: string | null
           heeft_bijlagen?: boolean
           herkend_via?: string | null
           herkenning_score?: number | null

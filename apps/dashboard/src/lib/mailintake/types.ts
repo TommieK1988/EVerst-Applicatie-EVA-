@@ -309,6 +309,11 @@ export interface PostvakRij {
   toegewezenNaam: string | null
   outlookNabehandeling: string
   laatsteFout: string | null
+  /**
+   * Hoeveel mails er in deze klus zitten. Een opdracht komt lang niet altijd in
+   * één mail binnen; het postvak toont dan één regel, niet drie losse.
+   */
+  aantalInGroep: number
 }
 
 /** Wat er in Outlook gebeurt zodra een bericht is afgehandeld. */
