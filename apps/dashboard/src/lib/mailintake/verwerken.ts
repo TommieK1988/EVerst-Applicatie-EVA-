@@ -177,8 +177,14 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     log.stap('groep bepalen')
     const vooraf = await zoekGroepVooraf(berichtId).catch(() => null)
     let groepId = await zetGroep(berichtId, vooraf?.groepId ?? null)
-    let groepReden = vooraf?.reden ?? null
-    let eerdere = vooraf ? await andereLeden(groepId, berichtId).catch(() => []) : []
+
+    // Altijd kijken wie er in de groep zit, ook zonder verse treffer. Een ander
+    // bericht kan zich er eerder bij hebben gezet -- en dat gebeurde ook: van twee
+    // mails over dezelfde klus werd de eerste netjes over het geheel gelezen, en las
+    // de tweede daarna alsnog alleen zichzelf, omdat hij op "heb ik zojuist een
+    // treffer gevonden" keek in plaats van op "wie hoort hier bij".
+    let eerdere = await andereLeden(groepId, berichtId).catch(() => [])
+    let groepReden = vooraf?.reden ?? (eerdere.length > 0 ? 'Hoort bij een klus die al binnen is' : null)
 
     // ── Bijlagen ────────────────────────────────────────────────────────────
     log.stap('bijlagen laden')
@@ -323,7 +329,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     // de halve gegevens ingevuld en wordt er één keer opnieuw gelezen -- nu over
     // het geheel. Eén keer, niet in een lus: deze tweede ronde kijkt zelf niet
     // meer naar groepen.
-    if (!vooraf && !budgetOp) {
+    if (eerdere.length === 0 && !budgetOp) {
       const achteraf = await zoekGroepAchteraf(berichtId, {
         relatieId: afz.relatieId,
         straat: velden.werkadresStraat,
