@@ -81,8 +81,15 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   useEffect(() => {
     const opgeslagen = getMeetregels(meetstaatId).filter(r => r.groep_id === groepId)
     const sorted = opgeslagen.sort((a, b) => a.volgorde - b.volgorde)
-    // Voeg altijd een lege rij toe aan het einde
-    const legeRij = nieuweLegeRegel(meetstaatId, groepId, (sorted[sorted.length - 1]?.volgorde ?? 0) + 10)
+    // Lege slotregel erbij; die spiegelt meteen het element van de onderste regel,
+    // zodat verder meten in een bestaande groep net zo werkt als doortypen.
+    const laatste = sorted[sorted.length - 1]
+    const legeRij: Meetregel = {
+      ...nieuweLegeRegel(meetstaatId, groepId, (laatste?.volgorde ?? 0) + 10),
+      element: laatste?.element,
+      behandeling_id: laatste?.behandeling_id,
+      behandeling: laatste?.behandeling,
+    }
     setRegels([...sorted, legeRij])
     // Zet focus op eerste lege rij
     setActieveId(legeRij.id)
@@ -90,17 +97,26 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
     setGeselecteerd(new Set())
   }, [meetstaatId, groepId])
 
-  // Zorg dat er altijd precies 1 lege rij aan het einde staat. Die erft het element
-  // en de behandeling van de regel erboven: bij het opmeten hoort een reeks regels
-  // bij hetzelfde element, en dat wil je niet elke keer opnieuw typen.
-  const ensureLegeRij = useCallback((huidigeRegels: Meetregel[]) => {
-    const heeftLege = huidigeRegels.some(r => r.is_leeg)
-    if (heeftLege) return huidigeRegels
+  /**
+   * Zorgt voor precies één lege regel onderaan, die het element en de behandeling
+   * van de regel erboven spiegelt. Bij het opmeten hoort een reeks regels bij
+   * hetzelfde element, en dat wil je niet elke keer opnieuw typen.
+   *
+   * Bewust *spiegelen* en niet eenmalig overnemen: erfde de lege regel alleen bij
+   * zijn aanmaak, dan bleef hij staan op het element dat je daarna wijzigde, en
+   * bij het openen van een groep met bestaande regels erfde hij helemaal niets.
+   * Een lege regel draagt per definitie geen eigen invoer, dus er gaat niets
+   * verloren door hem steeds bij te trekken — zodra je erin typt is hij niet meer
+   * leeg en blijft hij ongemoeid.
+   */
+  const metLegeSlotregel = useCallback((huidigeRegels: Meetregel[]): Meetregel[] => {
+    const gevuld = huidigeRegels.filter(r => !r.is_leeg)
+    const laatste = gevuld[gevuld.length - 1]
     const max = Math.max(...huidigeRegels.map(r => r.volgorde), 0)
-    const laatste = [...huidigeRegels].reverse().find(r => !r.is_leeg)
-    const nieuw = nieuweLegeRegel(meetstaatId, groepId, max + 10)
-    return [...huidigeRegels, {
-      ...nieuw,
+    const lege = huidigeRegels.find(r => r.is_leeg)
+      ?? nieuweLegeRegel(meetstaatId, groepId, max + 10)
+    return [...gevuld, {
+      ...lege,
       element: laatste?.element,
       behandeling_id: laatste?.behandeling_id,
       behandeling: laatste?.behandeling,
@@ -130,9 +146,9 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         return nieuw
       })
 
-      return ensureLegeRij(bijgewerkt)
+      return metLegeSlotregel(bijgewerkt)
     })
-  }, [meetstaatId, ensureLegeRij])
+  }, [meetstaatId, metLegeSlotregel])
 
   const onEnter = useCallback((id: string) => {
     setRegels(prev => {
@@ -149,21 +165,8 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         if (sleutel) herberekeningAggregaat(meetstaatId, sleutel)
         onWijziging?.()
 
-        const bijgewerkt = prev.map(r => r.id === id ? definitief : r)
-        const metLege = ensureLegeRij(bijgewerkt)
-
-        // Element en behandeling overnemen van huidige regel in nieuwe lege rij
-        const resultaat = metLege.map(r =>
-          r.is_leeg
-            ? {
-                ...r,
-                element: regel.element ?? r.element,
-                ...(regel.behandeling_id
-                  ? { behandeling_id: regel.behandeling_id, behandeling: regel.behandeling }
-                  : {}),
-              }
-            : r
-        )
+        // De lege slotregel neemt hier vanzelf element en behandeling over.
+        const resultaat = metLegeSlotregel(prev.map(r => r.id === id ? definitief : r))
 
         // Focus volgende (lege) rij
         const volgende = resultaat[idx + 1] ?? resultaat[resultaat.length - 1]
@@ -176,7 +179,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
       }
       return prev
     })
-  }, [meetstaatId, ensureLegeRij, onWijziging])
+  }, [meetstaatId, metLegeSlotregel, onWijziging])
 
   const onVerwijder = useCallback((id: string) => {
     setRegels(prev => {
@@ -188,7 +191,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         onWijziging?.()
       }
       const gefilterd = prev.filter(r => r.id !== id)
-      return ensureLegeRij(gefilterd)
+      return metLegeSlotregel(gefilterd)
     })
     setGeselecteerd(prev => {
       if (!prev.has(id)) return prev
@@ -196,7 +199,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
       volgend.delete(id)
       return volgend
     })
-  }, [meetstaatId, ensureLegeRij, onWijziging])
+  }, [meetstaatId, metLegeSlotregel, onWijziging])
 
   // ─── Pijltoetsnavigatie ────────────────────────────────────────────────────
   // Elk bewerkbaar veld draagt data-cel="rij:kolom" (nummering in MeetregelRij).
@@ -262,8 +265,12 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
     setGeselecteerd(aan ? new Set(regels.filter(r => !r.is_leeg).map(r => r.id)) : new Set())
   }, [regels])
 
-  /** Plakt de regels van een bewaard element onderaan de huidige groep. */
-  const voegElementToe = useCallback((el: MeetstaatElement) => {
+  /**
+   * Plakt de regels van een bewaard element onderaan de huidige groep. Het element
+   * is de maatvoering van één stuk; `aantal` zegt hoe vaak dat stuk hier voorkomt en
+   * komt op elke ingevoegde regel te staan.
+   */
+  const voegElementToe = useCallback((el: MeetstaatElement, aantal: number) => {
     const bestaand = getMeetregels(meetstaatId).filter(r => r.groep_id === groepId)
     const max = Math.max(...bestaand.map(r => r.volgorde), 0)
     const nu = new Date().toISOString()
@@ -274,7 +281,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
       meetstaat_id: meetstaatId,
       groep_id: groepId,
       volgorde: max + (i + 1) * 10,
-      aantal: er.aantal || 1,
+      aantal,
       eenheid: er.eenheid || 'm²',
       is_leeg: false,
       aangepast_op: nu,
@@ -286,16 +293,26 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
     )
     sleutels.forEach(s => herberekeningAggregaat(meetstaatId, s))
 
-    // De oude lege rij vervalt; ensureLegeRij maakt een verse die het element van de
+    // De oude lege rij vervalt; metLegeSlotregel maakt een verse die het element van de
     // laatst ingevoegde regel overneemt. Een lege rij draagt niets, dus er gaat niets verloren.
-    setRegels(prev => ensureLegeRij([...prev.filter(r => !r.is_leeg), ...nieuweRegels]))
+    setRegels(prev => metLegeSlotregel([...prev.filter(r => !r.is_leeg), ...nieuweRegels]))
     onWijziging?.()
     setKiezerOpen(false)
-    toast.success(`"${el.naam}" toegevoegd (${nieuweRegels.length} ${nieuweRegels.length === 1 ? 'regel' : 'regels'})`)
-  }, [meetstaatId, groepId, ensureLegeRij, onWijziging])
+    toast.success(
+      `"${el.naam}" ${aantal}× toegevoegd (${nieuweRegels.length} ${nieuweRegels.length === 1 ? 'regel' : 'regels'})`
+    )
+  }, [meetstaatId, groepId, metLegeSlotregel, onWijziging])
 
   const actieveRegels = regels.filter(r => !r.is_leeg && isRegelActief(r))
-  const totaalHoeveelheid = actieveRegels.reduce((s, r) => s + berekenHoeveelheid(r), 0)
+  // Per eenheid optellen: m¹ en m² bij elkaar optellen en er 'm²' achter zetten is
+  // een getal dat nergens op slaat.
+  const totalenPerEenheid = actieveRegels.reduce<Record<string, number>>((acc, r) => {
+    acc[r.eenheid] = (acc[r.eenheid] ?? 0) + berekenHoeveelheid(r)
+    return acc
+  }, {})
+  const totaalTekst = Object.entries(totalenPerEenheid)
+    .map(([eenheid, totaal]) => `${totaal.toFixed(2)} ${eenheid}`)
+    .join(' · ')
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -305,7 +322,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
           <h2 className="text-sm font-semibold text-slate-800">{groep?.naam ?? 'Groep'}</h2>
           <p className="text-xs text-slate-400">
             {actieveRegels.length} {actieveRegels.length === 1 ? 'meetregel' : 'meetregels'}
-            {totaalHoeveelheid > 0 && ` · totaal ${totaalHoeveelheid.toFixed(2)} m²`}
+            {totaalTekst && ` · totaal ${totaalTekst}`}
             {geselecteerd.size > 0 && ` · ${geselecteerd.size} geselecteerd`}
           </p>
         </div>
@@ -345,7 +362,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
 
       {/* Grid */}
       <div ref={bladRef} onKeyDown={onBladKeyDown} className="flex-1 overflow-auto">
-        <table className="w-full border-collapse text-sm" style={{ minWidth: '1280px' }}>
+        <table className="w-full border-collapse text-sm" style={{ minWidth: '1220px' }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
               <th className="w-8 px-1 py-2 text-center font-medium">
@@ -365,10 +382,11 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
               <th className="min-w-[140px] px-2 py-2 text-left font-medium">Type</th>
               <th className="min-w-[200px] px-2 py-2 text-left font-medium">Behandeling</th>
               <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">B (m)</th>
-              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400" title="Breedte aantal">B aant.</th>
               <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">H (m)</th>
-              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400" title="Hoogte aantal">H aant.</th>
-              <th className="w-16 px-1 py-2 text-right font-medium text-blue-400">L (m)</th>
+              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
+                  title="Breedte aantal — hoeveel breedtes je meet. Telt alleen mee bij m¹.">B aant.</th>
+              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
+                  title="Hoogte aantal — hoeveel hoogtes je meet. Telt alleen mee bij m¹.">H aant.</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Vermenigvuldiger op de hele regel">Factor</th>
               <th className="w-14 px-1 py-2 text-right font-medium">Aant.</th>
               <th className="w-20 px-2 py-2 text-right font-medium text-everts">Hoev.</th>

@@ -39,8 +39,8 @@ interface Props {
 
 export const KOL = {
   element: 0, onderdeel: 1, type: 2, behandeling: 3,
-  breedte: 4, breedteAantal: 5, hoogte: 6, hoogteAantal: 7, lengte: 8,
-  factor: 9, aantal: 10, opmerking: 11,
+  breedte: 4, hoogte: 5, breedteAantal: 6, hoogteAantal: 7,
+  factor: 8, aantal: 9, opmerking: 10,
 } as const
 
 export const LAATSTE_KOL = KOL.opmerking
@@ -349,7 +349,11 @@ export default function MeetregelRij({
                   onWijzig({
                     type: naam ?? '', type_id: id,
                     behandeling_id: undefined, behandeling: undefined,
-                    ...(t ? { eenheid: t.eenheid, formule: t.formule ?? undefined } : {}),
+                    // De eenheid komt wél uit de bibliotheek, de formule niet meer: de
+                    // opnemer geeft breedte- en hoogte-aantallen zelf op. `formule`
+                    // leegmaken ruimt hem meteen op bij oude regels.
+                    formule: undefined,
+                    ...(t ? { eenheid: t.eenheid } : {}),
                   })
                 }}
               />
@@ -379,24 +383,19 @@ export default function MeetregelRij({
         {ni(KOL.breedte, regel.breedte, v => onWijzig({ breedte: v }), '—', 'text-blue-700')}
       </td>
 
-      {/* B aantal — vermenigvuldiger op de breedte */}
-      <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')}
-      </td>
-
       {/* H */}
       <td className="px-0.5 py-0.5 bg-blue-50/30">
         {ni(KOL.hoogte, regel.hoogte, v => onWijzig({ hoogte: v }), '—', 'text-blue-700')}
       </td>
 
-      {/* H aantal — vermenigvuldiger op de hoogte */}
-      <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')}
+      {/* B aantal — hoeveel breedtes je meet; telt alleen mee bij m¹ */}
+      <td className="px-0.5 py-0.5 bg-blue-50/20">
+        {ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')}
       </td>
 
-      {/* L */}
+      {/* H aantal — hoeveel hoogtes je meet; telt alleen mee bij m¹ */}
       <td className="px-0.5 py-0.5 bg-blue-50/20">
-        {ni(KOL.lengte, regel.lengte, v => onWijzig({ lengte: v }), '—', 'text-blue-600')}
+        {ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')}
       </td>
 
       {/* Factor — vermenigvuldiger op de hele regel */}

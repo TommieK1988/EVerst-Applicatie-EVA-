@@ -4,36 +4,42 @@ import {
   slaMeetregelAggregaatOp, verwijderMeetregelAggregaat,
 } from './local-store'
 import { nieuweId } from './utils'
-import { evalueerFormule } from './schilder-formule'
 
 // ─── HOEVEELHEID ─────────────────────────────────────────────────────────────
 
+/**
+ * De hoeveelheid van één meetregel.
+ *
+ * Bewust géén formule meer uit `schilder_types` (types als 'Omtrek' droegen
+ * '2*B+2*H'). De opnemer geeft nu zélf op hoeveel breedtes en hoeveel hoogtes hij
+ * meet, en een formule die daar achter zijn rug om nóg eens overheen rekent geeft
+ * dubbel werk en een onnavolgbaar getal. `Meetregel.formule` en `Meetregel.lengte`
+ * blijven alleen staan voor oude regels; ze tellen niet meer mee.
+ *
+ *   m¹  = ((breedte × breedte-aantal) + (hoogte × hoogte-aantal)) × factor × aantal
+ *   m²  = (breedte × hoogte) × factor × aantal
+ *   rest (stuks, post, uur …) = factor × aantal
+ */
 export function berekenHoeveelheid(r: Meetregel): number {
   if (r.hoeveelheid_override !== undefined && r.hoeveelheid_override !== null) {
     return r.hoeveelheid_override
   }
-  // Breedte- en hoogte-aantal zijn vermenigvuldigers op die ene maat: 3 gelijke
-  // ruiten van 0,60 breed staan als B 0,60 met B-aantal 3 in één regel. Ze werken
-  // vóór de formule, zodat '2*B+2*H' met de vermenigvuldigde maten rekent.
+  const B = r.breedte ?? 0
+  const H = r.hoogte ?? 0
   // Leeg én 0 tellen als 1 (zoals `aantal` al deed): een lege cel mag een regel
   // nooit stil op nul zetten.
-  const B = (r.breedte ?? 0) * (r.breedte_aantal || 1)
-  const H = (r.hoogte ?? 0) * (r.hoogte_aantal || 1)
-  const L = r.lengte ?? 0
   const N = (r.aantal || 1) * (r.factor || 1)
 
-  // Aangepaste formule (uit schilder_types, bijv. '2*B+2*H')
-  if (r.formule?.trim()) return +(evalueerFormule(r.formule, B, H, L) * N).toFixed(4)
+  // m¹: optellen. Zo geef je een omtrek zelf op — 2 breedtes plus 2 hoogtes.
+  if (r.eenheid === 'm¹') {
+    return +((B * (r.breedte_aantal || 1) + H * (r.hoogte_aantal || 1)) * N).toFixed(4)
+  }
 
-  // m³: breedte × hoogte × lengte
-  if (r.eenheid === 'm³') return +(B * H * L * N).toFixed(4)
-
-  // m²: breedte × hoogte (standaard gedrag)
+  // m² en al het andere mét maten: oppervlak. De aantallen per maat horen bij m¹
+  // en spelen hier geen rol.
   if (B && H) return +(B * H * N).toFixed(4)
 
-  // m¹: lengte
-  if (L) return +(L * N).toFixed(4)
-
+  // Zonder maten telt alleen het aantal.
   return N
 }
 

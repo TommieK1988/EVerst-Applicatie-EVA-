@@ -80,15 +80,16 @@ export default function ElementOpslaanDialog({
                   {[r.onderdeel, r.type, r.behandeling].filter(Boolean).join(' · ') || 'Regel zonder onderdeel'}
                 </span>
                 <span className="flex-shrink-0 font-semibold text-slate-500">
-                  {berekenHoeveelheid(r).toFixed(2)} {r.eenheid}
+                  {berekenHoeveelheid({ ...r, aantal: 1 }).toFixed(2)} {r.eenheid}
                 </span>
               </div>
             ))}
           </div>
 
           <p className="text-xs text-slate-400">
-            Het element blijft binnen deze meetstaat en is daarna in elke groep in te voegen,
-            inclusief de maten zoals ze er nu staan.
+            Het element wordt bewaard als één stuk: de maten blijven zoals ze er nu staan,
+            het aantal gaat naar 1. Bij het invoegen vraagt EVA hoe vaak het stuk voorkomt.
+            Het blijft binnen deze meetstaat en is daarna in elke groep in te voegen.
           </p>
         </DialogBody>
 
@@ -105,9 +106,13 @@ export default function ElementOpslaanDialog({
  * Haalt de plaatsgebonden velden eraf: die krijgt de regel bij het invoegen opnieuw.
  * Bewust wegstrepen in plaats van overnemen wat we kennen — zo reist een later
  * toegevoegd meetregelveld vanzelf mee in het element.
+ *
+ * Het aantal gaat altijd naar 1: een element is de maatvoering van één stuk. Hoe
+ * vaak dat stuk voorkomt hoort bij de plek waar je het invoegt, niet bij het element
+ * zelf — daar wordt bij het toevoegen om gevraagd.
  */
 function stripRegel(r: Meetregel): MeetstaatElementRegel {
-  const kopie: Partial<Meetregel> = { ...r }
+  const kopie: Partial<Meetregel> = { ...r, aantal: 1 }
   // Het rekenblad plakt zijn debounce-timer op de regel; die hoort niet in een element.
   delete (kopie as { _saveTimer?: unknown })._saveTimer
   delete kopie.id

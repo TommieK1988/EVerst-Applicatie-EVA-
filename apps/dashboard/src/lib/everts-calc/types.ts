@@ -335,17 +335,21 @@ export interface Meetregel {
   onderdeel?: string
   type?: string
   behandeling?: string
-  // Formule uit schilder_types (gekopieerd bij type-selectie)
-  formule?: string      // bijv. '2*B+2*H' voor m¹
+  /** @deprecated Formule uit `schilder_types` (bijv. '2*B+2*H'). Rekent niet meer mee:
+   *  de opnemer geeft breedte- en hoogte-aantallen zelf op. Staat alleen nog op
+   *  regels van vóór september 2026 en wordt gewist zodra je het type opnieuw kiest. */
+  formule?: string
   opmerking?: string              // vrije toelichting bij de regel
   /** @deprecated oude naam van `opmerking`; wordt bij het hydrateren omgezet. */
   omschrijving?: string
   bestek_kenmerk?: string         // RAL, spec, besteksreferentie
   // Maatvoering
   breedte?: number
-  breedte_aantal?: number         // vermenigvuldiger op breedte (leeg = 1)
   hoogte?: number
-  hoogte_aantal?: number          // vermenigvuldiger op hoogte (leeg = 1)
+  breedte_aantal?: number         // hoeveel breedtes je meet; telt alleen mee bij m¹ (leeg = 1)
+  hoogte_aantal?: number          // hoeveel hoogtes je meet; telt alleen mee bij m¹ (leeg = 1)
+  /** @deprecated De kolom Lengte is vervallen; m¹ komt uit breedte/hoogte met hun
+   *  aantallen. Blijft staan voor regels van vóór september 2026, maar telt niet mee. */
   lengte?: number
   factor?: number                 // vermenigvuldiger op de hele regel (leeg = 1)
   aantal: number
