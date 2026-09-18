@@ -182,8 +182,16 @@ export type TermijnschemaBron = {
   /** Alle betalingscondities uit de stamgegevens, om handmatig uit te kiezen. */
   condities: { id: string; naam: string; termijnen: TermijnschemaRegel[] }[]
   aanneemsom: number
-  /** Goedgekeurd meerwerk (EVA-regels waar die er zijn, anders het Bouw7-aggregaat). */
+  /**
+   * Goedgekeurd meerwerk dat in een termijn hoort: alleen **aangenomen** werk (vaste prijs).
+   * EVA-regels waar die er zijn, anders het Bouw7-aggregaat (dat niet te splitsen valt).
+   */
   meerwerk: number
+  /**
+   * Goedgekeurd meerwerk op regie of stelpost. Staat hier alleen om te kunnen uitleggen waarom het
+   * buiten de grondslag blijft: dat werk wordt op nacalculatie gefactureerd, niet via een termijn.
+   */
+  meerwerkRegie: number
   /** Aantal termijnen dat nu in Bouw7 staat. Boven 0 valt er niets meer aan te maken. */
   bestaandeTermijnen: number
   /** Hoe de offertegrondslag over de btw-tarieven is verdeeld; leeg als er geen offerte is. */
@@ -193,9 +201,19 @@ export type TermijnschemaBron = {
 }
 
 
+/**
+ * De bedragen waarop een termijnschema gerekend kan worden.
+ *
+ * Alleen **aangenomen** meerwerk telt mee. Regie- en stelpostregels rekenen op werkelijke kosten af
+ * en worden via de nacalculatie gefactureerd; hun bedrag staat pas vast als het werk geboekt is.
+ * Zou je ze in de grondslag meenemen, dan verdeel je een bedrag over termijnen dat nooit als
+ * termijn gefactureerd wordt -- en blijft de dekkingcontrole op de Verkoop-tab een gat melden dat
+ * niemand kan dichten.
+ */
 async function termijnGrondslagen(dossierId: string): Promise<{
   aanneemsom: number
   meerwerk: number
+  meerwerkRegie: number
   bestaandeTermijnen: number
 }> {
   const [verkoop, meerwerk] = await Promise.all([
@@ -203,12 +221,13 @@ async function termijnGrondslagen(dossierId: string): Promise<{
     getDossierMeerwerk(dossierId).catch(() => null),
   ])
   const goedgekeurd = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
-  const meerwerkBedrag = goedgekeurd.length > 0
-    ? (meerwerk?.totalen.goedgekeurdExcl ?? 0)
-    : verkoop.totalen.meerwerk
+  // Zijn er EVA-regels, dan zijn die leidend en is het meerwerk te splitsen. Valt het terug op het
+  // Bouw7-aggregaat, dan is er geen splitsing te maken en blijft het bij één getal.
+  const eva = goedgekeurd.length > 0
   return {
     aanneemsom: verkoop.totalen.aanneemsom,
-    meerwerk: meerwerkBedrag,
+    meerwerk: eva ? (meerwerk?.totalen.goedgekeurdAangenomenExcl ?? 0) : verkoop.totalen.meerwerk,
+    meerwerkRegie: eva ? (meerwerk?.totalen.goedgekeurdRegieExcl ?? 0) : 0,
     bestaandeTermijnen: verkoop.termijnen.length,
   }
 }
@@ -427,6 +446,10 @@ export async function maakTermijnschema(
       .update({ in_termijnstaat: true, bouw7_term_pending: false })
       .eq('dossier_id', dossierId)
       .in('status', ['akkoord', 'voltooid'])
+      // Alleen aangenomen werk zat in de grondslag; regie en stelposten zijn er bewust buiten
+      // gebleven. Die als "zit al in de termijnstaat" markeren zou een onwaarheid vastleggen.
+      .eq('afrekenwijze', 'aangenomen')
+      .not('is_stelpost', 'is', true)
       .is('bouw7_term_id', null)
   }
 

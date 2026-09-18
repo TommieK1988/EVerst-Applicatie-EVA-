@@ -251,13 +251,23 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
                   >
                     <option value="aanneemsom">Aanneemsom — {fmt(bron.aanneemsom)}</option>
                     <option value="contracttotaal">
-                      Aanneemsom + goedgekeurd meerwerk — {fmt(bron.aanneemsom + bron.meerwerk)}
+                      Aanneemsom + aangenomen meerwerk — {fmt(bron.aanneemsom + bron.meerwerk)}
                     </option>
                   </select>
+                  {bron.meerwerkRegie !== 0 && (
+                    <p className="mt-1 text-[11.5px] leading-snug text-neutral-500">
+                      {fmt(bron.meerwerkRegie)} goedgekeurd meerwerk op regie of stelpost blijft hier
+                      buiten: dat wordt op nacalculatie gefactureerd en krijgt geen termijn.
+                    </p>
+                  )}
                 </div>
               ) : (
-                <p className="text-[12.5px] text-neutral-600">
+                <p className="text-[12.5px] leading-relaxed text-neutral-600">
                   Bedragen worden gerekend over de aanneemsom van <strong>{fmt(bron.aanneemsom)}</strong> excl. btw.
+                  {bron.meerwerkRegie !== 0 && (
+                    <> Het goedgekeurde meerwerk van {fmt(bron.meerwerkRegie)} staat op regie of stelpost
+                    en wordt op nacalculatie gefactureerd, dus daar valt geen termijn over te maken.</>
+                  )}
                 </p>
               )}
 

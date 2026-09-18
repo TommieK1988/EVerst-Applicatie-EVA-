@@ -88,7 +88,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const [overzicht, setOverzicht] = useState<OpdrachtOverzicht | null>(null)
 
   function herlaad() {
-    getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdAantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0 } }))
+    getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdAantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0, goedgekeurdAangenomenExcl: 0, goedgekeurdRegieExcl: 0 } }))
     // Stelposten en aanneemsom horen bij hetzelfde beeld, maar mogen het meerwerk niet ophouden:
     // dit overzicht raakt Bouw7 aan en is daarom trager dan de meerwerkregels zelf.
     getOpdrachtOverzicht(dossierId).then(setOverzicht).catch(() => setOverzicht(null))

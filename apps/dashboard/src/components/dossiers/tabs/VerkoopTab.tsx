@@ -82,7 +82,9 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
   // Regie en stelposten rekenen op werkelijke kosten af; hun bedrag staat pas vast als het werk
   // geboekt is. Ze krijgen dus nooit een termijn en horen in het nacalculatie-blok, niet hier.
-  const termijnMeerwerk = goedgekeurdeRegels.filter(r => !r.opNacalculatie)
+  // `opTermijn` en niet `!opNacalculatie`: die laatste eist een bewakingscode, dus een regieregel
+  // zónder code zou hier als termijnwerk in de lijst belanden terwijl hij nooit een termijn krijgt.
+  const termijnMeerwerk = goedgekeurdeRegels.filter(r => r.opTermijn)
   const nacalculatieMeerwerk = goedgekeurdeRegels.length - termijnMeerwerk.length
   const heeftNacalculatie = nacalculatieCodes.length > 0
 
@@ -100,14 +102,29 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   //
   // De voorwaarde kijkt naar het AANTAL regels, niet naar het bedrag. Bij per saldo minderwerk is de
   // som negatief, en dan zou "bedrag > 0" het Bouw7-getal laten staan terwijl EVA de waarheid heeft.
+  const evaLeidend = goedgekeurdeRegels.length > 0
   const meerwerkEva = meerwerk?.totalen.goedgekeurdExcl ?? 0
+  const meerwerkAangenomen = meerwerk?.totalen.goedgekeurdAangenomenExcl ?? 0
+  const meerwerkRegie = meerwerk?.totalen.goedgekeurdRegieExcl ?? 0
   let t = data.totalen
   let dk = data.termijnenDekking
-  if (goedgekeurdeRegels.length > 0 && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
+  if (evaLeidend && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
     const contractTotaal = t.aanneemsom + meerwerkEva
     t = { ...t, meerwerk: meerwerkEva, contractTotaal, openstaand: Math.max(0, contractTotaal - t.gefactureerd) }
-    if (dk) {
-      dk = { ...dk, volledig: Math.abs(dk.somBedrag - contractTotaal) <= 1, ontbreektBedrag: Math.max(0, contractTotaal - dk.somBedrag) }
+  }
+
+  /* — Waar de termijnen tegen gemeten worden —
+   * Niet het contracttotaal: regie- en stelpostmeerwerk wordt op nacalculatie gefactureerd en komt
+   * nooit in de termijnstaat. Telde je dat mee, dan meldde de dekkingcontrole een gat dat niemand
+   * kan dichten — de banner bleef oranje zolang er regiewerk op het dossier stond.
+   * Zonder EVA-regels is het Bouw7-aggregaat het enige getal dat er is en valt er niets te splitsen. */
+  const termijnGrondslag = evaLeidend ? rond(t.aanneemsom + meerwerkAangenomen) : t.contractTotaal
+  const regieBuitenTermijnen = evaLeidend && Math.abs(meerwerkRegie) > 0.005
+  if (dk) {
+    dk = {
+      ...dk,
+      volledig: Math.abs(dk.somBedrag - termijnGrondslag) <= 1,
+      ontbreektBedrag: Math.max(0, termijnGrondslag - dk.somBedrag),
     }
   }
 
@@ -116,12 +133,14 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
    * het nog niet in de termijnstaat zit (anders zou het dubbel geteld worden); dat leiden we af uit
    * de som van de termijnen ten opzichte van het contracttotaal. */
   const termijnSom = rond(data.termijnen.reduce((s, tm) => s + tm.bedrag, 0))
-  const meerwerkInTermijnstaat = t.meerwerk > 0 && termijnSom >= t.contractTotaal - 1
+  // Meten tegen de termijngrondslag, niet tegen het contracttotaal: regiemeerwerk hoort daar niet
+  // in en zou de staat anders altijd als "meerwerk zit er nog niet in" laten gelden.
+  const meerwerkInTermijnstaat = meerwerkAangenomen > 0 && termijnSom >= termijnGrondslag - 1
   const btwRijen = data.termijnen.map((tm) => ({ pct: tm.btwPercentage, excl: tm.bedrag, btw: tm.btwBedrag }))
-  if (!meerwerkInTermijnstaat) {
-    for (const r of goedgekeurdeRegels) {
-      btwRijen.push({ pct: r.btwEffectief, excl: r.effectiefExcl, btw: rond(r.effectiefIncl - r.effectiefExcl) })
-    }
+  // Zit het aangenomen meerwerk al in de termijnen, dan is alleen het regiedeel nog niet geteld.
+  for (const r of goedgekeurdeRegels) {
+    if (meerwerkInTermijnstaat && r.opTermijn) continue
+    btwRijen.push({ pct: r.btwEffectief, excl: r.effectiefExcl, btw: rond(r.effectiefIncl - r.effectiefExcl) })
   }
   const btwGroepen = groepeerBtw(btwRijen)
   const btwGrondslag = rond(btwGroepen.reduce((s, g) => s + g.grondslag, 0))
@@ -175,7 +194,36 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                 <TD right kleur="var(--neutral-400)">—</TD>
                 <TD right kleur="var(--neutral-400)">—</TD>
               </tr>
-              {t.meerwerk > 0 && (
+              {/* Meerwerk gesplitst zodra EVA de regels kent: aangenomen werk gaat via de
+                  termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
+                  het bedrag terechtkomt, dus het hoort zichtbaar te zijn. Zonder EVA-regels is er
+                  alleen het Bouw7-aggregaat en blijft het bij één regel. */}
+              {evaLeidend ? (
+                <>
+                  {Math.abs(meerwerkAangenomen) > 0.005 && (
+                    <tr>
+                      <TD wrap>
+                        Goedgekeurd {meerwerkAangenomen < 0 ? 'minderwerk' : 'meerwerk'} — aangenomen
+                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via termijnen</span>
+                      </TD>
+                      <TD right accent>{fmt(meerwerkAangenomen, true)}</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                    </tr>
+                  )}
+                  {regieBuitenTermijnen && (
+                    <tr>
+                      <TD wrap>
+                        Goedgekeurd meerwerk — regie en stelposten
+                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via nacalculatie</span>
+                      </TD>
+                      <TD right accent>{fmt(meerwerkRegie, true)}</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                    </tr>
+                  )}
+                </>
+              ) : t.meerwerk > 0 && (
                 <tr>
                   <TD wrap>Goedgekeurd meerwerk</TD>
                   <TD right accent>{fmt(t.meerwerk, true)}</TD>
@@ -272,20 +320,27 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
               {dk.volledig ? (
                 <>
                   <span>✓</span>
-                  <span>Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(t.contractTotaal)}</span>
+                  <span>
+                    Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(termijnGrondslag)}
+                    {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
+                  </span>
                 </>
               ) : data.termijnen.length === 0 ? (
                 <>
                   <span>⚠</span>
-                  <span>Geen termijnen aangemaakt voor een aanneemsom van {fmt(t.contractTotaal)}</span>
+                  <span>
+                    Geen termijnen aangemaakt voor een aanneemsom van {fmt(termijnGrondslag)}
+                    {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
+                  </span>
                 </>
               ) : (
                 <>
                   <span>⚠</span>
                   <span>
-                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(t.contractTotaal)} aanneemsom
+                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(termijnGrondslag)} aanneemsom
                     {' '}— nog {fmt(dk.ontbreektBedrag)}
                     {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
+                    {regieBuitenTermijnen ? `. ${fmt(meerwerkRegie)} regie en stelposten telt niet mee: dat gaat via de nacalculatie` : ''}
                   </span>
                 </>
               )}

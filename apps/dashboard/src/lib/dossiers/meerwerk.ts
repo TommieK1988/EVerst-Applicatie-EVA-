@@ -89,6 +89,19 @@ function effectiefExcl(regel: MeerwerkRegel, regiePerCode: Map<string, number>):
   return rond(Number(regel.bedrag_excl_btw) || 0)
 }
 
+/**
+ * Rekent deze regel op een vaste prijs af, en hoort het bedrag dus in de termijnstaat?
+ *
+ * Bewust losstaand van `rekentOpNacalculatie`: die eist een bewakingscode, omdat hij bepaalt wélke
+ * code er op de nacalculatiefactuur komt. Voor de vraag "hoort dit bedrag in een termijn" doet die
+ * code niet ter zake -- regiewerk zonder code hoort er net zo min in. Zelfde criterium als
+ * `meerwerkTermijnGeschikt` in meerwerk-termijn.ts, zodat de dekkingcontrole op de Verkoop-tab
+ * precies de regels telt die daadwerkelijk een termijn kunnen krijgen.
+ */
+function rekentOpTermijn(r: MeerwerkRegel): boolean {
+  return r.afrekenwijze === 'aangenomen' && r.is_stelpost !== true
+}
+
 export type MeerwerkRegelView = MeerwerkRegel & {
   effectiefExcl: number
   effectiefIncl: number
@@ -98,6 +111,8 @@ export type MeerwerkRegelView = MeerwerkRegel & {
    * termijn: het bedrag staat pas vast als het werk geboekt is.
    */
   opNacalculatie: boolean
+  /** Vaste prijs: dit bedrag hoort in de termijnstaat en telt mee in de termijndekking. */
+  opTermijn: boolean
 }
 
 export type DossierMeerwerkData = {
@@ -108,6 +123,18 @@ export type DossierMeerwerkData = {
     goedgekeurdAantal: number
     goedgekeurdExcl: number
     goedgekeurdIncl: number
+    /**
+     * Goedgekeurd meerwerk tegen een **vaste prijs** (excl. btw). Dit is het deel dat in de
+     * termijnstaat hoort en dus meetelt bij de vraag of er voor de volledige opdracht termijnen
+     * zijn aangemaakt.
+     */
+    goedgekeurdAangenomenExcl: number
+    /**
+     * Goedgekeurd meerwerk op **regie of stelpost** (excl. btw): wordt via de nacalculatie
+     * gefactureerd en krijgt nooit een termijn. Optellen bij de termijngrondslag zou een gat in de
+     * dekking suggereren dat nooit te dichten is.
+     */
+    goedgekeurdRegieExcl: number
   }
 }
 
@@ -141,14 +168,22 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
   let goedgekeurdExcl = 0
   let goedgekeurdIncl = 0
   let goedgekeurdAantal = 0
+  let goedgekeurdAangenomenExcl = 0
+  let goedgekeurdRegieExcl = 0
   const views: MeerwerkRegelView[] = regels.map(r => {
     const excl = effectiefExcl(r, regiePerCode)
     const btwPct = r.btw_pct != null ? Number(r.btw_pct) : 21
     const incl = rond(excl * (1 + btwPct / 100))
-    if (GOEDGEKEURD.includes(r.status)) { goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++ }
+    const opTermijn = rekentOpTermijn(r)
+    if (GOEDGEKEURD.includes(r.status)) {
+      goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++
+      if (opTermijn) goedgekeurdAangenomenExcl += excl
+      else goedgekeurdRegieExcl += excl
+    }
     return {
       ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct,
       opNacalculatie: rekentOpNacalculatie(r),
+      opTermijn,
     }
   })
 
@@ -159,6 +194,8 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
       goedgekeurdAantal,
       goedgekeurdExcl: rond(goedgekeurdExcl),
       goedgekeurdIncl: rond(goedgekeurdIncl),
+      goedgekeurdAangenomenExcl: rond(goedgekeurdAangenomenExcl),
+      goedgekeurdRegieExcl: rond(goedgekeurdRegieExcl),
     },
   }
 }
