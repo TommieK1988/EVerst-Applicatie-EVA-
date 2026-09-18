@@ -13,6 +13,12 @@
  *     werkelijke kosten wordt afgerekend;
  *   • een **stelpost** — die rekent per definitie op werkelijke kosten af.
  *
+ * Bij een meerwerkregel geldt daarbovenop dat de klant akkoord moet zijn. Vóór dat akkoord bestaat
+ * de bewakingscode nog niet in Bouw7 — die wordt pas bij `akkoord` aangemaakt (zie `meerwerk.ts`),
+ * dus er kunnen geen kosten op geboekt of naartoe verplaatst worden. Zo'n post in het
+ * nacalculatie-overzicht zetten suggereert een factuurregel die er geen is, en blijft per definitie
+ * op nul staan.
+ *
  * En één uitzondering die er echt toe doet: zit een stelpost **in de aanneemsom** (carve-out), dan
  * is hij al betaald via de termijnen en is alleen het *verschil* nog te verrekenen. Dat verschil
  * loopt via `verrekenStelpost` naar een aparte meerwerkregel. Zo'n stelpost hoort dus níét als
@@ -93,7 +99,10 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
     // wordt als zodanig gefactureerd, niet uit de geboekte kosten.
     const opNacalculatie = m.afrekenwijze === 'regie' || m.is_stelpost === true
     if (!opNacalculatie) continue
-    if (m.status === 'afgewezen') continue
+    // Pas ná akkoord. Niet "alles behalve afgewezen": een regel die nog aangevraagd is of waarvan
+    // de offerte loopt heeft nog geen bewakingscode in Bouw7, dus er valt niets op te boeken en
+    // niets naartoe te verplaatsen. Hij stond dan als lege nul-post in de nacalculatie.
+    if (m.status !== 'akkoord' && m.status !== 'voltooid') continue
     // Een verrekenregel van een stelpost draagt zelf geen code en hoort hier niet; de guard is er
     // voor het geval dat ooit verandert.
     if (m.opdracht_onderdeel_id != null) continue

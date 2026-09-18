@@ -64,8 +64,10 @@ const euro = (n: number): string =>
  * Rekent deze regel op werkelijke kosten af? Dan wordt hij via het nacalculatie-blok gefactureerd
  * en hoort hij nooit in een termijnstaat — een termijn veronderstelt een bedrag dat vooraf vaststaat.
  *
- * Zelfde criterium als `getFactureerbareCodes`, zodat een regel niet op twee plekken tegelijk kan
- * opduiken of juist nergens.
+ * Zelfde soort-criterium als `getFactureerbareCodes`, zodat een regel niet op twee plekken tegelijk
+ * kan opduiken of juist nergens. De status blijft hier buiten beschouwing: deze vlag beschrijft de
+ * áárd van de regel en de aanroepers filteren zelf op goedgekeurd. `getFactureerbareCodes` eist
+ * daarbovenop akkoord, want zonder akkoord bestaat de bewakingscode nog niet in Bouw7.
  */
 function rekentOpNacalculatie(r: MeerwerkRegel): boolean {
   if (!r.bewakingscode) return false
