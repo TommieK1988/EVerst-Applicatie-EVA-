@@ -13,7 +13,7 @@ import {
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
-import { getStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
+import { getEigenBewakingscodes, type EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
@@ -61,8 +61,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   /** Bestaande Bouw7-hoofdstukken + het gekozen doelhoofdstuk voor nieuwe codes (onthouden per dossier). */
   const [hoofdstukken, setHoofdstukken] = useState<Hoofdstuk[]>([])
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
-  /** Bewakingscodes van de stelposten uit de opdracht (EVA-bron, zie `getStelpostBewakingscodes`). */
-  const [stelpostCodes, setStelpostCodes] = useState<{ code: string; naam: string }[]>([])
+  /** Door EVA uitgedeelde codes (stelposten + goedgekeurd meerwerk); zie `getEigenBewakingscodes`. */
+  const [eigenCodes, setEigenCodes] = useState<EigenBewakingscode[]>([])
   /** Kale bewakingscodes waarop al inkoop verbruikt is → regels in de grid worden read-only. */
   const [vergrendeldeCodes, setVergrendeldeCodes] = useState<string[]>([])
   const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
@@ -146,14 +146,15 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     return () => { actief = false }
   }, [dossierId])
 
-  // Stelpost-bewakingscodes uit de opdracht ophalen. Zie `getStelpostBewakingscodes`: Bouw7 kent
-  // een net aangewezen stelpost pas na de volgende sync, en soms helemaal niet.
+  // Eigen bewakingscodes (stelposten + goedgekeurd meerwerk) ophalen. Zie
+  // `getEigenBewakingscodes`: Bouw7 kent een net uitgedeelde code pas na de volgende sync, en
+  // soms helemaal niet.
   useEffect(() => {
-    if (!dossierId) { setStelpostCodes([]); return }
+    if (!dossierId) { setEigenCodes([]); return }
     let actief = true
-    getStelpostBewakingscodes(dossierId)
-      .then(codes => { if (actief) setStelpostCodes(codes) })
-      .catch(() => { if (actief) setStelpostCodes([]) })
+    getEigenBewakingscodes(dossierId)
+      .then(codes => { if (actief) setEigenCodes(codes) })
+      .catch(() => { if (actief) setEigenCodes([]) })
     return () => { actief = false }
   }, [dossierId])
 
@@ -496,7 +497,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           scenarioId={scenarioId}
           onWijziging={handleWijziging}
           bewakingscodes={bewakingscodes}
-          stelpostCodes={stelpostCodes}
+          eigenCodes={eigenCodes}
           dossierId={dossierId}
           vergrendeldeCodes={vergrendeldeCodes}
         />

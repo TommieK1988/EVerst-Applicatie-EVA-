@@ -18,6 +18,7 @@ import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth
 import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt } from './meerwerk-termijn'
+import { leesMeerwerkOfferte } from './meerwerk-offerte'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -46,6 +47,10 @@ export type MeerwerkBesluitActor = {
 const BESLUIT_STATUSSEN: MeerwerkStatus[] = ['akkoord', 'afgewezen']
 
 const rond = (n: number): number => Math.round(n * 100) / 100
+
+/** Bedrag voor in een melding aan de gebruiker. */
+const euro = (n: number): string =>
+  new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 
 /**
  * Rekent deze regel op werkelijke kosten af? Dan wordt hij via het nacalculatie-blok gefactureerd
@@ -339,7 +344,7 @@ export async function setMeerwerkStatus(
     /** Toelichting van de besluitnemer zelf; los van de interne afgewezen_reden. */
     besluitOpmerking?: string | null
   },
-): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; waarschuwing?: string; melding?: string } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
   const { data: regel, error: leesFout } = await supabase
     .from('meerwerk_regels')
@@ -381,13 +386,49 @@ export async function setMeerwerkStatus(
 
   let waarschuwing: string | undefined
 
+  /*
+   * Akkoord op een meerwerkregel met een eigen offerte: het bedrag van die offerte wordt het
+   * bedrag van de regel.
+   *
+   * Zonder dit bleef `bedrag_excl_btw` leeg bij precies het meerwerk dat het zorgvuldigst is
+   * onderbouwd -- je rekent het uit in de calculatie, stuurt de offerte, de klant tekent, en in
+   * EVA staat het meerwerk dan nog steeds op niets. Het telde niet mee in het contracttotaal, er
+   * ging geen budget naar de bewakingscode, en er kwam geen termijn in de termijnstaat
+   * ("geen bedrag"). Dat is precies wat er op dossier "herstellen gevel" gebeurde: offerte van
+   * EUR 19.225,35 akkoord, meerwerk in EVA EUR 0,00.
+   *
+   * Alleen bij `aangenomen` en geen stelpost: regie en stelposten leiden hun bedrag af uit de
+   * geboekte kosten of een werkelijke hoeveelheid, en een offertebedrag zou dat overschrijven met
+   * een waarde die daarna niet meer meebeweegt. Het btw-percentage vullen we alleen aan als de
+   * regel er nog geen heeft -- een handmatig gekozen tarief is een beslissing, geen leeg veld.
+   */
+  const neemtOfferteOver = status === 'akkoord'
+    && r.quote_id != null
+    && r.afrekenwijze === 'aangenomen'
+    && !r.is_stelpost
+  const offerte = neemtOfferteOver ? await leesMeerwerkOfferte(r.quote_id as string).catch(() => null) : null
+  const meldingen: string[] = []
+  if (offerte && offerte.verkoopExclBtw > 0) {
+    const oud = r.bedrag_excl_btw != null ? rond(Number(r.bedrag_excl_btw)) : null
+    velden.bedrag_excl_btw = offerte.verkoopExclBtw
+    if (r.btw_pct == null && offerte.btwPct != null) velden.btw_pct = offerte.btwPct
+    meldingen.push(oud != null && oud !== offerte.verkoopExclBtw
+      ? `Bedrag uit de offerte overgenomen: ${euro(offerte.verkoopExclBtw)} (stond op ${euro(oud)})`
+      : `Bedrag uit de offerte overgenomen: ${euro(offerte.verkoopExclBtw)}`)
+  }
+
   // Fallback/retry bij akkoord: normaal is de bewakingscode al bij het aanmaken van de regel gezet.
   // De guard bouw7_chapter_id == null voorkomt dubbel aanmaken; alleen voor EVA-native regels zonder
   // Bouw7-koppeling (geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
   if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_line_id == null && r.bouw7_chapter_id == null) {
     const code = `MW${String(r.volgnummer).padStart(2, '0')}`
-    // Seed-bedrag: alleen zinvol bij aangenomen/handmatig (regie-bedrag is op dit moment nog 0).
-    const bedrag = r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null
+    // Wat er als verwachte kosten naar Bouw7 gaat. Is er een offerte, dan de KOSTPRIJS daarvan --
+    // nooit het verkoopbedrag: dat draagt AK en winst en zou de verwachte kosten opblazen (zelfde
+    // regel als bij stelposten). Zonder offerte blijft het oude gedrag staan: het handmatig
+    // ingevoerde bedrag, dat bij gebrek aan beter de enige indicatie is.
+    const bedrag = offerte
+      ? (offerte.kostprijs || null)
+      : (r.afrekenwijze === 'aangenomen' && !r.is_stelpost ? (Number(r.bedrag_excl_btw) || null) : null)
     const res = await maakMeerwerkBewakingscodeBouw7(r.dossier_id, { code, naam: r.omschrijving, bedrag })
     if (res.ok) {
       velden.bewakingscode = code
@@ -422,6 +463,11 @@ export async function setMeerwerkStatus(
   if (status === 'akkoord' && meerwerkTermijnGeschikt(naStatus).ok && r.bouw7_term_id == null) {
     const t = await zetMeerwerkAlsTermijn(id)
     termijnGezet = t.ok
+    if (t.ok) {
+      meldingen.push(t.termIds.length > 1
+        ? `${t.termIds.length} termijnen in de termijnstaat gezet, volgens het betalingsschema van de offerte`
+        : 'Als termijn in de termijnstaat gezet')
+    }
     if (!t.ok) {
       waarschuwing = [waarschuwing, `Nog niet als termijn in Bouw7: ${t.error}`].filter(Boolean).join(' ')
       // Herkansing via de cron — alleen voor déze regel, niet voor historisch meerwerk.
@@ -441,7 +487,7 @@ export async function setMeerwerkStatus(
     )
   }
   revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
-  return { ok: true, waarschuwing }
+  return { ok: true, waarschuwing, melding: meldingen.length ? meldingen.join(' · ') : undefined }
 }
 
 /** De velden die `meerwerkTermijnGeschikt` beoordeelt (subset van MeerwerkRegel + bouw7_term_id). */

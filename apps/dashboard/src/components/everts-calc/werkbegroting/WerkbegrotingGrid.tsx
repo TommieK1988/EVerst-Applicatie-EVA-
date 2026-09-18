@@ -22,6 +22,7 @@ import type {
 import RelatieZoekveld from './RelatieZoekveld'
 import MateriaalZoekveld from './MateriaalZoekveld'
 import KostengroepKiezer from './KostengroepKiezer'
+import type { EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
 
 interface Props {
@@ -34,11 +35,12 @@ interface Props {
    */
   bewakingscodes?: { code: string; naam: string | null }[] | null
   /**
-   * Bewakingscodes van de stelposten in de opdracht. Die krijgen een eigen groepskop — ook als er
-   * nog geen enkele regel onder hangt. Een stelpost zonder werkbegroting-regels is namelijk precies
-   * het geval dat je wilt zien: er is wél een afgesproken bedrag, maar nog geen begroting.
+   * Bewakingscodes die EVA zelf heeft uitgedeeld: stelposten in de opdracht en goedgekeurd
+   * meerwerk. Die krijgen een eigen groepskop — ook als er nog geen enkele regel onder hangt. Dat
+   * is namelijk precies het geval dat je wilt zien: er is wél een afgesproken bedrag, maar nog
+   * geen begroting.
    */
-  stelpostCodes?: { code: string; naam: string }[] | null
+  eigenCodes?: EigenBewakingscode[] | null
   /** Dossier-id van het gekoppelde Bouw7-project — nodig om codes/bestelregels te importeren. */
   dossierId?: string
   /**
@@ -183,9 +185,9 @@ interface SeparatorRij {
   label: string
   groepTotaal: number
   groepCalcTotaal: number
-  /** Deze kostengroep is de bewakingscode van een stelpost uit de opdracht. */
-  isStelpost?: boolean
-  /** Stelpost-groep zonder werkbegroting-regels — alleen de kop, nog niets begroot. */
+  /** Deze kostengroep is een door EVA uitgedeelde code (stelpost of goedgekeurd meerwerk). */
+  eigenSoort?: EigenBewakingscode['soort']
+  /** Eigen groep zonder werkbegroting-regels — alleen de kop, nog niets begroot. */
   leeg?: boolean
 }
 
@@ -518,7 +520,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, stelpostCodes, dossierId, vergrendeldeCodes }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeCodes }: Props) {
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
@@ -656,14 +658,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const bekendeCodes = useMemo((): { code: string; naam: string | null }[] => {
     const uit = [...(bewakingscodes ?? [])]
     const bekend = new Set(uit.map(b => b.code.trim().toUpperCase()))
-    for (const sp of stelpostCodes ?? []) {
-      const kaal = sp.code.trim().toUpperCase()
+    for (const e of eigenCodes ?? []) {
+      const kaal = e.code.trim().toUpperCase()
       if (!kaal || bekend.has(kaal)) continue
       bekend.add(kaal)
-      uit.push({ code: sp.code, naam: sp.naam })
+      uit.push({ code: e.code, naam: e.naam })
     }
     return uit
-  }, [bewakingscodes, stelpostCodes])
+  }, [bewakingscodes, eigenCodes])
 
   const alleKostengroepen = useMemo((): { value: string; label: string | null }[] => {
     if (bekendeCodes.length > 0) {
@@ -676,11 +678,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     return [...new Set([...fromRegels, ...fromInst])].sort().map(v => ({ value: v, label: null }))
   }, [regels, instellingen, bekendeCodes])
 
-  // Kale bewakingscodes die bij een stelpost horen — de groepskop krijgt dan een stelpost-merk.
-  const stelpostSet = useMemo(
-    () => new Set((stelpostCodes ?? []).map(s => s.code.trim()).filter(Boolean)),
-    [stelpostCodes],
-  )
+  // Kale bewakingscode → herkomst (stelpost / meerwerk); de groepskop krijgt dan dat merk.
+  const eigenSoortPerCode = useMemo(() => {
+    const m = new Map<string, EigenBewakingscode['soort']>()
+    for (const e of eigenCodes ?? []) {
+      const kaal = e.code.trim()
+      if (kaal) m.set(kaal, e.soort)
+    }
+    return m
+  }, [eigenCodes])
 
   // Bewakingscode → omschrijving/naam, voor het tonen van de codenaam in de groepskoppen.
   const codeNaam = useMemo(() => {
@@ -796,24 +802,26 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           type: 'separator', label,
           groepTotaal:     groepTotalen.get(label)     ?? 0,
           groepCalcTotaal: groepCalcTotalen.get(label) ?? 0,
-          isStelpost:      sortering === 'kostengroep' && stelpostSet.has(bareCode(label)),
+          eigenSoort:      sortering === 'kostengroep' ? eigenSoortPerCode.get(bareCode(label)) : undefined,
         })
         vorigeLabel = label
       }
       result.push(rij)
     }
 
-    // Stelposten zonder werkbegroting-regels krijgen alsnog een kop. Zonder dit zie je een
-    // stelpost pas in de werkbegroting nadat er iets onder staat -- terwijl juist de lege
-    // stelpost het werk is dat nog begroot moet worden. De kop staat op zijn alfabetische
-    // plek tussen de andere kostengroepen, zodat SP01 niet ineens onderaan hangt.
+    // Stelposten en goedgekeurd meerwerk zonder werkbegroting-regels krijgen alsnog een kop.
+    // Zonder dit zie je zo'n post pas in de werkbegroting nadat er iets onder staat -- terwijl
+    // juist de lege post het werk is dat nog begroot moet worden. De kop staat op zijn
+    // alfabetische plek tussen de andere kostengroepen, zodat SP01 niet ineens onderaan hangt.
     if (sortering === 'kostengroep') {
       const bezet = new Set(result.filter((r): r is SeparatorRij => r.type === 'separator').map(r => bareCode(r.label)))
-      for (const sp of stelpostCodes ?? []) {
-        if (bezet.has(sp.code.trim())) continue
-        bezet.add(sp.code.trim())
-        const label = kostengroepLabel(sp.code, sp.naam)
-        const kop: SeparatorRij = { type: 'separator', label, groepTotaal: 0, groepCalcTotaal: 0, isStelpost: true, leeg: true }
+      for (const e of eigenCodes ?? []) {
+        if (bezet.has(e.code.trim())) continue
+        bezet.add(e.code.trim())
+        const label = kostengroepLabel(e.code, e.naam)
+        const kop: SeparatorRij = {
+          type: 'separator', label, groepTotaal: 0, groepCalcTotaal: 0, eigenSoort: e.soort, leeg: true,
+        }
         let idx = result.findIndex(r => r.type === 'separator' && r.label.localeCompare(label, 'nl') > 0)
         if (idx < 0) idx = result.length
         result.splice(idx, 0, kop)
@@ -821,7 +829,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     }
 
     return result
-  }, [groepen, regels, actieveComponenten, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, stelpostCodes, stelpostSet])
+  }, [groepen, regels, actieveComponenten, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, eigenCodes, eigenSoortPerCode])
 
   // ─── Selectie helpers ─────────────────────────────────────────────────────
   const displayRijen = tabelRijen.filter((r): r is DisplayRij => r.type === 'rij')
@@ -1009,15 +1017,16 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       }
 
       // 1) Placeholder-regel per bewakingscode (identiteit = code + omschrijving) die nog niet
-      //    bestaat. Stelpost-codes zitten er bewust bij: die zijn in EVA uitgedeeld en pas daarna
-      //    in Bouw7 aangemaakt, dus de snapshot waar `res.codes` uit komt kent ze nog niet.
+      //    bestaat. De eigen codes (stelposten, goedgekeurd meerwerk) zitten er bewust bij: die
+      //    zijn in EVA uitgedeeld en pas daarna in Bouw7 aangemaakt, dus de snapshot waar
+      //    `res.codes` uit komt kent ze nog niet.
       const importCodes = [...res.codes]
       const bekendImport = new Set(importCodes.map(c => c.code.trim().toUpperCase()))
-      for (const sp of stelpostCodes ?? []) {
-        const kaal = sp.code.trim().toUpperCase()
+      for (const e of eigenCodes ?? []) {
+        const kaal = e.code.trim().toUpperCase()
         if (!kaal || bekendImport.has(kaal)) continue
         bekendImport.add(kaal)
-        importCodes.push({ code: sp.code, naam: sp.naam })
+        importCodes.push({ code: e.code, naam: e.naam })
       }
       for (const c of importCodes) ensureRegel(c.code, c.naam)
       // 2) Bestelregels onder de juiste code: nieuw toevoegen, GEWIJZIGDE bijwerken, ongewijzigde overslaan.
@@ -1100,7 +1109,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     } finally {
       setImportBezig(false)
     }
-  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, stelpostCodes, onWijziging, onComponentWijzig])
+  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, eigenCodes, onWijziging, onComponentWijzig])
 
   // Soft-delete component
   const verwijderComp = useCallback((compId: string) => {
@@ -1667,12 +1676,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                                 — {codeNaam.get(bareCode(rij.label))}
                               </span>
                             )}
-                            {rij.isStelpost && (
+                            {rij.eigenSoort && (
                               <span
                                 className="ml-1 rounded-full bg-amber-100 px-1.5 py-px text-[9px] font-semibold normal-case tracking-normal text-amber-700"
-                                title="Bewakingscode van een stelpost uit de opdracht. Wat je hier begroot, bewaak je op die stelpost."
+                                title={rij.eigenSoort === 'meerwerk'
+                                  ? 'Bewakingscode van goedgekeurd meerwerk. Wat je hier begroot, bewaak je op dat meerwerk.'
+                                  : 'Bewakingscode van een stelpost uit de opdracht. Wat je hier begroot, bewaak je op die stelpost.'}
                               >
-                                stelpost
+                                {rij.eigenSoort}
                               </span>
                             )}
                             {isHovered && <span className="ml-2 normal-case font-normal text-everts/70">↓ Hier neerzetten</span>}
@@ -1683,12 +1694,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                                 nog niets begroot
                               </span>
                             )}
-                            {rij.isStelpost && (
+                            {rij.eigenSoort && (
                               <button
                                 type="button"
                                 onClick={() => voegNieuweRegelToe(rij.label)}
                                 className="rounded px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-everts hover:bg-everts-50"
-                                title="Voeg een werkbegroting-regel toe onder deze stelpost"
+                                title={rij.eigenSoort === 'meerwerk'
+                                  ? 'Voeg een werkbegroting-regel toe onder dit meerwerk'
+                                  : 'Voeg een werkbegroting-regel toe onder deze stelpost'}
                               >
                                 + regel
                               </button>

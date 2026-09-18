@@ -147,6 +147,9 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     if (!r.ok) { toast.error(r.error); return }
     if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
     else toast.success(`Status: ${meerwerkStatusLabels[status]}`)
+    // Wat er automatisch bij is gebeurd (bedrag uit de offerte, termijnen) apart tonen: dat is
+    // geen waarschuwing maar wel iets waarvan je wilt weten dát het gebeurd is.
+    if (r.melding) toast(r.melding, { icon: '✅', duration: 8000 })
     herlaad(); router.refresh()
   }
 

@@ -441,6 +441,11 @@ export type MeerwerkRegel = {
   bouw7_line_id: number | null
   /** Bouw7-verkooptermijn die voor dit (aangenomen) meerwerk is gezet; null zolang niet gedaan. */
   bouw7_term_id: number | null
+  /**
+   * Álle termijnen van deze regel, in schemavolgorde. Meer dan één zodra het meerwerk het
+   * betalingsschema van zijn eigen offerte volgt; `bouw7_term_id` is de eerste uit deze reeks.
+   */
+  bouw7_term_ids: number[] | null
   /** True zolang de termijn bij akkoord nog niet gezet kon worden (herkansing via de cron). */
   bouw7_term_pending: boolean
   /** True als dit meerwerk al in de grondslag van de Bouw7-termijnstaat zat; dan geen eigen termijn. */
