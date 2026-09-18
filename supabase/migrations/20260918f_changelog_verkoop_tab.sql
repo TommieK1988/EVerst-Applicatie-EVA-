@@ -1,0 +1,4 @@
+-- Wat is nieuw: indeling van de Verkoop-tab en factureren per nacalculatiepost.
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-18','verbeterd','Financieel','Verkoop-tab overzichtelijker, en per post klaarzetten',
+   'Op het Verkoop-tab van een dossier staan Overzicht en Verkoopfacturen nu naast elkaar, en daaronder Termijnen naast Nacalculatie. Je hoeft dus niet meer te scrollen om de facturatiestand naast de facturen te leggen. Bij een regiepost of stelpost zie je in een nieuwe kolom hoeveel er al gefactureerd is, zodat bij een post die je in delen factureert duidelijk is wat er al weg is. Het klaarzetten in Bouw7 doe je voortaan in het venster van de post zelf, waar je ook de factuurregels samenstelt: de knop staat onderin en factureert alleen die ene post, met het btw-tarief ernaast. In de termijnstaat is de kolom Factureerbaar vervallen, die was vrijwel altijd leeg.');
