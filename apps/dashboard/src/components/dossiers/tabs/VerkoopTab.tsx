@@ -208,9 +208,9 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                 <thead>
                   <tr>
                     <TH />
-                    <TH right breedte={104}>Excl. BTW</TH>
-                    <TH right breedte={92}>BTW</TH>
-                    <TH right breedte={104}>Incl. BTW</TH>
+                    <TH right breedte={150}>Excl. BTW</TH>
+                    <TH right breedte={130}>BTW</TH>
+                    <TH right breedte={150}>Incl. BTW</TH>
                   </tr>
                 </thead>
                 <tbody>
@@ -327,7 +327,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
               {data.facturen.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Nog geen verkoopfacturen.</div>
               ) : (
-                <table style={{ ...tabel, minWidth: 520 }}>
+                <table style={{ ...tabel, minWidth: 640 }}>
                   <thead>
                     <tr>
                       <TH>Factuurnr.</TH>
@@ -533,7 +533,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
 
 export function VerkoopTab({ dossierId }: { dossierId: string }) {
   return (
-    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', maxWidth: 1100 }}>
+    <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
       <Suspense fallback={<div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}><SkeletonCard /><SkeletonCard /></div>}>
         <VerkoopInhoud dossierId={dossierId} />
       </Suspense>
