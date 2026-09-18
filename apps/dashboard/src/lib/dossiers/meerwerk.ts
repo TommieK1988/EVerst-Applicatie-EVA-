@@ -23,11 +23,19 @@ import { leesMeerwerkOfferte } from './meerwerk-offerte'
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
 
-/** Toegestane statusovergangen. Afgewezen mag heropend worden naar Aangevraagd. */
+/**
+ * Toegestane statusovergangen. Afgewezen en Akkoord mogen allebei terug naar Aangevraagd.
+ *
+ * Akkoord was tot 18 sep 2026 een eenrichtingsdeur: eenmaal goedgekeurd kon je alleen nog naar
+ * Voltooid of Afgewezen. Wie per ongeluk goedkeurde, of het te vroeg deed, moest het meerwerk dus
+ * *afwijzen* om er weer vanaf te komen -- en afgewezen betekent iets heel anders dan nog niet
+ * besloten: het staat zo in het meerwerkoverzicht naar de klant en in de besluitvastlegging.
+ * Terug naar Aangevraagd is de eerlijke weg terug.
+ */
 const TRANSITIES: Record<MeerwerkStatus, MeerwerkStatus[]> = {
   aangevraagd:       ['offerte_verstuurd', 'akkoord', 'afgewezen'],
   offerte_verstuurd: ['akkoord', 'afgewezen', 'aangevraagd'],
-  akkoord:           ['voltooid', 'afgewezen'],
+  akkoord:           ['voltooid', 'afgewezen', 'aangevraagd'],
   afgewezen:         ['aangevraagd'],
   voltooid:          [],
 }
@@ -387,6 +395,23 @@ export async function setMeerwerkStatus(
   let waarschuwing: string | undefined
 
   /*
+   * Terug van Akkoord naar Aangevraagd: de gevolgen die het akkoord in Bouw7 had, draaien niet
+   * mee terug. De bewakingscode blijft staan (daar kan al op geboekt zijn) en de termijn blijft
+   * in de termijnstaat (die kan al gefactureerd zijn). Beide stil weghalen zou erger zijn dan
+   * ze laten staan; wel zeggen wat er nog open staat.
+   */
+  if (r.status === 'akkoord' && status === 'aangevraagd') {
+    const blijft = [
+      r.bewakingscode ? `bewakingscode ${r.bewakingscode}` : null,
+      r.bouw7_term_id != null ? 'de termijn in de termijnstaat' : null,
+    ].filter(Boolean)
+    if (blijft.length > 0) {
+      waarschuwing = `Teruggezet op Aangevraagd. Let op: ${blijft.join(' en ')} blijft in Bouw7 staan — `
+        + 'haal dat daar zelf weg als het meerwerk niet doorgaat.'
+    }
+  }
+
+  /*
    * Akkoord op een meerwerkregel met een eigen offerte: het bedrag van die offerte wordt het
    * bedrag van de regel.
    *
@@ -488,6 +513,94 @@ export async function setMeerwerkStatus(
   }
   revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
   return { ok: true, waarschuwing, melding: meldingen.length ? meldingen.join(' · ') : undefined }
+}
+
+/**
+ * Neemt het offertebedrag over op een meerwerkregel die al op Akkoord staat.
+ *
+ * Nodig omdat een akkoord van vóór deze functie niet met terugwerkende kracht wordt bijgewerkt,
+ * en omdat een offerte ná het akkoord nog herzien kan worden. Zonder deze knop zou je de regel
+ * moeten terugzetten en opnieuw goedkeuren, en dat overschrijft de vastlegging van wie er
+ * wannéér akkoord gaf -- precies wat je niet wilt kwijtraken.
+ *
+ * Doet hetzelfde als het akkoord zelf: bedrag en btw uit de offerte, de kostprijs als verwachte
+ * kosten op de bewakingscode, en de termijnen volgens het betalingsschema van die offerte.
+ */
+export async function neemMeerwerkOfferteOver(
+  id: string,
+): Promise<{ ok: true; melding: string; waarschuwing?: string } | { ok: false; error: string }> {
+  await vereisSessie()
+  const supabase = createAdminClient()
+  // Alleen de kolommen die hier nodig zijn: dat houdt de getypeerde client bruikbaar (een
+  // `select('*')` zou tegen `MeerwerkRegel` aan moeten worden gecast) en maakt zichtbaar waar
+  // deze functie op stuurt.
+  const { data: r } = await supabase
+    .from('meerwerk_regels')
+    .select('id, dossier_id, volgnummer, omschrijving, status, afrekenwijze, is_stelpost, bron, bedrag_excl_btw, btw_pct, bewakingscode, quote_id, bouw7_line_id, bouw7_nummer, bouw7_term_id, termijn_wijze, in_termijnstaat')
+    .eq('id', id)
+    .maybeSingle()
+  if (!r) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
+  await assertDossierBewerkbaar(r.dossier_id)
+
+  if (!r.quote_id) return { ok: false, error: 'Aan deze meerwerkregel hangt geen offerte.' }
+  if (r.afrekenwijze !== 'aangenomen' || r.is_stelpost) {
+    return { ok: false, error: 'Alleen aangenomen meerwerk (geen stelpost) neemt een offertebedrag over; regie en stelposten rekenen af op wat er geboekt is.' }
+  }
+
+  const offerte = await leesMeerwerkOfferte(r.quote_id).catch(() => null)
+  if (!offerte) return { ok: false, error: 'De offerte van deze regel is niet te lezen.' }
+  if (!(offerte.verkoopExclBtw > 0)) return { ok: false, error: 'De offerte heeft (nog) geen bedrag.' }
+
+  const oud = r.bedrag_excl_btw != null ? rond(Number(r.bedrag_excl_btw)) : null
+  const velden = {
+    bedrag_excl_btw: offerte.verkoopExclBtw,
+    ...(r.btw_pct == null && offerte.btwPct != null ? { btw_pct: offerte.btwPct } : {}),
+    updated_at: new Date().toISOString(),
+  }
+  const { error } = await supabase.from('meerwerk_regels').update(velden).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+
+  const meldingen = [oud != null && oud !== offerte.verkoopExclBtw
+    ? `Bedrag uit de offerte overgenomen: ${euro(offerte.verkoopExclBtw)} (stond op ${euro(oud)})`
+    : `Bedrag uit de offerte overgenomen: ${euro(offerte.verkoopExclBtw)}`]
+  const waarschuwingen: string[] = []
+
+  // Verwachte kosten op de bewakingscode bijwerken. Best effort: het bedrag in EVA staat al goed
+  // en dat is wat er gefactureerd wordt; de prognose is bewaking.
+  if (r.bewakingscode && r.bron === 'eva' && r.bouw7_line_id == null && offerte.kostprijs > 0) {
+    const res = await maakMeerwerkBewakingscodeBouw7(r.dossier_id, {
+      code: r.bewakingscode, naam: r.omschrijving, bedrag: offerte.kostprijs,
+    })
+    if (!res.ok) waarschuwingen.push(`Verwachte kosten in Bouw7 niet bijgewerkt: ${res.error}`)
+  }
+
+  // Termijnen volgens het schema van de offerte (idempotent op bouw7_term_ids).
+  const naStatus = { ...r, ...velden } as Regelvelden
+  let termijnGezet = false
+  if (meerwerkTermijnGeschikt(naStatus).ok) {
+    const t = await zetMeerwerkAlsTermijn(id)
+    termijnGezet = t.ok
+    if (t.ok) {
+      meldingen.push(t.termIds.length > 1
+        ? `${t.termIds.length} termijnen in de termijnstaat gezet, volgens het betalingsschema van de offerte`
+        : 'Als termijn in de termijnstaat gezet')
+    } else {
+      waarschuwingen.push(`Nog niet als termijn in Bouw7: ${t.error}`)
+      await supabase.from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', id)
+    }
+  }
+
+  await ververSnapshotsNaSchrijven(
+    r.dossier_id,
+    termijnGezet ? ['termijnen', 'athena_control'] : ['athena_control'],
+    ['athena_financial', 'security_links'],
+  )
+  revalidatePath(`/opdrachten/${r.dossier_id}/meerwerk`)
+  return {
+    ok: true,
+    melding: meldingen.join(' · '),
+    waarschuwing: waarschuwingen.length ? waarschuwingen.join(' ') : undefined,
+  }
 }
 
 /** De velden die `meerwerkTermijnGeschikt` beoordeelt (subset van MeerwerkRegel + bouw7_term_id). */

@@ -7,7 +7,7 @@ import { Card, CardHeader, CardBody, Button, Input, Badge, useDialogen } from '@
 import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, type MeerwerkTermijnWijze } from '@everts/database'
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
-  verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
+  verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7, neemMeerwerkOfferteOver,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
 import { getOpdrachtOverzicht, verrekenStelpost } from '@/lib/dossiers/opdracht-onderdelen'
@@ -157,6 +157,20 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     const r = await updateMeerwerkRegel(id, patch)
     if (!r.ok) { toast.error(r.error); return }
     if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
+    herlaad(); router.refresh()
+  }
+
+  /**
+   * Bedrag, verwachte kosten en termijnen alsnog uit de offerte halen. Voor regels die al op
+   * Akkoord stonden voordat dat automatisch ging, en voor een offerte die daarna is herzien.
+   */
+  async function uitOfferte(regel: MeerwerkRegelView) {
+    setBezig(true)
+    const r = await neemMeerwerkOfferteOver(regel.id)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success(r.melding, { duration: 8000 })
+    if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 8000 })
     herlaad(); router.refresh()
   }
 
@@ -453,6 +467,18 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                             <>
                               <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                                 onClick={() => naarBouw7(r)}>Naar Bouw7</button>
+                              <span className="mx-1 text-neutral-300">·</span>
+                            </>
+                          )}
+                          {/* Alleen zinvol bij aangenomen meerwerk met een eigen offerte: daar valt een
+                              bedrag uit over te nemen. Regie en stelposten rekenen af op wat er geboekt is. */}
+                          {r.quote_id && r.afrekenwijze === 'aangenomen' && !r.is_stelpost && (
+                            <>
+                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                                onClick={() => uitOfferte(r)}
+                                title="Neem bedrag, verwachte kosten en termijnen over uit de gekoppelde offerte">
+                                Uit offerte
+                              </button>
                               <span className="mx-1 text-neutral-300">·</span>
                             </>
                           )}
