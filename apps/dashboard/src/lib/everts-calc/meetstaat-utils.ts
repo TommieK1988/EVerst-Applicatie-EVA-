@@ -12,10 +12,15 @@ export function berekenHoeveelheid(r: Meetregel): number {
   if (r.hoeveelheid_override !== undefined && r.hoeveelheid_override !== null) {
     return r.hoeveelheid_override
   }
-  const B = r.breedte ?? 0
-  const H = r.hoogte ?? 0
+  // Breedte- en hoogte-aantal zijn vermenigvuldigers op die ene maat: 3 gelijke
+  // ruiten van 0,60 breed staan als B 0,60 met B-aantal 3 in één regel. Ze werken
+  // vóór de formule, zodat '2*B+2*H' met de vermenigvuldigde maten rekent.
+  // Leeg én 0 tellen als 1 (zoals `aantal` al deed): een lege cel mag een regel
+  // nooit stil op nul zetten.
+  const B = (r.breedte ?? 0) * (r.breedte_aantal || 1)
+  const H = (r.hoogte ?? 0) * (r.hoogte_aantal || 1)
   const L = r.lengte ?? 0
-  const N = r.aantal || 1
+  const N = (r.aantal || 1) * (r.factor || 1)
 
   // Aangepaste formule (uit schilder_types, bijv. '2*B+2*H')
   if (r.formule?.trim()) return +(evalueerFormule(r.formule, B, H, L) * N).toFixed(4)

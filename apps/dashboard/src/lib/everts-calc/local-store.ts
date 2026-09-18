@@ -15,7 +15,7 @@
 import type {
   Scenario,
   Groep, Calculatieregel, Componentregel, Instellingen, EenheidConfig,
-  Meetstaat, Meetregel, MeetregelAggregaat,
+  Meetstaat, Meetregel, MeetregelAggregaat, MeetstaatElement,
   Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent,
   WerkbegrotingWijziging, WerkbegrotingBestelling,
 } from './types'
@@ -35,6 +35,7 @@ const KEYS = {
   meetstaten: 'meetstaten',
   meetregels: 'meetregels',
   meetregel_aggregaten: 'meetregel_aggregaten',
+  meetstaat_elementen: 'meetstaat_elementen',
 }
 
 // Standaard-eenheden met afkorting + volledige omschrijving.
@@ -257,6 +258,7 @@ export function hydrateCalculatie(
   snapshot: {
     scenarios: Scenario[]; groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[]
     meetstaten?: Meetstaat[]; meetregels?: Meetregel[]; meetregel_aggregaten?: MeetregelAggregaat[]
+    meetstaat_elementen?: MeetstaatElement[]
   }
 ): void {
   if (typeof window === 'undefined') return
@@ -295,12 +297,30 @@ export function hydrateCalculatie(
   ])
   sla(KEYS.meetregels, [
     ...getMeetregels().filter(r => !projectMeetstaatIds.has(r.meetstaat_id)),
-    ...(snapshot.meetregels ?? []),
+    ...(snapshot.meetregels ?? []).map(metOpmerking),
   ])
   sla(KEYS.meetregel_aggregaten, [
     ...getMeetregelAggregaten().filter(a => !projectMeetstaatIds.has(a.meetstaat_id)),
     ...(snapshot.meetregel_aggregaten ?? []),
   ])
+  sla(KEYS.meetstaat_elementen, [
+    ...getMeetstaatElementen().filter(e => !projectMeetstaatIds.has(e.meetstaat_id)),
+    ...(snapshot.meetstaat_elementen ?? []).map(el => ({
+      ...el,
+      regels: (el.regels ?? []).map(metOpmerking),
+    })),
+  ])
+}
+
+/**
+ * De kolom Omschrijving heet sinds september 2026 Opmerking, en het veld heet mee.
+ * Snapshots van daarvóór dragen nog `omschrijving`; die wordt hier omgezet zodat
+ * de rest van de code maar één veld hoeft te kennen. De omzetting is blijvend:
+ * bij de eerstvolgende opslag verdwijnt de oude sleutel uit de snapshot.
+ */
+function metOpmerking<T extends { opmerking?: string; omschrijving?: string }>(r: T): T {
+  if (r.opmerking !== undefined || r.omschrijving === undefined) return r
+  return { ...r, opmerking: r.omschrijving, omschrijving: undefined }
 }
 
 // ─── Undo snapshot (nieuwe structuur) ────────────────────────────────────────
@@ -533,6 +553,7 @@ export function verwijderMeetstaat(id: string): void {
   sla(KEYS.meetstaten, getMeetstaten().filter(m => m.id !== id))
   sla(KEYS.meetregels, getMeetregels().filter(r => r.meetstaat_id !== id))
   sla(KEYS.meetregel_aggregaten, getMeetregelAggregaten().filter(a => a.meetstaat_id !== id))
+  sla(KEYS.meetstaat_elementen, getMeetstaatElementen().filter(e => e.meetstaat_id !== id))
 }
 
 export function maakNieuweMeetstaat(project_id: string, scenario_id: string): Meetstaat {
@@ -583,6 +604,25 @@ export function slaMeetregelAggregaatOp(agg: MeetregelAggregaat): void {
 
 export function verwijderMeetregelAggregaat(id: string): void {
   sla(KEYS.meetregel_aggregaten, getMeetregelAggregaten().filter(a => a.id !== id))
+}
+
+// ─── MEETSTAAT ELEMENTEN ─────────────────────────────────────────────────────
+// Bewaarde sets meetregels binnen één meetstaat. Bewust géén eigen tabel: een
+// element hoort bij de meetstaat waarin het is opgeslagen en reist daarom mee in
+// dezelfde calculatie-snapshot.
+
+export function getMeetstaatElementen(meetstaat_id?: string): MeetstaatElement[] {
+  const alle = lees<MeetstaatElement>(KEYS.meetstaat_elementen, [])
+  return meetstaat_id ? alle.filter(e => e.meetstaat_id === meetstaat_id) : alle
+}
+
+export function slaMeetstaatElementOp(el: MeetstaatElement): void {
+  const lijst = getMeetstaatElementen().filter(e => e.id !== el.id)
+  sla(KEYS.meetstaat_elementen, [...lijst, { ...el, aangepast_op: new Date().toISOString() }])
+}
+
+export function verwijderMeetstaatElement(id: string): void {
+  sla(KEYS.meetstaat_elementen, getMeetstaatElementen().filter(e => e.id !== id))
 }
 
 // ─── WERKBEGROTINGEN ──────────────────────────────────────────────────────────

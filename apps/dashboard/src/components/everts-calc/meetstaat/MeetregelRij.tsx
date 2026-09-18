@@ -15,13 +15,35 @@ interface SchilderData {
 interface Props {
   regel: Meetregel
   volgnummer: number
+  /** Positie in het rekenblad; samen met de kolom het adres voor de pijltoetsen. */
+  rijIndex: number
   isActief: boolean
+  /** Zet de cursor in deze rij. Alleen waar op het moment dat het rekenblad de
+   *  focus verplaatst (groep openen, Enter) — niet zomaar omdat de rij actief is,
+   *  anders trekt deze rij de cursor weg uit de cel die je net aanklikte of waar
+   *  je met een pijltoets naartoe ging. */
+  moetFocussen: boolean
+  onGefocust: () => void
+  isGeselecteerd: boolean
+  onSelecteer: (aan: boolean) => void
   onFocus: () => void
   onWijzig: (patch: Partial<Meetregel>) => void
   onEnter: () => void
   onVerwijder: () => void
   schilderData?: SchilderData
 }
+
+// ─── KOLOMADRESSEN ───────────────────────────────────────────────────────────
+// Alleen de bewerkbare cellen tellen mee; #, vinkje, hoeveelheid, eenheid en de
+// prullenbak zijn geen navigatiedoel. MeetregelGrid gebruikt dezelfde nummering.
+
+export const KOL = {
+  element: 0, onderdeel: 1, type: 2, behandeling: 3,
+  breedte: 4, breedteAantal: 5, hoogte: 6, hoogteAantal: 7, lengte: 8,
+  factor: 9, aantal: 10, opmerking: 11,
+} as const
+
+export const LAATSTE_KOL = KOL.opmerking
 
 // ─── ZOEKINVOER ──────────────────────────────────────────────────────────────
 // Lichtgewicht combobox die native <datalist> vervangt. Gebruikt position:fixed
@@ -31,12 +53,13 @@ interface Props {
 interface ZoekOptie { id: string; naam: string; code?: string | null }
 
 function ZoekInvoer({
-  value, opties, placeholder, inputRef: externalRef, onSelect, onEnter, onFocus: onFocusProp,
+  value, opties, placeholder, inputRef: externalRef, celAdres, onSelect, onEnter, onFocus: onFocusProp,
 }: {
   value: string | undefined
   opties: ZoekOptie[]
   placeholder?: string
   inputRef?: React.RefObject<HTMLInputElement>
+  celAdres: string
   onSelect: (id: string | undefined, naam: string | undefined) => void
   onEnter: () => void
   onFocus: () => void
@@ -45,6 +68,7 @@ function ZoekInvoer({
   const ref = externalRef ?? localRef
   const [open, setOpen] = useState(false)
   const [inputVal, setInputVal] = useState(value ?? '')
+  const [gemarkeerd, setGemarkeerd] = useState(0)
   const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
   // Sync inputVal wanneer value extern wijzigt (bijv. carry-over behandeling)
@@ -59,6 +83,11 @@ function ZoekInvoer({
         (o.code?.toLowerCase().includes(q) ?? false)
       )
 
+  // De lijst claimt de pijltoetsen alleen als de gebruiker aan het zoeken is. Staat
+  // hij alleen open omdat je de cel binnenkwam, dan horen omhoog/omlaag bij het
+  // rekenblad — anders zou je in deze drie kolommen nooit van rij kunnen wisselen.
+  const lijstActief = open && inputVal.trim() !== '' && gefilterd.length > 0
+
   const selecteer = useCallback((o: ZoekOptie) => {
     setInputVal(o.naam)
     setOpen(false)
@@ -67,6 +96,7 @@ function ZoekInvoer({
 
   const handleInput = (val: string) => {
     setInputVal(val)
+    setGemarkeerd(0)
 
     if (!val.trim()) {
       setOpen(false)
@@ -90,6 +120,7 @@ function ZoekInvoer({
       const r = ref.current.getBoundingClientRect()
       setDropPos({ top: r.bottom + 1, left: r.left, width: Math.max(r.width, 200) })
     }
+    setGemarkeerd(0)
     setOpen(true)
   }
 
@@ -114,6 +145,7 @@ function ZoekInvoer({
       <input
         ref={ref}
         type="text"
+        data-cel={celAdres}
         value={inputVal}
         placeholder={placeholder}
         autoComplete="off"
@@ -122,9 +154,21 @@ function ZoekInvoer({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={e => {
           if (e.key === 'Escape') { setOpen(false); e.stopPropagation() }
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!lijstActief) { setOpen(false); return }   // laat het rekenblad navigeren
+            e.preventDefault()
+            e.stopPropagation()
+            setGemarkeerd(i =>
+              e.key === 'ArrowDown'
+                ? Math.min(i + 1, gefilterd.length - 1)
+                : Math.max(i - 1, 0)
+            )
+            return
+          }
           if (e.key === 'Enter') {
             e.preventDefault()
-            if (gefilterd.length === 1) selecteer(gefilterd[0])
+            if (lijstActief) selecteer(gefilterd[Math.min(gemarkeerd, gefilterd.length - 1)])
+            else if (gefilterd.length === 1) selecteer(gefilterd[0])
             else { setOpen(false); onEnter() }
           }
         }}
@@ -138,11 +182,13 @@ function ZoekInvoer({
           style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, zIndex: 9999 }}
           className="max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl"
         >
-          {gefilterd.slice(0, 25).map(o => (
+          {gefilterd.slice(0, 25).map((o, i) => (
             <div
               key={o.id}
               onMouseDown={e => { e.preventDefault(); selecteer(o) }}
-              className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-everts/5 text-xs"
+              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${
+                lijstActief && i === gemarkeerd ? 'bg-everts/10' : 'hover:bg-everts/5'
+              }`}
             >
               {o.code && (
                 <span className="flex-shrink-0  font-semibold text-[10px] px-1.5 py-0.5 rounded bg-everts/10 text-everts min-w-[2rem] text-center">
@@ -161,7 +207,8 @@ function ZoekInvoer({
 // ─── MEETREGEL RIJ ────────────────────────────────────────────────────────────
 
 export default function MeetregelRij({
-  regel, volgnummer, isActief, onFocus, onWijzig, onEnter, onVerwijder, schilderData,
+  regel, volgnummer, rijIndex, isActief, moetFocussen, onGefocust, isGeselecteerd, onSelecteer,
+  onFocus, onWijzig, onEnter, onVerwijder, schilderData,
 }: Props) {
   const eersteRef = useRef<HTMLInputElement>(null)
   const actief = isRegelActief(regel)
@@ -170,9 +217,13 @@ export default function MeetregelRij({
   const geselecteerdOnderdeel = schilderData?.onderdelen.find(o => o.id === regel.onderdeel_id)
   const geselecteerdType = schilderData?.types.find(t => t.id === regel.type_id)
 
+  const cel = (kol: number) => `${rijIndex}:${kol}`
+
   useEffect(() => {
-    if (isActief && regel.is_leeg && eersteRef.current) eersteRef.current.focus()
-  }, [isActief, regel.is_leeg])
+    if (!moetFocussen || !eersteRef.current) return
+    eersteRef.current.focus()
+    onGefocust()
+  }, [moetFocussen, onGefocust])
 
   const beschikbareTypes = schilderData
     ? regel.onderdeel_id
@@ -190,9 +241,10 @@ export default function MeetregelRij({
       })()
     : []
 
-  const ni = (value: number | undefined, onChange: (v: number | undefined) => void, placeholder = '', cls = '') => (
+  const ni = (kol: number, value: number | undefined, onChange: (v: number | undefined) => void, placeholder = '', cls = '') => (
     <input
       type="number" step="0.01" min="0"
+      data-cel={cel(kol)}
       value={value === undefined || value === 0 ? '' : value}
       placeholder={placeholder}
       onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); onChange(isNaN(v as number) ? undefined : v) }}
@@ -204,9 +256,9 @@ export default function MeetregelRij({
     />
   )
 
-  const ti = (value: string | undefined, onChange: (v: string) => void, placeholder = '', ref?: React.RefObject<HTMLInputElement>) => (
+  const ti = (kol: number, value: string | undefined, onChange: (v: string) => void, placeholder = '', ref?: React.RefObject<HTMLInputElement>) => (
     <input
-      ref={ref} type="text" value={value ?? ''} placeholder={placeholder}
+      ref={ref} type="text" data-cel={cel(kol)} value={value ?? ''} placeholder={placeholder}
       onChange={e => onChange(e.target.value)}
       onFocus={onFocus}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
@@ -218,16 +270,35 @@ export default function MeetregelRij({
   )
 
   const rijCls = `border-b border-slate-100 transition-colors ${
-    isActief ? 'bg-everts/5' : actief ? 'bg-white hover:bg-slate-50' : 'bg-paper/60 hover:bg-white'
+    isGeselecteerd ? 'bg-everts/10' : isActief ? 'bg-everts/5' : actief ? 'bg-white hover:bg-slate-50' : 'bg-paper/60 hover:bg-white'
   }`
 
   return (
     <tr className={rijCls} onClick={onFocus}>
+      {/* Selectievinkje — alleen op bestaande regels */}
+      <td className="px-1 py-1 text-center">
+        {!regel.is_leeg && (
+          <input
+            type="checkbox"
+            checked={isGeselecteerd}
+            onChange={e => onSelecteer(e.target.checked)}
+            onClick={e => e.stopPropagation()}
+            title="Selecteer voor 'Element opslaan'"
+            className="w-3.5 h-3.5 rounded border-slate-300 text-everts focus:ring-everts/40 cursor-pointer"
+          />
+        )}
+      </td>
+
       {/* # */}
       <td className="px-2 py-1 text-center">
         <span className={`text-xs  ${actief ? 'text-slate-400' : 'text-slate-200'}`}>
           {actief ? volgnummer : ''}
         </span>
+      </td>
+
+      {/* Element */}
+      <td className="px-1 py-0.5">
+        {ti(KOL.element, regel.element, v => onWijzig({ element: v }), 'Element...')}
       </td>
 
       {/* Onderdeel */}
@@ -244,6 +315,7 @@ export default function MeetregelRij({
                 opties={schilderData.onderdelen}
                 placeholder="Onderdeel..."
                 inputRef={eersteRef}
+                celAdres={cel(KOL.onderdeel)}
                 onFocus={onFocus}
                 onEnter={onEnter}
                 onSelect={(id, naam) => {
@@ -251,7 +323,7 @@ export default function MeetregelRij({
                   onWijzig({ onderdeel: naam ?? '', onderdeel_id: id, type_id: undefined, type: undefined, behandeling_id: undefined, behandeling: undefined })
                 }}
               />
-            : ti(regel.onderdeel, v => onWijzig({ onderdeel: v }), 'Onderdeel...', eersteRef)
+            : ti(KOL.onderdeel, regel.onderdeel, v => onWijzig({ onderdeel: v }), 'Onderdeel...', eersteRef)
           }
         </div>
       </td>
@@ -269,6 +341,7 @@ export default function MeetregelRij({
                 value={regel.type}
                 opties={beschikbareTypes}
                 placeholder="Type..."
+                celAdres={cel(KOL.type)}
                 onFocus={onFocus}
                 onEnter={onEnter}
                 onSelect={(id, naam) => {
@@ -292,32 +365,48 @@ export default function MeetregelRij({
               value={regel.behandeling}
               opties={beschikbareBehandelingen}
               placeholder="Behandeling..."
+              celAdres={cel(KOL.behandeling)}
               onFocus={onFocus}
               onEnter={onEnter}
               onSelect={(id, naam) => onWijzig({ behandeling: naam ?? '', behandeling_id: id })}
             />
-          : ti(regel.behandeling, v => onWijzig({ behandeling: v }), 'Behandeling...')
+          : ti(KOL.behandeling, regel.behandeling, v => onWijzig({ behandeling: v }), 'Behandeling...')
         }
       </td>
 
       {/* B */}
       <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(regel.breedte, v => onWijzig({ breedte: v }), '—', 'text-blue-700')}
+        {ni(KOL.breedte, regel.breedte, v => onWijzig({ breedte: v }), '—', 'text-blue-700')}
+      </td>
+
+      {/* B aantal — vermenigvuldiger op de breedte */}
+      <td className="px-0.5 py-0.5 bg-blue-50/30">
+        {ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')}
       </td>
 
       {/* H */}
       <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(regel.hoogte, v => onWijzig({ hoogte: v }), '—', 'text-blue-700')}
+        {ni(KOL.hoogte, regel.hoogte, v => onWijzig({ hoogte: v }), '—', 'text-blue-700')}
+      </td>
+
+      {/* H aantal — vermenigvuldiger op de hoogte */}
+      <td className="px-0.5 py-0.5 bg-blue-50/30">
+        {ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')}
       </td>
 
       {/* L */}
       <td className="px-0.5 py-0.5 bg-blue-50/20">
-        {ni(regel.lengte, v => onWijzig({ lengte: v }), '—', 'text-blue-600')}
+        {ni(KOL.lengte, regel.lengte, v => onWijzig({ lengte: v }), '—', 'text-blue-600')}
+      </td>
+
+      {/* Factor — vermenigvuldiger op de hele regel */}
+      <td className="px-0.5 py-0.5">
+        {ni(KOL.factor, regel.factor, v => onWijzig({ factor: v }), '1')}
       </td>
 
       {/* Aantal */}
       <td className="px-0.5 py-0.5">
-        {ni(regel.aantal === 1 && !regel.breedte && !regel.lengte ? undefined : regel.aantal, v => onWijzig({ aantal: v ?? 1 }), '1')}
+        {ni(KOL.aantal, regel.aantal === 1 && !regel.breedte && !regel.lengte ? undefined : regel.aantal, v => onWijzig({ aantal: v ?? 1 }), '1')}
       </td>
 
       {/* Hoeveelheid */}
@@ -334,9 +423,9 @@ export default function MeetregelRij({
         <span className="text-xs  text-slate-400">{regel.eenheid}</span>
       </td>
 
-      {/* Omschrijving */}
+      {/* Opmerking */}
       <td className="px-1 py-0.5">
-        {ti(regel.omschrijving, v => onWijzig({ omschrijving: v }), 'Toelichting...')}
+        {ti(KOL.opmerking, regel.opmerking, v => onWijzig({ opmerking: v }), 'Opmerking...')}
       </td>
 
       {/* Verwijder */}

@@ -324,6 +324,9 @@ export interface Meetregel {
   meetstaat_id: string
   groep_id: string
   volgorde: number
+  /** Vrij label waar deze regel bij hoort (bijv. 'Kozijn type A'). Wordt overgenomen
+   *  naar de volgende regel, en is de naam die een bewaard element voorstelt. */
+  element?: string
   // Schilderwerk bibliotheek IDs (gekoppeld aan schilder_* tabellen)
   onderdeel_id?: string
   type_id?: string
@@ -334,12 +337,17 @@ export interface Meetregel {
   behandeling?: string
   // Formule uit schilder_types (gekopieerd bij type-selectie)
   formule?: string      // bijv. '2*B+2*H' voor m¹
-  omschrijving?: string           // handmatige override op auto-omschrijving
+  opmerking?: string              // vrije toelichting bij de regel
+  /** @deprecated oude naam van `opmerking`; wordt bij het hydrateren omgezet. */
+  omschrijving?: string
   bestek_kenmerk?: string         // RAL, spec, besteksreferentie
   // Maatvoering
   breedte?: number
+  breedte_aantal?: number         // vermenigvuldiger op breedte (leeg = 1)
   hoogte?: number
+  hoogte_aantal?: number          // vermenigvuldiger op hoogte (leeg = 1)
   lengte?: number
+  factor?: number                 // vermenigvuldiger op de hele regel (leeg = 1)
   aantal: number
   eenheid: string                 // 'm²' | 'm¹' | 'st'
   hoeveelheid_override?: number   // handmatige override
@@ -368,6 +376,25 @@ export interface MeetregelAggregaat {
   is_gesynchroniseerd: boolean
   aangepast_op: string
 }
+
+/**
+ * Een bewaarde set meetregels binnen één meetstaat, herbruikbaar in een andere
+ * groep. De regels zijn een *kopie*, geen verwijzing: een element blijft wat het
+ * was toen je het opsloeg, ook als de oorspronkelijke regels daarna veranderen.
+ * Elementen horen bij precies één meetstaat en zijn van buiten die meetstaat niet
+ * te zien — ze reizen mee in de calculatie-snapshot van het project.
+ */
+export interface MeetstaatElement {
+  id: string
+  meetstaat_id: string
+  naam: string
+  regels: MeetstaatElementRegel[]
+  aangemaakt_op: string
+  aangepast_op: string
+}
+
+export type MeetstaatElementRegel =
+  Omit<Meetregel, 'id' | 'meetstaat_id' | 'groep_id' | 'volgorde' | 'is_leeg' | 'aangepast_op'>
 
 // ─── Materialen bibliotheek ───────────────────────────────────────────────────
 

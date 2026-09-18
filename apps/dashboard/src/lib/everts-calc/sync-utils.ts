@@ -13,6 +13,7 @@ import {
   getMeetstaten,
   getMeetregels,
   getMeetregelAggregaten,
+  getMeetstaatElementen,
 } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, berekeningNummers } from '@/lib/everts-calc/calculations'
 import { isTekstregel } from '@/lib/everts-calc/types'
@@ -78,6 +79,10 @@ export function verzamelCalculatieSnapshot(projectId: string): CalculatieSnapsho
   const meetstaatIds = new Set(meetstaten.map(m => m.id))
   const meetregels   = getMeetregels().filter(r => meetstaatIds.has(r.meetstaat_id))
   const meetregel_aggregaten = getMeetregelAggregaten().filter(a => meetstaatIds.has(a.meetstaat_id))
+  const meetstaat_elementen  = getMeetstaatElementen().filter(e => meetstaatIds.has(e.meetstaat_id))
 
-  return { scenarios, groepen, regels, componenten, meetstaten, meetregels, meetregel_aggregaten }
+  return {
+    scenarios, groepen, regels, componenten,
+    meetstaten, meetregels, meetregel_aggregaten, meetstaat_elementen,
+  }
 }

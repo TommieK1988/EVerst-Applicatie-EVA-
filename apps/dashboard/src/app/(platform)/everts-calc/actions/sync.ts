@@ -5,7 +5,7 @@ import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import type {
   Scenario, Groep, Calculatieregel, Componentregel,
-  Meetstaat, Meetregel, MeetregelAggregaat,
+  Meetstaat, Meetregel, MeetregelAggregaat, MeetstaatElement,
 } from '@/lib/everts-calc/types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -147,6 +147,8 @@ export interface CalculatieSnapshot {
   meetstaten?: Meetstaat[]
   meetregels?: Meetregel[]
   meetregel_aggregaten?: MeetregelAggregaat[]
+  /** Bewaarde elementen per meetstaat. Optioneel: snapshots van vóór september 2026 hebben ze niet. */
+  meetstaat_elementen?: MeetstaatElement[]
 }
 
 /**
@@ -196,6 +198,7 @@ function beschermBevrorenScenarios(
     meetstaten: incoming.meetstaten,
     meetregels: incoming.meetregels,
     meetregel_aggregaten: incoming.meetregel_aggregaten,
+    meetstaat_elementen: incoming.meetstaat_elementen,
   }
 }
 
