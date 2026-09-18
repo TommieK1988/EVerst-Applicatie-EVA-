@@ -25,53 +25,13 @@ import {
 } from '@/lib/mailintake/actions'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL,
-  VELD_BETROUWBAAR, bepaalRoute,
+  bepaalRoute,
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
-
-const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
-const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
-const kop = { fontSize: 13, fontWeight: 600, marginBottom: 6 } as const
-
-const veldStijl: React.CSSProperties = {
-  width: '100%', padding: '7px 9px', borderRadius: 6, fontSize: 13,
-  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
-}
-
-/** Percentage-badge achter een veld. Onder de 80% is het nakijken waard. */
-function Zekerheid({ score }: { score: number | undefined }) {
-  if (score == null || score === 0) return null
-  const pct = Math.round(score * 100)
-  const goed = score >= VELD_BETROUWBAAR
-  return (
-    <span
-      title={goed ? 'EVA is hier zeker van' : 'Controleer dit veld'}
-      style={{
-        ...klein, marginLeft: 6, padding: '1px 5px', borderRadius: 4,
-        background: goed ? 'var(--su-100, #dcfce7)' : 'var(--wa-100, #fef3c7)',
-        color: goed ? 'var(--su-800, #166534)' : 'var(--wa-800, #92400e)',
-      }}
-    >
-      {pct}%
-    </span>
-  )
-}
-
-function Veld({
-  label, score, children,
-}: { label: string; score?: number; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ ...klein, display: 'flex', alignItems: 'center' }}>
-        {label}<Zekerheid score={score} />
-      </span>
-      {children}
-    </label>
-  )
-}
+import { klein, zacht, kop, veldStijl, Veld } from './panelen/velden'
 
 type Detail = {
   bericht: any
@@ -245,6 +205,16 @@ export default function BerichtBehandelen({
         plaats: velden.factuuradres_plaats ?? null,
       }
     : null
+
+  // Wat het opdrachtpaneel van de herkenning moet weten. Die stond alleen in het
+  // aanvraagformulier, waardoor het bij het kiezen van een offerte uit beeld
+  // verdween -- en het leek alsof EVA de opdrachtgever niet meer kende.
+  const herkendVoorOpdracht = {
+    opdrachtgever: klantNaam || null,
+    contactpersoonId,
+    contactpersoonNaam: contactpersonen.find(c => c.id === contactpersoonId)?.naam ?? null,
+    factuuradres: factuuradresVoorstel,
+  }
 
   const compleet = Boolean(klantId && omschrijving.trim() && werkmaatschappijId && categorieId && straat && huisnummer && postcode && stad)
   const topDuplicaat = detail.duplicaten[0]
@@ -503,6 +473,8 @@ export default function BerichtBehandelen({
             kandidaten={detail.duplicaten}
             relatieId={klantId}
             bewerkbaar={bewerkbaar}
+            herkend={herkendVoorOpdracht}
+            werkadres={{ straat, huisnummer }}
             voorstel={{
               opdrachtReferentie: velden.opdracht_referentie ?? null,
               opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
@@ -750,6 +722,8 @@ export default function BerichtBehandelen({
               kandidaten={detail.duplicaten}
               relatieId={klantId}
               bewerkbaar={bewerkbaar}
+              herkend={herkendVoorOpdracht}
+              werkadres={{ straat, huisnummer }}
               voorgekozenDossierId={gekozenOfferte}
               voorstel={{
                 opdrachtReferentie: velden.opdracht_referentie ?? null,

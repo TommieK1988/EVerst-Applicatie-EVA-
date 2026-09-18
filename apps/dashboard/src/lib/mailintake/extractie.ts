@@ -43,10 +43,28 @@ export const MODEL = 'claude-opus-5'
 const PRIJS_INVOER_PER_MTOK = 5.0
 const PRIJS_UITVOER_PER_MTOK = 25.0
 
-/** Bijlagen boven deze grenzen gaan niet naar het model; een mens leest ze beter. */
-const MAX_PDF_BYTES = 10 * 1024 * 1024
-const MAX_DOCUMENTEN = 5
-const MAX_AFBEELDINGEN = 3
+/**
+ * Bijlagen boven deze grenzen gaan niet naar het model; een mens leest ze beter.
+ *
+ * Ruim gezet, en dat is een bewuste keuze. De krappe variant hiervoor (10 MB, vijf
+ * documenten) liet precies het document weg dat de scope draagt -- het bestek is
+ * altijd het dikste bestand -- waarna EVA op een halve lezing ging routeren en
+ * uitsluiten. Liever een dure leesronde dan een goedkope aanname.
+ *
+ * De harde rem is niet van ons: één Anthropic-verzoek mag 32 MB zijn en base64
+ * maakt bestanden ~33% groter. Vandaar een totaalbudget over álle documenten samen.
+ */
+const MAX_PDF_BYTES = 20 * 1024 * 1024
+const MAX_DOCUMENTEN = 10
+const MAX_AFBEELDINGEN = 6
+const MAX_TOTAAL_BYTES = 20 * 1024 * 1024
+
+/**
+ * Ruimte voor het antwoord. Stond op 2000 en dat werd in élke run precies volgemaakt:
+ * het formulier kwam afgekapt terug en werd tóch als 'gereed' weggeschreven, met
+ * willekeurig lege velden tot gevolg. Zie ook de stop_reason-controle hieronder.
+ */
+const MAX_ANTWOORD_TOKENS = 6000
 
 const PDF_TYPES = new Set(['application/pdf'])
 const AFBEELDING_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'])
@@ -108,18 +126,24 @@ export async function extraheer(
   const gesorteerd = [...bijlagen].sort((a, b) => bijlageGewicht(a.bestandsnaam) - bijlageGewicht(b.bestandsnaam))
   let pdfs = 0
   let plaatjes = 0
+  let gebruikteBytes = 0
 
   for (const b of gesorteerd) {
     const type = (b.contentType ?? '').toLowerCase().split(';')[0].trim()
     if (PDF_TYPES.has(type)) {
       if (b.bytes.length > MAX_PDF_BYTES) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'PDF groter dan 10 MB' })
+        overgeslagen.push({ naam: b.bestandsnaam, reden: `PDF groter dan ${MAX_PDF_BYTES / 1024 / 1024} MB` })
         continue
       }
       if (pdfs >= MAX_DOCUMENTEN) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'meer dan 5 documenten' })
+        overgeslagen.push({ naam: b.bestandsnaam, reden: `meer dan ${MAX_DOCUMENTEN} documenten` })
         continue
       }
+      if (gebruikteBytes + b.bytes.length > MAX_TOTAAL_BYTES) {
+        overgeslagen.push({ naam: b.bestandsnaam, reden: 'paste niet meer in één verzoek' })
+        continue
+      }
+      gebruikteBytes += b.bytes.length
       inhoud.push({ type: 'text', text: `<bijlage naam="${b.bestandsnaam}" grootte="${Math.round(b.bytes.length / 1024)} kB">` })
       inhoud.push({
         type: 'document',
@@ -130,13 +154,18 @@ export async function extraheer(
       pdfs++
     } else if (AFBEELDING_TYPES.has(type)) {
       if (plaatjes >= MAX_AFBEELDINGEN) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'meer dan 3 afbeeldingen' })
+        overgeslagen.push({ naam: b.bestandsnaam, reden: `meer dan ${MAX_AFBEELDINGEN} afbeeldingen` })
         continue
       }
       if (b.bytes.length > 5 * 1024 * 1024) {
         overgeslagen.push({ naam: b.bestandsnaam, reden: 'afbeelding groter dan 5 MB' })
         continue
       }
+      if (gebruikteBytes + b.bytes.length > MAX_TOTAAL_BYTES) {
+        overgeslagen.push({ naam: b.bestandsnaam, reden: 'paste niet meer in één verzoek' })
+        continue
+      }
+      gebruikteBytes += b.bytes.length
       inhoud.push({ type: 'text', text: `<bijlage naam="${b.bestandsnaam}" soort="foto">` })
       inhoud.push({
         type: 'image',
@@ -173,10 +202,10 @@ export async function extraheer(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bericht = await (client.messages.create as any)({
       model: MODEL,
-      max_tokens: 2000,
-      // Bounded invulwerk; het schema doet het zware werk. Volledige diepgang
-      // levert hier weinig op en kost per mail geld.
-      output_config: { effort: 'medium' },
+      max_tokens: MAX_ANTWOORD_TOKENS,
+      // Het formulier is lang en er zit een bestek bij; op 'medium' viel het antwoord
+      // eerder om in de limiet. Grondig lezen is hier het hele punt.
+      output_config: { effort: 'high' },
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       tools: [LEVER_EXTRACTIE_TOOL],
       tool_choice: { type: 'tool', name: LEVER_EXTRACTIE_TOOL.name },
@@ -188,6 +217,18 @@ export async function extraheer(
     const kostenCent = Math.ceil(
       ((invoer / 1_000_000) * PRIJS_INVOER_PER_MTOK + (uitvoer / 1_000_000) * PRIJS_UITVOER_PER_MTOK) * 100,
     )
+
+    // Een afgekapt antwoord levert een half ingevuld formulier op dat er compleet
+    // uitziet. Dat is de gevaarlijkste uitkomst van alle drie, want alles erna --
+    // route, duplicaten, uitsluiting -- gaat er dan vanuit dat de velden kloppen.
+    if (bericht.stop_reason === 'max_tokens') {
+      return {
+        ...leeg,
+        fout: 'Het model kwam niet uit met de ruimte voor het antwoord; het formulier zou half ingevuld zijn.',
+        invoerTokens: invoer, uitvoerTokens: uitvoer, kostenCent,
+        gelezenBijlagen: gelezen, overgeslagenBijlagen: overgeslagen,
+      }
+    }
 
     const blok = (bericht.content ?? []).find((b: any) => b.type === 'tool_use' && b.name === LEVER_EXTRACTIE_TOOL.name)
     if (!blok) {

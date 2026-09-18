@@ -33,7 +33,7 @@ import { postbusSoortVoorMail } from './regels'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
 import {
-  AFZENDER_ONBEKEND, SOORT_ONZEKER, DUPLICAAT_HARD, MAIL_SOORT_LABELS,
+  AFZENDER_ONBEKEND, SOORT_ONZEKER, DUPLICAAT_HARD, MAIL_SOORT_LABELS, WERK_SOORTEN,
   type PostbusRij, type MailSoort,
 } from './types'
 
@@ -234,6 +234,17 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       ruwe_uitvoer: ex.ruweUitvoer,
     })
 
+    // Vastleggen wélke bijlagen het model werkelijk onder ogen kreeg. Dit stond in
+    // het datamodel maar werd nergens geschreven, dus `aan_ai_gegeven` was altijd
+    // false -- en daarmee onbruikbaar om te controleren of EVA de bon had gelezen.
+    if (ex.gelezenBijlagen.length > 0) {
+      await supabase.from('mailintake_bijlagen')
+        .update({ aan_ai_gegeven: true })
+        .eq('bericht_id', berichtId)
+        .in('bestandsnaam', ex.gelezenBijlagen)
+        .then(() => undefined, () => undefined)
+    }
+
     if (!ex.ok || !ex.data) {
       // De AI viel om. Niet weggooien: leg het voor, met de fout erbij.
       const eindStatus = pogingen >= MAX_POGINGEN ? 'wacht_op_mens' : 'mislukt'
@@ -406,12 +417,15 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     })
 
     // ── Scope-samenvatting ──────────────────────────────────────────────────
-    // Alleen bij een offerteaanvraag: daar bespaart een scope de meeste tijd, en
-    // bij een opdrachtbon of servicedeskbon is hij meestal één regel en de tweede
-    // AI-ronde de kosten niet waard. Voor die soorten staat de knop er wel.
+    // Voor élke mail die over werk gaat, niet alleen een offerteaanvraag. Dit is de
+    // ronde die álle bijlagen ruim doorleest; hem overslaan betekende dat EVA bij een
+    // opdrachtbon alleen de krappe veldextractie zag en op die halve lezing ging
+    // routeren en uitsluiten. De bon blijkt in de praktijk ook zelden één regel:
+    // hij verwijst naar een bestek, noemt voorwaarden en stelt eisen aan de uitvoering.
+    //
     // Faalt de samenvatting, dan gaat het bericht gewoon door — een scope is nooit
     // belangrijk genoeg om een aanvraag op te laten sneuvelen.
-    if (ex.data.soort === 'offerteaanvraag') {
+    if (ex.data.soort != null && WERK_SOORTEN.includes(ex.data.soort)) {
       log.stap('werkzaamheden samenvatten')
       const wz = await maakWerkzaamhedenSamenvatting(berichtId).catch(() => null)
       if (wz) uit.kostenCent += wz.kostenCent

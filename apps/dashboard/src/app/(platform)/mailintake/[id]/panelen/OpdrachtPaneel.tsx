@@ -25,6 +25,7 @@ import {
 } from '@/lib/mailintake/actions'
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { DUPLICAAT_HARD } from '@/lib/mailintake/types'
+import { adresOvereenkomst } from '@/lib/mailintake/regels'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const kop = { fontSize: 13, fontWeight: 600, marginBottom: 6 } as const
@@ -43,7 +44,11 @@ export interface OfferteKandidaat {
   score: number
   redenen: string[]
   soort: string
+  /** Werkadres van het dossier; alleen gevuld voor de lijst uit de relatie. */
+  adres?: string | null
 }
+
+type KandidaatMetAdres = OfferteKandidaat
 
 type Factuuradres = {
   id: string
@@ -55,13 +60,27 @@ type Factuuradres = {
 
 export default function OpdrachtPaneel({
   berichtId, kandidaten, relatieId, bewerkbaar,
-  voorstel, onKlaar, voorgekozenDossierId,
+  voorstel, onKlaar, voorgekozenDossierId, herkend, werkadres,
 }: {
   berichtId: string
   kandidaten: OfferteKandidaat[]
   /** De herkende opdrachtgever; nodig om factuuradressen op te halen. */
   relatieId: string | null
   bewerkbaar: boolean
+  /**
+   * Wat EVA uit de mail heeft herkend. Stond eerder alleen in het aanvraagformulier,
+   * waardoor het bij het kiezen van een offerte uit beeld verdween en het leek alsof
+   * EVA de opdrachtgever en contactpersoon niet meer kende.
+   */
+  herkend: {
+    opdrachtgever: string | null
+    contactpersoonId: string | null
+    contactpersoonNaam: string | null
+    /** Het factuuradres zoals het op de opdracht staat. */
+    factuuradres: { naam: string | null; straat: string | null; postcode: string | null; plaats: string | null } | null
+  }
+  /** Het werkadres uit de mail; bepaalt welke offertes bovenaan komen. */
+  werkadres: { straat: string | null; huisnummer: string | null }
   voorstel: {
     opdrachtReferentie: string | null
     opdrachtdatum: string | null
@@ -93,9 +112,20 @@ export default function OpdrachtPaneel({
   const [opmerking, setOpmerking] = useState(voorstel.klantOpmerkingen ?? '')
 
   const [adressen, setAdressen] = useState<Factuuradres[] | null>(null)
-  const [adresKeuze, setAdresKeuze] = useState<'offerte' | 'bestaand' | 'nieuw'>('offerte')
+  // Staat er een factuuradres op de opdracht, dan is dát de beginstand: de klant
+  // heeft het er niet voor niets bij gezet.
+  const [adresKeuze, setAdresKeuze] = useState<'opdracht' | 'offerte' | 'bestaand' | 'nieuw'>(
+    herkend.factuuradres ? 'opdracht' : 'offerte',
+  )
   const [adresId, setAdresId] = useState<string>('')
   const [nieuwAdres, setNieuwAdres] = useState({ label: '', straat: '', postcode: '', plaats: '' })
+
+  // De contactpersoon van de offerte is meestal de juiste; wie de opdracht stuurt
+  // lang niet altijd. Daarom uit, en zichtbaar.
+  const [contactOvernemen, setContactOvernemen] = useState(false)
+  const [opDossier, setOpDossier] = useState<{
+    contactpersoonNaam: string | null; factuuradresLabel: string | null; werkadres: string | null
+  } | null>(null)
 
   const [bezig, setBezig] = useState(false)
   const [waarschuwing, setWaarschuwing] = useState<string | null>(null)
@@ -103,13 +133,45 @@ export default function OpdrachtPaneel({
   const alleKandidaten = [...offertes, ...extra]
   const gekozen = alleKandidaten.find(k => k.dossierId === dossierId) ?? null
 
+  // Een beheerder heeft tientallen lopende offertes; die allemaal onder elkaar zetten
+  // maakt kiezen moeilijker in plaats van makkelijker. Wat op dit werkadres slaat --
+  // of een eigen duplicaatsignaal heeft -- staat bovenaan; de rest gaat achter een
+  // uitklapper, want soms is de juiste offerte er wél een zonder adresoverlap.
+  function adresRang(k: KandidaatMetAdres): 'nummer' | 'straat' | null {
+    const bron = [k.adres, k.titel].filter(Boolean).join(' ')
+    if (!bron) return null
+    const uit = adresOvereenkomst(werkadres.straat, werkadres.huisnummer, bron)
+    return uit === 'straat_en_nummer' ? 'nummer' : uit === 'straat' ? 'straat' : null
+  }
+
+  const gewogen = alleKandidaten.map(k => {
+    const rang = adresRang(k)
+    return {
+      k,
+      relevant: k.score > 0 || rang != null || k.dossierId === dossierId,
+      sorteer: (k.score > 0 ? 100 : 0) + (rang === 'nummer' ? 50 : rang === 'straat' ? 20 : 0),
+      adresReden: rang === 'nummer' ? 'Zelfde straat en huisnummer'
+        : rang === 'straat' ? 'Zelfde straat' : null,
+    }
+  }).sort((a, b) => b.sorteer - a.sorteer)
+
+  const belangrijk = gewogen.filter(g => g.relevant)
+  const overig = gewogen.filter(g => !g.relevant)
+
   // Het gekozen dossier moet in de offertefase staan; anders valt er niets te winnen.
   React.useEffect(() => {
     let weg = false
     setWaarschuwing(null)
+    setOpDossier(null)
     if (!dossierId) return
     void toetsOfferteVoorOpdracht(dossierId).then(res => {
-      if (!weg && !res.ok) setWaarschuwing(res.error)
+      if (weg) return
+      if (!res.ok) { setWaarschuwing(res.error); return }
+      setOpDossier({
+        contactpersoonNaam: res.contactpersoonNaam,
+        factuuradresLabel: res.factuuradresLabel,
+        werkadres: res.werkadres,
+      })
     })
     return () => { weg = true }
   }, [dossierId])
@@ -134,6 +196,7 @@ export default function OpdrachtPaneel({
             score: 0,
             redenen: [`Lopende offerte van deze opdrachtgever${d.substatus ? ` (${d.substatus})` : ''}`],
             soort: 'offerte_match',
+            adres: d.werkadres,
           }))
         return nieuw.length ? [...e, ...nieuw] : e
       })
@@ -191,6 +254,19 @@ export default function OpdrachtPaneel({
         const res = await bewaarFactuuradresVoorIntake(relatieId, nieuwAdres)
         if (!res.ok) { toast.error(res.error ?? 'Factuuradres opslaan mislukt'); return }
         factuuradresId = res.id
+      } else if (adresKeuze === 'opdracht' && relatieId && herkend.factuuradres) {
+        // Het adres van de opdracht wordt pas nu vastgelegd bij de relatie -- niet bij
+        // het inlezen, want dan zou elke mail met een postbusregel een factuuradres
+        // aanmaken dat niemand gekozen heeft.
+        const fa = herkend.factuuradres
+        const res = await bewaarFactuuradresVoorIntake(relatieId, {
+          label: fa.naam ?? 'Uit de opdracht',
+          straat: fa.straat ?? '',
+          postcode: fa.postcode ?? '',
+          plaats: fa.plaats ?? '',
+        })
+        if (!res.ok) { toast.error(res.error ?? 'Factuuradres opslaan mislukt'); return }
+        factuuradresId = res.id
       }
 
       const res = await bevestigOpdrachtOpDossier(berichtId, dossierId, {
@@ -198,6 +274,7 @@ export default function OpdrachtPaneel({
         opdrachtdatum: datum || null,
         klantOpmerkingen: opmerking.trim() || null,
         factuuradresId,
+        contactpersoonOpDossier: contactOvernemen,
         forceerBouw7: forceer,
       })
 
@@ -239,8 +316,79 @@ export default function OpdrachtPaneel({
     }
   }
 
+  function regel(g: { k: KandidaatMetAdres; adresReden: string | null }) {
+    const k = g.k
+    const redenen = [...(g.adresReden ? [g.adresReden] : []), ...k.redenen]
+    return (
+      <label
+        key={k.dossierId}
+        style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start', padding: 8, borderRadius: 6,
+          border: `1px solid ${k.dossierId === dossierId ? 'var(--primary-border, #2b4a7d)' : 'var(--border)'}`,
+          background: k.dossierId === dossierId ? 'var(--surface-2, #f6f8fb)' : 'transparent',
+          cursor: bewerkbaar ? 'pointer' : 'default',
+        }}
+      >
+        <input
+          type="radio"
+          name="offertedossier"
+          checked={k.dossierId === dossierId}
+          onChange={() => setDossierId(k.dossierId)}
+          disabled={!bewerkbaar}
+          style={{ marginTop: 3 }}
+        />
+        <span style={{ fontSize: 13 }}>
+          <strong>{k.dossiernummer ?? 'zonder nummer'}</strong>
+          {k.titel ? ` — ${k.titel}` : ''}
+          {k.klantnaam ? <span style={klein}> · {k.klantnaam}</span> : null}
+          {redenen.length > 0 && (
+            <span style={{ ...klein, display: 'block' }}>{redenen.join(' · ')}</span>
+          )}
+        </span>
+      </label>
+    )
+  }
+
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Wat EVA uit de mail heeft gehaald. Dit hoort boven de keuze te staan: het is
+          de grond waarop je de offerte aanwijst, en zonder dit blok leek het alsof de
+          opdrachtgever en contactpersoon waren kwijtgeraakt. */}
+      <div style={{ padding: 10, borderRadius: 6, background: 'var(--surface-2, #f6f8fb)' }}>
+        <div style={kop}>Uit deze mail herkend</div>
+        <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span>Opdrachtgever: <strong>{herkend.opdrachtgever ?? 'niet herkend'}</strong></span>
+          <span>Contactpersoon: <strong>{herkend.contactpersoonNaam ?? 'niet herkend'}</strong></span>
+          {werkadres.straat && (
+            <span style={klein}>
+              Werkadres: {[werkadres.straat, werkadres.huisnummer].filter(Boolean).join(' ')}
+            </span>
+          )}
+        </div>
+        {opDossier && (
+          <div style={{ ...klein, marginTop: 6 }}>
+            Op het gekozen dossier staat nu:{' '}
+            {opDossier.contactpersoonNaam ?? 'geen contactpersoon'}
+            {opDossier.werkadres ? ` · ${opDossier.werkadres}` : ''}
+            {opDossier.factuuradresLabel ? ` · factuur naar ${opDossier.factuuradresLabel}` : ''}
+          </div>
+        )}
+        {herkend.contactpersoonId && opDossier && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 8 }}>
+            <input
+              type="checkbox" checked={contactOvernemen} disabled={!bewerkbaar}
+              onChange={e => setContactOvernemen(e.target.checked)}
+            />
+            <span>
+              {herkend.contactpersoonNaam ?? 'Deze contactpersoon'} ook op het dossier zetten
+              {opDossier.contactpersoonNaam && (
+                <span style={klein}> — vervangt {opDossier.contactpersoonNaam}</span>
+              )}
+            </span>
+          </label>
+        )}
+      </div>
+
       <div>
         <div style={kop}>Bij welke offerte hoort deze opdracht?</div>
         {alleKandidaten.length === 0 && (
@@ -256,35 +404,20 @@ export default function OpdrachtPaneel({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-          {alleKandidaten.map(k => (
-            <label
-              key={k.dossierId}
-              style={{
-                display: 'flex', gap: 8, alignItems: 'flex-start', padding: 8, borderRadius: 6,
-                border: `1px solid ${k.dossierId === dossierId ? 'var(--primary-border, #2b4a7d)' : 'var(--border)'}`,
-                background: k.dossierId === dossierId ? 'var(--surface-2, #f6f8fb)' : 'transparent',
-                cursor: bewerkbaar ? 'pointer' : 'default',
-              }}
-            >
-              <input
-                type="radio"
-                name="offertedossier"
-                checked={k.dossierId === dossierId}
-                onChange={() => setDossierId(k.dossierId)}
-                disabled={!bewerkbaar}
-                style={{ marginTop: 3 }}
-              />
-              <span style={{ fontSize: 13 }}>
-                <strong>{k.dossiernummer ?? 'zonder nummer'}</strong>
-                {k.titel ? ` — ${k.titel}` : ''}
-                {k.klantnaam ? <span style={klein}> · {k.klantnaam}</span> : null}
-                {k.redenen.length > 0 && (
-                  <span style={{ ...klein, display: 'block' }}>{k.redenen.join(' · ')}</span>
-                )}
-              </span>
-            </label>
-          ))}
+          {belangrijk.map(g => regel(g))}
         </div>
+
+        {overig.length > 0 && (
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ ...klein, cursor: 'pointer' }}>
+              Nog {overig.length} andere lopende {overig.length === 1 ? 'offerte' : 'offertes'} van
+              deze opdrachtgever — op een ander adres
+            </summary>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+              {overig.map(g => regel(g))}
+            </div>
+          </details>
+        )}
 
         {bewerkbaar && (
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
@@ -343,12 +476,25 @@ export default function OpdrachtPaneel({
           De opdrachtgever blijft dezelfde; dit gaat alleen over het adres waar de factuur heen gaat.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-          {(['offerte', 'bestaand', 'nieuw'] as const).map(k => (
+          {(['opdracht', 'offerte', 'bestaand', 'nieuw'] as const)
+            .filter(k => k !== 'opdracht' || herkend.factuuradres != null)
+            .map(k => (
             <label key={k} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
               <input
                 type="radio" name="factuuradres" checked={adresKeuze === k}
                 onChange={() => setAdresKeuze(k)} disabled={!bewerkbaar}
               />
+              {k === 'opdracht' && herkend.factuuradres && (
+                <span>
+                  Zoals op de opdracht
+                  <span style={klein}>
+                    {' — '}
+                    {[herkend.factuuradres.naam, herkend.factuuradres.straat,
+                      herkend.factuuradres.postcode, herkend.factuuradres.plaats]
+                      .filter(Boolean).join(', ')}
+                  </span>
+                </span>
+              )}
               {k === 'offerte' && (
                 <span>
                   Zoals op de offerte

@@ -126,6 +126,8 @@ export async function bevestigOpdrachtOpDossier(
     opdrachtdatum?: string | null
     klantOpmerkingen?: string | null
     factuuradresId?: string | null
+    /** Zet de herkende contactpersoon ook op het dossier. */
+    contactpersoonOpDossier?: boolean
     /** Afrekenen op nacalculatie: geen aanneemsom naar Bouw7. */
     regie?: boolean
     /** Alleen na een expliciete tweede klik bij een Bouw7-conflict. */
@@ -158,6 +160,7 @@ export async function bevestigOpdrachtOpDossier(
     opdrachtdatum: invoer?.opdrachtdatum ?? bericht.ontvangen_op?.slice(0, 10) ?? null,
     klantOpmerkingen: invoer?.klantOpmerkingen ?? null,
     factuuradresId: invoer?.factuuradresId,
+    contactpersoonOpDossier: invoer?.contactpersoonOpDossier === true,
     regie: invoer?.regie === true,
     relatieId: bericht.relatie_id,
     contactpersoonId: bericht.contactpersoon_id,
@@ -184,7 +187,15 @@ export async function bevestigOpdrachtOpDossier(
  * te scoren en het werd weggegooid.
  */
 export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
-  { dossierId: string; dossiernummer: string | null; titel: string | null; substatus: string | null; aangemaakt: string }[]
+  {
+    dossierId: string
+    dossiernummer: string | null
+    titel: string | null
+    substatus: string | null
+    aangemaakt: string
+    /** Om de lijst op het werkadres van de mail te kunnen sorteren. */
+    werkadres: string | null
+  }[]
 > {
   await vereisRecht('mailintake', 'lezen')
   const supabase = createAdminClient()
@@ -194,7 +205,7 @@ export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
 
   const { data } = await supabase
     .from('dossiers')
-    .select('id, dossiernummer, titel, offerte_substatus, created_at')
+    .select('id, dossiernummer, titel, offerte_substatus, created_at, werkadres_straat, werkadres_huisnummer, werkadres_stad')
     .eq('klant_id', relatieId)
     .eq('hoofdstatus', 'offerte')
     .gte('created_at', vanaf.toISOString())
@@ -207,6 +218,8 @@ export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
     titel: d.titel ?? null,
     substatus: d.offerte_substatus ?? null,
     aangemaakt: d.created_at,
+    werkadres: [d.werkadres_straat, d.werkadres_huisnummer, d.werkadres_stad, d.titel]
+      .filter(Boolean).join(' ') || null,
   }))
 }
 
@@ -277,7 +290,7 @@ export async function zoekDossierVoorIntake(term: string): Promise<
 
 /** Kan deze offerte gewonnen worden? Voor de knop in het behandelscherm. */
 export async function toetsOfferteVoorOpdracht(dossierId: string): Promise<
-  { ok: true; dossiernummer: string | null; titel: string | null } | { ok: false; error: string }
+  Awaited<ReturnType<typeof toetsOfferteDossier>>
 > {
   await vereisRecht('mailintake', 'lezen')
   return toetsOfferteDossier(dossierId)

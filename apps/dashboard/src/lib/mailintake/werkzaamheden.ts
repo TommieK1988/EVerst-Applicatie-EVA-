@@ -35,7 +35,7 @@ import { kortIn } from './prompt'
 export const WERKZAAMHEDEN_PROMPT_VERSIE = '2026-09-10.2'
 
 /** Ruimer dan de veldextractie: dit is de ronde waar het bestek juist wél in moet. */
-const MAX_TOKENS = 4000
+const MAX_TOKENS = 8000
 const MAX_BODY_TEKENS = 40_000
 const MAX_PDF_BYTES = 20 * 1024 * 1024
 const MAX_DOCUMENTEN = 10
@@ -69,7 +69,7 @@ export const werkzaamhedenSchema = z.object({
 export type Werkzaamheden = z.infer<typeof werkzaamhedenSchema>
 
 export const SYSTEM_PROMPT = `Je bent calculator bij een Nederlands onderhouds- en renovatiebedrijf.
-Je krijgt een binnengekomen offerteaanvraag met de bijbehorende documenten, en je schrijft op wat er
+Je krijgt een binnengekomen aanvraag, opdracht of servicedeskbon met de bijbehorende documenten, en je schrijft op wat er
 gevraagd wordt. Niet wat er in de mail staat — wat er aan werk gevraagd wordt.
 
 HOE JE SCHRIJFT
@@ -94,7 +94,7 @@ VIER REGELS DIE ERTOE DOEN
 4. Wat onduidelijk is krijgt een eigen regel die begint met "Onduidelijk:" en soort "onduidelijk".
    Maar wees hier streng: HOOGSTENS DRIE zulke regels, en alleen voor iets dat de prijsvorming
    echt blokkeert of waar de aanvraag zichzelf tegenspreekt. Dat er geen maten, oppervlaktes,
-   tekeningen of foto's zijn meegestuurd is bij een offerteaanvraag de normale gang van zaken en
+   tekeningen of foto's zijn meegestuurd is bij een aanvraag of opdracht de normale gang van zaken en
    komt uit de opname — dat is dus GEEN onduidelijkheid en noem je niet.
 
 VOLGORDE
@@ -329,6 +329,16 @@ export async function vatWerkzaamhedenSamen(inv: WerkzaamhedenInvoer): Promise<W
       ((invoerTokens / 1_000_000) * PRIJS_INVOER_PER_MTOK +
        (uitvoerTokens / 1_000_000) * PRIJS_UITVOER_PER_MTOK) * 100,
     )
+
+    // Een afgekapte samenvatting mist de laatste regels, en dat zijn juist de
+    // "Optioneel aanbieden:" en "Onduidelijk:"-regels: die staan achteraan.
+    if (bericht.stop_reason === 'max_tokens') {
+      return {
+        ...leeg,
+        fout: 'Het model kwam niet uit met de ruimte; de samenvatting zou halverwege afbreken.',
+        gelezen, gemist, invoerTokens, uitvoerTokens, kostenCent,
+      }
+    }
 
     const blok = (bericht.content ?? []).find(
       (b: any) => b.type === 'tool_use' && b.name === LEVER_WERKZAAMHEDEN_TOOL.name,

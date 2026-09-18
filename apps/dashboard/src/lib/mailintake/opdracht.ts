@@ -42,6 +42,12 @@ export interface OpdrachtInvoer {
   /** Een afwijkend factuuradres bij dezelfde opdrachtgever. */
   factuuradresId?: string | null
   /**
+   * Zet de uit de mail herkende contactpersoon ook op het dossier. Standaard niet:
+   * de offerte heeft zijn eigen contactpersoon en die is meestal de juiste. Wie de
+   * opdracht stuurt is dat lang niet altijd -- soms is het de administratie.
+   */
+  contactpersoonOpDossier?: boolean
+  /**
    * De opdracht wordt op nacalculatie afgerekend. Zet de facturatiemethode op regie
    * en houdt de aanneemsom uit Bouw7 -- een vaste prijs zou daar een bedrag
    * suggereren dat niemand heeft afgesproken.
@@ -79,13 +85,25 @@ export interface OpdrachtResultaat {
  * databasefout opleveren in plaats van een leesbare melding.
  */
 export async function toetsOfferteDossier(dossierId: string): Promise<
-  { ok: true; dossiernummer: string | null; titel: string | null }
+  {
+    ok: true
+    dossiernummer: string | null
+    titel: string | null
+    /** Wat er nú op dit dossier staat -- het scherm zet dat naast wat de mail zegt. */
+    contactpersoonId: string | null
+    contactpersoonNaam: string | null
+    factuuradresLabel: string | null
+    werkadres: string | null
+  }
   | { ok: false; error: string }
 > {
   const supabase = createAdminClient()
+  // Bewust zonder embeds: tussen deze tabellen lopen meerdere sleutels, en een
+  // dubbelzinnige embed geeft PostgREST-fout 300 die er als "niets gevonden" uitziet.
+  // Twee losse lookups op een id zijn hier goedkoper dan die valkuil.
   const { data: d } = await supabase
     .from('dossiers')
-    .select('dossiernummer, titel, hoofdstatus, offerte_substatus, opdracht_substatus')
+    .select('dossiernummer, titel, hoofdstatus, offerte_substatus, opdracht_substatus, werkadres_straat, werkadres_postcode, werkadres_stad, contactpersoon_id, factuuradres_id')
     .eq('id', dossierId)
     .maybeSingle()
 
@@ -103,7 +121,25 @@ export async function toetsOfferteDossier(dossierId: string): Promise<
       error: `${d.dossiernummer ?? 'Dit dossier'} staat nog in de aanvraagfase. Er is nog geen offerte om te winnen — zet hem eerst op verzonden.`,
     }
   }
-  return { ok: true, dossiernummer: d.dossiernummer ?? null, titel: d.titel ?? null }
+  const cp = d.contactpersoon_id
+    ? (await supabase.from('contactpersonen')
+        .select('voornaam, achternaam').eq('id', d.contactpersoon_id).maybeSingle()).data
+    : null
+  const fa = d.factuuradres_id
+    ? (await supabase.from('relatie_factuuradressen')
+        .select('label, straat, plaats').eq('id', d.factuuradres_id).maybeSingle()).data
+    : null
+  return {
+    ok: true,
+    dossiernummer: d.dossiernummer ?? null,
+    titel: d.titel ?? null,
+    contactpersoonId: d.contactpersoon_id ?? null,
+    contactpersoonNaam: cp ? [cp.voornaam, cp.achternaam].filter(Boolean).join(' ') || null : null,
+    factuuradresLabel: fa
+      ? [fa.label, fa.straat, fa.plaats].filter(Boolean).join(' · ') || null
+      : null,
+    werkadres: [d.werkadres_straat, d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(', ') || null,
+  }
 }
 
 /**
@@ -170,6 +206,9 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   const velden: Record<string, string | null> = {}
   if (inv.opdrachtReferentie) velden.opdracht_referentie = inv.opdrachtReferentie
   if (inv.factuuradresId !== undefined) velden.factuuradres_id = inv.factuuradresId ?? null
+  if (inv.contactpersoonOpDossier && inv.contactpersoonId) {
+    velden.contactpersoon_id = inv.contactpersoonId
+  }
   if (Object.keys(velden).length) {
     const { updateDossierInfo } = await import('@/lib/dossiers/actions')
     await updateDossierInfo(inv.dossierId, velden).catch(() => undefined)
