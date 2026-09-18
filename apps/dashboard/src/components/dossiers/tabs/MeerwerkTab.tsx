@@ -338,7 +338,11 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
           {data.regels.length === 0 ? (
             <p className="text-[13px] text-neutral-500">Nog geen meerwerkregels op dit dossier.</p>
           ) : (
-            <table className="w-full border-collapse">
+            /* Scrollen in plaats van knijpen: de drie keuzelijsten houden hun breedte, dus zonder
+               minimumbreedte werd de actiekolom in een smal venster tot onleesbaar samengeperst en
+               viel "Uit offerte" buiten de kaart. */
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[1040px] border-collapse">
               <thead>
                 <tr className="border-b-2 border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">
                   <th className="py-1.5 pr-2">#</th>
@@ -458,45 +462,42 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                       )}
                     </td>
                     <td className="py-2 px-2 text-right tabular-nums text-neutral-500">{fmt(r.effectiefIncl)}</td>
-                    <td className="py-2 pl-2 text-right whitespace-nowrap">
+                    {/*
+                      De acties stonden op één regel (`whitespace-nowrap`) met een punt ertussen. Met
+                      vijf acties -- en "Uit offerte" is de vijfde -- werd die kolom breder dan de kaart
+                      en schoof de laatste actie buiten beeld. Ze mogen nu afbreken; de scheidingspunten
+                      zijn daarmee overbodig geworden en zouden bij een afbreking aan een regeleinde
+                      blijven hangen.
+                    */}
+                    <td className="py-2 pl-2">
                       {readOnly ? (
-                        <span className="text-neutral-300">—</span>
+                        <span className="block text-right text-neutral-300">—</span>
                       ) : (
-                        <>
+                        <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5">
                           {!r.bouw7_line_id && (
-                            <>
-                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                                onClick={() => naarBouw7(r)}>Naar Bouw7</button>
-                              <span className="mx-1 text-neutral-300">·</span>
-                            </>
+                            <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                              onClick={() => naarBouw7(r)}>Naar Bouw7</button>
                           )}
                           {/* Alleen zinvol bij aangenomen meerwerk met een eigen offerte: daar valt een
                               bedrag uit over te nemen. Regie en stelposten rekenen af op wat er geboekt is. */}
                           {r.quote_id && r.afrekenwijze === 'aangenomen' && !r.is_stelpost && (
-                            <>
-                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                                onClick={() => uitOfferte(r)}
-                                title="Neem bedrag, verwachte kosten en termijnen over uit de gekoppelde offerte">
-                                Uit offerte
-                              </button>
-                              <span className="mx-1 text-neutral-300">·</span>
-                            </>
+                            <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                              onClick={() => uitOfferte(r)}
+                              title="Neem bedrag, verwachte kosten en termijnen over uit de gekoppelde offerte">
+                              Uit offerte
+                            </button>
                           )}
                           <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                             onClick={() => calculatie(r)}>
                             Calculatie
                           </button>
                           {r.quote_id && (
-                            <>
-                              <span className="mx-1 text-neutral-300">·</span>
-                              <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                                onClick={() => openOfferte(r)}>Open offerte</button>
-                            </>
+                            <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
+                              onClick={() => openOfferte(r)}>Open offerte</button>
                           )}
-                          <span className="mx-1 text-neutral-300">·</span>
                           <button className="text-[11px] font-medium text-error-600 hover:underline" disabled={bezig}
                             onClick={() => verwijder(r)}>Verwijder</button>
-                        </>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -512,6 +513,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                 </tr>
               </tfoot>
             </table>
+            </div>
           )}
           <p className="mt-4 text-[11px] text-neutral-500">
             Meerwerkregels uit Bouw7 worden automatisch geïmporteerd (herkenbaar aan “uit Bouw7”). Bij die regels is Bouw7 leidend
