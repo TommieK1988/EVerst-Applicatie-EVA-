@@ -20,6 +20,10 @@
  * omdat er iets anders is afgesproken. In één veld is achteraf niet meer te zien of een bedrag
  * berekend was of afgesproken.
  *
+ * Een losse regel heeft geen boekingen onder zich en stelt daarom zijn eigen aantal, eenheid en
+ * prijs samen: het bedrag in het veld is daar de prijs per eenheid, en het regelbedrag aantal maal
+ * die prijs. Bij een afgeleide regel komen aantal en eenheid uit de boekingen en liggen ze vast.
+ *
  * Elke handeling slaat meteen op. Een tabel met een losse Opslaan-knop nodigt uit tot half werk: je
  * vinkt drie regels uit, sluit het venster en weet niet of het is meegegaan.
  *
@@ -300,7 +304,7 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
   async function losseRegel() {
     const naam = await vraagTekst({
       titel: 'Losse regel toevoegen',
-      omschrijving: 'Een regel die niet uit een boeking volgt. Het bedrag vul je zo in de tabel in.',
+      omschrijving: 'Een regel die niet uit een boeking volgt. Aantal, eenheid en prijs vul je zo in de tabel in.',
       label: 'Omschrijving op de factuur',
       placeholder: 'bijv. Voorrijkosten',
       verplicht: true,
@@ -647,13 +651,13 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
               )}
             </div>
             <div className={scrollBak}>
-              <table className="w-full min-w-[530px] table-fixed border-collapse">
+              <table className="w-full min-w-[545px] table-fixed border-collapse">
                 <colgroup>
                   <col style={{ width: 34 }} />
                   <col style={{ width: 30 }} />
                   <col style={{ width: '99%' }} />
-                  <col style={{ width: 68 }} />
-                  <col style={{ width: 112 }} />
+                  <col style={{ width: 126 }} />
+                  <col style={{ width: 108 }} />
                   <col style={{ width: 116 }} />
                   <col style={{ width: 30 }} />
                 </colgroup>
@@ -662,7 +666,7 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                     <th className={kop}>Nr</th>
                     <th className={kop} title="Deze regel meenemen">Op</th>
                     <th className={kop}>Omschrijving op de factuur</th>
-                    <th className={`${kop} text-right`}>Aantal</th>
+                    <th className={`${kop} text-right`}>Aantal · eenheid</th>
                     <th className={`${kop} text-right`}>Bedrag</th>
                     <th className={kop}>Btw</th>
                     <th className={kop} />
@@ -713,9 +717,34 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             opslaan={t => groepPatch(g.groepSleutel, { omschrijving: t })}
                           />
                         </td>
-                        <td className="whitespace-nowrap px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
-                          {g.eenheid === 'uur' ? `${fmtAantal(g.aantal)} uur` : '1 post'}
-                        </td>
+                        {/* Bij een afgeleide regel volgen aantal en eenheid uit de boekingen
+                            eronder en zijn ze dus niet te bewerken. Een losse regel heeft die
+                            boekingen niet: daar stel je de regel zelf samen — 3 dagen × € 85. */}
+                        {g.los ? (
+                          <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                            <div className="flex gap-1">
+                              <BewaarVeld
+                                waarde={alsTekst(g.aantal)}
+                                placeholder="1"
+                                uitlijnen="rechts"
+                                titel="Aantal op de factuur"
+                                disabled={regelVast}
+                                opslaan={t => groepPatch(g.groepSleutel, { aantal: getal(t) })}
+                              />
+                              <BewaarVeld
+                                waarde={g.eenheid ?? ''}
+                                placeholder="post"
+                                titel="Eenheid achter het aantal — post, uur, dag, stuks, m²"
+                                disabled={regelVast}
+                                opslaan={t => groepPatch(g.groepSleutel, { eenheid: t })}
+                              />
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="whitespace-nowrap px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
+                            {g.eenheid === 'uur' ? `${fmtAantal(g.aantal)} uur` : '1 post'}
+                          </td>
+                        )}
                         <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
                           <BewaarVeld
                             waarde={alsTekst(g.bedragOverride)}
@@ -724,11 +753,18 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
                             eenheid="€"
                             eenheidVoor
                             titel={g.los
-                              ? 'Bedrag van deze losse regel'
+                              ? `Prijs per ${g.eenheid ?? 'post'}; het regelbedrag is aantal × deze prijs`
                               : `Vast bedrag; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
                             disabled={regelVast}
                             opslaan={t => groepPatch(g.groepSleutel, { bedrag_excl_btw: getal(t) })}
                           />
+                          {/* Zodra het aantal niet 1 is, is de prijs in het veld niet meer het
+                              regelbedrag — en dat is wél wat er onderaan wordt opgeteld. */}
+                          {g.los && g.aantal !== 1 && (
+                            <div className="mt-1 text-right text-[11.5px] tabular-nums text-neutral-500">
+                              = {fmt(g.bedrag)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
                           <BtwKeuze

@@ -338,11 +338,16 @@ export type GroepView = {
   eigenOmschrijving: string | null
   /** Som van de boekingen in deze regel. */
   berekend: number
-  /** Handmatig vastgezet bedrag; leeg = `berekend` telt. */
+  /**
+   * Zelf ingevuld bedrag; leeg = `berekend` telt. Bij een afgeleide regel is dit het regeltotaal,
+   * bij een losse regel de prijs per eenheid — daar is het regeltotaal `aantal × stukprijs`.
+   */
   bedragOverride: number | null
-  /** Wat er werkelijk op de factuur komt. */
+  /** Wat er werkelijk op de factuur komt: het regeltotaal. */
   bedrag: number
   aantal: number
+  /** Prijs per eenheid; `aantal × stukprijs` is wat er als regel naar Bouw7 gaat. */
+  stukprijs: number
   eenheid: string | null
   btwTariefBouw7Id: number | null
   meefactureren: boolean
@@ -499,6 +504,9 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         bedragOverride: override,
         bedrag: override ?? g.berekend,
         aantal,
+        // Stukprijs volgt uit het regeltotaal, ook als dat handmatig is vastgezet: anders zou de
+        // factuur een aantal maal een prijs tonen die niet op het regeltotaal uitkomt.
+        stukprijs: aantal ? rond((override ?? g.berekend) / aantal) : (override ?? g.berekend),
         eenheid,
         btwTariefBouw7Id: opgeslagenGroep?.btw_tarief_bouw7_id ?? codeBtw,
         meefactureren: opgeslagenGroep?.meefactureren ?? true,
@@ -513,16 +521,21 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     // kent ze niet — ze bestaan puur als opgeslagen rij en dragen hun eigen bedrag.
     for (const l of groepen) {
       if (l.bewakingscode !== c.bewakingscode || !isLosseRegel(l.groep_sleutel)) continue
-      const bedrag = l.bedrag_excl_btw != null ? Number(l.bedrag_excl_btw) : 0
+      // Bij een losse regel is het opgeslagen bedrag de prijs per eenheid en niet het regeltotaal:
+      // je stelt hier een factuurregel samen ("3 dagen × € 85") in plaats van een som van boekingen
+      // af te dekken. Met het standaardaantal van 1 komt dat op hetzelfde neer.
+      const stukprijs = l.bedrag_excl_btw != null ? Number(l.bedrag_excl_btw) : 0
+      const losAantal = l.aantal != null ? Number(l.aantal) : 1
       groepenView.push({
         groepSleutel: l.groep_sleutel,
         omschrijving: (l.omschrijving ?? '').trim() || 'Losse regel',
         eigenOmschrijving: l.omschrijving,
         berekend: 0,
-        bedragOverride: l.bedrag_excl_btw != null ? bedrag : null,
-        bedrag,
-        aantal: 1,
-        eenheid: 'post',
+        bedragOverride: l.bedrag_excl_btw != null ? stukprijs : null,
+        bedrag: rond(losAantal * stukprijs),
+        aantal: losAantal,
+        stukprijs,
+        eenheid: (l.eenheid ?? '').trim() || 'post',
         btwTariefBouw7Id: l.btw_tarief_bouw7_id ?? codeBtw,
         meefactureren: l.meefactureren,
         aantalBoekingen: 0,
@@ -599,9 +612,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         omschrijving: g.omschrijving,
         aantal: g.aantal,
         eenheid: g.eenheid,
-        // Stukprijs volgt uit het bedrag, ook als dat handmatig is vastgezet: anders zou de factuur
-        // een aantal maal een prijs tonen die niet op het regeltotaal uitkomt.
-        stukprijs: g.aantal ? rond(g.bedrag / g.aantal) : g.bedrag,
+        stukprijs: g.stukprijs,
         bedrag: g.bedrag,
         aantalBoekingen: g.aantalBoekingen,
         btwTariefBouw7Id: g.btwTariefBouw7Id,
@@ -707,13 +718,33 @@ export async function bewaarFactuurGroep(
   groepSleutel: string,
   patch: {
     omschrijving?: string | null
+    /** Afgeleide regel: vast regeltotaal. Losse regel: de prijs per eenheid. */
     bedrag_excl_btw?: number | null
+    /** Alleen bij losse regels. */
+    aantal?: number | null
+    /** Alleen bij losse regels. */
+    eenheid?: string | null
     btw_tarief_bouw7_id?: number | null
     meefactureren?: boolean
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
   if (!toegang.ok) return toegang
+
+  // Aantal en eenheid horen bij een losse regel, die zijn eigen regel samenstelt. Bij een afgeleide
+  // regel komen ze uit de boekingen eronder; ze daar overschrijven zou een aantal op de factuur
+  // zetten dat niet meer bij de geboekte uren hoort.
+  if ((patch.aantal !== undefined || patch.eenheid !== undefined) && !isLosseRegel(groepSleutel)) {
+    return {
+      ok: false,
+      error: 'Aantal en eenheid volgen bij deze regel uit de boekingen eronder en zijn alleen op een '
+        + 'losse regel in te vullen.',
+    }
+  }
+  if (patch.aantal !== undefined && patch.aantal != null
+      && (!Number.isFinite(patch.aantal) || patch.aantal <= 0 || patch.aantal > 1_000_000)) {
+    return { ok: false, error: 'Vul een aantal groter dan nul in.' }
+  }
 
   // Een losse regel die al op een verstuurde factuur staat ligt net zo vast als een boeking die
   // is afgeboekt: de omschrijving of het bedrag nu nog wijzigen zou suggereren dat die factuur is
@@ -743,6 +774,8 @@ export async function bewaarFactuurGroep(
     groep_sleutel: groepSleutel,
     omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
     bedrag_excl_btw: patch.bedrag_excl_btw !== undefined ? patch.bedrag_excl_btw : bestaand?.bedrag_excl_btw ?? null,
+    aantal: patch.aantal !== undefined ? patch.aantal : bestaand?.aantal ?? null,
+    eenheid: patch.eenheid !== undefined ? (patch.eenheid?.trim().slice(0, 24) || null) : bestaand?.eenheid ?? null,
     btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
     meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
     volgorde: bestaand?.volgorde ?? 0,
@@ -769,7 +802,13 @@ export async function bewaarFactuurGroep(
 export async function voegLosseRegelToe(
   dossierId: string,
   bewakingscode: string,
-  regel: { omschrijving: string; bedragExclBtw: number | null },
+  regel: {
+    omschrijving: string
+    /** De prijs per eenheid; met het standaardaantal van 1 is dat het regelbedrag. */
+    bedragExclBtw: number | null
+    aantal?: number | null
+    eenheid?: string | null
+  },
 ): Promise<{ ok: true; groepSleutel: string } | { ok: false; error: string }> {
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
   if (!toegang.ok) return toegang
@@ -780,6 +819,8 @@ export async function voegLosseRegelToe(
   const r = await bewaarFactuurGroep(dossierId, bewakingscode, sleutel, {
     omschrijving,
     bedrag_excl_btw: regel.bedragExclBtw,
+    aantal: regel.aantal ?? null,
+    eenheid: regel.eenheid ?? null,
   })
   if (!r.ok) return r
   return { ok: true, groepSleutel: sleutel }
