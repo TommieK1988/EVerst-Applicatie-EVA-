@@ -183,3 +183,28 @@ export function bedragUitOpslag(inkoopBedrag: number, opslagPct: number): number
 export function bedragUitTarief(tarief: number, aantal: number | null): number {
   return rond(tarief * (aantal || 1))
 }
+
+/**
+ * De factuurregels die een nacalculatiepost op de eerstvolgende factuur oplevert.
+ *
+ * Staat hier en niet bij het scherm of bij de server-actie, omdat ze het allebei moeten weten en
+ * het niet uiteen mag lopen: zou het venster zijn eigen telling doen, dan kan de knop
+ * "Klaarzetten (3)" er twee wegschrijven. Dezelfde afweging als bij `groepeer()`, dat scherm en
+ * server ook delen.
+ *
+ * Structureel getypeerd en generiek, zodat `servicedesk.ts` — een 'use server'-module die geen
+ * synchrone functies mag exporteren — hem hier kan halen zonder dat de typen heen en weer hoeven.
+ */
+export function telbareRegels<
+  G extends { los: boolean; gefactureerd: boolean; meefactureren: boolean; bedrag: number },
+>(code: { meefactureren: boolean; aantalBoekingen: number; groepen: G[] }): G[] {
+  if (!code.meefactureren) return []
+  return code.groepen.filter(g => {
+    // Een afgeleide groep zonder openstaande boekingen heeft niets te factureren; een losse regel
+    // draagt zijn bedrag zelf, maar mag maar een keer mee — daarna is hij afgeboekt op de factuur
+    // waar hij op staat. Zonder die controle zou hij elke volgende keer opnieuw meegaan.
+    if (!g.los && code.aantalBoekingen === 0) return false
+    if (g.los && g.gefactureerd) return false
+    return g.meefactureren && g.bedrag !== 0
+  })
+}

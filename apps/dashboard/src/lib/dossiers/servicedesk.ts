@@ -12,7 +12,7 @@ import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './f
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
   bedragUitOpslag, bedragUitTarief, isLosseRegel, nieuweHandmatigeSleutel, nieuweLosseSleutel,
-  soortVan, tariefEnOpslag, type Groepering,
+  soortVan, tariefEnOpslag, telbareRegels, type Groepering,
 } from './factuurregel-groepen'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
@@ -393,6 +393,16 @@ export type CodeRegelView = {
   aantalBoekingen: number
   /** Boekingen op deze code die al op een factuur staan. */
   aantalGefactureerd: number
+  /**
+   * Wat er van deze post al op een factuur staat, excl. btw. Opgeteld uit de afgeboekte boekingen
+   * en de losse regels die hun eigen factuur onthouden.
+   *
+   * Een benadering, en bewust: stond er op een afgeleide factuurregel een vast bedrag, dan is de
+   * som van de boekingen eronder niet precies wat er gefactureerd is. Exact worden zou vragen om
+   * het regelbedrag per groep bij het factureren vast te leggen; zolang dat er niet is, is dit het
+   * dichtstbijzijnde getal dat uit de bestaande gegevens volgt.
+   */
+  alGefactureerdBedrag: number
   /** Bestaat de code ook in Bouw7? Zo niet, dan kan er niets op geboekt worden. */
   inBouw7: boolean
   /**
@@ -409,6 +419,8 @@ export type RegieVoorstel = {
   codes: CodeRegelView[]
   totaal: number
   alGefactureerd: number
+  /** Som van `alGefactureerdBedrag` over alle codes; voor de voetregel van het overzicht. */
+  alGefactureerdBedrag: number
   /** Codes die bewust buiten de factuur blijven, met de reden. Zichtbaar maken is het punt. */
   buitenBeschouwing: { bewakingscode: string; omschrijving: string; reden: string }[]
 }
@@ -440,7 +452,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
 
   const teFactureren = codes.filter(c => !c.alleenVerschil)
   if (teFactureren.length === 0) {
-    return { regels: [], codes: [], totaal: 0, alGefactureerd: 0, buitenBeschouwing }
+    return { regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0, buitenBeschouwing }
   }
 
   // Eigen opslagpercentages meegeven, zodat de verkoopwaarde per code met het juiste percentage
@@ -570,7 +582,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     const uitgeslotenEigen = opCode.filter(r =>
       r.bewakingscode === c.bewakingscode && r.uitgesloten && r.status !== 'gefactureerd')
 
-    views.push({
+    const view: CodeRegelView = {
       bewakingscode: c.bewakingscode,
       bron: c.bron,
       omschrijving: codeOmschrijving,
@@ -592,19 +604,18 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       urenAantal,
       aantalBoekingen: eigen.length,
       aantalGefactureerd: eerderGefactureerd.length,
+      // Wat er al weg is: de afgeboekte boekingen plus de losse regels die hun eigen factuur
+      // onthouden. Die twee overlappen niet — een losse regel heeft per definitie geen boeking.
+      alGefactureerdBedrag: rond(
+        eerderGefactureerd.reduce((som, r) => som + (r.verkoopBedrag || 0), 0)
+        + groepenView.filter(g => g.los && g.gefactureerd).reduce((som, g) => som + g.bedrag, 0),
+      ),
       inBouw7: c.inBouw7,
       vergrendeld,
-    })
+    }
+    views.push(view)
 
-    if (!meefactureren) continue
-
-    for (const g of groepenView) {
-      // Een afgeleide groep zonder openstaande boekingen heeft niets te factureren; een losse regel
-      // draagt zijn bedrag zelf, maar mag maar één keer mee — daarna is hij afgeboekt op de factuur
-      // waar hij op staat. Zonder die controle zou hij elke volgende keer opnieuw meegaan.
-      if (!g.los && eigen.length === 0) continue
-      if (g.los && g.gefactureerd) continue
-      if (!g.meefactureren || g.bedrag === 0) continue
+    for (const g of telbareRegels(view)) {
       regels.push({
         sleutel: `${c.bewakingscode}|${g.groepSleutel}`,
         bewakingscode: c.bewakingscode,
@@ -625,6 +636,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     codes: views,
     totaal: rond(regels.reduce((s, r) => s + r.bedrag, 0)),
     alGefactureerd,
+    alGefactureerdBedrag: rond(views.reduce((s, v) => s + v.alGefactureerdBedrag, 0)),
     buitenBeschouwing,
   }
 }
@@ -1034,10 +1046,14 @@ export async function bewaarBoekingen(
  *
  * De selectie wordt hier server-side opnieuw bepaald; wat de client meestuurde is alleen de
  * groeperingskeuze en het btw-tarief.
+ *
+ * Met `bewakingscode` gaat alleen die ene post op de factuur. Dat is de route vanuit het
+ * factuurregel-venster: je stelt daar de regels van één post samen en zet ze daar ook klaar.
+ * Zonder de code gaat het hele dossier in één keer mee, zoals altijd.
  */
 export async function maakRegieFactuurInBouw7(
   dossierId: string,
-  opties: { btwTariefBouw7Id: number },
+  opties: { btwTariefBouw7Id: number; bewakingscode?: string },
 ): Promise<{ ok: true; invoiceId: number; aantal: number; totaal: number } | { ok: false; error: string; invoiceId?: number }> {
   await vereisRecht('financieel', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
@@ -1052,19 +1068,31 @@ export async function maakRegieFactuurInBouw7(
   // Het voorstel wordt hier server-side opnieuw opgebouwd; wat de client meestuurde is alleen de
   // btw-keuze. Zo kan een verouderd scherm nooit iets factureren wat inmiddels anders ligt.
   const voorstel = await getRegieFactuurvoorstel(dossierId)
-  if (voorstel.regels.length === 0) return { ok: false, error: 'Er is niets te factureren.' }
+  const code = opties.bewakingscode
+  const regels = code == null ? voorstel.regels : voorstel.regels.filter(r => r.bewakingscode === code)
+  if (regels.length === 0) {
+    return {
+      ok: false,
+      error: code == null ? 'Er is niets te factureren.' : 'Er is niets te factureren op deze post.',
+    }
+  }
+  const postNaam = code == null
+    ? null
+    : (voorstel.codes.find(c => c.bewakingscode === code)?.omschrijving ?? code)
 
   // Sleutel over de inhoud: dezelfde regels met dezelfde bedragen leveren dezelfde sleutel op, dus
   // een tweede klik vindt de bestaande conceptfactuur terug in plaats van een duplicaat te maken.
-  const basis = dossierId + '|regie|' + voorstel.regels
+  // De post staat er apart in: twee posten met toevallig hetzelfde bedrag mogen niet op dezelfde
+  // hash uitkomen en elkaars conceptfactuur terugvinden.
+  const basis = dossierId + '|regie|' + (code ?? '') + '|' + regels
     .map(r => r.sleutel + ':' + Math.round(r.bedrag * 100)).join(',')
   const sleutel = createHash('sha1').update(basis).digest('hex').slice(0, 16)
 
   const res = await maakConceptVerkoopfactuur({
     projectId: Number(ctx.bouw7Id),
     idempotentieSleutel: sleutel,
-    omschrijving: 'Nacalculatie regiewerk en stelposten',
-    regels: voorstel.regels.map(r => ({
+    omschrijving: postNaam ? `Nacalculatie — ${postNaam}` : 'Nacalculatie regiewerk en stelposten',
+    regels: regels.map(r => ({
       omschrijving: r.omschrijving,
       aantal: r.aantal,
       eenheid: r.eenheid,
@@ -1079,7 +1107,7 @@ export async function maakRegieFactuurInBouw7(
   // preciezer dan "alle boekingen van een gefactureerde code": een factuurregel die uitstond, of
   // een post die op nul uitkwam, ging niet mee en mag dus ook niet als gefactureerd gelden — anders
   // verdwijnt hij stilzwijgend van de volgende factuur.
-  const opFactuur = new Set(voorstel.regels.map(r => `${r.bewakingscode}|${r.groepSleutel}`))
+  const opFactuur = new Set(regels.map(r => `${r.bewakingscode}|${r.groepSleutel}`))
   const mee = voorstel.codes.flatMap(c =>
     c.boekingen
       .filter(b => !b.uitgesloten && !b.gefactureerd && opFactuur.has(`${c.bewakingscode}|${b.groepSleutel}`))
@@ -1090,15 +1118,25 @@ export async function maakRegieFactuurInBouw7(
 
   // Losse regels hebben geen boeking om af te boeken; ze onthouden zelf op welke factuur ze staan.
   // Zonder dit zouden opstart- of voorrijkosten bij elke volgende factuur opnieuw meegaan.
+  //
+  // Een afgeleide regel boekt af via zijn boekingen, maar een vastgezet bedrag op zo'n regel is net
+  // zo'n val: de boekingen verdwijnen, de override blijft staan, en de eerstvolgende boeking die in
+  // dezelfde groep valt laat het hele vaste bedrag opnieuw meegaan. Dat bedrag was een afspraak
+  // over wát er gefactureerd is, niet over wat er daarna nog binnenkomt — dus wordt het gewist en
+  // rekent nieuw werk weer met zijn eigen berekende bedrag.
   for (const c of voorstel.codes) {
     for (const g of c.groepen) {
-      if (!g.los || g.gefactureerd) continue
+      if (g.gefactureerd) continue
       if (!opFactuur.has(`${c.bewakingscode}|${g.groepSleutel}`)) continue
+      if (!g.los && g.bedragOverride == null) continue
       await supabase
         .from('factuur_regelgroepen')
         .update({
-          bouw7_invoice_id: String(res.invoiceId),
-          gefactureerd_op: new Date().toISOString(),
+          // `gefactureerd_op` hoort bij een losse regel: die is er klaar mee. Een afgeleide regel
+          // blijft bestaan zolang er boekingen in vallen; die raakt alleen zijn vaste bedrag kwijt.
+          ...(g.los
+            ? { bouw7_invoice_id: String(res.invoiceId), gefactureerd_op: new Date().toISOString() }
+            : { bedrag_excl_btw: null }),
           updated_at: new Date().toISOString(),
         })
         .eq('dossier_id', dossierId)
@@ -1131,7 +1169,7 @@ export async function maakRegieFactuurInBouw7(
   await ververSnapshotsNaSchrijven(dossierId, ['verkoopfacturen'], ['termijnen', 'athena_financial'])
   revalidatePath('/servicedesk/' + dossierId + '/financieel')
   revalidatePath('/opdrachten/' + dossierId + '/verkoop')
-  return { ok: true, invoiceId: res.invoiceId, aantal: voorstel.regels.length, totaal: res.totaalExclBtw }
+  return { ok: true, invoiceId: res.invoiceId, aantal: regels.length, totaal: res.totaalExclBtw }
 }
 
 export type SubstatusFase = { substatus: string; van: string; tot: string | null; dagen: number }

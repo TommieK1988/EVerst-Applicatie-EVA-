@@ -21,7 +21,7 @@ import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext
 import { zetTermijnenKlaar } from '@/lib/dossiers/termijnen'
 import type { VerkoopTermijn, VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import TermijnschemaVenster from './TermijnschemaVenster'
-import { fmt, fmtPct, fmtDatum, TH, TD } from './tab-ui'
+import { fmt, fmtPct, TH, TD } from './tab-ui'
 
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
   nog_te_factureren: { label: 'Nog te factureren', kleur: 'var(--amber-700, #b45309)' },
@@ -103,7 +103,7 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
 
   return (
     <>
-      <table style={{ ...tabel, minWidth: kanKiezen ? 900 : 860 }}>
+      <table style={{ ...tabel, minWidth: kanKiezen ? 750 : 710 }}>
         <thead>
           <tr>
             {kanKiezen && (
@@ -125,7 +125,6 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
             <TH right>BTW%</TH>
             <TH right>BTW</TH>
             <TH right>Incl. BTW</TH>
-            <TH>Factureerbaar</TH>
             <TH>Status</TH>
           </tr>
         </thead>
@@ -152,7 +151,6 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
               <TD right kleur="var(--neutral-500)">{fmtPct(tm.btwPercentage)}</TD>
               <TD right>{tm.btwBedrag > 0 ? fmt(tm.btwBedrag) : '—'}</TD>
               <TD right vet>{fmt(tm.bedragIncl)}</TD>
-              <TD>{fmtDatum(tm.invoiceableAt)}</TD>
               <TD kleur={TERMIJN_STATUS[tm.status].kleur}>{TERMIJN_STATUS[tm.status].label}</TD>
             </tr>
           ))}
@@ -170,7 +168,7 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
             <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
               {fmt(termijnen.reduce((s, tm) => s + tm.bedragIncl, 0))}
             </td>
-            <td colSpan={2} style={{ padding: '6px 12px' }} />
+            <td style={{ padding: '6px 12px' }} />
           </tr>
         </tfoot>
       </table>

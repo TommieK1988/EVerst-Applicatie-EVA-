@@ -30,6 +30,29 @@ const InfoRij = ({ label, waarde }: { label: string; waarde: string | null }) =>
 
 const rond = (n: number) => Math.round(n * 100) / 100
 
+/**
+ * Twee blokken naast elkaar, allebei vanaf de bovenkant uitgelijnd.
+ *
+ * `auto-fit` en geen vaste `1fr 1fr`: is er maar één kind, dan krijgt dat de volle breedte in
+ * plaats van een leeg spoor naast zich. En het meet de eigen ruimte, niet de vensterbreedte —
+ * hoeveel er overblijft hangt hier van de zijbalk af, niet van het scherm.
+ */
+const Kolommen = ({ children }: { children: React.ReactNode }) => (
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+    alignItems: 'start',
+    gap: 16,
+  }}>
+    {children}
+  </div>
+)
+
+/** Grid-cel. `minWidth: 0` is wat een brede tabel binnen zijn eigen schuifbalk houdt. */
+const Kolom = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ minWidth: 0 }}>{children}</div>
+)
+
 /** Kopregel binnen het overzichtsblok — scheidt contractwaarde, BTW en facturatiestand. */
 const SectieRij = ({ titel, eerste }: { titel: string; eerste?: boolean }) => (
   <tr>
@@ -173,209 +196,277 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
         ontbreekt={data.stand.ontbreekt}
         fout={data.stand.fout}
       />
-      {/* Overzicht: contractwaarde, BTW-specificatie per tarief en facturatiestand */}
-      <Card>
-        <CardHeader>Overzicht</CardHeader>
-        <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-          <table style={tabel}>
-            <thead>
-              <tr>
-                <TH />
-                <TH right breedte={150}>Excl. BTW</TH>
-                <TH right breedte={130}>BTW</TH>
-                <TH right breedte={150}>Incl. BTW</TH>
-              </tr>
-            </thead>
-            <tbody>
-              <SectieRij titel="Contractwaarde" eerste />
-              <tr>
-                <TD wrap>Aanneemsom</TD>
-                <TD right>{fmt(t.aanneemsom, true)}</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-              </tr>
-              {/* Meerwerk gesplitst zodra EVA de regels kent: aangenomen werk gaat via de
-                  termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
-                  het bedrag terechtkomt, dus het hoort zichtbaar te zijn. Zonder EVA-regels is er
-                  alleen het Bouw7-aggregaat en blijft het bij één regel. */}
-              {evaLeidend ? (
-                <>
-                  {Math.abs(meerwerkAangenomen) > 0.005 && (
+      {/* Contractwaarde en facturatiestand naast de facturen die er al liggen: die gaan over
+          hetzelfde geld, en onder elkaar stonden ze een scherm uit elkaar. */}
+      <Kolommen>
+        <Kolom>
+          {/* Overzicht: contractwaarde, BTW-specificatie per tarief en facturatiestand */}
+          <Card>
+            <CardHeader>Overzicht</CardHeader>
+            <CardBody style={{ padding: 0, overflowX: 'auto' }}>
+              <table style={tabel}>
+                <thead>
+                  <tr>
+                    <TH />
+                    <TH right breedte={104}>Excl. BTW</TH>
+                    <TH right breedte={92}>BTW</TH>
+                    <TH right breedte={104}>Incl. BTW</TH>
+                  </tr>
+                </thead>
+                <tbody>
+                  <SectieRij titel="Contractwaarde" eerste />
+                  <tr>
+                    <TD wrap>Aanneemsom</TD>
+                    <TD right>{fmt(t.aanneemsom, true)}</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                  </tr>
+                  {/* Meerwerk gesplitst zodra EVA de regels kent: aangenomen werk gaat via de
+                      termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
+                      het bedrag terechtkomt, dus het hoort zichtbaar te zijn. Zonder EVA-regels is er
+                      alleen het Bouw7-aggregaat en blijft het bij één regel. */}
+                  {evaLeidend ? (
+                    <>
+                      {Math.abs(meerwerkAangenomen) > 0.005 && (
+                        <tr>
+                          <TD wrap>
+                            Goedgekeurd {meerwerkAangenomen < 0 ? 'minderwerk' : 'meerwerk'} — aangenomen
+                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via termijnen</span>
+                          </TD>
+                          <TD right accent>{fmt(meerwerkAangenomen, true)}</TD>
+                          <TD right kleur="var(--neutral-400)">—</TD>
+                          <TD right kleur="var(--neutral-400)">—</TD>
+                        </tr>
+                      )}
+                      {regieBuitenTermijnen && (
+                        <tr>
+                          <TD wrap>
+                            Goedgekeurd meerwerk — regie en stelposten
+                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via nacalculatie</span>
+                          </TD>
+                          <TD right accent>{fmt(meerwerkRegie, true)}</TD>
+                          <TD right kleur="var(--neutral-400)">—</TD>
+                          <TD right kleur="var(--neutral-400)">—</TD>
+                        </tr>
+                      )}
+                    </>
+                  ) : t.meerwerk > 0 && (
                     <tr>
-                      <TD wrap>
-                        Goedgekeurd {meerwerkAangenomen < 0 ? 'minderwerk' : 'meerwerk'} — aangenomen
-                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via termijnen</span>
-                      </TD>
-                      <TD right accent>{fmt(meerwerkAangenomen, true)}</TD>
+                      <TD wrap>Goedgekeurd meerwerk</TD>
+                      <TD right accent>{fmt(t.meerwerk, true)}</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>
                     </tr>
                   )}
-                  {regieBuitenTermijnen && (
+                  <tr style={{ borderTop: '1px solid var(--neutral-100)' }}>
+                    <TD vet wrap>Contracttotaal</TD>
+                    <TD right vet>{fmt(t.contractTotaal, true)}</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                  </tr>
+
+                  <SectieRij titel="BTW-specificatie" />
+                  {btwGroepen.map((g) => (
+                    <tr key={g.pct ?? 'onbekend'}>
+                      <TD wrap>{g.pct != null ? `BTW ${fmtPct(g.pct)}` : 'Tarief onbekend'}</TD>
+                      <TD right>{fmt(g.grondslag, true)}</TD>
+                      <TD right>{fmt(g.btw, true)}</TD>
+                      <TD right>{fmt(rond(g.grondslag + g.btw), true)}</TD>
+                    </tr>
+                  ))}
+                  {btwOnvolledig && (
                     <tr>
-                      <TD wrap>
-                        Goedgekeurd meerwerk — regie en stelposten
-                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via nacalculatie</span>
+                      <TD wrap kleur="var(--amber-700, #b45309)">
+                        Nog geen BTW-tarief bekend
+                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>
+                          {data.termijnen.length === 0 ? 'geen termijnstaat' : 'niet in de termijnstaat'}
+                        </span>
                       </TD>
-                      <TD right accent>{fmt(meerwerkRegie, true)}</TD>
+                      <TD right>{fmt(zonderTarief, true)}</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>
                     </tr>
                   )}
-                </>
-              ) : t.meerwerk > 0 && (
-                <tr>
-                  <TD wrap>Goedgekeurd meerwerk</TD>
-                  <TD right accent>{fmt(t.meerwerk, true)}</TD>
-                  <TD right kleur="var(--neutral-400)">—</TD>
-                  <TD right kleur="var(--neutral-400)">—</TD>
-                </tr>
-              )}
-              <tr style={{ borderTop: '1px solid var(--neutral-100)' }}>
-                <TD vet wrap>Contracttotaal</TD>
-                <TD right vet>{fmt(t.contractTotaal, true)}</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-              </tr>
+                  <tr style={{ background: 'var(--neutral-50)' }}>
+                    <TD vet wrap>Totaal</TD>
+                    <TD right vet>{fmt(totaalExcl, true)}</TD>
+                    <TD right vet={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(btwTotaal, true) : '—'}</TD>
+                    <TD right vet={btwBekend} accent={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(totaalIncl, true) : '—'}</TD>
+                  </tr>
 
-              <SectieRij titel="BTW-specificatie" />
-              {btwGroepen.map((g) => (
-                <tr key={g.pct ?? 'onbekend'}>
-                  <TD wrap>{g.pct != null ? `BTW ${fmtPct(g.pct)}` : 'Tarief onbekend'}</TD>
-                  <TD right>{fmt(g.grondslag, true)}</TD>
-                  <TD right>{fmt(g.btw, true)}</TD>
-                  <TD right>{fmt(rond(g.grondslag + g.btw), true)}</TD>
-                </tr>
-              ))}
-              {btwOnvolledig && (
-                <tr>
-                  <TD wrap kleur="var(--amber-700, #b45309)">
-                    Nog geen BTW-tarief bekend
-                    <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>
-                      {data.termijnen.length === 0 ? 'geen termijnstaat' : 'niet in de termijnstaat'}
-                    </span>
-                  </TD>
-                  <TD right>{fmt(zonderTarief, true)}</TD>
-                  <TD right kleur="var(--neutral-400)">—</TD>
-                  <TD right kleur="var(--neutral-400)">—</TD>
-                </tr>
-              )}
-              <tr style={{ background: 'var(--neutral-50)' }}>
-                <TD vet wrap>Totaal</TD>
-                <TD right vet>{fmt(totaalExcl, true)}</TD>
-                <TD right vet={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(btwTotaal, true) : '—'}</TD>
-                <TD right vet={btwBekend} accent={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(totaalIncl, true) : '—'}</TD>
-              </tr>
-
-              <SectieRij titel="Facturatiestand" />
-              <tr>
-                <TD wrap>Gefactureerd</TD>
-                <TD right accent={gefactureerdExcl > 0}>{fmt(gefactureerdExcl, true)}</TD>
-                <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurBtw, true) : '—'}</TD>
-                <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurIncl, true) : '—'}</TD>
-              </tr>
-              <tr style={{ background: 'var(--neutral-50)' }}>
-                <TD vet wrap>Nog te factureren</TD>
-                <TD right vet>{fmt(openstaandExcl, true)}</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-                <TD right kleur="var(--neutral-400)">—</TD>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px', lineHeight: 1.5 }}>
-            {!btwBekend
-              ? 'Er staan nog geen bedragen met een BTW-tarief in de termijnstaat, dus de BTW en het totaal incl. BTW zijn nog niet te bepalen.'
-              : btwOnvolledig
-                ? `De BTW-tarieven komen uit de termijnstaat. Over ${fmt(zonderTarief)} van het contract is nog geen tarief bekend, dus het totaal incl. BTW is een ondergrens.`
-                : `De BTW-tarieven komen uit de termijnstaat${meerwerkInTermijnstaat || goedgekeurdeRegels.length === 0 ? '' : ', aangevuld met het goedgekeurde meerwerk uit EVA'}.`}
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Termijnen */}
-      <Card>
-        <CardHeader>Termijnen</CardHeader>
-        <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-          {/* Dekkingcheck-banner */}
-          {dk && (
-            <div style={{
-              margin: '0 0 0 0',
-              padding: '8px 12px',
-              borderBottom: '1px solid var(--neutral-100)',
-              fontSize: 12.5,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: dk.volledig
-                ? 'var(--green-50, #f0fdf4)'
-                : data.termijnen.length === 0
-                  ? 'var(--orange-50, #fff7ed)'
-                  : 'var(--amber-50, #fffbeb)',
-              color: dk.volledig
-                ? 'var(--green-700, #15803d)'
-                : data.termijnen.length === 0
-                  ? 'var(--orange-700, #c2410c)'
-                  : 'var(--amber-700, #b45309)',
-            }}>
-              {dk.volledig ? (
-                <>
-                  <span>✓</span>
-                  <span>
-                    Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(termijnGrondslag)}
-                    {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
-                  </span>
-                </>
-              ) : data.termijnen.length === 0 ? (
-                <>
-                  <span>⚠</span>
-                  <span>
-                    Geen termijnen aangemaakt voor een aanneemsom van {fmt(termijnGrondslag)}
-                    {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
-                  </span>
-                </>
+                  <SectieRij titel="Facturatiestand" />
+                  <tr>
+                    <TD wrap>Gefactureerd</TD>
+                    <TD right accent={gefactureerdExcl > 0}>{fmt(gefactureerdExcl, true)}</TD>
+                    <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurBtw, true) : '—'}</TD>
+                    <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurIncl, true) : '—'}</TD>
+                  </tr>
+                  <tr style={{ background: 'var(--neutral-50)' }}>
+                    <TD vet wrap>Nog te factureren</TD>
+                    <TD right vet>{fmt(openstaandExcl, true)}</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                    <TD right kleur="var(--neutral-400)">—</TD>
+                  </tr>
+                </tbody>
+              </table>
+              <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px', lineHeight: 1.5 }}>
+                {!btwBekend
+                  ? 'Er staan nog geen bedragen met een BTW-tarief in de termijnstaat, dus de BTW en het totaal incl. BTW zijn nog niet te bepalen.'
+                  : btwOnvolledig
+                    ? `De BTW-tarieven komen uit de termijnstaat. Over ${fmt(zonderTarief)} van het contract is nog geen tarief bekend, dus het totaal incl. BTW is een ondergrens.`
+                    : `De BTW-tarieven komen uit de termijnstaat${meerwerkInTermijnstaat || goedgekeurdeRegels.length === 0 ? '' : ', aangevuld met het goedgekeurde meerwerk uit EVA'}.`}
+              </div>
+            </CardBody>
+          </Card>
+        </Kolom>
+        <Kolom>
+          {/* Verkoopfacturen */}
+          <Card>
+            <CardHeader>Verkoopfacturen</CardHeader>
+            <CardBody style={{ padding: 0, overflowX: 'auto' }}>
+              {data.facturen.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Nog geen verkoopfacturen.</div>
               ) : (
-                <>
+                <table style={{ ...tabel, minWidth: 520 }}>
+                  <thead>
+                    <tr>
+                      <TH>Factuurnr.</TH>
+                      <TH>Datum</TH>
+                      <TH>Vervaldatum</TH>
+                      <TH right>Excl. BTW</TH>
+                      <TH right>BTW</TH>
+                      <TH right>Incl. BTW</TH>
+                      <TH>Status</TH>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.facturen.map((f, i) => (
+                      <tr key={i}>
+                        <TD wrap>{f.factuurnummer ?? '—'}{f.isCredit ? ' (credit)' : ''}</TD>
+                        <TD>{fmtDatum(f.datum)}</TD>
+                        <TD>{fmtDatum(f.vervaldatum)}</TD>
+                        <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined}>{fmt(f.bedragExcl)}</TD>
+                        <TD right kleur="var(--neutral-500)">{f.btwBedrag > 0 ? fmt(f.btwBedrag) : '—'}</TD>
+                        <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined} vet>{fmt(f.bedrag)}</TD>
+                        <TD kleur={f.betaald ? 'var(--accent)' : undefined}>{f.betaald ? 'Betaald' : 'Open'}</TD>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
+                      <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0))}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0))}
+                      </td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0))}
+                      </td>
+                      <td style={{ padding: '6px 12px' }} />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </CardBody>
+          </Card>
+        </Kolom>
+      </Kolommen>
+
+      {/* De twee routes waarlangs een dossier gefactureerd wordt, naast elkaar. Staat er geen
+          nacalculatie op dit dossier, dan neemt de termijnstaat de volle breedte. */}
+      <Kolommen>
+        <Kolom>
+          {/* Termijnen */}
+          <Card>
+            <CardHeader>Termijnen</CardHeader>
+            <CardBody style={{ padding: 0, overflowX: 'auto' }}>
+              {/* Dekkingcheck-banner */}
+              {dk && (
+                <div style={{
+                  margin: '0 0 0 0',
+                  padding: '8px 12px',
+                  borderBottom: '1px solid var(--neutral-100)',
+                  fontSize: 12.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: dk.volledig
+                    ? 'var(--green-50, #f0fdf4)'
+                    : data.termijnen.length === 0
+                      ? 'var(--orange-50, #fff7ed)'
+                      : 'var(--amber-50, #fffbeb)',
+                  color: dk.volledig
+                    ? 'var(--green-700, #15803d)'
+                    : data.termijnen.length === 0
+                      ? 'var(--orange-700, #c2410c)'
+                      : 'var(--amber-700, #b45309)',
+                }}>
+                  {dk.volledig ? (
+                    <>
+                      <span>✓</span>
+                      <span>
+                        Volledig gedekt — termijnen dekken de volledige aanneemsom van {fmt(termijnGrondslag)}
+                        {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
+                      </span>
+                    </>
+                  ) : data.termijnen.length === 0 ? (
+                    <>
+                      <span>⚠</span>
+                      <span>
+                        Geen termijnen aangemaakt voor een aanneemsom van {fmt(termijnGrondslag)}
+                        {regieBuitenTermijnen ? `, exclusief ${fmt(meerwerkRegie)} regie en stelposten` : ''}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚠</span>
+                      <span>
+                        Termijnen dekken {fmt(dk.somBedrag)} van {fmt(termijnGrondslag)} aanneemsom
+                        {' '}— nog {fmt(dk.ontbreektBedrag)}
+                        {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
+                        {regieBuitenTermijnen ? `. ${fmt(meerwerkRegie)} regie en stelposten telt niet mee: dat gaat via de nacalculatie` : ''}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Wijkt wat er in Bouw7 staat af van de betalingsconditie op de offerte, dan is dat
+                  een echte fout in wording: je factureert dan een ander schema dan de klant heeft
+                  geaccepteerd. Daarom zichtbaar in plaats van stil. */}
+              {schemaAfwijking?.afwijking && (
+                <div style={{
+                  display: 'flex', gap: 8, padding: '8px 12px', fontSize: 12.5,
+                  borderBottom: '1px solid var(--neutral-100)',
+                  color: 'var(--orange-700, #c2410c)',
+                }}>
                   <span>⚠</span>
                   <span>
-                    Termijnen dekken {fmt(dk.somBedrag)} van {fmt(termijnGrondslag)} aanneemsom
-                    {' '}— nog {fmt(dk.ontbreektBedrag)}
-                    {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
-                    {regieBuitenTermijnen ? `. ${fmt(meerwerkRegie)} regie en stelposten telt niet mee: dat gaat via de nacalculatie` : ''}
+                    {schemaAfwijking.afwijking}
+                    {schemaAfwijking.conditieNaam ? ` (offerte: ${schemaAfwijking.conditieNaam})` : ''}
+                    {' '}Controleer wat er met de klant is afgesproken voordat je een termijn klaarzet.
                   </span>
-                </>
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Wijkt wat er in Bouw7 staat af van de betalingsconditie op de offerte, dan is dat
-              een echte fout in wording: je factureert dan een ander schema dan de klant heeft
-              geaccepteerd. Daarom zichtbaar in plaats van stil. */}
-          {schemaAfwijking?.afwijking && (
-            <div style={{
-              display: 'flex', gap: 8, padding: '8px 12px', fontSize: 12.5,
-              borderBottom: '1px solid var(--neutral-100)',
-              color: 'var(--orange-700, #c2410c)',
-            }}>
-              <span>⚠</span>
-              <span>
-                {schemaAfwijking.afwijking}
-                {schemaAfwijking.conditieNaam ? ` (offerte: ${schemaAfwijking.conditieNaam})` : ''}
-                {' '}Controleer wat er met de klant is afgesproken voordat je een termijn klaarzet.
-              </span>
-            </div>
-          )}
-
-          {!data.termijnenBeschikbaar ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
-          ) : (
-            <TermijnenBlok dossierId={dossierId} termijnen={data.termijnen} />
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Regiewerk. Op een opdracht is dat de uitzondering, dus het blok verschijnt alleen als er
-          daadwerkelijk uren of kosten op het dossier staan. */}
-      <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg />
+              {!data.termijnenBeschikbaar ? (
+                <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
+              ) : (
+                <TermijnenBlok dossierId={dossierId} termijnen={data.termijnen} />
+              )}
+            </CardBody>
+          </Card>
+        </Kolom>
+        {heeftNacalculatie && (
+          <Kolom>
+            {/* Regiewerk. Op een opdracht is dat de uitzondering, dus het blok verschijnt alleen als er
+                daadwerkelijk uren of kosten op het dossier staan. */}
+            <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg />
+          </Kolom>
+        )}
+      </Kolommen>
 
       {/* Meerwerk in de termijnstaat (EVA-weergave; nog niet naar Bouw7 geschreven) */}
       {termijnMeerwerk.length > 0 && (
@@ -416,58 +507,6 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           </CardBody>
         </Card>
       )}
-
-      {/* Verkoopfacturen */}
-      <Card>
-        <CardHeader>Verkoopfacturen</CardHeader>
-        <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-          {data.facturen.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Nog geen verkoopfacturen.</div>
-          ) : (
-            <table style={{ ...tabel, minWidth: 640 }}>
-              <thead>
-                <tr>
-                  <TH>Factuurnr.</TH>
-                  <TH>Datum</TH>
-                  <TH>Vervaldatum</TH>
-                  <TH right>Excl. BTW</TH>
-                  <TH right>BTW</TH>
-                  <TH right>Incl. BTW</TH>
-                  <TH>Status</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {data.facturen.map((f, i) => (
-                  <tr key={i}>
-                    <TD wrap>{f.factuurnummer ?? '—'}{f.isCredit ? ' (credit)' : ''}</TD>
-                    <TD>{fmtDatum(f.datum)}</TD>
-                    <TD>{fmtDatum(f.vervaldatum)}</TD>
-                    <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined}>{fmt(f.bedragExcl)}</TD>
-                    <TD right kleur="var(--neutral-500)">{f.btwBedrag > 0 ? fmt(f.btwBedrag) : '—'}</TD>
-                    <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined} vet>{fmt(f.bedrag)}</TD>
-                    <TD kleur={f.betaald ? 'var(--accent)' : undefined}>{f.betaald ? 'Betaald' : 'Open'}</TD>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
-                  <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0))}
-                  </td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0))}
-                  </td>
-                  <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                    {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0))}
-                  </td>
-                  <td style={{ padding: '6px 12px' }} />
-                </tr>
-              </tfoot>
-            </table>
-          )}
-        </CardBody>
-      </Card>
 
       {/* Betaalgegevens klant */}
       {bg && (

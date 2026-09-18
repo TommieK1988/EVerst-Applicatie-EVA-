@@ -39,10 +39,10 @@ import {
 } from '@/components/ui'
 import {
   bewaarCodeInstelling, bewaarFactuurGroep, bewaarBoekingen, zetBoekingGroep,
-  voegLosseRegelToe, verwijderLosseRegel,
+  voegLosseRegelToe, verwijderLosseRegel, maakRegieFactuurInBouw7,
   type CodeRegelView, type BoekingView, type GroepView,
 } from '@/lib/dossiers/servicedesk'
-import { GROEPERINGEN, type Groepering } from '@/lib/dossiers/factuurregel-groepen'
+import { GROEPERINGEN, telbareRegels, type Groepering } from '@/lib/dossiers/factuurregel-groepen'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 
 const fmt = (v: number) =>
@@ -188,7 +188,9 @@ function tekstVan(b: BoekingView): { titel: string; onder: string } {
   return { titel, onder }
 }
 
-export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnly, onSluit, onBewaard }: {
+export default function FactuurRegelVenster({
+  dossierId, code, tarieven, readOnly, onSluit, onBewaard, onGefactureerd,
+}: {
   dossierId: string
   code: CodeRegelView | null
   tarieven: BtwTariefKeuze[]
@@ -196,14 +198,29 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
   readOnly?: boolean
   onSluit: () => void
   onBewaard: () => void
+  /** Er staat een conceptfactuur in Bouw7: het paneel en de pagina eromheen moeten verversen. */
+  onGefactureerd: () => void
 }) {
   const veld = useId()
   const { vraagTekst, bevestig } = useDialogen()
+  /** Btw voor de hele factuur; een regel mag er via zijn eigen kolom van afwijken. */
+  const [factuurTariefId, setFactuurTariefId] = useState<number | null>(null)
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
   /** De factuurregel die als doel is aangewezen voor de →-knop. */
   const [doel, setDoel] = useState<string | null>(null)
   const [bezig, start] = useTransition()
   const [geopendVoor, setGeopendVoor] = useState<string | null>(null)
+
+  // Standaard 21%, net als voorheen in het nacalculatie-blok. Pas zetten zodra de tarieven er zijn,
+  // en daarna een eigen keuze niet meer overschrijven.
+  useEffect(() => {
+    if (tarieven.length === 0) return
+    setFactuurTariefId(vorig => {
+      if (vorig != null) return vorig
+      const standaard = tarieven.find(t => !t.verlegd && Math.abs(t.percentage - 21) < 0.01) ?? tarieven[0]
+      return standaard?.bouw7_id ?? null
+    })
+  }, [tarieven])
 
   // Van code wisselen betekent een schone selectie; anders zouden regels van de vorige post meegaan
   // in een verplaatsing.
@@ -344,10 +361,48 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
     codePatch({ groepering: nieuw })
   }
 
+  /** Wat er van deze post op de eerstvolgende factuur belandt — dezelfde regel als de server. */
+  const teFactureren = telbareRegels(code)
+  const teFacturerenTotaal = teFactureren.reduce((som, g) => som + g.bedrag, 0)
+
+  /**
+   * Deze post als conceptfactuur klaarzetten in Bouw7.
+   *
+   * Alleen deze post: je stelt hier de regels samen, dus hier hoort ook de knop die ze afdrukt.
+   * De server bouwt het voorstel opnieuw op en factureert wat er dán staat; `teFactureren` is
+   * puur wat de knop laat zien, en komt uit dezelfde `telbareRegels` die de server gebruikt.
+   */
+  async function klaarzetten() {
+    if (factuurTariefId == null) return
+    const tarief = tarieven.find(t => t.bouw7_id === factuurTariefId)
+    const ja = await bevestig({
+      titel: 'Conceptfactuur klaarzetten in Bouw7?',
+      omschrijving: `${teFactureren.length} factuurregel${teFactureren.length === 1 ? '' : 's'} `
+        + `van "${post.omschrijving}", samen ${fmt(teFacturerenTotaal)} excl. btw`
+        + `${tarief ? ` (${tarief.label}, tenzij per regel anders)` : ''}. `
+        + 'De factuur krijgt nog geen factuurnummer; de administratie verstuurt hem in Bouw7.',
+      bevestigLabel: 'Klaarzetten',
+    })
+    if (!ja) return
+    start(async () => {
+      const r = await maakRegieFactuurInBouw7(dossierId, {
+        btwTariefBouw7Id: factuurTariefId,
+        bewakingscode: post.bewakingscode,
+      })
+      if (!r.ok) { toast.error(r.error, { duration: 9000 }); onBewaard(); return }
+      toast.success(`Conceptfactuur klaargezet in Bouw7 — ${r.aantal} regels, ${fmt(r.totaal)} excl. btw.`)
+      onGefactureerd()
+      onSluit()
+    })
+  }
+
   // ── Knopstatus ────────────────────────────────────────────────────────────
   const kanNaarDoel = !opslot && !bezig && gekozen.length > 0 && actiefDoel != null
   const kanLosmaken = !opslot && !bezig && gekozen.some(b => b.handmatigToegewezen)
   const kanNieuw = !opslot && !bezig && gekozen.length > 0
+  // Een vergrendelde post, een afgesloten dossier of een post waar niets van meegaat: dan is er
+  // niets af te drukken en hoort de knop er ook niet te staan.
+  const kanKlaarzetten = !opslot && teFactureren.length > 0
   const doelUitleg = gekozen.length === 0
     ? 'Selecteer eerst boekingen links'
     : actiefDoel == null ? 'Kies eerst een factuurregel rechts'
@@ -837,9 +892,35 @@ export default function FactuurRegelVenster({ dossierId, code, tarieven, readOnl
               </span>
             )}
           </div>
-          <Button variant="primary" size="lg" onClick={onSluit} disabled={bezig}>
-            {bezig ? 'Bezig…' : 'Klaar'}
-          </Button>
+          <div className="flex items-center gap-3">
+            {kanKlaarzetten && (
+              <label className="flex items-center gap-1.5 text-[12px] text-neutral-600">
+                <span>Btw</span>
+                <select
+                  value={factuurTariefId ?? ''}
+                  onChange={e => setFactuurTariefId(e.target.value ? Number(e.target.value) : null)}
+                  disabled={bezig}
+                  aria-label="Btw-tarief voor deze factuur"
+                  title="Btw voor de hele factuur; een regel met een eigen tarief houdt dat van zichzelf"
+                  className="h-9 rounded-md border border-neutral-300 bg-white px-2 text-[12.5px] text-neutral-700 outline-none focus:border-brand-500"
+                >
+                  {tarieven.map(t => (
+                    <option key={t.bouw7_id ?? t.label} value={t.bouw7_id ?? ''}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <Button variant="outline" size="lg" onClick={onSluit} disabled={bezig}>Sluiten</Button>
+            {kanKlaarzetten && (
+              <Button
+                variant="primary" size="lg"
+                onClick={klaarzetten}
+                disabled={bezig || factuurTariefId == null}
+              >
+                {bezig ? 'Bezig…' : `Klaarzetten in Bouw7 (${teFactureren.length})`}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
