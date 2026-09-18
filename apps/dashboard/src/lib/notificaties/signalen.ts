@@ -15,6 +15,7 @@ import { createAdminClient } from '@everts/database/server'
 
 export type SignaalSoort =
   | 'taak_deadline' | 'planning' | 'uren_week' | 'uren_fiatteren' | 'offertebewaking'
+  | 'verkoopkansen'
 
 export type VorigSignaal = {
   sleutel: string

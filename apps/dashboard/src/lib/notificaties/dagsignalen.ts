@@ -64,6 +64,7 @@ export type DagsignalenResultaat = {
   urenWeken: number
   urenFiatteren: number
   offertebewaking: number
+  verkoopkansen: number
   fouten: string[]
 }
 
@@ -544,6 +545,93 @@ async function meldOffertebewaking(
   return verzonden
 }
 
+/* ── 6. Verkoopkansen ───────────────────────────────────────────────── */
+
+/**
+ * De verkoopkansen waarvan de deadline vandaag is of al voorbij, per actiehouder.
+ *
+ * Waarom dit een apart signaal is en niet bij de offertebewaking hierboven hoort: een
+ * verkoopkans hangt niet aan een dossier (`dossier_id` is leeg, zie `lib/commercie`), en de
+ * offertebewaking leest `getDossiersVoorOffertes()`. Kansen vallen daar dus per definitie
+ * buiten. Ze staan bovendien op een ander scherm — het Aanvragen-tab — en één melding kan
+ * maar naar één plek wijzen.
+ *
+ * Zonder dit signaal bereikt de deadline van een kans niemand: de actiehouder krijgt één
+ * melding op het moment dat de kans wordt vastgelegd, en daarna blijft het stil tot iemand uit
+ * zichzelf de lijst opent. Precies de stilte waar deze module tegen bedoeld is — een kans die
+ * je een jaar vooruit zet en daarna nooit meer ziet, is een vergeten kans.
+ *
+ * Eigen query in plaats van `getVerkoopkansen()`: die zit achter `vereisRecht`, en de cron
+ * heeft geen sessie. De gegevens die hier nodig zijn (houder, datum, uitleg) zijn bovendien
+ * precies drie kolommen, terwijl het overzicht ook dossiers, relaties en objecten ophaalt.
+ */
+async function meldVerkoopkansen(
+  medewerkers: Medewerker[],
+  vorige: Map<string, VorigSignaal>,
+): Promise<number> {
+  const vandaag = vandaagLokaal()
+
+  type Rij = { actiehouder_id: string | null; stap_datum: string | null; titel: string | null }
+
+  // Gepagineerd: "open kansen met een verstreken deadline" is vandaag een handvol, maar het is
+  // een groeiende lijst zonder harde bovengrens — en PostgREST kapt stil af op 1000.
+  const rijen = await haalAlleRijen<Rij>((van, tot) =>
+    db()
+      .from('commercie_bewaking')
+      .select('actiehouder_id, stap_datum, titel')
+      .eq('soort', 'signaal')
+      .is('afgerond_op', null)
+      .lte('stap_datum', vandaag)
+      .order('id')
+      .range(van, tot))
+
+  type Emmer = { verlopen: number; vandaag: number; uitleg: string | null }
+  const perMedewerker = new Map<string, Emmer>()
+
+  for (const r of rijen) {
+    if (!r.actiehouder_id || !r.stap_datum) continue
+    const emmer = perMedewerker.get(r.actiehouder_id) ?? { verlopen: 0, vandaag: 0, uitleg: null }
+    if (r.stap_datum < vandaag) emmer.verlopen++
+    else emmer.vandaag++
+    // De uitleg van de eerste kans; alleen gebruikt als het er één is, want dan zegt de tekst
+    // meer dan een telling van één.
+    emmer.uitleg ??= r.titel
+    perMedewerker.set(r.actiehouder_id, emmer)
+  }
+
+  let verzonden = 0
+
+  for (const mw of medewerkers) {
+    const emmer = perMedewerker.get(mw.id)
+    const sleutel = emmer ? `${vandaag}|${emmer.verlopen}|${emmer.vandaag}` : `${vandaag}|stil`
+
+    // Niets te doen: stand wél onthouden, anders geldt dezelfde achterstand morgen als nieuw.
+    if (!emmer || (emmer.verlopen === 0 && emmer.vandaag === 0)) {
+      if (vorige.get(mw.id)) await onthoudSignaal(mw.id, 'verkoopkansen', sleutel)
+      continue
+    }
+    if (vorige.get(mw.id)?.sleutel === sleutel) continue
+
+    const totaal = emmer.verlopen + emmer.vandaag
+    const delen: string[] = []
+    if (emmer.verlopen > 0) delen.push(`${emmer.verlopen} verlopen`)
+    if (emmer.vandaag > 0) delen.push(`${emmer.vandaag} voor vandaag`)
+
+    await maakNotificatie({
+      user_id: mw.auth_user_id,
+      type: 'verkoopkans',
+      titel: emmer.verlopen > 0 ? 'Verkoopkans: deadline verlopen' : 'Verkoopkans voor vandaag',
+      // Bij precies één kans zegt de uitleg meer dan "1 verlopen".
+      body: totaal === 1 && emmer.uitleg ? emmer.uitleg : delen.join(' · '),
+      url: '/aanvragen',
+    })
+    await onthoudSignaal(mw.id, 'verkoopkansen', sleutel)
+    verzonden++
+  }
+
+  return verzonden
+}
+
 /* ── De run ───────────────────────────────────────────────────────── */
 
 export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<DagsignalenResultaat> {
@@ -556,6 +644,7 @@ export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<Dags
     urenWeken: 0,
     urenFiatteren: 0,
     offertebewaking: 0,
+    verkoopkansen: 0,
     fouten: [],
   }
 
@@ -592,6 +681,12 @@ export async function stuurDagsignalen(run: Run, log: CronLogboek): Promise<Dags
       if (run !== 'ochtend') return
       log.stap('offertebewaking')
       resultaat.offertebewaking = await meldOffertebewaking(medewerkers, await haalVorigeSignalen('offertebewaking'))
+    }],
+    ['verkoopkansen', async () => {
+      // Zelfde reden als hierboven: het hoort bij het lijstje waarmee je de dag begint.
+      if (run !== 'ochtend') return
+      log.stap('verkoopkansen')
+      resultaat.verkoopkansen = await meldVerkoopkansen(medewerkers, await haalVorigeSignalen('verkoopkansen'))
     }],
   ]
 
