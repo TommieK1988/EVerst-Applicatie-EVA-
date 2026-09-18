@@ -427,14 +427,17 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                     <td className="py-2 px-2">
                       {readOnly ? (
                         <span className="text-neutral-700">
-                          {r.termijn_wijze === 'een_regel' ? '1 regel in termijnstaat'
+                          {r.termijn_wijze === 'een_regel' ? 'Volg offerte termijnstaat'
                             : r.termijn_wijze === 'eigen_termijnstaat' ? 'Eigen termijnstaat' : '—'}
                         </span>
                       ) : (
                       <select className={selectCls} value={r.termijn_wijze ?? ''} disabled={bezig}
                         onChange={e => wijzigVeld(r.id, { termijn_wijze: (e.target.value || null) as MeerwerkTermijnWijze | null })}>
                         <option value="">—</option>
-                        <option value="een_regel">1 regel in termijnstaat</option>
+                        {/* Waarde blijft 'een_regel' — alleen de tekst klopte niet. Het meerwerk
+                            loopt mee in de projecttermijnstaat en volgt daar het betalingsschema
+                            van zijn eigen offerte; dat zijn er vaak meer dan één. */}
+                        <option value="een_regel">Volg offerte termijnstaat</option>
                         <option value="eigen_termijnstaat">Eigen termijnstaat</option>
                       </select>
                       )}

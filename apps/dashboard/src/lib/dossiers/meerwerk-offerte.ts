@@ -93,3 +93,45 @@ export async function leesMeerwerkOfferte(quoteId: string): Promise<MeerwerkOffe
     termijnen,
   }
 }
+
+/**
+ * Het betalingsschema van meerdere meerwerkoffertes ineens, gesleuteld op quote-id.
+ *
+ * Bestaat naast `leesMeerwerkOfferte` omdat een overzichtsscherm alleen het schema nodig heeft en
+ * niet de kostprijs: die vraagt per offerte twee extra lezingen op secties en regels. Dat is
+ * verspilling zodra je een hele meerwerklijst wilt tonen, en het is precies het soort per-rij-lezing
+ * dat een tab traag maakt.
+ *
+ * Een lege lijst in de uitkomst betekent: geen betalingsconditie, dus één termijn voor het hele
+ * bedrag — hetzelfde wat `zetMeerwerkAlsTermijn` doet.
+ */
+export async function leesTermijnschemaPerOfferte(
+  quoteIds: string[],
+): Promise<Map<string, TermijnschemaRegel[]>> {
+  const uit = new Map<string, TermijnschemaRegel[]>()
+  const ids = Array.from(new Set(quoteIds.filter(Boolean)))
+  if (ids.length === 0) return uit
+
+  const supabase = createAdminClient()
+  // Begrensd op de meegegeven ids; geen kans op de stille PostgREST-afkapping.
+  const { data: quotes } = await supabase
+    .from('quotes').select('id, betalingsconditie_id').in('id', ids)
+  const rijen = (quotes ?? []) as { id: string; betalingsconditie_id: string | null }[]
+
+  const conditieIds = Array.from(new Set(
+    rijen.map(q => q.betalingsconditie_id).filter((v): v is string => !!v),
+  ))
+  const perConditie = new Map<string, TermijnschemaRegel[]>()
+  if (conditieIds.length > 0) {
+    const { data: condities } = await supabase
+      .from('betalingscondities').select('id, termijnen').in('id', conditieIds)
+    for (const c of (condities ?? []) as { id: string; termijnen: unknown }[]) {
+      perConditie.set(c.id, leesTermijnen(c.termijnen).filter(t => t.percentage > 0))
+    }
+  }
+
+  for (const q of rijen) {
+    uit.set(q.id, q.betalingsconditie_id ? (perConditie.get(q.betalingsconditie_id) ?? []) : [])
+  }
+  return uit
+}

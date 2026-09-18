@@ -18,7 +18,8 @@ import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth
 import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt } from './meerwerk-termijn'
-import { leesMeerwerkOfferte } from './meerwerk-offerte'
+import { leesMeerwerkOfferte, leesTermijnschemaPerOfferte } from './meerwerk-offerte'
+import type { TermijnschemaRegel } from './termijnen-schema'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -104,6 +105,24 @@ function rekentOpTermijn(r: MeerwerkRegel): boolean {
   return r.afrekenwijze === 'aangenomen' && r.is_stelpost !== true
 }
 
+/**
+ * Leidt af hoe deze regel in de termijnstaat terechtkomt. Spiegelt `zetMeerwerkAlsTermijn`: eerst
+ * de vraag óf er een termijn komt (`termijn_wijze` / afrekenwijze), dan hoevéél — en dat laatste
+ * bepaalt de betalingsconditie van de meerwerkofferte, niet de meerwerkregel zelf.
+ */
+function termijnVerwerkingVan(
+  r: MeerwerkRegel,
+  opTermijn: boolean,
+  schemaPerOfferte: Map<string, TermijnschemaRegel[]>,
+): MeerwerkRegelView['termijnVerwerking'] {
+  if (!opTermijn) return { soort: 'nacalculatie', aantal: 0, schema: [] }
+  if (r.termijn_wijze === 'eigen_termijnstaat') return { soort: 'eigen_termijnstaat', aantal: 0, schema: [] }
+  const schema = (r.quote_id ? schemaPerOfferte.get(r.quote_id) : null) ?? []
+  return schema.length > 1
+    ? { soort: 'volgt_offerte', aantal: schema.length, schema }
+    : { soort: 'een_termijn', aantal: 1, schema: [] }
+}
+
 export type MeerwerkRegelView = MeerwerkRegel & {
   effectiefExcl: number
   effectiefIncl: number
@@ -115,6 +134,22 @@ export type MeerwerkRegelView = MeerwerkRegel & {
   opNacalculatie: boolean
   /** Vaste prijs: dit bedrag hoort in de termijnstaat en telt mee in de termijndekking. */
   opTermijn: boolean
+  /**
+   * Hoe dit meerwerk daadwerkelijk in de termijnstaat terechtkomt.
+   *
+   * Dit is een **afleiding, geen keuze**. `termijn_wijze` zegt alleen of het meerwerk in de
+   * projecttermijnstaat meeloopt of een eigen staat krijgt; hoevéél termijnen het worden volgt uit
+   * de betalingsconditie van de meerwerkofferte (zie `zetMeerwerkAlsTermijn`). Een regel van
+   * € 20.000 onder een 30/30/30/10-offerte wordt dus vier termijnen, ook al staat er "1 regel in
+   * termijnstaat" op de regel. Die keuze als verwerking tonen liegt over wat er in Bouw7 komt.
+   */
+  termijnVerwerking: {
+    soort: 'eigen_termijnstaat' | 'nacalculatie' | 'volgt_offerte' | 'een_termijn'
+    /** Aantal termijnen dat deze regel in de staat krijgt; 0 bij een eigen staat of nacalculatie. */
+    aantal: number
+    /** Het schema uit de offerte, leeg als er geen betalingsconditie aan hangt. */
+    schema: TermijnschemaRegel[]
+  }
 }
 
 export type DossierMeerwerkData = {
@@ -167,6 +202,12 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
     }
   }
 
+  // Betalingsschema's van de meerwerkoffertes in één keer, niet per regel: dat bepaalt hoeveel
+  // termijnen een regel werkelijk krijgt. Alleen ophalen als er offertes aan hangen.
+  const schemaPerOfferte = await leesTermijnschemaPerOfferte(
+    regels.filter(r => rekentOpTermijn(r) && r.quote_id).map(r => r.quote_id as string),
+  ).catch(() => new Map<string, TermijnschemaRegel[]>())
+
   let goedgekeurdExcl = 0
   let goedgekeurdIncl = 0
   let goedgekeurdAantal = 0
@@ -186,6 +227,7 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
       ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct,
       opNacalculatie: rekentOpNacalculatie(r),
       opTermijn,
+      termijnVerwerking: termijnVerwerkingVan(r, opTermijn, schemaPerOfferte),
     }
   })
 

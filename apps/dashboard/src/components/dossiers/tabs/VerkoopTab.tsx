@@ -488,10 +488,19 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                   <tr key={r.id}>
                     <TD>MW{String(r.volgnummer).padStart(2, '0')}</TD>
                     <TD wrap>{r.omschrijving}</TD>
+                    {/* Wat er werkelijk in de termijnstaat komt, niet wat er op de meerwerkregel
+                        is aangevinkt: het aantal termijnen volgt de betalingsconditie van de
+                        meerwerkofferte. Zie `termijnVerwerking` in lib/dossiers/meerwerk.ts. */}
                     <TD kleur="var(--neutral-500)">
-                      {r.termijn_wijze === 'eigen_termijnstaat' ? 'Eigen termijnstaat'
-                        : r.termijn_wijze === 'een_regel' ? '1 regel in termijnstaat'
-                        : 'Nog te kiezen'}
+                      {r.termijnVerwerking.soort === 'eigen_termijnstaat' ? 'Eigen termijnstaat'
+                        : r.termijnVerwerking.soort === 'volgt_offerte' ? (
+                          <>
+                            {r.termijnVerwerking.aantal} termijnen
+                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>
+                              volgens offerte · {r.termijnVerwerking.schema.map(s => `${s.percentage}%`).join('/')}
+                            </span>
+                          </>
+                        ) : '1 termijn'}
                     </TD>
                     <TD right vet>{fmt(r.effectiefExcl)}</TD>
                     <TD right kleur="var(--neutral-500)">{fmt(r.effectiefIncl)}</TD>
