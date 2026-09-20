@@ -48,13 +48,20 @@ export async function getMedewerkerByAuthId(authUserId: string): Promise<Medewer
  */
 export async function getInterneDossierIds(): Promise<Set<string>> {
   const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('dossier_toggles')
-    .select('dossier_id, dossier_toggle_definities!inner(sleutel)')
-    .eq('aan', true)
-    .eq('dossier_toggle_definities.sleutel', 'intern')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new Set((data ?? []).map((d: any) => d.dossier_id as string))
+  // Gepagineerd: nu 6 rijen, maar dit aantal loopt mee met `dossiers` (al 1098 rijen) — er is
+  // geen bovengrens die het onder de 1000 houdt. `dossier_toggles` heeft geen `id`; de
+  // samengestelde sleutel (dossier_id, definitie_id) is de stabiele sortering.
+  const rijen = await haalAlleRijen<{ dossier_id: string }>((van, tot) =>
+    supabase
+      .from('dossier_toggles')
+      .select('dossier_id, dossier_toggle_definities!inner(sleutel)')
+      .eq('aan', true)
+      .eq('dossier_toggle_definities.sleutel', 'intern')
+      .order('dossier_id')
+      .order('definitie_id')
+      .range(van, tot),
+  )
+  return new Set(rijen.map(d => d.dossier_id))
 }
 
 const MANAGEMENT_PROJECT_KOLOMMEN =
@@ -65,16 +72,23 @@ const MANAGEMENT_PROJECT_KOLOMMEN =
 
 export async function getManagementProjecten(): Promise<ManagementProject[]> {
   const supabase = createAdminClient() as any
-  const [{ data }, ohw, internSet] = await Promise.all([
-    supabase
-      .from('management_projecten')
-      .select(MANAGEMENT_PROJECT_KOLOMMEN)
-      .order('projectnummer', { ascending: true }),
+  const [rijen, ohw, internSet] = await Promise.all([
+    // Gepagineerd: 485 rijen vandaag, maar de tabel groeit met elk project mee. Bij >1000 zou
+    // PostgREST stil afkappen en zouden projecten uit de KPI's, AK-berekening en snapshots
+    // verdwijnen zonder foutmelding. `projectnummer` is niet gegarandeerd uniek, dus `id` erbij
+    // als stabiele tiebreak — anders slaat de paginering rijen over of haalt ze dubbel op.
+    haalAlleRijen<ManagementProject>((van, tot) =>
+      supabase
+        .from('management_projecten')
+        .select(MANAGEMENT_PROJECT_KOLOMMEN)
+        .order('projectnummer', { ascending: true })
+        .order('id')
+        .range(van, tot),
+    ),
     getManagementOhw(HUIDIG_BOEKJAAR),
     getInterneDossierIds(),
   ])
-  const projecten = ((data ?? []) as ManagementProject[])
-    .filter(p => !p.dossier_id || !internSet.has(p.dossier_id))
+  const projecten = rijen.filter(p => !p.dossier_id || !internSet.has(p.dossier_id))
 
   // OHW-correctie per dossier koppelen op bouw7_id.
   const ohwMap = new Map<string, ManagementOhw>()
@@ -90,7 +104,12 @@ export async function getManagementProjecten(): Promise<ManagementProject[]> {
   return projecten
 }
 
-/** OHW-correctieregels (handmatig per dossier), optioneel gefilterd op boekjaar. */
+/**
+ * OHW-correctieregels (handmatig per dossier), optioneel gefilterd op boekjaar.
+ *
+ * Niet gepagineerd: handmatig ingevoerde correcties, 4 rijen in productie. Een paar per boekjaar
+ * per dossier dat een OHW-correctie nodig heeft — dit blijft ruim onder de 1000.
+ */
 export async function getManagementOhw(boekjaar?: number): Promise<ManagementOhw[]> {
   const supabase = createAdminClient() as any
   let q = supabase
@@ -111,17 +130,26 @@ export type ManagementProjectKeuze = {
   filiaal: string | null
 }
 
-/** Selecteerbare projecten voor de OHW-dossier-picker in Instellingen. */
+/**
+ * Selecteerbare projecten voor de OHW-dossier-picker in Instellingen.
+ *
+ * Gepagineerd om dezelfde reden als `getManagementProjecten`: zelfde groeiende tabel. Kapt hij
+ * af, dan ontbreken projecten stil in de picker en lijken ze simpelweg niet te bestaan.
+ */
 export async function getManagementProjectenKeuze(): Promise<ManagementProjectKeuze[]> {
   const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('management_projecten')
-    .select('bouw7_id, projectnummer, projectnaam, opdrachtgever, filiaal')
-    .not('bouw7_id', 'is', null)
-    .order('projectnummer', { ascending: true })
-  return (data ?? []) as ManagementProjectKeuze[]
+  return haalAlleRijen<ManagementProjectKeuze>((van, tot) =>
+    supabase
+      .from('management_projecten')
+      .select('bouw7_id, projectnummer, projectnaam, opdrachtgever, filiaal')
+      .not('bouw7_id', 'is', null)
+      .order('projectnummer', { ascending: true })
+      .order('id')
+      .range(van, tot),
+  )
 }
 
+/** Niet gepagineerd: één handmatige regel per jaar × filiaal (2 rijen). Blijft onder de 1000. */
 export async function getManagementAk(): Promise<ManagementAK[]> {
   const supabase = createAdminClient() as any
   const { data } = await supabase
@@ -131,6 +159,10 @@ export async function getManagementAk(): Promise<ManagementAK[]> {
   return (data ?? []) as ManagementAK[]
 }
 
+/**
+ * Niet gepagineerd: één handmatige regel per jaar × filiaal × projectleider (7 rijen). Zelfs met
+ * alle projectleiders en filialen over tien jaar blijft dit een fractie van de 1000.
+ */
 export async function getManagementDoelstellingen(): Promise<ManagementDoelstelling[]> {
   const supabase = createAdminClient() as any
   const { data } = await supabase
@@ -140,15 +172,25 @@ export async function getManagementDoelstellingen(): Promise<ManagementDoelstell
   return (data ?? []) as ManagementDoelstelling[]
 }
 
-/** Unieke filialen + projectleiders uit management_projecten (voor Instellingen-dropdowns). */
+/**
+ * Unieke filialen + projectleiders uit management_projecten (voor Instellingen-dropdowns).
+ *
+ * Gepagineerd: de uitkomst is klein, maar hij wordt client-side uit de volledige tabel gedestilleerd.
+ * Kapt de select af, dan ontbreekt precies het filiaal of de projectleider die alleen in de
+ * afgekapte staart voorkomt — en die is dan niet meer te kiezen.
+ */
 export async function getManagementDimensies(): Promise<{ filialen: string[]; projectleiders: string[] }> {
   const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('management_projecten')
-    .select('filiaal, projectleider')
+  const rijen = await haalAlleRijen<{ filiaal: string | null; projectleider: string | null }>((van, tot) =>
+    supabase
+      .from('management_projecten')
+      .select('filiaal, projectleider')
+      .order('id')
+      .range(van, tot),
+  )
   const filialen = new Set<string>()
   const projectleiders = new Set<string>()
-  for (const r of (data ?? []) as { filiaal: string | null; projectleider: string | null }[]) {
+  for (const r of rijen) {
     if (r.filiaal) filialen.add(r.filiaal)
     if (r.projectleider) projectleiders.add(r.projectleider)
   }
@@ -203,14 +245,19 @@ function medNaam(med: { voornaam?: string | null; tussenvoegsel?: string | null;
 /** Funnel-cijfers: huidige pipeline-stand + instroom/verzonden trend + verliesredenen. */
 export async function getFunnelData(nuISO?: string): Promise<FunnelData> {
   const supabase = createAdminClient() as any
-  const [dossiers, redenenResp] = await Promise.all([
+  const [dossiers, lostReasons] = await Promise.all([
     getFunnelDossiers(),
-    supabase
-      .from('dossier_status_historie')
-      .select('reden')
-      .eq('naar_offerte_substatus', 'verloren'),
+    // Gepagineerd: 48 rijen nu, maar `dossier_status_historie` is append-only (1191 rijen totaal)
+    // en het verloren-deel groeit alleen maar. Afkappen zou de verliesredenen stil onderrapporteren.
+    haalAlleRijen<{ reden: string | null }>((van, tot) =>
+      supabase
+        .from('dossier_status_historie')
+        .select('reden')
+        .eq('naar_offerte_substatus', 'verloren')
+        .order('id')
+        .range(van, tot),
+    ),
   ])
-  const lostReasons = (redenenResp.data ?? []) as { reden: string | null }[]
   return berekenFunnel(dossiers, lostReasons, nuISO ?? new Date().toISOString())
 }
 
@@ -222,6 +269,8 @@ export async function getCalculatorStats(): Promise<CalculatorStat[]> {
   const ids = [...new Set(dossiers.map(d => d.calculator_id).filter(Boolean) as string[])]
   const namen = new Map<string, { naam: string; kleur: string | null }>()
   if (ids.length > 0) {
+    // Niet gepagineerd: begrensd door `.in('id', ids)` met de unieke calculators uit de dossiers —
+    // dat is een handvol medewerkers, nooit in de buurt van 1000.
     const { data } = await supabase
       .from('medewerkers')
       .select('id, voornaam, tussenvoegsel, achternaam, kleur')
@@ -235,7 +284,12 @@ export async function getCalculatorStats(): Promise<CalculatorStat[]> {
 
 /* ── Vastgestelde maandsnapshots ──────────────────────────────────── */
 
-/** Lijst vastgestelde maanden (incl. kpi voor trendweergave), nieuwste eerst. */
+/**
+ * Lijst vastgestelde maanden (incl. kpi voor trendweergave), nieuwste eerst.
+ *
+ * Niet gepagineerd: precies één rij per vastgestelde maand (2 rijen). Bij twaalf per jaar duurt het
+ * meer dan tachtig jaar voor dit de 1000 raakt.
+ */
 export async function getMaandSnapshots(): Promise<MaandSnapshotSamenvatting[]> {
   const supabase = createAdminClient() as any
   const { data } = await supabase
