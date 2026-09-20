@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-20','nieuw','Relaties','Eén contactpersoon die voor meerdere bedrijven werkt',
+   'Werkt iemand voor twee opdrachtgevers, dan stond die persoon twee keer in EVA. Nu kun je die rijen samenvoegen tot één persoon met twee werkgevers: zijn dossiers, notities en afspraken komen bij elkaar te staan, en per bedrijf kun je een eigen zakelijk e-mailadres en telefoonnummer vastleggen. Onder Relaties staat een nieuw tabblad Dubbelen dat voorstelt welke rijen waarschijnlijk dezelfde mens zijn; gedeelde postbussen zoals info@ of crediteuren@ laat hij met rust. Samenvoegen is altijd terug te draaien.');
