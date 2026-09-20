@@ -42,6 +42,14 @@ type ParticulierRij = Particulier
 
 type Tab = 'organisaties' | 'contactpersonen' | 'particulieren' | 'dubbelen'
 
+/**
+ * Alle drie de tabbladen openen op Actief. Inactief betekent hier: niet meer in Bouw7 — mensen
+ * die uit dienst zijn, en VvE's die ooit als "contactpersoon" onder hun beheerder waren
+ * aangemaakt. Je wilt ze kunnen terugvinden, maar niet standaard tussen de rest zien staan.
+ * Het filter blijft gewoon te wijzigen; zet je het zelf anders, dan blijft dat zo.
+ */
+const BEGIN_FILTER_ACTIEF = [{ id: 'status', value: ['Actief'] }]
+
 /* ─── helpers ─────────────────────────────────────────────────────── */
 
 function initialen(naam: string): string {
@@ -532,6 +540,8 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
           kolommen={KOLOMMEN_ORGANISATIES}
           layouts={layouts}
           user_id={user_id}
+          // Inactief = niet meer in Bouw7. Wel terug te vinden, niet standaard in beeld.
+          beginFilters={BEGIN_FILTER_ACTIEF}
           onRijKlik={r => router.push(`/relaties/${r.id}`)}
           acties={
             <Button variant="primary" onClick={() => setShowNieuweOrganisatie(true)}>
@@ -549,10 +559,7 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
           kolommen={KOLOMMEN_CONTACTPERSONEN}
           layouts={layouts}
           user_id={user_id}
-          // Inactieve contactpersonen zijn mensen die uit dienst zijn en VvE's die ooit als
-          // "contactpersoon" onder hun beheerder waren aangemaakt. Je wilt ze kunnen terugvinden,
-          // maar niet standaard tussen de rest zien staan. Het filter blijft gewoon te wijzigen.
-          beginFilters={[{ id: 'status', value: ['Actief'] }]}
+          beginFilters={BEGIN_FILTER_ACTIEF}
           onRijKlik={r => router.push(`/relaties/contactpersonen/${r.id}`)}
           acties={
             <Button variant="primary" onClick={() => setShowNieuweContactpersoon(true)}>
@@ -570,6 +577,8 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
           kolommen={KOLOMMEN_PARTICULIEREN}
           layouts={layouts}
           user_id={user_id}
+          // Inactief = niet meer in Bouw7. Wel terug te vinden, niet standaard in beeld.
+          beginFilters={BEGIN_FILTER_ACTIEF}
           onRijKlik={r => router.push(`/relaties/particulieren/${r.id}`)}
           acties={
             <Button variant="primary" onClick={() => setShowNieuweParticulier(true)}>
