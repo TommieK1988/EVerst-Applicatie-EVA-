@@ -147,6 +147,24 @@ export type SyncContactsResult = {
   contactpersonen: SyncResult
 }
 
+/** De velden van een Bouw7-spiegel die de opruimstap (15) nodig heeft. */
+type SpiegelRij = {
+  id: string
+  contactpersoon_id: string
+  bouw7_id: string
+  verdwenen_op: string | null
+}
+
+/** Idem voor de persoon zelf: alleen wat bepaalt of hij uit of aan mag. */
+type CpOpruimRij = {
+  id: string
+  actief: boolean | null
+  bouw7_sync_status: string | null
+  sync_vergrendeld?: boolean | null
+  handmatige_velden?: string[] | null
+  samengevoegd_in?: string | null
+}
+
 export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncContactsResult> {
   const mode: SyncMode = opts?.mode ?? 'incremental'
   const start = Date.now()
@@ -412,7 +430,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbSpiegels = await haalAlleRijen<any>((van, tot) => supabase
       .from('contactpersoon_bouw7_koppelingen')
-      .select('id, contactpersoon_id, bouw7_id, bouw7_contact_id, organisatie_id, bouw7_sync_hash, is_primair')
+      .select('id, contactpersoon_id, bouw7_id, bouw7_contact_id, organisatie_id, bouw7_sync_hash, is_primair, verdwenen_op')
       .order('id')
       .range(van, tot),
     )
@@ -423,7 +441,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const dbCps = await haalAlleRijen<any>((van, tot) => supabase
       .from('contactpersonen')
       .select(
-        'id, bouw7_id, sync_vergrendeld, handmatige_velden, samengevoegd_in, '
+        'id, bouw7_id, sync_vergrendeld, handmatige_velden, samengevoegd_in, actief, bouw7_sync_status, '
         + BOUW7_CONTACTPERSOON_VELDEN.join(', ')
       )
       .order('id')
@@ -672,11 +690,82 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((r: any) => r.id)
 
-    if (toDeactivate.length > 0) {
+    // Zelfde grens als bij de contactpersonen hieronder: geeft Bouw7 bij een storing een lege
+    // lijst terug, dan is dat geen leeg relatiebestand maar een mislukte call.
+    if (toDeactivate.length > 0 && allContacts.length > 0) {
       await supabase
         .from('relaties')
         .update({ actief: false, bouw7_sync_status: 'inactief_in_bouw7' })
         .in('id', toDeactivate)
+    }
+
+    // 15. Hetzelfde voor contactpersonen. Dit ontbrak jarenlang: verwijderde contactpersonen
+    //     bleven in EVA staan (65 stuks in september 2026, waaronder tientallen VvE's die als
+    //     contactpersoon waren aangemaakt) en dook op in elke keuzelijst.
+    //
+    //     Sleutel op de spiegels, niet op `contactpersonen.bouw7_id`: na een samenvoeging is dat
+    //     veld van de verliezer leeg terwijl zijn spiegel naar de blijver verhuisde. Op bouw7_id
+    //     sleutelen zou dan iemand deactiveren die bij het andere bedrijf nog gewoon werkt.
+    const cpIdsInResponse = new Set(alleCps.map(cp => String(cp.id)))
+
+    // Een lege respons is een storing, geen leeg bestand. Zonder deze grens zou één mislukte
+    // Bouw7-call het hele contactpersonenbestand op inactief zetten.
+    if (alleCps.length > 0) {
+      const nu = new Date().toISOString()
+
+      // 15a. Sterfdatum bijwerken per spiegel — alleen waar hij verandert, zodat een run die
+      //      niets te melden heeft ook niets schrijft en de stap niet elke nacht oscilleert.
+      const spiegels: SpiegelRij[] = dbSpiegels ?? []
+      const netVerdwenen = spiegels.filter(s => !cpIdsInResponse.has(s.bouw7_id) && s.verdwenen_op == null)
+      const netTerug = spiegels.filter(s => cpIdsInResponse.has(s.bouw7_id) && s.verdwenen_op != null)
+
+      for (let i = 0; i < netVerdwenen.length; i += 500) {
+        await supabase.from('contactpersoon_bouw7_koppelingen')
+          .update({ verdwenen_op: nu })
+          .in('id', netVerdwenen.slice(i, i + 500).map(s => s.id))
+      }
+      for (let i = 0; i < netTerug.length; i += 500) {
+        await supabase.from('contactpersoon_bouw7_koppelingen')
+          .update({ verdwenen_op: null })
+          .in('id', netTerug.slice(i, i + 500).map(s => s.id))
+      }
+
+      // 15b. Een mens gaat pas op inactief als ál zijn spiegels weg zijn.
+      const levendPerPersoon = new Map<string, number>()
+      for (const s of spiegels) {
+        const eerder = levendPerPersoon.get(s.contactpersoon_id) ?? 0
+        levendPerPersoon.set(s.contactpersoon_id, eerder + (cpIdsInResponse.has(s.bouw7_id) ? 1 : 0))
+      }
+
+      const beschermd = (cp: CpOpruimRij) =>
+        cp.sync_vergrendeld === true
+        || (cp.handmatige_velden ?? []).includes('actief')
+        // Al weggevoegd: die rij bestaat alleen nog als doorverwijzing.
+        || cp.samengevoegd_in != null
+
+      const personen: CpOpruimRij[] = dbCps ?? []
+      const cpUit = personen.filter(cp =>
+        levendPerPersoon.get(cp.id) === 0 && cp.actief === true && !beschermd(cp))
+
+      // Terugkomst. Alleen wat déze stap heeft uitgezet leeft weer op — een rij die om een
+      // andere reden inactief staat (handmatig, of omgezet naar een eigen Bouw7-contact) blijft
+      // uit, ook al duikt zijn oude id weer op.
+      const cpAan = personen.filter(cp =>
+        (levendPerPersoon.get(cp.id) ?? 0) > 0
+        && cp.actief === false && cp.bouw7_sync_status === 'verwijderd_in_bouw7' && !beschermd(cp))
+
+      for (let i = 0; i < cpUit.length; i += 500) {
+        await supabase.from('contactpersonen')
+          .update({ actief: false, bouw7_sync_status: 'verwijderd_in_bouw7' })
+          .in('id', cpUit.slice(i, i + 500).map(cp => cp.id))
+      }
+      for (let i = 0; i < cpAan.length; i += 500) {
+        await supabase.from('contactpersonen')
+          .update({ actief: true, bouw7_sync_status: 'synced' })
+          .in('id', cpAan.slice(i, i + 500).map(cp => cp.id))
+      }
+
+      cpResult.bijgewerkt += cpUit.length + cpAan.length
     }
 
   } catch (e: unknown) {
