@@ -1,0 +1,6 @@
+-- Changelog-items voor de mobiele dossier- en offertewijzigingen (commit eba9b933).
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-20','verbeterd','Dossiers','Op je telefoon zie je alle rollen, en alleen de tabbladen die ergens over gaan',
+   'Een dossier op je telefoon toonde alleen de uitvoerder en de projectleider. Nu staan alle ingevulde rollen erbij: projectleider, calculator, uitvoerder, teamleider en controller. Lege rollen laten we weg. Daarnaast verschijnen de tabbladen Planning en Voortgang — en de knop om een projectbezoek te starten — alleen nog bij werk dat ook echt wordt uitgevoerd. Bij een aanvraag of een offerte waren die tabbladen toch altijd leeg. Servicedeskbonnen houden hun planning gewoon.'),
+  ('2026-09-20','nieuw','Offertes','Openstaande offertes op je telefoon: het bedrag en de offerte zelf',
+   'In het klantbeeld op je telefoon staat bij elke openstaande offerte nu het offertebedrag exclusief btw. Is er een offertedocument bij het dossier, dan kun je het er direct als PDF openen — handig als een klant je belt over een offerte die hij heeft liggen. Op de knop staat om welk document het gaat, zodat je ziet wat je opent. Offertes van voor de overstap naar EVA hebben vaak geen document in het systeem; daar blijft de knop weg.');
