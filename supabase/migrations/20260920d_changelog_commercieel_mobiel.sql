@@ -1,0 +1,7 @@
+-- Changelog-items voor de mobiele module Commercieel en het blok Acquisitie op de
+-- relatiepagina. Toegevoegd nadat de code op main stond (commit b2887e0b, CI groen).
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-20','nieuw','Commercieel','Klantbeeld op je telefoon: alles over een opdrachtgever in één scherm',
+   'Spreek je een opdrachtgever, dan vind je hem voortaan op je telefoon onder Commercieel — zoek op bedrijfsnaam of op de naam van je contactpersoon. Je ziet in één scherm welke offertes we voor ze maken, wat er open staat, welke opdrachten en servicedeskbonnen lopen, wat we de afgelopen twee jaar hebben uitgevoerd en of er nog facturen open staan. Bovenaan staat wat ze ons dit en vorig jaar hebben opgeleverd en hoe vaak we bij deze klant scoren, met daaronder een balkje dat waarschuwt voor facturen die lang openstaan of offertes waar wij aan zet zijn. Bellen, mailen en de route starten met één tik. En je kunt ter plekke iets vastleggen: een gespreksnotitie die je ook kunt inspreken, een verkoopkans, of een actie voor jezelf of een collega.'),
+  ('2026-09-20','nieuw','Relaties','Gespreksnotities bij een opdrachtgever',
+   'Op de pagina van een opdrachtgever staat nu het blok Acquisitie: een lijst met wat er met deze klant besproken is, met datum en naam erbij. Je kunt erbij zetten met wie je sprak. Het zijn dezelfde notities die je op je telefoon onder Commercieel vastlegt, dus wat je onderweg noteert staat op kantoor meteen in beeld — en andersom.');
