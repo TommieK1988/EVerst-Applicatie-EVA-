@@ -113,9 +113,16 @@ async function verkooptarievenVoorRelatie(klantId: string | null): Promise<Map<s
 }
 
 /**
- * Bouwt de regie-factuurregels op uit de geboekte uren en kosten (live uit Bouw7),
- * met defaults: uren → afgesproken verkooptarief per uursoort (relatie), overige kosten → de
- * ingestelde opslag. Eerder opgeslagen overrides (regie_factuurregels) winnen altijd.
+ * Bouwt de regie-factuurregels op uit de geboekte uren en kosten (live uit Bouw7).
+ *
+ * Standaardprijs is de kostprijs plus de ingestelde opslag — voor uren net zo goed als voor
+ * materiaal. Is er voor de klant een verkooptarief per uursoort afgesproken, dan gaat dat vóór de
+ * opslag: een afgesproken tarief is een harde prijsafspraak en een opslag maar een vuistregel.
+ * Eerder opgeslagen overrides (regie_factuurregels) winnen altijd van beide.
+ *
+ * Uren vielen hiervoor zonder afgesproken tarief terug op het kále kostprijstarief, dus zonder
+ * opslag. Dat was geen bewuste keuze maar een gat: er staat geen enkel verkooptarief in
+ * relatie_uurtarieven, dus liep in de praktijk élk regie-uur tegen kostprijs de factuur op.
  */
 export async function getServicedeskRegie(
   dossierId: string,
@@ -143,14 +150,22 @@ export async function getServicedeskRegie(
 
   const regels: RegieFactuurRegel[] = []
 
-  // Uren → verkooptarief uit relatie (per uursoort/hourType).
+  // Uren → afgesproken verkooptarief uit de relatie, en anders kostprijs plus opslag.
   for (const u of uren.regels) {
     if (u.bouw7Id == null) continue // alleen detailregels met stabiele sleutel
     const sleutel = `uur:${u.bouw7Id}`
     const opgesl = opgeslagen.get(sleutel)
     const relatieTarief = u.hourTypeId != null ? tarieven.get(String(u.hourTypeId)) : undefined
     const tariefUitRelatie = relatieTarief != null
-    const verkoopTarief = opgesl?.verkoop_tarief ?? relatieTarief ?? u.uurtarief ?? null
+    // Zelfde voorrang als bij de kosten hieronder: eigen percentage van de post, dan de
+    // bedrijfsstandaard. Alleen telt hij hier pas mee als er geen tarief is afgesproken.
+    const urenOpslag = opgesl?.opslag_pct
+      ?? (u.code ? opties?.opslagPerCode?.[u.code] : undefined)
+      ?? standaardOpslag
+    const kostTarief = u.uurtarief ?? null
+    const verkoopTarief = opgesl?.verkoop_tarief
+      ?? relatieTarief
+      ?? (kostTarief != null ? Math.round(kostTarief * (1 + urenOpslag / 100) * 100) / 100 : null)
     const verkoopBedrag = opgesl?.verkoop_bedrag ?? (verkoopTarief != null ? u.uren * verkoopTarief : 0)
     regels.push({
       bronType: 'uur',
@@ -162,7 +177,12 @@ export async function getServicedeskRegie(
       aantal: u.uren,
       eenheid: 'uur',
       inkoopBedrag: u.uren * (u.uurtarief ?? 0),
-      opslagPct: opgesl?.opslag_pct ?? null,
+      // Alleen een percentage melden als het de prijs ook werkelijk bepaald heeft; bij een
+      // afgesproken tarief of een handmatig bedrag zegt een opslagpercentage niets.
+      opslagPct: opgesl?.opslag_pct
+        ?? (opgesl?.verkoop_bedrag == null && opgesl?.verkoop_tarief == null && !tariefUitRelatie
+          ? urenOpslag
+          : null),
       verkoopTarief,
       verkoopBedrag,
       handmatigePrijs: opgesl?.verkoop_bedrag != null,
@@ -421,6 +441,14 @@ export type RegieVoorstel = {
   alGefactureerd: number
   /** Som van `alGefactureerdBedrag` over alle codes; voor de voetregel van het overzicht. */
   alGefactureerdBedrag: number
+  /**
+   * Dezelfde waarde als `totaal` + `alGefactureerdBedrag`, maar gesplitst naar herkomst.
+   *
+   * Het Informatie-tab heeft die splitsing nodig: daar staat een stelpost buiten de aanneemsom al
+   * als eigen regel met zijn begrote bedrag, en alleen het verschil met de nacalculatie hoort er
+   * nog bij. Regie-meerwerk heeft daar geen eigen regel en telt volledig mee.
+   */
+  waardePerBron: { stelpost: number; meerwerk: number }
   /** Codes die bewust buiten de factuur blijven, met de reden. Zichtbaar maken is het punt. */
   buitenBeschouwing: { bewakingscode: string; omschrijving: string; reden: string }[]
 }
@@ -452,7 +480,10 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
 
   const teFactureren = codes.filter(c => !c.alleenVerschil)
   if (teFactureren.length === 0) {
-    return { regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0, buitenBeschouwing }
+    return {
+      regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0,
+      waardePerBron: { stelpost: 0, meerwerk: 0 }, buitenBeschouwing,
+    }
   }
 
   // Eigen opslagpercentages meegeven, zodat de verkoopwaarde per code met het juiste percentage
@@ -631,12 +662,20 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     }
   }
 
+  // Splitsing naar herkomst over precies dezelfde bedragen als `totaal` en `alGefactureerdBedrag`,
+  // zodat de twee optellingen nooit uit elkaar kunnen lopen.
+  const bronVanCode = new Map(views.map(v => [v.bewakingscode, v.bron]))
+  const waardePerBron = { stelpost: 0, meerwerk: 0 }
+  for (const r of regels) waardePerBron[bronVanCode.get(r.bewakingscode) ?? 'meerwerk'] += r.bedrag
+  for (const v of views) waardePerBron[v.bron] += v.alGefactureerdBedrag
+
   return {
     regels,
     codes: views,
     totaal: rond(regels.reduce((s, r) => s + r.bedrag, 0)),
     alGefactureerd,
     alGefactureerdBedrag: rond(views.reduce((s, v) => s + v.alGefactureerdBedrag, 0)),
+    waardePerBron: { stelpost: rond(waardePerBron.stelpost), meerwerk: rond(waardePerBron.meerwerk) },
     buitenBeschouwing,
   }
 }

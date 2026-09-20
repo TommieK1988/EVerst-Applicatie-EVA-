@@ -1139,6 +1139,11 @@ type Props = {
   categorieen?: string[]
   /** Goedgekeurd meerwerk (excl. btw), live uit Bouw7; 0 indien geen/ongekoppeld. */
   meerwerk?: number
+  /**
+   * Verkoopwaarde van de stelposten buiten de aanneemsom volgens het nacalculatie-blok, inclusief
+   * wat daarvan al gefactureerd is. Null = er is geen nacalculatie op dit dossier.
+   */
+  nacalculatieStelposten?: number | null
   /** Dossiernotities (nieuwste eerst), getoond in het Notities-blok rechts. */
   notities?: DossierNotitie[]
   /** Ingelogde medewerker — bepaalt welke notities verwijderbaar zijn. */
@@ -1153,7 +1158,7 @@ type Props = {
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
-  relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0,
+  relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0, nacalculatieStelposten = null,
   notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
   datums = LEGE_DOSSIER_DATUMS, opdrachtOverzicht = null,
 }: Props) {
@@ -1483,14 +1488,31 @@ export function InformatieTab({
   // Opdracht-samenstelling: gekozen opties tellen mee in het contracttotaal (excl. eigen bewakingscode).
   const finGekozenOpties = opdrachtOverzicht?.gekozenOptiesTotaal ?? 0
   const [detailSoort, setDetailSoort] = React.useState<OpdrachtDetailSoort | null>(null)
+  /* Stelposten buiten de aanneemsom staan hierboven tegen hun begrote bedrag. Zodra er op zo'n post
+   * geboekt is, rekent hij in werkelijkheid af tegen de nacalculatie — hetzelfde bedrag dat het
+   * Verkoop-tab in het contracttotaal zet. Het verschil komt er als eigen regel bij, zodat beide
+   * bedragen zichtbaar blijven én het totaal op de nacalculatie uitkomt.
+   *
+   * Alleen posten waarop daadwerkelijk geboekt is tellen mee. Bij een post zonder boekingen is de
+   * nacalculatie nul, en dan zou het verschil het hele budget wegstrepen terwijl het werk gewoon
+   * nog moet gebeuren. */
+  const geboekteAparteStelposten = (opdrachtOverzicht?.stelposten ?? []).filter(
+    sp => sp.in_opdracht && !sp.in_aanneemsom && sp.bewakingscode != null && (sp.geboekt ?? 0) > 0)
+  const begrootVanGeboekte = Math.round(
+    geboekteAparteStelposten.reduce((s, sp) => s + (sp.bedrag_excl_btw ?? 0), 0) * 100) / 100
+  const stelpostNacalculatieVerschil = (nacalculatieStelposten != null && geboekteAparteStelposten.length > 0)
+    ? Math.round((nacalculatieStelposten - begrootVanGeboekte) * 100) / 100
+    : 0
+
   // Stelposten die BUITEN de aanneemsom vallen zijn extra omzet en moeten er bij op. Stelposten
   // ín de aanneemsom zijn carve-outs: die zitten al in finAanneemsom en mogen hier niet nog eens
   // meegeteld worden — dat zou dubbeltelling zijn.
   const finStelpostenApart = opdrachtOverzicht?.stelpostenApartTotaal ?? 0
   const finContractIncl = finTotaalInclMeerwerk != null
-    ? Math.round((finTotaalInclMeerwerk + (finGekozenOpties + finStelpostenApart) * btwFactor) * 100) / 100
+    ? Math.round((finTotaalInclMeerwerk + (finGekozenOpties + finStelpostenApart + stelpostNacalculatieVerschil) * btwFactor) * 100) / 100
     : finTotaalInclMeerwerk
   const heeftContractExtra = heeftMeerwerk || finGekozenOpties > 0 || finStelpostenApart > 0
+    || stelpostNacalculatieVerschil !== 0
   // Itemized opbouw tonen zodra er iets in staat, én op een bewerkbaar opdracht-dossier met
   // aanneemsom (anders is er geen ingang om de eerste stelpost aan te wijzen).
   const heeftOpdrachtItems = !!opdrachtOverzicht
@@ -1508,7 +1530,8 @@ export function InformatieTab({
      nog eens mee. De btw-regels worden zo opgebouwd dat subtotaal + btw exact op
      het contracttotaal uitkomt — anders klopt de kolom zichtbaar niet. */
   const finSubtotaalExcl = finAanneemsom == null ? null
-    : Math.round((finAanneemsom + (heeftMeerwerk ? meerwerk : 0) + finStelpostenApart + finGekozenOpties) * 100) / 100
+    : Math.round((finAanneemsom + (heeftMeerwerk ? meerwerk : 0) + finStelpostenApart
+        + stelpostNacalculatieVerschil + finGekozenOpties) * 100) / 100
   const btwTeVerdelen = (finContractIncl != null && finSubtotaalExcl != null)
     ? Math.round((finContractIncl - finSubtotaalExcl) * 100) / 100
     : null
@@ -2081,6 +2104,20 @@ export function InformatieTab({
                   bedrag={fmtBedrag(finStelpostenApart)}
                   onClick={() => setDetailSoort('stelposten')}
                   titel="Apart te factureren stelposten — tellen bij het contracttotaal op."
+                />
+              )}
+              {stelpostNacalculatieVerschil !== 0 && (
+                <RekenRegel
+                  soort="waarvan"
+                  label={stelpostNacalculatieVerschil < 0
+                    ? 'waarvan nagecalculeerd lager'
+                    : 'waarvan nagecalculeerd hoger'}
+                  bedrag={fmtBedrag(stelpostNacalculatieVerschil)}
+                  bedragKleur={stelpostNacalculatieVerschil < 0 ? '#009439' : undefined}
+                  onClick={() => setDetailSoort('stelposten')}
+                  titel={'Op deze stelposten is geboekt; ze rekenen af tegen de nacalculatie in plaats van '
+                    + 'tegen het begrote bedrag. Dit is het verschil, zodat het totaal op de '
+                    + 'nacalculatie uitkomt — hetzelfde bedrag als op het Verkoop-tab.'}
                 />
               )}
               {heeftMeerwerk && (
