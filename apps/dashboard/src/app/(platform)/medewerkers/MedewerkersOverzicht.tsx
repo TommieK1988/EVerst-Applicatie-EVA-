@@ -422,12 +422,30 @@ type Props = {
   user_id: string | null
   functies: { id: string; naam: string }[]
   lookups: Lookups
+  /** Functie `medewerkers.persoonsgegevens` — woonadres en geboortedatum. */
+  magPersoonsgegevens: boolean
+  /** Functie `medewerkers.tarieven` — uurtarieven en CAO. */
+  magTarieven: boolean
 }
 
-export default function MedewerkersOverzicht({ medewerkers, layouts, user_id, functies, lookups }: Props) {
+/** Kolommen die pas verschijnen met de bijbehorende functie. */
+const PERSOONSGEGEVENS_KOLOMMEN = ['geboortedatum', 'adres_straat', 'adres_postcode', 'adres_plaats']
+const TARIEF_KOLOMMEN = ['uurtarief_verkoop', 'uurtarief_kostprijs', 'cao_schaal', 'cao_trede', 'cao_document_id']
+
+export default function MedewerkersOverzicht({
+  medewerkers, layouts, user_id, functies, lookups, magPersoonsgegevens, magTarieven,
+}: Props) {
   const router = useRouter()
   const [showNieuw, setShowNieuw] = useState(false)
-  const kolommen = useMemo(() => maakKolommen(lookups, medewerkers), [lookups, medewerkers])
+  // De waarden zijn er op de server al uit gehaald; dit voorkomt alleen een rij
+  // kolommen met louter streepjes.
+  const kolommen = useMemo(() => {
+    const verborgen = new Set([
+      ...(magPersoonsgegevens ? [] : PERSOONSGEGEVENS_KOLOMMEN),
+      ...(magTarieven ? [] : TARIEF_KOLOMMEN),
+    ])
+    return maakKolommen(lookups, medewerkers).filter(k => !verborgen.has(String(k.key)))
+  }, [lookups, medewerkers, magPersoonsgegevens, magTarieven])
 
   return (
     <div className="eva-page-full">

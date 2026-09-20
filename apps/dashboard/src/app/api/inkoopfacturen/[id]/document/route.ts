@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
  * Bewust een eigen route en niet `/api/bouw7/bestand/[hash]`. Die route gate't op
  * `dossiers:lezen` en neemt een wíllekeurige storage-hash uit de URL aan: allebei fout hier.
  * Een inkoopfactuur-lezer heeft geen dossiers-recht nodig, en een hash in de URL zou de
- * scope-regel omzeilen — dan kan iemand zonder `inkoopfacturen_alle` alsnog een overheadfactuur
+ * scope-regel omzeilen — dan kan iemand zonder de functie `inkoopfacturen.zonder_project` alsnog een overheadfactuur
  * ophalen als hij de hash ergens vandaan haalt.
  *
  * Daarom: de EVA-uuid in het pad, `vereisInkoopfactuurToegang` erop, en de storage-sleutel pas

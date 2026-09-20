@@ -18,7 +18,11 @@ import type {
 } from '@everts/database/platform-types'
 import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { vereisRecht, vereisBeheerder, GeenToegangError, getCurrentMedewerker } from '@/lib/auth/rechten'
+import {
+  vereisRecht, vereisBeheerder, GeenToegangError, getCurrentMedewerker,
+  getRechtenBundel, heeftFunctie, kiesKanaal,
+} from '@/lib/auth/rechten'
+import { schrijfPlatteDesktopSet } from '@/lib/auth/rechten-opslag'
 import { bouwUitnodigingsMail } from '@/lib/auth/uitnodiging-mail'
 import { verstuurMailNamensMedewerker } from '@/lib/o365/mail'
 import { O365TokenError } from '@/lib/o365/tokens'
@@ -260,6 +264,19 @@ export async function updateMedewerkerGegevens(
     return { ok: false, error: 'Iemand kan niet zijn eigen uren goedkeuren.' }
   }
 
+  // Velden die de aanroeper niet mag zien, mag hij ook niet overschrijven. Het
+  // formulier verbergt ze, en zou ze dan leeg terugsturen — dat zou BSN en
+  // salaris wissen bij iemand die ze nooit in beeld heeft gehad. Weglaten uit de
+  // update laat de bestaande waarde staan.
+  const set = kiesKanaal(await getRechtenBundel(), 'beide')
+  const velden = { ...parsed.data } as Record<string, unknown>
+  if (!heeftFunctie(set, 'medewerkers.persoonsgegevens')) {
+    for (const k of ['adres_straat', 'adres_postcode', 'adres_plaats', 'geboortedatum', 'bsn']) delete velden[k]
+  }
+  if (!heeftFunctie(set, 'medewerkers.tarieven')) {
+    for (const k of ['uurtarief_verkoop', 'uurtarief_kostprijs', 'cao_schaal', 'cao_document_id', 'cao_trede']) delete velden[k]
+  }
+
   const supabase = db()
 
   // Velden die ook uit Bouw7 komen: alleen markeren wat écht verandert, zodat het opslaan van
@@ -270,9 +287,9 @@ export async function updateMedewerkerGegevens(
     .eq('id', id)
     .maybeSingle()
   const gewijzigd = huidig?.bouw7_id
-    ? beschermdeVelden(parsed.data, BOUW7_MEDEWERKER_VELDEN).filter(k => {
+    ? beschermdeVelden(velden, BOUW7_MEDEWERKER_VELDEN).filter(k => {
         const oud = huidig[k]
-        const nieuw = (parsed.data as Record<string, unknown>)[k]
+        const nieuw = velden[k]
         return (oud ?? null) !== (nieuw ?? null)
       })
     : []
@@ -280,7 +297,7 @@ export async function updateMedewerkerGegevens(
 
   const { error } = await supabase
     .from('medewerkers')
-    .update(handmatig ? { ...parsed.data, handmatige_velden: handmatig } : parsed.data)
+    .update(handmatig ? { ...velden, handmatige_velden: handmatig } : velden)
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
 
@@ -658,6 +675,12 @@ const rechtenSetSchema = z.record(
   z.enum(['lezen', 'schrijven', 'beheren']).nullable()
 )
 
+/**
+ * @deprecated Kent alleen de platte desktopset. Het rechtenscherm
+ * (`/instellingen/gebruikers`) gebruikt `updateGebruikerRechtenDocument`, dat
+ * beide kanalen én de functies zet. Deze action wordt sinds september 2026
+ * nergens meer aangeroepen; hij verdwijnt met de platte spiegelkolommen.
+ */
 export async function updateRechtenOverride(
   medewerker_id: string,
   rechten: RechtenSet
@@ -666,7 +689,16 @@ export async function updateRechtenOverride(
   const parsed = rechtenSetSchema.safeParse(rechten)
   if (!parsed.success) return { ok: false, error: 'Ongeldige rechten' }
 
-  const { error } = await db().from('medewerkers').update({ rechten_override: parsed.data }).eq('id', medewerker_id)
+  // Dit scherm kent alleen de platte desktopset. De mobiele kant van de
+  // persoonlijke afwijking blijft daarom staan zoals hij stond, en de platte
+  // spiegel loopt mee voor de SQL-lezers. Zie lib/auth/rechten-opslag.ts.
+  const { data: rij } = await db().from('medewerkers')
+    .select('rechten, rechten_override').eq('id', medewerker_id).maybeSingle()
+  const opslag = schrijfPlatteDesktopSet(rij?.rechten, rij?.rechten_override, parsed.data)
+
+  const { error } = await db().from('medewerkers')
+    .update({ rechten: opslag.rechten, rechten_override: opslag.plat })
+    .eq('id', medewerker_id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/medewerkers/${medewerker_id}`)
   return { ok: true }

@@ -296,6 +296,8 @@ export default function MedewerkerGegevensForm({
   standaardGoedkeurderId,
   caoDocumenten,
   caoSchalen,
+  magPersoonsgegevens,
+  magTarieven,
 }: {
   medewerker: Medewerker
   werkmaatschappijen: Pick<Bedrijfsgegevens, 'id' | 'naam'>[]
@@ -318,6 +320,14 @@ export default function MedewerkerGegevensForm({
   standaardGoedkeurderId: string | null
   caoDocumenten: Pick<CaoDocument, 'id' | 'naam' | 'werkmaatschappij_id'>[]
   caoSchalen: CaoLoonschaal[]
+  /**
+   * Functie `medewerkers.persoonsgegevens`: woonadres, geboortedatum en BSN.
+   * De pagina wist deze velden ook al uit het meegegeven record — dit verbergt
+   * alleen de invoervelden, want een client-filter is geen afscherming.
+   */
+  magPersoonsgegevens: boolean
+  /** Functie `medewerkers.tarieven`: uurtarieven en CAO-schaal. Zelfde verhaal. */
+  magTarieven: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [state, setState] = useState<FormState>(toForm(medewerker))
@@ -412,21 +422,25 @@ export default function MedewerkerGegevensForm({
             <Veld label="Mobiel">
               {editing ? <Input type="tel" style={{ width: '100%' }} value={state.mobiel} onChange={e => set('mobiel', e.target.value)} /> : <Waarde value={m.mobiel} />}
             </Veld>
-            <Veld label="Adres" span>
-              {editing ? <Input style={{ width: '100%' }} value={state.adres_straat} onChange={e => set('adres_straat', e.target.value)} placeholder="Straat en huisnummer" /> : <Waarde value={m.adres_straat} />}
-            </Veld>
-            <Veld label="Postcode">
-              {editing ? <Input style={{ width: '100%' }} value={state.adres_postcode} onChange={e => set('adres_postcode', e.target.value)} /> : <Waarde value={m.adres_postcode} />}
-            </Veld>
-            <Veld label="Plaats">
-              {editing ? <Input style={{ width: '100%' }} value={state.adres_plaats} onChange={e => set('adres_plaats', e.target.value)} /> : <Waarde value={m.adres_plaats} />}
-            </Veld>
-            <Veld label="Geboortedatum">
-              {editing ? <Input type="date" style={{ width: '100%' }} value={state.geboortedatum} onChange={e => set('geboortedatum', e.target.value)} /> : <Waarde value={m.geboortedatum} />}
-            </Veld>
-            <Veld label={<>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></>}>
-              <BsnVeld value={editing ? state.bsn : (m.bsn ?? '')} onChange={v => set('bsn', v)} disabled={!editing} />
-            </Veld>
+            {magPersoonsgegevens && (
+              <>
+                <Veld label="Adres" span>
+                  {editing ? <Input style={{ width: '100%' }} value={state.adres_straat} onChange={e => set('adres_straat', e.target.value)} placeholder="Straat en huisnummer" /> : <Waarde value={m.adres_straat} />}
+                </Veld>
+                <Veld label="Postcode">
+                  {editing ? <Input style={{ width: '100%' }} value={state.adres_postcode} onChange={e => set('adres_postcode', e.target.value)} /> : <Waarde value={m.adres_postcode} />}
+                </Veld>
+                <Veld label="Plaats">
+                  {editing ? <Input style={{ width: '100%' }} value={state.adres_plaats} onChange={e => set('adres_plaats', e.target.value)} /> : <Waarde value={m.adres_plaats} />}
+                </Veld>
+                <Veld label="Geboortedatum">
+                  {editing ? <Input type="date" style={{ width: '100%' }} value={state.geboortedatum} onChange={e => set('geboortedatum', e.target.value)} /> : <Waarde value={m.geboortedatum} />}
+                </Veld>
+                <Veld label={<>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></>}>
+                  <BsnVeld value={editing ? state.bsn : (m.bsn ?? '')} onChange={v => set('bsn', v)} disabled={!editing} />
+                </Veld>
+              </>
+            )}
           </div>
         </section>
 
@@ -575,6 +589,7 @@ export default function MedewerkerGegevensForm({
         </section>
 
         {/* Tarieven + CAO */}
+        {magTarieven && (
         <section>
           <p style={sectieKopStyle}>Beloning</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -601,6 +616,7 @@ export default function MedewerkerGegevensForm({
             />
           </div>
         </section>
+        )}
       </div>
     </div>
   )

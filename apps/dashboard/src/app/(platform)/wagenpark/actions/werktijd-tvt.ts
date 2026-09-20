@@ -18,7 +18,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
+import { magWerktijdenZien } from '@/lib/wagenpark/privacy'
 import { pgQuery } from '@/lib/wagenpark/db'
 
 export type TvtResultaat = { ok: true } | { ok: false; error: string }
@@ -57,7 +57,7 @@ export async function reserveerTijdVoorTijd(
   toelichting = '',
 ): Promise<TvtResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
   if (!/^\d+$/.test(user_id_ulu) || !/^\d{4}-\d{2}-\d{2}$/.test(datum)) {
@@ -97,7 +97,7 @@ export async function verwijderTijdVoorTijd(
   datum: string,
 ): Promise<TvtResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
   try {

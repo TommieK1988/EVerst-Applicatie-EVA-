@@ -11,7 +11,7 @@
  *   * elke actie op één factuur begint met `vereisInkoopfactuurToegang(id)`, die de rij ophaalt
  *     en de scope hertoetst. Een id dat van de client komt is nooit een bewijs van toegang.
  *
- * De scope-regel: wie het recht `inkoopfacturen_alle` niet heeft, ziet facturen mét een
+ * De scope-regel: wie de functie `inkoopfacturen.zonder_project` niet heeft, ziet facturen mét een
  * Bouw7-project (opdrachten én servicedesk) plus de facturen waarvan hij zélf de goedkeurder is.
  * Die tweede helft is nodig omdat een goedkeurder ook overheadfacturen toegewezen kan krijgen —
  * zonder die uitzondering kan hij zijn eigen werk niet doen.
@@ -20,8 +20,8 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import {
-  vereisRecht, getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang,
-  GeenToegangError, type CurrentMedewerker,
+  vereisRecht, getCurrentMedewerker, getRechtenBundel, heeftModuleToegang,
+  heeftFunctie, kiesKanaal, GeenToegangError, type CurrentMedewerker,
 } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { INKOOP_STATUS_BETAALBAAR } from '@/lib/bouw7/inkoop-status'
@@ -49,8 +49,8 @@ async function scopeVoorGebruiker(min: 'lezen' | 'schrijven' | 'beheren' = 'leze
   medewerker: CurrentMedewerker
   allesZien: boolean
 }> {
-  const { medewerker, rechten } = await vereisRecht('inkoopfacturen', min)
-  return { medewerker, allesZien: heeftModuleToegang(rechten, 'inkoopfacturen_alle', 'lezen') }
+  const { medewerker, set } = await vereisRecht('inkoopfacturen', min)
+  return { medewerker, allesZien: heeftFunctie(set, 'inkoopfacturen.zonder_project') }
 }
 
 /**
@@ -353,11 +353,11 @@ export async function getInkoopfacturenRechten(): Promise<{
   magLezen: boolean; magAccorderen: boolean; magBetalen: boolean; allesZien: boolean
 }> {
   const medewerker = await getCurrentMedewerker()
-  const rechten = await getEffectieveRechten(medewerker ?? undefined)
+  const set = kiesKanaal(await getRechtenBundel(medewerker ?? undefined), 'beide')
   return {
-    magLezen:      heeftModuleToegang(rechten, 'inkoopfacturen', 'lezen'),
-    magAccorderen: heeftModuleToegang(rechten, 'inkoopfacturen', 'schrijven'),
-    magBetalen: heeftModuleToegang(rechten, 'inkoopfacturen', 'beheren'),
-    allesZien:     heeftModuleToegang(rechten, 'inkoopfacturen_alle', 'lezen'),
+    magLezen:      heeftModuleToegang(set, 'inkoopfacturen', 'lezen'),
+    magAccorderen: heeftModuleToegang(set, 'inkoopfacturen', 'schrijven'),
+    magBetalen:    heeftFunctie(set, 'inkoopfacturen.betaalronde'),
+    allesZien:     heeftFunctie(set, 'inkoopfacturen.zonder_project'),
   }
 }

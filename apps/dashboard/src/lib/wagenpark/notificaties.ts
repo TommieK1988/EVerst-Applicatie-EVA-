@@ -15,15 +15,17 @@ import { stuurPush } from '@/lib/notificaties/push'
 export async function beheerOntvangers(): Promise<string[]> {
   const rows = await pgQuery<{ auth_user_id: string }>(
     `
+    -- Join op afdeling_id en de merge via public.eva_recht: één plek waar de
+    -- vorm van het rechtendocument in SQL bekend is. Zie 20260920j.
     select distinct m.auth_user_id::text as auth_user_id
       from public.medewerkers m
-      left join public.medewerker_afdelingen ad on ad.naam = m.afdeling and ad.actief = true
+      left join public.medewerker_afdelingen ad on ad.id = m.afdeling_id and ad.actief = true
      where m.actief = true
        and m.auth_user_id is not null
        and (
          lower(coalesce(m.afdeling, '')) = 'directie'
-         or coalesce(m.rechten_override->>'instellingen', ad.standaard_rechten->>'instellingen') = 'beheren'
-         or coalesce(m.rechten_override->>'wagenpark', ad.standaard_rechten->>'wagenpark') = 'beheren'
+         or public.eva_recht(ad.rechten, m.rechten, 'instellingen') = 'beheren'
+         or public.eva_recht(ad.rechten, m.rechten, 'wagenpark') = 'beheren'
        )
     `,
   )

@@ -1,5 +1,6 @@
 import 'server-only'
-import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
+import type { FunctieKey } from '@everts/database/platform-types'
+import { getCurrentMedewerker, getRechtenBundel, heeftFunctie, kiesKanaal } from '@/lib/auth/rechten'
 
 /**
  * SQL-fragment dat het effectieve rit-type bepaalt, inclusief verlof-override.
@@ -84,9 +85,29 @@ export function ritHorizonVanaf(magPrive: boolean): string | null {
   return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Amsterdam' })
 }
 
-export async function magPriveRittenZien(): Promise<boolean> {
+async function heeftWagenparkFunctie(functie: FunctieKey): Promise<boolean> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) return false
-  const rechten = await getEffectieveRechten(medewerker)
-  return heeftModuleToegang(rechten, 'wagenpark_prive', 'lezen')
+  // Kanaal 'beide': wagenpark bestaat alleen op de desktop, en deze helper wordt
+  // ook vanuit route-handlers aangeroepen waar het verzoekkanaal niets zegt.
+  return heeftFunctie(kiesKanaal(await getRechtenBundel(medewerker), 'beide'), functie)
+}
+
+/** Mag de gebruiker de privé-ritten van een met naam genoemde collega zien? */
+export async function magPriveRittenZien(): Promise<boolean> {
+  return heeftWagenparkFunctie('wagenpark.prive_ritten')
+}
+
+/**
+ * Mag de gebruiker de Werktijden-pagina openen: aankomst- en vertrektijden per
+ * collega?
+ *
+ * Stond tot september 2026 op hetzelfde recht als de privé-ritten. Dat waren
+ * twee verschillende vragen onder één sleutel — wie de kilometers van een bus
+ * nodig heeft, hoeft niet te weten hoe laat iemand 's ochtends binnenkwam.
+ * Vandaag heeft iedereen met het ene recht ook het andere, dus de splitsing
+ * verandert nog niets; ze zijn nu wel apart in te stellen.
+ */
+export async function magWerktijdenZien(): Promise<boolean> {
+  return heeftWagenparkFunctie('wagenpark.werktijden')
 }

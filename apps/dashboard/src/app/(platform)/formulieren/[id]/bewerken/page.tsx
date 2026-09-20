@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getFormTemplate, getLatestFormVersie } from '../../actions'
-import { vereisModuleToegang } from '@/lib/auth/rechten'
+import { vereisFunctieToegang } from '@/lib/auth/rechten'
 import FormBuilder from '@/components/formulieren/builder/FormBuilder'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -11,7 +11,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function FormulierBewerkPage({ params }: { params: Promise<{ id: string }> }) {
-  await vereisModuleToegang('formulieren')
+  // Sjablonen ontwerpen raakt alle toekomstige inzendingen en stond tot september
+  // 2026 op `formulieren: lezen` — wie het overzicht mocht zien, kon de formulieren
+  // herbouwen. Nu een eigen functie, standaard inbegrepen vanaf `beheren`.
+  await vereisFunctieToegang('formulieren.sjablonen_beheren', { terug: '/formulieren' })
 
   const { id } = await params
   const [templateResult, versieResult] = await Promise.all([

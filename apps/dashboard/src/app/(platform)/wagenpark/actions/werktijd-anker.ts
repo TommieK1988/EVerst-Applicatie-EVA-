@@ -20,7 +20,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import { magWerktijdenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { herbouwWerktijdDag, type WerktijdRegel } from '@/lib/wagenpark/werktijd-anker'
 
@@ -97,7 +97,7 @@ export async function kiesWerktijdAnker(
   toelichting = '',
 ): Promise<AnkerResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
 
@@ -151,7 +151,7 @@ export async function kiesWerktijdAnker(
 /** Terug naar wat de ketenregel er zelf van maakt. */
 export async function herstelWerktijdAnker(bevinding_id: string): Promise<AnkerResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
 
@@ -201,7 +201,7 @@ export async function zetRitTypeVoorWerkdag(
   nieuwType: 'zakelijk' | 'prive' | null,
 ): Promise<AnkerResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
 

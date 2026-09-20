@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@everts/database/server'
 import { createServiceRoleClient } from '@/lib/wagenpark/supabase/service-role'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
+import { magWerktijdenZien } from '@/lib/wagenpark/privacy'
 
 /**
  * Auth-user-id van de ingelogde gebruiker; `compliance_feedback.gebruiker_id`
@@ -60,7 +60,7 @@ export async function handelWerktijdSignaalAf(
   toelichting: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden afhandelen.' }
   }
 
@@ -100,7 +100,7 @@ export async function heropenWerktijdSignaal(
   bevinding_id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await vereisRecht('wagenpark', 'schrijven')
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden afhandelen.' }
   }
 

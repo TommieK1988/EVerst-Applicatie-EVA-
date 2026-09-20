@@ -869,80 +869,19 @@ export type GebruikerVoorkeuren = {
 
 export type GebruikerType = 'geen' | 'app_gebruiker' | 'platform_gebruiker'
 
-export type ModuleRechten = 'lezen' | 'schrijven' | 'beheren'
-
 /**
- * Eén bron van waarheid voor de instelbare onderdelen (modules) in het rechtensysteem.
- * De rechtenmatrices (afdeling-standaard + gebruiker-override) en de Zod-validatie
- * leiden hun lijst hieruit af, zodat ze nooit uit elkaar lopen.
- *
- * Het niveau (lezen/schrijven/beheren) is de bestaande ladder:
- *  - lezen     → onderdeel zichtbaar + read-only overzichten
- *  - schrijven → records aanmaken/bewerken binnen het onderdeel
- *  - beheren   → óók de beheer-/instellingen-schermen van dat onderdeel
+ * Het rechtenmodel woont in ./rechten-catalogus.ts — daar staat per onderdeel ook
+ * wat lezen/schrijven/beheren concreet betekenen en welke losse functies er zijn.
+ * Hier alleen de doorgifte, zodat bestaande imports uit '@everts/database/platform-types'
+ * blijven werken en er maar één bron van waarheid is.
  */
-export const RECHTEN_MODULES = [
-  { key: 'dossiers',       label: 'Dossiers' },
-  { key: 'servicedesk',    label: 'Servicedesk' },
-  { key: 'management',     label: 'Management' },
-  { key: 'planning',       label: 'Planning' },
-  { key: 'relaties',       label: 'Relaties' },
-  { key: 'objectenbeheer', label: 'Objecten' },
-  { key: 'medewerkers',    label: 'Medewerkers' },
-  { key: 'wagenpark',      label: 'Wagenpark' },
-  // Privacygevoelige wagenpark-data: privé-ritten (in Ritten, Bestuurders,
-  // Parkeren, Dashboard, Livetracker) én de Werktijden-pagina. Geen eigen
-  // menu-item — het is een schakelaar bovenop 'wagenpark' die bepaalt of je de
-  // aankomst/vertrektijden en privé-ritten van een met naam genoemde collega
-  // mag zien. Alleen Directie krijgt hem standaard (seed-migratie).
-  { key: 'wagenpark_prive', label: 'Wagenpark: privé & werktijden' },
-  { key: 'kam',            label: 'KAM/VGM' },
-  { key: 'houtrotherstel', label: 'Houtrotherstel' },
-  { key: 'everts_calc',    label: 'EvertsCalc' },
-  { key: 'materieelbeheer', label: 'Materieelbeheer' },
-  { key: 'toolbox',        label: 'Toolbox' },
-  { key: 'formulieren',    label: 'Formulieren' },
-  { key: 'taken',          label: 'Actielijsten' },
-  { key: 'mijn_taken',     label: 'Mijn acties' },
-  // Geen menu-item maar een schakelaar: vanaf 'lezen' toont "Mijn acties" ook de
-  // acties van collega's (scope-slicer). Het niveau erboven doet hier niets extra's.
-  { key: 'alle_taken',     label: 'Alle acties' },
-  { key: 'financieel',     label: 'Financieel' },
-  // Inkoopfacturen (crediteuren uit Bouw7):
-  //  - lezen     → het overzicht en je eigen werkvoorraad "Te accorderen door mij"
-  //  - schrijven → accorderen/afkeuren en opmerkingen plaatsen
-  //  - beheren   → betaalrondes samenstellen, vrijgeven en afronden (directie)
-  { key: 'inkoopfacturen', label: 'Inkoopfacturen' },
-  // Geen menu-item maar een schakelaar bovenop 'inkoopfacturen', zoals 'alle_taken'.
-  // Zonder dit recht zie je alleen facturen die aan een project hangen (opdrachten en
-  // servicedesk) plus de facturen waarvan jij zelf de goedkeurder bent. Mét dit recht
-  // zie je óók de facturen zonder project: overhead, abonnementen, leasing, juridisch.
-  // Vanaf 'lezen'; de niveaus erboven doen hier niets extra's.
-  { key: 'inkoopfacturen_alle', label: 'Inkoopfacturen: alle' },
-  // Klantportaal: wie mag zien wat er met een opdrachtgever gedeeld is.
-  //  - lezen    → de Portaal-tab en de klantchat inzien
-  //  - schrijven → onderdelen en bestanden vrijgeven, terugschrijven in de chat
-  //  - beheren  → contactpersonen uitnodigen, hun scope zetten, toegang intrekken
-  { key: 'klantportaal',   label: 'Klantportaal' },
-  // Medewerkershandboek: dit recht gaat over het BEHEER van het handboek, niet
-  // over het lezen ervan. Lezen op /m hangt aan een account, niet aan een recht
-  // — elke medewerker hoort zijn eigen handboek te kunnen openen, en wát hij
-  // ziet bepalen de zichtbaarheidskenmerken.
-  //  - lezen     → beheerschermen en "Bekijk als" inzien
-  //  - schrijven → teksten en zichtbaarheid bewerken
-  //  - beheren   → publiceren, bijlagen verwijderen, hoofdstukken archiveren
-  { key: 'medewerkershandboek', label: 'Medewerkershandboek' },
-  // Mailintake: de post uit de drie gedeelde intakepostbussen.
-  //  - lezen     -> het postvak en de behandelschermen inzien
-  //  - schrijven -> berichten behandelen: dossier aanmaken, koppelen, negeren
-  //  - beheren   -> postbussen instellen, automatisch aanmaken aanzetten, aliassen beheren
-  { key: 'mailintake',     label: 'Mailintake' },
-  { key: 'instellingen',   label: 'Instellingen' },
-] as const
+import type { RechtenSet } from './rechten-catalogus'
 
-export type RechtenModule = typeof RECHTEN_MODULES[number]['key']
-
-export type RechtenSet = Partial<Record<RechtenModule, ModuleRechten | null>>
+export type {
+  ModuleRechten, RechtenModule, RechtenSet, Kanaal, FunctieKey,
+  KanaalRechten, FunctieSet, RechtenDocument, ModuleDefinitie,
+} from './rechten-catalogus'
+export { RECHTEN_MODULES } from './rechten-catalogus'
 
 export type Medewerker = {
   id: string
@@ -955,6 +894,11 @@ export type Medewerker = {
   foto_url: string | null
   functie: string | null
   afdeling: string | null
+  /**
+   * Verwijzing naar `medewerker_afdelingen`. Leidend voor de standaardrechten;
+   * `afdeling` is de tekstspiegel die een trigger bijhoudt. Zie 20260920d/e.
+   */
+  afdeling_id: string | null
   in_dienst_vanaf: string | null
   uit_dienst_per: string | null
   extern: boolean

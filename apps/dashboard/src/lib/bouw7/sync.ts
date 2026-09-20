@@ -11,6 +11,8 @@ import { bouw7RichTextNaarTekst } from './rich-text'
 import { deriveBtwTarieven } from './derive-stamdata'
 import { mapBouw7NaarEvaStatus } from './status-afleiding'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
+import type { KanaalRechten } from '@everts/database/platform-types'
+import { leesRechtenDocument, mergeKanaal, leegKanaal, niveauHaalt } from '@everts/database/rechten'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
 import {
   metBehoudVanHandmatigeVelden, BOUW7_DOSSIER_VELDEN, BOUW7_MEDEWERKER_VELDEN, BOUW7_BANK_VELDEN,
@@ -1867,25 +1869,38 @@ export async function syncDebiteuren(opts?: { mode?: SyncMode }): Promise<SyncRe
   return result
 }
 
-/** Auth-id's van administratie/MT (financieel schrijven/beheren via afdeling óf override, of beheerder). */
+/**
+ * Auth-id's van administratie/MT: `financieel` op schrijven of beheren, of beheerder.
+ *
+ * Gebruikt de gedeelde merge uit de catalogus in plaats van hier een eigen kopie
+ * van die regel te hebben — dat was een tweede implementatie die bij elke
+ * wijziging aan het rechtenmodel stil uit de pas kon lopen. De koppeling naar de
+ * afdeling gaat over `afdeling_id`, niet over de naam (zie 20260920d).
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getAdministratieAuthIds(supabase: any): Promise<string[]> {
-  const ids = new Set<string>()
   const { data: afd } = await supabase
-    .from('medewerker_afdelingen').select('naam, standaard_rechten').eq('actief', true)
-  const adminAfd = new Set<string>(
-    (afd ?? [])
-      .filter((a: { standaard_rechten: Record<string, string> | null }) =>
-        ['schrijven', 'beheren'].includes(a.standaard_rechten?.financieel ?? ''))
-      .map((a: { naam: string }) => a.naam))
+    .from('medewerker_afdelingen').select('id, rechten, standaard_rechten').eq('actief', true)
+  const perAfdeling = new Map<string, KanaalRechten>()
+  for (const a of (afd ?? []) as { id: string; rechten: unknown; standaard_rechten: unknown }[]) {
+    perAfdeling.set(a.id, leesRechtenDocument(a.rechten, a.standaard_rechten).desktop)
+  }
+
   const { data: mws } = await supabase
-    .from('medewerkers').select('auth_user_id, afdeling, rechten_override').eq('actief', true).not('auth_user_id', 'is', null)
-  for (const m of mws ?? []) {
-    const ro = (m.rechten_override ?? {}) as Record<string, string>
-    const heeft = (m.afdeling && adminAfd.has(m.afdeling))
-      || ['schrijven', 'beheren'].includes(ro.financieel ?? '')
-      || ro.instellingen === 'beheren'
-    if (heeft && m.auth_user_id) ids.add(m.auth_user_id as string)
+    .from('medewerkers')
+    .select('auth_user_id, afdeling_id, rechten, rechten_override')
+    .eq('actief', true).not('auth_user_id', 'is', null)
+
+  const ids = new Set<string>()
+  for (const m of (mws ?? []) as {
+    auth_user_id: string | null; afdeling_id: string | null; rechten: unknown; rechten_override: unknown
+  }[]) {
+    if (!m.auth_user_id) continue
+    const basis = (m.afdeling_id && perAfdeling.get(m.afdeling_id)) || leegKanaal()
+    const set = mergeKanaal(basis, leesRechtenDocument(m.rechten, m.rechten_override).desktop)
+    if (niveauHaalt(set.modules.financieel, 'schrijven') || set.modules.instellingen === 'beheren') {
+      ids.add(m.auth_user_id)
+    }
   }
   return [...ids]
 }

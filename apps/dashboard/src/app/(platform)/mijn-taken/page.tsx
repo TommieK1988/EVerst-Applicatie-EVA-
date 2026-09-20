@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisModuleToegang, getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
-import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
+import {
+  vereisModuleToegang, getCurrentMedewerker, getRechtenBundel, heeftFunctie, kiesKanaal,
+} from '@/lib/auth/rechten'
 import { getMijnTakenRijen, getAlleTakenRijen } from '@/lib/taken/services/taken'
 import TakenActieveDossiers from '@/components/taken/TakenActieveDossiers'
 
@@ -21,8 +22,10 @@ export default async function MijnTakenPage() {
   }
 
   const medewerker = await getCurrentMedewerker()
-  const rechten = await getEffectieveRechten(medewerker)
-  const magAlleTaken = heeftModuleToegang(rechten, 'alle_taken')
+  // Scope-schakelaar: met deze functie toont het scherm ook de acties van collega's.
+  // Was de verkapte module `alle_taken`; zie packages/database/src/rechten-catalogus.ts.
+  const set = kiesKanaal(await getRechtenBundel(medewerker), 'verzoek')
+  const magAlleTaken = heeftFunctie(set, 'mijn_taken.alle_zien')
 
   const [data, layouts] = await Promise.all([
     magAlleTaken

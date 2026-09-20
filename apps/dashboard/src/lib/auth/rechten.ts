@@ -2,10 +2,21 @@ import 'server-only'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@everts/database/server'
-import type { ModuleRechten, RechtenModule, RechtenSet } from '@everts/database/platform-types'
-import { heeftModuleToegang } from './rechten-shared'
+import type {
+  ModuleRechten, RechtenModule, RechtenSet, FunctieKey, RechtenDocument, Kanaal,
+} from '@everts/database/platform-types'
+import { leesRechtenDocument, mergeKanaal } from '@everts/database/rechten'
+import {
+  heeftModuleToegang, heeftFunctie, kiesKanaal, alsRechtenSet,
+  type KanaalSet, type KanaalKeuze, type RechtenBundel,
+} from './rechten-shared'
+import { getVerzoekKanaal } from './kanaal'
 
-export { isBeheerder, heeftModuleToegang, magOnderdeelZien, AFGEDWONGEN_MODULES } from './rechten-shared'
+export {
+  isBeheerder, heeftModuleToegang, heeftFunctie, magOnderdeelZien,
+  kiesKanaal, alsRechtenSet, AFGEDWONGEN_MODULES,
+} from './rechten-shared'
+export type { KanaalSet, KanaalKeuze, RechtenBundel } from './rechten-shared'
 
 export type CurrentMedewerker = {
   id: string
@@ -16,9 +27,14 @@ export type CurrentMedewerker = {
   achternaam: string | null
   functie: string | null
   afdeling: string | null
+  /** Leidend voor de standaardrechten; `afdeling` is de tekstspiegel. Zie 20260920d. */
+  afdeling_id: string | null
   foto_url: string | null
   gebruiker_type: string
+  /** Platte v1-spiegel. Blijft bestaan tot de laatste SQL-lezer om is. */
   rechten_override: RechtenSet
+  /** De v2-vorm: per kanaal modules + functies. Leeg → val terug op de spiegel. */
+  rechten: unknown
 }
 
 /**
@@ -49,7 +65,7 @@ export const getCurrentMedewerker = cache(async (): Promise<CurrentMedewerker | 
   const admin = createAdminClient() as any
   const { data } = await admin
     .from('medewerkers')
-    .select('id, auth_user_id, voornaam, tussenvoegsel, achternaam, functie, afdeling, foto_url, gebruiker_type, rechten_override')
+    .select('id, auth_user_id, voornaam, tussenvoegsel, achternaam, functie, afdeling, afdeling_id, foto_url, gebruiker_type, rechten_override, rechten')
     .eq('auth_user_id', user.id)
     .eq('actief', true)
     .maybeSingle()
@@ -57,48 +73,95 @@ export const getCurrentMedewerker = cache(async (): Promise<CurrentMedewerker | 
   return (data as CurrentMedewerker | null) ?? null
 })
 
-/**
- * Effectieve rechten = afdeling-standaard (`standaard_rechten`, gematcht op naam)
- * met de gebruiker-specifieke `rechten_override` eroverheen (override wint).
- * Geef `medewerker` mee om een dubbele fetch te voorkomen.
- *
- * Ook gecachet per request. Dat werkt hier omdat `getCurrentMedewerker()` binnen
- * één request altijd hetzélfde object teruggeeft: aanroepen die dat object
- * doorgeven vallen daardoor op dezelfde cache-sleutel als elkaar.
- */
-export const getEffectieveRechten = cache(async (
-  medewerker?: CurrentMedewerker | null,
-): Promise<RechtenSet> => {
-  const mw = medewerker !== undefined ? medewerker : await getCurrentMedewerker()
-  if (!mw) return {}
+const LEGE_BUNDEL = (kanaal: Kanaal): RechtenBundel => ({
+  verzoekKanaal: kanaal,
+  desktop: { modules: {}, functies: {}, beheerder: false },
+  mobiel: { modules: {}, functies: {}, beheerder: false },
+  beheerder: false,
+})
 
-  let afdelingRechten: RechtenSet = {}
-  if (mw.afdeling) {
+/**
+ * Beide kanalen, samengevoegd uit de afdelingsstandaard en de persoonlijke
+ * afwijking (de afwijking wint). Geef `medewerker` mee om een dubbele fetch te
+ * voorkomen.
+ *
+ * Gecachet per request. Dat werkt omdat `getCurrentMedewerker()` binnen één
+ * request altijd hetzélfde object teruggeeft: aanroepen die dat object
+ * doorgeven vallen daardoor op dezelfde cache-sleutel.
+ */
+export const getRechtenBundel = cache(async (
+  medewerker?: CurrentMedewerker | null,
+): Promise<RechtenBundel> => {
+  const verzoekKanaal = await getVerzoekKanaal()
+  const mw = medewerker !== undefined ? medewerker : await getCurrentMedewerker()
+  if (!mw) return LEGE_BUNDEL(verzoekKanaal)
+
+  let afdeling: RechtenDocument = leesRechtenDocument(null, null)
+  // Op `afdeling_id`, niet op naam. De naam-match verloor stil alle standaardrechten
+  // zodra iemand een afdeling hernoemde: geen match, geen fout, geen rechten. Zie 20260920d.
+  if (mw.afdeling_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const admin = createAdminClient() as any
     const { data } = await admin
       .from('medewerker_afdelingen')
-      .select('standaard_rechten')
-      .eq('naam', mw.afdeling)
+      .select('rechten, standaard_rechten')
+      .eq('id', mw.afdeling_id)
       .eq('actief', true)
       .maybeSingle()
-    afdelingRechten = (data?.standaard_rechten as RechtenSet) ?? {}
+    // De v2-kolom is leidend; staat hij nog leeg, dan leest `leesRechtenDocument`
+    // de platte spiegel. Zo werkt dit ook op een omgeving waar 20260920g nog niet
+    // gedraaid heeft.
+    afdeling = leesRechtenDocument(data?.rechten, data?.standaard_rechten)
   }
+  const eigen = leesRechtenDocument(mw.rechten, mw.rechten_override)
 
-  const effectief: RechtenSet = { ...afdelingRechten }
-  for (const [k, v] of Object.entries(mw.rechten_override ?? {})) {
-    if (v !== undefined) (effectief as Record<string, unknown>)[k] = v
+  const desktop = mergeKanaal(afdeling.desktop, eigen.desktop)
+  const mobiel = mergeKanaal(afdeling.mobiel, eigen.mobiel)
+  // Beheerder is bewust kanaal-onafhankelijk: anders sluit een beheerder zichzelf
+  // op mobiel buiten en kan hij het daar niet meer repareren.
+  const beheerder =
+    desktop.modules.instellingen === 'beheren' || mobiel.modules.instellingen === 'beheren'
+
+  return {
+    verzoekKanaal,
+    desktop: { ...desktop, beheerder },
+    mobiel: { ...mobiel, beheerder },
+    beheerder,
   }
-  return effectief
 })
 
-/** Server-guard: redirect naar de startpagina als de gebruiker onvoldoende recht heeft. */
+/**
+ * Effectieve rechten van het kanaal waar dit verzoek vandaan komt, in de platte
+ * v1-vorm. Signatuur bewust ongewijzigd: alle bestaande aanroepers blijven doen
+ * wat ze deden, alleen krijgt `/m` nu zijn eigen set in plaats van de
+ * desktopset.
+ *
+ * Nieuwe code die functies of een specifiek kanaal nodig heeft, gebruikt
+ * `getRechtenBundel()` met `kiesKanaal()`.
+ */
+export const getEffectieveRechten = cache(async (
+  medewerker?: CurrentMedewerker | null,
+): Promise<RechtenSet> =>
+  alsRechtenSet(kiesKanaal(await getRechtenBundel(medewerker), 'verzoek')))
+
+/**
+ * Server-guard voor pagina's: stuurt weg als de gebruiker onvoldoende recht heeft.
+ *
+ * Standaard het kanaal van het verzoek — deze guard bewaakt een scherm, en welk
+ * scherm dat is volgt uit het pad. De terugval is `/m` op mobiel: wie op zijn
+ * telefoon een guard raakt hoort terug naar het mobiele startscherm, niet naar de
+ * desktopweergave waar hij niets te zoeken heeft.
+ */
 export async function vereisModuleToegang(
   module: RechtenModule,
   min: ModuleRechten = 'lezen',
+  opties: { kanaal?: KanaalKeuze; terug?: string } = {},
 ): Promise<void> {
-  const rechten = await getEffectieveRechten()
-  if (!heeftModuleToegang(rechten, module, min)) redirect('/')
+  const bundel = await getRechtenBundel()
+  const set = kiesKanaal(bundel, opties.kanaal ?? 'verzoek')
+  if (!heeftModuleToegang(set, module, min)) {
+    redirect(opties.terug ?? (bundel.verzoekKanaal === 'mobiel' ? '/m' : '/'))
+  }
 }
 
 /**
@@ -136,30 +199,81 @@ export async function vereisSessie(): Promise<CurrentMedewerker> {
  * Gebruik dit aan het begin van ELKE muterende action die de admin-client
  * (service-role, bypast RLS) gebruikt — anders kan elke ingelogde gebruiker de
  * action als kale RPC aanroepen.
+ *
+ * Het kanaal staat standaard op 'beide' en dat is bewust. Een server action
+ * wordt geadresseerd via de `Next-Action`-header en niet via het pad, dus de
+ * aanroeper kiest zelf vanaf welke pagina hij hem post. Zou deze gate op het
+ * verzoekkanaal afgaan, dan zou hij een grens suggereren die er niet is — en
+ * zouden route-handlers die vanaf /m worden aangeroepen ten onrechte de
+ * desktopset krijgen. Kanaal is een zichtbaarheidsscheiding, geen
+ * datatoegangsscheiding; zie kanaalVoorPad in rechten-catalogus.ts.
  */
 export async function vereisRecht(
   module: RechtenModule,
   min: ModuleRechten = 'schrijven',
-): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet }> {
+  opties: { kanaal?: KanaalKeuze } = {},
+): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet; set: KanaalSet }> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) throw new GeenToegangError('Niet ingelogd')
-  const rechten = await getEffectieveRechten(medewerker)
-  if (!heeftModuleToegang(rechten, module, min)) {
+  const set = kiesKanaal(await getRechtenBundel(medewerker), opties.kanaal ?? 'beide')
+  if (!heeftModuleToegang(set, module, min)) {
     throw new GeenToegangError(`Onvoldoende rechten voor ${module} (${min})`)
   }
-  return { medewerker, rechten }
+  return { medewerker, rechten: alsRechtenSet(set), set }
 }
 
 /**
- * Zwaarste gate: alleen echte beheerders (instellingen = beheren). Voor
- * rechten-mutaties, gebruikersbeheer en uitnodigingen.
+ * Paginaguard op een losse functie: stuurt weg in plaats van te gooien.
+ * De tegenhanger van `vereisModuleToegang`, met dezelfde kanaalkeuze.
  */
-export async function vereisBeheerder(): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet }> {
+export async function vereisFunctieToegang(
+  functie: FunctieKey,
+  opties: { kanaal?: KanaalKeuze; terug?: string } = {},
+): Promise<void> {
+  const bundel = await getRechtenBundel()
+  if (!heeftFunctie(kiesKanaal(bundel, opties.kanaal ?? 'verzoek'), functie)) {
+    redirect(opties.terug ?? (bundel.verzoekKanaal === 'mobiel' ? '/m' : '/'))
+  }
+}
+
+/**
+ * Autorisatie-gate op een losse functie, voor handelingen waar het niveau te
+ * grof voor is: bedragen zien, iets definitief verwijderen, accorderen.
+ * Zelfde kanaalkeuze en zelfde reden als bij `vereisRecht`.
+ */
+export async function vereisFunctie(
+  functie: FunctieKey,
+  opties: { kanaal?: KanaalKeuze } = {},
+): Promise<{ medewerker: CurrentMedewerker; set: KanaalSet }> {
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) throw new GeenToegangError('Niet ingelogd')
-  const rechten = await getEffectieveRechten(medewerker)
-  if (rechten.instellingen !== 'beheren') {
-    throw new GeenToegangError('Alleen beheerders')
+  const set = kiesKanaal(await getRechtenBundel(medewerker), opties.kanaal ?? 'beide')
+  if (!heeftFunctie(set, functie)) {
+    throw new GeenToegangError(`Onvoldoende rechten voor ${functie}`)
   }
-  return { medewerker, rechten }
+  return { medewerker, set }
+}
+
+/**
+ * Zwaarste gate: alleen echte beheerders. Voor rechten-mutaties,
+ * gebruikersbeheer en uitnodigingen.
+ *
+ * Loopt via de functie `instellingen.rechten_beheren`, die `inbegrepenVanaf:
+ * 'beheren'` heeft — vandaag dus gedragsgelijk aan de oude check op
+ * `instellingen === 'beheren'`. Het verschil komt later van pas: je kunt iemand
+ * de instellingen laten beheren zonder dat hij zichzelf rechten kan toekennen.
+ *
+ * Bewust NIET op het verzoekkanaal: `instellingen` bestaat alleen op desktop, en
+ * een beheerder die op zijn telefoon iets doet is nog steeds beheerder.
+ */
+export async function vereisBeheerder(): Promise<{ medewerker: CurrentMedewerker; rechten: RechtenSet }> {
+  try {
+    const { medewerker, set } = await vereisFunctie('instellingen.rechten_beheren')
+    return { medewerker, rechten: alsRechtenSet(set) }
+  } catch (e) {
+    if (e instanceof GeenToegangError && e.message.includes('rechten_beheren')) {
+      throw new GeenToegangError('Alleen beheerders')
+    }
+    throw e
+  }
 }

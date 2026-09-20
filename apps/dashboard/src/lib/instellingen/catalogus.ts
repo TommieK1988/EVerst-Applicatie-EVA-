@@ -145,11 +145,14 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
       {
         href: '/instellingen/gebruikers',
         titel: 'Gebruikers & rechten',
-        omschrijving: 'Wie toegang heeft tot EVA, welk type gebruiker ze zijn en welke rechten per afdeling gelden.',
+        omschrijving: 'Wie toegang heeft tot EVA en wie wat mag — per afdeling, per collega, en apart voor de desktop en de telefoon.',
         module: 'instellingen',
         alleenBeheerder: true,
         guard: { module: 'instellingen', niveau: 'beheren' },
-        synoniemen: ['toegang', 'rechten', 'rol', 'inloggen', 'wachtwoord', 'account', 'uitnodigen'],
+        synoniemen: [
+          'toegang', 'rechten', 'rol', 'inloggen', 'wachtwoord', 'account', 'uitnodigen',
+          'kanaal', 'mobiel', 'telefoon', 'desktop', 'functie', 'lezen', 'schrijven', 'beheren',
+        ],
       },
       {
         href: '/instellingen/klantportaal',

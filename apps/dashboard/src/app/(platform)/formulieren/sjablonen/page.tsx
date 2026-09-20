@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { getFormTemplates } from '../actions'
-import { vereisModuleToegang } from '@/lib/auth/rechten'
+import { vereisFunctieToegang } from '@/lib/auth/rechten'
 import type { FormTemplate } from '@/components/formulieren/types'
 import { TEMPLATE_CATEGORIE_LABELS } from '@/components/formulieren/types'
 import { format } from 'date-fns'
@@ -109,7 +109,10 @@ function TemplateKaart({ t }: { t: FormTemplate }) {
 }
 
 export default async function FormulierenSjablonenPage() {
-  await vereisModuleToegang('formulieren')
+  // Sjablonen ontwerpen raakt alle toekomstige inzendingen en stond tot september
+  // 2026 op `formulieren: lezen` — wie het overzicht mocht zien, kon de formulieren
+  // herbouwen. Nu een eigen functie, standaard inbegrepen vanaf `beheren`.
+  await vereisFunctieToegang('formulieren.sjablonen_beheren', { terug: '/formulieren' })
 
   const result = await getFormTemplates()
   const templates = result.ok ? result.data : []

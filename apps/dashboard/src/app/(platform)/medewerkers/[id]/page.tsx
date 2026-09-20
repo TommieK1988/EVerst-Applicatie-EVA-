@@ -35,7 +35,10 @@ import SaldoBeheer from '@/components/medewerkers/SaldoBeheer'
 import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { vereisModuleToegang, getEffectieveRechten, getCurrentMedewerker } from '@/lib/auth/rechten'
+import {
+  vereisModuleToegang, getEffectieveRechten, getCurrentMedewerker,
+  getRechtenBundel, heeftFunctie, kiesKanaal,
+} from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
@@ -58,7 +61,13 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   await vereisModuleToegang('medewerkers')
   const params = await props.params;
   const ingelogde = await getCurrentMedewerker()
+  const eigenSet = kiesKanaal(await getRechtenBundel(ingelogde), 'verzoek')
   const eigenRechten = await getEffectieveRechten(ingelogde)
+  // BSN, woonadres en geboortedatum zijn iets anders dan "mag de medewerkerskaart
+  // openen": een planner heeft die kaart nodig, een BSN niet. Zelfde voor tarieven
+  // en CAO-schaal. Beide zaten tot september 2026 op `medewerkers: lezen`.
+  const magPersoonsgegevens = heeftFunctie(eigenSet, 'medewerkers.persoonsgegevens')
+  const magTarieven = heeftFunctie(eigenSet, 'medewerkers.tarieven')
   // Het saldo van een collega bijstellen is beheerwerk; lezen mag iedereen met medewerkers-recht.
   const magMedewerkersBeheren = heeftModuleToegang(eigenRechten, 'medewerkers', 'beheren')
   // Wie welke rechten heeft, is beheerdersinformatie: gebruikertype, platformaccount en
@@ -186,7 +195,20 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
 
   if (!medewerkerRes.data) notFound()
 
-  const medewerker = medewerkerRes.data as Medewerker
+  // Afschermen door de waarden hier te wissen, niet door het veld in de client te
+  // verbergen: wat in de RSC-payload zit staat in de HTML en is met de devtools te
+  // lezen. Het formulier krijgt dus een record zónder deze velden.
+  const medewerker = {
+    ...(medewerkerRes.data as Medewerker),
+    ...(magPersoonsgegevens ? {} : {
+      bsn: null, geboortedatum: null,
+      adres_straat: null, adres_postcode: null, adres_plaats: null,
+    }),
+    ...(magTarieven ? {} : {
+      uurtarief_verkoop: null, uurtarief_kostprijs: null,
+      cao_schaal: null, cao_trede: null, cao_document_id: null,
+    }),
+  } as Medewerker
   const roosters = ((roosterRes.data ?? []) as (RoosterMetPauzes & { medewerker_rooster_pauzes: unknown[] })[]).map(r => ({
     ...r,
     pauzes: r.medewerker_rooster_pauzes ?? [],
@@ -326,6 +348,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
                 standaardGoedkeurderId={urenInstellingenRes.data?.niet_gewerkt_goedkeurder_id ?? null}
                 caoDocumenten={caoDocumenten}
                 caoSchalen={caoSchalen}
+                magPersoonsgegevens={magPersoonsgegevens}
+                magTarieven={magTarieven}
               />
             </CardBody>
           </Card>

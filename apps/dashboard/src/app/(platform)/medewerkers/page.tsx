@@ -1,15 +1,19 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisModuleToegang } from '@/lib/auth/rechten'
+import { vereisModuleToegang, getRechtenBundel, heeftFunctie, kiesKanaal } from '@/lib/auth/rechten'
 import MedewerkersOverzicht from './MedewerkersOverzicht'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 export const metadata: Metadata = { title: 'Medewerkers' }
 
 export default async function MedewerkersPage() {
-  // Salaris/persoonsgegevens: alleen zichtbaar met medewerkers-recht (beheerders altijd).
   await vereisModuleToegang('medewerkers')
+  // Tarieven en woonadres/geboortedatum hangen aan een eigen functie, niet aan
+  // "mag de medewerkerslijst zien". Zie packages/database/src/rechten-catalogus.ts.
+  const set = kiesKanaal(await getRechtenBundel(), 'verzoek')
+  const magPersoonsgegevens = heeftFunctie(set, 'medewerkers.persoonsgegevens')
+  const magTarieven = heeftFunctie(set, 'medewerkers.tarieven')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   // Alle kolommen behalve bsn (AVG-gevoelig — alleen op de medewerkerkaart, gemaskeerd)
@@ -54,7 +58,20 @@ export default async function MedewerkersPage() {
 
   return (
     <MedewerkersOverzicht
-      medewerkers={data ?? []}
+      // Wissen op de server, niet de kolom verbergen in de tabel: een kolom
+      // uitzetten laat de waarde gewoon in de RSC-payload staan.
+      medewerkers={(data ?? []).map((m: Record<string, unknown>) => ({
+        ...m,
+        ...(magPersoonsgegevens ? {} : {
+          geboortedatum: null, adres_straat: null, adres_postcode: null, adres_plaats: null,
+        }),
+        ...(magTarieven ? {} : {
+          uurtarief_verkoop: null, uurtarief_kostprijs: null,
+          cao_schaal: null, cao_trede: null, cao_document_id: null,
+        }),
+      }))}
+      magPersoonsgegevens={magPersoonsgegevens}
+      magTarieven={magTarieven}
       layouts={layouts}
       user_id={user_id}
       functies={(functiesRes.data ?? []) as { id: string; naam: string }[]}

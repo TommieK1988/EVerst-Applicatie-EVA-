@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { alsSessieCookie, APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
+import { KANAAL_HEADER, kanaalVoorPad } from '@everts/database/rechten'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
 import {
   COOKIE_SESSIE_VERLOOPT, COOKIE_PORTAAL, PORTAAL_SESSIE_MAXAGE,
@@ -13,8 +14,25 @@ import {
 } from '@/lib/auth/auth-bereikbaarheid'
 
 export async function middleware(request: NextRequest) {
+  // Het kanaal (desktop/mobiel) volgt uit het pad en gaat als requestheader mee naar
+  // de server-componenten, die er hun rechtenset mee kiezen. `set()` en niet
+  // `append()`: stuurt een client de header zelf mee, dan moet hij overschreven
+  // worden — anders is dit net zo vervalsbaar als het apparaat-cookie.
+  //
+  // Elke keer opnieuw uit `request.headers` opbouwen en niet één kopie hergebruiken:
+  // `request.cookies.set()` in de setAll hieronder schrijft de verse tokens in de
+  // cookie-header van het verzoek, en een eerder gemaakte kopie mist die dan. Het
+  // kanaal moet in BEIDE NextResponse.next()-aanroepen zitten, anders verdwijnt het
+  // precies op de requests waarin Supabase het token ververst.
+  const kanaal = kanaalVoorPad(request.nextUrl.pathname)
+  const verzoekHeaders = () => {
+    const h = new Headers(request.headers)
+    h.set(KANAAL_HEADER, kanaal)
+    return h
+  }
+
   let response = NextResponse.next({
-    request: { headers: request.headers },
+    request: { headers: verzoekHeaders() },
   })
 
   // Mobiel? Dan krijgt de sessie een persistente 3-daagse levensduur (overleeft
@@ -50,7 +68,7 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({
-            request: { headers: request.headers },
+            request: { headers: verzoekHeaders() },
           })
           cookiesToSet.forEach(({ name, value, options }) =>
             // Desktop: sessie-cookies (vervallen bij sluiten). Mobiel: persistent

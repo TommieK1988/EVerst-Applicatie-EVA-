@@ -541,6 +541,19 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/gebruikers$/, {
+    title: 'Instellingen — Gebruikers & rechten',
+    description: 'Wie mag wat, en waar. Elke afdeling heeft een standaard; per collega kun je daarvan afwijken. Desktop en telefoon stel je apart in.',
+    sections: [
+      { title: 'Gebruikers', body: 'Iedereen die kan inloggen, met een samenvatting van waar hij bij kan. Klap iemand open om van de afdelingsstandaard af te wijken. Staat een onderdeel op “Erven”, dan volgt hij de afdeling — ook als die later verandert.' },
+      { title: 'Afdelingen', body: 'De standaard die iedereen in die afdeling krijgt. Dit is de plek om iets voor een hele groep te regelen; een persoonlijke afwijking is bedoeld voor de uitzondering.' },
+      { title: 'Wat betekent wat', body: 'Per onderdeel in gewone taal wat lezen, schrijven en beheren daar inhouden, en welke losse functies er zijn. Je vindt dezelfde tekst door in de matrix een onderdeel uit te klappen.' },
+      { title: 'Desktop en mobiel', body: 'Twee losse sets. Op de telefoon bestaan maar zes onderdelen; uren, verlof, de planning van vandaag en het handboek staan daar bewust niet tussen, want die gaan over je eigen gegevens en zijn voor iedereen met een account bereikbaar.' },
+      { title: 'Niveau of functie', body: 'Het niveau is de gewone ladder: wie mag schrijven, mag ook lezen. Een functie is er voor handelingen waar dat te grof voor is — bedragen zien, iets definitief verwijderen, accorderen. “Standaard” betekent: volgen wat het niveau of de afdeling al bepaalt.' },
+      { title: 'Let op', body: 'Dit bepaalt wat iemand in EVA ziet en kan aanklikken. Het is geen afscherming van de gegevens zelf: voor wat een handeling mag, telt het hoogste van de twee kanalen. En wie Instellingen op “beheren” heeft, kan overal bij — ook bij onderdelen die hieronder uit staan.' },
+    ],
+  }],
+
   [/^\/instellingen\/medewerkers$/, {
     title: 'Instellingen — Medewerkers',
     description: 'Wat er op een medewerkerprofiel te kiezen valt, verdeeld over drie tabbladen.',

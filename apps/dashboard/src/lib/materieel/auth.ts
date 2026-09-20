@@ -35,7 +35,10 @@ export async function vereisMaterieelToegang(
   // Flag uit (productie vóór go-live) → de module bestaat hier simpelweg niet.
   if (!FEATURES.materieelbeheer) notFound()
   try {
-    const { medewerker } = await vereisRecht('materieelbeheer', min)
+    // Kanaal van het verzoek: dit bewaakt een scherm, en of dat het mobiele of het
+    // desktopscherm is volgt uit het pad. Muterende actions hieronder staan wél op
+    // 'beide' — daar is het kanaal geen grens, zie vereisRecht.
+    const { medewerker } = await vereisRecht('materieelbeheer', min, { kanaal: 'verzoek' })
     return medewerker
   } catch (e) {
     // redirect() gooit zelf een Next-signaal; dat mag hier gewoon doorlopen.

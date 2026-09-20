@@ -81,7 +81,11 @@ const PLANNING_INKOOP: NavEntry[] = [
 
 const FINANCIEEL: NavEntry[] = [
   { href: '/facturen', label: 'Facturen', Icon: IconFacturen, module: 'financieel' },
-  { href: '/uren',     label: 'Uren',     Icon: IconUren,     module: 'financieel' },
+  // Bewust géén module: /uren schermt zichzélf af op inhoud (zie app/(platform)/uren/page.tsx).
+  // Wie het financieel-recht mist ziet er alleen de uren die hij moet goedkeuren, en dat is
+  // precies waarvoor een teamleider of projectleider hier komt. Zou het menu-item aan
+  // 'financieel' hangen, dan verdwijnt het bij hem zodra dat recht wordt afgedwongen.
+  { href: '/uren',     label: 'Uren',     Icon: IconUren },
   { href: '/inkoop/facturen', label: 'Inkoop', Icon: IconInkoop, module: 'inkoopfacturen' },
   { href: '/management/dashboard', label: 'Management', Icon: IconManagement, module: 'management' },
 ]

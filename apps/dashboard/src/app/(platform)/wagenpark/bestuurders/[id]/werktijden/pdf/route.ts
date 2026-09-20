@@ -10,7 +10,7 @@ import { NextResponse } from 'next/server'
 import { laadPdfAfzender } from '@/lib/pdf/afzender'
 import { laadPdfLogo } from '@/lib/pdf/logo'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { magPriveRittenZien } from '@/lib/wagenpark/privacy'
+import { magWerktijdenZien } from '@/lib/wagenpark/privacy'
 import { laadWerktijdGegevens } from '@/lib/wagenpark/werktijd-bevindingen'
 import { bepaalPeriode } from '@/lib/wagenpark/periode'
 import { bouwWerktijdenPdf, werktijdenPdfBestandsnaam } from '@/lib/wagenpark/werktijden-pdf'
@@ -22,7 +22,7 @@ export async function GET(
   // Zelfde poort als het blok op de bestuurderpagina: aankomst- en
   // vertrektijden met een naam erbij zijn privacygevoelig. De PDF wordt met
   // verhoogde rechten gebouwd, dus deze controle staat er niet voor de sier.
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 })
   }
 

@@ -20,7 +20,7 @@
 
 import { pgQuery } from '@/lib/wagenpark/db'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { magPriveRittenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import { magWerktijdenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 
 export type DagRit = {
   id: string
@@ -109,7 +109,7 @@ export async function laadRittenVanDag(
   await vereisRecht('wagenpark', 'lezen')
   // Zelfde poort als de rest van dit scherm: ritten met een naam en adressen
   // erbij zijn privacygevoelig, en `pgQuery` gaat buiten RLS om.
-  if (!(await magPriveRittenZien())) {
+  if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen ritten inzien.' }
   }
   if (!/^\d+$/.test(user_id_ulu) || !/^\d{4}-\d{2}-\d{2}$/.test(datum)) {

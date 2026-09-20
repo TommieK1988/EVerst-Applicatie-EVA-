@@ -7,19 +7,11 @@ import { RECHTEN_MODULES } from '@everts/database/platform-types'
 import {
   updateGebruikerType,
   verstuurUitnodiging,
-  updateRechtenOverride,
   ontkoppelOffice365,
 } from '@/app/(platform)/medewerkers/[id]/actions'
 import { Button } from '@/components/ui'
 
 const MODULES = RECHTEN_MODULES
-
-const NIVEAUS: { value: 'lezen' | 'schrijven' | 'beheren' | null; label: string }[] = [
-  { value: null,        label: 'Geen' },
-  { value: 'lezen',     label: 'Lezen' },
-  { value: 'schrijven', label: 'Schrijven' },
-  { value: 'beheren',   label: 'Beheren' },
-]
 
 const GEBRUIKER_TYPE_LABELS: Record<GebruikerType, string> = {
   geen:               'Geen toegang',
@@ -65,9 +57,7 @@ export default function GebruikerToegangBeheer({
   afdeling_standaard_rechten: RechtenSet
 }) {
   const [type, setType] = useState<GebruikerType>(initial_type)
-  const [rechten, setRechten] = useState<RechtenSet>(initial_rechten)
-  const [editingRechten, setEditingRechten] = useState(false)
-  const [editRechten, setEditRechten] = useState<Record<string, 'lezen' | 'schrijven' | 'beheren' | null>>({})
+  const rechten = initial_rechten
   const [isPending, startTransition] = useTransition()
   const [authUserId, setAuthUserId] = useState<string | null>(auth_user_id)
 
@@ -104,34 +94,6 @@ export default function GebruikerToegangBeheer({
       if (!res.ok) { toast.error(res.error); return }
       if (res.auth_user_id) setAuthUserId(res.auth_user_id)
       toast.success('Uitnodiging verstuurd')
-    })
-  }
-
-  function startEditRechten() {
-    // Formulier starten vanaf de effectieve rechten, niet alleen de override
-    const seed: Record<string, 'lezen' | 'schrijven' | 'beheren' | null> = {}
-    for (const m of MODULES) {
-      seed[m.key] = (effectiefRechten as Record<string, 'lezen' | 'schrijven' | 'beheren' | null>)[m.key] ?? null
-    }
-    setEditRechten(seed)
-    setEditingRechten(true)
-  }
-
-  function saveRechten() {
-    // Alleen afwijkingen t.o.v. de afdeling-standaard als override bewaren,
-    // zodat ongewijzigde modules de afdeling-standaard blijven volgen.
-    const override: RechtenSet = {}
-    for (const m of MODULES) {
-      const val = editRechten[m.key] ?? null
-      const std = (afdeling_standaard_rechten as Record<string, string | null>)[m.key] ?? null
-      if (val !== std) (override as Record<string, unknown>)[m.key] = val
-    }
-    startTransition(async () => {
-      const res = await updateRechtenOverride(medewerker_id, override)
-      if (!res.ok) { toast.error(res.error); return }
-      setRechten(override)
-      setEditingRechten(false)
-      toast.success('Rechten opgeslagen')
     })
   }
 
@@ -216,87 +178,55 @@ export default function GebruikerToegangBeheer({
         </div>
       )}
 
-      {/* Rechten override — alleen zichtbaar als type = platform_gebruiker */}
-      {magToegangBeheren && type === 'platform_gebruiker' && (
-        <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>Rechten (override op afdeling-standaard)</label>
-            {!editingRechten && (
-              <Button variant="ghost" size="sm" onClick={startEditRechten}>
-                Aanpassen
-              </Button>
+      {/* Rechten — samenvatting; wijzigen gebeurt op het rechtenscherm.
+          Stond hier eerst als tweede matrix naast die van de afdeling, waardoor je
+          nooit het geheel zag: desktop, mobiel, afdeling en afwijking staan nu op
+          één plek bij elkaar. */}
+      {magToegangBeheren && type === "platform_gebruiker" && (
+        <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Rechten op de desktop</label>
+            <a
+              href={"/instellingen/gebruikers?deel=gebruikers#" + medewerker_id}
+              style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--accent)" }}
+            >
+              Aanpassen →
+            </a>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {MODULES.map(m => {
+              const effectief = (effectiefRechten as Record<string, string | null>)[m.key] ?? null
+              if (!effectief) return null
+              const heeftOverride = (rechten as Record<string, string | null>)[m.key] !== undefined
+              return (
+                <span
+                  key={m.key}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    padding: "2px 8px", borderRadius: 4, fontSize: 10,
+                    background: "rgba(31,122,58,0.08)", color: "var(--accent)",
+                    border: heeftOverride ? "1px solid var(--accent)" : "1px solid var(--border)",
+                  }}
+                >
+                  {m.label}: {effectief}
+                  {heeftOverride && <span title="Wijkt af van de afdeling">*</span>}
+                </span>
+              )
+            })}
+            {Object.values(effectiefRechten).every(v => !v) && (
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--fg-muted)" }}>
+                Geen rechten ingesteld.
+              </span>
             )}
           </div>
 
-          {editingRechten ? (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '6px 12px', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ ...labelStyle, marginBottom: 0 }}>Module</div>
-                {NIVEAUS.map(n => (
-                  <div key={n.label} style={{ ...labelStyle, marginBottom: 0, textAlign: 'center' }}>{n.label}</div>
-                ))}
-                {MODULES.map(m => {
-                  const huidig = editRechten[m.key] ?? null
-                  return (
-                    <React.Fragment key={m.key}>
-                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13 }}>{m.label}</span>
-                      {NIVEAUS.map(n => (
-                        <div key={n.label} style={{ display: 'flex', justifyContent: 'center' }}>
-                          <input
-                            type="radio"
-                            name={`rechten_${m.key}`}
-                            checked={huidig === n.value}
-                            onChange={() => setEditRechten(prev => ({ ...prev, [m.key]: n.value }))}
-                          />
-                        </div>
-                      ))}
-                    </React.Fragment>
-                  )
-                })}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="ghost" size="sm" onClick={() => setEditingRechten(false)}>
-                  Annuleren
-                </Button>
-                <Button variant="primary" size="sm" onClick={saveRechten} loading={isPending} disabled={isPending}>
-                  Opslaan
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {MODULES.map(m => {
-                const effectief = (effectiefRechten as Record<string, string | null>)[m.key] ?? null
-                const override  = (rechten as Record<string, string | null>)[m.key]
-                const heeftOverride = override !== undefined
-                return (
-                  <span
-                    key={m.key}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      padding: '2px 8px', borderRadius: 4,
-                      fontSize: 10,
-                      background: effectief ? 'rgba(31,122,58,0.08)' : 'var(--bg-active)',
-                      color: effectief ? 'var(--accent)' : 'var(--fg-muted)',
-                      border: heeftOverride ? '1px solid var(--accent)' : '1px solid var(--border)',
-                    }}
-                  >
-                    {m.label}: {effectief ?? 'geen'}
-                    {heeftOverride && <span title="Handmatig aangepast">*</span>}
-                  </span>
-                )
-              })}
-              {Object.keys(rechten).length === 0 && Object.keys(afdeling_standaard_rechten).length === 0 && (
-                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
-                  Geen rechten ingesteld — stel standaard in via{' '}
-                  <a href="/instellingen/gebruikers" style={{ color: 'var(--accent)' }}>Instellingen → Gebruikers</a>.
-                </span>
-              )}
-            </div>
-          )}
+          <p style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--fg-muted)", margin: "8px 0 0" }}>
+            Een ster betekent dat het afwijkt van de afdelingsstandaard. De rechten op de
+            telefoon staan los en zie je op het rechtenscherm.
+          </p>
         </div>
       )}
-
       {/* Office 365 */}
       <div>
         <label style={labelStyle}>Office 365</label>

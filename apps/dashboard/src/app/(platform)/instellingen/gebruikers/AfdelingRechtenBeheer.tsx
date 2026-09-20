@@ -1,101 +1,45 @@
 'use client'
 
-import React, { useState, useTransition } from 'react'
+import React from 'react'
 import toast from 'react-hot-toast'
-import type { MedewerkerAfdeling, RechtenSet } from '@everts/database/platform-types'
-import { RECHTEN_MODULES } from '@everts/database/platform-types'
-import { updateAfdelingRechten } from './actions'
-import { Card, Button, EmptyState } from '@/components/ui'
+import type { RechtenDocument } from '@everts/database/platform-types'
+import { leesRechtenDocument } from '@everts/database/rechten'
+import { updateAfdelingRechtenDocument } from './actions'
+import { Card, EmptyState } from '@/components/ui'
+import KanaalRechtenEditor from '@/components/rechten/KanaalRechtenEditor'
 
-const MODULES = RECHTEN_MODULES
+export type AfdelingMetRechten = {
+  id: string
+  naam: string
+  rechten: unknown
+  standaard_rechten: unknown
+}
 
-const NIVEAUS: { value: 'lezen' | 'schrijven' | 'beheren' | null; label: string; color: string }[] = [
-  { value: null,        label: 'Geen',      color: 'var(--fg-muted)' },
-  { value: 'lezen',     label: 'Lezen',     color: '#3b82f6' },
-  { value: 'schrijven', label: 'Schrijven', color: '#f59e0b' },
-  { value: 'beheren',   label: 'Beheren',   color: 'var(--accent)' },
-]
+function AfdelingKaart({ afdeling }: { afdeling: AfdelingMetRechten }) {
+  // `leesRechtenDocument` valt terug op de platte spiegel zolang de v2-kolom leeg
+  // is, zodat een nieuwe afdeling meteen werkt zonder migratie.
+  const doc = leesRechtenDocument(afdeling.rechten, afdeling.standaard_rechten)
 
-function AfdelingRij({ afdeling }: { afdeling: MedewerkerAfdeling }) {
-  const [rechten, setRechten] = useState<RechtenSet>(afdeling.standaard_rechten ?? {})
-  const [isPending, startTransition] = useTransition()
-  const [dirty, setDirty] = useState(false)
-
-  function set(module: string, niveau: 'lezen' | 'schrijven' | 'beheren' | null) {
-    setRechten(prev => ({ ...prev, [module]: niveau }))
-    setDirty(true)
-  }
-
-  function save() {
-    startTransition(async () => {
-      const res = await updateAfdelingRechten(afdeling.id, rechten)
-      if (!res.ok) { toast.error(res.error); return }
-      setDirty(false)
-      toast.success(`Rechten opgeslagen voor ${afdeling.naam}`)
-    })
-  }
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 10, fontWeight: 700,
-    color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
+  async function opslaan(nieuw: RechtenDocument) {
+    const res = await updateAfdelingRechtenDocument(afdeling.id, nieuw)
+    if (!res.ok) { toast.error(res.error); throw new Error(res.error) }
+    toast.success(`Rechten opgeslagen voor ${afdeling.naam}`)
   }
 
   return (
     <Card style={{ padding: '16px 20px', marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-          {afdeling.naam}
-        </div>
-        {dirty && (
-          <Button variant="primary" size="sm" onClick={save} loading={isPending}>
-            {isPending ? 'Opslaan…' : 'Opslaan'}
-          </Button>
-        )}
+      <div style={{
+        fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600,
+        color: 'var(--fg)', marginBottom: 12,
+      }}>
+        {afdeling.naam}
       </div>
-
-      {/* Grid: modules × niveaus */}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-          <thead>
-            <tr>
-              <th style={{ ...labelStyle, textAlign: 'left', padding: '4px 8px 8px 0', width: '30%' }}>Module</th>
-              {NIVEAUS.map(n => (
-                <th key={n.label} style={{ ...labelStyle, textAlign: 'center', padding: '4px 8px 8px', color: n.color || 'var(--fg-muted)' }}>
-                  {n.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {MODULES.map(m => {
-              const huidig = (rechten as Record<string, string | null>)[m.key] ?? null
-              return (
-                <tr key={m.key} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '8px 8px 8px 0', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>
-                    {m.label}
-                  </td>
-                  {NIVEAUS.map(n => (
-                    <td key={n.label} style={{ textAlign: 'center', padding: 8 }}>
-                      <input
-                        type="radio"
-                        name={`${afdeling.id}_${m.key}`}
-                        checked={huidig === n.value}
-                        onChange={() => set(m.key, n.value)}
-                        style={{ accentColor: n.color || 'var(--fg-muted)', width: 15, height: 15, cursor: 'pointer' }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <KanaalRechtenEditor waarde={doc} opslaan={opslaan} />
     </Card>
   )
 }
 
-export default function AfdelingRechtenBeheer({ afdelingen }: { afdelingen: MedewerkerAfdeling[] }) {
+export default function AfdelingRechtenBeheer({ afdelingen }: { afdelingen: AfdelingMetRechten[] }) {
   if (afdelingen.length === 0) {
     return (
       <Card>
@@ -114,9 +58,5 @@ export default function AfdelingRechtenBeheer({ afdelingen }: { afdelingen: Mede
     )
   }
 
-  return (
-    <div>
-      {afdelingen.map(a => <AfdelingRij key={a.id} afdeling={a} />)}
-    </div>
-  )
+  return <div>{afdelingen.map(a => <AfdelingKaart key={a.id} afdeling={a} />)}</div>
 }
