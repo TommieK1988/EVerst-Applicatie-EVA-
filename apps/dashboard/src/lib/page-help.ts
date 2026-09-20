@@ -301,6 +301,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Kanban-kolommen', body: 'Statussen: Bevestigd, Gepland, In uitvoering, Opgeleverd onder voorbehoud, Opgeleverd, Gefactureerd en Afgerond. Een opdracht gaat automatisch naar "In uitvoering" zodra de eerste uren worden geregistreerd.' },
       { title: 'Opdrachtstatus bewaken', body: 'Opdrachten die langer dan 14 dagen in dezelfde status staan worden oranje gemarkeerd. Klik op de kaart voor details en vervolgactie.' },
       { title: 'Filteren op medewerker', body: 'Gebruik het medewerkersfilter om alleen de opdrachten te tonen die aan een specifieke uitvoerder of projectleider zijn gekoppeld.' },
+      { title: 'Financieel gereed verdwijnt na een week', body: 'De kolom "Financieel gereed" is een controlelijstje, geen archief: een opdracht blijft er zeven dagen staan nadat hij gereed is gemeld en verdwijnt daarna van het bord. Je vindt hem terug onder Afgesloten. Hetzelfde geldt op Servicedesk.' },
     ],
   }],
 
@@ -1113,11 +1114,12 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Hoofdproces: Afgesloten ────────────────────────────────────────────
   [/^\/afgesloten$/, {
     title: 'Afgesloten',
-    description: 'Archief van alle afgeronde en afgesloten dossiers: financieel afgesloten opdrachten, verloren offertes, afgewezen en vervallen aanvragen. Vanuit hier bekijk je oude dossiers zonder ze per ongeluk te wijzigen.',
+    description: 'Archief van alle afgeronde dossiers: financieel gereed gemelde en financieel afgesloten opdrachten en servicedeskbonnen, verloren offertes, afgewezen en vervallen aanvragen. Vanuit hier bekijk je oude dossiers zonder ze per ongeluk te wijzigen.',
     sections: [
-      { title: 'Wat staat hier', body: 'Alle dossiers die het proces hebben verlaten: opdrachten met status "financieel afgesloten", niet-gewonnen offertes en aanvragen die zijn afgewezen of vervallen. Actieve dossiers vind je in Aanvragen, Offertes, Opdrachten of Servicedesk.' },
+      { title: 'Wat staat hier', body: 'Alle dossiers die het proces hebben verlaten: opdrachten en servicedeskbonnen met status "financieel gereed" of "financieel afgesloten", niet-gewonnen offertes en aanvragen die zijn afgewezen of vervallen. Actieve dossiers vind je in Aanvragen, Offertes, Opdrachten of Servicedesk.' },
+      { title: 'Financieel gereed', body: 'Een dossier dat financieel gereed is gemeld blijft nog zeven dagen op Opdrachten of Servicedesk staan en verhuist daarna hierheen. In die eerste week staat het dus op beide plekken.' },
       { title: 'Filteren en openen', body: 'Met de filter "Soort" schakel je tussen opdracht-/servicedesk-dossiers en aanvraag-/offerte-dossiers. Klik op een regel om het dossier te openen; standaard staat de lijst gesorteerd op laatst gewijzigd.' },
-      { title: 'Alleen-lezen', body: 'Afgesloten dossiers zijn overal in EVA alleen-lezen — je kunt ze bekijken en gebruiken als naslag, maar niet meer bewerken. Wil je toch iets aanpassen, dan moet het dossier eerst heropend worden vanuit de opdracht.' },
+      { title: 'Alleen-lezen', body: 'Financieel afgesloten, verloren, afgewezen en vervallen dossiers zijn overal in EVA alleen-lezen — je kunt ze bekijken en gebruiken als naslag, maar niet meer bewerken. Wil je toch iets aanpassen, dan moet het dossier eerst heropend worden vanuit de opdracht. Dossiers die alleen financieel gereed zijn gemeld blijven wél bewerkbaar; de laatste facturatie moet immers nog kunnen.' },
     ],
   }],
 

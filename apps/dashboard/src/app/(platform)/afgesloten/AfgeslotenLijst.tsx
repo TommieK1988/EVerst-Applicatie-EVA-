@@ -3,7 +3,7 @@ import React from 'react'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
-import { getDossierSubstatus } from '@/components/dossiers/types'
+import { getDossierSubstatus, isServicedeskDossier } from '@/components/dossiers/types'
 import { openDossierInNieuwTabblad } from '@/components/dossiers/open-dossier'
 import type { DossierRij } from '@/components/dossiers/types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
@@ -15,8 +15,26 @@ const HOOFDSTATUS_ROUTE: Record<string, string> = {
   opdracht: 'opdrachten',
 }
 
-/** Label + kleur per eindstatus (afgesloten/verloren/vervallen/afgewezen). */
+/**
+ * Route-segment voor één rij. Een servicedeskbon draagt hoofdstatus 'opdracht' en zou via de
+ * tabel hierboven op /opdrachten/<id> uitkomen — de verkeerde tab-set.
+ */
+function routeSegmentVoor(d: DossierRij): string {
+  if (isServicedeskDossier(d)) return 'servicedesk'
+  return HOOFDSTATUS_ROUTE[d.hoofdstatus] ?? 'opdrachten'
+}
+
+/**
+ * De substatus die deze rij hier draagt. `getDossierSubstatus` kent de servicedesk-ladder niet
+ * en zou voor een bon de (lege) opdracht-substatus teruggeven.
+ */
+function afsluitSubstatus(d: DossierRij): string {
+  return d.servicedesk_substatus ?? getDossierSubstatus(d)
+}
+
+/** Label + kleur per eindstatus (gereed/afgesloten/verloren/vervallen/afgewezen). */
 const STATUS_META: Record<string, { label: string; kleur: string }> = {
+  financieel_gereed:     { label: 'Financieel gereed',     kleur: 'var(--success-500)' },
   financieel_afgesloten: { label: 'Financieel afgesloten', kleur: 'var(--neutral-500)' },
   verloren:              { label: 'Verloren',              kleur: 'var(--error-500)'   },
   vervallen:             { label: 'Vervallen',             kleur: 'var(--warning-500)' },
@@ -111,9 +129,9 @@ export function AfgeslotenLijst({ dossiers, layouts, user_id }: Props) {
       breedte: 165,
       filterType: 'select',
       filterOpties: Array.from(new Set(Object.values(STATUS_META).map(s => s.label))),
-      sorteerWaarde: d => STATUS_META[getDossierSubstatus(d)]?.label ?? getDossierSubstatus(d),
+      sorteerWaarde: d => STATUS_META[afsluitSubstatus(d)]?.label ?? afsluitSubstatus(d),
       render: d => {
-        const sub = getDossierSubstatus(d)
+        const sub = afsluitSubstatus(d)
         const meta = STATUS_META[sub] ?? { label: sub, kleur: 'var(--neutral-400)' }
         return (
           <span style={{
@@ -162,8 +180,7 @@ export function AfgeslotenLijst({ dossiers, layouts, user_id }: Props) {
         toonRijActie={false}
         beginSortering={[{ id: 'laatst_bewerkt', desc: true }]}
         onRijKlik={d => {
-          const segment = HOOFDSTATUS_ROUTE[d.hoofdstatus] ?? 'opdrachten'
-          openDossierInNieuwTabblad(`/${segment}/${d.id}/informatie`)
+          openDossierInNieuwTabblad(`/${routeSegmentVoor(d)}/${d.id}/informatie`)
         }}
       />
     </div>

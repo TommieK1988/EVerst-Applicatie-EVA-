@@ -5,7 +5,7 @@ import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
 import { DossierLijst } from '@/components/dossiers/DossierLijst'
 import { BouwSyncKnop } from '@/components/dossiers/BouwSyncKnop'
 import { OPDRACHT_KANBAN_STATUSSEN, OPDRACHT_STATUSSEN } from '@/components/dossiers/types'
-import { getDossiersByBouw7Prefix, getDossiersAfgesloten, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
+import { getDossiersVoorOpdrachten, getDossiersAfgesloten, getLastBouw7SyncTijd } from '@/lib/dossiers/actions'
 import { getMedewerkerByAuthId } from '@/lib/dashboard/queries'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import { AfgeslotenToggle } from './AfgeslotenToggle'
@@ -63,7 +63,7 @@ export default async function OpdrachtenPage({
   }
 
   const [result, layouts, lasteSyncIso] = await Promise.all([
-    getDossiersByBouw7Prefix(['02.', '03.', '04.', '05.', '06.'], 'opdracht'),
+    getDossiersVoorOpdrachten(),
     user_id ? laadLayouts(user_id, 'dossiers-opdracht') : Promise.resolve([]),
     getLastBouw7SyncTijd(),
   ])

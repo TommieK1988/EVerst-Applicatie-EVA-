@@ -360,22 +360,43 @@ export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResu
 }
 
 /**
- * Haal dossiers op gefilterd op Bouw7 projectstatus-naam prefix.
- * Valt terug op hoofdstatus-query voor dossiers zonder Bouw7-koppeling.
- * prefix: bijv. '01.' voor aanvragen, '09.' + '08.' voor offertes.
+ * Nawerktijd van de kolom "Financieel gereed": zolang een dossier binnen dit venster gereed is
+ * gemeld blijft het op het bord staan, daarna verhuist het naar Afgesloten. Zeven dagen omdat
+ * de melding vrijwel altijd nog één keer wordt nagelopen — de kolom is een controlelijstje,
+ * geen archief.
  */
-export async function getDossiersByBouw7Prefix(prefixen: string[], fallbackHoofdstatus?: Hoofdstatus): Promise<DossierResult> {
-  const likeCondities = prefixen
+const FINANCIEEL_GEREED_VENSTER_DAGEN = 7
+
+function financieelGereedCutoff(): string {
+  return new Date(Date.now() - FINANCIEEL_GEREED_VENSTER_DAGEN * 24 * 60 * 60 * 1000).toISOString()
+}
+
+/**
+ * Het filter dat een langer geleden gereed gemeld dossier van het bord houdt. Als losse `.or()`
+ * bedoeld: meerdere `.or()`-aanroepen op dezelfde query worden door PostgREST met AND verbonden,
+ * dus dit knijpt de bord-query af zonder hem te herschrijven.
+ *
+ * Een leeg `financieel_gereed_op` telt als "lang geleden". Dat is bewust: de stempel bestaat pas
+ * sinds juli 2026 (opdrachten) resp. september 2026 (servicedesk), dus wat nu leeg is, is per
+ * definitie ouder. Zie 20260920_financieel_gereed_op_servicedesk.sql.
+ */
+function nogNietVerlopenFinancieelGereed(kolom: 'opdracht_substatus' | 'servicedesk_substatus'): string {
+  return `${kolom}.is.null,${kolom}.neq.financieel_gereed,financieel_gereed_op.gte.${financieelGereedCutoff()}`
+}
+
+/**
+ * Haal dossiers op voor het Opdrachten-bord: Bouw7-projectstatus 02 t/m 06, plus opdrachten
+ * zonder Bouw7-koppeling. Dossiers die langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen
+ * geleden financieel gereed zijn gemeld vallen eraf — die staan op Afgesloten.
+ */
+export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
+  const prefixen = ['02.', '03.', '04.', '05.', '06.']
     .map(p => `bouw7_projectstatus_naam.ilike.${p}%`)
     .join(',')
 
-  // Bouw OR-query: match op bouw7 prefix, of (geen bouw7 EN fallback hoofdstatus)
-  const orClause = fallbackHoofdstatus
-    ? `${likeCondities},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.${fallbackHoofdstatus})`
-    : likeCondities
-
   return haalDossierLijst(q => q
-    .or(orClause)
+    .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht)`)
+    .or(nogNietVerlopenFinancieelGereed('opdracht_substatus'))
     .order('created_at', { ascending: false }))
 }
 
@@ -415,11 +436,16 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
     .order('created_at', { ascending: false }))
 }
 
-/** Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit '08. Afgewezen' uit. */
+/**
+ * Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit
+ * '08. Afgewezen' uit, en net als bij Opdrachten ook alles wat langer dan
+ * {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
+ */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
   return haalDossierLijst(q => q
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')
+    .or(nogNietVerlopenFinancieelGereed('servicedesk_substatus'))
     .order('created_at', { ascending: false }))
 }
 
@@ -439,17 +465,23 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
 }
 
 /**
- * Haal alle definitief afgeronde dossiers op voor de "Afgesloten"-tab, over alle secties heen:
- * - Opdrachten: Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
- * - Offertes:   Verloren of Vervallen
- * - Aanvragen:  Vervallen
+ * Haal alle afgeronde dossiers op voor de "Afgesloten"-tab, over alle secties heen:
+ * - Opdrachten:  Financieel gereed of Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
+ * - Servicedesk: Financieel gereed
+ * - Offertes:    Verloren of Vervallen
+ * - Aanvragen:   Vervallen
  * Hoofdstatus-gated zodat een oude substatus-waarde op een inmiddels doorgeschoven dossier geen
  * vals-positief oplevert.
+ *
+ * Financieel gereed hoort hier ook thuis omdat het na zeven dagen van Opdrachten en Servicedesk
+ * verdwijnt (zie `nogNietVerlopenFinancieelGereed`); dit scherm is dan de enige ingang. Binnen
+ * die zeven dagen staat het dossier bewust op beide plekken.
  */
 export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
   return haalDossierLijst(q => q
     .or(
-      'and(hoofdstatus.eq.opdracht,opdracht_substatus.eq.financieel_afgesloten),' +
+      'and(hoofdstatus.eq.opdracht,opdracht_substatus.in.(financieel_gereed,financieel_afgesloten)),' +
+      'servicedesk_substatus.eq.financieel_gereed,' +
       'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
       'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.eq.vervallen),' +
       'bouw7_projectstatus_naam.ilike.07.%'
