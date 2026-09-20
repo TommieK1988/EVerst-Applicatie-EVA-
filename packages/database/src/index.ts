@@ -21,6 +21,7 @@ export type {
   Contactpersoon,
   ContactpersoonSoort,
   ContactpersoonBouw7Koppeling,
+  ContactpersoonEmail,
   ContactpersoonOrganisatie,
   ContactpersoonMetLink,
   ContactpersoonSamenvoeging,

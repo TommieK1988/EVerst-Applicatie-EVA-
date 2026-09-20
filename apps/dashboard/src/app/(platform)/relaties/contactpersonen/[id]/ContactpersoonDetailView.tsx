@@ -19,6 +19,7 @@ import { zetContactpersoonSoort } from '@/lib/relaties/ontdubbelen'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 import DossierLijstBlok from '@/components/relaties/DossierLijstBlok'
 import SamenvoegenModal from '@/components/relaties/SamenvoegenModal'
+import EmailadressenBlok from '@/components/relaties/EmailadressenBlok'
 
 const baseInput: React.CSSProperties = {
   width: '100%', padding: '7px 10px',
@@ -190,6 +191,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
     prive_adres_plaats: initial.prive_adres_plaats ?? '',
     prive_adres_land: initial.prive_adres_land ?? 'Nederland',
     geboortedatum: initial.geboortedatum ?? '',
+    kerstkaart: initial.kerstkaart ?? false,
     opmerkingen: initial.opmerkingen ?? '',
   })
   const [bezig, setBezig] = useState(false)
@@ -237,6 +239,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
       prive_adres_plaats: form.prive_adres_plaats || null,
       prive_adres_land: form.prive_adres_land || null,
       geboortedatum: form.geboortedatum || null,
+      kerstkaart: form.kerstkaart,
       opmerkingen: form.opmerkingen || null,
     })
     setBezig(false)
@@ -391,6 +394,11 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
             )}
           </Blok>
 
+          {/* Alle e-mailadressen — het veld "E-mail werk" hierboven is hiervan het primaire. */}
+          <Blok titel="E-mailadressen">
+            <EmailadressenBlok contactpersoonId={cp.id} />
+          </Blok>
+
           {/* Privégegevens */}
           <Blok
             titel="Privégegevens"
@@ -411,6 +419,16 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
                   <VeldInput label="Land" value={form.prive_adres_land} onChange={set('prive_adres_land')} />
                   <VeldInput label="Geboortedatum" value={form.geboortedatum} onChange={set('geboortedatum')} type="date" />
                 </div>
+                {/* De kaart gaat naar het privé-adres hierboven, vandaar dat dit hier staat. */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    id="kerstkaart"
+                    type="checkbox"
+                    checked={form.kerstkaart}
+                    onChange={e => setForm(f => ({ ...f, kerstkaart: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: 13 }}>Krijgt de kerstkaart</span>
+                </label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button variant="primary" onClick={opslaan} disabled={bezig}>{bezig ? 'Opslaan…' : 'Opslaan'}</Button>
                   <Button variant="ghost" onClick={() => setBewerken(false)}>Annuleer</Button>
@@ -426,6 +444,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
                   cp.prive_adres_land !== 'Nederland' ? cp.prive_adres_land : null,
                 ].filter(Boolean).join(', ') || null} />
                 <Rij label="Geboortedatum" waarde={cp.geboortedatum} />
+                <Rij label="Kerstkaart" waarde={cp.kerstkaart ? 'Ja' : null} />
               </div>
             )}
           </Blok>

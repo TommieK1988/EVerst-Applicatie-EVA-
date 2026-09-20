@@ -1584,6 +1584,7 @@ export type Database = {
           geslacht: string | null
           handmatige_velden: string[]
           id: string
+          kerstkaart: boolean
           linkedin_url: string | null
           mobiel: string | null
           opmerkingen: string | null
@@ -1620,6 +1621,7 @@ export type Database = {
           geslacht?: string | null
           handmatige_velden?: string[]
           id?: string
+          kerstkaart?: boolean
           linkedin_url?: string | null
           mobiel?: string | null
           opmerkingen?: string | null
@@ -1656,6 +1658,7 @@ export type Database = {
           geslacht?: string | null
           handmatige_velden?: string[]
           id?: string
+          kerstkaart?: boolean
           linkedin_url?: string | null
           mobiel?: string | null
           opmerkingen?: string | null
@@ -1677,6 +1680,50 @@ export type Database = {
           voornaam?: string
         }
         Relationships: []
+      }
+      contactpersoon_emails: {
+        Row: {
+          contactpersoon_id: string
+          created_at: string
+          created_by: string | null
+          email: string
+          herkomst: string
+          id: string
+          is_primair: boolean
+          label: string | null
+          opmerking: string | null
+        }
+        Insert: {
+          contactpersoon_id: string
+          created_at?: string
+          created_by?: string | null
+          email: string
+          herkomst?: string
+          id?: string
+          is_primair?: boolean
+          label?: string | null
+          opmerking?: string | null
+        }
+        Update: {
+          contactpersoon_id?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          herkomst?: string
+          id?: string
+          is_primair?: boolean
+          label?: string | null
+          opmerking?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_emails_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contactpersoon_bouw7_koppelingen: {
         Row: {

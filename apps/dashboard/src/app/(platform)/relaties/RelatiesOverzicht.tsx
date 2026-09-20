@@ -314,6 +314,17 @@ const KOLOMMEN_CONTACTPERSONEN: KolomDefinitie<ContactpersoonRij>[] = [
       ? <a href={r.linkedin_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>LinkedIn</a>
       : <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>,
   },
+  {
+    key: 'kerstkaart',
+    label: 'Kerstkaart',
+    standaard_zichtbaar: false,
+    filterType: 'select',
+    filterOpties: ['Ja', 'Nee'],
+    sorteerWaarde: r => r.kerstkaart ? 'Ja' : 'Nee',
+    render: r => r.kerstkaart
+      ? <Badge variant="outline" tone="success" dot>Ja</Badge>
+      : <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>,
+  },
 ]
 
 const KOLOMMEN_PARTICULIEREN: KolomDefinitie<ParticulierRij>[] = [

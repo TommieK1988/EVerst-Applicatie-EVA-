@@ -20,3 +20,4 @@ Thumbs.db
 .idea/
 .claude/settings.local.json
 render.env.import
+scratch-*.json

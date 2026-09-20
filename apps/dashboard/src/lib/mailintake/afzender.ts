@@ -115,15 +115,33 @@ export async function herkenAfzender(opts: {
   }
 
   // ── 2. Exact e-mailadres van een contactpersoon ────────────────────────────
+  // Niet alleen het primaire adres: iemand kan vanaf zijn tweede adres mailen, en dan hoort
+  // het bericht nog steeds bij dezelfde persoon. `contactpersoon_emails` bevat beide.
   if (adres) {
-    const { data } = await supabase
-      .from('contactpersonen')
-      .select('id, voornaam, achternaam, email, contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, actief))')
+    const { data: viaLijst } = await supabase
+      .from('contactpersoon_emails')
+      .select('contactpersoon_id')
       .ilike('email', adres)
-      .eq('actief', true)
       .limit(10)
+    const idsViaLijst = [...new Set((viaLijst ?? []).map((r: { contactpersoon_id: string }) => r.contactpersoon_id))]
 
-    for (const cp of data ?? []) {
+    const velden = 'id, voornaam, achternaam, email, contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, actief))'
+    const { data: viaPrimair } = await supabase
+      .from('contactpersonen').select(velden).ilike('email', adres).eq('actief', true).limit(10)
+    const { data: viaExtra } = idsViaLijst.length
+      ? await supabase.from('contactpersonen').select(velden).in('id', idsViaLijst).eq('actief', true).limit(10)
+      : { data: [] }
+
+    // Het primaire adres eerst: dat is de sterkste treffer als beide wegen iets opleveren.
+    const gezien = new Set<string>()
+    const data: any[] = []
+    for (const cp of [...(viaPrimair ?? []), ...(viaExtra ?? [])]) {
+      if (gezien.has(cp.id)) continue
+      gezien.add(cp.id)
+      data.push(cp)
+    }
+
+    for (const cp of data) {
       const koppels = (cp.contactpersoon_organisaties ?? []) as any[]
       const primair = koppels.find(k => k.is_primair && k.organisatie?.actief) ?? koppels.find(k => k.organisatie?.actief)
       if (primair?.organisatie) {

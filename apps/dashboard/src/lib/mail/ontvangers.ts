@@ -89,7 +89,7 @@ export async function getMailOntvangers(input: MailOntvangersInput): Promise<Mai
         klant_id, werkadres_email, werkadres_naam,
         ${ROLLEN.map(r => r.kolom).join(', ')},
         relaties!klant_id ( id, naam, email ),
-        contactpersonen ( voornaam, tussenvoegsel, achternaam, email )
+        contactpersonen ( id, voornaam, tussenvoegsel, achternaam, email, prive_email )
       `)
       .eq('id', input.dossierId)
       .maybeSingle()
@@ -98,10 +98,22 @@ export async function getMailOntvangers(input: MailOntvangersInput): Promise<Mai
       klantId = d.klant_id ?? null
       const klantNaam: string = d.relaties?.naam ?? 'Opdrachtgever'
 
-      // De contactpersoon die op het dossier staat is bijna altijd de bedoelde ontvanger.
+      // De contactpersoon die op het dossier staat is bijna altijd de bedoelde ontvanger —
+      // inclusief zijn andere adressen, want juist hier wil je kunnen kiezen.
       if (d.contactpersonen) {
-        voegToe(schoonAdres(d.contactpersonen.email), volledigeNaam(d.contactpersonen),
-          'Dit dossier', `Contactpersoon · ${klantNaam}`)
+        const cpNaam = volledigeNaam(d.contactpersonen)
+        voegToe(schoonAdres(d.contactpersonen.email), cpNaam, 'Dit dossier', `Contactpersoon · ${klantNaam}`)
+
+        const { data: extra } = await admin
+          .from('contactpersoon_emails')
+          .select('email, label, is_primair')
+          .eq('contactpersoon_id', d.contactpersonen.id)
+          .order('is_primair', { ascending: false })
+        for (const a of (extra ?? [])) {
+          if (a.is_primair) continue
+          voegToe(schoonAdres(a.email), cpNaam, 'Dit dossier', `Contactpersoon · ${a.label || 'extra adres'}`)
+        }
+        voegToe(schoonAdres(d.contactpersonen.prive_email), cpNaam, 'Dit dossier', 'Contactpersoon · privé')
       }
       voegToe(schoonAdres(d.werkadres_email), d.werkadres_naam || 'Contact op locatie',
         'Dit dossier', 'Werkadres')
@@ -151,16 +163,42 @@ export async function getMailOntvangers(input: MailOntvangersInput): Promise<Mai
 
     const { data: koppelingen } = await admin
       .from('contactpersoon_organisaties')
-      .select('organisatie_id, functie, is_primair, contactpersonen!inner ( voornaam, tussenvoegsel, achternaam, email, actief )')
+      .select('contactpersoon_id, organisatie_id, functie, is_primair, email, contactpersonen!inner ( id, voornaam, tussenvoegsel, achternaam, email, prive_email, actief )')
       .in('organisatie_id', organisatieIds)
       .eq('contactpersonen.actief', true)
       .order('is_primair', { ascending: false })
 
+    // Alle extra adressen van deze mensen in één keer; een contactpersoon kan er meerdere
+    // hebben (persoonlijk adres, facturenpostbus, oud adres) en je moet naar elk kunnen mailen.
+    const cpIds = [...new Set((koppelingen ?? []).map((k: any) => k.contactpersoon_id))]
+    const extraPerPersoon = new Map<string, { email: string; label: string | null; is_primair: boolean }[]>()
+    if (cpIds.length > 0) {
+      const { data: adressen } = await admin
+        .from('contactpersoon_emails')
+        .select('contactpersoon_id, email, label, is_primair')
+        .in('contactpersoon_id', cpIds)
+        .order('is_primair', { ascending: false })
+      for (const a of (adressen ?? [])) {
+        if (!extraPerPersoon.has(a.contactpersoon_id)) extraPerPersoon.set(a.contactpersoon_id, [])
+        extraPerPersoon.get(a.contactpersoon_id)!.push(a)
+      }
+    }
+
     for (const k of (koppelingen ?? [])) {
       const cp = k.contactpersonen
-      voegToe(schoonAdres(cp.email), volledigeNaam(cp),
-        naamPerOrg.get(k.organisatie_id) ?? 'Contactpersonen',
-        k.functie || undefined)
+      const naam = volledigeNaam(cp)
+      const groep = naamPerOrg.get(k.organisatie_id) ?? 'Contactpersonen'
+      const functie = k.functie || undefined
+
+      // Het primaire adres eerst, zodat dat bovenaan staat en de rest eronder.
+      voegToe(schoonAdres(cp.email), naam, groep, functie)
+      // Een adres dat alleen bij díe werkgever geldt staat op de koppeling.
+      voegToe(schoonAdres(k.email), naam, groep, [functie, 'adres bij deze organisatie'].filter(Boolean).join(' · '))
+      for (const a of (extraPerPersoon.get(k.contactpersoon_id) ?? [])) {
+        if (a.is_primair) continue
+        voegToe(schoonAdres(a.email), naam, groep, [functie, a.label || 'extra adres'].filter(Boolean).join(' · '))
+      }
+      voegToe(schoonAdres(cp.prive_email), naam, groep, [functie, 'privé'].filter(Boolean).join(' · '))
     }
   }
 

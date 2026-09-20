@@ -151,6 +151,8 @@ export type Contactpersoon = {
   // Overig
   opmerkingen: string | null
   actief: boolean
+  /** Staat op de kerstkaartlijst. Alleen EVA — Bouw7 kent dit veld niet. */
+  kerstkaart: boolean
   /**
    * De primaire Bouw7-spiegel. Bouw7 kan een mens maar aan één contact hangen, dus wie voor
    * twee bedrijven werkt staat daar twee keer; in EVA is dat één persoon met meerdere
@@ -216,6 +218,28 @@ export type ContactpersoonOrganisatie = {
   /** Overrides die in EVA zijn gezet en die de sync niet terugzet (`email`, `telefoon`, `mobiel`). */
   handmatige_velden: string[]
   created_at: string
+}
+
+/**
+ * Eén e-mailadres van een contactpersoon.
+ *
+ * Bouw7 kent per contactpersoon maar één adres, en dat blijft `contactpersonen.email` — het
+ * primaire. Deze tabel houdt de volledige lijst bij (inclusief een spiegel van dat primaire
+ * adres), zodat de ontvangerkiezer alle adressen kan aanbieden.
+ */
+export type ContactpersoonEmail = {
+  id: string
+  contactpersoon_id: string
+  email: string
+  /** Vrije aanduiding: Werk, Privé, Facturen, Oud adres… */
+  label: string | null
+  /** Precies één per persoon; spiegelt `contactpersonen.email` en gaat mee naar Bouw7. */
+  is_primair: boolean
+  /** `primair` = door de database gespiegeld, `handmatig` = door een gebruiker toegevoegd. */
+  herkomst: 'primair' | 'handmatig'
+  opmerking: string | null
+  created_at: string
+  created_by: string | null
 }
 
 export type ContactpersoonSamenvoeging = {

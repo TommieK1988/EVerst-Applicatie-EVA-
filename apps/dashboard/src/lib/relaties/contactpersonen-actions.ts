@@ -6,6 +6,7 @@ import type { Contactpersoon, ContactpersoonBouw7Koppeling, ContactpersoonOrgani
 import { BOUW7_CONTACTPERSOON_VELDEN, beschermdeVelden } from './sync-velden'
 import { ontmarkeerHandmatig } from '@/lib/bouw7/handmatige-velden'
 import { schrijfBouw7Contactpersoon, schrijfBouw7ContactpersoonFunctie } from '@/lib/bouw7/contact-write'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 
 type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
@@ -111,16 +112,24 @@ export async function getContactpersoonById(id: string): Promise<ContactpersoonM
 
 export async function getAlleContactpersonen(): Promise<(Contactpersoon & { organisaties: { naam: string; functie: string | null }[] })[]> {
   const supabase = createAdminClient() as any
-  const { data: koppelingen } = await supabase
+  // Gepagineerd: beide tabellen zijn de 1000-rijengrens van PostgREST voorbij of naderen hem,
+  // en een afkapping komt zonder foutmelding — dan mist een contactpersoon stil zijn organisatie.
+  const koppelingen = await haalAlleRijen<{
+    contactpersoon_id: string; functie: string | null; organisatie: { naam: string } | null
+  }>((van, tot) => supabase
     .from('contactpersoon_organisaties')
     .select('contactpersoon_id, functie, organisatie:relaties(naam)')
+    .order('id')
+    .range(van, tot))
 
   // Samengevoegde rijen blijven bestaan als doorverwijzing, maar horen in geen enkele lijst.
-  const { data: personen } = await supabase
+  const personen = await haalAlleRijen<any>((van, tot) => supabase
     .from('contactpersonen')
     .select('*')
     .is('samengevoegd_in', null)
     .order('achternaam')
+    .order('id')
+    .range(van, tot))
 
   if (!personen) return []
 
@@ -232,6 +241,7 @@ export async function updateContactpersoon(
     prive_adres_land?: string | null
     geboortedatum?: string | null
     opmerkingen?: string | null
+    kerstkaart?: boolean
   }
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any
