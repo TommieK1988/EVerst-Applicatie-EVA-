@@ -988,7 +988,13 @@ export async function maakAanvraag(input: {
     // Bouw7-referenties resolven.
     const [klantRow, cpRow, wmRow] = await Promise.all([
       input.klant_id ? supabase.from('relaties').select('bouw7_id').eq('id', input.klant_id).maybeSingle() : Promise.resolve({ data: null }),
-      input.contactpersoon_id ? supabase.from('contactpersonen').select('bouw7_id').eq('id', input.contactpersoon_id).maybeSingle() : Promise.resolve({ data: null }),
+      // Via de spiegel: één mens kan in Bouw7 meerdere contactpersoon-rijen hebben (één per
+      // bedrijf). Het project krijgt de rij van déze opdrachtgever.
+      input.contactpersoon_id
+        ? import('@/lib/bouw7/contactpersoon-spiegel')
+            .then(m => m.bouw7CpIdVoorOrganisatie(input.contactpersoon_id as string, input.klant_id ?? null))
+            .then(bouw7_id => ({ data: bouw7_id ? { bouw7_id } : null }))
+        : Promise.resolve({ data: null }),
       input.werkmaatschappij_id ? supabase.from('bedrijfsgegevens').select('naam, bouw7_branch_id').eq('id', input.werkmaatschappij_id).maybeSingle() : Promise.resolve({ data: null }),
     ])
 
