@@ -7,6 +7,9 @@
  * desktoproute (`/opdrachten/<id>`), en daar wil je vanaf `/m` niet belanden. Is `href` leeg,
  * dan weet de leeslaag geen zeker segment; dan wordt het een gewone regel zonder link in
  * plaats van een gok die op een foutpagina uitkomt.
+ *
+ * `terugNaar` reist mee als `?terug=`: zonder dat wijst de terugknop op het dossier naar de
+ * dossierlijst en ben je de klant kwijt die je aan de lijn had.
  */
 
 import React from 'react'
@@ -15,6 +18,7 @@ import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
 } from '@/components/dossiers/types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
+import { metTerug } from '@/lib/mobiel/terug'
 import { GRIJS, TEKST, lijstRij } from './stijl'
 
 const ALLE_STATUSSEN = [
@@ -56,12 +60,14 @@ const euro = (n: number): string =>
   n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export default function DossierRegel({
-  dossier, toonBedrag = false, toonJaar = false,
+  dossier, toonBedrag = false, toonJaar = false, terugNaar = null,
 }: {
   dossier: RelatieDossier
   /** Bij uitgevoerd werk is het gefactureerde bedrag het interessantste getal. */
   toonBedrag?: boolean
   toonJaar?: boolean
+  /** Het scherm waar deze regel op staat; wordt de terugknop van het dossier. */
+  terugNaar?: string | null
 }) {
   const { label, kleur } = statusVan(dossier)
 
@@ -111,7 +117,7 @@ export default function DossierRegel({
     return <div style={{ ...lijstRij, cursor: 'default' }}>{inhoud}</div>
   }
   return (
-    <Link href={`/m/dossiers/${dossier.id}/informatie`} style={lijstRij}>
+    <Link href={metTerug(`/m/dossiers/${dossier.id}/informatie`, terugNaar)} style={lijstRij}>
       {inhoud}
     </Link>
   )

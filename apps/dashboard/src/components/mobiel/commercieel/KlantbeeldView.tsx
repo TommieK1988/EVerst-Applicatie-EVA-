@@ -43,6 +43,9 @@ export default function KlantbeeldView({
 }) {
   const { relatie, kengetallen, score, signalen } = beeld
 
+  // Waar de terugknop van een geopend dossier heen moet: hierheen, niet naar de dossierlijst.
+  const terugNaar = `/m/commercieel/${relatie.id}`
+
   // Deze klant bovenaan "recent geopend" zetten. In een effect omdat localStorage pas na
   // hydratatie bestaat.
   React.useEffect(() => {
@@ -68,7 +71,7 @@ export default function KlantbeeldView({
           standaardOpen
           leegTekst="Er staat nu niets open bij deze klant."
         >
-          {beeld.offertesOpen.map(d => <DossierRegel key={d.id} dossier={d} />)}
+          {beeld.offertesOpen.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
         </KlapBlok>
 
         <KlapBlok
@@ -77,7 +80,7 @@ export default function KlantbeeldView({
           standaardOpen
           leegTekst="We zijn nu niets aan het uitwerken."
         >
-          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} />)}
+          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
         </KlapBlok>
 
         <KlapBlok
@@ -86,7 +89,7 @@ export default function KlantbeeldView({
           standaardOpen
           leegTekst="Er loopt op dit moment geen werk."
         >
-          {beeld.lopendWerk.map(d => <DossierRegel key={d.id} dossier={d} />)}
+          {beeld.lopendWerk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
         </KlapBlok>
 
         {/* Zonder het recht `financieel` verschijnt dit blok niet — geen lege kaart die
@@ -113,7 +116,7 @@ export default function KlantbeeldView({
           leegTekst="Geen afgerond werk in deze periode."
         >
           {beeld.uitgevoerd.map(d => (
-            <DossierRegel key={d.id} dossier={d} toonBedrag toonJaar />
+            <DossierRegel key={d.id} dossier={d} toonBedrag toonJaar terugNaar={terugNaar} />
           ))}
         </KlapBlok>
 

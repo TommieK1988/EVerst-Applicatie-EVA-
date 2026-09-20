@@ -95,6 +95,9 @@ export default function ContactpersoonView({
   // Mobiel vóór vast: op het kantoornummer krijg je de receptie, op zijn mobiel hemzelf.
   const belNummer = beeld.mobiel || beeld.telefoon
 
+  // Open je van hieruit een dossier, dan hoort de terugknop naar deze kaart te wijzen.
+  const terugNaar = `/m/commercieel/cp/${beeld.id}`
+
   return (
     <>
       {!beeld.actief && (
@@ -205,7 +208,9 @@ export default function ContactpersoonView({
           standaardOpen={beeld.dossiers.length > 0 && beeld.dossiers.length <= 5}
           leegTekst="Er staat geen dossier op deze contactpersoon."
         >
-          {beeld.dossiers.map(d => <DossierRegel key={d.id} dossier={d} toonJaar />)}
+          {beeld.dossiers.map(d => (
+            <DossierRegel key={d.id} dossier={d} toonJaar terugNaar={terugNaar} />
+          ))}
         </KlapBlok>
 
         <KlapBlok

@@ -18,6 +18,7 @@ import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 import OpleveringView from '@/components/mobiel/dossier-tabs/OpleveringView'
 import OpnameView from '@/components/mobiel/dossier-tabs/OpnameView'
+import { metTerug, veiligTerugPad } from '@/lib/mobiel/terug'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
@@ -29,12 +30,22 @@ const TabLaden = () => (
 )
 
 export default async function MobielDossierTabPage(
-  { params }: { params: Promise<{ id: string; tab: string }> }
+  { params, searchParams }: {
+    params: Promise<{ id: string; tab: string }>
+    searchParams: Promise<Record<string, string | string[] | undefined>>
+  }
 ) {
-  const { id, tab } = await params
+  const [{ id, tab }, sp] = await Promise.all([params, searchParams])
+
+  /**
+   * Waar je vandaan kwam. Leeg bij binnenkomst via de dossierlijst; dan blijft `/m/dossiers`
+   * de juiste terugweg. Komt hij uit het klantbeeld of een contactpersoonkaart, dan hoort de
+   * terugknop daarheen — anders raak je je klant kwijt bij elke stap naar een dossier.
+   */
+  const terug = veiligTerugPad(sp.terug)
 
   const geldig = DOSSIER_TABS.some(t => t.key === tab)
-  if (!geldig) redirect(`/m/dossiers/${id}/informatie`)
+  if (!geldig) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
   const actief = tab as DossierTabKey
 
   const res = await getDossierById(id)
@@ -42,17 +53,17 @@ export default async function MobielDossierTabPage(
 
   // Oplevering (Fase 9) én Houtrot horen bij een opdracht, niet bij een aanvraag.
   const isOpdracht = (res.data as { hoofdstatus?: string }).hoofdstatus === 'opdracht'
-  if (actief === 'oplevering' && !isOpdracht) redirect(`/m/dossiers/${id}/informatie`)
+  if (actief === 'oplevering' && !isOpdracht) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
 
   // Houtrot verschijnt alleen bij een opdracht-dossier waar de toggle aanstaat.
   const toggles = await getDossierToggles(id).catch(() => [])
   const houtrotAan =
     isOpdracht && toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.houtrot && t.aan)
-  if (actief === 'houtrot' && !houtrotAan) redirect(`/m/dossiers/${id}/informatie`)
+  if (actief === 'houtrot' && !houtrotAan) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
 
   // Opname verschijnt ook bij een aanvraag: de mutatie-opname gaat juist vooraf aan de offerte.
   const opnameAan = toggles.some(t => t.sleutel === TAB_TOGGLE_GATES.opname && t.aan)
-  if (actief === 'opname' && !opnameAan) redirect(`/m/dossiers/${id}/informatie`)
+  if (actief === 'opname' && !opnameAan) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
 
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,8 +73,11 @@ export default async function MobielDossierTabPage(
 
   return (
     <>
-      <AppHeader title={kop} sub={d.titel ?? undefined} backHref="/m/dossiers" />
-      <DossierTabStrip id={id} active={actief} houtrotAan={houtrotAan} opnameAan={opnameAan} isOpdracht={isOpdracht} />
+      <AppHeader title={kop} sub={d.titel ?? undefined} backHref={terug ?? '/m/dossiers'} />
+      <DossierTabStrip
+        id={id} active={actief} houtrotAan={houtrotAan} opnameAan={opnameAan}
+        isOpdracht={isOpdracht} terug={terug}
+      />
 
       {actief === 'informatie' && (
         <>

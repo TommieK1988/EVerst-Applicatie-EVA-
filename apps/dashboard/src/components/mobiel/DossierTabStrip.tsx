@@ -1,5 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
+import { metTerug } from '@/lib/mobiel/terug'
 
 /**
  * Horizontaal scrollbare sub-tab-strip binnen een mobiel dossier. Vijf tabs;
@@ -26,13 +27,18 @@ export const DOSSIER_TABS = [
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
 export default function DossierTabStrip({
-  id, active, houtrotAan = false, opnameAan = false, isOpdracht = false,
+  id, active, houtrotAan = false, opnameAan = false, isOpdracht = false, terug = null,
 }: {
   id: string
   active: DossierTabKey
   houtrotAan?: boolean
   opnameAan?: boolean
   isOpdracht?: boolean
+  /**
+   * Waar de terugknop van dit dossier heen wijst. Moet mee in elke tab-link: zonder dat ben
+   * je na één tabwissel je herkomst kwijt en val je terug op de dossierlijst.
+   */
+  terug?: string | null
 }) {
   const tabs = DOSSIER_TABS
     .filter(t => t.key !== 'houtrot' || houtrotAan)
@@ -59,7 +65,7 @@ export default function DossierTabStrip({
         return (
           <Link
             key={key}
-            href={`/m/dossiers/${id}/${key}`}
+            href={metTerug(`/m/dossiers/${id}/${key}`, terug)}
             style={{
               flexShrink: 0,
               padding: '13px 12px 11px',
