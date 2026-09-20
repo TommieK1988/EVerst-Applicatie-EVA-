@@ -56,10 +56,14 @@ export async function getContactpersonenVoorOrganisatie(organisatie_id: string):
     .eq('organisatie_id', organisatie_id)
     .order('is_primair', { ascending: false })
 
-  // Samengevoegde rijen horen nergens meer te verschijnen; hun koppelingen zijn al verhuisd,
-  // maar een handmatig teruggezette koppeling zou hem hier alsnog kunnen tonen.
-  return (data ?? []).filter((k: { contactpersoon?: { samengevoegd_in?: string | null } | null }) =>
-    !k.contactpersoon?.samengevoegd_in)
+  // Twee soorten rijen horen hier niet te staan. Samengevoegde: hun koppelingen zijn al verhuisd,
+  // maar een handmatig teruggezette koppeling zou hem alsnog tonen. En inactieve: dat zijn mensen
+  // die uit dienst zijn of, vaker, VvE's die ooit als "contactpersoon" onder hun beheerder waren
+  // aangemaakt en in Bouw7 allang verwijderd zijn. Alle aanroepers van deze functie vragen
+  // "wie kan ik hier aanspreken?" — de relatiekaart, de mailintake-kiezer, Nieuwe aanvraag en het
+  // klantbeeld. In geen van die vier hoort een opgeruimde rij nog te verschijnen.
+  return (data ?? []).filter((k: { contactpersoon?: { samengevoegd_in?: string | null; actief?: boolean | null } | null }) =>
+    k.contactpersoon != null && !k.contactpersoon.samengevoegd_in && k.contactpersoon.actief !== false)
 }
 
 export async function getContactpersoonById(id: string): Promise<ContactpersoonMetOrganisaties | null> {
