@@ -49,12 +49,15 @@ export default function RegelSheet({
   const [opmerking, setOpmerking] = useState(regel?.opmerking ?? '')
   const [bezig, setBezig] = useState(false)
 
-  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean }>>([])
+  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean; indirect: boolean }>>([])
   const [codes, setCodes] = useState<BewakingscodeOptie[]>([])
   const [codesLaden, setCodesLaden] = useState(false)
 
   const soort = uursoorten.find(u => u.id === uursoortId)
   const isWerk = soort?.categorie === 'werk'
+  // Overheadwerk op een indirecte-urendossier: daar staat geen begroting tegenover, dus is er
+  // geen bewakingscode te kiezen en vraagt het scherm er ook niet om.
+  const isIndirect = dossiers.some(d => d.id === dossierId && d.indirect)
 
   // De opdrachten waaraan deze medewerker gekoppeld is staan bovenaan; de rest blijft kiesbaar.
   useEffect(() => {
@@ -67,14 +70,14 @@ export default function RegelSheet({
   // Alleen codes waar prognose-uren op staan: de monteur kiest uit het werk dat voor dit project
   // begroot is, niet uit de volledige codelijst.
   useEffect(() => {
-    if (!isWerk || !dossierId) { setCodes([]); return }
+    if (!isWerk || !dossierId || isIndirect) { setCodes([]); return }
     let levend = true
     setCodesLaden(true)
     getBewakingscodesVoorUurlog(dossierId, { alleenMetPrognose: true })
       .then(c => { if (levend) setCodes(c) })
       .finally(() => { if (levend) setCodesLaden(false) })
     return () => { levend = false }
-  }, [dossierId, isWerk])
+  }, [dossierId, isWerk, isIndirect])
 
   async function bewaar() {
     setBezig(true)
@@ -147,36 +150,49 @@ export default function RegelSheet({
                     </optgroup>
                   )}
                   <optgroup label="Overige opdrachten">
-                    {dossiers.filter(d => !d.gekoppeld).map(d => (
+                    {dossiers.filter(d => !d.gekoppeld && !d.indirect).map(d => (
                       <option key={d.id} value={d.id}>{d.label}</option>
                     ))}
                   </optgroup>
+                  {dossiers.some(d => d.indirect) && (
+                    <optgroup label="Indirecte uren">
+                      {dossiers.filter(d => d.indirect).map(d => (
+                        <option key={d.id} value={d.id}>{d.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
-              <div>
-                <label style={labelStijl}>Bewakingscode</label>
-                <select value={code} onChange={e => setCode(e.target.value)} style={veld}
-                  disabled={!dossierId || codesLaden}>
-                  <option value="">
-                    {!dossierId ? '— kies eerst een project —'
-                      : codesLaden ? 'Bezig met ophalen…'
-                      : codes.length === 0 ? '— geen codes met begrote uren —'
-                      : '— kies een code —'}
-                  </option>
-                  {codes.map(c => (
-                    <option key={c.pslId} value={c.code}>
-                      {c.code}{c.naam ? ` · ${c.naam}` : ''} ({c.prognoseUren}u begroot)
+              {isIndirect ? (
+                <p style={{ fontSize: 12.5, color: '#6b757c', margin: '-6px 0 0', lineHeight: 1.45 }}>
+                  Indirecte uren worden niet bewaakt, dus een bewakingscode hoeft hier niet.
+                </p>
+              ) : (
+                <div>
+                  <label style={labelStijl}>Bewakingscode</label>
+                  <select value={code} onChange={e => setCode(e.target.value)} style={veld}
+                    disabled={!dossierId || codesLaden}>
+                    <option value="">
+                      {!dossierId ? '— kies eerst een project —'
+                        : codesLaden ? 'Bezig met ophalen…'
+                        : codes.length === 0 ? '— geen codes met begrote uren —'
+                        : '— kies een code —'}
                     </option>
-                  ))}
-                </select>
-                {dossierId && !codesLaden && codes.length === 0 && (
-                  <p style={{ fontSize: 12, color: '#a15c00', margin: '6px 0 0' }}>
-                    Op dit project staan geen begrote uren. Vraag je werkvoorbereider om een
-                    bewakingscode met uren, of kies een ander project.
-                  </p>
-                )}
-              </div>
+                    {codes.map(c => (
+                      <option key={c.pslId} value={c.code}>
+                        {c.code}{c.naam ? ` · ${c.naam}` : ''} ({c.prognoseUren}u begroot)
+                      </option>
+                    ))}
+                  </select>
+                  {dossierId && !codesLaden && codes.length === 0 && (
+                    <p style={{ fontSize: 12, color: '#a15c00', margin: '6px 0 0' }}>
+                      Op dit project staan geen begrote uren. Vraag je werkvoorbereider om een
+                      bewakingscode met uren, of kies een ander project.
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
 

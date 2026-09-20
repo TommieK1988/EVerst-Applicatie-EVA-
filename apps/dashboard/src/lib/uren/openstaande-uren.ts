@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client } from '@/lib/bouw7/sync'
-import { getUrenInstellingen } from './instellingen'
+import { getUrenInstellingen, getIndirecteDossierIds } from './instellingen'
 import type { Bouw7Client, Bouw7EmployeeHourLog, Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
 
 /**
@@ -65,8 +65,9 @@ export type OpenUurRegel = {
    */
   nietGewerkt: boolean
   /**
-   * Het dossier staat in `uren_instellingen.indirecte_dossier_ids`: overheadwerk, geen project.
-   * Dan gaan ook de gewerkte uren naar de eigen goedkeurder van de medewerker.
+   * Het dossier geldt als indirecte-urenproject (zie `getIndirecteDossierIds`): overheadwerk,
+   * geen project. Dan gaan ook de gewerkte uren naar de eigen goedkeurder van de medewerker,
+   * en is een bewakingscode niet verplicht -- er valt niets te bewaken.
    */
   indirectDossier: boolean
 
@@ -165,7 +166,7 @@ export async function haalOpenstaandeUren(
   const standaardGoedkeurderId = instellingen.niet_gewerkt_goedkeurder_id
   // Op een indirecte-urenproject valt voor een projectleider niets te beoordelen: daar gaat ook
   // de gewerkte tijd naar de eigen goedkeurder van de medewerker.
-  const indirecteDossiers = new Set(instellingen.indirecte_dossier_ids)
+  const indirecteDossiers = await getIndirecteDossierIds()
 
   type MedewerkerRij = { id: string; bouw7_id: string; uren_goedkeurder_id: string | null }
   const medRijen = (medewerkers ?? []) as MedewerkerRij[]

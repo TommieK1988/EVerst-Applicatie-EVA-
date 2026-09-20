@@ -142,3 +142,29 @@ function deadlineVan(weekStart: string, dag: number, tijd: string, volgendeWeek:
   dt.setHours(Number(uu), Number(mi), 0, 0)
   return dt
 }
+
+/**
+ * Alle dossiers die als indirecte-urenproject gelden: wat in de instellingen is aangevinkt én
+ * het dossier dat per werkmaatschappij voor indirecte uren is aangewezen.
+ *
+ * Hierop is een bewakingscode niet verplicht. Een bewakingscode hoort bij een begroting die
+ * bewaakt wordt; op een indirecte-urendossier staat geen begroting, dus valt er geen code te
+ * kiezen en heeft het geen zin er een te eisen. Op een echt project blijft hij verplicht --
+ * daar is de code de bewaking zelf.
+ */
+export async function getIndirecteDossierIds(): Promise<Set<string>> {
+  const supabase = db()
+  const [inst, { data: wm }] = await Promise.all([
+    getUrenInstellingen(),
+    // Een handvol rijen: één per werkmaatschappij.
+    supabase
+      .from('bedrijfsgegevens')
+      .select('indirect_uren_dossier_id')
+      .not('indirect_uren_dossier_id', 'is', null),
+  ])
+  const ids = new Set(inst.indirecte_dossier_ids)
+  for (const r of (wm ?? []) as Array<{ indirect_uren_dossier_id: string }>) {
+    ids.add(r.indirect_uren_dossier_id)
+  }
+  return ids
+}

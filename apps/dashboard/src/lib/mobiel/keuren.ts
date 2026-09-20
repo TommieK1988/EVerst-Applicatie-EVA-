@@ -399,8 +399,12 @@ async function haalOnkosten(
 
 type BronRegel = OpenUurRegel
 
-/** Gewerkte uren zonder bewakingscode — verlof en ATV horen er geen te hebben. */
-const mistCode = (r: BronRegel) => !r.nietGewerkt && !r.bewakingscode
+/**
+ * Gewerkte uren op een echt project zonder bewakingscode: die mogen niet door, want in Bouw7
+ * belanden ze op de ongecodeerde hoop. Verlof en ATV horen geen code te hebben, en op een
+ * indirecte-urendossier valt niets te bewaken -- daar houdt de code dus niemand tegen.
+ */
+const mistCode = (r: BronRegel) => !r.nietGewerkt && !r.indirectDossier && !r.bewakingscode
 
 function maakRegel(r: BronRegel, rol: KeurRegel['rol'], wachtOpTeamleider = false): KeurRegel {
   // Ben ik zelf ook de projectleider, dan schuift er niets door en handelt

@@ -438,8 +438,10 @@ export default function UrenInstellingenBeheer({
             <p style={{ ...uitlegStijl, marginTop: 4 }}>
               Op een aangevinkt dossier gaan <strong>alle</strong> uren naar de eigen goedkeurder
               van de medewerker — ook de gewerkte. Daar is geen projectwerk te beoordelen, alleen
-              overhead. Niet aangevinkt = gewerkte uren gaan naar de teamleider en projectleider
-              van dat dossier, zoals bij elk ander project.
+              overhead. Er is op zo&apos;n dossier ook <strong>geen bewakingscode nodig</strong>:
+              overhead wordt niet bewaakt, dus valt er niets te kiezen en houdt het opgeven en
+              goedkeuren van die uren niemand op. Niet aangevinkt = gewerkte uren gaan naar de
+              teamleider en projectleider van dat dossier, mét code, zoals bij elk ander project.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {indirectDossiers.map(d => (

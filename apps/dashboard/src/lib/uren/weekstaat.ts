@@ -15,7 +15,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
-import { getUrenInstellingen, getIndirectDossierId } from './instellingen'
+import { getUrenInstellingen, getIndirectDossierId, getIndirecteDossierIds } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
@@ -204,7 +204,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   const weekStart = weekStartVan(datum ?? new Date())
   const weekId = await zorgVoorWeek(medewerker.id, weekStart)
 
-  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst] = await Promise.all([
+  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers] = await Promise.all([
     supabase.from('uren_weken').select('*').eq('id', weekId).single(),
     supabase
       .from('uren_regels')
@@ -214,6 +214,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     supabase.from('uren_onkosten').select('*').eq('week_id', weekId).order('datum'),
     supabase.from('uren_saldo_per_medewerker').select('saldo_uren').eq('medewerker_id', medewerker.id).maybeSingle(),
     getUrenInstellingen(),
+    getIndirecteDossierIds(),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -239,7 +240,9 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   const contracturen = Number(week.contracturen ?? 0)
   const totalen = berekenWeekTotalen(nette, contracturen, inst.tolerantie_uren)
   const status = week.status as WeekStatus
-  const ongecodeerd = nette.filter(r => r.categorie === 'werk' && (!r.dossier_id || !r.bewakingscode)).length
+  const ongecodeerd = nette.filter(r => r.categorie === 'werk' && (
+    !r.dossier_id || (!r.bewakingscode && !indirecteDossiers.has(r.dossier_id))
+  )).length
   const blokkade = indienBlokkade(totalen, contracturen, ongecodeerd)
 
   // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
@@ -339,7 +342,7 @@ const KOPPELING_DAGEN = 180
  * geen voorwaarde meer.
  */
 export async function getDossierOpties(datum: string): Promise<Array<{
-  id: string; label: string; gekoppeld: boolean
+  id: string; label: string; gekoppeld: boolean; indirect: boolean
 }>> {
   const medewerker = await vereisSessie()
   const supabase = db()
@@ -418,20 +421,39 @@ export async function getDossierOpties(datum: string): Promise<Array<{
 
   const { data: opdrachten } = await lopendeOpdrachten().limit(500)
 
+  // De indirecte-urendossiers horen er altijd bij te staan. Het zijn administratieve dossiers en
+  // vaak geen lopende opdracht, dus het filter hierboven laat ze vallen -- terwijl juist daar de
+  // overheadtijd op hoort. Ze krijgen in het scherm een eigen groep.
+  const indirecteIds = [...await getIndirecteDossierIds()]
+  const { data: indirecte } = indirecteIds.length
+    ? await supabase
+        .from('dossiers')
+        .select('id, dossiernummer, titel')
+        .in('id', indirecteIds)
+        .eq('gearchiveerd', false)
+        .order('dossiernummer')
+    : { data: [] }
+
   type Rij = { id: string; dossiernummer: string; titel: string }
   const label = (d: Rij) => `${d.dossiernummer} · ${d.titel}`
 
+  const indirectSet = new Set(((indirecte ?? []) as Rij[]).map(d => d.id))
+
   const eigen = ((mijne ?? []) as Rij[])
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: true }))
+    .filter(d => !indirectSet.has(d.id))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: true, indirect: false }))
     // Waar hij deze dag staat ingepland bovenaan; de rest op dossiernummer aflopend.
     .sort((a, b) => Number(vandaagGepland.has(b.id)) - Number(vandaagGepland.has(a.id)))
 
   const eigenIds = new Set(eigen.map(d => d.id))
   const rest = ((opdrachten ?? []) as Rij[])
-    .filter(d => !eigenIds.has(d.id))
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: false }))
+    .filter(d => !eigenIds.has(d.id) && !indirectSet.has(d.id))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: false }))
 
-  return [...eigen, ...rest]
+  const overhead = ((indirecte ?? []) as Rij[])
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: true }))
+
+  return [...eigen, ...rest, ...overhead]
 }
 
 /* ── Muteren ──────────────────────────────────────────────────────── */
@@ -468,14 +490,17 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
   const categorie = soort.uren_categorie as UrenCategorie
   if (categorie === 'werk') {
     if (!invoer.dossier_id) throw new Error('Kies een project voor deze uren.')
-    if (!invoer.bewakingscode) throw new Error('Kies een bewakingscode voor deze uren.')
+    // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
+    // is de code niet verplicht. Zie `getIndirecteDossierIds`.
+    const indirect = (await getIndirecteDossierIds()).has(invoer.dossier_id)
+    if (!indirect && !invoer.bewakingscode) throw new Error('Kies een bewakingscode voor deze uren.')
     return {
       medewerker_id: medewerkerId,
       datum: invoer.datum,
       uren: invoer.uren,
       uursoort_id: invoer.uursoort_id,
       dossier_id: invoer.dossier_id,
-      bewakingscode: invoer.bewakingscode,
+      bewakingscode: invoer.bewakingscode ?? null,
       bouw7_psl_id: invoer.bouw7_psl_id ?? null,
       opmerking: invoer.opmerking?.trim() || null,
     }
@@ -589,12 +614,13 @@ export async function dienWeekIn(
     return { ok: false, error: 'Er staan geen contracturen voor je ingesteld. Vraag de planning om je rooster in te vullen.' }
   }
 
-  const [{ data: regels }, inst] = await Promise.all([
+  const [{ data: regels }, inst, indirecteDossiers] = await Promise.all([
     supabase
       .from('uren_regels')
       .select('uren, dossier_id, bewakingscode, planning_uursoorten(uren_categorie)')
       .eq('week_id', weekId),
     getUrenInstellingen(),
+    getIndirecteDossierIds(),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rij = (regels ?? []) as any[]
@@ -606,9 +632,11 @@ export async function dienWeekIn(
     return { ok: false, error: `Nog ${tekort.toLocaleString('nl-NL')} uur te verantwoorden.` }
   }
 
-  // Werk-uren zonder bewakingscode zouden in Bouw7 op de ongecodeerde hoop belanden.
+  // Werk-uren zonder bewakingscode zouden in Bouw7 op de ongecodeerde hoop belanden. Behalve op
+  // een indirecte-urendossier: daar is er niets te bewaken en dus geen code te kiezen.
   const ongecodeerd = rij.filter(
-    r => r.planning_uursoorten?.uren_categorie === 'werk' && (!r.dossier_id || !r.bewakingscode),
+    r => r.planning_uursoorten?.uren_categorie === 'werk'
+      && (!r.dossier_id || (!r.bewakingscode && !indirecteDossiers.has(r.dossier_id))),
   ).length
   if (ongecodeerd > 0) {
     return {
