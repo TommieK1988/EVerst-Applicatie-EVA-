@@ -70,8 +70,8 @@ export async function voorleggen(
   bericht: { onderwerp?: string | null; van_naam?: string | null; van_adres?: string | null; ontvangen_op?: string | null },
   redenen: string[],
   context?: { velden?: GekeurdeVelden; relatieNaam?: string | null; soort?: string | null },
-): Promise<void> {
-  if (!behandelaarId) return
+): Promise<{ gemeldAan: string | null }> {
+  if (!behandelaarId) return { gemeldAan: null }
 
   const afzender = bericht.van_naam || bericht.van_adres || 'onbekende afzender'
   const v = context?.velden
@@ -141,6 +141,12 @@ export async function voorleggen(
       details: { taak_id: res.taakId, behandelaar: res.toegewezenAan },
     })
   }
+
+  // De actie heeft de behandelaar zelf al een melding opgeleverd. `meldVoorgelegd`
+  // hoort hem daarom over te slaan: de behandelaar staat meestal óók in de
+  // notificatielijst van de postbus, en kreeg dan twee belletjes over één bericht.
+  const gemeld = !res.bestond && !res.zonderOntvanger
+  return { gemeldAan: gemeld ? behandelaarId : null }
 }
 
 /** Notificaties bij een bericht dat is voorgelegd. */
@@ -151,9 +157,11 @@ export async function meldVoorgelegd(
   afzenderScore: number,
   soortVertrouwen: number,
   status: string,
+  /** Medewerker die via `voorleggen` al een melding kreeg; die slaan we over. */
+  alGemeldAan?: string | null,
 ): Promise<void> {
   if (status === 'geen_aanvraag') return // geen ruis over ruis
-  const wie = await ontvangers(postbus)
+  const wie = (await ontvangers(postbus)).filter(w => w.medewerkerId !== alGemeldAan)
   if (!wie.length) return
 
   const afzender = bericht.van_naam || bericht.van_adres || 'onbekende afzender'

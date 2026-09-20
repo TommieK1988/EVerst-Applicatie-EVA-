@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { meldTaakToegewezen } from './meldingen'
 
 /**
  * Gedeelde bouwstenen voor het klonen van een sjabloontaak naar een echte taak op
@@ -22,31 +21,19 @@ export interface KloonContext {
  * een rol-toewijzing wordt opgezocht op het dossier, 'medewerker_zelf' wordt de medewerker
  * om wie de actielijst draait, een directe toewijzing wordt overgenomen.
  *
- * Iedereen die er hier op komt krijgt een melding — dit is voor de ontvanger niet te
- * onderscheiden van een collega die hem handmatig iets toewijst. Dat de taak uit een
- * sjabloon rolde is een detail van de herkomst, geen reden om het stil te houden.
+ * GEEN MELDINGEN. Een actielijst rolt in één keer uit: het activeren van een sjabloon
+ * levert al gauw vijftien taken op en de herhaal-reeks bouwt er bij een verschoven
+ * planning nog eens twaalf bij. Vijftien belletjes binnen twee seconden is geen melding
+ * meer maar een storing, en de ontvanger ziet het werk toch: in de actielijst zelf, in
+ * Mijn taken en via de dagelijkse deadline-melding. Melden doen we alleen bij taken die
+ * iemand los aanmaakt of toewijst — zie `meldTaakToegewezen`.
  */
 export async function resolveerToewijzingen(
   sb: any,
   context: KloonContext,
   sjabloonTaak: any,
   nieuweTaakId: string,
-  opties?: {
-    /** Wie het sjabloon activeerde; die krijgt geen melding over zijn eigen klik. */
-    doorUserId?: string | null
-    /**
-     * Uit te zetten waar in één keer een hele reeks taken ontstaat. De
-     * herhaal-reeks bouwt bij een verschoven planning in één ronde alle nog
-     * ontbrekende keren op; dat zijn er zo twaalf, en twaalf pushmeldingen op
-     * één moment is geen melding meer maar een storing. Die keren komen vanzelf
-     * in beeld via de dagelijkse deadline-melding.
-     */
-    melden?: boolean
-  },
 ): Promise<void> {
-  const melden = opties?.melden !== false
-  const doorUserId = opties?.doorUserId ?? null
-  const toegewezen: string[] = []
   if (
     sjabloonTaak.assignee_type === 'dossier_rol' &&
     context.dossier &&
@@ -67,10 +54,8 @@ export async function resolveerToewijzingen(
           user_id: med.auth_user_id,
           rol:     'verantwoordelijke',
         })
-        toegewezen.push(med.auth_user_id)
       }
     }
-    if (melden) await meldTaakToegewezen(nieuweTaakId, toegewezen, { doorUserId })
     return
   }
 
@@ -84,7 +69,6 @@ export async function resolveerToewijzingen(
         user_id: context.medewerker.auth_user_id,
         rol:     'verantwoordelijke',
       })
-      if (melden) await meldTaakToegewezen(nieuweTaakId, [context.medewerker.auth_user_id], { doorUserId })
     }
     return
   }
@@ -98,13 +82,6 @@ export async function resolveerToewijzingen(
         rol:     a.rol,
       })),
     )
-    if (melden) {
-      await meldTaakToegewezen(
-        nieuweTaakId,
-        assignees.map((a: { user_id: string }) => a.user_id),
-        { doorUserId },
-      )
-    }
   }
 }
 

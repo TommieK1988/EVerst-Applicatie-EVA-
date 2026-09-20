@@ -186,7 +186,6 @@ export async function activeerSjabloon(input: {
       { dossier: dossier ?? undefined, medewerker: medewerker ?? undefined },
       taak,
       nieuweTaak.id,
-      { doorUserId: activeerder },
     )
     await kopieerCompletionActies(supabase, taak, nieuweTaak.id)
   }

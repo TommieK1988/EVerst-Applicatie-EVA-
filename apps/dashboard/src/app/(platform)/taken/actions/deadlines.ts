@@ -139,7 +139,7 @@ async function stemHerhalingAf(
       .single()
 
     if (!nieuweTaak) continue
-    await resolveerToewijzingen(sb, { dossier }, sjabloonTaak, nieuweTaak.id, { melden: false })
+    await resolveerToewijzingen(sb, { dossier }, sjabloonTaak, nieuweTaak.id)
     await kopieerCompletionActies(sb, sjabloonTaak, nieuweTaak.id)
   }
 

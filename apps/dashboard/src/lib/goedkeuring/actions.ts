@@ -241,7 +241,12 @@ export async function vraagGoedkeuringAan(opts: {
   let taak: BeoordeelTaakResultaat | null = null
   if (opts.dossierId) {
     try {
-      taak = await maakBeoordeelTaak(opts.dossierId, BEOORDEEL_TAAK_TITEL[opts.objectType], beoordelaar?.id ?? null)
+      // Geen taak-melding: `notificeerBeoordelaar` hieronder stuurt er al een over
+      // dezelfde handeling, met een betere tekst en bestemming.
+      taak = await maakBeoordeelTaak(
+        opts.dossierId, BEOORDEEL_TAAK_TITEL[opts.objectType], beoordelaar?.id ?? null,
+        { meldToewijzing: false },
+      )
     } catch {
       // Taak is ondersteunend — aanvraag zelf is al vastgelegd.
     }
@@ -528,7 +533,10 @@ export async function draagOver(goedkeuringId: string, medewerkerId: string): Pr
 
   // Beoordeeltaak voor de gedelegeerde.
   if (g.dossier_id) {
-    try { await maakBeoordeelTaak(g.dossier_id, BEOORDEEL_TAAK_TITEL[g.object_type], medewerkerId) } catch { /* ondersteunend */ }
+    // Zonder taak-melding: de overdracht krijgt hieronder zijn eigen melding.
+    try {
+      await maakBeoordeelTaak(g.dossier_id, BEOORDEEL_TAAK_TITEL[g.object_type], medewerkerId, { meldToewijzing: false })
+    } catch { /* ondersteunend */ }
   }
 
   // Ook bij overdragen een melding — anders merkt de nieuwe beoordelaar het niet.

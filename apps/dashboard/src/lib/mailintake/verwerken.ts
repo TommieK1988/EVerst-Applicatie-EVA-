@@ -574,11 +574,15 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       uit.automatisch = true
     } else {
       uit.status = besluit.status
-      await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, gelezen.soort_vertrouwen, besluit.status)
+      // Eerst de actie: die meldt zichzelf bij de behandelaar. `meldVoorgelegd` slaat
+      // hem daarna over, zodat één binnengekomen bericht niet twee belletjes geeft.
+      let alGemeldAan: string | null = null
       if (besluit.status === 'wacht_op_mens') {
-        await voorleggen(postbus, behandelaarId, berichtId, geclaimd, besluit.redenen,
+        const voorgelegd = await voorleggen(postbus, behandelaarId, berichtId, geclaimd, besluit.redenen,
           { velden, relatieNaam: afz.relatieNaam, soort: gelezen.soort })
+        alGemeldAan = voorgelegd.gemeldAan
       }
+      await meldVoorgelegd(postbus, berichtId, geclaimd, afz.score, gelezen.soort_vertrouwen, besluit.status, alGemeldAan)
     }
 
     // ── Nabehandeling in Outlook ────────────────────────────────────────────

@@ -26,6 +26,17 @@ export async function maakBeoordeelTaak(
   dossierId: string,
   titel: string,
   medewerkerId?: string | null,
+  opts?: {
+    /**
+     * Of de ontvanger een "Actie voor jou"-melding krijgt. Uit zetten waar de
+     * aanroeper zelf al een melding over dezelfde gebeurtenis stuurt: bij het
+     * aanvragen en overdragen van een goedkeuring gaat er een eigen melding uit
+     * ("Werkbegroting ter goedkeuring"), en dan zijn twee belletjes voor één
+     * handeling alleen maar ruis. Standaard aan — de aanpas-taak na een
+     * afgekeurde begroting heeft geen eigen melding en leunt hierop.
+     */
+    meldToewijzing?: boolean
+  },
 ): Promise<BeoordeelTaakResultaat> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
@@ -103,7 +114,7 @@ export async function maakBeoordeelTaak(
     // Deze taak is urgent (prioriteit hoog, deadline morgen) en ontstaat doordat
     // iemand anders zijn werk terugstuurt; juist die hoort niet te wachten tot de
     // ontvanger toevallig in Mijn taken kijkt.
-    await meldTaakToegewezen(taak.id, [authUserId])
+    if (opts?.meldToewijzing !== false) await meldTaakToegewezen(taak.id, [authUserId])
   }
 
   revalidatePath('/opdrachten')
