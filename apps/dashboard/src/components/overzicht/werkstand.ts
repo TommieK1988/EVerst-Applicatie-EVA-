@@ -54,13 +54,14 @@ function standaardZichtbaar(k: KolomBasis): boolean {
 export function standaardStand(
   kolommen: KolomBasis[],
   beginSortering?: { id: string; desc: boolean }[],
+  beginFilters?: { id: string; value: unknown }[],
 ): TabelStand {
   return {
     columnOrder:      kolommen.map(k => k.key),
     columnVisibility: Object.fromEntries(kolommen.map(k => [k.key, standaardZichtbaar(k)])),
     columnSizing:     {},
     sorting:          beginSortering ?? [],
-    columnFilters:    [],
+    columnFilters:    beginFilters ?? [],
     globalFilter:     '',
     pageSize:         STANDAARD_PAGINA_GROOTTE,
   }
@@ -121,6 +122,7 @@ export function standUitWerkstand(
   staat: TabelWerkstand | null,
   kolommen: KolomBasis[],
   basis: TabelStand,
+  beginFiltersId?: string,
 ): TabelStand | null {
   if (!staat || staat.versie !== WERKSTAND_VERSIE || !Array.isArray(staat.kolommen)) return null
 
@@ -129,9 +131,15 @@ export function standUitWerkstand(
   const sortering = (staat.sortering ?? []).filter(s => perKey.has(s.id))
   // Een filter op een kolom die geen filter (meer) heeft, kun je in de UI niet wissen:
   // de chip verwijst naar een kolom zonder filterknop. Die gooien we weg.
-  const filters = (staat.filters ?? [])
+  const bewaardeFilters = (staat.filters ?? [])
     .filter(f => perKey.get(f.id)?.filterType)
     .map(f => ({ id: f.id, value: f.waarde }))
+
+  // Schrijft de code begin-filters voor die deze werkstand nog niet kent, dan winnen die één
+  // keer. Anders zou iemand die dit scherm ooit heeft geopend een later toegevoegd standaard-
+  // filter nooit te zien krijgen: zijn bewaarde (lege) filterlijst overschrijft de standaard.
+  const kentBeginFilters = beginFiltersId == null || staat.beginFilters === beginFiltersId
+  const filters = kentBeginFilters ? bewaardeFilters : basis.columnFilters
 
   const paginaGrootte = (PAGINA_GROOTTES as readonly number[]).includes(staat.paginaGrootte)
     ? staat.paginaGrootte
@@ -148,7 +156,11 @@ export function standUitWerkstand(
 }
 
 /** De huidige stand omzetten naar het opslagformaat. */
-export function werkstandUitStand(stand: TabelStand, layout_id: string | null): TabelWerkstand {
+export function werkstandUitStand(
+  stand: TabelStand,
+  layout_id: string | null,
+  beginFiltersId?: string,
+): TabelWerkstand {
   return {
     versie:    WERKSTAND_VERSIE,
     kolommen:  stand.columnOrder.map((key, i) => ({
@@ -163,6 +175,7 @@ export function werkstandUitStand(stand: TabelStand, layout_id: string | null): 
     paginaGrootte: stand.pageSize,
     layout_id,
     opgeslagen_op: new Date().toISOString(),
+    ...(beginFiltersId != null ? { beginFilters: beginFiltersId } : {}),
   }
 }
 

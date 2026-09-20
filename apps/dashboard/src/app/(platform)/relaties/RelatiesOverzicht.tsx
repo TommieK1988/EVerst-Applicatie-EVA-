@@ -549,6 +549,10 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
           kolommen={KOLOMMEN_CONTACTPERSONEN}
           layouts={layouts}
           user_id={user_id}
+          // Inactieve contactpersonen zijn mensen die uit dienst zijn en VvE's die ooit als
+          // "contactpersoon" onder hun beheerder waren aangemaakt. Je wilt ze kunnen terugvinden,
+          // maar niet standaard tussen de rest zien staan. Het filter blijft gewoon te wijzigen.
+          beginFilters={[{ id: 'status', value: ['Actief'] }]}
           onRijKlik={r => router.push(`/relaties/contactpersonen/${r.id}`)}
           acties={
             <Button variant="primary" onClick={() => setShowNieuweContactpersoon(true)}>

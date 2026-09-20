@@ -1485,6 +1485,14 @@ export type TabelWerkstand = {
   layout_id:     string | null
   /** Moment van opslaan; bepaalt wie wint als twee apparaten uiteenlopen. */
   opgeslagen_op: string
+  /**
+   * Handtekening van de begin-filters die de code voorschrijft, op het moment dat ze zijn
+   * toegepast. Zonder dit veld zou een scherm dat later een standaardfilter krijgt dat nooit
+   * tonen aan wie het ooit heeft geopend: zijn bewaarde (lege) filters winnen immers. Wijkt de
+   * handtekening af, dan worden de begin-filters één keer gezet; daarna telt weer wat de
+   * gebruiker zelf instelt.
+   */
+  beginFilters?: string
 }
 
 export type GebruikerWerkstand = {

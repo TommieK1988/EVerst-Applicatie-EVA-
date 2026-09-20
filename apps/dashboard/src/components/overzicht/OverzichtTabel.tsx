@@ -95,6 +95,13 @@ type Props<T extends { id: string }> = {
   acties?:    React.ReactNode
   /** Begin-sortering (kolom-key + richting); de gebruiker kan daarna vrij sorteren. */
   beginSortering?: SortingState
+  /**
+   * Begin-filters, zelfde rol als `beginSortering`: dit is de stand vóórdat een bewaarde
+   * werkstand eroverheen komt. Zet de gebruiker het filter zelf anders, dan wint dat en blijft
+   * het zo — dit is een startpunt, geen dwang. Voor een select-filter is de waarde de lijst
+   * aangevinkte labels, bv. `[{ id: 'status', value: ['Actief'] }]`.
+   */
+  beginFilters?: ColumnFiltersState
   /** Compacte rij-dichtheid (minder verticaal padding) — opt-in voor data-dichte schermen. */
   dicht?: boolean
   /** Toon de per-rij actieknop (⋯) rechts (default true). Rijen blijven klikbaar zonder de knop. */
@@ -382,7 +389,7 @@ function MultiSelectFilter({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverzichtTabel<T extends { id: string }>({
-  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, onSelectie, exportExtraRijen,
+  scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, beginFilters, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, onSelectie, exportExtraRijen,
 }: Props<T>) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -408,6 +415,13 @@ export default function OverzichtTabel<T extends { id: string }>({
   kolomBasisRef.current = kolomBasis
 
   const werkstandSleutel = lokaleSleutel(user_id, scherm)
+  /**
+   * Handtekening van de begin-filters. Staat hij niet in de bewaarde werkstand, dan heeft deze
+   * gebruiker de standaard nog nooit gezien en wordt hij één keer toegepast — zie
+   * `standUitWerkstand`. Verandert de code later van standaardfilter, dan verandert de
+   * handtekening mee en gebeurt dat opnieuw.
+   */
+  const beginFiltersId = beginFilters?.length ? JSON.stringify(beginFilters) : undefined
 
   /**
    * De stand voor de eerste render. Bewust *zonder* localStorage: dit component wordt
@@ -416,7 +430,7 @@ export default function OverzichtTabel<T extends { id: string }>({
    * er meteen na hydratie overheen (zie de layout-effecten hieronder).
    */
   const beginStand = React.useMemo<{ stand: TabelStand; layout_id: string | null }>(() => {
-    const basis = standaardStand(kolomBasis, beginSortering)
+    const basis = standaardStand(kolomBasis, beginSortering, beginFilters)
     const standaardLayout = initialLayouts.find(l => l.is_standaard)
     return standaardLayout
       ? { stand: standUitLayout(standaardLayout.kolommen, kolomBasis, basis), layout_id: standaardLayout.id }
@@ -470,7 +484,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   }, [])
 
   const applyLayout = useCallback((layout: GebruikerLayout) => {
-    const basis = standaardStand(kolomBasisRef.current, beginSortering)
+    const basis = standaardStand(kolomBasisRef.current, beginSortering, beginFilters)
     const stand = standUitLayout(layout.kolommen, kolomBasisRef.current, basis)
     // Een layout gaat alleen over kolommen: sortering, filters en zoekterm blijven staan.
     setColumnOrder(stand.columnOrder)
@@ -496,7 +510,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   const bekendeKern = useRef<string | null>(null)
   const kern = (staat: TabelWerkstand) => JSON.stringify({ ...staat, opgeslagen_op: '' })
   if (bekendeKern.current === null) {
-    bekendeKern.current = kern(werkstandUitStand(beginStand.stand, beginStand.layout_id))
+    bekendeKern.current = kern(werkstandUitStand(beginStand.stand, beginStand.layout_id, beginFiltersId))
   }
 
   /**
@@ -517,7 +531,7 @@ export default function OverzichtTabel<T extends { id: string }>({
     const staat = werkstandUitStand({
       columnOrder, columnVisibility, columnSizing, sorting,
       columnFilters, globalFilter, pageSize: pagination.pageSize,
-    }, activeLayoutId)
+    }, activeLayoutId, beginFiltersId)
     if (kern(staat) === bekendeKern.current) return   // niets nieuws t.o.v. wat er al ligt
 
     bekendeKern.current = kern(staat)
@@ -529,6 +543,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   }, [
     gehydrateerd, columnOrder, columnVisibility, columnSizing, sorting, columnFilters,
     globalFilter, pagination.pageSize, activeLayoutId, werkstandSleutel, schrijfNaarServer,
+    beginFiltersId,
   ])
 
   // Doorschrijven bij unmount (kanban-wissel, navigeren) en zodra de tab naar de
@@ -550,13 +565,13 @@ export default function OverzichtTabel<T extends { id: string }>({
 
   /** Een bewaarde werkstand toepassen zonder hem als nieuwe wijziging te tellen. */
   const pasWerkstandToe = useCallback((staat: TabelWerkstand): boolean => {
-    const basis = standaardStand(kolomBasisRef.current, beginSortering)
-    const stand = standUitWerkstand(staat, kolomBasisRef.current, basis)
+    const basis = standaardStand(kolomBasisRef.current, beginSortering, beginFilters)
+    const stand = standUitWerkstand(staat, kolomBasisRef.current, basis, beginFiltersId)
     if (!stand) return false
     const layout_id = staat.layout_id && layoutsRef.current.some(l => l.id === staat.layout_id)
       ? staat.layout_id
       : null
-    bekendeKern.current = kern(werkstandUitStand(stand, layout_id))
+    bekendeKern.current = kern(werkstandUitStand(stand, layout_id, beginFiltersId))
     zetStand(stand)
     setActiveLayoutId(layout_id)
     return true
@@ -590,7 +605,7 @@ export default function OverzichtTabel<T extends { id: string }>({
 
   /** Terug naar de standaardweergave (of naar de layout die als standaard staat). */
   function herstelWeergave() {
-    const basis = standaardStand(kolomBasisRef.current, beginSortering)
+    const basis = standaardStand(kolomBasisRef.current, beginSortering, beginFilters)
     const standaardLayout = layouts.find(l => l.is_standaard)
     zetStand(standaardLayout
       ? standUitLayout(standaardLayout.kolommen, kolomBasisRef.current, basis)
@@ -850,7 +865,7 @@ export default function OverzichtTabel<T extends { id: string }>({
   const isDirty = React.useMemo(() => {
     const layout = activeLayoutId ? layouts.find(l => l.id === activeLayoutId) : null
     if (!layout) return false
-    const vanLayout = standUitLayout(layout.kolommen, kolomBasis, standaardStand(kolomBasis, beginSortering))
+    const vanLayout = standUitLayout(layout.kolommen, kolomBasis, standaardStand(kolomBasis, beginSortering, beginFilters))
     if (vanLayout.columnOrder.join('|') !== columnOrder.join('|')) return true
     return columnOrder.some(key =>
       (vanLayout.columnVisibility[key] !== false) !== (columnVisibility[key] !== false)
