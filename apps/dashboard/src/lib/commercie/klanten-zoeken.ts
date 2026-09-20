@@ -19,12 +19,18 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 
+/**
+ * Eén zoekresultaat. Twee soorten, want je zoekt twee dingen: een bedrijf ("KesslerPerspektief")
+ * of een persoon ("Jan de Vries"). Ze landen op verschillende schermen — een organisatie op het
+ * klantbeeld, een persoon op zijn eigen kaart — dus ze moeten uit elkaar te houden zijn.
+ */
 export type KlantTreffer = {
+  /** Organisatie: de relatie-id. Contactpersoon: de contactpersoon-id. */
   id: string
+  soort: 'organisatie' | 'contactpersoon'
   naam: string
-  plaats: string | null
-  /** Gevuld als de treffer via een contactpersoon binnenkwam: "via Jan de Vries". */
-  viaContactpersoon: string | null
+  /** Organisatie: de plaats. Contactpersoon: waar hij werkt, en in welke functie. */
+  onder: string | null
 }
 
 /** Vanaf hier zoeken we pas; korter levert de halve kaartenbak op. */
@@ -58,8 +64,8 @@ export async function zoekKlanten(term: string, limiet = 20): Promise<KlantTreff
   const supabase = createAdminClient()
   const patroon = `%${escapeIlike(schoon)}%`
 
-  // Ruimer ophalen dan `limiet`: de twee kanten overlappen vaak (je vindt dezelfde klant via
-  // de naam én via een contactpersoon), en na het samenvoegen wil je nog steeds een volle lijst.
+  // Ruimer ophalen dan `limiet`: na het filteren op opdrachtgever en het samenvoegen van de
+  // drie contactpersoon-queries wil je nog steeds een volle lijst overhouden.
   const ruim = limiet * 2
 
   const [opNaam, opPlaats, cpVoornaam, cpAchternaam, cpEmail] = await Promise.all([
@@ -75,7 +81,7 @@ export async function zoekKlanten(term: string, limiet = 20): Promise<KlantTreff
       .ilike('email', patroon).eq('actief', true).limit(ruim),
   ])
 
-  /** Naam van de contactpersoon per id; dubbele treffers vallen vanzelf samen. */
+  /** Naam per contactpersoon-id; de drie queries overlappen en vallen hier samen. */
   const cpNaamPerId = new Map<string, string>()
   for (const res of [cpVoornaam, cpAchternaam, cpEmail]) {
     for (const c of (res.data ?? [])) {
@@ -84,51 +90,64 @@ export async function zoekKlanten(term: string, limiet = 20): Promise<KlantTreff
     }
   }
 
-  // De organisaties waar die contactpersonen aan hangen. `.in()` op de gevonden ids, dus
-  // begrensd; zonder treffers slaan we de query over.
+  /**
+   * Waar de gevonden personen werken. Nodig om twee redenen: een contactpersoon zonder
+   * opdrachtgever hoort niet in deze module thuis (dat kan de contactpersoon van een
+   * leverancier zijn), en de organisatienaam is wat een treffer herkenbaar maakt — "Jan de
+   * Vries" alleen zegt niets als er drie Jannen zijn.
+   */
   const cpIds = [...cpNaamPerId.keys()]
-  const viaContactpersoon = new Map<string, string>()
+  const werkgevers = new Map<string, { naam: string; functie: string | null }[]>()
   if (cpIds.length > 0) {
     const { data: koppelingen } = await supabase
       .from('contactpersoon_organisaties')
-      .select('contactpersoon_id, organisatie_id')
+      .select('contactpersoon_id, functie, relaties(naam, types)')
       .in('contactpersoon_id', cpIds)
-    for (const k of (koppelingen ?? [])) {
-      // Eerste wint: hangen twee gevonden personen aan dezelfde klant, dan noemen we er één.
-      if (!viaContactpersoon.has(k.organisatie_id)) {
-        const naam = cpNaamPerId.get(k.contactpersoon_id)
-        if (naam) viaContactpersoon.set(k.organisatie_id, naam)
-      }
+    type Koppel = {
+      contactpersoon_id: string
+      functie: string | null
+      relaties: { naam: string; types: string[] } | null
+    }
+    for (const k of ((koppelingen ?? []) as unknown as Koppel[])) {
+      if (!k.relaties?.types?.includes('opdrachtgever')) continue
+      const lijst = werkgevers.get(k.contactpersoon_id) ?? []
+      lijst.push({ naam: k.relaties.naam, functie: k.functie })
+      werkgevers.set(k.contactpersoon_id, lijst)
     }
   }
 
-  const viaIds = [...viaContactpersoon.keys()]
-  const relatiesViaCp = viaIds.length > 0
-    ? await supabase.from('relaties').select('id, naam, adres_plaats, types')
-        .in('id', viaIds).eq('actief', true).limit(ruim)
-    : { data: [] as RelatieRij[] }
-
-  // Samenvoegen. Directe naamtreffers eerst: wie de bedrijfsnaam intypt bedoelt dat bedrijf,
-  // niet de klant waar toevallig een gelijknamige contactpersoon werkt.
   const gezien = new Set<string>()
-  const treffers: KlantTreffer[] = []
-  const voegToe = (rijen: RelatieRij[] | null, viaCp: boolean) => {
+  const organisaties: KlantTreffer[] = []
+  const personen: KlantTreffer[] = []
+
+  const voegOrganisaties = (rijen: RelatieRij[] | null) => {
     for (const r of (rijen ?? [])) {
       if (gezien.has(r.id)) continue
-      // Alleen opdrachtgevers; een relatie kan meerdere types hebben.
+      // Alleen opdrachtgevers; een relatie kan meerdere types tegelijk hebben.
       if (!r.types?.includes('opdrachtgever')) continue
       gezien.add(r.id)
-      treffers.push({
-        id: r.id,
-        naam: r.naam,
-        plaats: r.adres_plaats,
-        viaContactpersoon: viaCp ? (viaContactpersoon.get(r.id) ?? null) : null,
+      organisaties.push({
+        id: r.id, soort: 'organisatie', naam: r.naam, onder: r.adres_plaats,
       })
     }
   }
-  voegToe(opNaam.data as RelatieRij[] | null, false)
-  voegToe(relatiesViaCp.data as RelatieRij[] | null, true)
-  voegToe(opPlaats.data as RelatieRij[] | null, false)
 
-  return treffers.slice(0, limiet)
+  voegOrganisaties(opNaam.data as RelatieRij[] | null)
+  voegOrganisaties(opPlaats.data as RelatieRij[] | null)
+
+  for (const [id, naam] of cpNaamPerId) {
+    const bij = werkgevers.get(id)
+    if (!bij || bij.length === 0) continue
+    const eerste = bij[0]
+    // "Technisch beheerder bij KesslerPerspektief"; hangt hij aan meer organisaties, dan
+    // zegt "+1" dat er meer is zonder de regel te laten overlopen.
+    const rol = eerste.functie?.trim() ? `${eerste.functie.trim()} bij ` : ''
+    const meer = bij.length > 1 ? ` +${bij.length - 1}` : ''
+    personen.push({ id, soort: 'contactpersoon', naam, onder: `${rol}${eerste.naam}${meer}` })
+  }
+  personen.sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
+
+  // Organisaties eerst: wie een bedrijfsnaam intypt bedoelt dat bedrijf, niet de persoon die
+  // daar toevallig zo heet.
+  return [...organisaties, ...personen].slice(0, limiet)
 }

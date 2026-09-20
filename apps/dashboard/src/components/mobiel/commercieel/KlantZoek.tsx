@@ -4,8 +4,9 @@
  * Zoekscherm van de module Commercieel: vind de opdrachtgever die je zo gaat spreken.
  *
  * Zoekt op bedrijfsnaam, plaats én contactpersoon — aan de telefoon ken je vaak wel de
- * persoon en niet de precieze bedrijfsnaam. Een treffer die via een contactpersoon binnenkwam
- * zegt dat er ook bij ("via Jan de Vries"), anders lijkt het een willekeurig resultaat.
+ * persoon en niet de precieze bedrijfsnaam. Personen zijn eigen treffers, met een icoontje en
+ * met hun functie en werkgever eronder, en ze gaan naar hun eigen kaart: je zoekt iemand op
+ * omdat je hém spreekt, niet om bij zijn werkgever uit te komen.
  *
  * Zoekpatroon overgenomen van `components/mobiel/materieel/MaterieelZoek.tsx`: vanaf twee
  * tekens, 250 ms typepauze, en een `afgebroken`-vlag in de cleanup zodat een traag antwoord
@@ -17,6 +18,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { User } from 'lucide-react'
 import { zoekKlantenActie } from '@/app/m/commercieel/actions'
 import type { KlantTreffer } from '@/lib/commercie/klanten-zoeken'
 import { leesRecent, type RecenteKlant } from './recent'
@@ -35,12 +37,33 @@ function KopRegel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function KlantRegel({ id, naam, onder }: { id: string; naam: string; onder?: string | null }) {
+function KlantRegel({
+  href, naam, onder, persoon = false,
+}: {
+  href: string
+  naam: string
+  onder?: string | null
+  /** Toont een persoon-icoontje, zodat je een naam niet voor een bedrijf aanziet. */
+  persoon?: boolean
+}) {
   return (
-    <Link href={`/m/commercieel/${id}`} style={lijstRij}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: TEKST, lineHeight: 1.3 }}>{naam}</div>
+    <Link href={href} style={lijstRij}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        {persoon && <User size={14} style={{ flexShrink: 0, color: GRIJS }} aria-hidden />}
+        <span style={{
+          fontSize: 15, fontWeight: 600, color: TEKST, lineHeight: 1.3,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {naam}
+        </span>
+      </div>
       {onder && (
-        <div style={{ fontSize: 13, color: GRIJS, marginTop: 2 }}>{onder}</div>
+        <div style={{
+          fontSize: 13, color: GRIJS, marginTop: 2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {onder}
+        </div>
       )}
     </Link>
   )
@@ -115,7 +138,9 @@ export default function KlantZoek() {
           {recent.length > 0 ? (
             <>
               <KopRegel>Recent geopend</KopRegel>
-              {recent.map(r => <KlantRegel key={r.id} id={r.id} naam={r.naam} onder={r.plaats} />)}
+              {recent.map(r => (
+                <KlantRegel key={r.id} href={`/m/commercieel/${r.id}`} naam={r.naam} onder={r.plaats} />
+              ))}
             </>
           ) : (
             <div style={{ fontSize: 14, color: GRIJS, lineHeight: 1.5, paddingTop: 8 }}>
@@ -136,14 +161,14 @@ export default function KlantZoek() {
           ) : (
             treffers.map(t => (
               <KlantRegel
-                key={t.id}
-                id={t.id}
+                key={`${t.soort}-${t.id}`}
+                // Een persoon heeft zijn eigen kaart: je zoekt hem omdat je hém spreekt.
+                href={t.soort === 'contactpersoon'
+                  ? `/m/commercieel/cp/${t.id}`
+                  : `/m/commercieel/${t.id}`}
                 naam={t.naam}
-                onder={
-                  // Plaats en herkomst in één regel; beide kunnen leeg zijn.
-                  [t.plaats, t.viaContactpersoon ? `via ${t.viaContactpersoon}` : null]
-                    .filter(Boolean).join(' · ') || null
-                }
+                onder={t.onder}
+                persoon={t.soort === 'contactpersoon'}
               />
             ))
           )}

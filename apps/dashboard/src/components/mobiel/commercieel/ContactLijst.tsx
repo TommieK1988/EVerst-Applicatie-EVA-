@@ -6,10 +6,15 @@
  * Mobiel gaat vóór vast: op een telefoonnummer van kantoor krijg je de receptie, op een
  * mobiel nummer de persoon zelf — en dit scherm bestaat om die persoon te bereiken. De
  * primaire contactpersoon staat bovenaan (gesorteerd in de leeslaag).
+ *
+ * De naam is een link naar de kaart van die persoon: daar staan zijn overige gegevens, de
+ * dossiers op zijn naam en de gesprekken die je met hém had. De bel- en mailknopjes blijven
+ * hier, want vaak is dat het enige wat je nodig hebt.
  */
 
 import React from 'react'
-import { Mail, Phone } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronRight, Mail, Phone } from 'lucide-react'
 import type { KlantContactpersoon } from '@/lib/commercie/klantbeeld-types'
 import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
 
@@ -45,17 +50,23 @@ export default function ContactLijst({ personen }: { personen: KlantContactperso
               background: OPPERVLAK, border: `1px solid ${RAND}`, marginBottom: 8,
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 14.5, fontWeight: 600, color: TEKST,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {p.naam}
-                {p.isPrimair && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: GRIJS, marginLeft: 6 }}>
-                    primair
-                  </span>
-                )}
+            <Link
+              href={`/m/commercieel/cp/${p.id}`}
+              style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{
+                  flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: TEKST,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {p.naam}
+                  {p.isPrimair && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: GRIJS, marginLeft: 6 }}>
+                      primair
+                    </span>
+                  )}
+                </span>
+                <ChevronRight size={15} style={{ flexShrink: 0, color: GRIJS }} aria-hidden />
               </div>
               {(p.functie || nummer) && (
                 <div style={{
@@ -65,7 +76,7 @@ export default function ContactLijst({ personen }: { personen: KlantContactperso
                   {[p.functie, nummer].filter(Boolean).join(' · ')}
                 </div>
               )}
-            </div>
+            </Link>
             {telHref && <IconKnop href={telHref} label={`Bel ${p.naam}`} Icon={Phone} />}
             {p.email && <IconKnop href={`mailto:${p.email}`} label={`Mail ${p.naam}`} Icon={Mail} />}
           </div>
