@@ -7,6 +7,7 @@ import TermijnenBlok from './TermijnenBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
+import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
@@ -91,13 +92,17 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   // Alles wat bepaalt óf er iets te tonen valt, wordt vóór de lege staat opgehaald. Stond het
   // meerwerk daar eerst achter, dan bleef de tab leeg op een dossier met goedgekeurd meerwerk maar
   // zonder aanneemsom of termijnen — precies het geval waarin je juist iets wilt zien.
-  const [data, schemaAfwijking, meerwerk, nacalculatieCodes] = await Promise.all([
+  const [data, schemaAfwijking, meerwerk, nacalculatieCodes, voorstel] = await Promise.all([
     getDossierVerkoop(dossierId),
     // Faalt dit (geen offerte, geen betalingsconditie), dan blijft de banner gewoon weg.
     getTermijnAfwijking(dossierId).catch(() => null),
     getDossierMeerwerk(dossierId).catch(() => null),
-    // Goedkope DB-lezing; het paneel zelf haalt zijn eigen (zwaardere) cijfers op.
+    // Goedkope DB-lezing; zegt alleen óf er nacalculatie is, niet hoeveel.
     getFactureerbareCodes(dossierId).catch(() => []),
+    // De nacalculatie hoort in het contracttotaal, dus die moet hier aan de serverkant al staan.
+    // Zwaarder dan de rest, maar het is Postgres (snapshots), geen Bouw7-aanroep — en het gaat mee
+    // naar het paneel, zodat dat niet nog eens hoeft te lezen.
+    getRegieFactuurvoorstel(dossierId).catch(() => null),
   ])
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
@@ -126,13 +131,35 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   // De voorwaarde kijkt naar het AANTAL regels, niet naar het bedrag. Bij per saldo minderwerk is de
   // som negatief, en dan zou "bedrag > 0" het Bouw7-getal laten staan terwijl EVA de waarheid heeft.
   const evaLeidend = goedgekeurdeRegels.length > 0
-  const meerwerkEva = meerwerk?.totalen.goedgekeurdExcl ?? 0
   const meerwerkAangenomen = meerwerk?.totalen.goedgekeurdAangenomenExcl ?? 0
-  const meerwerkRegie = meerwerk?.totalen.goedgekeurdRegieExcl ?? 0
+
+  /* — Wat regiewerk waard is —
+   * Niet de som van de meerwerkregels: die rekent de geboekte uren en kosten kaal op, terwijl het
+   * nacalculatie-blok ernaast dezelfde boekingen curatiseert — een vast bedrag op een factuurregel,
+   * een uitgevinkte post, een losse regel als voorrijkosten. Twee getallen voor hetzelfde werk, en
+   * het blok is het getal dat de klant straks gefactureerd krijgt. Bovendien kent het ook
+   * stelposten die geen meerwerkregel zijn; die zaten hiervoor in geen enkel totaal.
+   *
+   * Al gefactureerde posten tellen mee. Het gaat om de waarde van de opdracht, niet om wat er nog
+   * openstaat — anders zou het contracttotaal krimpen bij elke factuur, en zou "Nog te factureren"
+   * (contracttotaal min gefactureerd) het weggehaalde deel een tweede keer aftrekken. */
+  const nacalculatie = rond((voorstel?.totaal ?? 0) + (voorstel?.alGefactureerdBedrag ?? 0))
+  // Wat de meerwerkregels zelf aan nacalculatie meldden vervalt: dat is dezelfde post, anders
+  // geteld. Wat overblijft draagt zijn eigen bedrag en staat in geen enkel blok — meetellen dus.
+  const meerwerkRegieEigen = rond(
+    (meerwerk?.totalen.goedgekeurdRegieExcl ?? 0) - (meerwerk?.totalen.goedgekeurdNacalculatieExcl ?? 0),
+  )
+  const meerwerkRegie = rond(meerwerkRegieEigen + nacalculatie)
+  const meerwerkEva = rond(meerwerkAangenomen + meerwerkRegie)
+  /* Leidt EVA het meerwerk in dit overzicht? Ja zodra er goedgekeurde regels zijn, en ook zodra er
+   * nacalculatie op het dossier staat: die komt deels uit stelposten die helemaal geen meerwerkregel
+   * zijn, en dan is er niets waar het Bouw7-aggregaat op terug kan vallen. */
+  const evaBron = evaLeidend || Math.abs(nacalculatie) > 0.005
+
   let t = data.totalen
   let dk = data.termijnenDekking
-  if (evaLeidend && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
-    const contractTotaal = t.aanneemsom + meerwerkEva
+  if (evaBron && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
+    const contractTotaal = rond(t.aanneemsom + meerwerkEva)
     t = { ...t, meerwerk: meerwerkEva, contractTotaal, openstaand: Math.max(0, contractTotaal - t.gefactureerd) }
   }
 
@@ -141,8 +168,8 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
    * nooit in de termijnstaat. Telde je dat mee, dan meldde de dekkingcontrole een gat dat niemand
    * kan dichten — de banner bleef oranje zolang er regiewerk op het dossier stond.
    * Zonder EVA-regels is het Bouw7-aggregaat het enige getal dat er is en valt er niets te splitsen. */
-  const termijnGrondslag = evaLeidend ? rond(t.aanneemsom + meerwerkAangenomen) : t.contractTotaal
-  const regieBuitenTermijnen = evaLeidend && Math.abs(meerwerkRegie) > 0.005
+  const termijnGrondslag = evaBron ? rond(t.aanneemsom + meerwerkAangenomen) : t.contractTotaal
+  const regieBuitenTermijnen = evaBron && Math.abs(meerwerkRegie) > 0.005
   if (dk) {
     dk = {
       ...dk,
@@ -163,6 +190,10 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   // Zit het aangenomen meerwerk al in de termijnen, dan is alleen het regiedeel nog niet geteld.
   for (const r of goedgekeurdeRegels) {
     if (meerwerkInTermijnstaat && r.opTermijn) continue
+    // Wat in het nacalculatie-blok staat telt hier niet mee: het contracttotaal rekent dat werk uit
+    // dat blok, dat zijn btw per factuurregel kent en niet per meerwerkregel. Zou het hier met het
+    // kale regelbedrag staan, dan liep de btw-grondslag uit de pas met het totaal.
+    if (r.opNacalculatie) continue
     btwRijen.push({ pct: r.btwEffectief, excl: r.effectiefExcl, btw: rond(r.effectiefIncl - r.effectiefExcl) })
   }
   const btwGroepen = groepeerBtw(btwRijen)
@@ -225,7 +256,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
                       termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
                       het bedrag terechtkomt, dus het hoort zichtbaar te zijn. Zonder EVA-regels is er
                       alleen het Bouw7-aggregaat en blijft het bij één regel. */}
-                  {evaLeidend ? (
+                  {evaBron ? (
                     <>
                       {Math.abs(meerwerkAangenomen) > 0.005 && (
                         <tr>
@@ -463,7 +494,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
           <Kolom>
             {/* Regiewerk. Op een opdracht is dat de uitzondering, dus het blok verschijnt alleen als er
                 daadwerkelijk uren of kosten op het dossier staan. */}
-            <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg />
+            <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg initieel={voorstel} />
           </Kolom>
         )}
       </Kolommen>

@@ -13,7 +13,7 @@
  * verschil — die staat er apart bij, met de reden erbij, zodat zichtbaar is waaróm hij ontbreekt.
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardBody } from '@/components/ui'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
@@ -25,14 +25,20 @@ import FactuurRegelVenster from './FactuurRegelVenster'
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
 
-export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg }: {
+export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, initieel }: {
   dossierId: string
   /** Op een opdracht-dossier is nacalculatie de uitzondering; toon het blok dan alleen als er iets is. */
   verbergAlsLeeg?: boolean
+  /**
+   * Het voorstel zoals de server het al heeft gelezen — de Verkoop-tab heeft het nodig voor het
+   * contracttotaal. Doorgeven scheelt een tweede lezing van dezelfde snapshots, en het blok staat
+   * er meteen in plaats van eerst "Nacalculatie laden…".
+   */
+  initieel?: RegieVoorstel | null
 }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
-  const [voorstel, setVoorstel] = useState<RegieVoorstel | null>(null)
+  const [voorstel, setVoorstel] = useState<RegieVoorstel | null>(initieel ?? null)
   const [tarieven, setTarieven] = useState<BtwTariefKeuze[]>([])
   // Alleen de code onthouden, niet de hele regel: het venster slaat per handeling op en haalt
   // daarna opnieuw op. Met een bevroren kopie zou het scherm zijn eigen wijziging niet zien.
@@ -41,7 +47,14 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg }: {
   function herlaad() {
     getRegieFactuurvoorstel(dossierId).then(setVoorstel).catch(() => setVoorstel(null))
   }
-  useEffect(herlaad, [dossierId])
+  // Kwam er al een voorstel van de server mee, dan is de eerste lezing overbodig; daarna haalt elke
+  // bewerking hem gewoon opnieuw op.
+  const eersteLezingOvergeslagen = useRef(initieel != null)
+  useEffect(() => {
+    if (eersteLezingOvergeslagen.current) { eersteLezingOvergeslagen.current = false; return }
+    herlaad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dossierId])
 
   useEffect(() => {
     laadBtwTarieven().then(setTarieven).catch(() => setTarieven([]))
