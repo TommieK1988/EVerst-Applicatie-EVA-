@@ -12,6 +12,8 @@ import { IconPlus } from '@/components/eva/Icons'
 import NieuweOrganisatieModal from '@/components/relaties/NieuweOrganisatieModal'
 import NieuweContactpersoonModal from '@/components/relaties/NieuweContactpersoonModal'
 import NieuweParticulierModal from '@/components/relaties/NieuweParticulierModal'
+import DubbelenPaneel from '@/components/relaties/DubbelenPaneel'
+import type { DubbelGroep, SamenvoegingLog } from '@/lib/relaties/ontdubbelen'
 
 /* ─── types ───────────────────────────────────────────────────────── */
 
@@ -38,7 +40,7 @@ type ContactpersoonRij = Contactpersoon & {
 
 type ParticulierRij = Particulier
 
-type Tab = 'organisaties' | 'contactpersonen' | 'particulieren'
+type Tab = 'organisaties' | 'contactpersonen' | 'particulieren' | 'dubbelen'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 
@@ -419,6 +421,7 @@ const TABS: { key: Tab; label: string; count?: number }[] = [
   { key: 'organisaties', label: 'Organisaties' },
   { key: 'contactpersonen', label: 'Contactpersonen' },
   { key: 'particulieren', label: 'Particulieren' },
+  { key: 'dubbelen', label: 'Dubbelen' },
 ]
 
 function TabBalk({ actief, setActief, counts }: {
@@ -467,12 +470,15 @@ type Props = {
   organisaties: Organisatie[]
   contactpersonen: ContactpersoonRij[]
   particulieren: ParticulierRij[]
+  /** Mogelijke dubbele contactpersonen — Bouw7 dupliceert een mens per bedrijf. */
+  dubbelen: DubbelGroep[]
+  recenteSamenvoegingen: SamenvoegingLog[]
   layouts: GebruikerLayout[]
   user_id: string | null
   laatsteSync: string | null
 }
 
-export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, layouts, user_id, laatsteSync }: Props) {
+export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, dubbelen, recenteSamenvoegingen, layouts, user_id, laatsteSync }: Props) {
   const router = useRouter()
   const [actieveTab, setActieveTab] = useState<Tab>('organisaties')
   const [showNieuweOrganisatie, setShowNieuweOrganisatie] = useState(false)
@@ -505,6 +511,7 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
     organisaties: organisaties.length,
     contactpersonen: contactpersonen.length,
     particulieren: particulieren.length,
+    dubbelen: dubbelen.length,
   }
 
   return (
@@ -567,6 +574,10 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
             </Button>
           }
         />
+      )}
+
+      {actieveTab === 'dubbelen' && (
+        <DubbelenPaneel groepen={dubbelen} recent={recenteSamenvoegingen} />
       )}
 
       {showNieuweOrganisatie && (

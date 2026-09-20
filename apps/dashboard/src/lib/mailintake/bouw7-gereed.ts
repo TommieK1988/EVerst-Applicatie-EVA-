@@ -82,16 +82,20 @@ export async function controleerBouw7Gereed(inv: Bouw7GereedInvoer): Promise<Bou
   let contactpersoonBouw7Id: number | null = null
   if (inv.contactpersoonId) {
     const { data: cp } = await supabase
-      .from('contactpersonen').select('voornaam, achternaam, bouw7_id').eq('id', inv.contactpersoonId).maybeSingle()
+      .from('contactpersonen').select('voornaam, achternaam').eq('id', inv.contactpersoonId).maybeSingle()
     const naam = cp ? [cp.voornaam, cp.achternaam].filter(Boolean).join(' ') : 'De contactpersoon'
+    // De Bouw7-rij van déze opdrachtgever: dezelfde mens staat bij een ander bedrijf onder een
+    // ander contactpersoon-id.
+    const { bouw7CpIdVoorOrganisatie } = await import('@/lib/bouw7/contactpersoon-spiegel')
+    const cpBouw7Id = cp ? await bouw7CpIdVoorOrganisatie(inv.contactpersoonId, inv.relatieId ?? null) : null
     if (!cp) {
       ontbreekt.push('De gekozen contactpersoon bestaat niet meer.')
-    } else if (!cp.bouw7_id) {
+    } else if (!cpBouw7Id) {
       // Niet blokkerend: een project zonder contactpersoon is bruikbaar, een
       // project zonder klant niet. Wel melden, want het valt anders niemand op.
       ontbreekt.push(`${naam} staat nog niet in Bouw7; het project krijgt geen contactpersoon.`)
     } else {
-      contactpersoonBouw7Id = Number(cp.bouw7_id)
+      contactpersoonBouw7Id = Number(cpBouw7Id)
     }
   }
 

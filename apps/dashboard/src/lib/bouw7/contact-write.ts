@@ -121,22 +121,61 @@ async function moederContactBouw7Id(contactpersoonId: string): Promise<number | 
   return null
 }
 
-/** Schrijf de opgegeven contactpersoonkolommen naar Bouw7 (persoonsvelden; de functie gaat apart). */
+/**
+ * De Bouw7-spiegels van een persoon als `{ moeder, cp }`-paren: het contact waaronder de rij
+ * hangt en het contactpersoon-id daarbinnen. Eén mens die voor twee bedrijven werkt heeft er
+ * twee — Bouw7 kent geen gedeelde contactpersoon.
+ */
+async function spiegelParen(contactpersoonId: string): Promise<{ moeder: number; cp: number }[]> {
+  const supabase = db()
+  const { data } = await supabase
+    .from('contactpersoon_bouw7_koppelingen')
+    .select('bouw7_id, bouw7_contact_id, organisatie_id, is_primair')
+    .eq('contactpersoon_id', contactpersoonId)
+    .order('is_primair', { ascending: false })
+
+  const paren: { moeder: number; cp: number }[] = []
+  for (const s of (data ?? []) as { bouw7_id: string; bouw7_contact_id: string | null; organisatie_id: string | null }[]) {
+    let moeder = s.bouw7_contact_id ? Number(s.bouw7_contact_id) : null
+    if (moeder == null && s.organisatie_id) {
+      const { data: rel } = await supabase.from('relaties').select('bouw7_id').eq('id', s.organisatie_id).maybeSingle()
+      moeder = rel?.bouw7_id ? Number(rel.bouw7_id) : null
+    }
+    if (moeder != null && Number.isFinite(Number(s.bouw7_id))) paren.push({ moeder, cp: Number(s.bouw7_id) })
+  }
+
+  if (paren.length === 0) {
+    // Terugval voor personen zonder spiegelrij: de oude route via contactpersonen.bouw7_id.
+    const { data: cp } = await supabase.from('contactpersonen').select('bouw7_id').eq('id', contactpersoonId).maybeSingle()
+    const moeder = await moederContactBouw7Id(contactpersoonId)
+    if (cp?.bouw7_id && moeder) paren.push({ moeder, cp: Number(cp.bouw7_id) })
+  }
+  return paren
+}
+
+/**
+ * Schrijf de opgegeven contactpersoonkolommen naar Bouw7 (persoonsvelden; de functie gaat apart).
+ *
+ * Alle spiegels krijgen dezelfde waarde: het gaat om één mens, en de naam of het 06-nummer
+ * hoort bij elk bedrijf hetzelfde te zijn. Een veld telt pas als geschreven wanneer élke
+ * spiegel het heeft overgenomen — anders blijft het in EVA beschermd en probeert de cron opnieuw.
+ */
 export async function schrijfBouw7Contactpersoon(contactpersoonId: string, velden: readonly string[]): Promise<ContactWriteResultaat> {
   const geschreven: string[] = []
   try {
     const supabase = db()
     const { data: cp } = await supabase
       .from('contactpersonen')
-      .select('bouw7_id, voornaam, achternaam, email, telefoon, aanhef')
+      .select('voornaam, achternaam, email, telefoon, aanhef')
       .eq('id', contactpersoonId)
       .maybeSingle()
-    if (!cp?.bouw7_id) return { ok: false, error: 'Contactpersoon staat nog niet in Bouw7.', geschreven }
-    const moeder = await moederContactBouw7Id(contactpersoonId)
-    if (!moeder) return { ok: false, error: 'Contactpersoon hangt niet onder een relatie die in Bouw7 staat.', geschreven }
+    if (!cp) return { ok: false, error: 'Contactpersoon bestaat niet.', geschreven }
 
-    const body: Record<string, unknown> = { id: Number(cp.bouw7_id) }
+    const paren = await spiegelParen(contactpersoonId)
+    if (paren.length === 0) return { ok: false, error: 'Contactpersoon staat nog niet in Bouw7.', geschreven }
+
     const verwacht = new Map<string, { lees: keyof Bouw7ContactPerson; waarde: string }>()
+    const body: Record<string, unknown> = {}
     for (const k of velden) {
       const def = CP_VELDEN[k]
       if (!def) continue
@@ -146,12 +185,19 @@ export async function schrijfBouw7Contactpersoon(contactpersoonId: string, velde
     if (verwacht.size === 0) return { ok: true, geschreven, nietOvergenomen: [] }
 
     const client = await getBouw7Client()
-    await client.post(`/contact/${moeder}/contact-person`, body)
-    const na = (await client.get<Bouw7ListResponse<Bouw7ContactPerson>>('/list/contact-persons', { q: `contact.id = ${moeder}` }))
-      .items?.find(p => Number(p.id) === Number(cp.bouw7_id))
+    const aangekomen = new Map<string, number>()
+    for (const paar of paren) {
+      await client.post(`/contact/${paar.moeder}/contact-person`, { ...body, id: paar.cp })
+      const na = (await client.get<Bouw7ListResponse<Bouw7ContactPerson>>('/list/contact-persons', { q: `contact.id = ${paar.moeder}` }))
+        .items?.find(p => Number(p.id) === paar.cp)
+      for (const [k, v] of verwacht) {
+        if (na && norm(na[v.lees]) === v.waarde) aangekomen.set(k, (aangekomen.get(k) ?? 0) + 1)
+      }
+    }
+
     const nietOvergenomen: string[] = []
-    for (const [k, v] of verwacht) {
-      if (na && norm(na[v.lees]) === v.waarde) geschreven.push(k)
+    for (const k of verwacht.keys()) {
+      if ((aangekomen.get(k) ?? 0) === paren.length) geschreven.push(k)
       else nietOvergenomen.push(k)
     }
     return { ok: true, geschreven, nietOvergenomen }
@@ -161,20 +207,46 @@ export async function schrijfBouw7Contactpersoon(contactpersoonId: string, velde
 }
 
 /**
- * De functie (jobTitle) van een contactpersoon. In EVA hangt die aan de koppeling met een
- * organisatie; in Bouw7 aan de persoon. Geverifieerd: partiële `{ id, jobTitle }` werkt.
+ * De functie (jobTitle) van een contactpersoon. In EVA hangt die aan de koppeling met één
+ * organisatie; in Bouw7 aan de contactpersoon-rij van dát bedrijf. Met `organisatieId` gaat de
+ * functie dus naar de juiste spiegel — zonder zou een tweede werkgever de titel overschrijven.
+ * Geverifieerd: partiële `{ id, jobTitle }` werkt.
  */
 export async function schrijfBouw7ContactpersoonFunctie(
   contactpersoonId: string,
   functie: string | null,
+  organisatieId?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const { data: cp } = await db().from('contactpersonen').select('bouw7_id').eq('id', contactpersoonId).maybeSingle()
-    if (!cp?.bouw7_id) return { ok: false, error: 'Contactpersoon staat nog niet in Bouw7.' }
-    const moeder = await moederContactBouw7Id(contactpersoonId)
-    if (!moeder) return { ok: false, error: 'Contactpersoon hangt niet onder een relatie die in Bouw7 staat.' }
+    const supabase = db()
+    let moeder: number | null = null
+    let cpBouw7Id: number | null = null
+
+    if (organisatieId) {
+      const { data: s } = await supabase
+        .from('contactpersoon_bouw7_koppelingen')
+        .select('bouw7_id, bouw7_contact_id')
+        .eq('contactpersoon_id', contactpersoonId)
+        .eq('organisatie_id', organisatieId)
+        .maybeSingle()
+      if (s?.bouw7_id) {
+        cpBouw7Id = Number(s.bouw7_id)
+        moeder = s.bouw7_contact_id ? Number(s.bouw7_contact_id) : null
+        if (moeder == null) {
+          const { data: rel } = await supabase.from('relaties').select('bouw7_id').eq('id', organisatieId).maybeSingle()
+          moeder = rel?.bouw7_id ? Number(rel.bouw7_id) : null
+        }
+      }
+    }
+
+    if (cpBouw7Id == null || moeder == null) {
+      const paren = await spiegelParen(contactpersoonId)
+      if (paren.length === 0) return { ok: false, error: 'Contactpersoon staat nog niet in Bouw7.' }
+      ;({ moeder, cp: cpBouw7Id } = paren[0])
+    }
+
     const client = await getBouw7Client()
-    await client.post(`/contact/${moeder}/contact-person`, { id: Number(cp.bouw7_id), jobTitle: functie ?? '' })
+    await client.post(`/contact/${moeder}/contact-person`, { id: cpBouw7Id, jobTitle: functie ?? '' })
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij bijwerken van de functie in Bouw7.' }

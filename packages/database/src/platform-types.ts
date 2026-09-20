@@ -151,15 +151,53 @@ export type Contactpersoon = {
   // Overig
   opmerkingen: string | null
   actief: boolean
+  /**
+   * De primaire Bouw7-spiegel. Bouw7 kan een mens maar aan één contact hangen, dus wie voor
+   * twee bedrijven werkt staat daar twee keer; in EVA is dat één persoon met meerdere
+   * `ContactpersoonBouw7Koppeling`-rijen. Deze kolom blijft de spiegel waar EVA standaard
+   * naartoe schrijft.
+   */
   bouw7_id: string | null
   bouw7_laatst_sync: string | null
   bouw7_sync_status: 'synced' | 'pending' | 'error' | null
   sync_vergrendeld: boolean
   /** Kolommen die in EVA handmatig zijn aangepast en die de Bouw7-sync niet meer overschrijft. */
   handmatige_velden: string[]
+  /** Gevuld = deze rij is samengevoegd in een andere persoon en telt nergens meer mee. */
+  samengevoegd_in: string | null
+  samengevoegd_op: string | null
+  samengevoegd_door: string | null
+  /** Bouw7 registreert ook gedeelde postbussen en VvE's als contactpersoon; die zijn geen mens. */
+  soort: ContactpersoonSoort
   created_at: string
   updated_at: string
   created_by: string | null
+}
+
+export type ContactpersoonSoort = 'persoon' | 'postbus' | 'object'
+
+export const contactpersoonSoortLabels: Record<ContactpersoonSoort, string> = {
+  persoon: 'Persoon',
+  postbus: 'Gedeelde postbus',
+  object: 'Object / VvE',
+}
+
+/**
+ * Eén Bouw7-contactpersoon. Een EVA-persoon heeft er één per bedrijf waar hij in Bouw7 onder
+ * hangt — dat is wat het samenvoegen duurzaam maakt: de sync herkent de Bouw7-rij hieraan en
+ * maakt geen nieuwe persoon meer aan.
+ */
+export type ContactpersoonBouw7Koppeling = {
+  id: string
+  contactpersoon_id: string
+  bouw7_id: string
+  /** Het Bouw7-contact (de relatie) waaronder deze spiegel hangt. */
+  bouw7_contact_id: string | null
+  organisatie_id: string | null
+  bouw7_sync_hash: string | null
+  bouw7_laatst_sync: string | null
+  is_primair: boolean
+  created_at: string
 }
 
 export type ContactpersoonOrganisatie = {
@@ -171,6 +209,22 @@ export type ContactpersoonOrganisatie = {
   functie_handmatig: boolean
   is_primair: boolean
   opmerkingen: string | null
+  /** Zakelijke gegevens bij déze organisatie; leeg = het adres van de persoon zelf. */
+  email: string | null
+  telefoon: string | null
+  mobiel: string | null
+  /** Overrides die in EVA zijn gezet en die de sync niet terugzet (`email`, `telefoon`, `mobiel`). */
+  handmatige_velden: string[]
+  created_at: string
+}
+
+export type ContactpersoonSamenvoeging = {
+  id: string
+  blijver_id: string
+  verliezer_id: string
+  verplaatst: Record<string, unknown>
+  door: string | null
+  teruggedraaid_op: string | null
   created_at: string
 }
 

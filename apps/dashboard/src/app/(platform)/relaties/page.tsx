@@ -3,6 +3,7 @@ import { createAdminClient, createClient as createServerClient } from '@everts/d
 import { laadLayouts } from '@/app/actions/layouts'
 import { getAlleContactpersonen } from '@/lib/relaties/contactpersonen-actions'
 import { getAlleParticulieren } from '@/lib/relaties/particulieren-actions'
+import { getDubbelKandidaten, getRecenteSamenvoegingen } from '@/lib/relaties/ontdubbelen'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import RelatiesOverzicht from './RelatiesOverzicht'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
@@ -24,7 +25,7 @@ export default async function RelatiesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [relaties, contactpersonenRes, particulierenRes, layouts, laatsteSync] = await Promise.all([
+  const [relaties, contactpersonenRes, particulierenRes, dubbelen, recenteSamenvoegingen, layouts, laatsteSync] = await Promise.all([
     // Gepagineerd: het relatiebestand groeit richting de 1000 en PostgREST kapt daarna stil af,
     // waardoor organisaties zonder melding uit het overzicht vallen. Zie lib/supabase/paginate.ts.
     haalAlleRijen<Organisatie>((van, tot) => supabase
@@ -35,6 +36,10 @@ export default async function RelatiesPage() {
       .range(van, tot)),
     getAlleContactpersonen(),
     getAlleParticulieren(),
+    // Faalt de rechtencheck (of de query), dan blijft het tabblad leeg in plaats van dat de
+    // hele relatiepagina omvalt.
+    getDubbelKandidaten().catch(() => []),
+    getRecenteSamenvoegingen().catch(() => []),
     user_id ? laadLayouts(user_id, 'relaties-organisaties') : [],
     getLaatsteSyncTijd('relaties'),
   ])
@@ -44,6 +49,8 @@ export default async function RelatiesPage() {
       organisaties={relaties}
       contactpersonen={contactpersonenRes}
       particulieren={particulierenRes}
+      dubbelen={dubbelen}
+      recenteSamenvoegingen={recenteSamenvoegingen}
       layouts={layouts}
       user_id={user_id}
       laatsteSync={laatsteSync}

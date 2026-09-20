@@ -137,8 +137,10 @@ export async function voegPortaalMeekijkerToe(input: {
 
       // Bestaat dit adres al als contactpersoon? Dan die hergebruiken in plaats
       // van een tweede rij voor dezelfde persoon aan te maken.
+      // Niet op een samengevoegde rij uitkomen: die bestaat alleen nog als doorverwijzing.
       const { data: bestaandeCp } = await db()
-        .from('contactpersonen').select('id, voornaam').ilike('email', email).limit(1).maybeSingle()
+        .from('contactpersonen').select('id, voornaam').ilike('email', email)
+        .is('samengevoegd_in', null).limit(1).maybeSingle()
 
       if (bestaandeCp) {
         contactpersoonId = String(bestaandeCp.id)

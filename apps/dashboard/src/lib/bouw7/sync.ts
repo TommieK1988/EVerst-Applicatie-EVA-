@@ -399,35 +399,73 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       }
     } catch { /* tarief-sync is best-effort; faalt nooit de hele contact-sync */ }
 
-    // 9. Pre-fetch bestaande contactpersonen (één DB-query i.p.v. N).
+    // 9. Pre-fetch de Bouw7-spiegels en de personen waar ze bij horen.
+    //
+    //    Bouw7 kan een contactpersoon maar aan één contact hangen: wie voor twee bedrijven
+    //    werkt staat er twee keer. Die twee rijen zijn in EVA één mens met twee spiegels in
+    //    `contactpersoon_bouw7_koppelingen`. De sleutel van deze sync is dáárom de spiegel en
+    //    niet meer `contactpersonen.bouw7_id` — anders maakt de eerstvolgende cron-run een
+    //    zojuist samengevoegde persoon gewoon weer als tweede rij aan.
+    //
     //    Gepagineerd om dezelfde reden als bij de relaties hierboven: bij afkapping op 1000
-    //    rijen wordt een bestaande contactpersoon niet gevonden en als nieuw aangemaakt.
+    //    rijen wordt een bestaande spiegel niet gevonden en als nieuw aangemaakt.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dbSpiegels = await haalAlleRijen<any>((van, tot) => supabase
+      .from('contactpersoon_bouw7_koppelingen')
+      .select('id, contactpersoon_id, bouw7_id, bouw7_contact_id, organisatie_id, bouw7_sync_hash, is_primair')
+      .order('id')
+      .range(van, tot),
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const spiegelMap = new Map<string, any>((dbSpiegels ?? []).map((s: any) => [s.bouw7_id as string, s]))
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbCps = await haalAlleRijen<any>((van, tot) => supabase
       .from('contactpersonen')
       .select(
-        'id, bouw7_id, sync_vergrendeld, bouw7_sync_hash, handmatige_velden, '
+        'id, bouw7_id, sync_vergrendeld, handmatige_velden, samengevoegd_in, '
         + BOUW7_CONTACTPERSOON_VELDEN.join(', ')
       )
-      .not('bouw7_id', 'is', null)
       .order('id')
       .range(van, tot),
     )
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cpMap = new Map<string, any>(
-      (dbCps ?? []).map((cp: any) => [cp.bouw7_id as string, cp])
+    const cpById = new Map<string, any>((dbCps ?? []).map((cp: any) => [cp.id as string, cp]))
+    // Personen die wél een bouw7_id hebben maar (nog) geen spiegelrij: aangemaakt door een
+    // oudere codeversie. Die adopteren we — een tweede persoon aanmaken zou botsen op de
+    // unieke index en elke run opnieuw mislukken.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cpByBouw7Id = new Map<string, any>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (dbCps ?? []).filter((cp: any) => cp.bouw7_id).map((cp: any) => [cp.bouw7_id as string, cp])
     )
 
     // 10. Bouw contactpersonen-rows
-    const cpRows: Record<string, unknown>[] = []
-    const cpOrgKoppels: { cpBouw7Id: string; orgBouw7Id: string; functie: string | null }[] = []
+    /** Nieuwe personen: Bouw7 kent deze contactpersoon nog nergens in EVA. */
+    const nieuweCps: Record<string, unknown>[] = []
+    /** Bestaande personen: alleen de PRIMAIRE spiegel mag de persoonsvelden bijwerken. */
+    const bestaandeCps: Record<string, unknown>[] = []
+    /** Hash + herkomst per spiegel; de hash hoort bij de Bouw7-rij, niet bij de mens. */
+    const spiegelUpdates: Record<string, unknown>[] = []
+    /** Spiegels die nog gemaakt moeten worden; `persoonId` alleen bij een geadopteerde rij. */
+    const nieuweSpiegels: { cpBouw7Id: string; orgBouw7Id: string; persoonId?: string }[] = []
+    const cpOrgKoppels: {
+      cpBouw7Id: string; orgBouw7Id: string; functie: string | null
+      email: string | null; telefoon: string | null
+    }[] = []
+    let overgeslagen = 0
 
     for (const c of allContacts) {
       for (const cp of cpByContactId.get(c.id) ?? []) {
         const cpBouw7Id = String(cp.id)
-        const bestaandeCp = cpMap.get(cpBouw7Id)
+        const spiegel = spiegelMap.get(cpBouw7Id)
+        const bestaandeCp = spiegel ? cpById.get(spiegel.contactpersoon_id as string) : undefined
         if (bestaandeCp?.sync_vergrendeld) continue
+
+        const hash = fingerprint({
+          v: cp.firstName ?? '', a: cp.lastName ?? '', em: cp.emailAddress ?? null,
+          tel: cp.phoneNumber ?? null, aanhef: cp.salutation ?? null,
+        })
 
         // Aanhef eerst — dat is wat er in Bouw7 is ingevuld. Staat die er niet, dan de
         // voornaam als terugval. Levert ook dat niets op, dan blijft staan wat er in EVA
@@ -437,42 +475,66 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
           ?? bestaandeCp?.geslacht
           ?? null
 
-        cpRows.push({
-          voornaam:          cp.firstName ?? '',
-          achternaam:        cp.lastName ?? '',
-          email:             cp.emailAddress ?? null,
-          telefoon:          cp.phoneNumber ?? null,
+        const velden = {
+          voornaam:   cp.firstName ?? '',
+          achternaam: cp.lastName ?? '',
+          email:      cp.emailAddress ?? null,
+          telefoon:   cp.phoneNumber ?? null,
           geslacht,
-          bouw7_id:          cpBouw7Id,
-          bouw7_sync_hash:   fingerprint({
-            v: cp.firstName ?? '', a: cp.lastName ?? '', em: cp.emailAddress ?? null,
-            tel: cp.phoneNumber ?? null, aanhef: cp.salutation ?? null,
-          }),
+        }
+
+        cpOrgKoppels.push({
+          cpBouw7Id, orgBouw7Id: String(c.id), functie: cp.jobTitle || null,
+          email: cp.emailAddress ?? null, telefoon: cp.phoneNumber ?? null,
+        })
+
+        if (!spiegel) {
+          const wees = cpByBouw7Id.get(cpBouw7Id)
+          if (wees) {
+            // Persoon bestaat al, alleen de spiegelrij ontbreekt nog.
+            nieuweSpiegels.push({ cpBouw7Id, orgBouw7Id: String(c.id), persoonId: wees.id as string })
+          } else {
+            nieuweCps.push({
+              ...velden,
+              bouw7_id:          cpBouw7Id,   // primaire spiegel; blijft de schrijfkant voeden
+              bouw7_laatst_sync: new Date().toISOString(),
+              bouw7_sync_status: 'synced',
+            })
+            nieuweSpiegels.push({ cpBouw7Id, orgBouw7Id: String(c.id) })
+          }
+          continue
+        }
+
+        // Incrementeel: gelijke hash → deze Bouw7-rij is niet gewijzigd.
+        if (mode !== 'full' && spiegel.bouw7_sync_hash === hash) { overgeslagen++; continue }
+
+        // `contactpersoon_id` en `bouw7_id` gaan mee omdat een PostgREST-upsert een INSERT is
+        // met een conflict-clausule: zonder die NOT NULL-kolommen faalt hij vóór het conflict.
+        spiegelUpdates.push({
+          id: spiegel.id,
+          contactpersoon_id: spiegel.contactpersoon_id,
+          bouw7_id: spiegel.bouw7_id,
+          bouw7_sync_hash: hash,
+          bouw7_laatst_sync: new Date().toISOString(),
+          bouw7_contact_id: String(c.id),
+        })
+
+        // Alleen de primaire spiegel schrijft de mens zelf. Een tweede spiegel is de
+        // Bouw7-kopie bij een ánder bedrijf; die zou anders het werkadres van bedrijf A
+        // overschrijven met dat van bedrijf B. De afwijkende gegevens van die tweede spiegel
+        // landen op de koppeling met dát bedrijf (zie stap 13).
+        if (!spiegel.is_primair || !bestaandeCp || bestaandeCp.samengevoegd_in) continue
+
+        bestaandeCps.push({
+          ...metBehoudVanHandmatigeVelden(velden, bestaandeCp, BOUW7_CONTACTPERSOON_VELDEN),
+          id: bestaandeCp.id as string,
           bouw7_laatst_sync: new Date().toISOString(),
           bouw7_sync_status: 'synced',
         })
-        cpOrgKoppels.push({ cpBouw7Id, orgBouw7Id: String(c.id), functie: cp.jobTitle || null })
       }
     }
 
-    // Incrementeel: alleen nieuwe/gewijzigde contactpersonen schrijven (gelijke hash → overslaan).
-    const changedCpRows = mode === 'full'
-      ? cpRows
-      : cpRows.filter(r => cpMap.get(r.bouw7_id as string)?.bouw7_sync_hash !== r.bouw7_sync_hash)
-    cpResult.overgeslagen = cpRows.length - changedCpRows.length
-
-    // Splits in nieuw en bestaand (contactpersonen heeft ook partiële unique index)
-    const nieuweCps = changedCpRows.filter(r => !cpMap.has(r.bouw7_id as string))
-    const bestaandeCps = changedCpRows
-      .filter(r => cpMap.has(r.bouw7_id as string))
-      .map(r => {
-        const bestaand = cpMap.get(r.bouw7_id as string)
-        return {
-          ...metBehoudVanHandmatigeVelden(r, bestaand, BOUW7_CONTACTPERSOON_VELDEN),
-          id: bestaand?.id as string,
-        }
-      })
-
+    cpResult.overgeslagen = overgeslagen
     cpResult.nieuw = nieuweCps.length
     cpResult.bijgewerkt = bestaandeCps.length
 
@@ -490,31 +552,78 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       if (error) { cpResult.fouten++; cpResult.foutMelding = error.message }
     }
 
-    // 13. Contactpersoon-organisatie koppels batch upsert
-    if (cpOrgKoppels.length > 0) {
-      const cpBouw7Ids = [...new Set(cpOrgKoppels.map(k => k.cpBouw7Id))]
-      const { data: cpIds } = await supabase
+    // 12b. Spiegels bijwerken (hash per Bouw7-rij) en aanmaken voor de nieuwe personen.
+    for (let i = 0; i < spiegelUpdates.length; i += 500) {
+      const { error } = await supabase
+        .from('contactpersoon_bouw7_koppelingen')
+        .upsert(spiegelUpdates.slice(i, i + 500), { onConflict: 'id' })
+      if (error) { cpResult.fouten++; cpResult.foutMelding = error.message }
+    }
+
+    if (nieuweSpiegels.length > 0) {
+      const { data: verseCps } = await supabase
         .from('contactpersonen')
         .select('id, bouw7_id')
-        .in('bouw7_id', cpBouw7Ids)
-
-      const cpIdMap = new Map<string, string>(
-        (cpIds ?? []).map((cp: { id: string; bouw7_id: string }) => [cp.bouw7_id, cp.id])
+        .in('bouw7_id', nieuweSpiegels.map(s => s.cpBouw7Id))
+      const verseMap = new Map<string, string>(
+        (verseCps ?? []).map((c: { id: string; bouw7_id: string }) => [c.bouw7_id, c.id])
       )
+      const spiegelRows = nieuweSpiegels
+        .map(s => ({
+          contactpersoon_id: s.persoonId ?? verseMap.get(s.cpBouw7Id),
+          bouw7_id:          s.cpBouw7Id,
+          bouw7_contact_id:  s.orgBouw7Id,
+          organisatie_id:    relatieIdMap.get(s.orgBouw7Id) ?? null,
+          bouw7_sync_hash:   null,   // wordt bij de eerstvolgende run gezet
+          bouw7_laatst_sync: new Date().toISOString(),
+          is_primair:        true,
+        }))
+        .filter(r => r.contactpersoon_id != null)
+      for (let i = 0; i < spiegelRows.length; i += 500) {
+        const { error } = await supabase
+          .from('contactpersoon_bouw7_koppelingen')
+          .upsert(spiegelRows.slice(i, i + 500), { onConflict: 'bouw7_id' })
+        if (error) { cpResult.fouten++; cpResult.foutMelding = error.message }
+        else for (const r of spiegelRows.slice(i, i + 500)) {
+          spiegelMap.set(r.bouw7_id, { ...r, id: null })
+        }
+      }
+    }
 
-      // Een functie die in EVA is gezet (`functie_handmatig`) mag de sync niet terugzetten:
-      // die koppels krijgen hun eigen functie terug in de payload. Zonder deze stap zette de
-      // volledige upsert elke ochtend de EVA-invoer terug op Bouw7's jobTitle.
-      const cpIdsVoorKoppels = [...cpIdMap.values()]
-      const handmatigeFuncties = new Map<string, string | null>()
+    // 13. Contactpersoon-organisatie koppels batch upsert
+    if (cpOrgKoppels.length > 0) {
+      // De persoon achter een Bouw7-contactpersoon komt uit de spiegel, niet uit
+      // contactpersonen.bouw7_id: na een samenvoeging wijzen twee spiegels naar dezelfde mens.
+      const cpIdMap = new Map<string, string>()
+      for (const k of cpOrgKoppels) {
+        const persoonId = spiegelMap.get(k.cpBouw7Id)?.contactpersoon_id
+        if (persoonId) cpIdMap.set(k.cpBouw7Id, persoonId as string)
+      }
+      const ontbrekend = [...new Set(cpOrgKoppels.map(k => k.cpBouw7Id))].filter(id => !cpIdMap.has(id))
+      if (ontbrekend.length > 0) {
+        const { data: viaSpiegel } = await supabase
+          .from('contactpersoon_bouw7_koppelingen')
+          .select('contactpersoon_id, bouw7_id')
+          .in('bouw7_id', ontbrekend)
+        for (const s of (viaSpiegel ?? []) as { contactpersoon_id: string; bouw7_id: string }[]) {
+          cpIdMap.set(s.bouw7_id, s.contactpersoon_id)
+        }
+      }
+
+      // Wat in EVA is gezet mag de sync niet terugzetten: een functie met `functie_handmatig`,
+      // en een zakelijk e-mail/telefoonnummer dat in `handmatige_velden` staat. Zonder deze
+      // stap zette de volledige upsert elke ochtend de EVA-invoer terug op de Bouw7-waarde.
+      const cpIdsVoorKoppels = [...new Set(cpIdMap.values())]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bestaandeLinks = new Map<string, any>()
       for (let i = 0; i < cpIdsVoorKoppels.length; i += 500) {
         const { data: links } = await supabase
           .from('contactpersoon_organisaties')
-          .select('contactpersoon_id, organisatie_id, functie')
-          .eq('functie_handmatig', true)
+          .select('contactpersoon_id, organisatie_id, functie, functie_handmatig, email, telefoon, handmatige_velden')
           .in('contactpersoon_id', cpIdsVoorKoppels.slice(i, i + 500))
-        for (const l of (links ?? []) as { contactpersoon_id: string; organisatie_id: string; functie: string | null }[]) {
-          handmatigeFuncties.set(`${l.contactpersoon_id}|${l.organisatie_id}`, l.functie)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const l of (links ?? []) as any[]) {
+          bestaandeLinks.set(`${l.contactpersoon_id}|${l.organisatie_id}`, l)
         }
       }
 
@@ -523,13 +632,25 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
           contactpersoon_id: cpIdMap.get(k.cpBouw7Id),
           organisatie_id:    relatieIdMap.get(k.orgBouw7Id),
           functie:           k.functie,
+          // De Bouw7-contactpersoon hoort bij één bedrijf, dus zijn e-mail en telefoon horen
+          // bij déze koppeling. Na een samenvoeging is dat precies wat de twee bedrijven uit
+          // elkaar houdt: dezelfde mens, een ander werkadres per opdrachtgever.
+          email:             k.email,
+          telefoon:          k.telefoon,
         }))
-        .filter((k): k is { contactpersoon_id: string; organisatie_id: string; functie: string | null } =>
+        .filter((k): k is { contactpersoon_id: string; organisatie_id: string; functie: string | null; email: string | null; telefoon: string | null } =>
           k.contactpersoon_id != null && k.organisatie_id != null
         )
         .map(k => {
-          const sleutel = `${k.contactpersoon_id}|${k.organisatie_id}`
-          return handmatigeFuncties.has(sleutel) ? { ...k, functie: handmatigeFuncties.get(sleutel) ?? null } : k
+          const bestaand = bestaandeLinks.get(`${k.contactpersoon_id}|${k.organisatie_id}`)
+          if (!bestaand) return k
+          const handmatig: string[] = bestaand.handmatige_velden ?? []
+          return {
+            ...k,
+            functie:  bestaand.functie_handmatig ? bestaand.functie ?? null : k.functie,
+            email:    handmatig.includes('email') ? bestaand.email ?? null : k.email,
+            telefoon: handmatig.includes('telefoon') ? bestaand.telefoon ?? null : k.telefoon,
+          }
         })
 
       for (let i = 0; i < koppelRows.length; i += 500) {
@@ -1384,14 +1505,20 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     // ── Projectcontactpersoon-map + stubs ─────────────────────────────
     // Bouw7 levert de contactpersoon direct op het project (`p.contactPerson`). Map die op een
-    // EVA-contactpersoon via bouw7_id; ontbreekt hij, maak een stub (uit embedded naam/email/tel)
-    // en koppel aan de klant-organisatie. Veel betrouwbaarder dan de org-primair-gok.
-    const { data: cpAllData } = await supabase
-      .from('contactpersonen')
-      .select('id, bouw7_id')
-      .not('bouw7_id', 'is', null)
+    // EVA-contactpersoon via de Bouw7-spiegel; ontbreekt hij, maak een stub (uit embedded
+    // naam/email/tel) en koppel aan de klant-organisatie. Veel betrouwbaarder dan de
+    // org-primair-gok. De spiegel (niet `contactpersonen.bouw7_id`) is hier de sleutel, anders
+    // krijgt een samengevoegde persoon hier alsnog een duplicaat-stub.
+    // Gepagineerd: bij afkapping op 1000 rijen zou een bestaande persoon als stub terugkomen.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cpAllData = await haalAlleRijen<any>((van, tot) => supabase
+      .from('contactpersoon_bouw7_koppelingen')
+      .select('contactpersoon_id, bouw7_id')
+      .order('id')
+      .range(van, tot),
+    )
     const cpByBouw7 = new Map<string, string>(
-      (cpAllData ?? []).map((c: { id: string; bouw7_id: string }) => [c.bouw7_id, c.id])
+      (cpAllData ?? []).map((c: { contactpersoon_id: string; bouw7_id: string }) => [c.bouw7_id, c.contactpersoon_id])
     )
 
     const cpStubs = new Map<string, { row: Record<string, unknown>; orgBouw7Id: string | null }>()
@@ -1425,6 +1552,24 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         .select('id, bouw7_id')
         .in('bouw7_id', stubRows.map(r => r.bouw7_id as string))
       for (const c of (cp2 ?? []) as { id: string; bouw7_id: string }[]) cpByBouw7.set(c.bouw7_id, c.id)
+
+      // Elke stub krijgt meteen zijn spiegel; zonder die rij ziet de contactsync hem als een
+      // onbekende Bouw7-contactpersoon en maakt hij dezelfde mens nóg een keer aan.
+      const stubSpiegels = [...cpStubs.values()]
+        .map(s => ({
+          contactpersoon_id: cpByBouw7.get(s.row.bouw7_id as string),
+          bouw7_id:          s.row.bouw7_id as string,
+          bouw7_contact_id:  s.orgBouw7Id,
+          organisatie_id:    s.orgBouw7Id ? relatieMap.get(s.orgBouw7Id) ?? null : null,
+          bouw7_laatst_sync: new Date().toISOString(),
+          is_primair:        true,
+        }))
+        .filter(r => r.contactpersoon_id != null)
+      for (let i = 0; i < stubSpiegels.length; i += 500) {
+        await supabase
+          .from('contactpersoon_bouw7_koppelingen')
+          .upsert(stubSpiegels.slice(i, i + 500), { onConflict: 'bouw7_id', ignoreDuplicates: true })
+      }
 
       // Koppel nieuwe stubs aan hun klant-organisatie (voor het org-contactenoverzicht).
       const koppels = [...cpStubs.values()]

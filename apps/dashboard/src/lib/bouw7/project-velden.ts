@@ -149,8 +149,12 @@ export async function schrijfBouw7Projectvelden(
     if (wil('contactpersoon_id')) {
       if (!d.contactpersoon_id) { body.contactPerson = null; geschreven.push('contactpersoon_id') }
       else {
-        const { data: cp } = await supabase.from('contactpersonen').select('bouw7_id').eq('id', d.contactpersoon_id).maybeSingle()
-        if (cp?.bouw7_id) { body.contactPerson = { id: Number(cp.bouw7_id) }; geschreven.push('contactpersoon_id') }
+        // De spiegel die bij de opdrachtgever van dit dossier hoort. Eén mens kan in Bouw7
+        // meerdere contactpersoon-rijen hebben (één per bedrijf); de rij van een ánder bedrijf
+        // hoort niet op dit project.
+        const { bouw7CpIdVoorOrganisatie } = await import('@/lib/bouw7/contactpersoon-spiegel')
+        const cpBouw7Id = await bouw7CpIdVoorOrganisatie(d.contactpersoon_id as string, d.klant_id as string | null)
+        if (cpBouw7Id) { body.contactPerson = { id: Number(cpBouw7Id) }; geschreven.push('contactpersoon_id') }
         else overgeslagen.push('contactpersoon (staat nog niet in Bouw7)')
       }
     }
