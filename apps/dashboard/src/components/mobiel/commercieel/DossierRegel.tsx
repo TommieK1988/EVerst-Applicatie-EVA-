@@ -19,7 +19,7 @@ import {
 } from '@/components/dossiers/types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 import { metTerug } from '@/lib/mobiel/terug'
-import { GRIJS, TEKST, lijstRij } from './stijl'
+import { GRIJS, GROEN, RAND, TEKST, lijstRij } from './stijl'
 
 const ALLE_STATUSSEN = [
   ...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_ALLE_STATUSSEN,
@@ -60,16 +60,30 @@ const euro = (n: number): string =>
   n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export default function DossierRegel({
-  dossier, toonBedrag = false, toonJaar = false, terugNaar = null,
+  dossier, toonBedrag = false, bedrag, toonJaar = false,
+  terugNaar = null, pdfHref = null, pdfLabel = null,
 }: {
   dossier: RelatieDossier
   /** Bij uitgevoerd werk is het gefactureerde bedrag het interessantste getal. */
   toonBedrag?: boolean
+  /**
+   * Bedrag dat in plaats van `dossier.bedrag` getoond wordt. Bij een offerte is dat het
+   * offertebedrag excl. btw: gefactureerde omzet bestaat daar nog niet.
+   */
+  bedrag?: number | null
   toonJaar?: boolean
   /** Het scherm waar deze regel op staat; wordt de terugknop van het dossier. */
   terugNaar?: string | null
+  /** Link naar de offerte-PDF; zonder link blijft de knop weg. */
+  pdfHref?: string | null
+  /**
+   * Naam van het document op de knop. Bij een Bouw7-bestand is de keuze een beste gok op de
+   * bestandsnaam, dus je hoort te zien wát je opent voordat je hem voor een klant openklapt.
+   */
+  pdfLabel?: string | null
 }) {
   const { label, kleur } = statusVan(dossier)
+  const teTonenBedrag = bedrag !== undefined ? bedrag : (toonBedrag ? dossier.bedrag : null)
 
   const inhoud = (
     <>
@@ -80,9 +94,9 @@ export default function DossierRegel({
         }}>
           {dossier.titel}
         </span>
-        {toonBedrag && dossier.bedrag != null && dossier.bedrag > 0 && (
+        {teTonenBedrag != null && teTonenBedrag > 0 && (
           <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEKST }}>
-            {euro(dossier.bedrag)}
+            {euro(teTonenBedrag)}
           </span>
         )}
       </div>
@@ -113,12 +127,47 @@ export default function DossierRegel({
     </>
   )
 
-  if (!dossier.href) {
-    return <div style={{ ...lijstRij, cursor: 'default' }}>{inhoud}</div>
+  const dossierHref = dossier.href
+    ? metTerug(`/m/dossiers/${dossier.id}/informatie`, terugNaar)
+    : null
+
+  if (!pdfHref) {
+    if (!dossierHref) return <div style={{ ...lijstRij, cursor: 'default' }}>{inhoud}</div>
+    return <Link href={dossierHref} style={lijstRij}>{inhoud}</Link>
   }
+
+  // Met PDF-knop wordt de rij een kaartje met twee aparte doelen. De hele regel één grote link
+  // maken kan hier niet: een <a> in een <a> is ongeldige HTML en de browser sluit de buitenste
+  // dan vroegtijdig af, waarna de knop buiten de kaart valt.
   return (
-    <Link href={metTerug(`/m/dossiers/${dossier.id}/informatie`, terugNaar)} style={lijstRij}>
-      {inhoud}
-    </Link>
+    <div style={{ ...lijstRij, display: 'block', padding: 0, overflow: 'hidden' }}>
+      {dossierHref ? (
+        <Link href={dossierHref} style={{ display: 'block', padding: '13px 14px', textDecoration: 'none', color: TEKST }}>
+          {inhoud}
+        </Link>
+      ) : (
+        <div style={{ padding: '13px 14px' }}>{inhoud}</div>
+      )}
+      <a
+        href={pdfHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '11px 14px', borderTop: `1px solid ${RAND}`,
+          fontSize: 13.5, fontWeight: 700, color: GROEN, textDecoration: 'none',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+        </svg>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {pdfLabel || 'Offerte openen'}
+        </span>
+        <span style={{ flexShrink: 0, marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: GRIJS }}>PDF</span>
+      </a>
+    </div>
   )
 }

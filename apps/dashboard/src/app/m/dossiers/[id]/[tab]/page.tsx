@@ -55,6 +55,21 @@ export default async function MobielDossierTabPage(
   const isOpdracht = (res.data as { hoofdstatus?: string }).hoofdstatus === 'opdracht'
   if (actief === 'oplevering' && !isOpdracht) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
 
+  /**
+   * Is er werk om te plannen en te bewaken? Planning en Voortgang gaan allebei over uitvoering:
+   * een aanvraag of offerte heeft nog geen planning-activiteiten en geen bewakingscodes, dus die
+   * tabs waren daar altijd leeg. Om dezelfde reden vervalt daar de knop Projectbezoek starten.
+   *
+   * Servicedesk hoort er nadrukkelijk wél bij: die dossiers staan op `hoofdstatus = 'aanvraag'`
+   * (356 van de 415 aanvragen op productie) maar worden gewoon uitgevoerd. Gaten op `isOpdracht`
+   * alleen en je haalt de planning weg bij juist de dossiers waar de buitendienst op zit.
+   */
+  const isServicedesk = !!(res.data as { servicedesk_substatus?: string | null }).servicedesk_substatus
+  const isUitvoering = isOpdracht || isServicedesk
+  if ((actief === 'planning' || actief === 'voortgang') && !isUitvoering) {
+    redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
+  }
+
   // Houtrot verschijnt alleen bij een opdracht-dossier waar de toggle aanstaat.
   const toggles = await getDossierToggles(id).catch(() => [])
   const houtrotAan =
@@ -76,14 +91,14 @@ export default async function MobielDossierTabPage(
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref={terug ?? '/m/dossiers'} />
       <DossierTabStrip
         id={id} active={actief} houtrotAan={houtrotAan} opnameAan={opnameAan}
-        isOpdracht={isOpdracht} terug={terug}
+        isOpdracht={isOpdracht} isUitvoering={isUitvoering} terug={terug}
       />
 
       {actief === 'informatie' && (
         <>
           <InformatieTab d={d} statusLabel={label} />
           {/* Acties apart in Suspense: de takenquery mag de infokaarten niet ophouden. */}
-          <Suspense fallback={null}><ActiesBlok dossierId={id} /></Suspense>
+          <Suspense fallback={null}><ActiesBlok dossierId={id} magBezoekStarten={isUitvoering} /></Suspense>
         </>
       )}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
@@ -109,7 +124,9 @@ export default async function MobielDossierTabPage(
   )
 }
 
-async function ActiesBlok({ dossierId }: { dossierId: string }) {
+async function ActiesBlok(
+  { dossierId, magBezoekStarten }: { dossierId: string; magBezoekStarten: boolean },
+) {
   // Wie kijkt er mee? Bepaalt of een actie een startknop krijgt: de doorloop-schermen laten
   // alleen de toegewezen uitvoerder of een platform-gebruiker toe, dus een knop die daarop
   // stukloopt tonen we hier niet.
@@ -124,7 +141,8 @@ async function ActiesBlok({ dossierId }: { dossierId: string }) {
   }).catch(() => [])
 
   // Alleen wie het werk ook mag uitvoeren krijgt de startknop; de doorloop weert de rest toch.
-  const magStarten = medewerker?.gebruiker_type === 'platform_gebruiker'
+  // En alleen op een dossier dat daadwerkelijk wordt uitgevoerd — je bezoekt geen aanvraag.
+  const magStarten = magBezoekStarten && medewerker?.gebruiker_type === 'platform_gebruiker'
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
@@ -141,7 +159,20 @@ function InformatieTab({ d, statusLabel }: { d: Record<string, any>; statusLabel
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
 
-  // Bewust kaal voor de buitendienst: geen bedragen, geen volledige rollenlijst.
+  // Dezelfde vijf rollen als het Rollen-blok op de desktop, in dezelfde volgorde.
+  // `werkvoorbereider_naam` staat er bewust niet bij: die kolom wordt gelijkgehouden aan
+  // `calculator_id` (zie updateDossierRollen), dus hij zou de calculator dubbel tonen.
+  const rollen = ([
+    ['Projectleider', d.projectleider_naam],
+    ['Calculator',    d.calculator_naam],
+    ['Uitvoerder',    d.uitvoerder_naam],
+    ['Teamleider',    d.teamleider_naam],
+    ['Controller',    d.controller_naam],
+  ] as const)
+    .filter(([, naam]) => !!naam)
+    .map(([label, naam]) => ({ label, naam: naam as string }))
+
+  // Bewust kaal voor de buitendienst: geen bedragen.
   const info: DossierInfo = {
     titel: d.titel,
     dossiernummer: d.dossiernummer ?? null,
@@ -153,8 +184,7 @@ function InformatieTab({ d, statusLabel }: { d: Record<string, any>; statusLabel
     contact_naam: d.contactpersoon_naam ?? null,
     contact_telefoon: d.contactpersoon_telefoon ?? null,
     werkadres,
-    uitvoerder: d.uitvoerder_naam ?? null,
-    projectleider: d.projectleider_naam ?? null,
+    rollen,
   }
 
   return <DossierInfoView info={info} />

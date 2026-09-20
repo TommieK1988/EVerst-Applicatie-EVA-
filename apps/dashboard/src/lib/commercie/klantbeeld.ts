@@ -29,12 +29,16 @@ import { getDebiteurenVoorRelatie } from '@/lib/debiteuren/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { objectAdresRegel } from '@/lib/objecten/adres'
 import { vandaagNL } from '@/lib/wagenpark/periode'
+import { laadKaartBedragen } from '@/lib/dossiers/kaart-bedragen'
+import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
+import type { DossierRij } from '@/components/dossiers/types'
+import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
 import { bewakingsStatus } from './types'
 import { berekenScore } from './klantbeeld-score'
 import {
   FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, jaarVoorKlantbeeld,
   type Klantbeeld, type KlantContactpersoon, type KlantFactuur, type KlantObject,
-  type KlantSignalen,
+  type KlantOfferte, type KlantSignalen,
 } from './klantbeeld-types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 
@@ -125,6 +129,59 @@ async function telWijAanZet(
   return aantal
 }
 
+/**
+ * De openstaande offertes verrijken met hun bedrag en met de vraag of er een PDF te openen is.
+ *
+ * Het bedrag komt uit `berekenKaartBedrag` — dezelfde rekenregel als het offertebord en het
+ * Informatie-tab, zodat de telefoon geen derde getal introduceert. De velden die daarvoor nodig
+ * zijn staan niet in `RelatieDossier` (dat draagt gefactureerde omzet, en die is bij een offerte
+ * per definitie leeg), dus ze worden hier apart gelezen.
+ *
+ * Begrensd: dit loopt over de openstaande offertes van één klant — hoogstens twintig op
+ * productie, gemiddeld drie.
+ */
+async function verrijkOffertes(
+  supabase: ReturnType<typeof createAdminClient>,
+  offertes: RelatieDossier[],
+): Promise<KlantOfferte[]> {
+  const ids = offertes.map(d => d.id)
+  if (ids.length === 0) return []
+
+  const { data } = await supabase
+    .from('dossiers')
+    .select('id, hoofdstatus, bedrag_excl_btw, offerte_verstuurd_aantal, offerte_verstuurd_som_excl_btw, everts_calc_project_id')
+    .in('id', ids)
+
+  type Ruw = {
+    id: string
+    hoofdstatus: string
+    bedrag_excl_btw: number | string | null
+    offerte_verstuurd_aantal: number | null
+    offerte_verstuurd_som_excl_btw: number | string | null
+    everts_calc_project_id: string | null
+  }
+  const ruw = (data ?? []) as unknown as Ruw[]
+
+  const [kaartVelden, bronnen] = await Promise.all([
+    laadKaartBedragen(ruw.map(r => ({ id: r.id, everts_calc_project_id: r.everts_calc_project_id }))),
+    kiesOfferteBronnen(ids),
+  ])
+
+  const bedragPer = new Map<string, number | null>()
+  for (const r of ruw) {
+    // `berekenKaartBedrag` leest maar een handvol velden van de rij; een volledige `DossierRij`
+    // opbouwen zou hier dertig kolommen extra kosten zonder dat er iets mee gebeurt.
+    const rij = { ...r, ...(kaartVelden.get(r.id) ?? {}) } as unknown as DossierRij
+    bedragPer.set(r.id, berekenKaartBedrag(rij, 'offerte').totaalExclBtw)
+  }
+
+  return offertes.map((d): KlantOfferte => ({
+    ...d,
+    bedragExclBtw: bedragPer.get(d.id) ?? null,
+    offerteDocument: bronnen.get(d.id)?.naam ?? null,
+  }))
+}
+
 /** Objecten waar voor deze klant werk aan is of was, met het aantal dossiers per object. */
 async function leesObjecten(
   supabase: ReturnType<typeof createAdminClient>,
@@ -200,9 +257,10 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     dossiers.map(d => [d.id, d.fase === 'opdracht' || d.fase === 'afgesloten']),
   )
 
-  const [objecten, offerteWijAanZet] = await Promise.all([
+  const [objecten, offerteWijAanZet, offertesOpenVerrijkt] = await Promise.all([
     leesObjecten(supabase, dossiers),
     telWijAanZet(supabase, relatieId, dossiers.map(d => d.id), afgerondPerDossier),
+    verrijkOffertes(supabase, offertesOpen),
   ])
 
   const vandaagMs = Date.parse(`${vandaagNL()}T00:00:00Z`)
@@ -260,7 +318,7 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     // financieel afgesloten opdracht kunnen onderscheiden, en `fase` gooit die op één hoop.
     score: berekenScore(dossiers),
     signalen,
-    offertesOpen,
+    offertesOpen: offertesOpenVerrijkt,
     offertesInDeMaak,
     lopendWerk,
     uitgevoerd,

@@ -9,6 +9,9 @@ import { metTerug } from '@/lib/mobiel/terug'
  */
 export const DOSSIER_TABS = [
   { key: 'informatie', label: 'Info' },
+  // Planning en Voortgang gaan over uitvoering en verschijnen alleen bij een opdracht of een
+  // servicedeskbon; op een aanvraag of offerte bestaan er nog geen activiteiten of
+  // bewakingscodes en waren die tabs dus altijd leeg.
   { key: 'planning', label: 'Planning' },
   { key: 'voortgang', label: 'Voortgang' },
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
@@ -27,13 +30,16 @@ export const DOSSIER_TABS = [
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
 export default function DossierTabStrip({
-  id, active, houtrotAan = false, opnameAan = false, isOpdracht = false, terug = null,
+  id, active, houtrotAan = false, opnameAan = false, isOpdracht = false,
+  isUitvoering = false, terug = null,
 }: {
   id: string
   active: DossierTabKey
   houtrotAan?: boolean
   opnameAan?: boolean
   isOpdracht?: boolean
+  /** Opdracht of servicedeskbon — draagt Planning en Voortgang. */
+  isUitvoering?: boolean
   /**
    * Waar de terugknop van dit dossier heen wijst. Moet mee in elke tab-link: zonder dat ben
    * je na één tabwissel je herkomst kwijt en val je terug op de dossierlijst.
@@ -41,6 +47,7 @@ export default function DossierTabStrip({
   terug?: string | null
 }) {
   const tabs = DOSSIER_TABS
+    .filter(t => (t.key !== 'planning' && t.key !== 'voortgang') || isUitvoering)
     .filter(t => t.key !== 'houtrot' || houtrotAan)
     .filter(t => t.key !== 'opname' || opnameAan)
     .filter(t => t.key !== 'oplevering' || isOpdracht)

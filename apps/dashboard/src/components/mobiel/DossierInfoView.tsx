@@ -6,8 +6,12 @@ import StatusBadge from './StatusBadge'
  *
  * Bewust kaal: uitvoerend personeel heeft op een telefoon maar een paar dingen
  * nodig — waar moet ik zijn, wie bel ik, en wanneer. Grote tekst, grote
- * knoppen. Financiële cijfers en de volledige rollenlijst horen hier niet;
- * die staan op de desktop. Een tabletweergave met meer detail kan later.
+ * knoppen. Financiële cijfers horen hier niet; die staan op de desktop.
+ *
+ * De rollen staan er wél voluit: in het veld wil je weten wie de calculator of
+ * de teamleider is om die te kunnen bellen, en alleen uitvoerder + projectleider
+ * tonen betekende terug naar kantoor of naar de desktop. Alleen ingevulde rollen
+ * verschijnen — vijf lege regels zijn geen informatie.
  *
  * LET OP: dit scherm rendert géén eigen `AppHeader` — de dossierpagina doet dat
  * al. Twee headers stapelen gaf een dubbele bovenbalk waar de tabstrip tussen
@@ -24,8 +28,8 @@ export type DossierInfo = {
   contact_naam: string | null
   contact_telefoon: string | null
   werkadres: string | null
-  uitvoerder: string | null
-  projectleider: string | null
+  /** Ingevulde rollen in de volgorde van het Rollen-blok op de desktop; lege rollen zitten er niet in. */
+  rollen: { label: string; naam: string }[]
 }
 
 /** Groot, goed leesbaar feit. */
@@ -115,9 +119,13 @@ export default function DossierInfoView({ info }: { info: DossierInfo }) {
                 : info.contact_naam)
             : null}
         />
-        <Feit label="Uitvoerder" waarde={info.uitvoerder} />
-        <Feit label="Projectleider" waarde={info.projectleider} />
       </div>
+
+      {info.rollen.length > 0 && (
+        <div style={kaart}>
+          {info.rollen.map(r => <Feit key={r.label} label={r.label} waarde={r.naam} />)}
+        </div>
+      )}
     </div>
   )
 }

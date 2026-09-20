@@ -125,6 +125,29 @@ export type KlantContactpersoon = {
   isPrimair: boolean
 }
 
+/**
+ * Een openstaande offerte in het klantbeeld: de dossierrij plus de twee dingen die je aan de
+ * telefoon nodig hebt en die niet in `RelatieDossier` passen.
+ *
+ * `bedrag` op `RelatieDossier` is gefactureerde omzet uit `management_projecten` en is bij een
+ * offerte per definitie leeg — die staat nog niet in die tabel. Vandaar een eigen veld.
+ */
+export type KlantOfferte = RelatieDossier & {
+  /**
+   * Het offertebedrag excl. btw volgens de gedeelde kaart-rekenregel (`berekenKaartBedrag`),
+   * zodat de telefoon hetzelfde getal toont als het offertebord. `null` als geen van beide
+   * bronnen (EVA-calculatie, Bouw7-sync) een bedrag levert.
+   */
+  bedragExclBtw: number | null
+  /**
+   * Naam van het offertedocument dat als PDF te openen valt (offertenummer bij een EVA-offerte,
+   * anders de bestandsnaam), of `null` als er geen document is. Draagt bewust de naam en niet
+   * alleen een ja/nee: bij een Bouw7-bestand is de keuze een beste gok op de bestandsnaam, en
+   * dan hoort op de knop te staan wát je opent. Zie `lib/dossiers/offerte-bron.ts`.
+   */
+  offerteDocument: string | null
+}
+
 export type Klantbeeld = {
   relatie: {
     id: string
@@ -138,7 +161,7 @@ export type Klantbeeld = {
   score: KlantScore
   signalen: KlantSignalen
   /** De vijf lijsten, in de volgorde waarin ze op het scherm staan. */
-  offertesOpen: RelatieDossier[]
+  offertesOpen: KlantOfferte[]
   offertesInDeMaak: RelatieDossier[]
   lopendWerk: RelatieDossier[]
   uitgevoerd: RelatieDossier[]

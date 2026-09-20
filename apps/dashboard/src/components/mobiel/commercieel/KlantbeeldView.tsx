@@ -11,6 +11,10 @@
  *
  * De blok-ids (`blok-offertes-open`, `blok-facturen`) zijn de scrolldoelen van
  * `SignalenBalk`; hernoem je er een, hernoem hem daar ook.
+ *
+ * Bij de openstaande offertes staat het offertebedrag excl. btw én — als er een offerte te
+ * vinden is — een knop die hem als PDF opent. Dat is wat de klant aan de telefoon vraagt:
+ * "waar ging die offerte ook alweer over, en om welk bedrag?"
  */
 
 import React from 'react'
@@ -66,12 +70,24 @@ export default function KlantbeeldView({
       <div style={{ padding: '18px 16px 16px' }}>
         <KlapBlok
           id="blok-offertes-open"
-          titel="Openstaande offertes"
+          // De btw-basis staat één keer in de kop; achter elk bedrag zou hij de titel van de
+          // offerte wegdrukken, en dat is juist wat je op de regel wilt lezen.
+          titel="Openstaande offertes · excl. btw"
           aantal={beeld.offertesOpen.length}
           standaardOpen
           leegTekst="Er staat nu niets open bij deze klant."
         >
-          {beeld.offertesOpen.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+          {beeld.offertesOpen.map(d => (
+            <DossierRegel
+              key={d.id}
+              dossier={d}
+              terugNaar={terugNaar}
+              // Het offertebedrag, niet de gefactureerde omzet: die bestaat hier nog niet.
+              bedrag={d.bedragExclBtw}
+              pdfHref={d.offerteDocument ? `/api/dossiers/${d.id}/offerte/pdf` : null}
+              pdfLabel={d.offerteDocument}
+            />
+          ))}
         </KlapBlok>
 
         <KlapBlok
