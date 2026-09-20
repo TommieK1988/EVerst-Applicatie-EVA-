@@ -1593,6 +1593,10 @@ export type Database = {
           prive_adres_straat: string | null
           prive_email: string | null
           prive_telefoon: string | null
+          samengevoegd_door: string | null
+          samengevoegd_in: string | null
+          samengevoegd_op: string | null
+          soort: string
           sync_vergrendeld: boolean
           telefoon: string | null
           tussenvoegsel: string | null
@@ -1625,6 +1629,10 @@ export type Database = {
           prive_adres_straat?: string | null
           prive_email?: string | null
           prive_telefoon?: string | null
+          samengevoegd_door?: string | null
+          samengevoegd_in?: string | null
+          samengevoegd_op?: string | null
+          soort?: string
           sync_vergrendeld?: boolean
           telefoon?: string | null
           tussenvoegsel?: string | null
@@ -1657,6 +1665,10 @@ export type Database = {
           prive_adres_straat?: string | null
           prive_email?: string | null
           prive_telefoon?: string | null
+          samengevoegd_door?: string | null
+          samengevoegd_in?: string | null
+          samengevoegd_op?: string | null
+          soort?: string
           sync_vergrendeld?: boolean
           telefoon?: string | null
           tussenvoegsel?: string | null
@@ -1666,36 +1678,99 @@ export type Database = {
         }
         Relationships: []
       }
+      contactpersoon_bouw7_koppelingen: {
+        Row: {
+          bouw7_contact_id: string | null
+          bouw7_id: string
+          bouw7_laatst_sync: string | null
+          bouw7_sync_hash: string | null
+          contactpersoon_id: string
+          created_at: string
+          id: string
+          is_primair: boolean
+          organisatie_id: string | null
+        }
+        Insert: {
+          bouw7_contact_id?: string | null
+          bouw7_id: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          contactpersoon_id: string
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          organisatie_id?: string | null
+        }
+        Update: {
+          bouw7_contact_id?: string | null
+          bouw7_id?: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          contactpersoon_id?: string
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          organisatie_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_bouw7_koppelingen_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contactpersoon_bouw7_koppelingen_organisatie_id_fkey"
+            columns: ["organisatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contactpersoon_organisaties: {
         Row: {
           contactpersoon_id: string
           created_at: string
+          email: string | null
           functie: string | null
           functie_handmatig: boolean
+          handmatige_velden: string[]
           id: string
           is_primair: boolean
+          mobiel: string | null
           opmerkingen: string | null
           organisatie_id: string
+          telefoon: string | null
         }
         Insert: {
           contactpersoon_id: string
           created_at?: string
+          email?: string | null
           functie?: string | null
           functie_handmatig?: boolean
+          handmatige_velden?: string[]
           id?: string
           is_primair?: boolean
+          mobiel?: string | null
           opmerkingen?: string | null
           organisatie_id: string
+          telefoon?: string | null
         }
         Update: {
           contactpersoon_id?: string
           created_at?: string
+          email?: string | null
           functie?: string | null
           functie_handmatig?: boolean
+          handmatige_velden?: string[]
           id?: string
           is_primair?: boolean
+          mobiel?: string | null
           opmerkingen?: string | null
           organisatie_id?: string
+          telefoon?: string | null
         }
         Relationships: [
           {
@@ -1710,6 +1785,51 @@ export type Database = {
             columns: ["organisatie_id"]
             isOneToOne: false
             referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contactpersoon_samenvoegingen: {
+        Row: {
+          blijver_id: string
+          created_at: string
+          door: string | null
+          id: string
+          teruggedraaid_op: string | null
+          verliezer_id: string
+          verplaatst: Json
+        }
+        Insert: {
+          blijver_id: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          teruggedraaid_op?: string | null
+          verliezer_id: string
+          verplaatst?: Json
+        }
+        Update: {
+          blijver_id?: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          teruggedraaid_op?: string | null
+          verliezer_id?: string
+          verplaatst?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_samenvoegingen_blijver_id_fkey"
+            columns: ["blijver_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contactpersoon_samenvoegingen_verliezer_id_fkey"
+            columns: ["verliezer_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
             referencedColumns: ["id"]
           },
         ]
@@ -17852,6 +17972,14 @@ export type Database = {
       }
     }
     Functions: {
+      contactpersoon_samenvoegen: {
+        Args: { p_blijver: string; p_door?: string; p_verliezer: string }
+        Returns: string
+      }
+      contactpersoon_samenvoegen_ongedaan: {
+        Args: { p_log: string }
+        Returns: undefined
+      }
       dossier_actieve_substatus: {
         Args: {
           p_aanvraag: string

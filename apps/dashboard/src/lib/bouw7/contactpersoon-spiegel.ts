@@ -10,8 +10,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
+const db = () => createAdminClient()
 
 export type Spiegel = {
   id: string

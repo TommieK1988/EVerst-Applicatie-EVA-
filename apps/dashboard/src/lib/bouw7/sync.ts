@@ -614,15 +614,18 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       // en een zakelijk e-mail/telefoonnummer dat in `handmatige_velden` staat. Zonder deze
       // stap zette de volledige upsert elke ochtend de EVA-invoer terug op de Bouw7-waarde.
       const cpIdsVoorKoppels = [...new Set(cpIdMap.values())]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bestaandeLinks = new Map<string, any>()
+      type BestaandeLink = {
+        contactpersoon_id: string; organisatie_id: string
+        functie: string | null; functie_handmatig: boolean
+        email: string | null; telefoon: string | null; handmatige_velden: string[]
+      }
+      const bestaandeLinks = new Map<string, BestaandeLink>()
       for (let i = 0; i < cpIdsVoorKoppels.length; i += 500) {
         const { data: links } = await supabase
           .from('contactpersoon_organisaties')
           .select('contactpersoon_id, organisatie_id, functie, functie_handmatig, email, telefoon, handmatige_velden')
           .in('contactpersoon_id', cpIdsVoorKoppels.slice(i, i + 500))
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const l of (links ?? []) as any[]) {
+        for (const l of (links ?? []) as BestaandeLink[]) {
           bestaandeLinks.set(`${l.contactpersoon_id}|${l.organisatie_id}`, l)
         }
       }

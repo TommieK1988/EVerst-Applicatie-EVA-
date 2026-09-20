@@ -22,8 +22,7 @@ import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import type { ContactpersoonSoort } from '@everts/database'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
+const db = () => createAdminClient()
 
 type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
@@ -107,6 +106,28 @@ export type DubbelGroep = {
 
 const ZEKERHEID_ORDE = { zeker: 0, waarschijnlijk: 1, mogelijk: 2 } as const
 
+/** De kolommen die de suggestielaag van een contactpersoon nodig heeft. */
+type KandidaatRij = {
+  id: string
+  voornaam: string
+  tussenvoegsel: string | null
+  achternaam: string
+  email: string | null
+  telefoon: string | null
+  mobiel: string | null
+  soort: string | null
+  bouw7_id: string | null
+  updated_at: string
+  samengevoegd_in: string | null
+}
+
+/** Koppeling met de ingebedde organisatie; PostgREST levert het alias als object. */
+type KoppelRij = {
+  contactpersoon_id: string
+  functie: string | null
+  organisatie: { id: string; naam: string } | null
+}
+
 /**
  * Mogelijke duplicaten, gegroepeerd en gescoord. Leest alles en groepeert in geheugen: met
  * ~350 personen is dat één query, en een SQL-variant met drie self-joins is hier niet sneller
@@ -116,8 +137,7 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
   await vereisRecht('relaties', 'lezen')
   const supabase = db()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const personen = await haalAlleRijen<any>((van, tot) => supabase
+  const personen = await haalAlleRijen<KandidaatRij>((van, tot) => supabase
     .from('contactpersonen')
     .select('id, voornaam, tussenvoegsel, achternaam, email, telefoon, mobiel, soort, bouw7_id, updated_at, samengevoegd_in')
     .is('samengevoegd_in', null)
@@ -125,16 +145,14 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
     .range(van, tot),
   )
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const koppels = await haalAlleRijen<any>((van, tot) => supabase
+  const koppels = await haalAlleRijen<KoppelRij>((van, tot) => supabase
     .from('contactpersoon_organisaties')
     .select('contactpersoon_id, functie, organisatie:relaties(id, naam)')
     .order('id')
     .range(van, tot),
   )
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dossiers = await haalAlleRijen<any>((van, tot) => supabase
+  const dossiers = await haalAlleRijen<{ contactpersoon_id: string | null }>((van, tot) => supabase
     .from('dossiers')
     .select('contactpersoon_id')
     .not('contactpersoon_id', 'is', null)
@@ -144,6 +162,7 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
 
   const dossierTelling = new Map<string, number>()
   for (const d of dossiers ?? []) {
+    if (!d.contactpersoon_id) continue
     dossierTelling.set(d.contactpersoon_id, (dossierTelling.get(d.contactpersoon_id) ?? 0) + 1)
   }
 
@@ -160,8 +179,7 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const alsPersoon = (p: any): DubbelPersoon => ({
+  const alsPersoon = (p: KandidaatRij): DubbelPersoon => ({
     id: p.id,
     naam: [p.voornaam, p.tussenvoegsel, p.achternaam].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
     email: p.email, telefoon: p.telefoon, mobiel: p.mobiel,
@@ -174,16 +192,14 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
   })
 
   // Alleen echte mensen; een als contactpersoon geregistreerde VvE of postbus doet niet mee.
-  const kandidaten = (personen ?? []).filter((p: { soort?: string }) => (p.soort ?? 'persoon') === 'persoon')
+  const kandidaten = (personen ?? []).filter(p => (p.soort ?? 'persoon') === 'persoon')
 
   const perNaam = new Map<string, string[]>()
   const perEmail = new Map<string, string[]>()
   const perMobiel = new Map<string, string[]>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const index = new Map<string, any>()
+  const index = new Map<string, KandidaatRij>()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const p of kandidaten as any[]) {
+  for (const p of kandidaten) {
     index.set(p.id, p)
     const n = naamSleutel(p)
     if (n) perNaam.set(n, [...(perNaam.get(n) ?? []), p.id])
@@ -203,7 +219,7 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
       sleutel,
       zekerheid,
       reden,
-      personen: ids.map(id => alsPersoon(index.get(id)))
+      personen: ids.flatMap(id => { const p = index.get(id); return p ? [alsPersoon(p)] : [] })
         // De aanbevolen blijver eerst: de rij waar het meeste werk aan hangt, dan de volledigste.
         .sort((a, b) =>
           b.dossiers - a.dossiers
@@ -216,7 +232,7 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
 
   for (const [e, ids] of perEmail) {
     if (ids.length < 2) continue
-    const namen = new Set(ids.map(id => naamSleutel(index.get(id))))
+    const namen = new Set(ids.flatMap(id => { const p = index.get(id); return p ? [naamSleutel(p)] : [] }))
     if (namen.size === 1) voegToe(ids, 'zeker', `Zelfde naam én e-mailadres (${e})`)
     else voegToe(ids, 'waarschijnlijk', `Zelfde e-mailadres (${e}), andere schrijfwijze van de naam`)
   }
@@ -262,7 +278,7 @@ export async function voegContactpersonenSamen(
     const { data, error } = await supabase.rpc('contactpersoon_samenvoegen', {
       p_blijver: blijverId,
       p_verliezer: verliezerId,
-      p_door: medewerker.auth_user_id,
+      p_door: medewerker.auth_user_id ?? undefined,
     })
     if (error) fouten.push(error.message)
     else if (data) logIds.push(data as string)
@@ -307,6 +323,19 @@ export type SamenvoegingLog = {
   teruggedraaid_op: string | null
 }
 
+/** Naam-embed zoals PostgREST hem levert bij een `!fk`-alias. */
+type NaamEmbed = { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null } | null
+
+type LogRij = {
+  id: string
+  blijver_id: string
+  verliezer_id: string
+  created_at: string
+  teruggedraaid_op: string | null
+  blijver: NaamEmbed
+  verliezer: NaamEmbed
+}
+
 /** De laatste samenvoegingen, voor de knop "ongedaan maken" op het dubbelenscherm. */
 export async function getRecenteSamenvoegingen(limiet = 15): Promise<SamenvoegingLog[]> {
   await vereisRecht('relaties', 'lezen')
@@ -316,11 +345,10 @@ export async function getRecenteSamenvoegingen(limiet = 15): Promise<Samenvoegin
     .order('created_at', { ascending: false })
     .limit(limiet)
 
-  const naam = (p?: { voornaam?: string; tussenvoegsel?: string | null; achternaam?: string } | null) =>
+  const naam = (p: NaamEmbed) =>
     p ? [p.voornaam, p.tussenvoegsel, p.achternaam].filter(Boolean).join(' ') : '?'
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[]).map(r => ({
+  return ((data ?? []) as unknown as LogRij[]).map(r => ({
     id: r.id,
     blijver_id: r.blijver_id,
     verliezer_id: r.verliezer_id,
@@ -329,6 +357,15 @@ export async function getRecenteSamenvoegingen(limiet = 15): Promise<Samenvoegin
     created_at: r.created_at,
     teruggedraaid_op: r.teruggedraaid_op,
   }))
+}
+
+type ZoekRij = {
+  id: string
+  voornaam: string
+  tussenvoegsel: string | null
+  achternaam: string
+  email: string | null
+  contactpersoon_organisaties: { organisatie: { naam: string } | null }[] | null
 }
 
 export type ZoekResultaat = {
@@ -360,13 +397,13 @@ export async function zoekContactpersonenVoorSamenvoegen(
     .order('achternaam')
     .limit(25)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[]).map(p => ({
+  return ((data ?? []) as unknown as ZoekRij[]).map(p => ({
     id: p.id,
     naam: [p.voornaam, p.tussenvoegsel, p.achternaam].filter(Boolean).join(' '),
     email: p.email,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    organisaties: (p.contactpersoon_organisaties ?? []).map((k: any) => k.organisatie?.naam).filter(Boolean),
+    organisaties: (p.contactpersoon_organisaties ?? [])
+      .map(k => k.organisatie?.naam)
+      .filter((n): n is string => Boolean(n)),
   }))
 }
 
