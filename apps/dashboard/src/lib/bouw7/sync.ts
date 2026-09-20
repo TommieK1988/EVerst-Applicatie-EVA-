@@ -715,7 +715,11 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
 
       // 15a. Sterfdatum bijwerken per spiegel — alleen waar hij verandert, zodat een run die
       //      niets te melden heeft ook niets schrijft en de stap niet elke nacht oscilleert.
-      const spiegels: SpiegelRij[] = dbSpiegels ?? []
+      // Alleen spiegels met een echt Bouw7-id doen mee. Uit een oude import staan er nog rijen
+      // met een verzonnen sleutel (`c_<contact>_primary`, afgeleid van de contactpersoonnaam op
+      // het contact zelf). Die komen per definitie nooit in `/list/contact-persons` voor, dus
+      // zonder deze grens zou de opruimstap die mensen élke nacht opnieuw deactiveren.
+      const spiegels: SpiegelRij[] = (dbSpiegels ?? []).filter((s: SpiegelRij) => /^\d+$/.test(s.bouw7_id))
       const netVerdwenen = spiegels.filter(s => !cpIdsInResponse.has(s.bouw7_id) && s.verdwenen_op == null)
       const netTerug = spiegels.filter(s => cpIdsInResponse.has(s.bouw7_id) && s.verdwenen_op != null)
 
