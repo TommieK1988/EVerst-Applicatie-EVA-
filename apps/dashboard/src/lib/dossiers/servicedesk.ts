@@ -113,9 +113,16 @@ async function verkooptarievenVoorRelatie(klantId: string | null): Promise<Map<s
 }
 
 /**
- * Bouwt de regie-factuurregels op uit de geboekte uren en kosten (live uit Bouw7),
- * met defaults: uren → afgesproken verkooptarief per uursoort (relatie), overige kosten → de
- * ingestelde opslag. Eerder opgeslagen overrides (regie_factuurregels) winnen altijd.
+ * Bouwt de regie-factuurregels op uit de geboekte uren en kosten (live uit Bouw7).
+ *
+ * Standaardprijs is de kostprijs plus de ingestelde opslag — voor uren net zo goed als voor
+ * materiaal. Is er voor de klant een verkooptarief per uursoort afgesproken, dan gaat dat vóór de
+ * opslag: een afgesproken tarief is een harde prijsafspraak en een opslag maar een vuistregel.
+ * Eerder opgeslagen overrides (regie_factuurregels) winnen altijd van beide.
+ *
+ * Uren vielen hiervoor zonder afgesproken tarief terug op het kále kostprijstarief, dus zonder
+ * opslag. Dat was geen bewuste keuze maar een gat: er staat geen enkel verkooptarief in
+ * relatie_uurtarieven, dus liep in de praktijk élk regie-uur tegen kostprijs de factuur op.
  */
 export async function getServicedeskRegie(
   dossierId: string,
@@ -143,14 +150,22 @@ export async function getServicedeskRegie(
 
   const regels: RegieFactuurRegel[] = []
 
-  // Uren → verkooptarief uit relatie (per uursoort/hourType).
+  // Uren → afgesproken verkooptarief uit de relatie, en anders kostprijs plus opslag.
   for (const u of uren.regels) {
     if (u.bouw7Id == null) continue // alleen detailregels met stabiele sleutel
     const sleutel = `uur:${u.bouw7Id}`
     const opgesl = opgeslagen.get(sleutel)
     const relatieTarief = u.hourTypeId != null ? tarieven.get(String(u.hourTypeId)) : undefined
     const tariefUitRelatie = relatieTarief != null
-    const verkoopTarief = opgesl?.verkoop_tarief ?? relatieTarief ?? u.uurtarief ?? null
+    // Zelfde voorrang als bij de kosten hieronder: eigen percentage van de post, dan de
+    // bedrijfsstandaard. Alleen telt hij hier pas mee als er geen tarief is afgesproken.
+    const urenOpslag = opgesl?.opslag_pct
+      ?? (u.code ? opties?.opslagPerCode?.[u.code] : undefined)
+      ?? standaardOpslag
+    const kostTarief = u.uurtarief ?? null
+    const verkoopTarief = opgesl?.verkoop_tarief
+      ?? relatieTarief
+      ?? (kostTarief != null ? Math.round(kostTarief * (1 + urenOpslag / 100) * 100) / 100 : null)
     const verkoopBedrag = opgesl?.verkoop_bedrag ?? (verkoopTarief != null ? u.uren * verkoopTarief : 0)
     regels.push({
       bronType: 'uur',
@@ -162,7 +177,12 @@ export async function getServicedeskRegie(
       aantal: u.uren,
       eenheid: 'uur',
       inkoopBedrag: u.uren * (u.uurtarief ?? 0),
-      opslagPct: opgesl?.opslag_pct ?? null,
+      // Alleen een percentage melden als het de prijs ook werkelijk bepaald heeft; bij een
+      // afgesproken tarief of een handmatig bedrag zegt een opslagpercentage niets.
+      opslagPct: opgesl?.opslag_pct
+        ?? (opgesl?.verkoop_bedrag == null && opgesl?.verkoop_tarief == null && !tariefUitRelatie
+          ? urenOpslag
+          : null),
       verkoopTarief,
       verkoopBedrag,
       handmatigePrijs: opgesl?.verkoop_bedrag != null,
