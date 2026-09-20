@@ -31,6 +31,7 @@ import {
 import { schrijfBouw7Projectvelden, schrijfBouw7Aanneemsom, BOUW7_PROJECT_SCHRIJFVELDEN } from '@/lib/bouw7/project-velden'
 import { mapBouw7NaarEvaStatus } from '@/lib/bouw7/status-afleiding'
 import { assertDossierBewerkbaar } from './guards'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
 import {
@@ -3263,46 +3264,88 @@ export type OpdrachtgeverZoekResultaat = {
   contactpersoon?: { id: string; naam: string } | null
 }
 
+/** `%`, `_` en `\` zijn jokers in ilike en moeten letterlijk gezocht worden. */
+function escapeIlike(waarde: string): string {
+  return waarde.replace(/[\\%_]/g, (t) => `\\${t}`)
+}
+
 /**
  * Zoek opdrachtgevers voor de aanvraag-combobox. Doorzoekt zowel relaties (naam + adres/plaats)
  * als contactpersonen (voor-/achternaam + e-mail); bij een contactpersoon-match wordt de
  * gekoppelde organisatie teruggegeven met de contactpersoon erbij zodat de modal die kan voorselecteren.
  * De geselecteerde waarde is altijd een relatie (klant_id). Optioneel filteren op relatie-type.
+ *
+ * Vereist `relaties: lezen`; zonder dat recht een lege lijst.
  */
 export async function zoekRelaties(
   query: string,
   opts?: { type?: string },
 ): Promise<OpdrachtgeverZoekResultaat[]> {
+  // Deze action draait op de admin-client (service-role, bypast RLS) en is als kale
+  // RPC aanroepbaar: zonder gate kan elke ingelogde gebruiker het hele relatiebestand
+  // aftasten. Zacht falen met een lege lijst — dit is een zoeksuggestie in een
+  // combobox, geen mutatie, en niet elke aanroeper vangt een rejection (zie
+  // NieuweAanvraagModal, dat alleen try/finally gebruikt).
+  try {
+    await vereisRecht('relaties', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return []
+    throw e
+  }
+
   const term = query.trim()
   if (!term) return []
   const supabase = createAdminClient() as any
-  const like = `%${term}%`
+  const like = `%${escapeIlike(term)}%`
 
-  // 1. Relaties op naam of adres/plaats.
-  let relQ = supabase
-    .from('relaties')
-    .select('id, naam, types, adres_plaats')
-    .or(`naam.ilike.${like},adres_straat.ilike.${like},adres_plaats.ilike.${like}`)
-    .eq('actief', true)
-  if (opts?.type) relQ = relQ.contains('types', [opts.type])
-  const relRes = await relQ.order('naam', { ascending: true }).limit(8)
+  // Bewust losse `.ilike()`-queries per kolom en géén `.or(...)`: die filter gaat als
+  // kale string naar PostgREST, en een zoekterm met een komma of haakje erin — heel
+  // gewoon in een bedrijfsnaam als "Jansen & Zn, Rijswijk (VvE)" — breekt dan de
+  // filtersyntax. Via `.ilike()` gaat de waarde netjes als parameter mee.
+  const relQuery = (kolom: string) => {
+    let q = supabase
+      .from('relaties')
+      .select('id, naam, types, adres_plaats')
+      .ilike(kolom, like)
+      .eq('actief', true)
+    if (opts?.type) q = q.contains('types', [opts.type])
+    return q.order('naam', { ascending: true }).limit(8)
+  }
 
-  // 2. Contactpersonen op naam/e-mail → hun (primaire) organisatie.
-  const cpRes = await supabase
-    .from('contactpersonen')
-    .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief, adres_plaats))')
-    .or(`voornaam.ilike.${like},achternaam.ilike.${like},email.ilike.${like}`)
-    .eq('actief', true)
-    .limit(8)
+  const cpQuery = (kolom: string) =>
+    supabase
+      .from('contactpersonen')
+      .select('id, voornaam, tussenvoegsel, achternaam, koppelingen:contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, types, actief, adres_plaats))')
+      .ilike(kolom, like)
+      .eq('actief', true)
+      .limit(8)
+
+  const [relDelen, cpDelen] = await Promise.all([
+    Promise.all(['naam', 'adres_straat', 'adres_plaats'].map(relQuery)),
+    Promise.all(['voornaam', 'achternaam', 'email'].map(cpQuery)),
+  ])
+
+  type RelRij = { id: string; naam: string; types: string[]; adres_plaats: string | null }
+  // Per kolom een eigen query betekent per kolom een eigen top-8; samenvoegen op id en
+  // dan pas op naam sorteren geeft dezelfde volgorde als de oude gecombineerde query.
+  const relRijen = new Map<string, RelRij>()
+  for (const deel of relDelen) {
+    for (const r of (deel.data ?? []) as RelRij[]) relRijen.set(r.id, r)
+  }
+  const cpRijen = new Map<string, any>()
+  for (const deel of cpDelen) {
+    for (const cp of (deel.data ?? []) as any[]) cpRijen.set(cp.id, cp)
+  }
 
   const resultaten = new Map<string, OpdrachtgeverZoekResultaat>()
-  for (const r of (relRes.data ?? []) as { id: string; naam: string; types: string[]; adres_plaats: string | null }[]) {
+  const opNaam = Array.from(relRijen.values()).sort((a, b) => (a.naam ?? '').localeCompare(b.naam ?? '', 'nl'))
+  for (const r of opNaam) {
     resultaten.set(r.id, {
       id: r.id, naam: r.naam, types: r.types ?? [],
       plaats: r.adres_plaats ?? null, contactpersoon: null,
     })
   }
-  for (const cp of (cpRes.data ?? []) as any[]) {
+  for (const cp of cpRijen.values()) {
     const koppelingen = (cp.koppelingen ?? []).filter((k: any) => k.organisatie?.actief !== false)
     const primair = koppelingen.find((k: any) => k.is_primair) ?? koppelingen[0]
     const org = primair?.organisatie
