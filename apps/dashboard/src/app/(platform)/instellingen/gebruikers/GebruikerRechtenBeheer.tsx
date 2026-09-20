@@ -54,13 +54,22 @@ function telAfwijkingen(doc: RechtenDocument): number {
   return n
 }
 
-/** Waar iemand na samenvoegen op uitkomt, als korte samenvatting per kanaal. */
+/**
+ * Waar iemand na samenvoegen op uitkomt, gegroepeerd per niveau. Bewust mét het
+ * niveau erbij: een kale lijst onderdelen zegt niet of iemand er mag kijken of
+ * alles mag omgooien, en dat is juist de vraag die je hier stelt.
+ */
 function samenvatting(doc: RechtenDocument, basis: RechtenDocument, kanaal: Kanaal): string {
   const set = mergeKanaal(basis[kanaal], doc[kanaal])
-  const namen = modulesVoorKanaal(kanaal)
-    .filter(m => set.modules[m.key as RechtenModule])
-    .map(m => m.label)
-  return namen.length ? namen.join(' · ') : 'geen onderdelen'
+  const perNiveau: Record<string, string[]> = { beheren: [], schrijven: [], lezen: [] }
+  for (const m of modulesVoorKanaal(kanaal)) {
+    const niveau = set.modules[m.key as RechtenModule]
+    if (niveau) perNiveau[niveau].push(m.label)
+  }
+  const delen = (['beheren', 'schrijven', 'lezen'] as const)
+    .filter(n => perNiveau[n].length > 0)
+    .map(n => `${n}: ${perNiveau[n].join(', ')}`)
+  return delen.length ? delen.join('  ·  ') : 'geen onderdelen'
 }
 
 function GebruikerKaart({ g, eigenId }: { g: GebruikerRij; eigenId: string | null }) {

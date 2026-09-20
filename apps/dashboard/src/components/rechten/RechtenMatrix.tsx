@@ -13,11 +13,15 @@ import {
  * losse functies. De uitleg komt uit de catalogus — klap een onderdeel uit en je
  * leest wat lezen, schrijven en beheren daar precies betekenen.
  *
- * Twee standen:
- *  - afdelingsmatrix (`basis` niet meegegeven): Geen · Lezen · Schrijven · Beheren
- *  - persoonlijke afwijking (`basis` meegegeven): met een extra kolom Erven, en
- *    bij elk onderdeel wat de afdeling geeft. Zonder die kolom kun je het verschil
- *    tussen "erven" en "expliciet geen" niet meer uitdrukken, en dat verschil telt.
+ * De knop staat altijd op wat iemand **feitelijk** mag. Bij een persoonlijke
+ * afwijking (`basis` meegegeven) komt daar een kolom "Komt van" achter: staat er
+ * `afdeling`, dan volgt hij de afdelingsstandaard en is de knop zachter getekend;
+ * staat er `eigen`, dan is het hier gezet en kun je met "volg afdeling" terug.
+ *
+ * Eerder was dat een aparte kolom "Erven" mét lege niveaukolommen. Dat leek op
+ * "niets ingesteld" terwijl er niets uit stond — je kon aan de matrix niet zien
+ * wat iemand mocht. Het verschil tussen "volgt de afdeling" en "expliciet geen"
+ * blijft bestaan; het zit nu in de herkomstkolom in plaats van in een radio.
  */
 
 type Niveau = ModuleRechten | null
@@ -71,24 +75,27 @@ export default function RechtenMatrix({
     onChange({ ...waarde, functies })
   }
 
-  const kolommen = isAfwijking ? NIVEAUS.length + 1 : NIVEAUS.length
+  // Onderdeel + de vier niveaus + (bij een afwijking) de herkomstkolom.
+  const kolommen = 1 + NIVEAUS.length + (isAfwijking ? 1 : 0)
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isAfwijking ? 560 : 480 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isAfwijking ? 600 : 480 }}>
         <thead>
           <tr>
-            <th style={{ ...labelStijl, textAlign: 'left', padding: '4px 8px 8px 0', width: '34%' }}>
+            <th style={{ ...labelStijl, textAlign: 'left', padding: '4px 8px 8px 0', width: '32%' }}>
               Onderdeel
             </th>
-            {isAfwijking && (
-              <th style={{ ...labelStijl, textAlign: 'center', padding: '4px 8px 8px' }}>Erven</th>
-            )}
             {NIVEAUS.map(n => (
               <th key={n.label} style={{ ...labelStijl, textAlign: 'center', padding: '4px 8px 8px', color: n.kleur }}>
                 {n.label}
               </th>
             ))}
+            {isAfwijking && (
+              <th style={{ ...labelStijl, textAlign: 'left', padding: '4px 0 8px 12px', width: 150 }}>
+                Komt van
+              </th>
+            )}
           </tr>
         </thead>
 
@@ -99,7 +106,7 @@ export default function RechtenMatrix({
           return (
             <tbody key={groep.key}>
               <tr>
-                <td colSpan={kolommen + 1} style={{ ...labelStijl, padding: '14px 0 4px', color: 'var(--fg-muted)' }}>
+                <td colSpan={kolommen} style={{ ...labelStijl, padding: '14px 0 4px', color: 'var(--fg-muted)' }}>
                   {groep.label}
                 </td>
               </tr>
@@ -137,11 +144,6 @@ export default function RechtenMatrix({
                           }}>▶</span>
                           {m.label}
                         </button>
-                        {erft && (
-                          <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginLeft: 14, marginTop: 2 }}>
-                            erft {geerfd ?? 'geen'} van de afdeling
-                          </div>
-                        )}
                         {slot && (
                           <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginLeft: 14, marginTop: 2 }}>
                             {slot}
@@ -149,34 +151,55 @@ export default function RechtenMatrix({
                         )}
                       </td>
 
-                      {isAfwijking && (
-                        <td style={{ textAlign: 'center', padding: 8 }}>
-                          <input
-                            type="radio" name={`${naamruimte}_${kanaal}_${m.key}`} disabled={!!slot}
-                            checked={erft} onChange={() => zetNiveau(m.key, 'erven')}
-                            style={{ width: 15, height: 15, cursor: slot ? 'not-allowed' : 'pointer' }}
-                          />
-                        </td>
-                      )}
-
+                      {/* De knop staat altijd op wat iemand FEITELIJK mag, ook als dat
+                          van de afdeling komt. Eerst stond hier een losse kolom "Erven"
+                          en bleven de niveaus leeg zodra iemand de afdeling volgde — dat
+                          las als "alles uit" terwijl er niets uit stond. */}
                       {NIVEAUS.map(n => (
                         <td key={n.label} style={{ textAlign: 'center', padding: 8 }}>
                           <input
                             type="radio" name={`${naamruimte}_${kanaal}_${m.key}`} disabled={!!slot}
-                            checked={!erft && (eigen ?? null) === n.value}
+                            checked={effectief === n.value}
                             onChange={() => zetNiveau(m.key, n.value)}
+                            title={erft ? 'Komt van de afdeling. Kies een niveau om hiervan af te wijken.' : undefined}
                             style={{
                               accentColor: n.kleur, width: 15, height: 15,
+                              // Geërfd staat er zachter bij: je ziet dat het niet hier is gezet.
+                              opacity: erft ? 0.45 : 1,
                               cursor: slot ? 'not-allowed' : 'pointer',
                             }}
                           />
                         </td>
                       ))}
+
+                      {isAfwijking && (
+                        <td style={{ padding: '8px 0 8px 12px', fontSize: 10.5, whiteSpace: 'nowrap' }}>
+                          {erft ? (
+                            <span style={{ color: 'var(--fg-muted)' }}>afdeling</span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>eigen</span>
+                              {!slot && (
+                                <button
+                                  type="button"
+                                  onClick={() => zetNiveau(m.key, 'erven')}
+                                  style={{
+                                    padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                                    fontSize: 10.5, color: 'var(--fg-muted)', textDecoration: 'underline',
+                                  }}
+                                >
+                                  volg afdeling
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </tr>
 
                     {uitgeklapt && (
                       <tr>
-                        <td colSpan={kolommen + 1} style={{ padding: '2px 0 14px 14px' }}>
+                        <td colSpan={kolommen} style={{ padding: '2px 0 14px 14px' }}>
                           <div style={{
                             fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)',
                             lineHeight: 1.5, maxWidth: 780,
