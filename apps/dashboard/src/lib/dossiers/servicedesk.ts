@@ -441,6 +441,14 @@ export type RegieVoorstel = {
   alGefactureerd: number
   /** Som van `alGefactureerdBedrag` over alle codes; voor de voetregel van het overzicht. */
   alGefactureerdBedrag: number
+  /**
+   * Dezelfde waarde als `totaal` + `alGefactureerdBedrag`, maar gesplitst naar herkomst.
+   *
+   * Het Informatie-tab heeft die splitsing nodig: daar staat een stelpost buiten de aanneemsom al
+   * als eigen regel met zijn begrote bedrag, en alleen het verschil met de nacalculatie hoort er
+   * nog bij. Regie-meerwerk heeft daar geen eigen regel en telt volledig mee.
+   */
+  waardePerBron: { stelpost: number; meerwerk: number }
   /** Codes die bewust buiten de factuur blijven, met de reden. Zichtbaar maken is het punt. */
   buitenBeschouwing: { bewakingscode: string; omschrijving: string; reden: string }[]
 }
@@ -472,7 +480,10 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
 
   const teFactureren = codes.filter(c => !c.alleenVerschil)
   if (teFactureren.length === 0) {
-    return { regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0, buitenBeschouwing }
+    return {
+      regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0,
+      waardePerBron: { stelpost: 0, meerwerk: 0 }, buitenBeschouwing,
+    }
   }
 
   // Eigen opslagpercentages meegeven, zodat de verkoopwaarde per code met het juiste percentage
@@ -651,12 +662,20 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     }
   }
 
+  // Splitsing naar herkomst over precies dezelfde bedragen als `totaal` en `alGefactureerdBedrag`,
+  // zodat de twee optellingen nooit uit elkaar kunnen lopen.
+  const bronVanCode = new Map(views.map(v => [v.bewakingscode, v.bron]))
+  const waardePerBron = { stelpost: 0, meerwerk: 0 }
+  for (const r of regels) waardePerBron[bronVanCode.get(r.bewakingscode) ?? 'meerwerk'] += r.bedrag
+  for (const v of views) waardePerBron[v.bron] += v.alGefactureerdBedrag
+
   return {
     regels,
     codes: views,
     totaal: rond(regels.reduce((s, r) => s + r.bedrag, 0)),
     alGefactureerd,
     alGefactureerdBedrag: rond(views.reduce((s, v) => s + v.alGefactureerdBedrag, 0)),
+    waardePerBron: { stelpost: rond(waardePerBron.stelpost), meerwerk: rond(waardePerBron.meerwerk) },
     buitenBeschouwing,
   }
 }

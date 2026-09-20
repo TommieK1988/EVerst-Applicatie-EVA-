@@ -8,6 +8,7 @@ import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
+import { berekenContractwaarde } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
@@ -133,24 +134,15 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   const evaLeidend = goedgekeurdeRegels.length > 0
   const meerwerkAangenomen = meerwerk?.totalen.goedgekeurdAangenomenExcl ?? 0
 
-  /* — Wat regiewerk waard is —
-   * Niet de som van de meerwerkregels: die rekent de geboekte uren en kosten kaal op, terwijl het
-   * nacalculatie-blok ernaast dezelfde boekingen curatiseert — een vast bedrag op een factuurregel,
-   * een uitgevinkte post, een losse regel als voorrijkosten. Twee getallen voor hetzelfde werk, en
-   * het blok is het getal dat de klant straks gefactureerd krijgt. Bovendien kent het ook
-   * stelposten die geen meerwerkregel zijn; die zaten hiervoor in geen enkel totaal.
-   *
-   * Al gefactureerde posten tellen mee. Het gaat om de waarde van de opdracht, niet om wat er nog
-   * openstaat — anders zou het contracttotaal krimpen bij elke factuur, en zou "Nog te factureren"
-   * (contracttotaal min gefactureerd) het weggehaalde deel een tweede keer aftrekken. */
-  const nacalculatie = rond((voorstel?.totaal ?? 0) + (voorstel?.alGefactureerdBedrag ?? 0))
-  // Wat de meerwerkregels zelf aan nacalculatie meldden vervalt: dat is dezelfde post, anders
-  // geteld. Wat overblijft draagt zijn eigen bedrag en staat in geen enkel blok — meetellen dus.
-  const meerwerkRegieEigen = rond(
-    (meerwerk?.totalen.goedgekeurdRegieExcl ?? 0) - (meerwerk?.totalen.goedgekeurdNacalculatieExcl ?? 0),
-  )
-  const meerwerkRegie = rond(meerwerkRegieEigen + nacalculatie)
-  const meerwerkEva = rond(meerwerkAangenomen + meerwerkRegie)
+  // Zelfde berekening als het Informatie-tab; de opbouw staat in berekenContractwaarde.
+  const waarde = berekenContractwaarde({
+    aanneemsom: data.totalen.aanneemsom,
+    meerwerk: meerwerk?.totalen ?? null,
+    nacalculatie: voorstel,
+  })
+  const nacalculatie = waarde.nacalculatie
+  const meerwerkRegie = waarde.regie
+  const meerwerkEva = waarde.meerwerk
   /* Leidt EVA het meerwerk in dit overzicht? Ja zodra er goedgekeurde regels zijn, en ook zodra er
    * nacalculatie op het dossier staat: die komt deels uit stelposten die helemaal geen meerwerkregel
    * zijn, en dan is er niets waar het Bouw7-aggregaat op terug kan vallen. */

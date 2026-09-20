@@ -5,7 +5,9 @@ import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
 import { LEGE_DOSSIER_DATUMS } from '@/lib/dossiers/datum-regels'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
-import { getGoedgekeurdMeerwerk } from '@/lib/dossiers/meerwerk'
+import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
+import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
+import { berekenContractwaarde } from '@/lib/dossiers/contractwaarde'
 import { getOpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
 import { getRelatieById } from '@/lib/relaties/actions'
@@ -97,7 +99,7 @@ export async function DossierTabContent({ id, tab, sectie, deel }: Props) {
  * weggegooid — die call slaan we dan over.
  */
 async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossier: DossierRij; sectie: DossierSectie }) {
-  const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums, opdrachtOverzicht] = await Promise.all([
+  const [medewerkers, factuuradressen, relatie, sjablonen, urgenteTaken, categorieen, meerwerkEva, notities, currentMedewerker, werkmaatschappijen, datums, opdrachtOverzicht, voorstel] = await Promise.all([
     getMedewerkers(),
     dossier.klant_id ? getFactuuradressen(dossier.klant_id) : Promise.resolve<RelatieFactuuradres[]>([]),
     dossier.klant_id ? getRelatieById(dossier.klant_id) : Promise.resolve<Relatie | null>(null),
@@ -105,7 +107,7 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
     getUrgenteTakenVoorDossier(id),
     getCategorieOpties(),
     // EVA-native meerwerkregels (leidend zodra er goedgekeurde regels zijn).
-    getGoedgekeurdMeerwerk(id).catch(() => ({ excl: 0, aantal: 0 })),
+    getDossierMeerwerk(id).catch(() => null),
     getDossierNotities(id).catch(() => []),
     getCurrentMedewerker().catch(() => null),
     getWerkmaatschappijen().catch(() => []),
@@ -113,11 +115,24 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
     getDossierDatums(id).catch(() => LEGE_DOSSIER_DATUMS),
     // Opdracht-samenstelling (stelposten/opties + bewaking) — alleen voor opdracht-dossiers.
     sectie === 'opdracht' ? getOpdrachtOverzicht(id).catch(() => null) : Promise.resolve(null),
+    // Het nacalculatie-blok levert de waarde van regiewerk en stelposten buiten de aanneemsom;
+    // zonder dit zou dit tab een ander contracttotaal tonen dan het Verkoop-tab.
+    getRegieFactuurvoorstel(id).catch(() => null),
   ])
 
-  let meerwerk = meerwerkEva.excl
-  if (meerwerkEva.aantal === 0) {
-    // Geen EVA-regels → terugvallen op Bouw7, en alleen dan die call doen.
+  /* Dezelfde opbouw als het Verkoop-tab, uit dezelfde functie — maar alleen het meerwerk-deel van
+   * de nacalculatie. Stelposten buiten de aanneemsom hebben op dít tab al een eigen regel met hun
+   * begrote bedrag; hun nacalculatie komt daar als verschilregel onder te staan. Zou het hele
+   * blok in de meerwerkregel meelopen, dan stond zo'n stelpost er twee keer in. */
+  const waarde = berekenContractwaarde({
+    aanneemsom: 0, // de aanneemsom kiest het scherm zelf (kiesAanneemsom); hier telt alleen meerwerk
+    meerwerk: meerwerkEva?.totalen ?? null,
+    nacalculatie: voorstel && { totaal: voorstel.waardePerBron.meerwerk, alGefactureerdBedrag: 0 },
+  })
+
+  let meerwerk = waarde.meerwerk
+  if ((meerwerkEva?.totalen.goedgekeurdAantal ?? 0) === 0 && Math.abs(waarde.nacalculatie) < 0.005) {
+    // Geen EVA-regels en geen nacalculatie → terugvallen op Bouw7, en alleen dan die call doen.
     const financieel = dossier.bouw7_id ? await getDossierFinancieel(id).catch(() => null) : null
     const aw = financieel?.bouw7Financial?.additionalWork
     meerwerk = Number(aw?.prognosis ?? aw?.expected) || 0
@@ -139,6 +154,7 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
       werkmaatschappijen={werkmaatschappijen}
       datums={datums}
       opdrachtOverzicht={opdrachtOverzicht}
+      nacalculatieStelposten={voorstel?.waardePerBron.stelpost ?? null}
     />
   )
 }
