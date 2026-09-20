@@ -51,7 +51,7 @@ const rond = (n: number): number => Math.round(n * 100) / 100
  * `string`. Dan komt er `GenericStringError[]` uit en heb je weer een any-cast op de client nodig.
  */
 const DOSSIER_KOLOMMEN =
-  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
+  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, verzonden_op, object_id, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
 
 type RuweDossierRij = FaseVelden & {
   id: string
@@ -59,6 +59,8 @@ type RuweDossierRij = FaseVelden & {
   titel: string
   bouw7_aanmaakdatum: string | null
   aanvraagdatum: string | null
+  verzonden_op: string | null
+  object_id: string | null
   created_at: string
   updated_at: string
   werkadres_straat: string | null
@@ -87,6 +89,15 @@ function naarRij(d: RuweDossierRij, bedrag: number | null, rollen: BetrokkenRol[
     updated_at: d.updated_at,
     bedrag,
     rollen,
+    verzonden_op: d.verzonden_op,
+    object_id: d.object_id,
+    bouw7_aanmaakdatum: d.bouw7_aanmaakdatum,
+    aanvraagdatum: d.aanvraagdatum,
+    created_at: d.created_at,
+    hoofdstatus: d.hoofdstatus,
+    offerte_substatus: d.offerte_substatus,
+    opdracht_substatus: d.opdracht_substatus,
+    servicedesk_substatus: d.servicedesk_substatus,
   }
 }
 
@@ -246,6 +257,25 @@ export async function getRelatieDossiers(relatieId: string): Promise<RelatieDoss
     betrokkenTotalen: betrokken.totalen,
     toontInkoopbedragen: magBedragenZien,
   }
+}
+
+/**
+ * Alleen de opdrachtgeverkant, voor het mobiele klantbeeld.
+ *
+ * `getRelatieDossiers` doet daarnaast vier queries voor de inkoopkant plus een vijfde op de
+ * werkbegrotingen. Dat is op de relatiepagina terecht — daar staan beide tabellen — maar het
+ * klantbeeld toont alleen wat we vóór deze klant doen. Op een telefoon over 4G scheelt dat
+ * merkbaar, en de inkoopbedragen zouden er sowieso niet in passen.
+ *
+ * Zelfde gate als hierboven: `getCurrentMedewerker`. Het recht `relaties` wordt door de
+ * aanroepende pagina gecontroleerd (`vereisCommercieelToegang`).
+ */
+export async function getKlantDossiers(
+  relatieId: string,
+): Promise<{ rijen: RelatieDossier[]; totalen: RelatieDossierTotalen }> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) return { rijen: [], totalen: LEEG_DOSSIER_TOTAAL }
+  return leesKlantDossiers(createAdminClient(), relatieId)
 }
 
 /**

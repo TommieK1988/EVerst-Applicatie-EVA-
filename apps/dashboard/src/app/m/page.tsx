@@ -46,6 +46,12 @@ export default async function MobielHomePage() {
   const magMaterieel =
     FEATURES.materieelbeheer && heeftModuleToegang(rechten, 'materieelbeheer', 'lezen')
 
+  // Commercieel hangt aan het bestaande recht `relaties` (lezen). Zie
+  // `lib/commercie/mobiel-auth.ts` voor waarom dat geen eigen recht is geworden: het scherm
+  // toont niets wat niet ook op de relatiepagina staat, en `relaties` dekt vandaag precies
+  // de groep die opdrachtgevers spreekt.
+  const magCommercieel = heeftModuleToegang(rechten, 'relaties', 'lezen')
+
   // Het handboek staat bewust NIET op een recht: iedereen met een account mag
   // zijn eigen handboek lezen, en wát hij ziet bepalen de zichtbaarheids-
   // kenmerken in de database. Alleen de feature-flag verbergt de tegel zolang
@@ -68,6 +74,7 @@ export default async function MobielHomePage() {
       ongelezenMeldingen={ongelezenMeldingen}
       magMaterieel={magMaterieel}
       magHandboek={magHandboek}
+      magCommercieel={magCommercieel}
       vandaag={vandaag}
       signalen={signalen}
     />

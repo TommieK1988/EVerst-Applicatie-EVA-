@@ -1,0 +1,274 @@
+import 'server-only'
+
+/**
+ * Het klantbeeld: alles wat je van een opdrachtgever wilt weten terwijl je hem spreekt.
+ *
+ * Eén functie die parallel leest uit vijf bronnen en er de vijf lijsten, de kengetallen, de
+ * score en de signalen van maakt. Bewust één leesronde: op een telefoon wacht je niet graag
+ * twee keer, en de meeste afgeleide getallen komen toch uit dezelfde dossierrijen.
+ *
+ * Wat hier NIET in zit, met opzet:
+ *
+ *  - **De inkoopkant.** `getRelatieDossiers` haalt ook op waar deze relatie onderaannemer of
+ *    leverancier is. Dat hoort op de relatiepagina, niet in een commercieel gesprek — en het
+ *    kost vijf extra queries.
+ *  - **Objecten zonder dossier.** De objectenlijst wordt afgeleid uit de dossiers, niet uit
+ *    `getRelatieObjecten`. Dat laatste zit achter het recht `objectenbeheer` (dat de doelgroep
+ *    niet per se heeft) en roept `getObjecten()` aan, dat twee onbegrensde selects doet.
+ *    Gevolg van deze keuze: een complex waar nog nooit werk voor is gedaan verschijnt niet.
+ *    Voor "werk per object" is dat juist wat je wilt.
+ *  - **`getOmzetVoorRelatie`.** Die groepeert op `created_at` — de importdag — waardoor alle
+ *    omzet in 2026 landt. Zie `jaarVoorKlantbeeld` voor het hele verhaal.
+ */
+
+import { createAdminClient } from '@everts/database/server'
+import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
+import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
+import { getKlantDossiers } from '@/lib/relaties/dossiers'
+import { getDebiteurenVoorRelatie } from '@/lib/debiteuren/actions'
+import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
+import { objectAdresRegel } from '@/lib/objecten/adres'
+import { vandaagNL } from '@/lib/wagenpark/periode'
+import { bewakingsStatus } from './types'
+import { berekenScore } from './klantbeeld-score'
+import {
+  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, jaarVoorKlantbeeld,
+  type Klantbeeld, type KlantContactpersoon, type KlantFactuur, type KlantObject,
+  type KlantSignalen,
+} from './klantbeeld-types'
+import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
+
+/** Hoeveel jaar terug "uitgevoerd werk" toont: dit jaar en vorig jaar. */
+const UITGEVOERD_JAREN_TERUG = 1
+
+const rond = (n: number): number => Math.round(n * 100) / 100
+
+/**
+ * Bewakingsstatussen waarbij wíj aan zet zijn — de klant wacht op ons.
+ *
+ * `verlopen` en `nu` spreken voor zich. `ongetrieerd` hoort erbij omdat "er is niets
+ * afgesproken" aan de telefoon hetzelfde betekent: niemand is ermee bezig.
+ */
+const WIJ_AAN_ZET = new Set(['verlopen', 'nu', 'ongetrieerd'])
+
+type BewakingRij = {
+  dossier_id: string | null
+  relatie_id: string | null
+  stap_soort: 'actie' | 'wachten' | null
+  stap_datum: string | null
+  wacht_op: 'klant' | 'intern' | 'extern' | null
+  afgerond_op: string | null
+}
+
+/* ── Deelberekeningen ──────────────────────────────────────────────────────────────────── */
+
+/** Gefactureerd per jaar, uit dezelfde bron als het blok Gekoppelde dossiers op de desktop. */
+function omzetPerJaar(dossiers: RelatieDossier[], jaar: number): number {
+  return rond(dossiers
+    .filter(d => jaarVoorKlantbeeld(d) === jaar)
+    .reduce((som, d) => som + (d.bedrag ?? 0), 0))
+}
+
+/**
+ * Hoeveel offertes bij deze klant liggen er al lang?
+ *
+ * Alleen openstaande offertes tellen mee: een gewonnen of verloren offerte "ligt" niet meer.
+ * Zonder `verzonden_op` valt een dossier af — dan weten we niet hoe lang het ligt, en gokken
+ * is hier erger dan zwijgen.
+ */
+function telLangliggend(offertesOpen: RelatieDossier[], vandaagMs: number): number {
+  return offertesOpen.filter(d => {
+    const dagen = dagenSindsDatum(d.verzonden_op, vandaagMs)
+    return dagen !== null && dagen > LANGLIGGEND_DAGEN
+  }).length
+}
+
+/**
+ * Offertes waar wij aan zet zijn, uit de offertebewaking.
+ *
+ * Twee filters die we samenvoegen: kaarten die aan een dossier van deze klant hangen, en
+ * kaarten die rechtstreeks aan de relatie hangen (verkoopkansen zonder dossier). Beide zijn
+ * begrensd — `.in()` op ids die we al hebben, respectievelijk één relatie.
+ */
+async function telWijAanZet(
+  supabase: ReturnType<typeof createAdminClient>,
+  relatieId: string,
+  dossierIds: string[],
+  afgerondPerDossier: Map<string, boolean>,
+): Promise<number> {
+  const KOLOMMEN = 'dossier_id, relatie_id, stap_soort, stap_datum, wacht_op, afgerond_op'
+  const [viaDossier, viaRelatie] = await Promise.all([
+    dossierIds.length > 0
+      ? supabase.from('commercie_bewaking').select(KOLOMMEN).in('dossier_id', dossierIds)
+      : Promise.resolve({ data: [] as BewakingRij[] }),
+    supabase.from('commercie_bewaking').select(KOLOMMEN).eq('relatie_id', relatieId),
+  ])
+
+  const vandaag = vandaagNL()
+  const gezien = new Set<string>()
+  let aantal = 0
+
+  for (const rij of [...(viaDossier.data ?? []), ...(viaRelatie.data ?? [])] as BewakingRij[]) {
+    // Een kaart die aan zowel het dossier als de relatie hangt komt twee keer langs.
+    const sleutel = `${rij.dossier_id ?? ''}|${rij.relatie_id ?? ''}|${rij.stap_datum ?? ''}`
+    if (gezien.has(sleutel)) continue
+    gezien.add(sleutel)
+
+    // Afgerond = de kaart zelf is afgevinkt, óf het dossier eronder is commercieel klaar.
+    // Zonder dat tweede zou een gewonnen offerte eeuwig als "wij aan zet" blijven staan.
+    const afgerond = !!rij.afgerond_op
+      || (rij.dossier_id ? (afgerondPerDossier.get(rij.dossier_id) ?? false) : false)
+
+    const status = bewakingsStatus(rij, { vandaag, afgerond })
+    if (WIJ_AAN_ZET.has(status)) aantal++
+  }
+  return aantal
+}
+
+/** Objecten waar voor deze klant werk aan is of was, met het aantal dossiers per object. */
+async function leesObjecten(
+  supabase: ReturnType<typeof createAdminClient>,
+  dossiers: RelatieDossier[],
+): Promise<KlantObject[]> {
+  const aantalPerObject = new Map<string, number>()
+  for (const d of dossiers) {
+    if (!d.object_id) continue
+    aantalPerObject.set(d.object_id, (aantalPerObject.get(d.object_id) ?? 0) + 1)
+  }
+  const ids = [...aantalPerObject.keys()]
+  if (ids.length === 0) return []
+
+  const { data } = await supabase
+    .from('vastgoed_objecten')
+    .select('id, naam, objectnummer, adres_straat, adres_huisnummer, adres_postcode, adres_plaats')
+    .in('id', ids)
+
+  return (data ?? [])
+    .map((o): KlantObject => ({
+      id: o.id,
+      // Objecten heten vaak "Complex 1013"; zonder terugval op het nummer sta je met een
+      // lege regel.
+      naam: o.naam || o.objectnummer || 'Object',
+      adres: objectAdresRegel(o) || null,
+      aantalDossiers: aantalPerObject.get(o.id) ?? 0,
+    }))
+    .sort((a, b) => b.aantalDossiers - a.aantalDossiers)
+}
+
+/* ── Hoofdfunctie ──────────────────────────────────────────────────────────────────────── */
+
+export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | null> {
+  const medewerker = await getCurrentMedewerker()
+  if (!medewerker) return null
+
+  const rechten = await getEffectieveRechten(medewerker)
+  const magFacturenZien = heeftModuleToegang(rechten, 'financieel', 'lezen')
+
+  const supabase = createAdminClient()
+
+  const [relatieRes, dossierData, contactRes, facturen] = await Promise.all([
+    supabase.from('relaties')
+      .select('id, naam, adres_straat, adres_postcode, adres_plaats, telefoon, email')
+      .eq('id', relatieId).maybeSingle(),
+    getKlantDossiers(relatieId),
+    getContactpersonenVoorOrganisatie(relatieId),
+    // Geeft zelf een lege lijst terug zonder het recht `financieel`.
+    getDebiteurenVoorRelatie(relatieId),
+  ])
+
+  if (!relatieRes.data) return null
+  const r = relatieRes.data
+  const dossiers = dossierData.rijen
+
+  // Fase per dossier is al bepaald door `bepaalFase` in de leeslaag.
+  const offertesInDeMaak = dossiers.filter(d => d.fase === 'aanvraag')
+  const offertesOpen     = dossiers.filter(d => d.fase === 'offerte')
+  const lopendWerk       = dossiers.filter(d => d.fase === 'opdracht' || d.fase === 'servicedesk')
+
+  const ditJaar = new Date().getFullYear()
+  const uitgevoerdVanafJaar = ditJaar - UITGEVOERD_JAREN_TERUG
+  const uitgevoerd = dossiers.filter(d => {
+    if (d.fase !== 'afgesloten') return false
+    const jaar = jaarVoorKlantbeeld(d)
+    return jaar !== null && jaar >= uitgevoerdVanafJaar
+  })
+
+  // Voor de bewaking: welke dossiers zijn commercieel klaar? Zelfde regel als `isAfgerond`
+  // in actions.ts — let op dat 'gewonnen' als substatus niet bestaat (de trigger promoveert
+  // hem meteen naar hoofdstatus 'opdracht').
+  const afgerondPerDossier = new Map<string, boolean>(
+    dossiers.map(d => [d.id, d.fase === 'opdracht' || d.fase === 'afgesloten']),
+  )
+
+  const [objecten, offerteWijAanZet] = await Promise.all([
+    leesObjecten(supabase, dossiers),
+    telWijAanZet(supabase, relatieId, dossiers.map(d => d.id), afgerondPerDossier),
+  ])
+
+  const vandaagMs = Date.parse(`${vandaagNL()}T00:00:00Z`)
+
+  const signalen: KlantSignalen = {
+    factuurTeLaat:      facturen.filter(f => (f.dagen_na_vervaldatum ?? 0) > FACTUUR_TE_LAAT_DAGEN).length,
+    offerteWijAanZet,
+    offerteLangliggend: telLangliggend(offertesOpen, vandaagMs),
+  }
+
+  const klantFacturen: KlantFactuur[] = facturen
+    .map((f): KlantFactuur => ({
+      id: f.id,
+      factuurnummer: f.factuurnummer,
+      bedrag: f.bedrag,
+      vervaldatum: f.vervaldatum,
+      dagenTeLaat: f.dagen_na_vervaldatum,
+      stoplicht: f.stoplicht,
+    }))
+    // Langst openstaand bovenaan: dat is de factuur waar het gesprek over gaat.
+    .sort((a, b) => (b.dagenTeLaat ?? 0) - (a.dagenTeLaat ?? 0))
+
+  const contactpersonen: KlantContactpersoon[] = contactRes
+    .filter(k => k.contactpersoon?.actief !== false)
+    .map((k): KlantContactpersoon => ({
+      id: k.contactpersoon.id,
+      naam: [k.contactpersoon.voornaam, k.contactpersoon.tussenvoegsel, k.contactpersoon.achternaam]
+        .filter(Boolean).join(' ').trim() || 'Naamloos',
+      functie:  k.functie ?? null,
+      email:    k.contactpersoon.email ?? null,
+      telefoon: k.contactpersoon.telefoon ?? null,
+      mobiel:   k.contactpersoon.mobiel ?? null,
+      isPrimair: !!k.is_primair,
+    }))
+    .sort((a, b) => Number(b.isPrimair) - Number(a.isPrimair))
+
+  return {
+    relatie: {
+      id: r.id,
+      naam: r.naam,
+      plaats: r.adres_plaats ?? null,
+      adres: [r.adres_straat, [r.adres_postcode, r.adres_plaats].filter(Boolean).join(' ')]
+        .filter(Boolean).join(', ') || null,
+      telefoon: r.telefoon ?? null,
+      email: r.email ?? null,
+    },
+    kengetallen: {
+      omzetDitJaar:   omzetPerJaar(dossiers, ditJaar),
+      omzetVorigJaar: omzetPerJaar(dossiers, ditJaar - 1),
+      ditJaar,
+      vorigJaar: ditJaar - 1,
+      zonderFacturatiegegevens: dossierData.totalen.zonderFacturatiegegevens,
+    },
+    // De ruwe statuskolommen gaan onveranderd mee: de score moet een verloren offerte van een
+    // financieel afgesloten opdracht kunnen onderscheiden, en `fase` gooit die op één hoop.
+    score: berekenScore(dossiers),
+    signalen,
+    offertesOpen,
+    offertesInDeMaak,
+    lopendWerk,
+    uitgevoerd,
+    facturen: klantFacturen,
+    objecten,
+    contactpersonen,
+    toontFacturen: magFacturenZien,
+    uitgevoerdVanafJaar,
+  }
+}
+

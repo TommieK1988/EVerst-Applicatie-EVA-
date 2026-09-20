@@ -1,5 +1,5 @@
 import React from 'react'
-import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench, BookOpen } from 'lucide-react'
+import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench, BookOpen, Handshake } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
@@ -26,13 +26,19 @@ import type { HomeSignalen as Signalen } from '@/lib/mobiel/home'
  */
 export default function MobielHome({
   naam, openTaken, ongelezenMeldingen = 0, magMaterieel = false, magHandboek = false,
-  vandaag, signalen,
+  magCommercieel = false, vandaag, signalen,
 }: {
   naam?: string | null
   openTaken?: number
   ongelezenMeldingen?: number
   /** Materieelbeheer aan in deze omgeving én minimaal 'lezen' op het recht. */
   magMaterieel?: boolean
+  /**
+   * Minimaal 'lezen' op het recht `relaties`. Vandaag Directie en Projectbureau — de mensen
+   * die opdrachtgevers spreken. Uitvoering krijgt de tegel niet: het klantbeeld toont omzet
+   * en openstaande facturen.
+   */
+  magCommercieel?: boolean
   /**
    * Handboek aan in deze omgeving. Anders dan bij Materieel hoort hier géén
    * rechtencontrole bij: iedereen met een account mag zijn eigen handboek
@@ -74,6 +80,7 @@ export default function MobielHome({
         <MobielTegel href="/m/uren" label="Uren" Icon={Clock} />
         <MobielTegel href="/m/planning" label="Planning" Icon={CalendarDays} />
         <MobielTegel href="/m/verlof" label="Verlof" Icon={Palmtree} />
+        {magCommercieel && <MobielTegel href="/m/commercieel" label="Commercieel" Icon={Handshake} />}
         {magMaterieel && <MobielTegel href="/m/materieel" label="Materieel" Icon={Wrench} />}
         {magHandboek && <MobielTegel href="/m/handboek" label="Handboek" Icon={BookOpen} />}
         {/* Houtrot heeft bewust géén eigen tegel: registraties horen bij een dossier

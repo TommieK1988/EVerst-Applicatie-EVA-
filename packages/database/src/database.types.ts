@@ -13529,6 +13529,62 @@ export type Database = {
           },
         ]
       }
+      relatie_notities: {
+        Row: {
+          contactpersoon_id: string | null
+          created_at: string
+          id: string
+          inhoud: string
+          medewerker_id: string | null
+          relatie_id: string
+        }
+        Insert: {
+          contactpersoon_id?: string | null
+          created_at?: string
+          id?: string
+          inhoud: string
+          medewerker_id?: string | null
+          relatie_id: string
+        }
+        Update: {
+          contactpersoon_id?: string | null
+          created_at?: string
+          id?: string
+          inhoud?: string
+          medewerker_id?: string | null
+          relatie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatie_notities_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relatie_notities_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relatie_notities_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "relatie_notities_relatie_id_fkey"
+            columns: ["relatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       relatie_uurtarieven: {
         Row: {
           bouw7_hourtype_id: string | null

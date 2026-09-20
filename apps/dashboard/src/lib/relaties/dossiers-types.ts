@@ -34,6 +34,33 @@ export type RelatieDossier = {
   bedrag: number | null
   /** Alleen gevuld bij de inkoopvariant. */
   rollen: BetrokkenRol[]
+  /* ── Velden voor het mobiele klantbeeld (lib/commercie/klantbeeld.ts) ──────────────────
+     De tabellen op de relatiepagina gebruiken ze niet; ze staan hier omdat ze uit dezelfde
+     query komen en een tweede leesronde zouden kosten. */
+  /**
+   * Datum waarop de offerte is verzonden. Twee rollen in het klantbeeld: hij corrigeert het
+   * jaar van de geïmporteerde Gilde-dossiers (zie `jaarVoorKlantbeeld`), en hij draagt het
+   * signaal "deze offerte ligt er al lang".
+   */
+  verzonden_op: string | null
+  /** Het vastgoedobject waar dit dossier bij hoort; draagt de groepering per complex. */
+  object_id: string | null
+  /** Ruwe datumbronnen, zodat het klantbeeld zijn eigen jaarbepaling kan doen. */
+  bouw7_aanmaakdatum: string | null
+  aanvraagdatum: string | null
+  created_at: string
+  /**
+   * De ruwe statuskolommen, waar `fase` de samenvatting van is.
+   *
+   * De scoreberekening heeft ze los nodig: `fase` gooit "verloren offerte" en "financieel
+   * afgesloten opdracht" allebei op `afgesloten`, en dat is precies het verschil tussen een
+   * gewonnen en een verloren traject. Ze komen sowieso al uit de query (`FASE_KOLOMMEN`),
+   * dus doorgeven kost niets — ze afleiden uit `fase` zou giswerk zijn.
+   */
+  hoofdstatus: string
+  offerte_substatus: string | null
+  opdracht_substatus: string | null
+  servicedesk_substatus: string | null
 }
 
 export type RelatieDossierTotalen = {

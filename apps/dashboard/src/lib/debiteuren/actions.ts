@@ -2,7 +2,7 @@
 
 import { createAdminClient, createClient as createServerClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { getEffectieveRechten, getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getEffectieveRechten, getCurrentMedewerker, vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
 import { syncDebiteuren } from '@/lib/bouw7/sync'
 import { bouw7RichTextNaarTekst } from '@/lib/bouw7/rich-text'
@@ -74,16 +74,23 @@ function volledigeNaam(m?: { voornaam: string | null; tussenvoegsel: string | nu
 const VERPLICHTE_VELDEN_DREMPEL_DAGEN = 60
 
 /**
- * Haal de debiteuren op (default: alle openstaande). De rolweergave (projectleider ziet eigen)
- * gebeurt als zachte filter ín de client (toggle "Mijn / Alle"); de server levert dus alle rijen
- * zodat omschakelen geen extra fetch vergt.
+ * De leeslaag achter `getDebiteuren` en `getDebiteurenVoorRelatie`.
+ *
+ * Bewust één implementatie: de dagenberekening, het verkeerslicht en de vlag
+ * `verplicht_incompleet` mogen niet uit elkaar lopen tussen het Debiteuren-scherm en het
+ * mobiele klantbeeld. Privé en niet geëxporteerd — dit is een `'use server'`-module, en een
+ * export die geen action hoort te zijn is er één te veel.
  */
-export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promise<DebiteurRij[]> {
+async function leesDebiteuren(
+  filter: { relatieId?: string; includeBetaald?: boolean } = {},
+): Promise<DebiteurRij[]> {
   const supabase = db()
   let q = supabase
     .from('debiteuren')
     .select('id, factuurnummer, klant_naam, project_titel, dossier_id, bouw7_project_id, projectleider_id, bedrag, factuurdatum, vervaldatum, status, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum, opvolgstatus, task_id, interne_notitie')
-  if (!opts?.includeBetaald) q = q.eq('status', 'open')
+  if (!filter.includeBetaald) q = q.eq('status', 'open')
+  // Begrenst de query tot een handvol rijen; de kolom is geïndexeerd en overal gevuld.
+  if (filter.relatieId) q = q.eq('klant_relatie_id', filter.relatieId)
   const { data: rows } = await q
   const debiteuren: Record<string, unknown>[] = rows ?? []
   if (debiteuren.length === 0) return []
@@ -152,6 +159,39 @@ export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promis
       verplicht_incompleet: verplichtPeriode && !veldenCompleet,
     }
   })
+}
+
+/**
+ * Haal de debiteuren op (default: alle openstaande). De rolweergave (projectleider ziet eigen)
+ * gebeurt als zachte filter ín de client (toggle "Mijn / Alle"); de server levert dus alle rijen
+ * zodat omschakelen geen extra fetch vergt.
+ */
+export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promise<DebiteurRij[]> {
+  return leesDebiteuren({ includeBetaald: opts?.includeBetaald })
+}
+
+/**
+ * Openstaande facturen van één opdrachtgever, voor het mobiele klantbeeld.
+ *
+ * Eigen gate op `financieel`: de aanroepende pagina besluit al of het blok getoond wordt,
+ * maar een action is ook als kale RPC aan te roepen en de admin-client hieronder bypast RLS.
+ * Zonder recht een lege lijst in plaats van een fout — het scherm laat het blok dan gewoon weg.
+ *
+ * Filtert op `klant_relatie_id` en niet op `klant_naam`: namen zijn geen sleutel. Er bestaan
+ * verschillende vestigingen met bijna dezelfde naam, en op naam matchen zou facturen aan de
+ * verkeerde klant hangen. De kolom is in productie overal gevuld (345 van 345).
+ */
+export async function getDebiteurenVoorRelatie(relatieId: string): Promise<DebiteurRij[]> {
+  try {
+    await vereisRecht('financieel', 'lezen')
+  } catch (e) {
+    // Zacht falen is hier de bedoeling: het klantbeeld laat het blok gewoon weg. Maar de
+    // gate moet wél echt gooien — `heeftModuleToegang` alleen is een boolean-check, geen
+    // afdwinging, en die leest bij het volgende onderhoud als "er staat iets, dus het zit goed".
+    if (e instanceof GeenToegangError) return []
+    throw e
+  }
+  return leesDebiteuren({ relatieId })
 }
 
 /** Mag de huidige gebruiker debiteuren-opvolging bewerken/corrigeren? (administratie/beheer). */

@@ -957,16 +957,6 @@ function ObjectenBlok({ objecten }: { objecten: RelatieObject[] }) {
   )
 }
 
-/* ─── Placeholder blokken ────────────────────────────────────────────── */
-
-function PlaceholderBlok({ titel }: { titel: string }) {
-  return (
-    <Blok titel={titel}>
-      <EmptyState size="sm" tone="neutral" title="Nog niet beschikbaar" description="Dit onderdeel wordt binnenkort uitgewerkt." />
-    </Blok>
-  )
-}
-
 /* ─── Prijsafspraken blok (generiek) ────────────────────────────────── */
 
 type PrijsAfspraakItem = { id: string; omschrijving: string; eenheid: string | null; prijs: number | null; geldig_vanaf: string | null; geldig_tot: string | null; opmerkingen: string | null }
@@ -1261,6 +1251,10 @@ type Props = {
   objecten: RelatieObject[]
   /** Server-gerenderd blok Gekoppelde dossiers, gestreamd via <Suspense> vanaf de pagina. */
   dossiers: React.ReactNode
+  /** Blok Acquisitie (gespreksnotities). Als node doorgegeven omdat de pagina de notities,
+   *  de contactpersoonkeuzes en het schrijfrecht al heeft — dit bestand hoeft daar niets
+   *  van te weten. Zelfde aanpak als `dossiers`, maar zonder Suspense: één lichte query. */
+  acquisitie: React.ReactNode
 }
 
 export default function RelatieDetailView({
@@ -1276,6 +1270,7 @@ export default function RelatieDetailView({
   omzet,
   objecten,
   dossiers,
+  acquisitie,
 }: Props) {
   const isOpdrachtgever = relatie.types.includes('opdrachtgever')
   const isLeverancier   = relatie.types.includes('leverancier')
@@ -1331,7 +1326,7 @@ export default function RelatieDetailView({
                   <FactuuradrressenBlok relatieId={relatie.id} initial={factuuradressen} />
                 </div>
                 <FacturatieBlok relatieId={relatie.id} initial={facturatie} />
-                <PlaceholderBlok titel="Acquisitie" />
+                {acquisitie}
                 <div style={{ gridColumn: '1 / -1' }}>
                   <VerkoopPrijsafsprakenBlok relatieId={relatie.id} initial={verkoopPrijsafspraken} />
                 </div>
