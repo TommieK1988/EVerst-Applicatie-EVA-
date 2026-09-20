@@ -179,11 +179,13 @@ export const RECHTEN_CATALOGUS = [
     key: 'relaties',
     label: 'Relaties',
     groep: 'beheer',
-    kanalen: ['desktop'],
-    omschrijving: 'Opdrachtgevers, contactpersonen en hun historie.',
+    // Ook mobiel: hier hangt de module Commercieel aan (/m/commercieel), het klantbeeld
+    // dat je opslaat terwijl je een opdrachtgever spreekt.
+    kanalen: ['desktop', 'mobiel'],
+    omschrijving: 'Opdrachtgevers, contactpersonen en hun historie. Op mobiel het klantbeeld onder Commercieel.',
     niveaus: {
-      lezen: 'Relatiekaarten, contactpersonen en de dossierhistorie inzien.',
-      schrijven: 'Relaties en contactpersonen aanmaken en wijzigen, en notities plaatsen.',
+      lezen: 'Relatiekaarten, contactpersonen en de dossierhistorie inzien. Op mobiel: het klantbeeld van een opdrachtgever openen.',
+      schrijven: 'Relaties en contactpersonen aanmaken en wijzigen, en gespreksnotities plaatsen.',
       beheren: 'Ook dubbele relaties samenvoegen en de relatie-instellingen wijzigen.',
     },
   },
@@ -451,10 +453,12 @@ export const RECHTEN_CATALOGUS = [
     key: 'financieel',
     label: 'Financieel',
     groep: 'financieel',
-    kanalen: ['desktop'],
-    omschrijving: 'Facturatie, termijnen, geboekte uren en debiteurenopvolging.',
+    // Ook mobiel, maar smal: alleen het blok met openstaande facturen in het klantbeeld
+    // onder Commercieel. Facturen bewerken blijft kantoorwerk.
+    kanalen: ['desktop', 'mobiel'],
+    omschrijving: 'Facturatie, termijnen, geboekte uren en debiteurenopvolging. Op mobiel alleen de openstaande facturen bij een opdrachtgever.',
     niveaus: {
-      lezen: 'Het facturenoverzicht, de geboekte uren en de termijnen van het hele bedrijf inzien.',
+      lezen: 'Het facturenoverzicht, de geboekte uren en de termijnen van het hele bedrijf inzien. Op mobiel: de openstaande facturen in het klantbeeld.',
       schrijven: 'Termijnen factureerbaar stellen, regiewerk verwerken en facturen bewerken.',
       beheren: 'Ook de facturatie-instellingen wijzigen.',
     },
