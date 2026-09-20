@@ -172,18 +172,6 @@ export type DossierMeerwerkData = {
      * dekking suggereren dat nooit te dichten is.
      */
     goedgekeurdRegieExcl: number
-    /**
-     * Het deel van `goedgekeurdRegieExcl` dat óók in het nacalculatie-blok staat (excl. btw) —
-     * dezelfde grens als `getFactureerbareCodes`, namelijk regel-met-bewakingscode.
-     *
-     * De Verkoop-tab trekt dit er weer af en telt in plaats daarvan het nacalculatie-blok op. Dat
-     * blok kijkt naar dezelfde boekingen maar houdt rekening met vaste bedragen per factuurregel,
-     * uitgevinkte posten en losse regels, en kent bovendien stelposten die helemaal geen
-     * meerwerkregel zijn. Eén bedrag uit één bron dus, in plaats van twee tellingen van hetzelfde
-     * werk. Wat hier overblijft is het meerwerk buiten de termijnstaat dat zijn eigen bedrag
-     * draagt en nergens anders geteld wordt — een eenheidsprijs-stelpost zonder bewakingscode.
-     */
-    goedgekeurdNacalculatieExcl: number
   }
 }
 
@@ -225,7 +213,6 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
   let goedgekeurdAantal = 0
   let goedgekeurdAangenomenExcl = 0
   let goedgekeurdRegieExcl = 0
-  let goedgekeurdNacalculatieExcl = 0
   const views: MeerwerkRegelView[] = regels.map(r => {
     const excl = effectiefExcl(r, regiePerCode)
     const btwPct = r.btw_pct != null ? Number(r.btw_pct) : 21
@@ -235,7 +222,6 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
       goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++
       if (opTermijn) goedgekeurdAangenomenExcl += excl
       else goedgekeurdRegieExcl += excl
-      if (rekentOpNacalculatie(r)) goedgekeurdNacalculatieExcl += excl
     }
     return {
       ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct,
@@ -254,7 +240,6 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
       goedgekeurdIncl: rond(goedgekeurdIncl),
       goedgekeurdAangenomenExcl: rond(goedgekeurdAangenomenExcl),
       goedgekeurdRegieExcl: rond(goedgekeurdRegieExcl),
-      goedgekeurdNacalculatieExcl: rond(goedgekeurdNacalculatieExcl),
     },
   }
 }
