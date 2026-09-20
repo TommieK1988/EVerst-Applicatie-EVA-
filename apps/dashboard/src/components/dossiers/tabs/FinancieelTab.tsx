@@ -1,11 +1,6 @@
 import { Fragment, Suspense } from 'react'
-import { createAdminClient } from '@everts/database/server'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
-import { InkoopTab } from './InkoopTab'
-import { VerkoopTab } from './VerkoopTab'
-import { UrenTab } from './UrenTab'
-import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import ParkeerkostenBlok from './ParkeerkostenBlok'
@@ -587,17 +582,16 @@ async function ProjectVoortgangBlok({ dossierId }: { dossierId: string }) {
 
 /* ── main component ──────────────────────────────────────────────────── */
 
+/**
+ * Financieel is overal hetzelfde: begroot versus geboekt per bewakingscode.
+ *
+ * Servicedesk had hier eerder een eigen weergave die op de facturatiemethode splitste —
+ * bij regie het afrekenpaneel, bij aangenomen de orders. Dat verknoopte twee dingen die
+ * los horen te staan: hoe je bewaakt (altijd gelijk) en hoe je factureert (termijnen of
+ * regie). Het afrekenpaneel staat nu waar het hoort: op het Verkoop-tab, de route naar de
+ * verkoopfactuur. Inkopen loopt voor beide methoden via Werkbegroting en Inkoop.
+ */
 export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
-  // Servicedesk voegt Inkoop/Verkoop/Financieel samen tot één tab, met een aparte
-  // weergave voor regie vs. aangenomen (op basis van de facturatiemethode).
-  if (sectie === 'servicedesk') {
-    return (
-      <Suspense fallback={<div style={{ padding: 28 }}><BewakingSkeleton /></div>}>
-        <ServicedeskFinancieel dossierId={dossierId} />
-      </Suspense>
-    )
-  }
-
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
       {/* Parkeerkosten — puur informatief en bewust bovenaan, los van de
@@ -628,39 +622,5 @@ export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie
         </Suspense>
       </div>
     </div>
-  )
-}
-
-/** Servicedesk Financieel-tab: regie (bewerkbare factuurregels) of aangenomen (orders/uren/termijnen). */
-async function ServicedeskFinancieel({ dossierId }: { dossierId: string }) {
-  const supabase = createAdminClient() as any
-  const { data } = await supabase.from('dossiers').select('facturatiemethode').eq('id', dossierId).single()
-  const methode = (data?.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'
-
-  return (
-    <>
-      {/* Parkeerkosten en % gereed — boven beide weergaven */}
-      <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
-        <div style={{ maxWidth: 960 }}>
-          <Suspense fallback={null}>
-            <ParkeerkostenBlok dossierId={dossierId} />
-          </Suspense>
-          <Suspense fallback={null}>
-            <ProjectVoortgangBlok dossierId={dossierId} />
-          </Suspense>
-        </div>
-      </div>
-
-      {methode === 'regie' ? (
-        <ServicedeskRegiePaneel dossierId={dossierId} />
-      ) : (
-        // Aangenomen: opdracht & orders, geboekte kosten/uren, en verkooptermijnen.
-        <>
-          <InkoopTab dossierId={dossierId} />
-          <UrenTab dossierId={dossierId} />
-          <VerkoopTab dossierId={dossierId} />
-        </>
-      )}
-    </>
   )
 }

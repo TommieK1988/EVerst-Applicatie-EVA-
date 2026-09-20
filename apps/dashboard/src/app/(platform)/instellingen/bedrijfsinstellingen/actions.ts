@@ -2,10 +2,18 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { vereisRecht } from '@/lib/auth/rechten'
 import type { Bedrijfsinstellingen, Uurtarief } from '@everts/database/platform-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
+
+/**
+ * `overige` is een vrije JSON-bak. Als losse sleutel-waardebak lezen in plaats van met een
+ * cast: dan kan er een sleutel bij zonder dat het type eromheen zijn betekenis verliest.
+ */
+const overigeVan = (inst: Bedrijfsinstellingen): Record<string, unknown> =>
+  (inst.overige ?? {}) as Record<string, unknown>
 
 export async function getBedrijfsinstellingen(): Promise<Bedrijfsinstellingen> {
   const { data, error } = await db()
@@ -83,6 +91,27 @@ export async function setGoedkeuringDrempelOfferte(
   return updateBedrijfsinstellingen({
     overige: { ...(inst.overige as any), goedkeuring_drempel_offerte: bedrag },
   })
+}
+
+/**
+ * Drempelbedrag (excl. btw) waarboven een inkooporder of onderaannemersopdracht op een
+ * servicedeskbon accordering vereist. Op alle andere dossiers is accordering altijd
+ * verplicht; zie `lib/goedkeuring/inkoop.ts`, waar ook de lezer staat.
+ *
+ * Deze waarde bepaalt wanneer een uitgave langs een tweede paar ogen moet, dus het zetten
+ * ervan is beheerwerk: `financieel: beheren`, net als de opslag op geboekte kosten.
+ */
+export async function setGoedkeuringDrempelInkoop(
+  bedrag: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisRecht('financieel', 'beheren')
+  if (!Number.isFinite(bedrag) || bedrag < 0) return { ok: false, error: 'Vul een bedrag van 0 of hoger in.' }
+  const inst = await getBedrijfsinstellingen()
+  const res = await updateBedrijfsinstellingen({
+    overige: { ...overigeVan(inst), goedkeuring_drempel_inkoop: bedrag },
+  })
+  if (res.ok) revalidatePath('/instellingen/offertes')
+  return res
 }
 
 /**

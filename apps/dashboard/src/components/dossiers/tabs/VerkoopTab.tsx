@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { createAdminClient } from '@everts/database/server'
 import { getDossierVerkoop, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
@@ -10,6 +11,7 @@ import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
 import { berekenContractwaarde } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
+import type { DossierSectie } from '../types'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -89,11 +91,29 @@ function groepeerBtw(rijen: { pct: number | null; excl: number; btw: number }[])
   return Array.from(groepen.values()).sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1))
 }
 
-async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
+/**
+ * Loopt dit dossier op regie als hoofdroute? Dan is nacalculatie geen uitzondering maar de
+ * manier waarop er gefactureerd wordt: het blok staat er altijd, ook leeg, en een termijnstaat
+ * die niet bestaat hoeft niet gemeld te worden.
+ *
+ * Bewust beperkt tot servicedesk. Op een opdracht is `facturatiemethode` vandaag betekenisloos:
+ * de kolom staat standaard op 'regie' en er is geen scherm waar iemand hem bewust zet
+ * (`ServicedeskInfoPaneel` rendert alleen op servicedesk). Sturen op die waarde zou op élke
+ * opdracht een leeg paneel opleveren. Daar blijft het bestaande gedrag gelden: het blok
+ * verschijnt zodra er werkelijk factureerbare nacalculatie op het dossier staat.
+ */
+async function regieIsHoofdroute(dossierId: string, sectie?: DossierSectie): Promise<boolean> {
+  if (sectie !== 'servicedesk') return false
+  const db = createAdminClient()
+  const { data } = await db.from('dossiers').select('facturatiemethode').eq('id', dossierId).maybeSingle()
+  return (data?.facturatiemethode ?? 'regie') === 'regie'
+}
+
+async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
   // Alles wat bepaalt óf er iets te tonen valt, wordt vóór de lege staat opgehaald. Stond het
   // meerwerk daar eerst achter, dan bleef de tab leeg op een dossier met goedgekeurd meerwerk maar
   // zonder aanneemsom of termijnen — precies het geval waarin je juist iets wilt zien.
-  const [data, schemaAfwijking, meerwerk, nacalculatieCodes, voorstel] = await Promise.all([
+  const [data, schemaAfwijking, meerwerk, nacalculatieCodes, voorstel, opRegie] = await Promise.all([
     getDossierVerkoop(dossierId),
     // Faalt dit (geen offerte, geen betalingsconditie), dan blijft de banner gewoon weg.
     getTermijnAfwijking(dossierId).catch(() => null),
@@ -104,6 +124,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
     // Zwaarder dan de rest, maar het is Postgres (snapshots), geen Bouw7-aanroep — en het gaat mee
     // naar het paneel, zodat dat niet nog eens hoeft te lezen.
     getRegieFactuurvoorstel(dossierId).catch(() => null),
+    regieIsHoofdroute(dossierId, sectie).catch(() => false),
   ])
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
@@ -117,7 +138,7 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   const nacalculatieMeerwerk = goedgekeurdeRegels.length - termijnMeerwerk.length
   const heeftNacalculatie = nacalculatieCodes.length > 0
 
-  if (!data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie) {
+  if (!data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie && !opRegie) {
     return (
       <LegeStaat
         titel="Geen verkoopgegevens"
@@ -400,8 +421,12 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
       {/* De twee routes waarlangs een dossier gefactureerd wordt, naast elkaar. Staat er geen
           nacalculatie op dit dossier, dan neemt de termijnstaat de volle breedte. */}
       <Kolommen>
+        {/* Termijnen. Rekent dit dossier op regie af en kent Bouw7 geen termijnstaat, dan blijft
+            deze kolom leeg: "Termijnen zijn niet beschikbaar voor dit project" is daar geen
+            mededeling maar ruis — die route bestaat er simpelweg niet. Staan er wél termijnen
+            (gemengd werk), dan hoor je ze te zien. */}
+        {(data.termijnenBeschikbaar || !opRegie) && (
         <Kolom>
-          {/* Termijnen */}
           <Card>
             <CardHeader>Termijnen</CardHeader>
             <CardBody style={{ padding: 0, overflowX: 'auto' }}>
@@ -482,11 +507,18 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
             </CardBody>
           </Card>
         </Kolom>
-        {heeftNacalculatie && (
+        )}
+        {/* Regiewerk. Op een dossier dat op regie afrekent is dit de factuurroute en staat het blok
+            er altijd — ook leeg, want dit is de plek waar je de factuur opbouwt. Elders is regie de
+            uitzondering en verschijnt het alleen als er factureerbare nacalculatie is. */}
+        {(heeftNacalculatie || opRegie) && (
           <Kolom>
-            {/* Regiewerk. Op een opdracht is dat de uitzondering, dus het blok verschijnt alleen als er
-                daadwerkelijk uren of kosten op het dossier staan. */}
-            <ServicedeskRegiePaneel dossierId={dossierId} verbergAlsLeeg initieel={voorstel} />
+            <ServicedeskRegiePaneel
+              dossierId={dossierId}
+              verbergAlsLeeg={!opRegie}
+              isHoofdroute={opRegie}
+              initieel={voorstel}
+            />
           </Kolom>
         )}
       </Kolommen>
@@ -563,11 +595,11 @@ async function VerkoopInhoud({ dossierId }: { dossierId: string }) {
   )
 }
 
-export function VerkoopTab({ dossierId }: { dossierId: string }) {
+export function VerkoopTab({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)' }}>
       <Suspense fallback={<div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}><SkeletonCard /><SkeletonCard /></div>}>
-        <VerkoopInhoud dossierId={dossierId} />
+        <VerkoopInhoud dossierId={dossierId} sectie={sectie} />
       </Suspense>
     </div>
   )

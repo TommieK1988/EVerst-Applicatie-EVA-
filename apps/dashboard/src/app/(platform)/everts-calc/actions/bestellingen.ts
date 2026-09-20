@@ -287,8 +287,11 @@ export async function stelBestellingenVoor(
   }
 
   const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
+  const { getInkoopDrempelVoorWerkbegroting } = await import('@/lib/goedkeuring/inkoop')
   const status = await berekenWerkbegrotingStatus(payload.wb.id).catch(() => ({ regels: [] as { regel_id: string; goedgekeurd: boolean }[] }))
   const goedgekeurd = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
+  // Servicedeskbon onder het drempelbedrag → geen accorderingsblokkade (zie lib/goedkeuring/inkoop).
+  const inkoopDrempel = await getInkoopDrempelVoorWerkbegroting(payload.wb.id).catch(() => null)
 
   const compById = new Map(payload.componenten.map(c => [c.id, c]))
   const planById = new Map(plan.regels.map(r => [r.componentId, r]))
@@ -377,8 +380,13 @@ export async function stelBestellingenVoor(
       groep.blokkades.push('Geen bewakingscode op deze regels — vul de kostengroep in de werkbegroting in.')
     }
     const nietGeaccordeerd = groep.regels.filter(r => !r.geaccordeerd).length
-    if (nietGeaccordeerd > 0) {
-      groep.blokkades.push(`${nietGeaccordeerd} regel(s) zijn nog niet geaccordeerd.`)
+    const accorderingVereist = inkoopDrempel == null || groep.totaal >= inkoopDrempel
+    if (nietGeaccordeerd > 0 && accorderingVereist) {
+      groep.blokkades.push(
+        inkoopDrempel == null
+          ? `${nietGeaccordeerd} regel(s) zijn nog niet geaccordeerd.`
+          : `${nietGeaccordeerd} regel(s) zijn nog niet geaccordeerd — vanaf € ${inkoopDrempel.toLocaleString('nl-NL')} is accordering verplicht.`,
+      )
     }
 
     // Al besteld in Bouw7 — geen nieuw contract, maar koppelen aan wat er staat.

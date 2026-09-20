@@ -1462,7 +1462,8 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
 //   aanvragen & offertes → informatie · bestanden · calculatie · uitvraag · acties
 //   opdrachten           → + uitvraag · werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
-//   servicedesk          → informatie · bestanden · calculatie · planning · financieel · kam
+//   servicedesk          → dezelfde set als opdrachten, maar zonder houtrot; KAM/VGM
+//                          hangt er aan de VCA-toggle omdat een bon geen oplevering kent
 // De KAM/VGM-tab heeft zelf drie onderdelen (?deel=kwaliteit|oplevering|formulieren);
 // die krijgen elk hun eigen hulp, want het zijn drie losse werkschermen.
 const DOSSIER_ROOT_LABELS: Record<string, string> = {
@@ -1563,6 +1564,7 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
           { title: 'Regels & componenten', body: 'Werk per regel met normhoeveelheden, tarieven en uurtypes. Bij de overgang offerte → opdracht wordt de calculatie automatisch overgenomen als startpunt van de werkbegroting.' },
           { title: 'Bestellen via Bouw7', body: 'Vanuit de regels maak je bestelregels aan in Bouw7. Bestelde codes worden vergrendeld in het grid; wijzigen loopt per regel (aanmaken/bijwerken) zonder de rest te verstoren.' },
           { title: 'Goedkeuring & prognose', body: 'De werkbegroting moet op regelniveau geaccordeerd worden (door controller of directie) voordat er besteld of geprognosticeerd kan worden. Het akkoord gaat over het geld: alleen als het bedrag van een regel verandert (hoeveelheid, norm, tarief, een component erbij of eraf, of een regel toegevoegd of verwijderd) vervalt de goedkeuring en verschijnt de WB!-badge. Een andere leverancier kiezen, een omschrijving bijwerken of een regel naar een andere bewakingscode slepen kan dus zonder nieuw akkoord. De prognose is voorbehouden aan controller/directie.' },
+          ...(isServicedesk ? [{ title: 'Servicedesk: kleine bestellingen', body: 'Op een servicedeskbon hoeft een inkooporder of onderaannemersopdracht pas geaccordeerd te zijn vanaf een drempelbedrag (standaard € 1.000 excl. btw, in te stellen bij Instellingen → Offertes → Goedkeuring). Daaronder bestel je direct, zodat een storing dezelfde dag verholpen kan worden. Heeft de bon geen calculatie, dan begint de werkbegroting leeg en typ je de regels zelf.' }] : []),
         ])
 
     case 'planning':
@@ -1612,8 +1614,10 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
 
     case 'verkoop':
       return T('Verkoop',
-        'De verkoopfacturen van deze opdracht, live uit Bouw7. Zo zie je wat er al gefactureerd en betaald is zonder Bouw7 te hoeven openen.',
+        'De route naar de verkoopfactuur, plus wat er al gefactureerd en betaald is (live uit Bouw7). Inkopen gaat overal hetzelfde; alléén het opstellen van de factuur verschilt per facturatiemethode, en dat gebeurt hier.',
         [
+          { title: 'Aangenomen: termijnen', body: 'Bij een vaste prijs factureer je via de termijnstaat: termijnen klaarzetten tijdens de uitvoering en de eindfactuur na oplevering. Wijkt het schema in Bouw7 af van de betalingsconditie op de offerte, dan krijg je daar een waarschuwing over.' },
+          { title: 'Regie: nacalculatie', body: 'Bij regie bouw je de factuur op uit de werkelijk geboekte uren en kosten, per bewakingscode en met de ingestelde opslag. Op een dossier dat op regie afrekent staat dat blok er altijd; elders verschijnt het alleen wanneer er daadwerkelijk regiewerk op het dossier staat.' },
           { title: 'Facturen', body: 'De uitgaande facturen (termijnen, eindfactuur, creditnota\'s) komen rechtstreeks uit Bouw7 met status en bedrag. Het opvolgen van openstaande facturen doe je centraal op het Facturen-scherm (debiteurenbeheer).' },
         ])
 
@@ -1628,10 +1632,10 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
     case 'financieel':
       if (isServicedesk) {
         return T('Financieel',
-          'Het samengevoegde financiële tabblad van een servicedesk-dossier: regie-factuurregels, inkoop en verkoop bij elkaar. Passend bij een snelle serviceklus die op regie of aangenomen loopt.',
+          'De financiële bewaking van deze bon per bewakingscode, live uit Bouw7: begrote versus geboekte kosten en wat er nog te verwachten is. Hetzelfde overzicht als bij een opdracht — bewaken gaat niet anders omdat de klus kleiner is.',
           [
-            { title: 'Regie-factuurregels', body: 'Bij een regie-klus leg je hier de te factureren uren en materialen vast tegen contract- of standaardtarief. Goedgekeurde regels worden doorgezet naar Bouw7.' },
-            { title: 'Aangenomen', body: 'Loopt de klus aangenomen (vaste prijs), dan werk je met de calculatie en termijnen zoals bij een reguliere opdracht.' },
+            { title: 'Per bewakingscode', body: 'De kosten worden per bewakingscode getoond met begroot, geboekt en het saldo — inclusief geboekte uren. Staat er een werkbegroting op de bon, dan vult die de begrote kant.' },
+            { title: 'Factureren doe je op Verkoop', body: 'Het opstellen van de factuur — termijnen bij aangenomen werk, nacalculatie bij regie — staat op het Verkoop-tabblad. Inkooporders en onderaannemersopdrachten staan op Inkoop, de geboekte uren op Uren.' },
           ])
       }
       return T('Financieel',

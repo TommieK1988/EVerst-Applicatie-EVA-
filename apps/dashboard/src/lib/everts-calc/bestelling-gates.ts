@@ -10,11 +10,16 @@
  *  (a) élke werkbegroting-regel achter de bestelde componenten is geaccordeerd;
  *  (b) de componenten zijn niet gewijzigd sinds het klaarzetten (hash-vergelijking).
  *
+ * Voorwaarde (a) vervalt voor een servicedeskbon onder het drempelbedrag — zie
+ * `lib/goedkeuring/inkoop.ts` voor het waarom. (b) geldt altijd: een bestelling die niet
+ * meer overeenkomt met wat er is klaargezet, klopt sowieso niet.
+ *
  * Staat bewust in een gewone lib (geen 'use server'), zodat beide server actions hem kunnen
  * importeren zonder er een extra aanroepbaar endpoint van te maken.
  */
 
 import type { WerkbegrotingComponent, WerkbegrotingRegel } from './types'
+import { bestellingBedrag } from './calculations'
 
 export type BestellingGateInvoer = {
   bestellingId: string
@@ -54,6 +59,11 @@ export async function controleerBestellingGates(
   }
 
   // (a) Regel-goedkeuring: elke regel achter de bestelde componenten moet geaccordeerd zijn.
+  // Tenzij het een servicedeskbon onder het drempelbedrag is; dan bestelt de servicedesk direct.
+  const { inkoopAccorderingVereist } = await import('@/lib/goedkeuring/inkoop')
+  const accordering = await inkoopAccorderingVereist(invoer.werkbegrotingId, bestellingBedrag(componenten))
+  if (!accordering.vereist) return { ok: true, componenten }
+
   const status = await berekenWerkbegrotingStatus(invoer.werkbegrotingId)
   const goedgekeurdPerRegel = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
   const regelIds = [...new Set(componenten.map(c => c.werkbegroting_regel_id))]

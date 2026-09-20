@@ -25,7 +25,7 @@ import FactuurRegelVenster from './FactuurRegelVenster'
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
 
-export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, initieel }: {
+export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, initieel, isHoofdroute }: {
   dossierId: string
   /** Op een opdracht-dossier is nacalculatie de uitzondering; toon het blok dan alleen als er iets is. */
   verbergAlsLeeg?: boolean
@@ -35,6 +35,11 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
    * er meteen in plaats van eerst "Nacalculatie laden…".
    */
   initieel?: RegieVoorstel | null
+  /**
+   * Rekent dit dossier op regie af? Dan is een leeg paneel geen eindpunt maar een beginpunt, en
+   * moet de lege tekst dat zeggen. Verwijzen naar "de termijnen" klopt daar niet: die zijn er niet.
+   */
+  isHoofdroute?: boolean
 }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
@@ -61,20 +66,22 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
   }, [])
 
   if (voorstel == null) {
-    return verbergAlsLeeg ? null : <div className="px-8 py-7 text-[13px] text-neutral-500">Nacalculatie laden…</div>
+    return verbergAlsLeeg ? null : <div className="text-[13px] text-neutral-500">Nacalculatie laden…</div>
   }
   const leeg = voorstel.codes.length === 0 && voorstel.buitenBeschouwing.length === 0
   if (verbergAlsLeeg && leeg) return null
 
+  // Geen eigen paginamarge: dit paneel staat in een kolom van het Verkoop-tab, dat zijn marge al zet.
   return (
-    <div className="px-8 py-7">
+    <>
       <Card>
         <CardHeader>Nacalculatie — regie en stelposten</CardHeader>
         <CardBody>
           {leeg ? (
             <p className="text-[13px] text-neutral-500">
-              Dit dossier heeft geen bewakingscodes die op nacalculatie afrekenen. Werk in de aanneemsom
-              wordt via de termijnen gefactureerd, niet hier.
+              {isHoofdroute
+                ? 'Er staan nog geen kosten of uren op dit dossier om te factureren. Zodra er uren geschreven zijn of inkoopfacturen zijn geboekt, verschijnen ze hier als factuurregels.'
+                : 'Dit dossier heeft geen bewakingscodes die op nacalculatie afrekenen. Werk in de aanneemsom wordt via de termijnen gefactureerd, niet hier.'}
             </p>
           ) : (
             <>
@@ -203,6 +210,6 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
         onBewaard={herlaad}
         onGefactureerd={() => { herlaad(); router.refresh() }}
       />
-    </div>
+    </>
   )
 }

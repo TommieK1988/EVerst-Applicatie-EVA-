@@ -1,5 +1,6 @@
 import { PageHeader, Card, CardBody, SubTabs } from '@/components/ui'
 import { getGoedkeuringDrempelOfferte } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
+import { getInkoopDrempel } from '@/lib/goedkeuring/inkoop'
 import { getLayouts } from '../offerte-layout/actions'
 import LayoutsBeheer from '../offerte-layout/LayoutsBeheer'
 import { getAlgemeneVoorwaarden, type AlgemeneVoorwaarden } from '../algemene-voorwaarden/actions'
@@ -99,15 +100,29 @@ async function Condities() {
 }
 
 async function Goedkeuring() {
-  const drempel = await getGoedkeuringDrempelOfferte()
+  const [drempel, inkoopDrempel] = await Promise.all([
+    getGoedkeuringDrempelOfferte(),
+    getInkoopDrempel(),
+  ])
   return (
-    <Card style={{ maxWidth: 560 }}>
-      <CardBody>
-        <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, margin: '0 0 12px' }}>
-          Goedkeuring offertes
-        </h2>
-        <GoedkeuringDrempelBeheer initial={drempel} />
-      </CardBody>
-    </Card>
+    <>
+      <Card style={{ maxWidth: 560 }}>
+        <CardBody>
+          <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, margin: '0 0 12px' }}>
+            Goedkeuring offertes
+          </h2>
+          <GoedkeuringDrempelBeheer initial={drempel} soort="offerte" />
+        </CardBody>
+      </Card>
+
+      <Card style={{ maxWidth: 560, marginTop: 16 }}>
+        <CardBody>
+          <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, margin: '0 0 12px' }}>
+            Goedkeuring inkoop servicedesk
+          </h2>
+          <GoedkeuringDrempelBeheer initial={inkoopDrempel} soort="inkoop" />
+        </CardBody>
+      </Card>
+    </>
   )
 }

@@ -251,18 +251,36 @@ const OPDRACHT_TABS: DossierTab[] = [
   { groep: 'Financieel', slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
+/**
+ * Servicedesk kreeg lange tijd een uitgeklede set tabs, alsof een bon nooit meer is dan een
+ * uurtje werk. In de praktijk wordt er materiaal besteld en werk uitbesteed, en dat moet
+ * langs dezelfde weg als bij een opdracht: werkbegroting → bestelregels in Bouw7 → order of
+ * onderaannemersopdracht. Vandaar dezelfde indeling als OPDRACHT_TABS, met twee verschillen:
+ * geen Houtrot (die hangt aan de opdracht-toggle) en KAM/VGM blijft aan de VCA-toggle hangen
+ * omdat een servicedeskbon geen oplevering kent.
+ */
 const SERVICEDESK_TABS: DossierTab[] = [
-  { slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+  { groep: 'Dossier', slug: 'informatie', label: 'Informatie', d: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { groep: 'Dossier', slug: 'bestanden',  label: 'Bestanden',  d: 'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z' },
+
   // Ook op de servicedesk, en juist daar: mutatiewerk van corporaties komt via die ingang binnen.
   // Alleen zichtbaar met de dossier-toggle `mutatie_opname` (TAB_TOGGLE_GATES), die vanzelf
   // aangaat bij categorie Mutatie. Vóór Calculatie, want de opname voedt die calculatie.
-  { slug: 'opname',     label: 'Opname',     d: OPNAME_ICOON },
-  { slug: 'calculatie', label: 'Calculatie', d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
-  { slug: 'planning',   label: 'Planning',   d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
+  { groep: 'Voorbereiding', slug: 'opname',        label: 'Opname',        d: OPNAME_ICOON },
+  { groep: 'Voorbereiding', slug: 'calculatie',    label: 'Calculatie',    d: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01' },
+  { groep: 'Voorbereiding', slug: 'uitvraag',      label: 'Uitvraag',      d: UITVRAAG_ICOON },
+  { groep: 'Voorbereiding', slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
+  { groep: 'Voorbereiding', slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
+
+  { groep: 'Uitvoering', slug: 'taken', label: 'Acties',   d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
+  { groep: 'Uitvoering', slug: 'uren',  label: 'Uren',     d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   // Servicedesk heeft geen oplevering; hier blijft de tab dus wel aan de VCA-toggle hangen.
-  { slug: 'kam',        label: 'KAM/VGM', toggle: 'vca', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
-  { slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { groep: 'Uitvoering', slug: 'kam',   label: 'KAM/VGM', toggle: 'vca', d: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+
+  { groep: 'Financieel', slug: 'inkoop',     label: 'Inkoop',     d: 'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z' },
+  { groep: 'Financieel', slug: 'verkoop',    label: 'Verkoop',    d: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5' },
+  { groep: 'Financieel', slug: 'meerwerk',   label: 'Meerwerk',   d: 'M12 4.8v14.4M4.8 12h14.4' },
+  { groep: 'Financieel', slug: 'financieel', label: 'Financieel', d: 'M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.953-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z' },
 ]
 
 const SECTIE_LABELS: Record<string, string> = {

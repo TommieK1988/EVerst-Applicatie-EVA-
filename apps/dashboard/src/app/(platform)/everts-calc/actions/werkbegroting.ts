@@ -474,6 +474,13 @@ export type WerkbegrotingGoedkeuringStatusResultaat = {
   volledigGoedgekeurd: boolean
   /** Snapshot van de laatste goedgekeurde ronde — voor client-side badges. */
   snapshot: { regel_id: string; regel_hash: string; kosten_centen: number | null }[]
+  /**
+   * Drempelbedrag (excl. btw) waarboven een bestelling accordering vereist, of `null`
+   * wanneer accordering altijd verplicht is (alles wat geen servicedeskbon is).
+   * Het bestellingenpaneel moet dezelfde poort tonen als de server hanteert — anders
+   * blijft de bestelknop uit terwijl de server hem gewoon zou doorlaten.
+   */
+  inkoopDrempel: number | null
 }
 
 /** Regel-goedkeuringsstatus voor de UI (badges + headerteller). */
@@ -481,13 +488,18 @@ export async function getWerkbegrotingGoedkeuringStatus(
   werkbegrotingId: string,
 ): Promise<WerkbegrotingGoedkeuringStatusResultaat> {
   const { berekenWerkbegrotingStatus } = await import('@/lib/goedkeuring/werkbegroting-status')
-  const status = await berekenWerkbegrotingStatus(werkbegrotingId)
+  const { getInkoopDrempelVoorWerkbegroting } = await import('@/lib/goedkeuring/inkoop')
+  const [status, inkoopDrempel] = await Promise.all([
+    berekenWerkbegrotingStatus(werkbegrotingId),
+    getInkoopDrempelVoorWerkbegroting(werkbegrotingId),
+  ])
   return {
     laatsteGoedkeuringId: status.laatsteGoedkeuringId,
     ooitGoedgekeurd: status.ooitGoedgekeurd,
     regels: status.regels,
     volledigGoedgekeurd: status.volledigGoedgekeurd,
     snapshot: status.snapshot,
+    inkoopDrempel,
   }
 }
 

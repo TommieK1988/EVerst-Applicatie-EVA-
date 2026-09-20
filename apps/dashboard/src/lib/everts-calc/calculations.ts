@@ -346,6 +346,19 @@ export function berekeningNummers(groepen: Groep[]): Map<string, string> {
 
 // ─── Werkbegroting berekeningen ───────────────────────────────────────────────
 
+/**
+ * Bestelwaarde (excl. btw) van een set componenten: wat er naar de leverancier of
+ * onderaannemer gaat. Bewust de kale componentwaarde zonder opslag — een opslag is onze
+ * marge richting de klant en hoort niet in een inkoopbedrag.
+ *
+ * Wordt zowel server-side (de accorderingsdrempel in `bestelling-gates`) als in het
+ * bestellingenpaneel gebruikt; één definitie, zodat scherm en poortwachter nooit een
+ * ander bedrag toetsen.
+ */
+export function bestellingBedrag(componenten: WerkbegrotingComponent[]): number {
+  return componenten.reduce((som, c) => som + (Number(c.norm_hoeveelheid) || 0) * (Number(c.tarief) || 0), 0)
+}
+
 /** Identieke logica als berekenCalculatieregel, maar voor WerkbegrotingComponent[]. */
 export function berekenWerkbegrotingRegel(
   regel: WerkbegrotingRegel,

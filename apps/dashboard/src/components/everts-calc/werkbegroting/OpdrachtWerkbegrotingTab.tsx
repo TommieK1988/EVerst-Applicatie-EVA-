@@ -20,9 +20,15 @@ interface Props {
   nummer: string
   /** Gekoppeld calculatieproject (dossiers.everts_calc_project_id). */
   gekoppeldProjectId?: string | null
+  /**
+   * Waar dit tab staat. Op een servicedeskbon blijft het calculatieproject met rust: dat
+   * dossier wordt geen opdracht, en de calculatie hoort dus ook niet als opdracht in de
+   * calculatiemodule te verschijnen.
+   */
+  sectie?: 'opdracht' | 'servicedesk'
 }
 
-export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldProjectId }: Props) {
+export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldProjectId, sectie = 'opdracht' }: Props) {
   const [projectId, setProjectId] = useState<string | null>(null)
   const statusBijgewerkt = useRef(false)
 
@@ -32,7 +38,7 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldPr
     if (gekoppeld) {
       // Gekoppelde EVA-calculatie → werkbegroting wordt standaard overgehaald.
       setProjectId(gekoppeld)
-      if (!statusBijgewerkt.current) {
+      if (!statusBijgewerkt.current && sectie === 'opdracht') {
         statusBijgewerkt.current = true
         setProjectStatus(gekoppeld, 'opdracht').catch(console.error)
       }
@@ -43,7 +49,7 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldPr
       maakStandaardScenario(synthId)
       setProjectId(synthId)
     }
-  }, [aanvraagId, gekoppeldProjectId])
+  }, [aanvraagId, gekoppeldProjectId, sectie])
 
   if (!projectId) {
     return (

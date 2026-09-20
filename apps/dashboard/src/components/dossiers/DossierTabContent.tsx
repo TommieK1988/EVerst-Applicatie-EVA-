@@ -176,15 +176,19 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
     )
   }
 
-  if (tab === 'werkbegroting' && sectie === 'opdracht') {
+  // Ook op de servicedesk: een bon waarvoor materiaal besteld of werk uitbesteed wordt, heeft
+  // een werkbegroting nodig — daar worden de bestelregels en de inkooporder/onderaannemers-
+  // opdracht uit samengesteld. Zonder gekoppelde calculatie begint hij leeg.
+  if (tab === 'werkbegroting' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
         <OpdrachtWerkbegrotingTab
           aanvraagId={id}
-          naam={dossier?.titel ?? 'Opdracht'}
+          naam={dossier?.titel ?? (sectie === 'servicedesk' ? 'Servicedesk' : 'Opdracht')}
           nummer={dossier?.dossiernummer ?? ''}
           gekoppeldProjectId={(dossier as any)?.everts_calc_project_id ?? null}
+          sectie={sectie}
         />
       </>
     )
@@ -331,8 +335,9 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
     )
   }
 
-  // Inkoop/Verkoop zijn voor servicedesk samengevoegd in het Financieel-tab; alleen opdracht houdt ze los.
-  if (tab === 'inkoop' && sectie === 'opdracht') {
+  // Inkoop, Verkoop en Uren stonden voor servicedesk verstopt ín het Financieel-tab, en dan
+  // alleen bij aangenomen werk: bij regie waren ze onvindbaar. Nu overal eigen tabs.
+  if (tab === 'inkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
@@ -343,18 +348,18 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
     )
   }
 
-  if (tab === 'verkoop' && sectie === 'opdracht') {
+  if (tab === 'verkoop' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
         <Suspense fallback={<DossierTabSkeleton />}>
-          <VerkoopTab dossierId={id} />
+          <VerkoopTab dossierId={id} sectie={sectie} />
         </Suspense>
       </>
     )
   }
 
-  if (tab === 'uren' && sectie === 'opdracht') {
+  if (tab === 'uren' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
@@ -365,7 +370,9 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
     )
   }
 
-  if (tab === 'meerwerk' && sectie === 'opdracht') {
+  // Ook op de servicedesk: bij aangenomen werk ontstaat er meerwerk zodra de bon groter blijkt
+  // dan de opdracht. Bij regie blijft het tab leeg — alles loopt daar via de factuurregels.
+  if (tab === 'meerwerk' && (sectie === 'opdracht' || sectie === 'servicedesk')) {
     return (
       <>
         {titleInjector}
@@ -383,8 +390,9 @@ async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: Dossi
 
   // Uitvragen bij onderaannemers/leveranciers. Op de aanvraag (waar je uitvraagt), en daarna op de
   // offerte en de opdracht: een dossier houdt bij een statuswissel hetzelfde id, dus wat in de
-  // aanvraagfase is vastgelegd blijft hier gewoon zichtbaar.
-  if (tab === 'uitvraag' && sectie !== 'servicedesk') {
+  // aanvraagfase is vastgelegd blijft hier gewoon zichtbaar. Ook op de servicedesk: een prijs
+  // opvragen vóór je uitbesteedt hoort bij inkopen, ongeacht hoe het dossier binnenkwam.
+  if (tab === 'uitvraag') {
     return (
       <>
         {titleInjector}

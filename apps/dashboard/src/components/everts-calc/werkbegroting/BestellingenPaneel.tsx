@@ -11,7 +11,7 @@ import {
   getWerkbegrotingWijzigingen, getWerkbegrotingBestellingen, slaBestellingOp, verwijderBestelling,
 } from '@/lib/everts-calc/local-store'
 import { nieuweId } from '@/lib/everts-calc/utils'
-import { formatEuro } from '@/lib/everts-calc/calculations'
+import { bestellingBedrag, formatEuro } from '@/lib/everts-calc/calculations'
 import {
   zetBestellingKlaar, verzendBestelling, getWerkbegrotingGoedkeuringStatus,
   type WerkbegrotingPayload,
@@ -90,6 +90,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
   const [omschrijving, setOmschrijving] = useState('')
   const [goedgekeurdRegels, setGoedgekeurdRegels] = useState<Set<string>>(new Set())
+  /**
+   * Drempelbedrag waarboven accordering verplicht is, of null wanneer dat altijd zo is.
+   * Op een servicedeskbon mag een kleine order zonder accordering de deur uit — dezelfde
+   * regel als de server hanteert, zie `lib/goedkeuring/inkoop.ts`.
+   */
+  const [inkoopDrempel, setInkoopDrempel] = useState<number | null>(null)
 
   /** Verzendvenster: welke bestelling wordt verstuurd + de (bewerkbare) mailvelden. */
   const [verstuurB, setVerstuurB] = useState<WerkbegrotingBestelling | null>(null)
@@ -147,6 +153,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     try {
       const status = await getWerkbegrotingGoedkeuringStatus(wb.id)
       setGoedgekeurdRegels(new Set(status.regels.filter(r => r.goedgekeurd).map(r => r.regel_id)))
+      setInkoopDrempel(status.inkoopDrempel)
     } catch { /* stil */ }
   }, [wb.id])
 
@@ -241,8 +248,17 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   const compById = useMemo(() => new Map(componenten.map(c => [c.id, c])), [componenten])
   const regelVanComp = useCallback((compId: string) => compById.get(compId)?.werkbegroting_regel_id ?? null, [compById])
 
-  /** Bevat de bestelling regels die (nog) niet geaccordeerd zijn? */
+  /**
+   * Bevat de bestelling regels die (nog) niet geaccordeerd zijn?
+   *
+   * Leeg zodra accordering voor dit bedrag niet vereist is — anders staat de verzendknop uit
+   * terwijl de server de bestelling gewoon zou doorlaten.
+   */
   const bestellingGeblokkeerd = useCallback((b: WerkbegrotingBestelling): string[] => {
+    if (inkoopDrempel != null) {
+      const bedrag = bestellingBedrag(b.component_ids.map(cid => compById.get(cid)).filter((c): c is WerkbegrotingComponent => !!c))
+      if (bedrag < inkoopDrempel) return []
+    }
     const blokkerend: string[] = []
     for (const cid of b.component_ids) {
       const regelId = regelVanComp(cid)
@@ -252,7 +268,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       }
     }
     return [...new Set(blokkerend)]
-  }, [regelVanComp, goedgekeurdRegels, compById])
+  }, [regelVanComp, goedgekeurdRegels, compById, inkoopDrempel])
 
   async function maakBestelling() {
     if (!omschrijving.trim() || selectie.size === 0) return
@@ -903,6 +919,12 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                 placeholder="Omschrijving, bijv. Levering steigermateriaal week 12"
                 className="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg mb-3 focus:outline-none focus:border-everts/40"
               />
+              {inkoopDrempel != null && (
+                <p className="text-xs text-slate-500 mb-2">
+                  Accordering is op deze bon pas verplicht vanaf {formatEuro(inkoopDrempel)}; daaronder kan de
+                  bestelling direct de deur uit.
+                </p>
+              )}
               <p className="text-xs font-semibold text-slate-500 mb-1">Componenten selecteren:</p>
               <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
                 {componenten.map(c => {
@@ -915,7 +937,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       <span className="text-slate-400">{formatEuro(c.norm_hoeveelheid * c.tarief)}</span>
                       {regelGoedgekeurd
                         ? <span className="text-[10px] text-green-600">✓ geaccordeerd</span>
-                        : <span className="text-[10px] text-amber-600">niet geaccordeerd</span>}
+                        : inkoopDrempel == null
+                          ? <span className="text-[10px] text-amber-600">niet geaccordeerd</span>
+                          : null}
                     </label>
                   )
                 })}
