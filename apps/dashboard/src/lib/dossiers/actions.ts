@@ -387,9 +387,27 @@ function nogNietVerlopenFinancieelGereed(kolom: 'opdracht_substatus' | 'serviced
 }
 
 /**
+ * Servicedesk-dossiers uit een projectenlijst weren. Dit is de databasekant van
+ * `isServicedeskDossier` (components/dossiers/types.ts): projectstatus 'LB.' óf categorie
+ * Dagelijks onderhoud/Mutatie. Zonder deze grens staat een onderhoudsbon op Servicedesk én
+ * op Opdrachten — op het bord valt hij nog weg omdat hij geen `opdracht_substatus` heeft,
+ * maar de lijstweergave toont hem gewoon.
+ *
+ * Twee losse regels omdat meerdere `.or()`-aanroepen door PostgREST met AND worden verbonden:
+ * samen zijn ze NOT (LB. OR servicedeskcategorie). De `is.null`-tak hoort er in beide gevallen
+ * bij — `NOT IN` levert op een lege kolom NULL op, en dan zou elk dossier zónder categorie of
+ * zonder Bouw7-status juist uit de lijst vallen.
+ */
+const NIET_SERVICEDESK: [string, string] = [
+  'bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.not.ilike.LB.%',
+  'bouw7_categorie_naam.is.null,bouw7_categorie_naam.not.in.(Dagelijks onderhoud,Mutatie)',
+]
+
+/**
  * Haal dossiers op voor het Opdrachten-bord: Bouw7-projectstatus 02 t/m 06, plus opdrachten
- * zonder Bouw7-koppeling. Dossiers die langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen
- * geleden financieel gereed zijn gemeld vallen eraf — die staan op Afgesloten.
+ * zonder Bouw7-koppeling. Servicedesk-dossiers vallen eraf (zie {@link NIET_SERVICEDESK}), net
+ * als alles wat langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel
+ * gereed is gemeld — die staan op Afgesloten.
  */
 export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
   const prefixen = ['02.', '03.', '04.', '05.', '06.']
@@ -398,6 +416,8 @@ export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
 
   return haalDossierLijst(q => q
     .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht)`)
+    .or(NIET_SERVICEDESK[0])
+    .or(NIET_SERVICEDESK[1])
     .or(nogNietVerlopenFinancieelGereed('opdracht_substatus'))
     .order('created_at', { ascending: false }))
 }
