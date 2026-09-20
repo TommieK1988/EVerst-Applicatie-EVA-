@@ -87,3 +87,27 @@ export function bouw7SubstatusNaarEva(
 export function evaSubstatusNaarBouw7(sectie: SubstatusSectie, substatus: string): string | null {
   return LADDER.find((l) => l[sectie] === substatus)?.label ?? null
 }
+
+/**
+ * In welke fase hoort deze substatus thuis? De ladder is hier de bron: elke sleutel bestaat maar
+ * in één fase, op "13. Vervallen" na — die kent beide, en dan blijft het dossier staan waar het staat.
+ *
+ * Nodig omdat een dossier niet altijd in de fase staat van de tab waarop het zichtbaar is: een
+ * zojuist verzonden offerte blijft zeven dagen op Aanvragen staan, en een Bouw7-project met
+ * projectstatus 08/09 staat op Offertes ook als EVA het nog als aanvraag kent. De substatus uit de
+ * dropdown moet dan in de kolom van *zijn eigen* fase landen — `aanvraag_substatus` en
+ * `offerte_substatus` zijn aparte enums, dus de verkeerde kolom geeft een harde databasefout
+ * ("invalid input value for enum") in plaats van een statuswijziging.
+ *
+ * `null` bij een onbekende sleutel (opdracht- of servicedesk-substatus); de aanroeper houdt dan
+ * de fase aan waarin het dossier al staat.
+ */
+export function substatusSectie(
+  substatus: string,
+  huidigeFase: SubstatusSectie,
+): SubstatusSectie | null {
+  const hit = LADDER.find((l) => l.aanvraag === substatus || l.offerte === substatus)
+  if (!hit) return null
+  if (hit.aanvraag === substatus && hit.offerte === substatus) return huidigeFase
+  return hit.aanvraag === substatus ? 'aanvraag' : 'offerte'
+}

@@ -23,6 +23,7 @@ import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
+import { substatusSectie, type SubstatusSectie } from '@/lib/bouw7/substatus-map'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
 import {
   markeerHandmatig, markeerHandmatigEnBewaar, ontmarkeerHandmatig, beschermdeVelden,
@@ -1126,14 +1127,16 @@ export async function updateDossierSubstatus(
   // hoofdstatus 'aanvraag' maar een eigen ladder: die horen hier niet.
   let bouw7: Bouw7WriteResult | undefined
   const isSubstatusFase = huidig.hoofdstatus === 'aanvraag' || huidig.hoofdstatus === 'offerte'
-  if (
-    opts?.schrijfBouw7 && isSubstatusFase
-    && huidig.servicedesk_substatus == null && huidig.bouw7_id != null
-  ) {
-    const sectie = huidig.hoofdstatus as 'aanvraag' | 'offerte'
-    // Aanvraag + 'verzonden' promoveert hieronder naar offerte/verzonden; in Bouw7 is dat
-    // hetzelfde label ("07. Verzonden"), dus schrijven we het als offerte-substatus weg.
-    const doelSectie = sectie === 'aanvraag' && nieuweSubstatus === 'verzonden' ? 'offerte' : sectie
+  const sectie = isSubstatusFase && huidig.servicedesk_substatus == null
+    ? (huidig.hoofdstatus as SubstatusSectie)
+    : null
+  // Fase waar de nieuwe substatus thuishoort — niet per se de fase waarin het dossier nu staat.
+  // Een zojuist verzonden offerte blijft zeven dagen op de Aanvragen-tab staan, en een Bouw7-project
+  // met projectstatus 08/09 staat op Offertes ook als EVA het nog als aanvraag kent. Kiest iemand
+  // daar een substatus uit de andere fase, dan verhuist het dossier mee; zonder die verhuizing
+  // belandde de waarde in de enum-kolom van de verkeerde fase en gaf de database een harde fout.
+  const doelSectie = sectie ? (substatusSectie(nieuweSubstatus, sectie) ?? sectie) : null
+  if (opts?.schrijfBouw7 && sectie != null && doelSectie != null && huidig.bouw7_id != null) {
     const res = await schrijfBouw7Substatus(
       huidig.bouw7_id,
       doelSectie,
@@ -1149,14 +1152,24 @@ export async function updateDossierSubstatus(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let update: any
-  if (huidig.hoofdstatus === 'aanvraag' && nieuweSubstatus === 'verzonden') {
-    // Promoveer direct naar offerte zodra aanvraag verzonden is;
-    // dossier blijft 7 dagen zichtbaar op Aanvragen-tab via verzonden_op
+  if (doelSectie === 'offerte') {
+    // De check-constraint op `dossiers` eist dat precies de substatuskolom van de hoofdstatus
+    // gevuld is: bij een faseverhuizing gaan hoofdstatus en beide kolommen in één update mee.
     update = {
       hoofdstatus:        'offerte' as Hoofdstatus,
       aanvraag_substatus: null,
-      offerte_substatus:  'verzonden' as OfferteSubstatus,
-      verzonden_op:       new Date().toISOString(),
+      offerte_substatus:  nieuweSubstatus as OfferteSubstatus,
+      // Promoveert de aanvraag naar een verzonden offerte, dan blijft het dossier nog
+      // 7 dagen zichtbaar op de Aanvragen-tab via `verzonden_op`.
+      ...(sectie === 'aanvraag' && nieuweSubstatus === 'verzonden'
+        ? { verzonden_op: new Date().toISOString() }
+        : {}),
+    }
+  } else if (doelSectie === 'aanvraag') {
+    update = {
+      hoofdstatus:        'aanvraag' as Hoofdstatus,
+      aanvraag_substatus: nieuweSubstatus as AanvraagSubstatus,
+      offerte_substatus:  null,
     }
   } else if (huidig.hoofdstatus === 'aanvraag') {
     update = { aanvraag_substatus: nieuweSubstatus as AanvraagSubstatus }
@@ -1189,7 +1202,7 @@ export async function updateDossierSubstatus(
   // Offerte gewonnen → opdracht: neem de everts-calc werkbegroting automatisch over als
   // planningsbudget. Stil vangnet — de sync-knop op de Planning-tab blijft beschikbaar.
   let aanneemsom: (Bouw7WriteResult & { bedrag?: number }) | undefined
-  if (huidig.hoofdstatus === 'offerte' && nieuweSubstatus === 'gewonnen') {
+  if (doelSectie === 'offerte' && nieuweSubstatus === 'gewonnen') {
     const { neemWerkbegrotingOverStil } = await import('@/lib/planning/werkbegroting')
     await neemWerkbegrotingOverStil(id)
     // De aanneemsom van de gewonnen EVA-offerte naar het Bouw7-project, zodat de Bouw7-
