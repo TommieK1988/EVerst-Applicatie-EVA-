@@ -20,7 +20,10 @@ import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 import type { GekeurdeVelden } from './extractie'
 import { maakIntakeActie } from './taken'
-import { bouwOmschrijvingHtml } from './omschrijving'
+import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
+
+// Blijft vanaf hier herexporteerd: bestaande aanroepers halen hem van deze plek.
+export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
 import type { ProefResultaat } from './proef'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -65,15 +68,6 @@ export type AanmaakResultaat =
       bestandenGeplaatst?: boolean
     }
   | { ok: false; error: string }
-
-/** Projectnaam zoals de aanvraagmodal hem samenstelt: "{Straat huisnr}, {Stad} - {Omschrijving}". */
-export function bouwTitel(v: GekeurdeVelden): string {
-  const adres = [v.werkadresStraat, v.werkadresHuisnummer].filter(Boolean).join(' ').trim()
-  const kop = [adres, v.werkadresStad].filter(Boolean).join(', ')
-  const omschrijving = (v.omschrijving ?? '').trim()
-  if (kop && omschrijving) return `${kop} - ${omschrijving}`
-  return omschrijving || kop || 'Aanvraag uit e-mail'
-}
 
 /**
  * Zet de bijlagen van een bericht in de SharePoint-dossiermap.

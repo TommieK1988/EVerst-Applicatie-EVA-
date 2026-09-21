@@ -2,9 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
 import { controleerBouw7Gereed } from './bouw7-gereed'
-import { bouwOmschrijvingHtml } from './omschrijving'
+import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 import { splitsBijlagen } from './bijlagen-filter'
-import { bouwTitel } from './aanmaken'
 import type { GekeurdeVelden } from './extractie'
 
 /**

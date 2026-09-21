@@ -62,3 +62,24 @@ export function bouwOmschrijvingHtml(delen: OmschrijvingDelen): string {
     blok('Aandachtspunten', puntenUit(delen.aandachtspunten)),
   ].filter(Boolean).join('\n\n')
 }
+
+/**
+ * De projectnaam zoals de aanvraagmodal hem samenstelt:
+ * "{Straat huisnr}, {Stad} - {Omschrijving}".
+ *
+ * Staat hier en niet in `aanmaken.ts` omdat het een pure functie is die ook door
+ * de proef gebruikt wordt. Vanuit `aanmaken.ts` sleepte de proef anders de hele
+ * meldingen- en SharePoint-keten mee, terwijl hij niets anders doet dan lezen.
+ */
+export function bouwTitel(v: {
+  werkadresStraat?: string | null
+  werkadresHuisnummer?: string | null
+  werkadresStad?: string | null
+  omschrijving?: string | null
+}): string {
+  const adres = [v.werkadresStraat, v.werkadresHuisnummer].filter(Boolean).join(' ').trim()
+  const kop = [adres, v.werkadresStad].filter(Boolean).join(', ')
+  const omschrijving = (v.omschrijving ?? '').trim()
+  if (kop && omschrijving) return `${kop} - ${omschrijving}`
+  return omschrijving || kop || 'Aanvraag uit e-mail'
+}
