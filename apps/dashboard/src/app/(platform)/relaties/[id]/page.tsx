@@ -13,6 +13,7 @@ import type {
   RelatieInkoopPrijsafspraak,
   OmzetData,
 } from '@everts/database'
+import { getContactenBijFactuuradressen } from '@/lib/relaties/factuuradres-contactpersonen'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { getOmzetVoorRelatie } from '@/lib/relaties/actions'
 import { getRelatieNotities } from '@/lib/relaties/notities-actions'
@@ -69,6 +70,11 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
 
   if (!relatieRes.data) notFound()
 
+  // Wie hoort er bij welk factuuradres (VvE-bestuur, assetmanager)? Pas na de adressen, want de
+  // query is erop begrensd — en zonder adressen is er niets te halen.
+  const adressen = (factuuradressen.data ?? []) as RelatieFactuuradres[]
+  const factuuradresContacten = await getContactenBijFactuuradressen(adressen.map(a => a.id))
+
   // Het Acquisitie-blok laat de invoer weg zonder schrijfrecht; alleen-lezen is nuttiger dan
   // een formulier dat bij opslaan een foutmelding geeft.
   const rechten = medewerker ? await getEffectieveRechten(medewerker) : {}
@@ -87,7 +93,8 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
   return (
     <RelatieDetailView
       relatie={relatieRes.data as Relatie}
-      factuuradressen={(factuuradressen.data ?? []) as RelatieFactuuradres[]}
+      factuuradressen={adressen}
+      factuuradresContacten={factuuradresContacten}
       bankgegevens={bankgegevens.data as RelatieBankgegevens | null}
       facturatie={facturatie.data as RelatieFacturatie | null}
       inkoop={inkoop.data as RelatieInkoop | null}

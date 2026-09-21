@@ -20,6 +20,7 @@ import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 import DossierLijstBlok from '@/components/relaties/DossierLijstBlok'
 import SamenvoegenModal from '@/components/relaties/SamenvoegenModal'
 import EmailadressenBlok from '@/components/relaties/EmailadressenBlok'
+import AdreskoppelingenBlok from '@/components/relaties/AdreskoppelingenBlok'
 
 const baseInput: React.CSSProperties = {
   width: '100%', padding: '7px 10px',
@@ -397,6 +398,12 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
           {/* Alle e-mailadressen — het veld "E-mail werk" hierboven is hiervan het primaire. */}
           <Blok titel="E-mailadressen">
             <EmailadressenBlok contactpersoonId={cp.id} />
+          </Blok>
+
+          {/* Waar staat deze persoon voor? Bij een VvE of een vastgoedportefeuille hangt het
+              factuuradres aan een bestuurder of assetmanager, niet aan het bedrijf. */}
+          <Blok titel="Factuuradressen">
+            <AdreskoppelingenBlok contactpersoonId={cp.id} />
           </Blok>
 
           {/* Privégegevens */}

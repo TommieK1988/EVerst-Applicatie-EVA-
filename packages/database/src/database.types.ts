@@ -1878,6 +1878,54 @@ export type Database = {
           },
         ]
       }
+      contactpersoon_factuuradressen: {
+        Row: {
+          contactpersoon_id: string
+          created_at: string
+          created_by: string | null
+          factuuradres_id: string
+          id: string
+          is_primair: boolean
+          opmerkingen: string | null
+          rol: string | null
+        }
+        Insert: {
+          contactpersoon_id: string
+          created_at?: string
+          created_by?: string | null
+          factuuradres_id: string
+          id?: string
+          is_primair?: boolean
+          opmerkingen?: string | null
+          rol?: string | null
+        }
+        Update: {
+          contactpersoon_id?: string
+          created_at?: string
+          created_by?: string | null
+          factuuradres_id?: string
+          id?: string
+          is_primair?: boolean
+          opmerkingen?: string | null
+          rol?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_factuuradressen_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contactpersoon_factuuradressen_factuuradres_id_fkey"
+            columns: ["factuuradres_id"]
+            isOneToOne: false
+            referencedRelation: "relatie_factuuradressen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contactpersoon_organisaties: {
         Row: {
           contactpersoon_id: string

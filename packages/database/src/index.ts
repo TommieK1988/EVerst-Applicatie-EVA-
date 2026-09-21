@@ -23,6 +23,7 @@ export type {
   ContactpersoonBouw7Koppeling,
   ContactpersoonEmail,
   ContactpersoonOrganisatie,
+  ContactpersoonFactuuradres,
   ContactpersoonMetLink,
   ContactpersoonSamenvoeging,
   Particulier,

@@ -40,9 +40,12 @@ import {
   deleteInkoopPrijsafspraak,
 } from '@/lib/relaties/actions'
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
+import { ontkoppelContactpersoonVanFactuuradres } from '@/lib/relaties/factuuradres-contactpersonen'
+import { volledigeNaam, type FactuuradresContact } from '@/lib/relaties/factuuradres-contactpersonen-types'
 import type { RelatieObject } from '@/lib/objecten/types'
 import OpnamePrijslijstBeheer from '@/components/relaties/OpnamePrijslijstBeheer'
 import KoppelContactpersoonModal from '@/components/relaties/KoppelContactpersoonModal'
+import KoppelContactpersoonAanAdresModal from '@/components/relaties/KoppelContactpersoonAanAdresModal'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
 
@@ -537,12 +540,39 @@ function FactuuradresForm({ initial, onOpslaan, onAnnuleer, bezig }: {
   )
 }
 
-function FactuuradrressenBlok({ relatieId, initial }: { relatieId: string; initial: RelatieFactuuradres[] }) {
+function FactuuradrressenBlok({ relatieId, initial, contacten, suggesties }: {
+  relatieId: string
+  initial: RelatieFactuuradres[]
+  /** Wie hoort er bij welk adres — de VvE-voorzitter, de assetmanager van een portefeuille. */
+  contacten: FactuuradresContact[]
+  /** De contactpersonen van deze relatie, als directe keuze in het koppelvenster. */
+  suggesties: { id: string; naam: string; email: string | null; toelichting: string | null }[]
+}) {
   const [adressen, setAdressen] = useState<RelatieFactuuradres[]>(initial)
+  const [links, setLinks] = useState<FactuuradresContact[]>(contacten)
+  const [koppelVoor, setKoppelVoor] = useState<RelatieFactuuradres | null>(null)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | 'nieuw' | null>(null)
   const { bevestig } = useDialogen()
+  const router = useRouter()
+
+  const linksVan = (adresId: string) => links.filter(l => l.factuuradres_id === adresId)
+
+  async function ontkoppelPersoon(link: FactuuradresContact) {
+    const naam = volledigeNaam(link.contactpersoon)
+    if (!await bevestig({
+      titel: `${naam} loskoppelen van dit factuuradres?`,
+      omschrijving: 'De contactpersoon zelf blijft bestaan.',
+      bevestigLabel: 'Loskoppelen',
+    })) return
+    setBezig(true)
+    const res = await ontkoppelContactpersoonVanFactuuradres(link.id, relatieId)
+    setBezig(false)
+    if (!res.ok) { setFout(res.error); return }
+    setLinks(prev => prev.filter(l => l.id !== link.id))
+    router.refresh()
+  }
 
   const formVan = (fa?: RelatieFactuuradres): AdresForm => fa
     ? { label: fa.label, straat: fa.straat ?? '', postcode: fa.postcode ?? '', plaats: fa.plaats ?? '', land: fa.land ?? 'Nederland', opmerkingen: fa.opmerkingen ?? '' }
@@ -584,19 +614,57 @@ function FactuuradrressenBlok({ relatieId, initial }: { relatieId: string; initi
             {editId === fa.id ? (
               <FactuuradresForm initial={formVan(fa)} onOpslaan={v => opslaan(fa.id, v)} onAnnuleer={() => setEditId(null)} bezig={bezig} />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', marginBottom: 3 }}>{fa.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.6 }}>
-                    {[fa.straat, [fa.postcode, fa.plaats].filter(Boolean).join('  ')].filter(Boolean).join(', ') || '—'}
+              <div style={{ padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', marginBottom: 3 }}>{fa.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.6 }}>
+                      {[fa.straat, [fa.postcode, fa.plaats].filter(Boolean).join('  ')].filter(Boolean).join(', ') || '—'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <Button onClick={() => setEditId(fa.id)} title="Bewerken" variant="ghost" size="icon-sm">
+                      <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2.5a2.121 2.121 0 0 1 3 3L6 17l-4 1 1-4L14.5 2.5z"/></svg>
+                    </Button>
+                    <Button onClick={() => verwijder(fa.id)} title="Verwijderen" variant="destructive" size="icon-sm">
+                      <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h14M8 6V4h4v2M19 6l-1 12H2L1 6"/></svg>
+                    </Button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <Button onClick={() => setEditId(fa.id)} title="Bewerken" variant="ghost" size="icon-sm">
-                    <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2.5a2.121 2.121 0 0 1 3 3L6 17l-4 1 1-4L14.5 2.5z"/></svg>
-                  </Button>
-                  <Button onClick={() => verwijder(fa.id)} title="Verwijderen" variant="destructive" size="icon-sm">
-                    <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h14M8 6V4h4v2M19 6l-1 12H2L1 6"/></svg>
+
+                {/* Wie hoort er bij dít adres: de voorzitter van de VvE, de assetmanager van de
+                    portefeuille. Dat is iets anders dan de contactpersonen van de relatie zelf. */}
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {linksVan(fa.id).map(link => (
+                    <div key={link.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Link
+                            href={`/relaties/contactpersonen/${link.contactpersoon.id}`}
+                            style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg)', textDecoration: 'none' }}
+                          >
+                            {volledigeNaam(link.contactpersoon)}
+                          </Link>
+                          {link.is_primair && <Badge tone="brand" size="sm">Eerste aanspreekpunt</Badge>}
+                        </div>
+                        <span style={{ fontSize: 11.5, color: 'var(--fg-muted)' }}>
+                          {[link.rol, link.contactpersoon.email].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
+                      <Button
+                        onClick={() => !bezig && ontkoppelPersoon(link)}
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Loskoppelen"
+                        disabled={bezig}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </Button>
+                    </div>
+                  ))}
+                  <Button onClick={() => setKoppelVoor(fa)} variant="ghost" size="sm" style={{ alignSelf: 'flex-start' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Contactpersoon
                   </Button>
                 </div>
               </div>
@@ -607,6 +675,17 @@ function FactuuradrressenBlok({ relatieId, initial }: { relatieId: string; initi
           <FactuuradresForm initial={leegAdresForm()} onOpslaan={v => opslaan(undefined, v)} onAnnuleer={() => setEditId(null)} bezig={bezig} />
         )}
       </div>
+      {koppelVoor && (
+        <KoppelContactpersoonAanAdresModal
+          factuuradresId={koppelVoor.id}
+          adresLabel={koppelVoor.label}
+          relatieId={relatieId}
+          alGekoppeld={linksVan(koppelVoor.id).map(l => l.contactpersoon_id)}
+          suggesties={suggesties}
+          onSluit={() => setKoppelVoor(null)}
+          onKlaar={() => router.refresh()}
+        />
+      )}
     </Blok>
   )
 }
@@ -1247,6 +1326,8 @@ function TypeSectie({ type, children }: { type: OrganisatieType; children: React
 type Props = {
   relatie: Relatie
   factuuradressen: RelatieFactuuradres[]
+  /** Contactpersonen per factuuradres — VvE-bestuur, assetmanager van een portefeuille. */
+  factuuradresContacten: FactuuradresContact[]
   bankgegevens: RelatieBankgegevens | null
   facturatie: RelatieFacturatie | null
   inkoop: RelatieInkoop | null
@@ -1268,6 +1349,7 @@ type Props = {
 export default function RelatieDetailView({
   relatie,
   factuuradressen,
+  factuuradresContacten,
   bankgegevens,
   facturatie,
   inkoop,
@@ -1331,7 +1413,17 @@ export default function RelatieDetailView({
             <TypeSectie type="opdrachtgever">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <FactuuradrressenBlok relatieId={relatie.id} initial={factuuradressen} />
+                  <FactuuradrressenBlok
+                    relatieId={relatie.id}
+                    initial={factuuradressen}
+                    contacten={factuuradresContacten}
+                    suggesties={contactpersonen.map(k => ({
+                      id: k.contactpersoon_id,
+                      naam: volledigeNaam(k.contactpersoon),
+                      email: k.email ?? k.contactpersoon?.email ?? null,
+                      toelichting: k.functie ?? null,
+                    }))}
+                  />
                 </div>
                 <FacturatieBlok relatieId={relatie.id} initial={facturatie} />
                 {acquisitie}

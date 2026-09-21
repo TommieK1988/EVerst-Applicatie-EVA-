@@ -242,6 +242,26 @@ export type ContactpersoonEmail = {
   created_by: string | null
 }
 
+/**
+ * Een contactpersoon die bij een factuuradres hoort.
+ *
+ * Los van `ContactpersoonOrganisatie`: dat zegt waar iemand wérkt, dit zegt wie je voor een
+ * bepaald adres moet hebben — de voorzitter van een VvE, de assetmanager van een portefeuille.
+ * Er kunnen er meerdere per adres zijn, en dezelfde persoon kan bij meerdere adressen horen.
+ */
+export type ContactpersoonFactuuradres = {
+  id: string
+  contactpersoon_id: string
+  factuuradres_id: string
+  /** Rol bij dít adres: Voorzitter, Penningmeester, Assetmanager… */
+  rol: string | null
+  /** Het eerste aanspreekpunt voor dit adres; hooguit één per adres. */
+  is_primair: boolean
+  opmerkingen: string | null
+  created_at: string
+  created_by: string | null
+}
+
 export type ContactpersoonSamenvoeging = {
   id: string
   blijver_id: string
