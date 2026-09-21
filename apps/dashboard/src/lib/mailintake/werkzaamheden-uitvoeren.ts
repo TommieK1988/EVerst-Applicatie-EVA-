@@ -17,6 +17,8 @@
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
+
+import { beoordeelBijlage } from './bijlagen-filter'
 import type { Json } from '@everts/database'
 
 import { appGraphFetch } from '@/lib/o365/graph'
@@ -33,9 +35,8 @@ async function bijlagenVanBericht(berichtId: string): Promise<{ bestanden: BronB
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_bijlagen')
-    .select('bestandsnaam, content_type, opslag_pad, grootte_bytes, te_groot')
+    .select('bestandsnaam, content_type, opslag_pad, grootte_bytes, te_groot, is_inline')
     .eq('bericht_id', berichtId)
-    .eq('is_inline', false)
     .limit(50)
 
   const bestanden: BronBestand[] = []
@@ -43,6 +44,11 @@ async function bijlagenVanBericht(berichtId: string): Promise<{ bestanden: BronB
   let totaal = 0
 
   for (const b of data ?? []) {
+    // Zelfde zeef als de veldronde: geplakte foto's lezen mee, mailopmaak niet.
+    if (!beoordeelBijlage({
+      bestandsnaam: b.bestandsnaam, contentType: b.content_type,
+      grootteBytes: b.grootte_bytes, isInline: Boolean(b.is_inline),
+    }).meelezen) continue
     if (b.te_groot || !b.opslag_pad) { gemist.push(`${b.bestandsnaam} (niet opgeslagen)`); continue }
     if (totaal + (b.grootte_bytes ?? 0) > MAX_TOTAAL_BYTES) { gemist.push(`${b.bestandsnaam} (past niet meer)`); continue }
     try {

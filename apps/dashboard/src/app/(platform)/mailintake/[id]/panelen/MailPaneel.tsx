@@ -29,6 +29,8 @@ export interface MailBijlage {
   grootte_bytes: number | null
   opslag_pad: string | null
   te_groot: boolean
+  /** Stond in de mailtekst zelf; leest wel mee, maar gaat niet naar de dossiermap. */
+  is_inline?: boolean | null
 }
 
 /** Is dit een plaatje waar een voorbeeld van te tonen valt? */
@@ -229,6 +231,11 @@ export default function MailPaneel({
                   {bij.bestandsnaam}
                 </button>
                 <span style={klein}>{bytes(bij.grootte_bytes)}</span>
+                {bij.is_inline && (
+                  <Badge tone="neutral" title="Geplakt in de mailtekst. EVA leest hem mee, maar hij gaat niet mee naar de dossiermap.">
+                    uit de mail
+                  </Badge>
+                )}
                 {bij.te_groot && <Badge tone="warning">niet gelezen</Badge>}
               </div>
             ))}

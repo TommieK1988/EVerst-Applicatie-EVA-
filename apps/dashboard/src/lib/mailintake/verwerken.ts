@@ -28,6 +28,7 @@ import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { behandelaarVoorMail, voorleggen, meldVoorgelegd } from './melden'
+import { beoordeelBijlage } from './bijlagen-filter'
 import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
@@ -111,9 +112,8 @@ async function bijlagenVoorAI(berichtIds: string[]): Promise<{ voorAI: BijlageVo
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('mailintake_bijlagen')
-    .select('id, bestandsnaam, content_type, opslag_pad, te_groot, sha256')
+    .select('id, bestandsnaam, content_type, grootte_bytes, is_inline, opslag_pad, te_groot, sha256')
     .in('bericht_id', berichtIds)
-    .eq('is_inline', false)
     .limit(100)
 
   const voorAI: BijlageVoorAI[] = []
@@ -122,6 +122,14 @@ async function bijlagenVoorAI(berichtIds: string[]): Promise<{ voorAI: BijlageVo
   let ongelezen = false
 
   for (const b of data ?? []) {
+    // Ingesloten beeld filteren we hier, niet in de query: een geplakte gevelfoto
+    // moet mee, het logo uit de handtekening niet. Dat onderscheid zit in de
+    // grootte en de naam, en die kent alleen `beoordeelBijlage`.
+    if (!beoordeelBijlage({
+      bestandsnaam: b.bestandsnaam, contentType: b.content_type,
+      grootteBytes: b.grootte_bytes, isInline: Boolean(b.is_inline),
+    }).meelezen) continue
+
     if (b.sha256) {
       if (gezien.has(b.sha256)) continue
       gezien.add(b.sha256)

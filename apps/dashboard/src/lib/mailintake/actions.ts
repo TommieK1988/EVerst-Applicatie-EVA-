@@ -490,6 +490,12 @@ export async function leesOpnieuw(berichtId: string): Promise<{ ok: boolean; err
     .update({ status: 'nieuw', pogingen: 0, laatste_fout: null, updated_at: new Date().toISOString() })
     .eq('id', berichtId)
 
+  // Eerst de bijlagen bijwerken, dan pas herlezen. Een bericht van vóór de
+  // wijziging mist zijn ingesloten foto's; zonder deze stap leest het model
+  // opnieuw precies dezelfde stukken en verandert er niets.
+  const { haalBijlagenOpnieuwOp } = await import('./ophalen')
+  await haalBijlagenOpnieuwOp(berichtId)
+
   const res = await verwerkBericht(berichtId)
   revalidatePath('/mailintake')
   return res.fout ? { ok: false, error: res.fout } : { ok: true }

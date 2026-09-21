@@ -56,8 +56,24 @@ weg('winmail.dat', 'application/octet-stream')
 weg('foto.jpg', 'image/jpeg', 4_000)          // te klein voor een echte foto
 weg('banner.png', 'image/png', 900_000)        // naam wint van grootte
 
-console.log('\n-- Inline beeld hoort bij de tekst ----------------------------')
-toets('inline afbeelding', !beoordeelBijlage(b('sfeer.jpg', 'image/jpeg', 900_000, true)).mee)
+console.log('\n-- Geplakt beeld leest mee maar gaat niet in de map -----------')
+// Hier zit de kern van de correctie: een foto die iemand in zijn mail plakt is
+// vaak het enige beeld van het werk. Die moet het model bereiken. In de
+// dossiermap hoort hij niet -- daar staat 'image003.jpg' zonder de tekst eromheen.
+const geplakt = beoordeelBijlage(b('image003.jpg', 'image/jpeg', 900_000, true))
+toets('geplakte gevelfoto leest mee', geplakt.meelezen)
+toets('geplakte gevelfoto gaat niet naar de dossiermap', !geplakt.mee)
+
+const logoInline = beoordeelBijlage(b('image001.png', 'image/png', 6_000, true))
+toets('handtekening-logo leest niet mee', !logoInline.meelezen)
+
+const naamloos = beoordeelBijlage(b('image002.jpg', 'image/jpeg', 700_000))
+toets('naamloos bijgevoegd beeld leest mee', naamloos.meelezen)
+toets('naamloos bijgevoegd beeld gaat niet in de map', !naamloos.mee)
+
+toets('winmail.dat leest ook niet mee',
+  !beoordeelBijlage(b('winmail.dat', 'application/octet-stream', 40_000)).meelezen)
+toets('bestek leest mee', beoordeelBijlage(b('Bestek.pdf', 'application/pdf')).meelezen)
 
 console.log('\n-- Bij twijfel gaat het mee -----------------------------------')
 // Een PDF met "logo" in de naam is zeldzaam, maar wegfilteren zou betekenen dat je
@@ -79,6 +95,7 @@ const uit = splitsBijlagen([
 ])
 toets('twee gaan mee', uit.mee.length === 2, String(uit.mee.length))
 toets('één wordt uitgesloten', uit.uitgesloten.length === 1)
+toets('meelezen bevat dezelfde twee', uit.meelezen.length === 2, String(uit.meelezen.length))
 toets('met een leesbare reden',
   (uit.uitgesloten[0]?.reden ?? '').length > 5, uit.uitgesloten[0]?.reden ?? '')
 

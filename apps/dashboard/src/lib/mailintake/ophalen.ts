@@ -14,6 +14,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { createAdminClient } from '@everts/database/server'
 
+import { beoordeelBijlage } from './bijlagen-filter'
 import { cronLogboek } from '@/lib/cron/logboek'
 import {
   haalNieuweBerichten, haalBijlageMeta, haalBijlageBytes, MAX_BIJLAGE_BYTES,
@@ -124,8 +125,16 @@ async function bewaarBijlagen(
   let aantal = 0
 
   for (const b of meta) {
-    // Handtekening-logo's zijn ruis; die kosten opslag en zeggen niets.
-    if (b.isInline) continue
+    // Ingesloten beeld is twee dingen tegelijk. Handtekening-logo's en
+    // tracking-pixels zijn ruis, maar een foto die iemand in de mailtekst plakt is
+    // vaak het enige beeld van het werk dat er is -- en die verdween hier
+    // voorheen zonder spoor, waardoor het model hem nooit zag. Het oordeel valt
+    // op naam en grootte; wat mee mag lezen komt binnen, de rest niet.
+    const oordeel = beoordeelBijlage({
+      bestandsnaam: b.naam, contentType: b.contentType,
+      grootteBytes: b.grootte, isInline: b.isInline,
+    })
+    if (b.isInline && !oordeel.meelezen) continue
 
     const teGroot = b.grootte > MAX_BIJLAGE_BYTES || b.isItem
     let opslagPad: string | null = null
@@ -156,7 +165,7 @@ async function bewaarBijlagen(
       bestandsnaam: b.naam,
       content_type: b.contentType,
       grootte_bytes: b.grootte,
-      is_inline: false,
+      is_inline: b.isInline,
       sha256: sha,
       opslag_pad: opslagPad,
       te_groot: teGroot,
@@ -165,6 +174,35 @@ async function bewaarBijlagen(
   }
 
   return aantal
+}
+
+/**
+ * Haalt de bijlagen van een al opgehaald bericht nog eens op.
+ *
+ * Nodig omdat de zeef kan veranderen zonder dat de mail verandert: ingesloten
+ * foto's werden eerder weggegooid bij het ophalen, dus voor berichten van vóór die
+ * wijziging bestaan ze nergens meer. De upsert negeert duplicaten op
+ * `(bericht_id, graph_attachment_id)`, dus dit voegt alleen toe wat er miste.
+ *
+ * Faalt zacht: een bericht dat in Outlook is verplaatst of verwijderd mag geen
+ * herlezing tegenhouden.
+ */
+export async function haalBijlagenOpnieuwOp(berichtId: string): Promise<number> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('mailintake_berichten')
+    .select('graph_message_id, postbus:mailintake_postbussen(adres, sleutel)')
+    .eq('id', berichtId)
+    .maybeSingle()
+
+  const postbus = (data as { postbus?: { adres?: string; sleutel?: string } | null } | null)?.postbus
+  if (!data?.graph_message_id || !postbus?.adres || !postbus.sleutel) return 0
+
+  try {
+    return await bewaarBijlagen(postbus.adres, berichtId, data.graph_message_id, postbus.sleutel)
+  } catch {
+    return 0
+  }
 }
 
 /** Haalt één postbus leeg (tot MAX_PER_POSTBUS). */

@@ -207,7 +207,10 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
   const [bijlagen, extractie, duplicaten, log] = await Promise.all([
     supabase.from('mailintake_bijlagen').select('*')
       .in('bericht_id', groepsIds.length ? groepsIds : [id])
-      .eq('is_inline', false).order('bestandsnaam').limit(100),
+      // Ook het ingesloten beeld: een foto die iemand in de mailtekst plakt is
+      // vaak het enige beeld van het werk. Wat er niet toe doet is bij het
+      // ophalen al niet bewaard.
+      .order('bestandsnaam').limit(100),
     // De meest recente gekeurde lezing binnen de hele klus, niet per se die van dit
     // bericht. Zodra een tweede mail erbij komt wordt er één keer over het geheel
     // gelezen, en die lezing hangt aan het bericht dat als laatste is verwerkt. De
