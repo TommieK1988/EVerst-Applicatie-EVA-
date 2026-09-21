@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-21','verbeterd','Offertes','Offerteteksten in één veld, met opmaak',
+   'De aparte vakjes voor voorwaarden, uitsluitingen en opmerkingen zijn vervangen door één tekstveld waarin je kunt opmaken: vet, cursief, onderstreept en opsommingen. Die opmaak komt ook echt zo in de offerte-PDF terecht. Bestaande offertes raken niets kwijt: hun drie teksten worden met een kopje samengevoegd tot hetzelfde ene blok. Verder staat "Offerte-instellingen & bijlages" nu als eigen knop in de balk in plaats van weggestopt onder Opties, en kun je een bijlage rechtstreeks uit de dossiermap kiezen in plaats van hem eerst te downloaden en opnieuw te uploaden.');
