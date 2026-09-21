@@ -30,9 +30,13 @@ const fmtPctWaarde = (v: number | null): string => {
   return `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 0 }).format(v)} %`
 }
 
-const fmtPct = (resultaat: number, omzet: number): string => {
-  if (omzet === 0) return '—'
-  return `${((resultaat / omzet) * 100).toFixed(2)} %`
+/** AK + winst als opslagpercentage over de kosten van diezelfde kolom, met 2 decimalen. */
+const fmtOpslagPct = (bedrag: unknown, kosten: number): string => {
+  const b = toNum(bedrag)
+  if (kosten === 0 || b === 0) return '—'
+  return `${new Intl.NumberFormat('nl-NL', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format((b / kosten) * 100)} %`
 }
 
 /* ── gedeelde cel-componenten ────────────────────────────────────────── */
@@ -426,12 +430,6 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
   const opbrTotaal = { b: omzet.b + meerwerk, r: omzet.r }
   const teFactureren = Math.max(0, omzet.b - omzet.r)
 
-  const res = {
-    b: toNum(f.result?.budgeted),
-    p: toNum(f.result?.prognosis),
-    r: toNum(f.result?.realised),
-  }
-
   return (
     <>
       <div style={{
@@ -467,9 +465,9 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
               {(toNum(f.generalCostsProfit?.budgeted) > 0 || toNum(f.generalCostsProfit?.prognosis) > 0) && (
                 <tr>
                   <TDLabel sub>AK + winst</TDLabel>
-                  <TD>{fmt(f.generalCostsProfit?.budgeted)}</TD>
-                  <TD>{fmt(f.generalCostsProfit?.prognosis)}</TD>
-                  <TD>{fmt(f.generalCostsProfit?.realised)}</TD>
+                  <TD>{fmtOpslagPct(f.generalCostsProfit?.budgeted, kostenTotaal.b)}</TD>
+                  <TD>{fmtOpslagPct(f.generalCostsProfit?.prognosis, kostenTotaal.p)}</TD>
+                  <TD>{fmtOpslagPct(f.generalCostsProfit?.realised, kostenTotaal.r)}</TD>
                 </tr>
               )}
             </tbody>
@@ -508,38 +506,6 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
                 <TD vet>{fmt(opbrTotaal.b, true)}</TD>
                 <TD vet accent={opbrTotaal.r > 0}>{fmt(opbrTotaal.r, true)}</TD>
                 <TD vet>{fmt(teFactureren, true)}</TD>
-              </tr>
-            </tbody>
-          </table>
-        </CardBody>
-      </Card>
-
-      {/* Resultaat + marge */}
-      <Card style={{ marginBottom: 16 }}>
-        <CardHeader>Resultaat</CardHeader>
-        <CardBody style={{ padding: 0 }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <TH></TH>
-                <TH right>Begroot</TH>
-                <TH right>Prognose</TH>
-                <TH right>Gerealiseerd</TH>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <TDLabel>Resultaat</TDLabel>
-                <TD vet kleur={res.b >= 0 ? undefined : ROOD}>{fmt(res.b, true)}</TD>
-                <TD vet kleur={res.p >= 0 ? undefined : ROOD}>{fmt(res.p, true)}</TD>
-                <TD vet kleur={res.r >= 0 ? undefined : ROOD}>{fmt(res.r, true)}</TD>
-              </tr>
-              <tr style={{ background: 'var(--neutral-50)' }}>
-                <TDLabel>Brutowinstmarge</TDLabel>
-                {/* Begroot = omzet excl. meerwerk; prognose-omzet bevat meerwerk al (niet nogmaals optellen). */}
-                <TD vet>{fmtPct(res.b, omzet.b)}</TD>
-                <TD vet>{fmtPct(res.p, omzet.p)}</TD>
-                <TD vet accent>{fmtPct(res.r, omzet.r)}</TD>
               </tr>
             </tbody>
           </table>
