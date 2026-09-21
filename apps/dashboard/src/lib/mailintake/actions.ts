@@ -27,7 +27,8 @@ import { verwerkBericht } from './verwerken'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { voerNabehandelingUit, planNabehandeling } from './nabehandeling'
 import type { GekeurdeVelden } from './extractie'
-import type { PostbusPatch, IntakeFase } from './types'
+import type { PostbusPatch } from './types'
+import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 
 /** Kortlopende downloadlink voor één bijlage uit de privébucket. */
 export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; url?: string; error?: string }> {
@@ -58,7 +59,7 @@ export async function proefDossierVanBericht(
     relatieId: string | null
     contactpersoonId: string | null
     /** Waar het dossier heen moet; bepaalt de plaatsing in het voorstel. */
-    fase?: IntakeFase
+    fase?: DossierFase
   },
   omschrijving: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null },
 ) {
@@ -88,7 +89,7 @@ export async function maakDossierVanBericht(
     /** Een eerste actie op het nieuwe dossier. */
     actie?: { titel: string; medewerkerId: string | null; dagen: number } | null
     /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
-    fase?: IntakeFase
+    fase?: DossierFase
   },
   /** Het voorstel uit de proef; waartegen er na het aanmaken wordt teruggelezen. */
   proef?: Awaited<ReturnType<typeof proefAanmaak>>,

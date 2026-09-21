@@ -17,7 +17,7 @@
  * uitkomst naast wat de intake bedoelde.
  */
 
-import { INTAKE_PLAATSINGEN, type IntakeFase } from '../apps/dashboard/src/lib/mailintake/types'
+import { FASE_PLAATSINGEN, type DossierFase } from '../apps/dashboard/src/components/dossiers/fase-plaatsing'
 import { mapBouw7NaarEvaStatus } from '../apps/dashboard/src/lib/bouw7/status-afleiding'
 
 let fouten = 0
@@ -27,7 +27,7 @@ const toets = (naam: string, gelukt: boolean, detail = '') => {
 }
 
 /** Categorie waarmee de fase in de praktijk gekozen wordt. */
-const CATEGORIE: Record<IntakeFase, string> = {
+const CATEGORIE: Record<DossierFase, string> = {
   aanvraag:    'Renovatie',
   opdracht:    'Bouwkundig Onderhoud',
   servicedesk: 'Dagelijks onderhoud',
@@ -35,8 +35,8 @@ const CATEGORIE: Record<IntakeFase, string> = {
 
 console.log('\n── De sync laat het dossier staan waar de intake het neerzette ──')
 
-for (const fase of Object.keys(INTAKE_PLAATSINGEN) as IntakeFase[]) {
-  const p = INTAKE_PLAATSINGEN[fase]
+for (const fase of Object.keys(FASE_PLAATSINGEN) as DossierFase[]) {
+  const p = FASE_PLAATSINGEN[fase]
   const k = p.kolommen
 
   // Wat de eerstvolgende sync ervan zou maken, met de stand zoals de intake hem
@@ -69,22 +69,22 @@ const opEen = mapBouw7NaarEvaStatus('01. Offerte', 'Dagelijks onderhoud', 'nieuw
 toets('01. Offerte zou de bon op "offerte uitgebracht" zetten',
   opEen.servicedesk_substatus === 'offerte_uitgebracht', String(opEen.servicedesk_substatus))
 toets('02. Nieuwe opdracht zet hem op "nieuw"',
-  INTAKE_PLAATSINGEN.servicedesk.bouw7Status === '02. Nieuwe opdracht')
+  FASE_PLAATSINGEN.servicedesk.bouw7Status === '02. Nieuwe opdracht')
 
 console.log('\n── Precies één substatuskolom per fase ──')
 // De check-constraint op `dossiers` eist dat de kolom van de hoofdstatus gevuld is.
 // Servicedesk is de uitzondering: die draait een eigen ladder náást de aanvraagfase.
-for (const fase of Object.keys(INTAKE_PLAATSINGEN) as IntakeFase[]) {
-  const k = INTAKE_PLAATSINGEN[fase].kolommen
+for (const fase of Object.keys(FASE_PLAATSINGEN) as DossierFase[]) {
+  const k = FASE_PLAATSINGEN[fase].kolommen
   const bijHoofdstatus = k.hoofdstatus === 'aanvraag' ? k.aanvraag_substatus : k.opdracht_substatus
   const andere = k.hoofdstatus === 'aanvraag' ? k.opdracht_substatus : k.aanvraag_substatus
   toets(`${fase}: kolom van de hoofdstatus is gevuld`, bijHoofdstatus != null)
   toets(`${fase}: de andere fasekolom is leeg`, andere == null, String(andere))
 }
 toets('alleen servicedesk heeft een ladderwaarde',
-  INTAKE_PLAATSINGEN.servicedesk.kolommen.servicedesk_substatus != null
-  && INTAKE_PLAATSINGEN.aanvraag.kolommen.servicedesk_substatus == null
-  && INTAKE_PLAATSINGEN.opdracht.kolommen.servicedesk_substatus == null)
+  FASE_PLAATSINGEN.servicedesk.kolommen.servicedesk_substatus != null
+  && FASE_PLAATSINGEN.aanvraag.kolommen.servicedesk_substatus == null
+  && FASE_PLAATSINGEN.opdracht.kolommen.servicedesk_substatus == null)
 
 console.log(fouten === 0 ? '\nAlles goed\n' : `\n${fouten} fout(en)\n`)
 process.exit(fouten === 0 ? 0 : 1)

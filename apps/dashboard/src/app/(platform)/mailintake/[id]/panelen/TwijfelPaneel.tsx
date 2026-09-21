@@ -19,7 +19,7 @@
 import React from 'react'
 
 import { Button, Card } from '@/components/ui'
-import { INTAKE_PLAATSINGEN, type IntakeFase } from '@/lib/mailintake/types'
+import { FASE_PLAATSINGEN, type DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { VELD_BETROUWBAAR } from '@/lib/mailintake/types'
 
 import { klein, veldStijl } from './velden'
@@ -60,13 +60,13 @@ export interface AfhandelingProps {
    * Waar dit dossier terechtkomt. Null op de opdrachtroute: daar wint een
    * bestaande offerte en bepaalt dat dossier zelf waar het staat.
    */
-  fase: IntakeFase | null
-  setFase: (v: IntakeFase) => void
+  fase: DossierFase | null
+  setFase: (v: DossierFase) => void
   /**
    * Waarom een fase nu niet kan, per fase. Komt uit de proef -- servicedesk vraagt
    * een categorie uit die hoek, en omgekeerd hóórt die categorie daar.
    */
-  faseBezwaar: Partial<Record<IntakeFase, string>>
+  faseBezwaar: Partial<Record<DossierFase, string>>
 }
 
 /**
@@ -79,12 +79,12 @@ export interface AfhandelingProps {
 function FaseKiezer({
   gekozen, kies, bezwaar, bewerkbaar,
 }: {
-  gekozen: IntakeFase
-  kies: (v: IntakeFase) => void
-  bezwaar: Partial<Record<IntakeFase, string>>
+  gekozen: DossierFase
+  kies: (v: DossierFase) => void
+  bezwaar: Partial<Record<DossierFase, string>>
   bewerkbaar: boolean
 }) {
-  const plaatsing = INTAKE_PLAATSINGEN[gekozen]
+  const plaatsing = FASE_PLAATSINGEN[gekozen]
   return (
     <div style={{
       padding: '8px 9px', borderRadius: 6,
@@ -92,7 +92,7 @@ function FaseKiezer({
     }}>
       <div style={{ ...klein, marginBottom: 5 }}>Waar dit dossier terechtkomt</div>
       <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
-        {(Object.keys(INTAKE_PLAATSINGEN) as IntakeFase[]).map(f => {
+        {(Object.keys(FASE_PLAATSINGEN) as DossierFase[]).map(f => {
           const actief = f === gekozen
           const reden = bezwaar[f]
           return (
@@ -101,7 +101,7 @@ function FaseKiezer({
               type="button"
               onClick={() => kies(f)}
               disabled={!bewerkbaar}
-              title={reden ?? INTAKE_PLAATSINGEN[f].uitleg}
+              title={reden ?? FASE_PLAATSINGEN[f].uitleg}
               style={{
                 flex: 1, padding: '5px 4px', borderRadius: 5, fontSize: 12.5,
                 cursor: bewerkbaar ? 'pointer' : 'default',
@@ -115,7 +115,7 @@ function FaseKiezer({
                 opacity: reden && !actief ? 0.55 : 1,
               }}
             >
-              {INTAKE_PLAATSINGEN[f].fase}
+              {FASE_PLAATSINGEN[f].fase}
             </button>
           )
         })}

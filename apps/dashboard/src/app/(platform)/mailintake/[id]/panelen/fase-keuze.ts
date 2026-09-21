@@ -19,8 +19,8 @@
 import React from 'react'
 
 import {
-  isServicedeskCategorie, SERVICEDESK_CATEGORIEEN, type IntakeFase,
-} from '@/lib/mailintake/types'
+  isServicedeskCategorie, SERVICEDESK_CATEGORIEEN, type DossierFase,
+} from '@/components/dossiers/fase-plaatsing'
 
 /**
  * De fase die bij dit bericht past.
@@ -32,7 +32,7 @@ import {
 export function faseVoorstelVoor(
   categorieNaam: string | null,
   mailSoort: string | null,
-): IntakeFase {
+): DossierFase {
   if (isServicedeskCategorie(categorieNaam)) return 'servicedesk'
   if (mailSoort === 'servicedeskbon') return 'servicedesk'
   if (mailSoort === 'opdrachtbon') return 'opdracht'
@@ -40,7 +40,7 @@ export function faseVoorstelVoor(
 }
 
 /** Wat er aan elke keuze in de weg staat, in gewone taal. Leeg als er niets speelt. */
-export function faseBezwarenVoor(categorieNaam: string | null): Partial<Record<IntakeFase, string>> {
+export function faseBezwarenVoor(categorieNaam: string | null): Partial<Record<DossierFase, string>> {
   if (!isServicedeskCategorie(categorieNaam)) {
     return {
       servicedesk:
@@ -63,7 +63,7 @@ export function faseBezwarenVoor(categorieNaam: string | null): Partial<Record<I
  * de afleiding afwijken.
  */
 export function useFase(categorieNaam: string | null, mailSoort: string | null) {
-  const [fase, setFaseRuw] = React.useState<IntakeFase>('aanvraag')
+  const [fase, setFaseRuw] = React.useState<DossierFase>('aanvraag')
   const [aangeraakt, setAangeraakt] = React.useState(false)
 
   const voorstel = faseVoorstelVoor(categorieNaam, mailSoort)
@@ -74,7 +74,7 @@ export function useFase(categorieNaam: string | null, mailSoort: string | null) 
     setFaseRuw(voorstel)
   }, [voorstel, aangeraakt])
 
-  const setFase = React.useCallback((v: IntakeFase) => {
+  const setFase = React.useCallback((v: DossierFase) => {
     setFaseRuw(v)
     setAangeraakt(true)
   }, [])

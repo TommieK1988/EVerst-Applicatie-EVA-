@@ -27,12 +27,12 @@ import {
   type MailSoort,
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
-import { INTAKE_PLAATSINGEN, type IntakeFase } from '@/lib/mailintake/types'
+import { FASE_PLAATSINGEN } from '@/components/dossiers/fase-plaatsing'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
-import { bouwVoorvertoning, bouwAfwijkingTekst } from './panelen/voorvertoning'
+import { Voorvertoning, Afwijkingen } from './panelen/voorvertoning'
 import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
 import { useFase } from './panelen/fase-keuze'
 import { useWeglegActies } from './panelen/wegleg-acties'
@@ -314,7 +314,7 @@ export default function BerichtBehandelen({
 
       const akkoord = await bevestig({
         titel: 'Dit wordt er aangemaakt',
-        omschrijving: bouwVoorvertoning(proef),
+        omschrijving: <Voorvertoning proef={proef} />,
         bevestigLabel: 'Aanmaken',
         annuleerLabel: 'Annuleren',
       })
@@ -330,7 +330,12 @@ export default function BerichtBehandelen({
       if ((res.afwijkingen?.length ?? 0) > 0) {
         await meld({
           titel: 'Het dossier staat er, maar wijkt af van het voorstel',
-          omschrijving: bouwAfwijkingTekst(res.afwijkingen ?? [], res.bestandenGeplaatst !== false),
+          omschrijving: (
+            <Afwijkingen
+              afwijkingen={res.afwijkingen ?? []}
+              bestandenGeplaatst={res.bestandenGeplaatst !== false}
+            />
+          ),
         })
       }
 
@@ -351,7 +356,7 @@ export default function BerichtBehandelen({
       // afweging al, en zonder die stap belandt een bon op /opdrachten en dus op 404.
       // `dossierId` is optioneel in het retourtype; zonder id is er niets om heen te springen —
       // dan blijft het scherm staan in plaats van naar /undefined te navigeren.
-      const k = INTAKE_PLAATSINGEN[fase].kolommen
+      const k = FASE_PLAATSINGEN[fase].kolommen
       const segment = dossierSegment(k.hoofdstatus, k.servicedesk_substatus)
       if (res.dossierId && segment) router.push(`/${segment}/${res.dossierId}`)
     } catch (e) {

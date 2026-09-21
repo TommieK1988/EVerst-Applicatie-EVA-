@@ -11,6 +11,8 @@ import {
 } from '../types'
 import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden, stuurAanneemsomNaarBouw7 } from '@/lib/dossiers/actions'
 import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
+import { FASE_PLAATSINGEN, GEVOLGEN_BIJ_OPDRACHT, type DossierFase } from '../fase-plaatsing'
+import { verplaatsDossierNaarFase } from '@/lib/dossiers/fase-verplaatsen'
 import { useDialogen } from '@/components/ui/dialogen'
 import { leidWerkmaatschappijAf, type WerkmaatschappijOptie } from '@/lib/dossiers/werkmaatschappij'
 import { kiesAanneemsom } from '@/lib/dossiers/aanneemsom'
@@ -1165,7 +1167,7 @@ export function InformatieTab({
 }: Props) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
-  const { bevestig } = useDialogen()
+  const { bevestig, meld } = useDialogen()
   /* Statusregel rechtsboven. Er is geen Opslaan-knop meer, dus moet ergens te zien
      zijn dát er iets is weggeschreven — anders type je in het luchtledige. */
   const [opslagStatus, setOpslagStatus] = React.useState<'rust' | 'bezig' | 'klaar' | 'fout'>('rust')
@@ -1260,6 +1262,73 @@ export function InformatieTab({
       return
     }
     await voerSubstatusUit(next)
+  }
+
+  /**
+   * Naar een andere fase verhuizen: Aanvraag, Opdracht of Servicedesk.
+   *
+   * Staat naast de substatuskeuze en niet erin, omdat het iets anders is. Een
+   * substatus is een stap binnen een traject; dit is de correctie van het traject
+   * zelf -- meestal omdat een bon bij binnenkomst als aanvraag is ingeschreven. De
+   * bevestiging zegt daarom expliciet wat er níet meekomt, want de gewone weg naar
+   * een opdracht (offerte op Gewonnen) trekt de werkbegroting en de aanneemsom mee
+   * en deze weg niet.
+   */
+  // Uit `sectie` en niet uit de dossierkolommen: die prop is al de beslissing welk
+  // bord dit dossier hoort te vullen, en scheelt een cast op servicedesk_substatus.
+  // Fase Offerte levert null -- daar kom je via de substatussen hierboven.
+  const huidigeFase: DossierFase | null =
+    sectie === 'servicedesk'             ? 'servicedesk'
+    : dossier.hoofdstatus === 'opdracht' ? 'opdracht'
+    : dossier.hoofdstatus === 'aanvraag' ? 'aanvraag'
+    : null
+
+  async function verplaatsFase(doel: DossierFase) {
+    setStatusPopoverOpen(false)
+    const p = FASE_PLAATSINGEN[doel]
+    const gevolgen = [
+      `Substatus wordt "${p.substatus}".`,
+      `Het Bouw7-project gaat naar "${p.bouw7Status}".`,
+      ...(doel === 'opdracht' ? GEVOLGEN_BIJ_OPDRACHT : []),
+    ]
+    // Een ReactNode en geen tekst met regeleinden: de dialoog rendert zijn
+    // omschrijving als gewone alinea, dus regeleinden verdwijnen en er staat een
+    // muur van tekst. Juist hier moet je kunnen scannen wat er níét meekomt.
+    const akkoord = await bevestig({
+      titel: `Verplaatsen naar ${p.fase}?`,
+      omschrijving: (
+        <span className="block">
+          <span className="block">{p.uitleg}</span>
+          <span className="mt-2 block">
+            {gevolgen.map(r => (
+              <span key={r} className="block">• {r}</span>
+            ))}
+          </span>
+        </span>
+      ),
+      bevestigLabel: 'Verplaatsen',
+      annuleerLabel: 'Annuleren',
+    })
+    if (!akkoord) return
+
+    const res = await verplaatsDossierNaarFase(dossier.id, doel)
+    if (!res.ok) { await meld({ titel: 'Verplaatsen kan niet', omschrijving: res.fout }); return }
+    if (!res.bouw7Ok) {
+      await meld({
+        titel: 'Verplaatst in EVA, maar niet in Bouw7',
+        omschrijving: (
+          <span className="block">
+            <span className="block">{res.bouw7Fout ?? 'onbekende fout'}</span>
+            <span className="mt-2 block">
+              Zolang Bouw7 niet meekomt kan de eerstvolgende sync het dossier terugzetten.
+            </span>
+          </span>
+        ),
+      })
+    } else {
+      toast.success(`Verplaatst naar ${p.fase}`)
+    }
+    router.refresh()
   }
 
   const [contactpersoonOpties, setContactpersoonOpties] = React.useState<{
@@ -1678,6 +1747,27 @@ export function InformatieTab({
                       )}
                     </PopoverItem>
                   ))}
+
+                  {/* Van fase wisselen. Tussen Aanvraag en Offerte gaat dat al via de
+                      substatussen hierboven -- die verhuizen het dossier mee. Naar
+                      Opdracht en naar Servicedesk kan dat niet: die hebben elk hun
+                      eigen substatuskolom. Vandaar deze aparte regels, en vandaar dat
+                      er alleen staat wat je langs de gewone weg niet kunt bereiken. */}
+                  {huidigeFase && (
+                    <React.Fragment>
+                      <div className="my-1 border-t border-neutral-200" />
+                      <div className="px-2 pb-1 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-neutral-400">
+                        Verplaatsen naar
+                      </div>
+                      {(Object.keys(FASE_PLAATSINGEN) as DossierFase[])
+                        .filter(f => f !== huidigeFase)
+                        .map(f => (
+                          <PopoverItem key={f} onClick={() => { void verplaatsFase(f) }}>
+                            {FASE_PLAATSINGEN[f].fase}
+                          </PopoverItem>
+                        ))}
+                    </React.Fragment>
+                  )}
                 </PopoverBody>
               </PopoverContent>
             </Popover>

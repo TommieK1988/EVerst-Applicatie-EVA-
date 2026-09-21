@@ -5,9 +5,9 @@ import { controleerBouw7Gereed } from './bouw7-gereed'
 import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 import { splitsBijlagen } from './bijlagen-filter'
 import {
-  INTAKE_PLAATSINGEN, isServicedeskCategorie, SERVICEDESK_CATEGORIEEN,
-  type IntakeFase, type IntakePlaatsing,
-} from './types'
+  FASE_PLAATSINGEN, isServicedeskCategorie, SERVICEDESK_CATEGORIEEN,
+  type DossierFase, type DossierPlaatsing,
+} from '@/components/dossiers/fase-plaatsing'
 import type { GekeurdeVelden } from './extractie'
 
 /**
@@ -60,7 +60,7 @@ export interface ProefResultaat {
      * het over dezelfde plek hebben. Wie beoordeelt hoort te zien waar het heen
      * gaat vóórdat hij klikt.
      */
-    plaatsing: IntakePlaatsing
+    plaatsing: DossierPlaatsing
   }
   /** Bestanden die naar de dossiermap gaan. */
   bestanden: ProefBestand[]
@@ -92,7 +92,7 @@ export async function proefAanmaak(
   },
   omschrijving: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null },
   /** Waar het dossier heen moet. Standaard de gewone aanvraagroute. */
-  fase: IntakeFase = 'aanvraag',
+  fase: DossierFase = 'aanvraag',
 ): Promise<ProefResultaat> {
   const supabase = createAdminClient()
 
@@ -164,7 +164,7 @@ export async function proefAanmaak(
     openPunten.push('De scope is leeg — dan komt er geen omschrijving in Bouw7 te staan.')
   }
   if (!omschrijving.buitenScope?.trim()) {
-    openPunten.push('Er is niets uitgesloten. Dat is geen fout; het betekent dat de stukken er niets over zeggen.')
+    openPunten.push('Het blok "Buiten scope" is leeg — de stukken zeggen niets over wat er níet bij hoort.')
   }
 
   // ── Bestanden ──────────────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ export async function proefAanmaak(
       vveCode: velden.vveCode,
       referentie: velden.referentie,
       mandaatBedrag: velden.mandaatBedrag,
-      plaatsing: INTAKE_PLAATSINGEN[fase],
+      plaatsing: FASE_PLAATSINGEN[fase],
       omschrijvingHtml: bouwOmschrijvingHtml({
         scope: omschrijving.scope,
         buitenScope: omschrijving.buitenScope,

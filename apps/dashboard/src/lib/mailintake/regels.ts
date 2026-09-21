@@ -32,10 +32,11 @@ const CATEGORIE_BOUW = ['renovatie', 'mutatie', 'dagelijks onderhoud']
 /**
  * De twee categorieën waaraan een dossier als servicedeskwerk wordt herkend.
  *
- * Hoofdlettergevoelig, want `isServicedeskDossier` vergelijkt exact. Staat er iets
- * anders, dan verdwijnt de bon van het servicedeskbord zonder dat iemand dat merkt.
+ * Stond hier een tweede keer gedefinieerd naast de kopie in de fasetabel. Eén lijst
+ * nu, in `components/dossiers/fase-plaatsing`, doorgevoerd voor wie hem hier al
+ * importeerde.
  */
-export const SERVICEDESK_CATEGORIEEN = ['Dagelijks onderhoud', 'Mutatie']
+export { SERVICEDESK_CATEGORIEEN } from '@/components/dossiers/fase-plaatsing'
 
 /** Woorden die een bedrag tot een mandaat maken in plaats van tot een prijsindicatie. */
 export const MANDAAT_WOORDEN = [

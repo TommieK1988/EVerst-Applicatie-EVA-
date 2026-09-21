@@ -27,7 +27,7 @@ import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
 import type { ProefResultaat } from './proef'
-import type { IntakeFase } from './types'
+import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
 export interface AanmaakInvoer {
@@ -48,7 +48,7 @@ export interface AanmaakInvoer {
    * Waar het dossier terechtkomt: de gewone aanvraagroute, meteen als opdracht, of
    * op het servicedeskbord. Standaard `aanvraag`.
    */
-  fase?: IntakeFase
+  fase?: DossierFase
   /**
    * Het voorstel zoals het in de proef stond. Zonder dit wordt er niet teruggelezen
    * -- dan is er namelijk niets om tegen te vergelijken.
@@ -276,7 +276,7 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // Aanvraag/Nieuw; koos de behandelaar Opdracht of Servicedesk, dan verhuist het
   // hier. Vóór de rollen en de actie, want die hangen aan de fase: een
   // opdracht-dossier hoort de opdracht-triggers te krijgen.
-  const fase: IntakeFase = inv.fase ?? 'aanvraag'
+  const fase: DossierFase = inv.fase ?? 'aanvraag'
   if (fase !== 'aanvraag') {
     const { zetFaseNaAanmaken } = await import('./fase')
     const faseRes = await zetFaseNaAanmaken(dossierId, fase, res.data.bouw7_id ?? null)

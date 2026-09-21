@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
-import { INTAKE_PLAATSINGEN, type IntakeFase } from './types'
+import { FASE_PLAATSINGEN, type DossierFase } from '@/components/dossiers/fase-plaatsing'
 
 /**
  * mailintake/fase.ts
@@ -32,19 +32,19 @@ export type FaseResultaat =
 /**
  * Verplaatst het dossier naar `fase`. Doet niets bij `aanvraag` -- daar staat het al.
  *
- * De kolommen komen uit `INTAKE_PLAATSINGEN`, dezelfde tabel die het scherm toont en
+ * De kolommen komen uit `FASE_PLAATSINGEN`, dezelfde tabel die het scherm toont en
  * waartegen de terugleescontrole vergelijkt. Alle vier de substatuskolommen gaan in
  * één update mee: de check-constraint op `dossiers` eist dat precies de kolom van de
  * hoofdstatus gevuld is, dus ze los bijwerken zou halverwege een ongeldige rij geven.
  */
 export async function zetFaseNaAanmaken(
   dossierId: string,
-  fase: IntakeFase,
+  fase: DossierFase,
   bouw7Id: string | null,
 ): Promise<FaseResultaat> {
   if (fase === 'aanvraag') return { ok: true, bouw7Ok: true, bouw7Fout: null }
 
-  const plaatsing = INTAKE_PLAATSINGEN[fase]
+  const plaatsing = FASE_PLAATSINGEN[fase]
   const supabase = createAdminClient()
 
   // Eerst Bouw7, dan EVA. Andersom zou een mislukte write een dossier opleveren dat

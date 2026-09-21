@@ -11,7 +11,7 @@
  * de voorvertoning een voorstel dat niet bestaat.
  */
 
-import type { IntakeFase } from '@/lib/mailintake/types'
+import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 
 export interface AanmaakSchermToestand {
   /** De ruwe lezing van het model; levert de velden die niet op het scherm staan. */
@@ -46,7 +46,7 @@ export interface AanmaakSchermToestand {
   /** De eerste actie op het nieuwe dossier; zonder titel gebeurt er niets. */
   actie: { titel: string; medewerkerId: string; dagen: number }
   /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
-  fase: IntakeFase
+  fase: DossierFase
 }
 
 export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
