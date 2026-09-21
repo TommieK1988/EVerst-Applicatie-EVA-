@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import type { Contactpersoon, ContactpersoonBouw7Koppeling, ContactpersoonOrganisatie, Relatie } from '@everts/database'
+import type { Contactpersoon, ContactpersoonBouw7Koppeling, ContactpersoonOrganisatie, KerstkaartAdres, Relatie } from '@everts/database'
 import { BOUW7_CONTACTPERSOON_VELDEN, beschermdeVelden } from './sync-velden'
 import { ontmarkeerHandmatig } from '@/lib/bouw7/handmatige-velden'
 import { schrijfBouw7Contactpersoon, schrijfBouw7ContactpersoonFunctie } from '@/lib/bouw7/contact-write'
@@ -42,7 +42,8 @@ export async function schrijfContactpersoonNaarBouw7(
 
 export type ContactpersoonMetOrganisaties = Contactpersoon & {
   koppelingen: (ContactpersoonOrganisatie & {
-    organisatie: Pick<Relatie, 'id' | 'naam' | 'types'>
+    /** Het bezoekadres zit erbij omdat de kerstkaart daarheen kan gaan i.p.v. naar het privé-adres. */
+    organisatie: Pick<Relatie, 'id' | 'naam' | 'types' | 'adres_straat' | 'adres_postcode' | 'adres_plaats' | 'adres_land'>
   })[]
   /** Eén rij per Bouw7-contactpersoon; meerdere betekent: in Bouw7 staat deze mens vaker. */
   spiegels: ContactpersoonBouw7Koppeling[]
@@ -74,7 +75,7 @@ export async function getContactpersoonById(id: string): Promise<ContactpersoonM
     supabase.from('contactpersonen').select('*').eq('id', id).single(),
     supabase
       .from('contactpersoon_organisaties')
-      .select('*, organisatie:relaties(id, naam, types)')
+      .select('*, organisatie:relaties(id, naam, types, adres_straat, adres_postcode, adres_plaats, adres_land)')
       .eq('contactpersoon_id', id)
       .order('is_primair', { ascending: false }),
     supabase
@@ -304,6 +305,7 @@ export async function updateContactpersoon(
     geboortedatum?: string | null
     opmerkingen?: string | null
     kerstkaart?: boolean
+    kerstkaart_adres?: KerstkaartAdres
   }
 ): Promise<ActionResult> {
   const supabase = createAdminClient() as any

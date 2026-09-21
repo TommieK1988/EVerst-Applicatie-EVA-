@@ -1676,6 +1676,7 @@ export type Database = {
           handmatige_velden: string[]
           id: string
           kerstkaart: boolean
+          kerstkaart_adres: string
           linkedin_url: string | null
           mobiel: string | null
           opmerkingen: string | null
@@ -1713,6 +1714,7 @@ export type Database = {
           handmatige_velden?: string[]
           id?: string
           kerstkaart?: boolean
+          kerstkaart_adres?: string
           linkedin_url?: string | null
           mobiel?: string | null
           opmerkingen?: string | null
@@ -1750,6 +1752,7 @@ export type Database = {
           handmatige_velden?: string[]
           id?: string
           kerstkaart?: boolean
+          kerstkaart_adres?: string
           linkedin_url?: string | null
           mobiel?: string | null
           opmerkingen?: string | null

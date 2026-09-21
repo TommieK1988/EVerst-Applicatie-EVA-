@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, useDialogen } from '@/components/ui'
 import {
-  organisatieTypeLabels, organisatieTypeTone, contactpersoonSoortLabels,
-  type OrganisatieType, type ContactpersoonSoort,
+  organisatieTypeLabels, organisatieTypeTone, contactpersoonSoortLabels, kerstkaartAdresLabels,
+  type OrganisatieType, type ContactpersoonSoort, type KerstkaartAdres,
 } from '@everts/database'
 import {
   updateContactpersoon,
@@ -59,6 +59,18 @@ function VeldInput({ label, value, onChange, type = 'text', placeholder }: { lab
       <input type={type} value={value} onChange={e => onChange(e.target.value)} style={baseInput} placeholder={placeholder} />
     </div>
   )
+}
+
+/**
+ * Adres als één leesbare regel; leeg blijft leeg. Nederland laten we weg — dat is de regel,
+ * geen informatie.
+ */
+function adresRegel(a: { straat?: string | null; postcode?: string | null; plaats?: string | null; land?: string | null }): string | null {
+  return [
+    a.straat,
+    [a.postcode, a.plaats].filter(Boolean).join('  '),
+    a.land && a.land !== 'Nederland' ? a.land : null,
+  ].filter(Boolean).join(', ') || null
 }
 
 const AANHEF_OPTIES = ['', 'De heer', 'Mevrouw', 'Dhr.', 'Mevr.', 'Dr.', 'Prof. dr.', 'Ir.', 'Mr.']
@@ -193,6 +205,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
     prive_adres_land: initial.prive_adres_land ?? 'Nederland',
     geboortedatum: initial.geboortedatum ?? '',
     kerstkaart: initial.kerstkaart ?? false,
+    kerstkaart_adres: (initial.kerstkaart_adres ?? 'prive') as KerstkaartAdres,
     opmerkingen: initial.opmerkingen ?? '',
   })
   const [bezig, setBezig] = useState(false)
@@ -220,6 +233,40 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
   const volledigeNaam = [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ')
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }))
 
+  // ── Kerstkaart: waar komt hij aan? ──
+  // De werkgever is de primaire koppeling; die staat vooraan (gesorteerd op is_primair).
+  const werkgever = cp.koppelingen[0] ?? null
+  const zakelijkAdres = werkgever ? adresRegel({
+    straat: werkgever.organisatie.adres_straat,
+    postcode: werkgever.organisatie.adres_postcode,
+    plaats: werkgever.organisatie.adres_plaats,
+    land: werkgever.organisatie.adres_land,
+  }) : null
+  /** Het adres waar de kaart heen gaat; null betekent: we hebben het niet, dus hij kan niet weg. */
+  function kaartAdres(keuze: KerstkaartAdres, prive: { straat: string | null; postcode: string | null; plaats: string | null; land: string | null }): string | null {
+    if (keuze === 'zakelijk') return werkgever && zakelijkAdres ? `${werkgever.organisatie.naam}, ${zakelijkAdres}` : null
+    return adresRegel(prive)
+  }
+  const kaartAdresOpgeslagen = kaartAdres(cp.kerstkaart_adres, {
+    straat: cp.prive_adres_straat, postcode: cp.prive_adres_postcode,
+    plaats: cp.prive_adres_plaats, land: cp.prive_adres_land,
+  })
+  const kaartAdresForm = kaartAdres(form.kerstkaart_adres, {
+    straat: form.prive_adres_straat || null, postcode: form.prive_adres_postcode || null,
+    plaats: form.prive_adres_plaats || null, land: form.prive_adres_land || null,
+  })
+  /** Waarom er geen adres is — dat is bruikbaarder dan een streepje bij "Gaat naar". */
+  function kaartWaarschuwing(keuze: KerstkaartAdres): string {
+    const oorzaak = keuze === 'zakelijk'
+      ? werkgever
+        ? `Bij ${werkgever.organisatie.naam} staat geen adres — vul dat op de relatiekaart in.`
+        : 'Deze persoon is aan geen enkele organisatie gekoppeld.'
+      : 'Er staat nog geen privé-adres bij Privégegevens.'
+    return `${oorzaak} De kaart heeft zo geen bezorgadres.`
+  }
+  // Radio's krijgen een unieke naam: een vaste name is paginabreed en botst met andere groepen.
+  const radioNaam = useId()
+
   async function opslaan() {
     setBezig(true)
     const res = await updateContactpersoon(cp.id, {
@@ -241,6 +288,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
       prive_adres_land: form.prive_adres_land || null,
       geboortedatum: form.geboortedatum || null,
       kerstkaart: form.kerstkaart,
+      kerstkaart_adres: form.kerstkaart_adres,
       opmerkingen: form.opmerkingen || null,
     })
     setBezig(false)
@@ -426,16 +474,6 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
                   <VeldInput label="Land" value={form.prive_adres_land} onChange={set('prive_adres_land')} />
                   <VeldInput label="Geboortedatum" value={form.geboortedatum} onChange={set('geboortedatum')} type="date" />
                 </div>
-                {/* De kaart gaat naar het privé-adres hierboven, vandaar dat dit hier staat. */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    id="kerstkaart"
-                    type="checkbox"
-                    checked={form.kerstkaart}
-                    onChange={e => setForm(f => ({ ...f, kerstkaart: e.target.checked }))}
-                  />
-                  <span style={{ fontSize: 13 }}>Krijgt de kerstkaart</span>
-                </label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button variant="primary" onClick={opslaan} disabled={bezig}>{bezig ? 'Opslaan…' : 'Opslaan'}</Button>
                   <Button variant="ghost" onClick={() => setBewerken(false)}>Annuleer</Button>
@@ -445,13 +483,84 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
               <div>
                 <Rij label="Privé e-mail" waarde={cp.prive_email} />
                 <Rij label="Privé telefoon" waarde={cp.prive_telefoon} />
-                <Rij label="Privé adres" waarde={[
-                  cp.prive_adres_straat,
-                  [cp.prive_adres_postcode, cp.prive_adres_plaats].filter(Boolean).join('  '),
-                  cp.prive_adres_land !== 'Nederland' ? cp.prive_adres_land : null,
-                ].filter(Boolean).join(', ') || null} />
+                <Rij label="Privé adres" waarde={adresRegel({
+                  straat: cp.prive_adres_straat, postcode: cp.prive_adres_postcode,
+                  plaats: cp.prive_adres_plaats, land: cp.prive_adres_land,
+                })} />
                 <Rij label="Geboortedatum" waarde={cp.geboortedatum} />
-                <Rij label="Kerstkaart" waarde={cp.kerstkaart ? 'Ja' : null} />
+              </div>
+            )}
+          </Blok>
+
+          {/* Kerstkaart — staat los van Privégegevens: de kaart gaat lang niet altijd naar huis.
+              Een factuuradres is bewust geen keuze: dat is een administratief adres (vaak een
+              postbus of het boekhoudkantoor) en daar hoort geen kaart heen. */}
+          <Blok
+            titel="Kerstkaart"
+            actie={!bewerken
+              ? <Button variant="ghost" size="sm" onClick={() => setBewerken(true)}>Bewerken</Button>
+              : null}
+          >
+            {bewerken ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    id="kerstkaart"
+                    type="checkbox"
+                    checked={form.kerstkaart}
+                    onChange={e => setForm(f => ({ ...f, kerstkaart: e.target.checked }))}
+                    style={{ accentColor: 'var(--accent)' }}
+                  />
+                  <span style={{ fontSize: 13 }}>Krijgt de kerstkaart</span>
+                </label>
+
+                {form.kerstkaart && (
+                  <div>
+                    <div style={veldLabel}>Verzendadres</div>
+                    <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
+                      {(['prive', 'zakelijk'] as const).map(keuze => (
+                        <label key={keuze} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--fg)', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name={`kerstkaart-adres-${radioNaam}`}
+                            value={keuze}
+                            checked={form.kerstkaart_adres === keuze}
+                            onChange={() => setForm(f => ({ ...f, kerstkaart_adres: keuze }))}
+                            style={{ accentColor: 'var(--accent)' }}
+                          />
+                          {kerstkaartAdresLabels[keuze]}
+                        </label>
+                      ))}
+                    </div>
+                    {kaartAdresForm ? (
+                      <p style={{ fontSize: 12, color: 'var(--fg-soft)', margin: 0, lineHeight: 1.5 }}>{kaartAdresForm}</p>
+                    ) : (
+                      <p style={{ fontSize: 12, color: 'var(--warning-700)', margin: 0, lineHeight: 1.5 }}>
+                        {kaartWaarschuwing(form.kerstkaart_adres)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button variant="primary" onClick={opslaan} disabled={bezig}>{bezig ? 'Opslaan…' : 'Opslaan'}</Button>
+                  <Button variant="ghost" onClick={() => setBewerken(false)}>Annuleer</Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Rij label="Kerstkaart" waarde={cp.kerstkaart ? 'Ja' : 'Nee'} />
+                {cp.kerstkaart && (
+                  <>
+                    <Rij label="Verzendadres" waarde={kerstkaartAdresLabels[cp.kerstkaart_adres]} />
+                    <Rij label="Gaat naar" waarde={kaartAdresOpgeslagen} />
+                    {!kaartAdresOpgeslagen && (
+                      <p style={{ fontSize: 12, color: 'var(--warning-700)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                        {kaartWaarschuwing(cp.kerstkaart_adres)}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </Blok>

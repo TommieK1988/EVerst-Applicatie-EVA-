@@ -154,6 +154,12 @@ export type Contactpersoon = {
   /** Staat op de kerstkaartlijst. Alleen EVA — Bouw7 kent dit veld niet. */
   kerstkaart: boolean
   /**
+   * Waar de kerstkaart heen gaat: het privé-adres van de persoon, of het adres van de
+   * organisatie waar hij voor werkt. Nooit een factuuradres — dat is administratief en
+   * vaak een postbus of boekhoudkantoor.
+   */
+  kerstkaart_adres: KerstkaartAdres
+  /**
    * De primaire Bouw7-spiegel. Bouw7 kan een mens maar aan één contact hangen, dus wie voor
    * twee bedrijven werkt staat daar twee keer; in EVA is dat één persoon met meerdere
    * `ContactpersoonBouw7Koppeling`-rijen. Deze kolom blijft de spiegel waar EVA standaard
@@ -177,6 +183,14 @@ export type Contactpersoon = {
 }
 
 export type ContactpersoonSoort = 'persoon' | 'postbus' | 'object'
+
+/** Bezorgadres voor de kerstkaart. Bewust geen factuuradres: dat is een administratief adres. */
+export type KerstkaartAdres = 'prive' | 'zakelijk'
+
+export const kerstkaartAdresLabels: Record<KerstkaartAdres, string> = {
+  prive: 'Privé-adres',
+  zakelijk: 'Zakelijk adres',
+}
 
 export const contactpersoonSoortLabels: Record<ContactpersoonSoort, string> = {
   persoon: 'Persoon',

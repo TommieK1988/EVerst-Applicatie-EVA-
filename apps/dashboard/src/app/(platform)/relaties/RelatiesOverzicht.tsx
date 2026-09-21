@@ -341,14 +341,16 @@ const KOLOMMEN_CONTACTPERSONEN: KolomDefinitie<ContactpersoonRij>[] = [
       : <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>,
   },
   {
+    // Het verzendadres staat erbij: filteren op "Zakelijk" geeft de stapel kaarten die naar
+    // kantoor gaat, en dat zijn andere etiketten dan de privé-stapel.
     key: 'kerstkaart',
     label: 'Kerstkaart',
     standaard_zichtbaar: false,
     filterType: 'select',
-    filterOpties: ['Ja', 'Nee'],
-    sorteerWaarde: r => r.kerstkaart ? 'Ja' : 'Nee',
+    filterOpties: ['Privé', 'Zakelijk', 'Nee'],
+    sorteerWaarde: r => r.kerstkaart ? (r.kerstkaart_adres === 'zakelijk' ? 'Zakelijk' : 'Privé') : 'Nee',
     render: r => r.kerstkaart
-      ? <Badge variant="outline" tone="success" dot>Ja</Badge>
+      ? <Badge variant="outline" tone="success" dot>{r.kerstkaart_adres === 'zakelijk' ? 'Zakelijk' : 'Privé'}</Badge>
       : <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>,
   },
 ]
