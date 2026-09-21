@@ -205,7 +205,7 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
     prive_adres_land: initial.prive_adres_land ?? 'Nederland',
     geboortedatum: initial.geboortedatum ?? '',
     kerstkaart: initial.kerstkaart ?? false,
-    kerstkaart_adres: (initial.kerstkaart_adres ?? 'prive') as KerstkaartAdres,
+    kerstkaart_adres: (initial.kerstkaart_adres ?? 'zakelijk') as KerstkaartAdres,
     opmerkingen: initial.opmerkingen ?? '',
   })
   const [bezig, setBezig] = useState(false)
