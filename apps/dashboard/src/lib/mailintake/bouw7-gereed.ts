@@ -29,8 +29,17 @@ import { createAdminClient } from '@everts/database/server'
 export interface Bouw7Gereedheid {
   /** Alles wat Bouw7 nodig heeft is aanwezig. */
   gereed: boolean
-  /** Wat er mist, in gewone taal. Leeg als alles klopt. */
+  /** Wat er mist én het aanmaken tegenhoudt, in gewone taal. Leeg als alles klopt. */
   ontbreekt: string[]
+  /**
+   * Wat aandacht vraagt maar niets tegenhoudt.
+   *
+   * Het onderscheid met `ontbreekt` moest hard worden: de melding "staat nog niet
+   * in Bouw7; het project krijgt geen contactpersoon" was hier bedoeld als
+   * waarschuwing, maar de proef schoof heel `ontbreekt` door naar de blokkades en
+   * zette daarmee de knop uit. Een losse lijst kan dat niet meer per ongeluk.
+   */
+  waarschuwingen: string[]
   branchId: number | null
   klantBouw7Id: number | null
   contactpersoonBouw7Id: number | null
@@ -55,6 +64,7 @@ export interface Bouw7GereedInvoer {
 export async function controleerBouw7Gereed(inv: Bouw7GereedInvoer): Promise<Bouw7Gereedheid> {
   const supabase = createAdminClient()
   const ontbreekt: string[] = []
+  const waarschuwingen: string[] = []
 
   if (!(inv.titel ?? '').trim()) ontbreekt.push('Er is geen omschrijving voor de projectnaam.')
 
@@ -91,9 +101,10 @@ export async function controleerBouw7Gereed(inv: Bouw7GereedInvoer): Promise<Bou
     if (!cp) {
       ontbreekt.push('De gekozen contactpersoon bestaat niet meer.')
     } else if (!cpBouw7Id) {
-      // Niet blokkerend: een project zonder contactpersoon is bruikbaar, een
-      // project zonder klant niet. Wel melden, want het valt anders niemand op.
-      ontbreekt.push(`${naam} staat nog niet in Bouw7; het project krijgt geen contactpersoon.`)
+      // Geen blokkade meer: bij het aanmaken maakt `zorgVoorBouw7Contactpersoon`
+      // hem alsnog aan onder deze opdrachtgever. Wel melden, want lukt dát niet,
+      // dan krijgt het project geen contactpersoon en moet iemand dat weten.
+      waarschuwingen.push(`${naam} staat nog niet in Bouw7 — EVA maakt hem daar aan bij het opslaan.`)
     } else {
       contactpersoonBouw7Id = Number(cpBouw7Id)
     }
@@ -141,12 +152,10 @@ export async function controleerBouw7Gereed(inv: Bouw7GereedInvoer): Promise<Bou
     }
   }
 
-  // Een ontbrekende contactpersoon is hinderlijk, geen blokkade. De rest wél.
-  const blokkerend = ontbreekt.filter(m => !m.includes('krijgt geen contactpersoon'))
-
   return {
-    gereed: blokkerend.length === 0,
+    gereed: ontbreekt.length === 0,
     ontbreekt,
+    waarschuwingen,
     branchId,
     klantBouw7Id,
     contactpersoonBouw7Id,

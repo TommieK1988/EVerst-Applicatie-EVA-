@@ -20,6 +20,7 @@ import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 import type { GekeurdeVelden } from './extractie'
 import { maakIntakeActie } from './taken'
+import { beoordeelBijlage } from './bijlagen-filter'
 import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 
 // Blijft vanaf hier herexporteerd: bestaande aanroepers halen hem van deze plek.
@@ -114,14 +115,21 @@ export async function zetBijlagenInSharePoint(
 
   const { data: rijen } = await supabase
     .from('mailintake_bijlagen')
-    .select('id, bestandsnaam, content_type, opslag_pad, grootte_bytes')
+    .select('id, bestandsnaam, content_type, opslag_pad, grootte_bytes, is_inline')
     .eq('bericht_id', berichtId)
-    .eq('is_inline', false)
     .not('opslag_pad', 'is', null)
     .is('naar_sharepoint_op', null)
     .limit(50)
 
-  if (!rijen?.length) return { geuploaded: 0, mislukt: 0, fout: null }
+  // Dezelfde zeef als de voorvertoning. Zonder dit belooft het scherm dat
+  // image001.jpg buiten de dossiermap blijft terwijl de upload hem er wel in zet
+  // -- en dan klopt het voorstel niet met wat er gebeurt.
+  const bestanden = (rijen ?? []).filter(r => beoordeelBijlage({
+    bestandsnaam: r.bestandsnaam, contentType: r.content_type,
+    grootteBytes: r.grootte_bytes, isInline: Boolean(r.is_inline),
+  }).mee)
+
+  if (!bestanden.length) return { geuploaded: 0, mislukt: 0, fout: null }
 
   const RUIMTE = 20 * 1024 * 1024
   let geuploaded = 0
@@ -157,7 +165,7 @@ export async function zetBijlagenInSharePoint(
     stapelBytes = 0
   }
 
-  for (const r of rijen) {
+  for (const r of bestanden) {
     // De query filtert hier al op, maar het pad is in het schema nullable; zonder
     // deze controle zou een lege waarde stil als "undefined" naar Storage gaan.
     if (!r.opslag_pad) { mislukt++; continue }
@@ -202,6 +210,27 @@ export async function zetBijlagenInSharePoint(
 export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<AanmaakResultaat> {
   const supabase = createAdminClient()
   const v = inv.velden
+
+  // Eerst de contactpersoon in Bouw7 zetten, dan pas het project. Andersom wordt
+  // het project zonder contactpersoon aangemaakt en is dat achteraf niet meer te
+  // repareren zonder handwerk. Lukt het aanmaken niet, dan gaat het project
+  // gewoon door -- een project zonder contactpersoon is bruikbaar, een verloren
+  // aanvraag niet -- maar staat de reden in het besluitenlog.
+  if (inv.contactpersoonId) {
+    const { zorgVoorBouw7Contactpersoon } = await import('./contactpersoon-bouw7')
+    const cpRes = await zorgVoorBouw7Contactpersoon(inv.contactpersoonId, inv.relatieId)
+      .catch((e: unknown) => ({ ok: false as const, reden: e instanceof Error ? e.message : String(e) }))
+    if (!cpRes.ok || cpRes.aangemaakt) {
+      await supabase.from('mailintake_besluiten').insert({
+        bericht_id: inv.berichtId,
+        actor: 'systeem',
+        actie: cpRes.ok ? 'contactpersoon_in_bouw7_aangemaakt' : 'contactpersoon_niet_in_bouw7',
+        details: cpRes.ok
+          ? { contactpersoon_id: inv.contactpersoonId, bouw7_id: cpRes.bouw7Id }
+          : { contactpersoon_id: inv.contactpersoonId, reden: cpRes.reden },
+      })
+    }
+  }
 
   const { maakAanvraag } = await import('@/lib/dossiers/actions')
   const res = await maakAanvraag({

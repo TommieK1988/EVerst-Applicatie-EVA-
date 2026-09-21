@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { controleerBouw7Gereed } from './bouw7-gereed'
 import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 import { splitsBijlagen } from './bijlagen-filter'
+import { PLAATSING_NIEUWE_AANVRAAG } from './types'
 import type { GekeurdeVelden } from './extractie'
 
 /**
@@ -47,6 +48,16 @@ export interface ProefResultaat {
     referentie: string | null
     mandaatBedrag: number | null
     omschrijvingHtml: string
+    /**
+     * Waar het dossier terechtkomt, in de woorden van het scherm.
+     *
+     * Vast voor deze route -- `maakAanvraag` zet altijd Aanvraag/Nieuw en Bouw7
+     * altijd "01. Offerte" -- maar daarom juist hier en niet verspreid als losse
+     * tekst: de voorvertoning, de terugleescontrole en het beoordeelscherm moeten
+     * het over dezelfde plek hebben. Wie beoordeelt hoort te zien waar het heen
+     * gaat vóórdat hij klikt.
+     */
+    plaatsing: { fase: string; substatus: string; bouw7Status: string }
   }
   /** Bestanden die naar de dossiermap gaan. */
   bestanden: ProefBestand[]
@@ -95,6 +106,7 @@ export async function proefAanmaak(
     bouw7CategorieId: velden.bouw7CategorieId,
   })
   blokkades.push(...bouw7.ontbreekt)
+  openPunten.push(...bouw7.waarschuwingen)
 
   // ── De partijen erbij zoeken, zodat de voorvertoning namen toont ───────────
   const [klant, cp, wm] = await Promise.all([
@@ -193,6 +205,7 @@ export async function proefAanmaak(
       vveCode: velden.vveCode,
       referentie: velden.referentie,
       mandaatBedrag: velden.mandaatBedrag,
+      plaatsing: PLAATSING_NIEUWE_AANVRAAG,
       omschrijvingHtml: bouwOmschrijvingHtml({
         scope: omschrijving.scope,
         buitenScope: omschrijving.buitenScope,

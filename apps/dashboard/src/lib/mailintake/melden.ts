@@ -124,10 +124,18 @@ export async function voorleggen(
   regels.push('')
   regels.push(`Afhandelen in EVA: /mailintake/${berichtId}`)
 
+  // De titel benoemt wat EVA erin ziet, niet de bus waar het binnenkwam. Dat laatste
+  // gaf "Beoordeel offerteaanvragen van Frits de Zwart" op een bericht dat EVA als
+  // aanvullende informatie had beoordeeld: meervoud, en het verkeerde woord. Wie de
+  // actie in zijn lijst ziet staan hoort meteen te weten waar het over gaat.
+  const watHetIs = context?.soort
+    ? (MAIL_SOORT_LABELS[context.soort as MailSoort] ?? 'bericht').toLowerCase()
+    : 'bericht'
+
   const res = await maakIntakeActie({
     berichtId,
     medewerkerId: behandelaarId,
-    titel: `Beoordeel ${postbus.naam.toLowerCase()} van ${afzender}`.slice(0, 200),
+    titel: `Beoordeel ${watHetIs} van ${afzender}`.slice(0, 200),
     toelichting: regels.join('\n'),
     dagen: 2,
   })
