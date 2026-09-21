@@ -554,6 +554,7 @@ export default function BerichtBehandelen({
                       >
                         {o.naam}
                         {o.contactpersoon && <span style={klein}> · {o.contactpersoon.naam}</span>}
+                        {o.viaFactuuradres && <span style={klein}> · factuuradres: {o.viaFactuuradres}</span>}
                       </button>
                     ))}
                   </div>

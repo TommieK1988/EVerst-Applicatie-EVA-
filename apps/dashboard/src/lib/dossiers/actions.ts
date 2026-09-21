@@ -3301,6 +3301,13 @@ export type OpdrachtgeverZoekResultaat = {
    */
   plaats?: string | null
   contactpersoon?: { id: string; naam: string } | null
+  /**
+   * Gevonden via een factuuradres van deze relatie, niet via de eigen naam. Bij een beheerder
+   * kennen collega's vaak alleen de betalende partij ("VvE 8266 Steenlaan"), niet de beheerder
+   * die de opdracht geeft. Zonder deze toelichting zou Schep Vastgoed Managers onverklaarbaar
+   * in de lijst opduiken bij het zoeken op een VvE-naam.
+   */
+  viaFactuuradres?: string | null
 }
 
 /** `%`, `_` en `\` zijn jokers in ilike en moeten letterlijk gezocht worden. */
@@ -3359,9 +3366,23 @@ export async function zoekRelaties(
       .eq('actief', true)
       .limit(8)
 
-  const [relDelen, cpDelen] = await Promise.all([
+  // Factuuradressen: bij een beheerder is de betalende partij een andere naam dan de
+  // opdrachtgever. Wie "VvE 8266 Steenlaan" intypt bedoelt meestal het dossier van Schep
+  // Vastgoed Managers, maar die naam komt in de relatie zelf nergens voor.
+  //
+  // Bewust alleen op `label` en niet op straat/plaats: tientallen VvE's van dezelfde beheerder
+  // delen één postbusadres, dus "Zoetermeer" zou de acht plekken volledig vullen met steeds
+  // dezelfde beheerder. Het label is de naam van de betalende partij en dus wat je zoekt.
+  const faQuery = supabase
+    .from('relatie_factuuradressen')
+    .select('label, relatie:relaties!relatie_id(id, naam, types, actief, adres_plaats)')
+    .ilike('label', like)
+    .limit(8)
+
+  const [relDelen, cpDelen, faRes] = await Promise.all([
     Promise.all(['naam', 'adres_straat', 'adres_plaats'].map(relQuery)),
     Promise.all(['voornaam', 'achternaam', 'email'].map(cpQuery)),
+    faQuery,
   ])
 
   type RelRij = { id: string; naam: string; types: string[]; adres_plaats: string | null }
@@ -3396,6 +3417,25 @@ export async function zoekRelaties(
       id: org.id, naam: org.naam, types: org.types ?? [],
       plaats: org.adres_plaats ?? null,
       contactpersoon: { id: cp.id, naam },
+    })
+  }
+
+  // Factuuradres-treffers als laatste: een relatie die al op eigen naam of via een
+  // contactpersoon is gevonden houdt die (sterkere) treffer, en omdat de Map de invoegvolgorde
+  // bewaart komen deze onderaan de suggestielijst.
+  type FaRij = {
+    label: string | null
+    relatie: { id: string; naam: string; types: string[] | null; actief: boolean | null; adres_plaats: string | null } | null
+  }
+  for (const rij of (faRes.data ?? []) as FaRij[]) {
+    const org = rij.relatie
+    if (!org?.id || org.actief === false) continue
+    if (resultaten.has(org.id)) continue
+    if (opts?.type && !(org.types ?? []).includes(opts.type)) continue
+    resultaten.set(org.id, {
+      id: org.id, naam: org.naam, types: org.types ?? [],
+      plaats: org.adres_plaats ?? null, contactpersoon: null,
+      viaFactuuradres: rij.label ?? null,
     })
   }
 

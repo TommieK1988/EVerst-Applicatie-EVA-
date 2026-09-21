@@ -26,13 +26,21 @@ export default async function RelatiesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [relaties, contactpersonenRes, particulierenRes, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, layouts, laatsteSync] = await Promise.all([
+  const [relaties, factuuradressen, contactpersonenRes, particulierenRes, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, layouts, laatsteSync] = await Promise.all([
     // Gepagineerd: het relatiebestand groeit richting de 1000 en PostgREST kapt daarna stil af,
     // waardoor organisaties zonder melding uit het overzicht vallen. Zie lib/supabase/paginate.ts.
     haalAlleRijen<Organisatie>((van, tot) => supabase
       .from('relaties')
       .select('id, types, naam, email, telefoon, website, kvk_nummer, btw_nummer, adres_straat, adres_postcode, adres_plaats, adres_land, actief, created_at')
       .order('naam', { ascending: true })
+      .order('id')
+      .range(van, tot)),
+    // Factuuradressen erbij zodat de zoekbalk van het overzicht ook de betalende partij vindt:
+    // bij een beheerder kennen collega's vaak alleen de VvE-naam, niet de beheerder zelf.
+    // Gepagineerd om dezelfde reden als hierboven — er staan er nu 62, maar dat loopt op.
+    haalAlleRijen<{ relatie_id: string; label: string }>((van, tot) => supabase
+      .from('relatie_factuuradressen')
+      .select('relatie_id, label')
       .order('id')
       .range(van, tot)),
     getAlleContactpersonen(),
@@ -47,9 +55,21 @@ export default async function RelatiesPage() {
     getLaatsteSyncTijd('relaties'),
   ])
 
+  const faPerRelatie = new Map<string, string[]>()
+  for (const fa of factuuradressen) {
+    if (!fa.label) continue
+    const lijst = faPerRelatie.get(fa.relatie_id)
+    if (lijst) lijst.push(fa.label)
+    else faPerRelatie.set(fa.relatie_id, [fa.label])
+  }
+  const organisaties: Organisatie[] = relaties.map(r => ({
+    ...r,
+    factuuradressen: faPerRelatie.get(r.id) ?? [],
+  }))
+
   return (
     <RelatiesOverzicht
-      organisaties={relaties}
+      organisaties={organisaties}
       contactpersonen={contactpersonenRes}
       particulieren={particulierenRes}
       dubbelen={dubbelen}

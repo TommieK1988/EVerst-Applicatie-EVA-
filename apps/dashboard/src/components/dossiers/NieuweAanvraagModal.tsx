@@ -391,6 +391,11 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
                           {rel.contactpersoon && (
                             <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{rel.contactpersoon.naam}</span>
                           )}
+                          {rel.viaFactuuradres && (
+                            <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+                              factuuradres: {rel.viaFactuuradres}
+                            </span>
+                          )}
                         </span>
                         <span style={{
                           fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',

@@ -34,6 +34,12 @@ export type Organisatie = {
   adres_land: string | null
   actief: boolean
   created_at: string
+  /**
+   * Labels van de factuuradressen onder deze relatie. Bij een beheerder is dat de lijst
+   * betalende partijen (de VvE's); collega's kennen die namen vaak beter dan de beheerder zelf,
+   * en zoeken erop. Als kolom meegenomen zodat de zoekbalk van de tabel erop matcht.
+   */
+  factuuradressen?: string[]
 }
 
 type ContactpersoonRij = Contactpersoon & {
@@ -135,6 +141,24 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
         {r.email ?? '—'}
       </span>
     ),
+  },
+  {
+    key: 'factuuradressen',
+    label: 'Factuuradressen',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    // Alle labels in één sorteer-/zoekwaarde: de zoekbalk van de tabel kijkt hiernaar, dus
+    // "VvE 8266 Steenlaan" vindt zo ook de beheerder die voor die VvE werkt.
+    sorteerWaarde: r => (r.factuuradressen ?? []).join(' · '),
+    render: r => {
+      const lijst = r.factuuradressen ?? []
+      if (lijst.length === 0) return <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>
+      return (
+        <span style={{ fontSize: 12, color: 'var(--fg-soft)' }} title={lijst.join('\n')}>
+          {lijst.length === 1 ? lijst[0] : `${lijst[0]} +${lijst.length - 1}`}
+        </span>
+      )
+    },
   },
   {
     key: 'status',
