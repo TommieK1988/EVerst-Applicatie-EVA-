@@ -268,7 +268,6 @@ export default function BerichtBehandelen({
         werkmaatschappijId: werkmaatschappijId || null,
         aanvraagdatum: velden.aanvraagdatum ?? null,
         deadline: deadline || null,
-        deadlineAfgeleid: false,
         opdrachtdatum: velden.opdrachtdatum ?? null,
         opdrachtReferentie: velden.opdracht_referentie ?? null,
         mandaatBedrag: mandaat.trim() ? Number(mandaat.replace(',', '.')) : null,

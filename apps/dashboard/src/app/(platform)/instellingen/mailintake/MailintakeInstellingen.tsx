@@ -89,13 +89,12 @@ function MeldingKiezer({
 }
 
 export default function MailintakeInstellingen({
-  postbussen, aliassen, nabehandelStand, medewerkers, werkmaatschappijen, magBeheren,
+  postbussen, aliassen, nabehandelStand, medewerkers, magBeheren,
 }: {
   postbussen: Postbus[]
   aliassen: Alias[]
   nabehandelStand: string
   medewerkers: { id: string; naam: string; heeftLogin: boolean }[]
-  werkmaatschappijen: { id: string; naam: string }[]
   magBeheren: boolean
 }) {
   const router = useRouter()
@@ -229,17 +228,13 @@ export default function MailintakeInstellingen({
                   />
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={klein}>Standaard werkmaatschappij</span>
-                  <select
-                    style={veldStijl}
-                    defaultValue={p.standaard_werkmaatschappij_id ?? ''}
-                    onChange={e => wijzig(p.id, 'standaard_werkmaatschappij_id', e.target.value || null)}
-                  >
-                    <option value="">— geen —</option>
-                    {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
-                  </select>
-                </label>
+                {/* Hier stond "Standaard werkmaatschappij". Die is weg omdat hij niets
+                    meer doet: de werkmaatschappij volgt uit de aard van het werk --
+                    schilderwerk naar Everts Onderhoudsschilders, bouwkundig naar
+                    Bouwbedrijf Morgenstond -- en is het werk gemengd of onduidelijk,
+                    dan wordt het voorgelegd in plaats van stilzwijgend ingevuld. Een
+                    instelling die nergens meer op aangrijpt is misleidender dan geen
+                    instelling. */}
 
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <span style={klein}>Dagbudget AI (in centen)</span>

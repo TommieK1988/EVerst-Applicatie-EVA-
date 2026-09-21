@@ -89,9 +89,9 @@ export async function voorleggen(
     const ingevuld: string[] = []
     const ontbreekt: string[] = []
 
-    const noteer = (label: string, waarde: unknown, extra = '') => {
+    const noteer = (label: string, waarde: unknown, extra = '', waaromLeeg = '') => {
       if (waarde) ingevuld.push(`- ${label}: ${String(waarde)}${extra}`)
-      else ontbreekt.push(`- ${label}`)
+      else ontbreekt.push(`- ${label}${waaromLeeg ? ` (${waaromLeeg})` : ''}`)
     }
 
     if (context.relatieNaam) ingevuld.push(`- Opdrachtgever: ${context.relatieNaam}`)
@@ -102,9 +102,9 @@ export async function voorleggen(
     noteer('Adres', adres && v.werkadresStad ? `${adres}, ${v.werkadresStad}` : adres || null,
       v.adresBevestigd ? '' : ' (niet bevestigd door PDOK)')
     noteer('Categorie', v.categorieNaam)
-    if (v.deadline) {
-      ingevuld.push(`- Deadline: ${v.deadline}${v.deadlineAfgeleid ? ' (afgeleid: aanvraagdatum + 4 weken)' : ''}`)
-    }
+    // Een ontbrekende deadline is bewust een open punt en geen stille +4 weken:
+    // dat veld gaat als opleverdatum naar Bouw7 en loopt daar mee in de bewaking.
+    noteer('Uiterste datum', v.deadline, '', 'stond niet in de aanvraag')
     if (v.referentie) ingevuld.push(`- Referentie klant: ${v.referentie}`)
     if (v.opdrachtReferentie) ingevuld.push(`- Opdrachtreferentie: ${v.opdrachtReferentie}`)
     if (v.mandaatBedrag != null) ingevuld.push(`- Mandaat: ${v.mandaatBedrag}`)

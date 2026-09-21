@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-16.2'
+export const PROMPT_VERSIE = '2026-09-21.1'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -56,6 +56,7 @@ export const extractieSchema = z.object({
   vve_code: korteTekst,
   categorie_voorstel: korteTekst,
   werkmaatschappij_voorstel: korteTekst,
+  aard_van_het_werk: korteTekst,
 
   // ── Wanneer ──
   aanvraagdatum: korteTekst,
@@ -126,6 +127,7 @@ export const VELD_LABELS: Record<string, string> = {
   vve_code:                  'VvE-code',
   categorie_voorstel:        'Categorie',
   werkmaatschappij_voorstel: 'Werkmaatschappij',
+  aard_van_het_werk:         'Aard van het werk',
   aanvraagdatum:             'Aanvraagdatum',
   deadline:                  'Deadline',
   gewenste_start:            'Gewenste start',
@@ -208,6 +210,16 @@ export const LEVER_EXTRACTIE_TOOL = {
       vve_code: { type: 'string', description: 'VvE- of complexcode, als die genoemd wordt.' },
       categorie_voorstel: { type: 'string', description: 'Soort werk, bijvoorbeeld Schilderwerk, Dagelijks onderhoud, Mutatie, Renovatie.' },
       werkmaatschappij_voorstel: { type: 'string', description: 'Werkmaatschappij, alleen als de mail die expliciet noemt.' },
+      aard_van_het_werk: {
+        type: 'string',
+        enum: ['schilderwerk', 'bouwkundig', 'gemengd', 'onduidelijk'],
+        description:
+          'Waar gaat het werk in hoofdzaak over? "schilderwerk" bij zuiver of overwegend schilderwerk. ' +
+          '"bouwkundig" bij bouwkundig werk, ook als daar een klein deel schilderwerk bij hoort. ' +
+          '"gemengd" als beide substantieel zijn en geen van beide duidelijk overheerst. ' +
+          '"onduidelijk" als de stukken het niet zeggen. Gok niet: gemengd en onduidelijk worden ' +
+          'aan een mens voorgelegd, en dat is beter dan een verkeerde werkmaatschappij.',
+      },
       aanvraagdatum: { type: 'string', description: 'Datum van de aanvraag als ISO-datum (JJJJ-MM-DD).' },
       deadline: { type: 'string', description: 'Uiterste datum als ISO-datum (JJJJ-MM-DD).' },
       gewenste_start: { type: 'string', description: 'Gewenste startdatum als ISO-datum (JJJJ-MM-DD).' },

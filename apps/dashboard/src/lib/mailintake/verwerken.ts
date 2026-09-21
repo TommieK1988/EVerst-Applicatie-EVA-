@@ -308,7 +308,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         eigenTekst,
         ...eerdere.map(m => `${m.onderwerp ?? ''}\n${m.bodyTekst ?? ''}`),
       ].join('\n')
-      return keurEnKalibreer(res, lijsten, brontekst, postbus.standaard_werkmaatschappij_id, {
+      return keurEnKalibreer(res, lijsten, brontekst, {
         ontvangenOp,
         // Op de inhoud en niet op de bus: een offerteaanvraag die per ongeluk naar
         // servicedesk@ is gestuurd hoort geen servicedeskcategorie te krijgen.

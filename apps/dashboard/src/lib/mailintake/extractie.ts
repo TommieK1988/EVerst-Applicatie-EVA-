@@ -26,8 +26,8 @@ import { zoekAdres, eersteHuisnummer } from '@/lib/adres/pdok'
 
 import { LEVER_EXTRACTIE_TOOL, PROMPT_VERSIE, veiligParse, type Extractie } from './schema'
 import {
-  kiesWerkmaatschappij, noemtMandaat, noemtRegie, komtVoorInBron, datumPlusDagen,
-  SERVICEDESK_CATEGORIEEN,
+  kiesWerkmaatschappij, noemtMandaat, noemtRegie, komtVoorInBron,
+  SERVICEDESK_CATEGORIEEN, type AardVanHetWerk,
 } from './regels'
 import { SYSTEM_PROMPT, bouwTekstBlok, type PromptContext } from './prompt'
 import { VELD_BETROUWBAAR } from './types'
@@ -288,8 +288,6 @@ export interface GekeurdeVelden {
   werkmaatschappijId: string | null
   aanvraagdatum: string | null
   deadline: string | null
-  /** true als de deadline niet in de mail stond maar is afgeleid (+4 weken). */
-  deadlineAfgeleid: boolean
   opdrachtdatum: string | null
   opdrachtReferentie: string | null
   mandaatBedrag: number | null
@@ -351,7 +349,6 @@ export async function keurEnKalibreer(
   data: Extractie,
   lijsten: WitteLijsten,
   brontekst: string,
-  standaardWerkmaatschappijId: string | null,
   opties: {
     /** Datum waarop de mail binnenkwam; de terugval voor de aanvraagdatum. */
     ontvangenOp: string
@@ -464,16 +461,18 @@ export async function keurEnKalibreer(
   }
   zet('categorie_voorstel', cat?.naam ?? null, cat ? 1 : 0)
 
-  // ── Werkmaatschappij: witte lijst, anders de standaard van de postbus ─────
+  // ── Werkmaatschappij: alleen schilders of bouw, anders voorleggen ─────────
+  const aard = (['schilderwerk', 'bouwkundig', 'gemengd', 'onduidelijk'] as const)
+    .find(a => a === (data.aard_van_het_werk ?? '').trim().toLowerCase()) ?? null
   const wmKeuze = kiesWerkmaatschappij(
-    data.werkmaatschappij_voorstel, cat?.naam ?? null,
-    lijsten.werkmaatschappijen, standaardWerkmaatschappijId,
+    aard as AardVanHetWerk | null, cat?.naam ?? null, lijsten.werkmaatschappijen,
   )
   const werkmaatschappijId = wmKeuze.id
-  // Uit de mail of uit de categorieregel is een vaststelling; de postbusstandaard is
-  // een terugval en scoort daarom lager.
+  // Een oordeel over de aard van het werk is de regel zelf en telt dus vol. De
+  // afleiding uit de categorie is een benadering: die zegt niets over de verhouding
+  // tussen schilderwerk en bouwkundig werk.
   zet('werkmaatschappij_voorstel', werkmaatschappijId,
-    wmKeuze.via === 'mail' || wmKeuze.via === 'categorie' ? 1 : werkmaatschappijId ? 0.7 : 0)
+    wmKeuze.via === 'aard' ? 1 : wmKeuze.via === 'categorie' ? 0.7 : 0)
 
   // ── Tekstvelden: staat het er letterlijk? ─────────────────────────────────
   for (const veld of ['omschrijving', 'klant_naam', 'contactpersoon_naam', 'contactpersoon_email', 'referentie', 'onze_offerte_referentie', 'vve_code'] as const) {
@@ -489,13 +488,13 @@ export async function keurEnKalibreer(
   const aanvraagdatum = uitMailDatum ?? opties.ontvangenOp.slice(0, 10)
   zet('aanvraagdatum', aanvraagdatum, uitMailDatum ? modelScore('aanvraagdatum') : 1)
 
-  // Geen deadline in de mail? Dan vier weken. Let op: dit veld gaat als opleverdatum
-  // naar Bouw7, dus een afgeleide waarde moet als afgeleid herkenbaar blijven --
-  // `deadlineAfgeleid` draagt dat naar het scherm en het besluitenlog.
-  const uitMailDeadline = geldigeDatum(data.deadline)
-  const deadline = uitMailDeadline ?? datumPlusDagen(aanvraagdatum, 28)
-  const deadlineAfgeleid = uitMailDeadline == null
-  zet('deadline', deadline, uitMailDeadline ? modelScore('deadline') : 0.5)
+  // Alleen een deadline die er werkelijk staat. Hiervoor vulde EVA er zelf een in --
+  // aanvraagdatum plus vier weken -- en dat veld gaat als opleverdatum naar Bouw7 en
+  // loopt daar mee in de bewaking. Dan bewaak je een datum die de klant nooit heeft
+  // genoemd en die niemand heeft toegezegd. Staat er geen uiterste datum, dan blijft
+  // het veld leeg en is dat een open punt voor de behandelaar.
+  const deadline = geldigeDatum(data.deadline)
+  zet('deadline', deadline, deadline ? modelScore('deadline') : 0)
 
   const opdrachtdatum = geldigeDatum(data.opdrachtdatum)
   zet('opdrachtdatum', opdrachtdatum, opdrachtdatum ? modelScore('opdrachtdatum') : 0)
@@ -548,7 +547,6 @@ export async function keurEnKalibreer(
     werkmaatschappijId,
     aanvraagdatum,
     deadline,
-    deadlineAfgeleid,
     opdrachtdatum,
     opdrachtReferentie,
     mandaatBedrag: mandaat,

@@ -17,15 +17,13 @@ export const dynamic = 'force-dynamic'
 export default async function MailintakeInstellingenPage() {
   const { rechten } = await vereisRecht('mailintake', 'lezen')
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient()
-  const [postbussen, aliassen, stand, { data: medewerkers }, { data: werkmaatschappijen }] = await Promise.all([
+  const [postbussen, aliassen, stand, { data: medewerkers }] = await Promise.all([
     getPostbussen(),
     getAliassen(),
     getNabehandelStand(),
     supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam, auth_user_id')
       .eq('actief', true).order('achternaam').limit(300),
-    supabase.from('bedrijfsgegevens').select('id, naam').eq('type', 'werkmaatschappij').order('naam').limit(50),
   ])
 
   return (
@@ -40,7 +38,6 @@ export default async function MailintakeInstellingenPage() {
         // waarschuwt daarvoor in plaats van hem stil te laten verdwijnen.
         heeftLogin: m.auth_user_id != null,
       }))}
-      werkmaatschappijen={werkmaatschappijen ?? []}
       magBeheren={heeftModuleToegang(rechten, 'mailintake', 'beheren')}
     />
   )

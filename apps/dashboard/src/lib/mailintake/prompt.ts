@@ -47,6 +47,11 @@ postcodes, en maak geen klantnamen compleet die er half staan. Weet je iets niet
 Geef in "vertrouwen" per veld aan hoe zeker je bent: 1,0 als het er letterlijk staat, rond 0,5
 als je het hebt afgeleid uit de context.
 
+Verzin in het bijzonder geen deadline, geen persoon, geen rol, geen werkzaamheden en geen
+uitsluitingen. Een uiterste datum vul je alleen in als die er werkelijk staat; "we horen graag
+snel" is geen datum. Een leeg veld is een open punt dat iemand oppakt — een ingevuld veld dat
+niet klopt gaat ongemerkt mee het dossier in en komt in Bouw7 terecht.
+
 Het werkadres is het adres waar het werk moet gebeuren — niet het factuuradres en niet het
 kantooradres in de handtekening. Staat er alleen een handtekeningadres, laat het werkadres dan leeg.
 

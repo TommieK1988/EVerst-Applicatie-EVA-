@@ -50,41 +50,63 @@ export const REGIE_WOORDEN = [
   'verrekenbare uren', 'werkelijk bestede uren', 'uurtarief',
 ]
 
-export type WerkmaatschappijVia = 'mail' | 'categorie' | 'standaard' | 'geen'
+export type WerkmaatschappijVia = 'aard' | 'categorie' | 'voorleggen' | 'geen'
+
+/** Wat het werk in hoofdzaak is; bepaalt de werkmaatschappij. */
+export type AardVanHetWerk = 'schilderwerk' | 'bouwkundig' | 'gemengd' | 'onduidelijk'
 
 /**
  * Welke werkmaatschappij hoort bij dit werk?
  *
- * Rangorde, en die volgorde is de hele regel:
- *  1. de mail noemt er zelf een die op de witte lijst staat;
- *  2. de categorie bepaalt het: schilderwerk naar de schilders, de rest naar bouw;
- *  3. de standaard van de postbus.
+ * De regel komt uit de intakebeschrijving en is er één van vier gevallen:
  *
- * Stap 1 staat bewust boven stap 2. Zonder die stap zou de derde werkmaatschappij
- * (Dakplan) nooit meer gekozen kunnen worden, ook niet als de opdrachtgever hem
- * letterlijk aanschrijft.
+ *  | zuiver of overwegend schilderwerk            | Everts Onderhoudsschilders |
+ *  | bouwkundig werk                              | Bouwbedrijf Morgenstond    |
+ *  | bouwkundig met een klein deel schilderwerk   | Bouwbedrijf Morgenstond    |
+ *  | gemengd of onduidelijk                       | voorleggen aan een mens    |
+ *
+ * Twee dingen daarin zijn geen detail.
+ *
+ * **Alleen deze twee werkmaatschappijen.** Schildersbedrijf Everts en
+ * Dakdekkersbedrijf Dakplan komen bij een intake niet in aanmerking, ook niet als
+ * de mail er één letterlijk noemt. Eerder woog zo'n vermelding juist het zwaarst,
+ * waardoor een terloopse zin in een handtekening of een doorgestuurde kop het werk
+ * bij de verkeerde onderneming kon zetten.
+ *
+ * **Gemengd is een eigen uitkomst, geen terugval.** Hiervoor viel alles wat de
+ * categorie niet besliste stilzwijgend op de standaard van de postbus. Dat is
+ * precies het gokken dat hier niet hoort: liever leeg, met de vraag erbij, dan een
+ * keuze die niemand gemaakt heeft. Een leeg veld dwingt het bericht vanzelf naar
+ * `wacht_op_mens`, want de veldcontrole eist een werkmaatschappij.
  */
 export function kiesWerkmaatschappij(
-  uitMail: string | null,
+  aard: AardVanHetWerk | null,
   categorieNaam: string | null,
   lijst: { id: string; naam: string }[],
-  standaardId: string | null,
 ): { id: string | null; via: WerkmaatschappijVia } {
-  const genoemd = (uitMail ?? '').trim().toLowerCase()
-  if (genoemd) {
-    const hit = lijst.find(w => w.naam.toLowerCase() === genoemd)
-      ?? lijst.find(w => genoemd.length >= 5 && w.naam.toLowerCase().includes(genoemd))
-    if (hit) return { id: hit.id, via: 'mail' }
+  const zoek = (voorvoegsel: string) =>
+    lijst.find(w => w.naam.toLowerCase().startsWith(voorvoegsel))?.id ?? null
+
+  if (aard === 'schilderwerk') {
+    const id = zoek(WM_SCHILDERS)
+    if (id) return { id, via: 'aard' }
+  }
+  if (aard === 'bouwkundig') {
+    const id = zoek(WM_BOUW)
+    if (id) return { id, via: 'aard' }
+  }
+  if (aard === 'gemengd' || aard === 'onduidelijk') {
+    return { id: null, via: 'voorleggen' }
   }
 
+  // Zonder oordeel over de aard valt de categorie terug op dezelfde tweedeling.
   const cat = (categorieNaam ?? '').trim().toLowerCase()
   if (cat) {
-    const zoek = cat === SCHILDER_CATEGORIE ? WM_SCHILDERS : WM_BOUW
-    const hit = lijst.find(w => w.naam.toLowerCase().startsWith(zoek))
-    if (hit) return { id: hit.id, via: 'categorie' }
+    const id = zoek(cat === SCHILDER_CATEGORIE ? WM_SCHILDERS : WM_BOUW)
+    if (id) return { id, via: 'categorie' }
   }
 
-  return standaardId ? { id: standaardId, via: 'standaard' } : { id: null, via: 'geen' }
+  return { id: null, via: 'geen' }
 }
 
 /**
@@ -110,12 +132,6 @@ export function postbusSoortVoorMail(soort: MailSoort | null): PostbusSoort | nu
   }
 }
 
-/** Datum plus een aantal dagen, als ISO-datum. */
-export function datumPlusDagen(iso: string, dagen: number): string {
-  const d = new Date(iso + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() + dagen)
-  return d.toISOString().slice(0, 10)
-}
 
 /**
  * Maakt tekst vergelijkbaar: kleine letters, en alles wat geen letter of cijfer is
