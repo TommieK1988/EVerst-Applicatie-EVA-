@@ -14,6 +14,7 @@ import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/
 import type { KanaalRechten } from '@everts/database/platform-types'
 import { leesRechtenDocument, mergeKanaal, leegKanaal, niveauHaalt } from '@everts/database/rechten'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
+import { alleSpiegelsAlsMap } from '@/lib/bouw7/relatie-spiegel'
 import {
   metBehoudVanHandmatigeVelden, BOUW7_DOSSIER_VELDEN, BOUW7_MEDEWERKER_VELDEN, BOUW7_BANK_VELDEN,
 } from './handmatige-velden'
@@ -193,8 +194,28 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     }
 
     // 3. Pre-fetch bestaande relaties (één DB-query i.p.v. N)
+    //
+    // De sleutel van de relatie-sync is de spiegeltabel, niet `relaties.bouw7_id`. Bouw7 geeft
+    // een contact precies één type, dus een bedrijf met twee rollen (klant én leverancier)
+    // staat daar twee keer; in EVA is dat één relatie met twee spiegels. Sleutelen op
+    // `relaties.bouw7_id` zou het contact van een samengevoegde verliezer niet meer vinden —
+    // en dan staat het duplicaat dat net is opgeruimd er binnen een halve dag weer.
     // Gepagineerd: bij afkapping op 1000 rijen wordt een bestaande relatie niet gevonden en
     // als NIEUW aangemaakt — een duplicaat in de stamgegevens. Zie lib/supabase/paginate.ts.
+    type RelatieSpiegelRij = {
+      id: string; relatie_id: string; bouw7_id: string
+      bouw7_type: string | null; bouw7_sync_hash: string | null; is_primair: boolean
+    }
+    const spiegels = await haalAlleRijen<RelatieSpiegelRij>((van, tot) => supabase
+      .from('relatie_bouw7_koppelingen')
+      .select('id, relatie_id, bouw7_id, bouw7_type, bouw7_sync_hash, is_primair')
+      .order('id')
+      .range(van, tot),
+    ).catch((e: unknown) => {
+      throw new Error(`Schema cache fout bij ophalen relatie-spiegels: ${e instanceof Error ? e.message : String(e)}`)
+    })
+    const spiegelPerBouw7 = new Map<string, RelatieSpiegelRij>(spiegels.map(s => [s.bouw7_id, s]))
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbRelaties = await haalAlleRijen<any>((van, tot) => supabase
       .from('relaties')
@@ -204,7 +225,8 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         'id, bouw7_id, sync_vergrendeld, bouw7_sync_hash, types, bouw7_type, handmatige_velden, '
         + BOUW7_RELATIE_VELDEN.join(', ')
       )
-      .not('bouw7_id', 'is', null)
+      // Samengevoegde verliezers doen niet meer mee; hun spiegels wijzen naar de blijver.
+      .is('samengevoegd_in', null)
       .order('id')
       .range(van, tot),
     ).catch((e: unknown) => {
@@ -212,14 +234,21 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const relatieMap = new Map<string, any>(
-      (dbRelaties ?? []).map((r: any) => [r.bouw7_id as string, r])
-    )
+    const relatiePerId = new Map<string, any>((dbRelaties ?? []).map((r: any) => [r.id as string, r]))
+    // bouw7_id → de EVA-relatie waar dat contact bij hoort, via de spiegel.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const relatieMap = new Map<string, any>()
+    for (const s of spiegels) {
+      const r = relatiePerId.get(s.relatie_id)
+      if (r) relatieMap.set(s.bouw7_id, r)
+    }
 
     // 3b. Fingerprint per contact, nu al — die bepaalt welke contacten hun detailrecord nodig
     //     hebben. `updatedAt` zit erin omdat de betalingsconditie niet op het lijstrecord staat:
     //     zonder die stempel zou een gewijzigde termijn incrementeel onzichtbaar blijven.
     const hashPerContact = new Map<string, string>()
+    // Het Bouw7-contact zelf, om later per spiegel het type te kunnen vastleggen.
+    const contactPerBouw7Id = new Map<string, Bouw7Contact>(allContacts.map(c => [String(c.id), c]))
     for (const c of allContacts) {
       hashPerContact.set(String(c.id), fingerprint({
         naam: c.name ?? null, type: mapContactType(c.type?.name), kvk: c.cocNumber ?? null,
@@ -237,9 +266,11 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // 3c. Betalingstermijn zit alleen op het detailrecord (`GET /contact/{id}`, enkelvoud), dus
     //     één call per relatie. Incrementeel halen we alleen de gewijzigde contacten op; bij een
     //     volledige run alle ~600, wat met deze concurrency ruim binnen de cron-limiet blijft.
+    // De hash hoort bij de Bouw7-rij, niet bij de EVA-relatie: twee spiegels van hetzelfde
+    // bedrijf wijzigen onafhankelijk van elkaar.
     const contactenVoorDetail = mode === 'full'
       ? allContacts
-      : allContacts.filter(c => relatieMap.get(String(c.id))?.bouw7_sync_hash !== hashPerContact.get(String(c.id)))
+      : allContacts.filter(c => spiegelPerBouw7.get(String(c.id))?.bouw7_sync_hash !== hashPerContact.get(String(c.id)))
 
     const detailPerContact = new Map<string, Bouw7ContactDetail>()
     {
@@ -300,13 +331,49 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // Incrementeel: alleen nieuwe/gewijzigde relaties schrijven (gelijke hash → overslaan).
     const changedRelatieRows = mode === 'full'
       ? relatieRows
-      : relatieRows.filter(r => relatieMap.get(r.bouw7_id as string)?.bouw7_sync_hash !== r.bouw7_sync_hash)
+      : relatieRows.filter(r => spiegelPerBouw7.get(r.bouw7_id as string)?.bouw7_sync_hash !== r.bouw7_sync_hash)
     orgResult.overgeslagen = relatieRows.length - changedRelatieRows.length
+
+    // Elke rol die Bouw7 van een relatie kent, verzameld over al haar spiegels. Een bedrijf
+    // dat als klant én als leverancier in Bouw7 staat, hoort in EVA beide types te dragen.
+    const rollenPerRelatie = new Map<string, Set<OrganisatieType>>()
+    for (const c of allContacts) {
+      const rel = relatieMap.get(String(c.id))
+      if (!rel) continue
+      const set = rollenPerRelatie.get(rel.id as string) ?? new Set<OrganisatieType>()
+      set.add(mapContactType(c.type?.name))
+      rollenPerRelatie.set(rel.id as string, set)
+    }
+    // De rollen die Bouw7 bij de vórige run voor deze relatie gaf, uit de spiegels. Die hebben
+    // we nodig om onderscheid te maken tussen "Bouw7 kent deze rol niet meer" (weghalen) en
+    // "dit type is in EVA zelf toegevoegd" (laten staan) — vijf relaties dragen zo'n
+    // handmatig toegevoegde rol.
+    const vorigeRollenPerRelatie = new Map<string, Set<string>>()
+    for (const s of spiegels) {
+      if (!s.bouw7_type) continue
+      const set = vorigeRollenPerRelatie.get(s.relatie_id) ?? new Set<string>()
+      set.add(s.bouw7_type)
+      vorigeRollenPerRelatie.set(s.relatie_id, set)
+    }
+    /** De types van een relatie: wat Bouw7 over al haar spiegels kent, plus wat EVA zelf toevoegde. */
+    const typesVoorRelatie = (
+      bestaand: { id?: string; types?: OrganisatieType[] | null; bouw7_type?: OrganisatieType | null },
+    ): OrganisatieType[] => {
+      const nu = rollenPerRelatie.get(bestaand.id as string) ?? new Set<OrganisatieType>()
+      const vorige = vorigeRollenPerRelatie.get(bestaand.id as string) ?? new Set<string>()
+      if (bestaand.bouw7_type) vorige.add(bestaand.bouw7_type)
+      const extras = (bestaand.types ?? []).filter(t => !nu.has(t) && !vorige.has(t))
+      return [...nu, ...extras]
+    }
 
     // Splits in nieuw en bestaand voor batch-schrijven
     // relaties heeft een partiële unique index op bouw7_id — upsert via primary key voor bestaande
     const nieuweRelaties = changedRelatieRows.filter(r => !relatieMap.has(r.bouw7_id as string))
     const bestaandeRelaties = changedRelatieRows
+      // Alleen de primaire spiegel schrijft de bedrijfsvelden. Een tweede spiegel is hetzelfde
+      // bedrijf in een andere rol; die zou naam en adres van de ene Bouw7-rij met die van de
+      // andere overschrijven. Zijn rol telt wél mee — via `typesVoorRelatie`.
+      .filter(r => spiegelPerBouw7.get(r.bouw7_id as string)?.is_primair !== false)
       .filter(r => relatieMap.has(r.bouw7_id as string))
       .map(r => {
         const bestaand = relatieMap.get(r.bouw7_id as string)
@@ -314,10 +381,23 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         return {
           ...rij,
           // Bouw7 levert het hoofdtype; in EVA toegevoegde types blijven ernaast staan.
-          types: voegTypesSamen(r.bouw7_type as OrganisatieType, bestaand?.types, bestaand?.bouw7_type),
+          types: typesVoorRelatie(bestaand),
           id: bestaand?.id as string,
         }
       })
+
+    // Relaties waarvan alleen een secundaire spiegel wijzigde: die krijgen geen bedrijfsvelden,
+    // maar hun rollenlijst moet wel kloppen. Per relatie hoogstens één update, ook als er twee
+    // secundaire spiegels tegelijk wijzigden.
+    const alRaak = new Set(bestaandeRelaties.map(b => b.id as string))
+    const alleenRollen: { id: string; types: string[] }[] = []
+    for (const r of changedRelatieRows) {
+      if (spiegelPerBouw7.get(r.bouw7_id as string)?.is_primair !== false) continue
+      const rel = relatieMap.get(r.bouw7_id as string)
+      if (!rel || alRaak.has(rel.id as string)) continue
+      alRaak.add(rel.id as string)
+      alleenRollen.push({ id: rel.id as string, types: typesVoorRelatie(rel) })
+    }
 
     orgResult.nieuw = nieuweRelaties.length
     orgResult.bijgewerkt = bestaandeRelaties.length
@@ -336,15 +416,72 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       if (error) { orgResult.fouten++; orgResult.foutMelding = error.message }
     }
 
-    // 7. Re-fetch relatie IDs (nieuwe records hebben nu een id)
-    const { data: relatiesNaUpsert } = await supabase
-      .from('relaties')
-      .select('id, bouw7_id')
-      .in('bouw7_id', allContacts.map(c => String(c.id)))
+    // 6b. Relaties waarvan alleen een tweede rol wijzigde: enkel het types-veld.
+    for (const rij of alleenRollen) {
+      const { error } = await supabase.from('relaties').update({ types: rij.types }).eq('id', rij.id)
+      if (error) { orgResult.fouten++; orgResult.foutMelding = error.message }
+    }
 
-    const relatieIdMap = new Map<string, string>(
-      (relatiesNaUpsert ?? []).map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
-    )
+    // 7. Spiegels bijwerken. Nieuwe relaties krijgen hier hun primaire spiegel; bestaande
+    //    spiegels krijgen de hash van hún Bouw7-rij. Deze tabel is de sleutel van de sync, dus
+    //    hij moet gevuld zijn vóór de volgende run — anders wordt het contact niet herkend en
+    //    als nieuwe relatie aangemaakt.
+    //    Gepagineerd en zonder `.in()` over 650 waarden: de relaties die we net hebben
+    //    aangemaakt vinden we terug op hun bouw7_id, de rest zit al in de spiegeltabel.
+    const nieuweBouw7Ids = new Set(nieuweRelaties.map(r => r.bouw7_id as string))
+    const relatieIdMap = new Map<string, string>()
+    for (const s of spiegels) relatieIdMap.set(s.bouw7_id, s.relatie_id)
+
+    if (nieuweBouw7Ids.size > 0) {
+      const verseRelaties = await haalAlleRijen<{ id: string; bouw7_id: string }>((van, tot) => supabase
+        .from('relaties')
+        .select('id, bouw7_id')
+        .not('bouw7_id', 'is', null)
+        .order('id')
+        .range(van, tot))
+      const spiegelRijen: Record<string, unknown>[] = []
+      for (const r of verseRelaties) {
+        if (!nieuweBouw7Ids.has(r.bouw7_id)) continue
+        relatieIdMap.set(r.bouw7_id, r.id)
+        spiegelRijen.push({
+          relatie_id:        r.id,
+          bouw7_id:          r.bouw7_id,
+          bouw7_type:        mapContactType(contactPerBouw7Id.get(r.bouw7_id)?.type?.name),
+          bouw7_sync_hash:   hashPerContact.get(r.bouw7_id) ?? null,
+          bouw7_laatst_sync: new Date().toISOString(),
+          is_primair:        true,
+        })
+      }
+      for (let i = 0; i < spiegelRijen.length; i += 500) {
+        const { error } = await supabase
+          .from('relatie_bouw7_koppelingen')
+          .upsert(spiegelRijen.slice(i, i + 500), { onConflict: 'bouw7_id' })
+        if (error) { orgResult.fouten++; orgResult.foutMelding = error.message }
+      }
+    }
+
+    // Hash per bestaande spiegel bijwerken — per spiegel, want twee rollen van hetzelfde
+    // bedrijf wijzigen los van elkaar.
+    const relatieSpiegelUpdates = changedRelatieRows
+      .map(r => ({ spiegel: spiegelPerBouw7.get(r.bouw7_id as string), hash: r.bouw7_sync_hash as string }))
+      .filter((x): x is { spiegel: RelatieSpiegelRij; hash: string } => Boolean(x.spiegel))
+      .map(x => ({
+        id:                x.spiegel.id,
+        relatie_id:        x.spiegel.relatie_id,
+        bouw7_id:          x.spiegel.bouw7_id,
+        bouw7_type:        mapContactType(contactPerBouw7Id.get(x.spiegel.bouw7_id)?.type?.name),
+        bouw7_sync_hash:   x.hash,
+        bouw7_laatst_sync: new Date().toISOString(),
+        is_primair:        x.spiegel.is_primair,
+      }))
+    for (let i = 0; i < relatieSpiegelUpdates.length; i += 500) {
+      // Een PostgREST-upsert is een INSERT met conflict-clausule: relatie_id en bouw7_id
+      // moeten mee, anders sneuvelt hij op NOT NULL vóór het conflict aan bod komt.
+      const { error } = await supabase
+        .from('relatie_bouw7_koppelingen')
+        .upsert(relatieSpiegelUpdates.slice(i, i + 500), { onConflict: 'id' })
+      if (error) { orgResult.fouten++; orgResult.foutMelding = error.message }
+    }
 
     // 8. IBAN batch upsert — met behoud van een in EVA gecorrigeerd nummer.
     //    De bestaande bankrijen komen mee zodat `metBehoudVanHandmatigeVelden` de EVA-waarde
@@ -683,10 +820,23 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
 
     // 14. Soft-delete: markeer organisaties die niet meer in Bouw7 staan als inactief.
     //     Wie de actief-vlag in EVA zelf heeft gezet, houdt zijn eigen waarde.
+    //
+    //     Sleutel op de spiegels, niet op `relaties.bouw7_id`. Twee redenen: een relatie kan
+    //     meer dan één Bouw7-contact hebben en is pas weg als ze állemaal weg zijn, en een
+    //     relatie die alleen in EVA bestaat (geen enkele spiegel) staat niet in Bouw7 maar is
+    //     daarom nog niet vervallen — die mag deze stap nooit op inactief zetten.
+    const spiegelsPerRelatie = new Map<string, string[]>()
+    for (const s of spiegels) {
+      spiegelsPerRelatie.set(s.relatie_id, [...(spiegelsPerRelatie.get(s.relatie_id) ?? []), s.bouw7_id])
+    }
     const toDeactivate = (dbRelaties ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((r: any) => !bouw7IdsInResponse.has(r.bouw7_id) && !r.sync_vergrendeld
-        && !(r.handmatige_velden ?? []).includes('actief'))
+      .filter((r: any) => {
+        const eigen = spiegelsPerRelatie.get(r.id as string)
+        if (!eigen || eigen.length === 0) return false          // bestaat alleen in EVA
+        if (eigen.some(id => bouw7IdsInResponse.has(id))) return false // minstens één rol leeft nog
+        return !r.sync_vergrendeld && !(r.handmatige_velden ?? []).includes('actief')
+      })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((r: any) => r.id)
 
@@ -780,29 +930,6 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
   await logSync('relaties', 'in', orgResult, Date.now() - start)
   await logSync('contactpersonen', 'in', cpResult, Date.now() - start)
   return { organisaties: orgResult, contactpersonen: cpResult }
-}
-
-/**
- * Voegt het type uit Bouw7 samen met de types die in EVA zijn toegevoegd.
- *
- * Bouw7 kent één contacttype per relatie, EVA staat er meerdere toe (een leverancier
- * die óók onderaannemer is). Bouw7 blijft leidend voor het hoofdtype; wat een
- * gebruiker daarnaast aanvinkte blijft staan.
- *
- * `vorigBouw7Type` maakt duidelijk welk type van Bouw7 kwam: verandert het contacttype
- * daar, dan verdwijnt het oude en blijven alleen de EVA-toevoegingen over. Is het nog
- * niet vastgelegd (relaties van vóór deze wijziging), dan blijven alle bestaande types
- * behouden — liever een type te veel dan een handmatige aanmerking kwijt.
- */
-function voegTypesSamen(
-  bouw7Type: OrganisatieType,
-  bestaandeTypes: OrganisatieType[] | null | undefined,
-  vorigBouw7Type: OrganisatieType | null | undefined,
-): OrganisatieType[] {
-  const extras = (bestaandeTypes ?? []).filter(
-    t => t !== bouw7Type && (vorigBouw7Type == null || t !== vorigBouw7Type)
-  )
-  return [bouw7Type, ...extras]
 }
 
 // `metBehoudVanHandmatigeVelden` (bescherming van in EVA bewerkte velden) staat sinds de
@@ -1270,17 +1397,11 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     const supabase = createAdminClient() as any
 
     // Pre-fetch lookup maps (3 queries i.p.v. 3N)
-    // Gepagineerd: deze map bepaalt of een Bouw7-relatie al bestaat. Ontbreekt een rij door
-    // afkapping, dan koppelt de sync het dossier aan niets of maakt een duplicaat aan.
-    const relatiesData = await haalAlleRijen<{ id: string; bouw7_id: string }>((van, tot) => supabase
-      .from('relaties')
-      .select('id, bouw7_id')
-      .not('bouw7_id', 'is', null)
-      .order('id')
-      .range(van, tot))
-    const relatieMap = new Map<string, string>(
-      relatiesData.map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
-    )
+    // Via de spiegels: een project kan aan het Bouw7-contact van een samengevoegde verliezer
+    // hangen, en hoort dan gewoon bij de overgebleven relatie. Gepagineerd, want deze map
+    // bepaalt of een Bouw7-relatie al bestaat — ontbreekt een rij door afkapping, dan koppelt
+    // de sync het dossier aan niets of maakt een duplicaat aan.
+    const relatieMap = await alleSpiegelsAlsMap()
 
     const { data: medewerkerData } = await supabase
       .from('medewerkers')
@@ -1996,15 +2117,10 @@ export async function syncDebiteuren(opts?: { mode?: SyncMode }): Promise<SyncRe
           [d.bouw7_id, { id: d.id, titel: d.titel, project_manager_id: d.project_manager_id }])
     )
 
-    const { data: relatieRows } = await supabase
-      .from('relaties')
-      .select('id, bouw7_id')
-      .not('bouw7_id', 'is', null)
-    const relatieByBouw7 = new Map<string, string>(
-      (relatieRows ?? [])
-        .filter((r: { bouw7_id: string | null }) => r.bouw7_id != null)
-        .map((r: { id: string; bouw7_id: string }) => [r.bouw7_id, r.id])
-    )
+    // Via de spiegels én gepagineerd: dit was een onbegrensde `.select()` die stil op 1000
+    // rijen afkapt, en na een samenvoeging vindt `relaties.bouw7_id` het contact van de
+    // verliezer niet meer — dan zou een openstaande factuur aan geen enkele klant hangen.
+    const relatieByBouw7 = await alleSpiegelsAlsMap()
 
     // Bestaande debiteuren: id + hash + status, voor change-detectie en zacht afsluiten.
     const { data: bestaand } = await supabase

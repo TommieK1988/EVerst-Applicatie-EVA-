@@ -8,7 +8,7 @@
  *
  * `types` staat er bewust NIET in: Bouw7 blijft leidend voor het hoofdtype en de
  * sync voegt in EVA toegevoegde types samen in plaats van ze te vervangen
- * (zie `voegTypesSamen` in lib/bouw7/sync.ts).
+ * (zie `typesVoorRelatie` in lib/bouw7/sync.ts).
  */
 export const BOUW7_RELATIE_VELDEN = [
   'naam',

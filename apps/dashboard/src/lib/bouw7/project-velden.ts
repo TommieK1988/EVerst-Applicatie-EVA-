@@ -140,8 +140,12 @@ export async function schrijfBouw7Projectvelden(
     if (wil('klant_id')) {
       if (!d.klant_id) overgeslagen.push('opdrachtgever (leeg; Bouw7 vereist een relatie)')
       else {
-        const { data: rel } = await supabase.from('relaties').select('bouw7_id').eq('id', d.klant_id).maybeSingle()
-        if (rel?.bouw7_id) { body.contact = { id: Number(rel.bouw7_id) }; geschreven.push('klant_id') }
+        // De spiegel waarmee deze relatie in Bouw7 als opdrachtgever bekend staat. Een bedrijf
+        // dat ook aan ons levert heeft daar twee contacten; een project hoort onder het
+        // klant-contact, niet onder het leverancier-contact.
+        const { bouw7IdVoorRol } = await import('@/lib/bouw7/relatie-spiegel')
+        const contactId = await bouw7IdVoorRol(d.klant_id, 'opdrachtgever')
+        if (contactId) { body.contact = { id: Number(contactId) }; geschreven.push('klant_id') }
         else overgeslagen.push('opdrachtgever (relatie staat nog niet in Bouw7)')
       }
     }

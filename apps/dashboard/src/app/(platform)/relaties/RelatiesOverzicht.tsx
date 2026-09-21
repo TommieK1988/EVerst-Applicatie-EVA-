@@ -13,7 +13,9 @@ import NieuweOrganisatieModal from '@/components/relaties/NieuweOrganisatieModal
 import NieuweContactpersoonModal from '@/components/relaties/NieuweContactpersoonModal'
 import NieuweParticulierModal from '@/components/relaties/NieuweParticulierModal'
 import DubbelenPaneel from '@/components/relaties/DubbelenPaneel'
+import RelatieDubbelenPaneel from '@/components/relaties/RelatieDubbelenPaneel'
 import type { DubbelGroep, SamenvoegingLog } from '@/lib/relaties/ontdubbelen'
+import type { DubbelRelatieGroep, RelatieSamenvoegingLog } from '@/lib/relaties/ontdubbelen-relaties'
 
 /* ─── types ───────────────────────────────────────────────────────── */
 
@@ -492,12 +494,15 @@ type Props = {
   /** Mogelijke dubbele contactpersonen — Bouw7 dupliceert een mens per bedrijf. */
   dubbelen: DubbelGroep[]
   recenteSamenvoegingen: SamenvoegingLog[]
+  /** Mogelijke dubbele relaties — Bouw7 dupliceert een bedrijf per rol. */
+  dubbeleRelaties: DubbelRelatieGroep[]
+  recenteRelatieSamenvoegingen: RelatieSamenvoegingLog[]
   layouts: GebruikerLayout[]
   user_id: string | null
   laatsteSync: string | null
 }
 
-export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, dubbelen, recenteSamenvoegingen, layouts, user_id, laatsteSync }: Props) {
+export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, layouts, user_id, laatsteSync }: Props) {
   const router = useRouter()
   const [actieveTab, setActieveTab] = useState<Tab>('organisaties')
   const [showNieuweOrganisatie, setShowNieuweOrganisatie] = useState(false)
@@ -530,7 +535,7 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
     organisaties: organisaties.length,
     contactpersonen: contactpersonen.length,
     particulieren: particulieren.length,
-    dubbelen: dubbelen.length,
+    dubbelen: dubbelen.length + dubbeleRelaties.length,
   }
 
   return (
@@ -601,7 +606,16 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
       )}
 
       {actieveTab === 'dubbelen' && (
-        <DubbelenPaneel groepen={dubbelen} recent={recenteSamenvoegingen} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <section>
+            <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Relaties</h2>
+            <RelatieDubbelenPaneel groepen={dubbeleRelaties} recent={recenteRelatieSamenvoegingen} />
+          </section>
+          <section>
+            <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Contactpersonen</h2>
+            <DubbelenPaneel groepen={dubbelen} recent={recenteSamenvoegingen} />
+          </section>
+        </div>
       )}
 
       {showNieuweOrganisatie && (

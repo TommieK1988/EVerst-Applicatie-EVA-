@@ -595,6 +595,82 @@ export type Database = {
         }
         Relationships: []
       }
+      bouw7_offertes: {
+        Row: {
+          bouw7_project_id: string | null
+          bouw7_quotation_id: string
+          calculator_naam: string | null
+          created_at: string
+          datum: string | null
+          dossier_id: string | null
+          id: string
+          nummer: string | null
+          onderwerp: string | null
+          referentie: string | null
+          status: string | null
+          subtotaal_excl_btw: number | null
+          synced_op: string
+          totaal_incl_btw: number | null
+          updated_at: string
+        }
+        Insert: {
+          bouw7_project_id?: string | null
+          bouw7_quotation_id: string
+          calculator_naam?: string | null
+          created_at?: string
+          datum?: string | null
+          dossier_id?: string | null
+          id?: string
+          nummer?: string | null
+          onderwerp?: string | null
+          referentie?: string | null
+          status?: string | null
+          subtotaal_excl_btw?: number | null
+          synced_op?: string
+          totaal_incl_btw?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bouw7_project_id?: string | null
+          bouw7_quotation_id?: string
+          calculator_naam?: string | null
+          created_at?: string
+          datum?: string | null
+          dossier_id?: string | null
+          id?: string
+          nummer?: string | null
+          onderwerp?: string | null
+          referentie?: string | null
+          status?: string | null
+          subtotaal_excl_btw?: number | null
+          synced_op?: string
+          totaal_incl_btw?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bouw7_snapshots: {
         Row: {
           aangemaakt_op: string
@@ -688,82 +764,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      bouw7_offertes: {
-        Row: {
-          bouw7_project_id: string | null
-          bouw7_quotation_id: string
-          calculator_naam: string | null
-          created_at: string
-          datum: string | null
-          dossier_id: string | null
-          id: string
-          nummer: string | null
-          onderwerp: string | null
-          referentie: string | null
-          status: string | null
-          subtotaal_excl_btw: number | null
-          synced_op: string
-          totaal_incl_btw: number | null
-          updated_at: string
-        }
-        Insert: {
-          bouw7_project_id?: string | null
-          bouw7_quotation_id: string
-          calculator_naam?: string | null
-          created_at?: string
-          datum?: string | null
-          dossier_id?: string | null
-          id?: string
-          nummer?: string | null
-          onderwerp?: string | null
-          referentie?: string | null
-          status?: string | null
-          subtotaal_excl_btw?: number | null
-          synced_op?: string
-          totaal_incl_btw?: number | null
-          updated_at?: string
-        }
-        Update: {
-          bouw7_project_id?: string | null
-          bouw7_quotation_id?: string
-          calculator_naam?: string | null
-          created_at?: string
-          datum?: string | null
-          dossier_id?: string | null
-          id?: string
-          nummer?: string | null
-          onderwerp?: string | null
-          referentie?: string | null
-          status?: string | null
-          subtotaal_excl_btw?: number | null
-          synced_op?: string
-          totaal_incl_btw?: number | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
-            columns: ["dossier_id"]
-            isOneToOne: false
-            referencedRelation: "dossier_lijst_verrijking"
-            referencedColumns: ["dossier_id"]
-          },
-          {
-            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
-            columns: ["dossier_id"]
-            isOneToOne: false
-            referencedRelation: "dossiers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "bouw7_offertes_dossier_id_fkey"
-            columns: ["dossier_id"]
-            isOneToOne: false
-            referencedRelation: "v_dossier_actief"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       btw_tarieven: {
         Row: {
@@ -1277,25 +1277,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
-            columns: ["dossier_id"]
+            foreignKeyName: "commercie_bewaking_actiehouder_id_fkey"
+            columns: ["actiehouder_id"]
             isOneToOne: false
-            referencedRelation: "dossier_lijst_verrijking"
-            referencedColumns: ["dossier_id"]
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
           },
           {
-            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
-            columns: ["dossier_id"]
+            foreignKeyName: "commercie_bewaking_actiehouder_id_fkey"
+            columns: ["actiehouder_id"]
             isOneToOne: false
-            referencedRelation: "dossiers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
-            columns: ["dossier_id"]
-            isOneToOne: false
-            referencedRelation: "v_dossier_actief"
-            referencedColumns: ["id"]
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
           },
           {
             foreignKeyName: "commercie_bewaking_afgerond_door_fkey"
@@ -1305,6 +1298,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "commercie_bewaking_afgerond_door_fkey"
+            columns: ["afgerond_door"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_afgerond_door_fkey"
+            columns: ["afgerond_door"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
             foreignKeyName: "commercie_bewaking_bron_dossier_id_fkey"
             columns: ["bron_dossier_id"]
             isOneToOne: false
@@ -1321,6 +1328,27 @@ export type Database = {
           {
             foreignKeyName: "commercie_bewaking_bron_dossier_id_fkey"
             columns: ["bron_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_dossier_id_fkey"
+            columns: ["dossier_id"]
             isOneToOne: false
             referencedRelation: "v_dossier_actief"
             referencedColumns: ["id"]
@@ -1331,6 +1359,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "medewerkers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_eigenaar_id_fkey"
+            columns: ["eigenaar_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_eigenaar_id_fkey"
+            columns: ["eigenaar_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_getrieerd_door_fkey"
+            columns: ["getrieerd_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_getrieerd_door_fkey"
+            columns: ["getrieerd_door"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_bewaking_getrieerd_door_fkey"
+            columns: ["getrieerd_door"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
           },
           {
             foreignKeyName: "commercie_bewaking_object_id_fkey"
@@ -1347,10 +1410,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "commercie_bewaking_getrieerd_door_fkey"
-            columns: ["getrieerd_door"]
+            foreignKeyName: "commercie_bewaking_taak_id_fkey"
+            columns: ["taak_id"]
             isOneToOne: false
-            referencedRelation: "medewerkers"
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -1405,11 +1468,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "commercie_gebeurtenissen_door_fkey"
+            columns: ["door"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_gebeurtenissen_door_fkey"
+            columns: ["door"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
             foreignKeyName: "commercie_gebeurtenissen_naar_actiehouder_id_fkey"
             columns: ["naar_actiehouder_id"]
             isOneToOne: false
             referencedRelation: "medewerkers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercie_gebeurtenissen_naar_actiehouder_id_fkey"
+            columns: ["naar_actiehouder_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "commercie_gebeurtenissen_naar_actiehouder_id_fkey"
+            columns: ["naar_actiehouder_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
           },
         ]
       }
@@ -1679,7 +1770,69 @@ export type Database = {
           voorletter?: string | null
           voornaam?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contactpersonen_samengevoegd_in_fkey"
+            columns: ["samengevoegd_in"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contactpersoon_bouw7_koppelingen: {
+        Row: {
+          bouw7_contact_id: string | null
+          bouw7_id: string
+          bouw7_laatst_sync: string | null
+          bouw7_sync_hash: string | null
+          contactpersoon_id: string
+          created_at: string
+          id: string
+          is_primair: boolean
+          organisatie_id: string | null
+          verdwenen_op: string | null
+        }
+        Insert: {
+          bouw7_contact_id?: string | null
+          bouw7_id: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          contactpersoon_id: string
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          organisatie_id?: string | null
+          verdwenen_op?: string | null
+        }
+        Update: {
+          bouw7_contact_id?: string | null
+          bouw7_id?: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          contactpersoon_id?: string
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          organisatie_id?: string | null
+          verdwenen_op?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_bouw7_koppelingen_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contactpersoon_bouw7_koppelingen_organisatie_id_fkey"
+            columns: ["organisatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contactpersoon_emails: {
         Row: {
@@ -1721,57 +1874,6 @@ export type Database = {
             columns: ["contactpersoon_id"]
             isOneToOne: false
             referencedRelation: "contactpersonen"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      contactpersoon_bouw7_koppelingen: {
-        Row: {
-          bouw7_contact_id: string | null
-          bouw7_id: string
-          bouw7_laatst_sync: string | null
-          bouw7_sync_hash: string | null
-          contactpersoon_id: string
-          created_at: string
-          id: string
-          is_primair: boolean
-          organisatie_id: string | null
-        }
-        Insert: {
-          bouw7_contact_id?: string | null
-          bouw7_id: string
-          bouw7_laatst_sync?: string | null
-          bouw7_sync_hash?: string | null
-          contactpersoon_id: string
-          created_at?: string
-          id?: string
-          is_primair?: boolean
-          organisatie_id?: string | null
-        }
-        Update: {
-          bouw7_contact_id?: string | null
-          bouw7_id?: string
-          bouw7_laatst_sync?: string | null
-          bouw7_sync_hash?: string | null
-          contactpersoon_id?: string
-          created_at?: string
-          id?: string
-          is_primair?: boolean
-          organisatie_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contactpersoon_bouw7_koppelingen_contactpersoon_id_fkey"
-            columns: ["contactpersoon_id"]
-            isOneToOne: false
-            referencedRelation: "contactpersonen"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contactpersoon_bouw7_koppelingen_organisatie_id_fkey"
-            columns: ["organisatie_id"]
-            isOneToOne: false
-            referencedRelation: "relaties"
             referencedColumns: ["id"]
           },
         ]
@@ -3021,6 +3123,57 @@ export type Database = {
         }
         Relationships: []
       }
+      dossiermap_standaardbestanden: {
+        Row: {
+          aangemaakt_door: string | null
+          aangemaakt_op: string
+          actief: boolean
+          bestandsnaam: string
+          bijgewerkt_op: string
+          categorie_ids: number[]
+          content_type: string | null
+          grootte: number | null
+          id: string
+          naam: string
+          storage_path: string
+          submap: string | null
+          volgorde: number
+          werkmaatschappij_ids: string[]
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          actief?: boolean
+          bestandsnaam: string
+          bijgewerkt_op?: string
+          categorie_ids?: number[]
+          content_type?: string | null
+          grootte?: number | null
+          id?: string
+          naam?: string
+          storage_path: string
+          submap?: string | null
+          volgorde?: number
+          werkmaatschappij_ids?: string[]
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          actief?: boolean
+          bestandsnaam?: string
+          bijgewerkt_op?: string
+          categorie_ids?: number[]
+          content_type?: string | null
+          grootte?: number | null
+          id?: string
+          naam?: string
+          storage_path?: string
+          submap?: string | null
+          volgorde?: number
+          werkmaatschappij_ids?: string[]
+        }
+        Relationships: []
+      }
       dossiers: {
         Row: {
           aanvraag_substatus:
@@ -3098,6 +3251,9 @@ export type Database = {
           sharepoint_gematcht_op: string | null
           sharepoint_handmatig: boolean
           sharepoint_item_id: string | null
+          sharepoint_map_gewenst: boolean
+          sharepoint_map_naam: string | null
+          sharepoint_map_naam_verouderd: boolean | null
           sharepoint_match_status: string | null
           sharepoint_web_url: string | null
           teamleider_id: string | null
@@ -3197,6 +3353,9 @@ export type Database = {
           sharepoint_gematcht_op?: string | null
           sharepoint_handmatig?: boolean
           sharepoint_item_id?: string | null
+          sharepoint_map_gewenst?: boolean
+          sharepoint_map_naam?: string | null
+          sharepoint_map_naam_verouderd?: boolean | null
           sharepoint_match_status?: string | null
           sharepoint_web_url?: string | null
           teamleider_id?: string | null
@@ -3296,6 +3455,9 @@ export type Database = {
           sharepoint_gematcht_op?: string | null
           sharepoint_handmatig?: boolean
           sharepoint_item_id?: string | null
+          sharepoint_map_gewenst?: boolean
+          sharepoint_map_naam?: string | null
+          sharepoint_map_naam_verouderd?: boolean | null
           sharepoint_match_status?: string | null
           sharepoint_web_url?: string | null
           teamleider_id?: string | null
@@ -3597,12 +3759,14 @@ export type Database = {
       }
       factuur_regelgroepen: {
         Row: {
+          aantal: number | null
           bedrag_excl_btw: number | null
           bewakingscode: string
           bouw7_invoice_id: string | null
           btw_tarief_bouw7_id: number | null
           created_at: string
           dossier_id: string
+          eenheid: string | null
           gefactureerd_op: string | null
           groep_sleutel: string
           id: string
@@ -3612,12 +3776,14 @@ export type Database = {
           volgorde: number
         }
         Insert: {
+          aantal?: number | null
           bedrag_excl_btw?: number | null
           bewakingscode: string
           bouw7_invoice_id?: string | null
           btw_tarief_bouw7_id?: number | null
           created_at?: string
           dossier_id: string
+          eenheid?: string | null
           gefactureerd_op?: string | null
           groep_sleutel: string
           id?: string
@@ -3627,12 +3793,14 @@ export type Database = {
           volgorde?: number
         }
         Update: {
+          aantal?: number | null
           bedrag_excl_btw?: number | null
           bewakingscode?: string
           bouw7_invoice_id?: string | null
           btw_tarief_bouw7_id?: number | null
           created_at?: string
           dossier_id?: string
+          eenheid?: string | null
           gefactureerd_op?: string | null
           groep_sleutel?: string
           id?: string
@@ -6800,8 +6968,8 @@ export type Database = {
           notificatie_medewerkers: string[]
           sleutel: string
           soort: string
-          standaard_bouw7_categorie_id: number | null
           standaard_behandelaar_id: string | null
+          standaard_bouw7_categorie_id: number | null
           standaard_categorie: string | null
           standaard_werkmaatschappij_id: string | null
           updated_at: string
@@ -6823,8 +6991,8 @@ export type Database = {
           notificatie_medewerkers?: string[]
           sleutel: string
           soort: string
-          standaard_bouw7_categorie_id?: number | null
           standaard_behandelaar_id?: string | null
+          standaard_bouw7_categorie_id?: number | null
           standaard_categorie?: string | null
           standaard_werkmaatschappij_id?: string | null
           updated_at?: string
@@ -6846,13 +7014,34 @@ export type Database = {
           notificatie_medewerkers?: string[]
           sleutel?: string
           soort?: string
-          standaard_bouw7_categorie_id?: number | null
           standaard_behandelaar_id?: string | null
+          standaard_bouw7_categorie_id?: number | null
           standaard_categorie?: string | null
           standaard_werkmaatschappij_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "mailintake_postbussen_standaard_behandelaar_id_fkey"
+            columns: ["standaard_behandelaar_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mailintake_postbussen_standaard_behandelaar_id_fkey"
+            columns: ["standaard_behandelaar_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "mailintake_postbussen_standaard_behandelaar_id_fkey"
+            columns: ["standaard_behandelaar_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
           {
             foreignKeyName: "mailintake_postbussen_standaard_werkmaatschappij_id_fkey"
             columns: ["standaard_werkmaatschappij_id"]
@@ -7970,6 +8159,7 @@ export type Database = {
           created_at: string | null
           id: string
           naam: string
+          rechten: Json
           standaard_rechten: Json
           volgorde: number
         }
@@ -7978,6 +8168,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           naam: string
+          rechten?: Json
           standaard_rechten?: Json
           volgorde?: number
         }
@@ -7986,6 +8177,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           naam?: string
+          rechten?: Json
           standaard_rechten?: Json
           volgorde?: number
         }
@@ -8615,6 +8807,7 @@ export type Database = {
           adres_postcode: string | null
           adres_straat: string | null
           afdeling: string | null
+          afdeling_id: string | null
           auth_user_id: string | null
           bouw7_afdeling_voor_inactief_id: number | null
           bouw7_id: string | null
@@ -8646,6 +8839,7 @@ export type Database = {
           o365_tenant_id: string | null
           o365_user_id: string | null
           ploeg_id: string | null
+          rechten: Json
           rechten_override: Json
           relatie_id: string | null
           standaard_uursoort_id: string | null
@@ -8669,6 +8863,7 @@ export type Database = {
           adres_postcode?: string | null
           adres_straat?: string | null
           afdeling?: string | null
+          afdeling_id?: string | null
           auth_user_id?: string | null
           bouw7_afdeling_voor_inactief_id?: number | null
           bouw7_id?: string | null
@@ -8700,6 +8895,7 @@ export type Database = {
           o365_tenant_id?: string | null
           o365_user_id?: string | null
           ploeg_id?: string | null
+          rechten?: Json
           rechten_override?: Json
           relatie_id?: string | null
           standaard_uursoort_id?: string | null
@@ -8723,6 +8919,7 @@ export type Database = {
           adres_postcode?: string | null
           adres_straat?: string | null
           afdeling?: string | null
+          afdeling_id?: string | null
           auth_user_id?: string | null
           bouw7_afdeling_voor_inactief_id?: number | null
           bouw7_id?: string | null
@@ -8754,6 +8951,7 @@ export type Database = {
           o365_tenant_id?: string | null
           o365_user_id?: string | null
           ploeg_id?: string | null
+          rechten?: Json
           rechten_override?: Json
           relatie_id?: string | null
           standaard_uursoort_id?: string | null
@@ -8769,6 +8967,13 @@ export type Database = {
           werkmaatschappij_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "medewerkers_afdeling_id_fkey"
+            columns: ["afdeling_id"]
+            isOneToOne: false
+            referencedRelation: "medewerker_afdelingen"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "medewerkers_cao_document_id_fkey"
             columns: ["cao_document_id"]
@@ -8805,6 +9010,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "medewerkers_uren_goedkeurder_id_fkey"
+            columns: ["uren_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "medewerkers_uren_goedkeurder_id_fkey"
+            columns: ["uren_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
             foreignKeyName: "medewerkers_werkmaatschappij_id_fkey"
             columns: ["werkmaatschappij_id"]
             isOneToOne: false
@@ -8832,6 +9051,7 @@ export type Database = {
           bouw7_nummer: string | null
           bouw7_security_code_id: number | null
           bouw7_term_id: number | null
+          bouw7_term_ids: number[] | null
           bouw7_term_pending: boolean
           bron: string
           btw_pct: number | null
@@ -8872,6 +9092,7 @@ export type Database = {
           bouw7_nummer?: string | null
           bouw7_security_code_id?: number | null
           bouw7_term_id?: number | null
+          bouw7_term_ids?: number[] | null
           bouw7_term_pending?: boolean
           bron?: string
           btw_pct?: number | null
@@ -8912,6 +9133,7 @@ export type Database = {
           bouw7_nummer?: string | null
           bouw7_security_code_id?: number | null
           bouw7_term_id?: number | null
+          bouw7_term_ids?: number[] | null
           bouw7_term_pending?: boolean
           bron?: string
           btw_pct?: number | null
@@ -8962,6 +9184,52 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "opdracht_onderdelen"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      melding_signalen: {
+        Row: {
+          laatst_gemeld_op: string
+          medewerker_id: string
+          sleutel: string
+          soort: string
+          stand: Json | null
+        }
+        Insert: {
+          laatst_gemeld_op?: string
+          medewerker_id: string
+          sleutel: string
+          soort: string
+          stand?: Json | null
+        }
+        Update: {
+          laatst_gemeld_op?: string
+          medewerker_id?: string
+          sleutel?: string
+          soort?: string
+          stand?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "melding_signalen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "melding_signalen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "melding_signalen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
           },
         ]
       }
@@ -11124,7 +11392,15 @@ export type Database = {
           volgorde?: number
           zichtbaar_voor?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personeelshandboek_bijlagen_sectie_id_fkey"
+            columns: ["sectie_id"]
+            isOneToOne: false
+            referencedRelation: "personeelshandboek_secties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personeelshandboek_blokken: {
         Row: {
@@ -11163,7 +11439,15 @@ export type Database = {
           zichtbaar_voor?: string[]
           zoektekst?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personeelshandboek_blokken_sectie_id_fkey"
+            columns: ["sectie_id"]
+            isOneToOne: false
+            referencedRelation: "personeelshandboek_secties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personeelshandboek_contacten: {
         Row: {
@@ -11199,7 +11483,29 @@ export type Database = {
           volgorde?: number
           zichtbaar_voor?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personeelshandboek_contacten_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "personeelshandboek_contacten_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "personeelshandboek_contacten_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+        ]
       }
       personeelshandboek_secties: {
         Row: {
@@ -11250,7 +11556,15 @@ export type Database = {
           volgorde?: number
           zichtbaar_voor?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personeelshandboek_secties_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "personeelshandboek_secties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personeelshandboek_versies: {
         Row: {
@@ -11438,8 +11752,10 @@ export type Database = {
       }
       planning_fasen: {
         Row: {
+          bewakingscode: string | null
           bouw7_id: string | null
           bouw7_laatst_sync: string | null
+          bouw7_security_code_id: number | null
           bron: string
           created_at: string
           dossier_id: string
@@ -11449,8 +11765,10 @@ export type Database = {
           volgorde: number
         }
         Insert: {
+          bewakingscode?: string | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
+          bouw7_security_code_id?: number | null
           bron?: string
           created_at?: string
           dossier_id: string
@@ -11460,8 +11778,10 @@ export type Database = {
           volgorde?: number
         }
         Update: {
+          bewakingscode?: string | null
           bouw7_id?: string | null
           bouw7_laatst_sync?: string | null
+          bouw7_security_code_id?: number | null
           bron?: string
           created_at?: string
           dossier_id?: string
@@ -12331,12 +12651,55 @@ export type Database = {
         }
         Relationships: []
       }
+      projectbezoek_disciplines: {
+        Row: {
+          bezoek_id: string
+          created_at: string
+          discipline_code: string
+          id: string
+          volgorde: number
+          voortgang_pct: number | null
+        }
+        Insert: {
+          bezoek_id: string
+          created_at?: string
+          discipline_code: string
+          id?: string
+          volgorde?: number
+          voortgang_pct?: number | null
+        }
+        Update: {
+          bezoek_id?: string
+          created_at?: string
+          discipline_code?: string
+          id?: string
+          volgorde?: number
+          voortgang_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projectbezoek_disciplines_bezoek_id_fkey"
+            columns: ["bezoek_id"]
+            isOneToOne: false
+            referencedRelation: "projectbezoeken"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_disciplines_discipline_code_fkey"
+            columns: ["discipline_code"]
+            isOneToOne: false
+            referencedRelation: "kwaliteit_disciplines"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
       projectbezoek_fotos: {
         Row: {
           bezoek_id: string
           created_at: string
           created_by: string | null
           id: string
+          punt_id: string | null
           soort: string
           storage_path: string | null
           toelichting: string | null
@@ -12348,6 +12711,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          punt_id?: string | null
           soort?: string
           storage_path?: string | null
           toelichting?: string | null
@@ -12359,6 +12723,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          punt_id?: string | null
           soort?: string
           storage_path?: string | null
           toelichting?: string | null
@@ -12393,6 +12758,95 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_bestuurders_overzicht"
             referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_fotos_punt_id_fkey"
+            columns: ["punt_id"]
+            isOneToOne: false
+            referencedRelation: "projectbezoek_punten"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projectbezoek_punten: {
+        Row: {
+          bezoek_id: string
+          created_at: string
+          created_by: string | null
+          discipline_code: string
+          id: string
+          is_aandachtspunt: boolean
+          oplever_punt_id: string | null
+          tekst: string
+          volgnummer: number
+          volgorde: number
+        }
+        Insert: {
+          bezoek_id: string
+          created_at?: string
+          created_by?: string | null
+          discipline_code: string
+          id?: string
+          is_aandachtspunt?: boolean
+          oplever_punt_id?: string | null
+          tekst: string
+          volgnummer: number
+          volgorde?: number
+        }
+        Update: {
+          bezoek_id?: string
+          created_at?: string
+          created_by?: string | null
+          discipline_code?: string
+          id?: string
+          is_aandachtspunt?: boolean
+          oplever_punt_id?: string | null
+          tekst?: string
+          volgnummer?: number
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projectbezoek_punten_bezoek_id_fkey"
+            columns: ["bezoek_id"]
+            isOneToOne: false
+            referencedRelation: "projectbezoeken"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_punten_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_punten_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_punten_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "projectbezoek_punten_discipline_code_fkey"
+            columns: ["discipline_code"]
+            isOneToOne: false
+            referencedRelation: "kwaliteit_disciplines"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "projectbezoek_punten_oplever_punt_id_fkey"
+            columns: ["oplever_punt_id"]
+            isOneToOne: false
+            referencedRelation: "oplever_punten"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -12652,6 +13106,7 @@ export type Database = {
           preview_token: string | null
           primaire_kleur: string | null
           secundaire_kleur: string | null
+          soort: string
           toon_paginanummer: boolean | null
           toon_specificatie: boolean | null
           toon_voorblad: boolean | null
@@ -12690,6 +13145,7 @@ export type Database = {
           preview_token?: string | null
           primaire_kleur?: string | null
           secundaire_kleur?: string | null
+          soort?: string
           toon_paginanummer?: boolean | null
           toon_specificatie?: boolean | null
           toon_voorblad?: boolean | null
@@ -12728,6 +13184,7 @@ export type Database = {
           preview_token?: string | null
           primaire_kleur?: string | null
           secundaire_kleur?: string | null
+          soort?: string
           toon_paginanummer?: boolean | null
           toon_specificatie?: boolean | null
           toon_voorblad?: boolean | null
@@ -12740,6 +13197,7 @@ export type Database = {
       }
       quote_lines: {
         Row: {
+          arbeid_pe: number | null
           btw_pct: number
           btw_tarief_id: string | null
           calculatieregel_id: string | null
@@ -12750,8 +13208,12 @@ export type Database = {
           hoeveelheid: number
           id: string
           is_stelpost: boolean
+          is_verrekenbaar: boolean
+          kostengroep: string | null
           kostprijs_pe: number | null
           line_total: number
+          materieel_pe: number | null
+          oa_pe: number | null
           omschrijving: string
           opmerking: string | null
           quote_id: string
@@ -12765,6 +13227,7 @@ export type Database = {
           werkomschrijving_afbeeldingen: Json | null
         }
         Insert: {
+          arbeid_pe?: number | null
           btw_pct?: number
           btw_tarief_id?: string | null
           calculatieregel_id?: string | null
@@ -12775,8 +13238,12 @@ export type Database = {
           hoeveelheid?: number
           id?: string
           is_stelpost?: boolean
+          is_verrekenbaar?: boolean
+          kostengroep?: string | null
           kostprijs_pe?: number | null
           line_total?: number
+          materieel_pe?: number | null
+          oa_pe?: number | null
           omschrijving?: string
           opmerking?: string | null
           quote_id: string
@@ -12790,6 +13257,7 @@ export type Database = {
           werkomschrijving_afbeeldingen?: Json | null
         }
         Update: {
+          arbeid_pe?: number | null
           btw_pct?: number
           btw_tarief_id?: string | null
           calculatieregel_id?: string | null
@@ -12800,8 +13268,12 @@ export type Database = {
           hoeveelheid?: number
           id?: string
           is_stelpost?: boolean
+          is_verrekenbaar?: boolean
+          kostengroep?: string | null
           kostprijs_pe?: number | null
           line_total?: number
+          materieel_pe?: number | null
+          oa_pe?: number | null
           omschrijving?: string
           opmerking?: string | null
           quote_id?: string
@@ -13408,6 +13880,47 @@ export type Database = {
           },
         ]
       }
+      relatie_bouw7_koppelingen: {
+        Row: {
+          bouw7_id: string
+          bouw7_laatst_sync: string | null
+          bouw7_sync_hash: string | null
+          bouw7_type: string | null
+          created_at: string
+          id: string
+          is_primair: boolean
+          relatie_id: string
+        }
+        Insert: {
+          bouw7_id: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          bouw7_type?: string | null
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          relatie_id: string
+        }
+        Update: {
+          bouw7_id?: string
+          bouw7_laatst_sync?: string | null
+          bouw7_sync_hash?: string | null
+          bouw7_type?: string | null
+          created_at?: string
+          id?: string
+          is_primair?: boolean
+          relatie_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatie_bouw7_koppelingen_relatie_id_fkey"
+            columns: ["relatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       relatie_contacten: {
         Row: {
           bouw7_id: string | null
@@ -13744,8 +14257,60 @@ export type Database = {
             referencedColumns: ["medewerker_id"]
           },
           {
+            foreignKeyName: "relatie_notities_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
             foreignKeyName: "relatie_notities_relatie_id_fkey"
             columns: ["relatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      relatie_samenvoegingen: {
+        Row: {
+          blijver_id: string
+          created_at: string
+          door: string | null
+          id: string
+          teruggedraaid_op: string | null
+          verliezer_id: string
+          verplaatst: Json
+        }
+        Insert: {
+          blijver_id: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          teruggedraaid_op?: string | null
+          verliezer_id: string
+          verplaatst?: Json
+        }
+        Update: {
+          blijver_id?: string
+          created_at?: string
+          door?: string | null
+          id?: string
+          teruggedraaid_op?: string | null
+          verliezer_id?: string
+          verplaatst?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatie_samenvoegingen_blijver_id_fkey"
+            columns: ["blijver_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relatie_samenvoegingen_verliezer_id_fkey"
+            columns: ["verliezer_id"]
             isOneToOne: false
             referencedRelation: "relaties"
             referencedColumns: ["id"]
@@ -13875,6 +14440,9 @@ export type Database = {
           mobiel: string | null
           naam: string
           opmerkingen: string | null
+          samengevoegd_door: string | null
+          samengevoegd_in: string | null
+          samengevoegd_op: string | null
           sync_vergrendeld: boolean
           telefoon: string | null
           types: string[]
@@ -13905,6 +14473,9 @@ export type Database = {
           mobiel?: string | null
           naam: string
           opmerkingen?: string | null
+          samengevoegd_door?: string | null
+          samengevoegd_in?: string | null
+          samengevoegd_op?: string | null
           sync_vergrendeld?: boolean
           telefoon?: string | null
           types?: string[]
@@ -13935,13 +14506,24 @@ export type Database = {
           mobiel?: string | null
           naam?: string
           opmerkingen?: string | null
+          samengevoegd_door?: string | null
+          samengevoegd_in?: string | null
+          samengevoegd_op?: string | null
           sync_vergrendeld?: boolean
           telefoon?: string | null
           types?: string[]
           updated_at?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "relaties_samengevoegd_in_fkey"
+            columns: ["samengevoegd_in"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       schilder_arbeid_normen: {
         Row: {
@@ -14712,6 +15294,7 @@ export type Database = {
           herhaling_bron_taak_id: string | null
           herhaling_index: number | null
           herhaling_interval: string
+          herhaling_start_offset_dagen: number
           id: string
           kwaliteit_ronde: boolean
           lijst_id: string | null
@@ -14747,6 +15330,7 @@ export type Database = {
           herhaling_bron_taak_id?: string | null
           herhaling_index?: number | null
           herhaling_interval?: string
+          herhaling_start_offset_dagen?: number
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
@@ -14782,6 +15366,7 @@ export type Database = {
           herhaling_bron_taak_id?: string | null
           herhaling_index?: number | null
           herhaling_interval?: string
+          herhaling_start_offset_dagen?: number
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
@@ -14845,6 +15430,13 @@ export type Database = {
             columns: ["lijst_id"]
             isOneToOne: false
             referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_mailintake_bericht_id_fkey"
+            columns: ["mailintake_bericht_id"]
+            isOneToOne: false
+            referencedRelation: "mailintake_berichten"
             referencedColumns: ["id"]
           },
           {
@@ -15435,6 +16027,8 @@ export type Database = {
           pl_akkoord_op: string | null
           tl_akkoord_door: string | null
           tl_akkoord_op: string | null
+          tl_overgeslagen_door: string | null
+          tl_overgeslagen_op: string | null
           updated_at: string
         }
         Insert: {
@@ -15455,6 +16049,8 @@ export type Database = {
           pl_akkoord_op?: string | null
           tl_akkoord_door?: string | null
           tl_akkoord_op?: string | null
+          tl_overgeslagen_door?: string | null
+          tl_overgeslagen_op?: string | null
           updated_at?: string
         }
         Update: {
@@ -15475,6 +16071,8 @@ export type Database = {
           pl_akkoord_op?: string | null
           tl_akkoord_door?: string | null
           tl_akkoord_op?: string | null
+          tl_overgeslagen_door?: string | null
+          tl_overgeslagen_op?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -15604,6 +16202,27 @@ export type Database = {
             referencedRelation: "v_bestuurders_overzicht"
             referencedColumns: ["medewerker_id"]
           },
+          {
+            foreignKeyName: "uren_bouw7_beoordeling_tl_overgeslagen_door_fkey"
+            columns: ["tl_overgeslagen_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uren_bouw7_beoordeling_tl_overgeslagen_door_fkey"
+            columns: ["tl_overgeslagen_door"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "uren_bouw7_beoordeling_tl_overgeslagen_door_fkey"
+            columns: ["tl_overgeslagen_door"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
         ]
       }
       uren_instellingen: {
@@ -15615,8 +16234,10 @@ export type Database = {
           id: boolean
           indien_deadline_dag: number
           indien_deadline_tijd: string
+          indirecte_dossier_ids: string[]
           km_vergoeding_auto: number
           km_vergoeding_bromfiets: number
+          niet_gewerkt_goedkeurder_id: string | null
           terugval_goedkeurder_id: string | null
           tolerantie_uren: number
           updated_at: string
@@ -15630,8 +16251,10 @@ export type Database = {
           id?: boolean
           indien_deadline_dag?: number
           indien_deadline_tijd?: string
+          indirecte_dossier_ids?: string[]
           km_vergoeding_auto?: number
           km_vergoeding_bromfiets?: number
+          niet_gewerkt_goedkeurder_id?: string | null
           terugval_goedkeurder_id?: string | null
           tolerantie_uren?: number
           updated_at?: string
@@ -15645,14 +16268,37 @@ export type Database = {
           id?: boolean
           indien_deadline_dag?: number
           indien_deadline_tijd?: string
+          indirecte_dossier_ids?: string[]
           km_vergoeding_auto?: number
           km_vergoeding_bromfiets?: number
+          niet_gewerkt_goedkeurder_id?: string | null
           terugval_goedkeurder_id?: string | null
           tolerantie_uren?: number
           updated_at?: string
           verlof_routes?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "uren_instellingen_niet_gewerkt_goedkeurder_id_fkey"
+            columns: ["niet_gewerkt_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uren_instellingen_niet_gewerkt_goedkeurder_id_fkey"
+            columns: ["niet_gewerkt_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "uren_instellingen_niet_gewerkt_goedkeurder_id_fkey"
+            columns: ["niet_gewerkt_goedkeurder_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
           {
             foreignKeyName: "uren_instellingen_terugval_goedkeurder_id_fkey"
             columns: ["terugval_goedkeurder_id"]
@@ -17519,6 +18165,36 @@ export type Database = {
           },
         ]
       }
+      werktijd_tvt_reserveringen: {
+        Row: {
+          aangemaakt_op: string
+          datum: string
+          gebruiker_id: string | null
+          id: string
+          toelichting: string | null
+          uren: number
+          user_id_ulu: number
+        }
+        Insert: {
+          aangemaakt_op?: string
+          datum: string
+          gebruiker_id?: string | null
+          id?: string
+          toelichting?: string | null
+          uren: number
+          user_id_ulu: number
+        }
+        Update: {
+          aangemaakt_op?: string
+          datum?: string
+          gebruiker_id?: string | null
+          id?: string
+          toelichting?: string | null
+          uren?: number
+          user_id_ulu?: number
+        }
+        Relationships: []
+      }
       workflow_instance_steps: {
         Row: {
           afgerond_door: string | null
@@ -18036,6 +18712,25 @@ export type Database = {
         }
         Returns: string
       }
+      eva_recht: {
+        Args: {
+          afdeling_rechten: Json
+          eigen_rechten: Json
+          kanaal?: string
+          module: string
+        }
+        Returns: string
+      }
+      eva_recht_haalt: {
+        Args: {
+          afdeling_rechten: Json
+          eigen_rechten: Json
+          kanaal?: string
+          min_niveau: string
+          module: string
+        }
+        Returns: boolean
+      }
       fn_reconcile_dossier_rol_taken_for: {
         Args: { p_dossier_id: string }
         Returns: undefined
@@ -18066,6 +18761,14 @@ export type Database = {
           planning_eind: string
           planning_start: string
         }[]
+      }
+      relatie_samenvoegen: {
+        Args: { p_blijver: string; p_door?: string; p_verliezer: string }
+        Returns: string
+      }
+      relatie_samenvoegen_ongedaan: {
+        Args: { p_log: string }
+        Returns: undefined
       }
       reserveer_offerte_nummer: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }

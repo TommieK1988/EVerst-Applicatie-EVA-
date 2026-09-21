@@ -89,10 +89,11 @@ export async function syncPropertyAssets(mode: SyncMode = 'incremental'): Promis
     const contactIds = [...new Set(assets.map((a) => a.invoiceRecipient?.id).filter(Boolean))].map(String)
     const relatieMap = new Map<string, string>()
     if (contactIds.length) {
-      const { data: relaties } = await supabase
-        .from('relaties').select('id, bouw7_id').in('bouw7_id', contactIds)
-      for (const r of (relaties ?? []) as { id: string; bouw7_id: string }[]) {
-        relatieMap.set(r.bouw7_id, r.id)
+      // Via de spiegels: het factuuradres kan het contact van een samengevoegde relatie zijn.
+      const { data: spiegels } = await supabase
+        .from('relatie_bouw7_koppelingen').select('relatie_id, bouw7_id').in('bouw7_id', contactIds)
+      for (const s of (spiegels ?? []) as { relatie_id: string; bouw7_id: string }[]) {
+        relatieMap.set(s.bouw7_id, s.relatie_id)
       }
     }
 

@@ -306,9 +306,12 @@ export async function syncInkoopfacturen(
       haalAlleRijen<KoppelRij>((van, tot) =>
         supabase.from('dossiers').select('id, bouw7_id')
           .not('bouw7_id', 'is', null).order('id').range(van, tot)),
+      // Via de spiegels: een leverancier die ook opdrachtgever is, is in EVA één relatie met
+      // twee Bouw7-contacten. De factuur komt binnen op het leverancier-contact, en dat moet
+      // ook ná een samenvoeging nog naar de overgebleven relatie wijzen.
       haalAlleRijen<KoppelRij>((van, tot) =>
-        supabase.from('relaties').select('id, bouw7_id')
-          .not('bouw7_id', 'is', null).order('id').range(van, tot)),
+        supabase.from('relatie_bouw7_koppelingen').select('id:relatie_id, bouw7_id')
+          .order('bouw7_id').range(van, tot)),
       haalAlleRijen<MedewerkerRij>((van, tot) =>
         supabase.from('medewerkers').select('id, bouw7_id')
           .not('bouw7_id', 'is', null).order('id').range(van, tot)),

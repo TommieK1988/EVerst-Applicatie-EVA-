@@ -4,6 +4,7 @@ import { laadLayouts } from '@/app/actions/layouts'
 import { getAlleContactpersonen } from '@/lib/relaties/contactpersonen-actions'
 import { getAlleParticulieren } from '@/lib/relaties/particulieren-actions'
 import { getDubbelKandidaten, getRecenteSamenvoegingen } from '@/lib/relaties/ontdubbelen'
+import { getDubbeleRelaties, getRecenteRelatieSamenvoegingen } from '@/lib/relaties/ontdubbelen-relaties'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import RelatiesOverzicht from './RelatiesOverzicht'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
@@ -25,7 +26,7 @@ export default async function RelatiesPage() {
     // niet ingelogd of session unavailable
   }
 
-  const [relaties, contactpersonenRes, particulierenRes, dubbelen, recenteSamenvoegingen, layouts, laatsteSync] = await Promise.all([
+  const [relaties, contactpersonenRes, particulierenRes, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, layouts, laatsteSync] = await Promise.all([
     // Gepagineerd: het relatiebestand groeit richting de 1000 en PostgREST kapt daarna stil af,
     // waardoor organisaties zonder melding uit het overzicht vallen. Zie lib/supabase/paginate.ts.
     haalAlleRijen<Organisatie>((van, tot) => supabase
@@ -40,6 +41,8 @@ export default async function RelatiesPage() {
     // hele relatiepagina omvalt.
     getDubbelKandidaten().catch(() => []),
     getRecenteSamenvoegingen().catch(() => []),
+    getDubbeleRelaties().catch(() => []),
+    getRecenteRelatieSamenvoegingen().catch(() => []),
     user_id ? laadLayouts(user_id, 'relaties-organisaties') : [],
     getLaatsteSyncTijd('relaties'),
   ])
@@ -51,6 +54,8 @@ export default async function RelatiesPage() {
       particulieren={particulierenRes}
       dubbelen={dubbelen}
       recenteSamenvoegingen={recenteSamenvoegingen}
+      dubbeleRelaties={dubbeleRelaties}
+      recenteRelatieSamenvoegingen={recenteRelatieSamenvoegingen}
       layouts={layouts}
       user_id={user_id}
       laatsteSync={laatsteSync}
