@@ -22,6 +22,22 @@ import { haalOp } from '@/lib/net/deadline'
 
 export const BIJLAGE_BUCKET = 'offerte-bijlagen'
 
+/**
+ * Supabase-client voor de bijlagetabellen. Die staan nog niet in de gegenereerde
+ * types (`database.types.ts` wordt na een migratie apart bijgewerkt), dus is de
+ * client hier ongetypeerd. De rijen zelf worden wél getypeerd, zie `BijlageRij`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function bijlagenClient(): any {
+  return createAdminClient()
+}
+
+/** Eén rij uit `quote_bijlagen`. */
+interface BijlageRij {
+  pad: string
+  bestandsnaam: string
+}
+
 /** Bovengrens op het aantal bijlages dat we bij een offerte ophalen. */
 const MAX_BIJLAGEN = 50
 
@@ -67,8 +83,7 @@ export async function voegPdfsSamen(
  */
 export async function haalQuoteBijlagenPdfs(quoteId: string): Promise<Uint8Array[]> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const admin = createAdminClient() as any
+    const admin = bijlagenClient()
     const { data, error } = await admin
       .from('quote_bijlagen')
       .select('pad, bestandsnaam, volgorde')
@@ -79,7 +94,8 @@ export async function haalQuoteBijlagenPdfs(quoteId: string): Promise<Uint8Array
     if (error || !data?.length) return []
 
     const bytes: Uint8Array[] = []
-    for (const rij of data as { pad: string; bestandsnaam: string }[]) {
+    const rijen: BijlageRij[] = data
+    for (const rij of rijen) {
       const { data: blob, error: dlErr } = await admin.storage.from(BIJLAGE_BUCKET).download(rij.pad)
       if (dlErr || !blob) {
         // Luid loggen: een bijlage die de klant had moeten zien ontbreekt nu.

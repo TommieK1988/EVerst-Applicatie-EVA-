@@ -30,6 +30,17 @@ export interface CalculatieBijlage {
   url: string | null
 }
 
+/** Eén rij uit `calculatie_bijlagen`. De tabel staat nog niet in de gegenereerde
+ *  types, dus is de client ongetypeerd — de rijen hier dus wél. */
+interface BijlageRij {
+  id: string
+  bestandsnaam: string
+  bytes: number | null
+  paginas: number | null
+  volgorde: number | null
+  pad: string
+}
+
 type Resultaat<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string }
@@ -68,8 +79,7 @@ export async function getCalculatieBijlagen(
     .limit(MAX_BIJLAGEN)
   if (error || !data) return []
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rijen = data as any[]
+  const rijen: BijlageRij[] = data
   return Promise.all(
     rijen.map(async r => {
       const { data: signed } = await db.storage.from(BIJLAGE_BUCKET).createSignedUrl(r.pad, 3600)
@@ -105,8 +115,7 @@ export async function heeftOfferteVoorScenario(
     .eq('project_id', projectId)
     .eq('scenario_id', scenarioId)
     .limit(10)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rijen = (data ?? []) as any[]
+  const rijen: { status: string }[] = data ?? []
   return {
     bestaat: rijen.length > 0,
     alleenConcept: rijen.length > 0 && rijen.every(q => q.status === 'concept'),
@@ -181,11 +190,8 @@ export async function uploadCalculatieBijlage(
     .eq('scenario_id', scenarioId)
     .order('volgorde', { ascending: false })
     .limit(1)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const volgorde = ((laatste ?? []) as any[])[0]?.volgorde != null
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? ((laatste as any[])[0].volgorde as number) + 1
-    : 0
+  const vorige: { volgorde: number | null }[] = laatste ?? []
+  const volgorde = vorige[0]?.volgorde != null ? vorige[0].volgorde + 1 : 0
 
   const { data: rij, error } = await db
     .from('calculatie_bijlagen')
@@ -296,8 +302,7 @@ export async function kopieerBijlagenNaarScenario(
     .order('volgorde', { ascending: true })
     .limit(MAX_BIJLAGEN)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rijen = (bronnen ?? []) as any[]
+  const rijen: BijlageRij[] = bronnen ?? []
   if (rijen.length === 0) return { ok: true, data: { gekopieerd: 0 } }
 
   let gekopieerd = 0

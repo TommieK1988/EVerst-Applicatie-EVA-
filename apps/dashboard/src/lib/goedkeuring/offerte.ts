@@ -155,8 +155,8 @@ export async function berekenOfferteHash(quoteId: string): Promise<string> {
     Number(quote?.subtotaal_ex_btw) || 0,
     wordVersie,
     {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      bijlagen: ((bijlagen ?? []) as any[]).map(b => ({ pad: b.pad, bytes: Number(b.bytes ?? 0) })),
+      bijlagen: ((bijlagen ?? []) as { pad: string; bytes: number | null }[])
+        .map(b => ({ pad: b.pad, bytes: Number(b.bytes ?? 0) })),
       inleiding: quote?.inleiding ?? null,
     },
   )

@@ -21,6 +21,25 @@ const kies = (calc: string | null | undefined, sjabloon: string | null | undefin
   return c !== '' ? c : (sjabloon ?? '')
 }
 
+/** Eén bijlagerij zoals de twee helpers hieronder hem lezen. */
+interface BijlageBronRij {
+  id?: string
+  bestandsnaam: string
+  pad: string
+  bytes: number | null
+  volgorde: number | null
+  bron_bijlage_id?: string | null
+}
+
+/**
+ * Supabase-client voor de bijlagetabellen. Die staan nog niet in de gegenereerde
+ * types, dus is de client ongetypeerd; de rijen worden wel getypeerd gelezen.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function bijlagenClient(): Promise<any> {
+  return (await import('@everts/database/server')).createAdminClient()
+}
+
 /**
  * Kopieert de PDF-bijlages van een calculatie naar de offerte en bevriest ze daarmee.
  *
@@ -39,8 +58,7 @@ async function bevriesBijlagenOpQuote(
 ): Promise<void> {
   const { randomUUID } = await import('crypto')
   const { BIJLAGE_BUCKET } = await import('@/lib/everts-calc/pdf-bijlagen')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = (await import('@everts/database/server')).createAdminClient() as any
+  const admin = await bijlagenClient()
 
   const { data: bronnen } = await admin
     .from('calculatie_bijlagen')
@@ -50,8 +68,7 @@ async function bevriesBijlagenOpQuote(
     .order('volgorde', { ascending: true })
     .limit(50)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rijen = (bronnen ?? []) as any[]
+  const rijen: BijlageBronRij[] = bronnen ?? []
   if (rijen.length === 0) return
 
   let gelukt = 0
@@ -92,8 +109,7 @@ async function bevriesBijlagenOpQuote(
 async function kopieerQuoteBijlagen(bronQuoteId: string, doelQuoteId: string): Promise<void> {
   const { randomUUID } = await import('crypto')
   const { BIJLAGE_BUCKET } = await import('@/lib/everts-calc/pdf-bijlagen')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = (await import('@everts/database/server')).createAdminClient() as any
+  const admin = await bijlagenClient()
 
   const { data } = await admin
     .from('quote_bijlagen')
@@ -102,8 +118,8 @@ async function kopieerQuoteBijlagen(bronQuoteId: string, doelQuoteId: string): P
     .order('volgorde', { ascending: true })
     .limit(50)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const bron of ((data ?? []) as any[])) {
+  const bronnen: BijlageBronRij[] = data ?? []
+  for (const bron of bronnen) {
     const naam = String(bron.bestandsnaam).replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120)
     const doelPad = `offerte/${doelQuoteId}/${randomUUID()}-${naam}`
     const { error: copyErr } = await admin.storage.from(BIJLAGE_BUCKET).copy(bron.pad, doelPad)

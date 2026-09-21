@@ -223,8 +223,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!isDemo && !templateOverride) {
       pdfBytes = await voegPdfsSamen(pdfBytes, [
         ...await haalQuoteBijlagenPdfs(id),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await haalVoorwaardenPdf((quote as any).algemene_voorwaarden?.bestand_url),
+        await haalVoorwaardenPdf(quote.algemene_voorwaarden?.bestand_url),
       ])
     }
 
