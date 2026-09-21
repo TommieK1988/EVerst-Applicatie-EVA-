@@ -188,7 +188,7 @@ const WORD_VARIABELEN: { groep: string; items: { v: string; label: string }[] }[
     { v: 'btw_bedrag_raw',           label: 'BTW-bedrag — kaal, mét duizendpunt (2.100,00)' },
   ]},
   { groep: 'Teksten', items: [
-    { v: '@offerteteksten',          label: 'Offertetekst — één blok mét opmaak (vet, bullets)' },
+    { v: '@inleiding',               label: 'Inleidende tekst MÉT opmaak (vet, cursief, bullets) — let op de @' },
     { v: 'voorwaarden',              label: 'Voorwaarden — VERVALLEN, gebruik @offerteteksten' },
     { v: 'uitsluitingen',            label: 'Uitsluitingen — VERVALLEN, gebruik @offerteteksten' },
     { v: 'opmerkingen',              label: 'Opmerkingen — VERVALLEN, gebruik @offerteteksten' },

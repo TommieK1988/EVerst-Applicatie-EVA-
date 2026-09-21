@@ -76,6 +76,11 @@ function leesAlineas(html: string): Alinea[] {
   const opmaak = { vet: 0, cursief: 0, onderstreept: 0, doorgehaald: 0 }
   // Openstaande lijsten; per lijst onthouden we of hij genummerd is en hoe ver.
   const lijsten: { genummerd: boolean; teller: number }[] = []
+  // Opsommingsteken dat nog aan de eerstvolgende alinea met tekst moet worden geplakt.
+  // Nodig omdat de editor `<li><p>tekst</p></li>` oplevert: bij het openen van die
+  // binnenste <p> begint er een nieuwe alinea, en zonder dit onthouden zou het bolletje
+  // daar verdwijnen — precies wat er misging.
+  let wachtendMerk: string | null = null
 
   const sluitAlinea = () => {
     if (huidig.stukken.some(s => s.tekst.trim() !== '' || s.breek)) alineas.push(huidig)
@@ -104,18 +109,21 @@ function leesAlineas(html: string): Alinea[] {
           break
         case 'ul': case 'ol':
           sluitAlinea()
+          wachtendMerk = null
           if (sluit) lijsten.pop()
           else lijsten.push({ genummerd: naam === 'ol', teller: 0 })
           break
         case 'li':
           sluitAlinea()
-          if (!sluit) {
+          if (sluit) {
+            wachtendMerk = null            // leeg lijstitem: niets te markeren
+          } else {
             const lijst = lijsten[lijsten.length - 1]
             if (lijst) {
               lijst.teller += 1
-              huidig.merk = lijst.genummerd ? `${lijst.teller}.` : '•'
+              wachtendMerk = lijst.genummerd ? `${lijst.teller}.` : '•'
             } else {
-              huidig.merk = '•'
+              wachtendMerk = '•'
             }
           }
           break
@@ -128,6 +136,10 @@ function leesAlineas(html: string): Alinea[] {
 
     const tekst = decodeer(token)
     if (tekst === '') continue
+    if (wachtendMerk && huidig.merk === undefined) {
+      huidig.merk = wachtendMerk
+      wachtendMerk = null
+    }
     huidig.stukken.push({
       tekst,
       vet: opmaak.vet > 0,

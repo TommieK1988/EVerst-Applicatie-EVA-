@@ -730,7 +730,7 @@ export default function CalculatieHoofdscherm({
           if (!o) { setInstellingenVereist(false); setPendingOfferteType(null) }
         }}
       >
-        <DialogContent size="md">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>Offerte-instellingen &amp; bijlages</DialogTitle>
           </DialogHeader>

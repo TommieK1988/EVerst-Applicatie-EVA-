@@ -241,9 +241,7 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
   const voorwaarden    = terms.find(t => t.type === 'voorwaarden')?.inhoud   ?? ''
   const uitsluitingen  = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''
   const opmerkingen    = terms.find(t => t.type === 'opmerkingen')?.inhoud   ?? ''
-  // Nieuwe offertes hebben één opgemaakt blok (HTML); oude de drie losse teksten.
-  const offerteteksten = terms.find(t => t.type === 'offerteteksten')?.inhoud ?? ''
-  const heeftTerms     = !!(offerteteksten || voorwaarden || uitsluitingen || opmerkingen)
+  const heeftTerms     = !!(voorwaarden || uitsluitingen || opmerkingen)
 
   const heeftStelposten = stelpostLines.length > 0
   const heeftOpties = optieSections.length > 0
@@ -369,7 +367,10 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
             <div style={{ marginBottom: '6mm' }}>
               <div style={{ marginBottom: '4mm', fontSize: '10pt' }}>{quote.aanhef}</div>
               {quote.inleiding && (
-                <div style={{ whiteSpace: 'pre-line', lineHeight: 1.7, marginBottom: '4mm' }}>{quote.inleiding}</div>
+                <div
+                  style={{ lineHeight: 1.7, marginBottom: '4mm' }}
+                  dangerouslySetInnerHTML={{ __html: schoonOfferteHtml(quote.inleiding) }}
+                />
               )}
             </div>
 
@@ -555,15 +556,6 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
               <div style={{ fontSize: '13pt', fontWeight: 800, marginBottom: '6mm', color: '#0f172a', borderBottom: '2px solid #1a56db', paddingBottom: '2mm' }}>
                 Voorwaarden &amp; opmerkingen
               </div>
-
-              {/* Het opgemaakte blok is HTML uit onze eigen editor (vet/cursief/lijsten);
-                  de drie oude velden eronder zijn platte tekst van bestaande offertes. */}
-              {offerteteksten && (
-                <div
-                  style={{ lineHeight: 1.7, color: '#475569', fontSize: '9pt' }}
-                  dangerouslySetInnerHTML={{ __html: schoonOfferteHtml(offerteteksten) }}
-                />
-              )}
 
               {voorwaarden && (
                 <div style={{ marginBottom: '6mm' }}>

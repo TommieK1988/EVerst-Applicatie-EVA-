@@ -8,53 +8,9 @@ import type { StructuurGroep } from '@/lib/everts-calc/import-structuur'
 import { assertQuoteBewerkbaar } from '@/lib/everts-calc/quote-guards'
 import { omschrijvingMetBehandeling } from '@/lib/everts-calc/behandeling-label'
 import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
+import { schoonOfferteHtml } from '@/lib/everts-calc/html-naar-ooxml'
 
 const PAD = '/quotes'
-
-/**
- * Vrije offerte-tekst kiezen: de tekst van de calculatie wint, is die leeg dan valt
- * het terug op het standaard offerte-sjabloon (`quote_templates`). Niet geëxporteerd —
- * een `'use server'`-bestand mag alleen async functies exporteren.
- */
-const kies = (calc: string | null | undefined, sjabloon: string | null | undefined) => {
-  const c = (calc ?? '').trim()
-  return c !== '' ? c : (sjabloon ?? '')
-}
-
-/**
- * De standaardteksten van het offerte-sjabloon als één opgemaakt blok (HTML).
- * Terugval wanneer de calculatie zelf geen tekst heeft; de drie kolommen in
- * `quote_templates` blijven bestaan zolang die sjablonen niet zijn omgezet.
- */
-function sjabloonAlsTekstblok(template: {
-  standaard_voorwaarden?: string | null
-  standaard_uitsluitingen?: string | null
-  standaard_opmerkingen?: string | null
-} | null | undefined): string {
-  if (!template) return ''
-  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const blok = (kop: string, tekst: string | null | undefined): string => {
-    const regels = (tekst ?? '').split(/\r?\n/).map(r => r.trim()).filter(r => r !== '')
-    if (regels.length === 0) return ''
-    const uit: string[] = [`<p><strong>${kop}</strong></p>`]
-    let inLijst = false
-    for (const regel of regels) {
-      const bullet = /^[-•*]\s+|^\d+[.)]\s+/.test(regel)
-      if (bullet && !inLijst) { uit.push('<ul>'); inLijst = true }
-      if (!bullet && inLijst) { uit.push('</ul>'); inLijst = false }
-      uit.push(bullet
-        ? `<li>${esc(regel.replace(/^[-•*]\s+|^\d+[.)]\s+/, ''))}</li>`
-        : `<p>${esc(regel)}</p>`)
-    }
-    if (inLijst) uit.push('</ul>')
-    return uit.join('')
-  }
-  return [
-    blok('Voorwaarden', template.standaard_voorwaarden),
-    blok('Uitsluitingen', template.standaard_uitsluitingen),
-    blok('Opmerkingen', template.standaard_opmerkingen),
-  ].join('')
-}
 
 /** Eén bijlagerij zoals de twee helpers hieronder hem lezen. */
 interface BijlageBronRij {
@@ -209,7 +165,7 @@ export async function maakQuoteVanuitProject(
   // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+    .select('id, geldigheid_dagen')
     .eq('is_standaard', true)
     .single()
 
@@ -257,15 +213,6 @@ export async function maakQuoteVanuitProject(
     .single()
 
   if (error) throw new Error(error.message)
-
-  // Voeg standaard voorwaarden in
-  if (template) {
-    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] = []
-    if (template.standaard_voorwaarden) terms.push({ quote_id: quote.id, type: 'voorwaarden', inhoud: template.standaard_voorwaarden, volgorde: 0 })
-    if (template.standaard_uitsluitingen) terms.push({ quote_id: quote.id, type: 'uitsluitingen', inhoud: template.standaard_uitsluitingen, volgorde: 0 })
-    if (template.standaard_opmerkingen) terms.push({ quote_id: quote.id, type: 'opmerkingen', inhoud: template.standaard_opmerkingen, volgorde: 0 })
-    if (terms.length) await supabase.from('quote_terms').insert(terms)
-  }
 
   revalidatePath(PAD)
   redirect(`/everts-calc/quotes/${quote.id}?import=1`)
@@ -329,14 +276,8 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   betalingsconditieId?: string | null
   /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
   voorwaardenId?: string | null
-  /** Vrije offerte-teksten van de calculatie; leeg → terugval op standaardsjabloon. */
+  /** Inleidende tekst van de calculatie, als HTML met opmaak. */
   inleidingTekst?: string | null
-  /** Eén opgemaakt tekstblok (HTML) — vervangt de drie losse teksten hieronder. */
-  offerteteksten?: string | null
-  /** @deprecated Alleen nog voor aanroepers van vóór september 2026. */
-  voorwaardenTekst?: string | null
-  uitsluitingenTekst?: string | null
-  opmerkingenTekst?: string | null
   /** Meerwerkregel waarvan dit de offerte is — tagt de quote als meerwerk-offerte en
    *  schrijft het quote-id terug op de regel. Leeg → gewone offerte. */
   meerwerkRegelId?: string | null
@@ -346,7 +287,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen, standaard_inleiding, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+    .select('id, geldigheid_dagen')
     .eq('is_standaard', true)
     .single()
 
@@ -399,9 +340,9 @@ export async function maakQuoteVanuitProjectMetImport(params: {
         ? `Interne begroting — ${params.projectNaam}`
         : `Offerte — ${params.projectNaam}`,
       referentie: params.projectNummer ?? null,
-      // Inleidende tekst van de calculatie ({offerte.inleiding} in het Word-sjabloon);
-      // leeg → de tekst uit het standaard offerte-sjabloon.
-      inleiding: kies(params.inleidingTekst, template?.standaard_inleiding) || null,
+      // Inleidende tekst van de calculatie, als HTML met opmaak. In het Word-sjabloon
+      // via {@inleiding} (mét opmaak) of {offerte.inleiding} (platte tekst).
+      inleiding: schoonOfferteHtml(params.inleidingTekst) || null,
       datum,
       geldig_tot,
       project_id: params.projectId,
@@ -445,19 +386,6 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       const { koppelDossierAanProject } = await import('@/lib/dossiers/actions')
       await koppelDossierAanProject(params.dossierId, params.projectId)
     } catch { /* koppeling is best-effort */ }
-  }
-
-  // Voeg de vrije offerte-teksten in. De calculatie-teksten (Offerte-instellingen)
-  // winnen; is een veld daar leeg, dan valt het terug op het standaardsjabloon.
-  {
-    // Eén rij: het opgemaakte tekstblok. De drie losse soorten worden niet meer
-    // geschreven — hun inhoud zit hierin. Is het blok leeg, dan valt het terug op de
-    // standaardteksten van het sjabloon, samengevoegd tot hetzelfde ene blok.
-    const { schoonOfferteHtml } = await import('@/lib/everts-calc/html-naar-ooxml')
-    const blok = schoonOfferteHtml(kies(params.offerteteksten, sjabloonAlsTekstblok(template)))
-    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] =
-      blok === '' ? [] : [{ quote_id: quote.id, type: 'offerteteksten', inhoud: blok, volgorde: 0 }]
-    if (terms.length) await supabase.from('quote_terms').insert(terms)
   }
 
   // Bevries de PDF-bijlages van de calculatie op deze offerte. De bestanden worden
@@ -526,7 +454,7 @@ export async function maakQuote(data: NieuweQuoteData): Promise<never> {
   // Haal standaard template op voor geldigheid_dagen
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+    .select('id, geldigheid_dagen')
     .eq('is_standaard', true)
     .single()
 
@@ -554,15 +482,6 @@ export async function maakQuote(data: NieuweQuoteData): Promise<never> {
     .single()
 
   if (error) throw new Error(error.message)
-
-  // Voeg standaard voorwaarden in als template beschikbaar is
-  if (template) {
-    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] = []
-    if (template.standaard_voorwaarden) terms.push({ quote_id: quote.id, type: 'voorwaarden', inhoud: template.standaard_voorwaarden, volgorde: 0 })
-    if (template.standaard_uitsluitingen) terms.push({ quote_id: quote.id, type: 'uitsluitingen', inhoud: template.standaard_uitsluitingen, volgorde: 0 })
-    if (template.standaard_opmerkingen) terms.push({ quote_id: quote.id, type: 'opmerkingen', inhoud: template.standaard_opmerkingen, volgorde: 0 })
-    if (terms.length) await supabase.from('quote_terms').insert(terms)
-  }
 
   revalidatePath(PAD)
   redirect(`/everts-calc/quotes/${quote.id}`)

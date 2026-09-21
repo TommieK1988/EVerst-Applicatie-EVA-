@@ -128,11 +128,13 @@ export interface Scenario {
   // leeg → terugval op het standaard offerte-sjabloon (quote_templates).
   /** Inleidende tekst bovenaan de offerte; komt op `quotes.inleiding` terecht en is in
    *  het Word-sjabloon te plaatsen als `{offerte.inleiding}`. */
+  /** Inleidende tekst van deze calculatie, als HTML met opmaak (vet, cursief,
+   *  onderstreept, opsommingen). Landt op `quotes.inleiding`; in het Word-sjabloon
+   *  via `{@inleiding}` mét opmaak of `{offerte.inleiding}` als platte tekst. */
   inleiding_tekst?: string | null
-  /** Eén opgemaakt tekstblok (HTML) dat de drie losse velden hieronder vervangt. */
-  offerteteksten?: string | null
-  /** @deprecated Vervangen door `offerteteksten`. Alleen nog gelezen voor calculaties
-   *  van vóór september 2026, zodat hun tekst niet verdwijnt; nooit meer schrijven. */
+  /** @deprecated De drie losse velden van vóór september 2026. Er is geen scherm meer
+   *  dat ze vult en de render gebruikt ze niet; alleen nog aanwezig zodat oude
+   *  scenario-snapshots blijven typen. */
   voorwaarden_tekst?: string | null
   /** @deprecated Zie `voorwaarden_tekst`. */
   uitsluitingen_tekst?: string | null

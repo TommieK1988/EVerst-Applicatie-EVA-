@@ -34,51 +34,10 @@ interface Props {
   onVoltooid?: () => void
 }
 
-/**
- * De drie standaardteksten uit het offerte-sjabloon als één opgemaakt blok. Ze staan
- * daar nog als platte tekst met streepjes-opsommingen; die worden hier echte bullets,
- * zodat "Laden uit standaardsjabloon" meteen bruikbare opmaak oplevert.
- */
-function sjabloonAlsBlok(sjabloon: {
-  standaard_voorwaarden: string | null
-  standaard_uitsluitingen: string | null
-  standaard_opmerkingen: string | null
-}): string {
-  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const blok = (kop: string, tekst: string | null): string => {
-    const regels = (tekst ?? '').split(/\r?\n/).map(r => r.trim()).filter(r => r !== '')
-    if (regels.length === 0) return ''
-    const uit: string[] = [`<p><strong>${kop}</strong></p>`]
-    let inLijst = false
-    for (const regel of regels) {
-      const bullet = /^[-•*]\s+|^\d+[.)]\s+/.test(regel)
-      if (bullet && !inLijst) { uit.push('<ul>'); inLijst = true }
-      if (!bullet && inLijst) { uit.push('</ul>'); inLijst = false }
-      uit.push(bullet
-        ? `<li>${esc(regel.replace(/^[-•*]\s+|^\d+[.)]\s+/, ''))}</li>`
-        : `<p>${esc(regel)}</p>`)
-    }
-    if (inLijst) uit.push('</ul>')
-    return uit.join('')
-  }
-  return [
-    blok('Voorwaarden', sjabloon.standaard_voorwaarden),
-    blok('Uitsluitingen', sjabloon.standaard_uitsluitingen),
-    blok('Opmerkingen', sjabloon.standaard_opmerkingen),
-  ].join('')
-}
-
 export default function CalculatieInstellingenKaarten({ projectId, dossierId, scenarioId, vereist = false, onVoltooid }: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
-  // Standaard offerte-sjabloon (quote_templates) — bron voor "Laden uit standaardsjabloon".
-  const [standaardSjabloon, setStandaardSjabloon]   = useState<{
-    standaard_inleiding: string | null
-    standaard_voorwaarden: string | null
-    standaard_uitsluitingen: string | null
-    standaard_opmerkingen: string | null
-  } | null>(null)
   const [opslaan, setOpslaan] = useState(false)
   const { bevestig } = useDialogen()
 
@@ -102,11 +61,6 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
       .then(({ data }: { data: Betalingsconditie[] | null }) => setBetalingscondities(data ?? []))
     supabase.from('algemene_voorwaarden').select('*').order('naam')
       .then(({ data }: { data: AlgemeneVoorwaarden[] | null }) => setAlgVoorwaarden(data ?? []))
-    supabase.from('quote_templates')
-      .select('standaard_inleiding, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
-      .eq('is_standaard', true).maybeSingle()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then(({ data }: { data: any }) => setStandaardSjabloon(data ?? null))
   }, [projectId, scenarioId])
 
   /**
@@ -157,20 +111,6 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
     if (direct) void bewaarNu()
     else saveTimer.current = setTimeout(() => { saveTimer.current = null; void bewaarNu() }, 800)
-  }
-
-  /** Laad de drie teksten uit het standaard offerte-sjabloon (overschrijft huidige). */
-  const laadUitSjabloon = async () => {
-    if (!standaardSjabloon) return
-    if (!await bevestig({
-      titel: 'Huidige teksten overschrijven met het standaardsjabloon?',
-      omschrijving: 'De inleidende tekst en het offertetekstblok worden vervangen.',
-      bevestigLabel: 'Overschrijven',
-    })) return
-    wijzig({
-      inleiding_tekst: standaardSjabloon.standaard_inleiding ?? '',
-      offerteteksten: sjabloonAlsBlok(standaardSjabloon),
-    }, true)
   }
 
 
@@ -224,50 +164,23 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
         </CardBody>
       </Card>
 
-      {/* ─── Vrije offerte-teksten (per calculatie) ──────────────────────────── */}
+      {/* ─── Inleidende tekst (per calculatie) ───────────────────────────────── */}
       <Card>
-        <CardHeader>
-          <span>Offerteteksten</span>
-          {standaardSjabloon && (
-            <Button variant="secondary" size="sm" onClick={laadUitSjabloon}>
-              Laden uit standaardsjabloon
-            </Button>
-          )}
-        </CardHeader>
+        <CardHeader>Inleidende tekst</CardHeader>
         <CardBody>
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1.5">Inleidende tekst</label>
-              <textarea
-                value={scenario.inleiding_tekst ?? ''}
-                onChange={e => wijzig({ inleiding_tekst: e.target.value })}
-                rows={4}
-                placeholder="Inleiding bovenaan de offerte…"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-y leading-relaxed"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Verschijnt waar in de offerte-layout
-                <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{offerte.inleiding}'}</code>
-                staat. Leeg → de tekst uit het standaardsjabloon.
-              </p>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1.5">Offertetekst</label>
-              <OfferteTekstEditor
-                waarde={scenario.offerteteksten ?? ''}
-                onChange={html => wijzig({ offerteteksten: html })}
-                readOnly={!!scenario.bevroren_op}
-                placeholder="Voorwaarden, uitsluitingen, opmerkingen… — opmaken met de knoppen hierboven."
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Eén blok voor alles wat je bij de offerte wilt vermelden. Vet, cursief en opsommingen
-                komen mee in de PDF, op de plek van
-                <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{@offerteteksten}'}</code>
-                in de offerte-layout.
-              </p>
-            </div>
-          </div>
+          {/* Breed en hoog: zo zie je meteen hoe de alinea's in de offerte uitvallen
+              in plaats van een smal vakje met afgebroken regels. */}
+          <OfferteTekstEditor
+            waarde={scenario.inleiding_tekst ?? ''}
+            onChange={html => wijzig({ inleiding_tekst: html })}
+            readOnly={!!scenario.bevroren_op}
+            placeholder="De tekst boven aan de offerte — opmaken met de knoppen hierboven."
+          />
+          <p className="text-xs text-slate-400 mt-2">
+            Verschijnt in de offerte op de plek van
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{@inleiding}'}</code>
+            in de opmaak. Vet, cursief, onderstreept en opsommingen komen mee.
+          </p>
         </CardBody>
       </Card>
 

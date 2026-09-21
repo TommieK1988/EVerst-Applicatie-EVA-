@@ -6,10 +6,10 @@ export type QuoteStatus =
   | 'concept'
   | 'verzonden'
 
-/** `offerteteksten` = het opgemaakte tekstblok (HTML) van nieuwe offertes. De andere
- *  drie zijn de losse velden van vóór september 2026: nog wel gelezen (bestaande
- *  offertes), niet meer geschreven. */
-export type TermType = 'offerteteksten' | 'voorwaarden' | 'uitsluitingen' | 'opmerkingen'
+/** De drie losse tekstsoorten van vóór september 2026. Ze worden nergens meer
+ *  geschreven of gerenderd; de offertetekst staat nu als opgemaakte HTML op
+ *  `quotes.inleiding`. Alleen nog aanwezig voor bestaande rijen. */
+export type TermType = 'voorwaarden' | 'uitsluitingen' | 'opmerkingen'
 
 export type Discipline =
   | 'schilderwerk'

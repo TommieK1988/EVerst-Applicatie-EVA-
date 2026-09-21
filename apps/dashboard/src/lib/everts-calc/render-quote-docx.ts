@@ -14,7 +14,7 @@
  */
 
 import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
-import { htmlNaarOoxml } from './html-naar-ooxml'
+import { htmlNaarOoxml, htmlNaarTekst } from './html-naar-ooxml'
 import { stripHtml, type OnderstreeptSplitsing } from './docx-utils'
 import type { Quote } from './types-quotes'
 import { renderDocx, loadTemplateBuffer, fetchImageDataUrl, bufferNaarDataUrl } from '../documenten/render-docx'
@@ -91,16 +91,14 @@ export async function renderQuoteDocx(
     ...ctx,
     offerte: {
       ...ctx.offerte,
-      inleiding: stripHtml(ctx.offerte.inleiding),
+      inleiding: htmlNaarTekst(ctx.offerte.inleiding),
       slottekst: stripHtml(ctx.offerte.slottekst),
     },
-    // Eén opgemaakt tekstblok als OOXML, voor de raw-tag {@offerteteksten}. Alleen zo
-    // komen vet, cursief en opsommingen echt in Word terecht — een gewone tag kan
-    // alleen platte tekst dragen.
-    offerteteksten: htmlNaarOoxml(ctx.offerteteksten),
-    // De drie losse tags worden bewust niet meer gevuld: hun inhoud zit nu in het blok
-    // hierboven. Een sjabloon dat ze nog gebruikt toont daar niets meer — vervang
-    // {voorwaarden}/{uitsluitingen}/{opmerkingen} door {@offerteteksten}.
+    // De inleidende tekst twee keer: `{offerte.inleiding}` als platte tekst (zo werken
+    // bestaande sjablonen gewoon door) en `{@inleiding}` als Word-XML mét opmaak. Alleen
+    // die raw-tag kan vet, cursief en opsommingen dragen; een gewone tag niet.
+    inleiding: htmlNaarOoxml(ctx.offerte.inleiding),
+    // De drie losse tags van vóór september 2026 worden niet meer gevuld.
     // Image-tags (base64 data-URLs — nooit kale Buffers, zie bufferNaarDataUrl)
     logo,
     logo_wit: logoWit,

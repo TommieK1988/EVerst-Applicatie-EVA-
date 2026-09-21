@@ -233,9 +233,7 @@ export interface RenderContext {
   heeft_terms: boolean
   heeft_behandelingen: boolean
   heeft_betalingscondities: boolean
-  /** Eén opgemaakt tekstblok als HTML; gaat via {@offerteteksten} de Word-render in. */
-  offerteteksten: string
-  /** @deprecated De drie losse velden; alleen nog gevuld voor oude offertes. */
+  /** @deprecated De drie losse velden van oude offertes; geen scherm vult ze nog. */
   voorwaarden: string
   uitsluitingen: string
   opmerkingen: string
@@ -1027,26 +1025,6 @@ function btwVerlegdTekst(groepen: BtwGroepContext[]): string {
 
 // ─── Context builder ─────────────────────────────────────────────────────────
 
-/**
- * Platte tekst uit de drie oude tekstvelden als HTML-alinea's. Regels die met een
- * streepje of bolletje beginnen worden een opsomming, want zo waren die velden in de
- * praktijk gevuld (het standaardsjabloon gebruikt `-`-bullets).
- */
-function alsHtmlAlineas(tekst: string): string {
-  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const regels = tekst.split(/\r?\n/).map(r => r.trim()).filter(r => r !== '')
-  const uit: string[] = []
-  let inLijst = false
-  for (const regel of regels) {
-    const bullet = /^[-•*]\s+/.test(regel)
-    if (bullet && !inLijst) { uit.push('<ul>'); inLijst = true }
-    if (!bullet && inLijst) { uit.push('</ul>'); inLijst = false }
-    uit.push(bullet ? `<li>${esc(regel.replace(/^[-•*]\s+/, ''))}</li>` : `<p>${esc(regel)}</p>`)
-  }
-  if (inLijst) uit.push('</ul>')
-  return uit.join('')
-}
-
 export function buildRenderContext(
   quote: Quote,
   bedrijf: BedrijfContext,
@@ -1177,19 +1155,6 @@ export function buildRenderContext(
   const uitsluitingen = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''
   const opmerkingen   = terms.find(t => t.type === 'opmerkingen')?.inhoud   ?? ''
 
-  // Eén opgemaakt tekstblok (HTML). Nieuwe offertes hebben een `offerteteksten`-rij;
-  // offertes van vóór september 2026 hebben alleen de drie losse teksten, die hier met
-  // een kopje boven elkaar worden gezet. Zo blijft hun inhoud zichtbaar zodra het
-  // Word-sjabloon op de nieuwe tag is overgezet, zonder dat er data verhuisd hoeft.
-  const offerteteksten = terms.find(t => t.type === 'offerteteksten')?.inhoud
-    ?? [
-      ['Voorwaarden', voorwaarden],
-      ['Uitsluitingen', uitsluitingen],
-      ['Opmerkingen', opmerkingen],
-    ]
-      .filter(([, inhoud]) => (inhoud ?? '').trim() !== '')
-      .map(([kop, inhoud]) => `<p><strong>${kop}</strong></p>${alsHtmlAlineas(inhoud)}`)
-      .join('')
 
   // Klantgegevens: voorkeur voor de opdrachtgever van het gekoppelde dossier
   // (relaties!klant_id), anders de losse `clients`-tabel van de offerte. De
@@ -1333,9 +1298,8 @@ export function buildRenderContext(
     heeft_stelposten: stelpost_regels.length > 0,
     heeft_opties: optie_secties.length > 0,
     heeft_behandelingen: behandelingen_overzicht.length > 0,
-    heeft_terms: !!(offerteteksten || voorwaarden || uitsluitingen || opmerkingen),
+    heeft_terms: !!(voorwaarden || uitsluitingen || opmerkingen),
     heeft_betalingscondities: !!betalingscondities_tekst,
-    offerteteksten,
     voorwaarden,
     uitsluitingen,
     opmerkingen,

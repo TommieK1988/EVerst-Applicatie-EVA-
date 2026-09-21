@@ -15,7 +15,6 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
 import { useEffect, useRef } from 'react'
 import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '@everts/ui'
@@ -49,12 +48,22 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
         blockquote: false,
         horizontalRule: false,
       }),
-      Underline,
+      // Underline zit al in StarterKit 3 — los toevoegen geeft
+      // "Duplicate extension names found: ['underline']".
     ],
     content: waarde || '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none min-h-[220px] px-3 py-2 focus:outline-none',
+        // Geen `prose`: het typography-plugin staat niet in deze build, dus die klasse
+        // doet niets en lijsten zouden zonder bolletje in beeld staan. Daarom expliciet.
+        class: [
+          'min-h-[420px] px-6 py-5 leading-relaxed text-sm text-slate-700 focus:outline-none',
+          '[&_p]:my-2 [&_p:first-child]:mt-0',
+          '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+          '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6',
+          '[&_li]:my-0.5 [&_li>p]:my-0',
+          '[&_strong]:font-semibold',
+        ].join(' '),
       },
     },
     onUpdate({ editor }) {
@@ -77,7 +86,7 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
   }, [readOnly, editor])
 
   if (!editor) {
-    return <div className="min-h-[260px] rounded-lg border border-slate-200 bg-slate-50" />
+    return <div className="min-h-[470px] rounded-lg border border-slate-200 bg-slate-50" />
   }
 
   const knop = (
@@ -93,6 +102,10 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
       aria-label={titel}
       aria-pressed={actief}
       disabled={readOnly || uitgeschakeld}
+      // De muisklik mag de focus niet uit de editor halen: zonder dit verliest
+      // ProseMirror zijn selectie en doet de opmaakknop niets. Het klassieke
+      // toolbar-patroon — voorkomen is betrouwbaarder dan achteraf refocussen.
+      onMouseDown={e => e.preventDefault()}
       onClick={aan}
       className={cn(
         'rounded p-1.5 text-slate-500 transition-colors',
@@ -120,8 +133,11 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
       </div>
 
       <div className="relative">
-        {leeg(editor.getHTML()) && placeholder && (
-          <span className="pointer-events-none absolute left-3 top-2 text-sm text-slate-400">
+        {/* Op `waarde` gebaseerd, niet op `editor.getHTML()`: de editor krijgt zijn
+            inhoud pas in het effect ná deze render, dus met getHTML() bleef de
+            hulptekst over net geladen tekst heen staan. */}
+        {leeg(waarde) && placeholder && (
+          <span className="pointer-events-none absolute left-6 top-5 text-sm text-slate-400">
             {placeholder}
           </span>
         )}
