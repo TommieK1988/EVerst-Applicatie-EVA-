@@ -182,6 +182,17 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     const allContacts = await fetchAllPages<Bouw7Contact>(bouw7, '/list/contacts')
     const bouw7IdsInResponse = new Set(allContacts.map(c => String(c.id)))
 
+    // Contacttype "Klant" (`customer`, id 7) is in Bouw7 de partij die de factuur krijgt — de VvE
+    // onder een beheerder — niet de partij die de opdracht geeft. Die horen in EVA thuis als
+    // factuuradres onder hun beheerder (`relatie_factuuradressen`), niet als losse opdrachtgever
+    // in het relatieoverzicht. Zie `isKlantContact` voor het volledige waarom.
+    //
+    // `bouw7IdsInResponse` blijft bewust op de ónbewerkte lijst staan: een Klant-contact is niet
+    // uit Bouw7 verdwenen, we nemen hem alleen niet over. Zou hij hier ook uit vallen, dan zette
+    // stap 14 elke overgebleven Klant-relatie op inactief met de melding dat Bouw7 hem niet meer
+    // kent — en dat is niet waar.
+    const contacten = allContacts.filter(c => !isKlantContact(c))
+
     // 2. Alle contactpersonen in één bulk-call. Let op het koppelteken in `contact-persons`:
     //    `/list/contactpersons` bestaat niet (404) en liet deze sync stilzwijgend leeglopen.
     const alleCps = await fetchAllPages<Bouw7ContactPerson>(bouw7, '/list/contact-persons')
@@ -249,8 +260,8 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     //     zonder die stempel zou een gewijzigde termijn incrementeel onzichtbaar blijven.
     const hashPerContact = new Map<string, string>()
     // Het Bouw7-contact zelf, om later per spiegel het type te kunnen vastleggen.
-    const contactPerBouw7Id = new Map<string, Bouw7Contact>(allContacts.map(c => [String(c.id), c]))
-    for (const c of allContacts) {
+    const contactPerBouw7Id = new Map<string, Bouw7Contact>(contacten.map(c => [String(c.id), c]))
+    for (const c of contacten) {
       hashPerContact.set(String(c.id), fingerprint({
         naam: c.name ?? null, type: mapContactType(c.type?.name), kvk: c.cocNumber ?? null,
         btw: c.vatNumber ?? null, em: c.emailAddress ?? null, tel: c.phoneNumber ?? null,
@@ -270,8 +281,8 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // De hash hoort bij de Bouw7-rij, niet bij de EVA-relatie: twee spiegels van hetzelfde
     // bedrijf wijzigen onafhankelijk van elkaar.
     const contactenVoorDetail = mode === 'full'
-      ? allContacts
-      : allContacts.filter(c => spiegelPerBouw7.get(String(c.id))?.bouw7_sync_hash !== hashPerContact.get(String(c.id)))
+      ? contacten
+      : contacten.filter(c => spiegelPerBouw7.get(String(c.id))?.bouw7_sync_hash !== hashPerContact.get(String(c.id)))
 
     const detailPerContact = new Map<string, Bouw7ContactDetail>()
     {
@@ -292,7 +303,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
 
     // 4. Bouw relaties-rows (skip vergrendelde)
     const relatieRows: Record<string, unknown>[] = []
-    for (const c of allContacts) {
+    for (const c of contacten) {
       const bouw7IdStr = String(c.id)
       const bestaandeRelatie = relatieMap.get(bouw7IdStr)
       if (bestaandeRelatie?.sync_vergrendeld) continue
@@ -338,7 +349,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     // Elke rol die Bouw7 van een relatie kent, verzameld over al haar spiegels. Een bedrijf
     // dat als klant én als leverancier in Bouw7 staat, hoort in EVA beide types te dragen.
     const rollenPerRelatie = new Map<string, Set<OrganisatieType>>()
-    for (const c of allContacts) {
+    for (const c of contacten) {
       const rel = relatieMap.get(String(c.id))
       if (!rel) continue
       const set = rollenPerRelatie.get(rel.id as string) ?? new Set<OrganisatieType>()
@@ -496,7 +507,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     ).catch(() => [] as { relatie_id: string; iban: string | null; handmatige_velden: string[] | null }[])
     const bankByRelatie = new Map(bankBestaand.map(b => [b.relatie_id, b]))
     const ibanRows: Record<string, unknown>[] = []
-    for (const c of allContacts) {
+    for (const c of contacten) {
       if (!c.iban) continue
       const relatieId = relatieIdMap.get(String(c.id))
       if (!relatieId) continue
@@ -529,7 +540,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
         return isNaN(n) ? null : n
       }
       const tariefRows: Record<string, unknown>[] = []
-      for (const c of allContacts) {
+      for (const c of contacten) {
         const relatieId = relatieIdMap.get(String(c.id))
         if (!relatieId || !c.hourTypePrices?.length) continue
         for (const p of c.hourTypePrices) {
@@ -611,7 +622,13 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
     }[] = []
     let overgeslagen = 0
 
-    for (const c of allContacts) {
+    // Ook hier de gefilterde lijst: zonder relatie is er geen organisatie om iemand onder te
+    // hangen. Elf mensen staan in Bouw7 onder een Klant-contact — VvE-voorzitters en
+    // penningmeesters. Die horen bij het factuuradres, niet bij een organisatie; in EVA is dat
+    // `contactpersoon_factuuradressen` (zie lib/relaties/factuuradres-contactpersonen.ts). Ze
+    // worden hier niet meer bijgewerkt, maar ook niet opgeruimd: stap 15 kijkt naar de volledige
+    // contactpersonenlijst van Bouw7, en daar staan ze gewoon in.
+    for (const c of contacten) {
       for (const cp of cpByContactId.get(c.id) ?? []) {
         const cpBouw7Id = String(cp.id)
         const spiegel = spiegelMap.get(cpBouw7Id)
@@ -935,6 +952,28 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
 
 // `metBehoudVanHandmatigeVelden` (bescherming van in EVA bewerkte velden) staat sinds de
 // uitrol naar dossiers en medewerkers in ./handmatige-velden.ts.
+
+/**
+ * Is dit een Bouw7-contact van het type **Klant** (`customer`, id 7)?
+ *
+ * Bouw7 kent naast Klant ook Opdrachtgever (`client`, id 3). Het verschil is geen nuance maar de
+ * kern van het beheerdersmodel: **Opdrachtgever is wie de opdracht geeft** (Schep Vastgoed
+ * Managers, J&M VvE Beheer), **Klant is wie de factuur krijgt** (de onderliggende VvE). Welke VvE
+ * dat per project is staat in het maatwerkveld `caFactuuradres` op het project.
+ *
+ * In EVA hoort die betalende partij onder de beheerder te hangen, als rij in
+ * `relatie_factuuradressen` — niet als zelfstandige relatie in het overzicht. Tot september 2026
+ * spiegelde `mapContactType` alles wat geen leverancier of onderaannemer was naar `opdrachtgever`,
+ * waardoor 124 Klant-contacten als opdrachtgever in de relatielijst stonden en collega's bij het
+ * kiezen van een klant tientallen VvE's langs zagen komen die nooit een opdracht geven.
+ *
+ * Match op de type-**naam**, niet op id 7: de id's zijn afgeleid uit de data (er is geen
+ * `/list/contact-types`-endpoint) en een omgeving met andere nummering mag hier niet stilletjes
+ * alle contacten doorlaten.
+ */
+export function isKlantContact(c: { type?: { id?: number; name?: string } | null }): boolean {
+  return (c.type?.name ?? '').toLowerCase() === 'customer'
+}
 
 /** Splits "Voornaam [tussenvoegsel] Achternaam" in twee delen. */
 function mapContactType(typeName?: string): OrganisatieType {
@@ -1829,13 +1868,18 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     // Zie lib/bouw7/factuuradres-sync.ts voor de matchregel en waarom die zo streng is.
     const factuuradresMap = new Map<string, string>()
     try {
+      // De contactenlijst is de matchbron: de betalende partij is een Klant-contact en dat is
+      // sinds sep 2026 juist géén relatie meer, dus matchen tegen `relaties` zou niets vinden.
+      const alleContacten = await fetchAllPages<Bouw7Contact>(bouw7, '/list/contacts')
       const fa = await bepaalFactuuradressen(
         supabase,
         changedProjects.map(p => ({
           bouw7ProjectId: String(p.id),
           klantId:        p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
+          klantBouw7Id:   p.contact?.id ? String(p.contact.id) : null,
           caFactuuradres: p.caFactuuradres,
         })),
+        alleContacten,
       )
       for (const [k, v] of fa.perProject) factuuradresMap.set(k, v)
       if (fa.aangemaakt > 0 || fa.nietGematcht.length > 0) {
@@ -1843,7 +1887,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
           integratie: 'bouw7', entiteit: 'factuuradressen', richting: 'in',
           aantal_nieuw: fa.aangemaakt, aantal_bijgewerkt: fa.perProject.size, aantal_fout: 0, duur_ms: 0,
           fout_melding: fa.nietGematcht.length
-            ? `Niet gematcht op een relatie: ${fa.nietGematcht.slice(0, 20).join('; ')}`
+            ? `Niet gematcht op een Bouw7-contact: ${fa.nietGematcht.slice(0, 20).join('; ')}`
             : null,
         })
       }

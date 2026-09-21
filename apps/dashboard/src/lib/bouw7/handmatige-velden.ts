@@ -39,9 +39,11 @@ export const BOUW7_DOSSIER_VELDEN = [
   'verwacht_startdatum',
   'verwacht_einddatum',
   'object_id',
-  'factuuradres_id',
   'servicedesk_substatus',
   // Tweerichting: alleen gemarkeerd zolang een write-back naar Bouw7 openstaat.
+  // Het factuuradres gaat als maatwerkveld "Factuuradres" (`caFactuuradres`) naar het project;
+  // zie lib/bouw7/project-velden.ts.
+  'factuuradres_id',
   'project_manager_id',
   'uitvoerder_id',
   'calculator_id',

@@ -14,6 +14,12 @@
  * Wat bewust NIET wordt geschreven: de werkmaatschappij (`branch`) — Bouw7 kent het projectnummer
  * toe op basis van de branch, dus die na het aanmaken wijzigen is vragen om een hernummering.
  *
+ * Sinds september 2026 gaat ook het **factuuradres** mee, als maatwerkveld "Factuuradres"
+ * (`caFactuuradres`). Dat is in Bouw7 de enige plek waar staat wie de factuur krijgt: `contact`
+ * is de beheerder die de opdracht geeft, de betalende VvE staat daar alleen als naam in dit veld.
+ * Kiest iemand in EVA een ander factuuradres, dan liep dat tot nu toe niet terug en gingen de
+ * twee systemen uit elkaar lopen.
+ *
  * Elke write geeft terug wélke velden echt zijn geschreven; de aanroeper ontmarkeert alleen die in
  * `handmatige_velden` (zie lib/bouw7/handmatige-velden.ts). Een categorie die Bouw7 niet kent blijft
  * zo beschermd in EVA in plaats van bij de volgende sync te verdwijnen.
@@ -44,6 +50,7 @@ export const BOUW7_PROJECT_SCHRIJFVELDEN = [
   'voorlopige_start',
   'voorlopige_eind',
   'vve_code',
+  'factuuradres_id',
 ] as const
 
 const WERKADRES = ['werkadres_straat', 'werkadres_huisnummer', 'werkadres_postcode', 'werkadres_stad']
@@ -66,6 +73,41 @@ function nlOffset(datum: string): string {
 function alsDatetime(datum: string | null | undefined): string | null {
   const d = (datum ?? '').slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00${nlOffset(d)}` : null
+}
+
+/**
+ * Herkent het maatwerkveld "Factuuradres" (`caFactuuradres`, id 19904, ownerType 0 = project).
+ * Op propertyName én naam, zodat het veld na opnieuw aanmaken in Bouw7 — met een nieuw id — nog
+ * steeds gevonden wordt. Niet op `caVveCode` uitkomen: die matcht "vve", niet "factuuradres".
+ */
+const isFactuuradresAttr = (a: { name?: string; code?: string; propertyName?: string }): boolean =>
+  a.propertyName === 'caFactuuradres' || /factuuradres/i.test(a.name ?? '')
+
+/**
+ * De tekst die in `caFactuuradres` hoort voor deze adresrij: de naam van het gekoppelde
+ * Bouw7-contact, met het EVA-label als terugval. Leeg factuuradres → lege string, wat het veld in
+ * Bouw7 wist.
+ */
+async function factuuradresTekst(
+  factuuradresId: string | null | undefined,
+  client: { get: <T>(pad: string) => Promise<T> },
+): Promise<string> {
+  if (!factuuradresId) return ''
+  const { data: fa } = await db()
+    .from('relatie_factuuradressen')
+    .select('label, bouw7_contact_id')
+    .eq('id', factuuradresId)
+    .maybeSingle()
+  if (!fa) return ''
+  if (fa.bouw7_contact_id) {
+    try {
+      const contact = await client.get<{ name?: string }>(`/contact/${fa.bouw7_contact_id}`)
+      if (contact?.name) return contact.name
+    } catch {
+      // Contact niet op te halen (verwijderd, of Bouw7 hapert): dan het label, dat is beter dan niets.
+    }
+  }
+  return fa.label ?? ''
 }
 
 /** "2026-11-15" (deliveryDate wil een kale datum); leeg → null. */
@@ -187,6 +229,13 @@ export async function schrijfBouw7Projectvelden(
       }
     }
 
+    // Maatwerkvelden delen één array op de POST. Ze worden dus op elkaar gestapeld: schrijft deze
+    // aanroep zowel de VvE-code als het factuuradres, dan mag de tweede merge de eerste niet
+    // overschrijven — vandaar één accumulator in plaats van twee losse toekenningen.
+    let maatwerk: Bouw7CustomAttrValue[] | null = null
+    const bestaandMaatwerk = () =>
+      maatwerk ?? (Array.isArray(project.customAttributeValues) ? project.customAttributeValues : [])
+
     if (wil('vve_code')) {
       const attrId = await resolveCustomAttributeId(
         client,
@@ -194,11 +243,30 @@ export async function schrijfBouw7Projectvelden(
       )
       if (attrId == null) overgeslagen.push('VvE-code (maatwerkveld niet gevonden)')
       else {
-        const bestaand = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
-        body.customAttributeValues = mergeCustomAttributeValue(bestaand, attrId, String(d.vve_code ?? ''))
+        maatwerk = mergeCustomAttributeValue(bestaandMaatwerk(), attrId, String(d.vve_code ?? ''))
         geschreven.push('vve_code')
       }
     }
+
+    // Het factuuradres van het dossier → het maatwerkveld "Factuuradres" (`caFactuuradres`) op het
+    // Bouw7-project. Dat veld is daar de énige plek waar staat wie de factuur krijgt; Bouw7 kent
+    // geen relatie "dit adres hoort bij die beheerder", en `contact` is de opdrachtgever.
+    //
+    // Er gaat de **naam van het Bouw7-contact** in, niet het EVA-label: `caFactuuradres` is van het
+    // type `contact` en Bouw7 bewaart er een kale naamstring in, die alleen bruikbaar is als hij
+    // letterlijk een contactnaam is. Heeft de adresrij geen Bouw7-contact (een met de hand
+    // vastgelegde tenaamstelling, zoals bij Von Geusau), dan gaat het label erin — dat is precies
+    // wat een collega daar met de hand zou typen.
+    if (wil('factuuradres_id')) {
+      const attrId = await resolveCustomAttributeId(client, isFactuuradresAttr)
+      if (attrId == null) overgeslagen.push('factuuradres (maatwerkveld niet gevonden)')
+      else {
+        maatwerk = mergeCustomAttributeValue(bestaandMaatwerk(), attrId, await factuuradresTekst(d.factuuradres_id, client))
+        geschreven.push('factuuradres_id')
+      }
+    }
+
+    if (maatwerk) body.customAttributeValues = maatwerk
 
     if (Object.keys(body).length > 2) {
       await client.post('/project', body)
