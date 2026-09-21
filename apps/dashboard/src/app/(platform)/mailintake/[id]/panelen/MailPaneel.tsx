@@ -25,13 +25,93 @@ function bytes(n: number | null): string {
 export interface MailBijlage {
   id: string
   bestandsnaam: string
+  content_type: string | null
   grootte_bytes: number | null
   opslag_pad: string | null
   te_groot: boolean
 }
 
+/** Is dit een plaatje waar een voorbeeld van te tonen valt? */
+function isAfbeelding(b: MailBijlage): boolean {
+  const type = (b.content_type ?? '').toLowerCase()
+  if (type.startsWith('image/')) return true
+  return /\.(png|jpe?g|gif|webp)$/i.test(b.bestandsnaam)
+}
+
+/**
+ * Voorbeelden van de meegestuurde plattegronden en foto's.
+ *
+ * Een bestandsnaam als "BG.png" zegt niets; het plaatje zegt meteen of het een
+ * plattegrond is of een foto van een lekkage. De links zijn kortlopend en worden
+ * per bijlage opgevraagd, dus ze worden pas geladen als het paneel in beeld komt.
+ */
+function Afbeeldingen({
+  bijlagen, onOpenBijlage, haalUrl,
+}: {
+  bijlagen: MailBijlage[]
+  onOpenBijlage: (id: string) => void
+  haalUrl: (id: string) => Promise<string | null>
+}) {
+  const [urls, setUrls] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    let weg = false
+    void (async () => {
+      for (const b of bijlagen) {
+        if (!b.opslag_pad) continue
+        const url = await haalUrl(b.id).catch(() => null)
+        if (weg) return
+        if (url) setUrls(vorig => ({ ...vorig, [b.id]: url }))
+      }
+    })()
+    return () => { weg = true }
+    // De lijst verandert niet tijdens de levensduur van dit scherm.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div>
+      <div style={kop}>Meegestuurde afbeeldingen</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>
+        {bijlagen.map(b => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => onOpenBijlage(b.id)}
+            title={`${b.bestandsnaam} — openen`}
+            style={{
+              padding: 0, border: '1px solid var(--border)', borderRadius: 6,
+              background: 'var(--surface-2, var(--bg))', cursor: 'pointer',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            }}
+          >
+            {urls[b.id] ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={urls[b.id]}
+                alt={b.bestandsnaam}
+                style={{ width: '100%', height: 84, objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <span style={{ ...klein, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                laden…
+              </span>
+            )}
+            <span style={{
+              ...klein, padding: '3px 5px', textAlign: 'left',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {b.bestandsnaam}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function MailPaneel({
-  bericht, bijlagen, groepsMails = [], onOpenBijlage,
+  bericht, bijlagen, groepsMails = [], onOpenBijlage, haalBijlageUrl,
 }: {
   bericht: {
     onderwerp: string | null
@@ -59,6 +139,8 @@ export default function MailPaneel({
     aantalBijlagen: number
   }[]
   onOpenBijlage: (id: string) => void
+  /** Kortlopende link naar één bijlage; gebruikt voor de voorbeelden. */
+  haalBijlageUrl: (id: string) => Promise<string | null>
 }) {
   return (
     <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -118,6 +200,14 @@ export default function MailPaneel({
             ))}
           </div>
         </div>
+      )}
+
+      {bijlagen.some(isAfbeelding) && (
+        <Afbeeldingen
+          bijlagen={bijlagen.filter(isAfbeelding)}
+          onOpenBijlage={onOpenBijlage}
+          haalUrl={haalBijlageUrl}
+        />
       )}
 
       {bijlagen.length > 0 && (

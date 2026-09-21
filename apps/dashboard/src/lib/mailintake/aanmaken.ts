@@ -47,6 +47,11 @@ export interface AanmaakInvoer {
    * -- dan is er namelijk niets om tegen te vergelijken.
    */
   proef?: ProefResultaat
+  /**
+   * De calculator, als die bij de intake al bekend is. Wordt als dossierrol gezet
+   * en gaat mee naar Bouw7; nooit afgeleid uit wie de intake uitvoert.
+   */
+  calculatorId?: string | null
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -229,6 +234,19 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // een calculator als eerste leest. Valt terug op wat er bij de intake is
   // opgesteld als de behandelaar hem niet heeft aangepast.
   await zetWerkzaamhedenOpDossier(dossierId, inv.berichtId, inv.gevraagdeWerkzaamheden ?? null).catch(() => {})
+
+  // De calculator, als de behandelaar hem bij de intake al heeft aangewezen. Dat
+  // kon eerder niet: rollen werden pas later aan een dossier gehangen, en het
+  // formulier had er dus geen veld voor. Wie het bij binnenkomst al weet, hoeft er
+  // nu niet nog een keer voor terug te komen.
+  //
+  // Nooit afleiden uit wie de intake doet -- dat is een andere rol, en een
+  // verkeerde calculator op een dossier leidt de hele planning om.
+  if (inv.calculatorId) {
+    const { updateDossierRollen } = await import('@/lib/dossiers/actions')
+    await updateDossierRollen(dossierId, { calculator_id: inv.calculatorId }, { schrijfBouw7: true })
+      .catch(() => undefined)
+  }
 
   // Mandaat en facturatiemethode kunnen niet mee in maakAanvraag -- die velden kent
   // de aanvraagmodal niet. Zonder deze stap zou het bedrag uit de bon wel gelezen

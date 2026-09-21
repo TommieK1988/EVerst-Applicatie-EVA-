@@ -23,11 +23,16 @@ export default async function BerichtPage({ params }: { params: Promise<{ id: st
   const detail = await getBerichtDetail(id)
   if (!detail) notFound()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient()
-  const [{ data: werkmaatschappijen }, categorieen] = await Promise.all([
+  const [{ data: werkmaatschappijen }, categorieen, { data: medewerkers }] = await Promise.all([
     supabase.from('bedrijfsgegevens').select('id, naam').eq('type', 'werkmaatschappij').order('naam').limit(50),
     getAanvraagCategorieen(),
+    // Voor het calculatorveld. Alle actieve medewerkers: wie er calculeert verschilt
+    // per werkmaatschappij en per soort werk, dus filteren op functienaam zou hier
+    // juist de helft wegstrepen.
+    supabase.from('medewerkers')
+      .select('id, voornaam, tussenvoegsel, achternaam')
+      .eq('actief', true).order('achternaam').limit(300),
   ])
 
   // De objectkandidaten worden niet opgeslagen maar hier opnieuw bepaald: de
@@ -49,6 +54,10 @@ export default async function BerichtPage({ params }: { params: Promise<{ id: st
       objectTreffer={objectTreffer ? JSON.parse(JSON.stringify(objectTreffer)) : null}
       werkmaatschappijen={werkmaatschappijen ?? []}
       categorieen={categorieen}
+      medewerkers={(medewerkers ?? []).map(m => ({
+        id: m.id,
+        naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+      }))}
       magSchrijven={heeftModuleToegang(rechten, 'mailintake', 'schrijven')}
     />
   )

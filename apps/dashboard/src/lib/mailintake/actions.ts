@@ -78,6 +78,8 @@ export async function maakDossierVanBericht(
     gevraagdeWerkzaamheden?: string | null
     buitenScope?: string | null
     aandachtspunten?: string | null
+    /** De calculator, als die bij de intake al is aangewezen. */
+    calculatorId?: string | null
   },
   /** Het voorstel uit de proef; waartegen er na het aanmaken wordt teruggelezen. */
   proef?: Awaited<ReturnType<typeof proefAanmaak>>,
@@ -117,6 +119,7 @@ export async function maakDossierVanBericht(
       aandachtspunten: velden.aandachtspunten ?? null,
     },
     proef,
+    calculatorId: velden.calculatorId ?? null,
     automatisch: false,
     medewerkerId: medewerker.id,
     behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,

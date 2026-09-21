@@ -20,14 +20,19 @@ import { zoekAdres } from '@/lib/adres/pdok'
 // Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
 import { dossierHref } from '@/lib/dossiers/href'
 import {
-  maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier,
+  maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier, getBijlageUrl,
 } from '@/lib/mailintake/actions'
-import { DUPLICAAT_TWIJFEL, bepaalRoute } from '@/lib/mailintake/types'
+import {
+  DUPLICAAT_TWIJFEL, VELD_BETROUWBAAR, MAIL_SOORT_LABELS, bepaalRoute,
+  type MailSoort,
+} from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
+import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { bouwVoorvertoning, bouwAfwijkingTekst } from './panelen/voorvertoning'
+import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
 
@@ -51,12 +56,14 @@ type ObjectTreffer = {
 } | null
 
 export default function BerichtBehandelen({
-  detail, objectTreffer, werkmaatschappijen, categorieen, magSchrijven,
+  detail, objectTreffer, werkmaatschappijen, categorieen, medewerkers, magSchrijven,
 }: {
   detail: Detail
   objectTreffer: ObjectTreffer
   werkmaatschappijen: { id: string; naam: string }[]
   categorieen: { id: number; name: string }[]
+  /** Actieve medewerkers, voor het calculatorveld. */
+  medewerkers: { id: string; naam: string }[]
   magSchrijven: boolean
 }) {
   const router = useRouter()
@@ -112,6 +119,11 @@ export default function BerichtBehandelen({
   const [objectId, setObjectId] = useState<string | null>(
     b.object?.id ?? objectTreffer?.objectId ?? null,
   )
+
+  // De calculator kan hier al worden aangewezen. Bewust leeg beginnen en nooit
+  // afleiden uit wie de intake doet: dat is een andere rol, en een verkeerde
+  // calculator op een dossier leidt de hele planning om.
+  const [calculatorId, setCalculatorId] = useState<string>('')
 
   const [bezig, setBezig] = useState(false)
 
@@ -258,44 +270,16 @@ export default function BerichtBehandelen({
 
     setBezig(true)
     try {
-      const teVersturen = {
-        relatieId: klantId,
-        contactpersoonId,
-        objectId,
-        gevraagdeWerkzaamheden: projectOmschrijving.scope.trim() || null,
-        buitenScope: projectOmschrijving.buitenScope.trim() || null,
-        aandachtspunten: projectOmschrijving.aandachtspunten.trim() || null,
-        omschrijving: omschrijving.trim(),
-        klantNaam,
-        contactpersoonNaam: null,
-        contactpersoonEmail: null,
-        contactpersoonTelefoon: null,
-        werkadresStraat: straat,
-        werkadresHuisnummer: huisnummer,
-        werkadresPostcode: postcode,
-        werkadresStad: stad,
-        adresBevestigd,
-        referentie: referentie.trim() || null,
-        onzeReferentie: velden.onze_offerte_referentie ?? null,
-        vveCode: vveCode.trim() || null,
-        bouw7CategorieId: categorieId === '' ? null : Number(categorieId),
-        categorieNaam: categorieen.find(c => c.id === categorieId)?.name ?? null,
-        werkmaatschappijId: werkmaatschappijId || null,
-        aanvraagdatum: velden.aanvraagdatum ?? null,
-        deadline: deadline || null,
-        opdrachtdatum: velden.opdrachtdatum ?? null,
-        opdrachtReferentie: velden.opdracht_referentie ?? null,
-        mandaatBedrag: mandaat.trim() ? Number(mandaat.replace(',', '.')) : null,
-        regie,
-        regieAanwijzing: velden.regie_aanwijzing ?? null,
+      // Het samenstellen van de payload staat bij de panelen: het is een platte
+      // afbeelding van de schermtoestand en hoort de leesbaarheid hier niet te
+      // verdringen.
+      const teVersturen = bouwVeldenVoorAanmaak({
+        velden, categorieen, klantId, klantNaam, contactpersoonId, objectId, calculatorId,
+        projectOmschrijving, omschrijving, straat, huisnummer, postcode, stad, adresBevestigd,
+        referentie, vveCode, categorieId, werkmaatschappijId, deadline, mandaat, regie,
+        opmerkingen,
         factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
-        klantOpmerkingen: velden.klant_opmerkingen ?? null,
-        bedragExclBtw: velden.bedrag_excl_btw ?? null,
-        spoed: Boolean(velden.spoed),
-        opmerkingen: opmerkingen.trim() || null,
-        meerdereWerkadressen: false,
-        vertrouwen: {},
-      }
+      })
 
       // ── Proef ─────────────────────────────────────────────────────────────
       // Eerst laten zien wat er precies weggeschreven wordt, en niets doen. De
@@ -384,6 +368,38 @@ export default function BerichtBehandelen({
     return redenen[0] ?? null
   }, [detail.log])
 
+  /** Kortlopende link naar een bijlage, voor de voorbeelden in het mailpaneel. */
+  async function haalBijlageUrl(id: string): Promise<string | null> {
+    const res = await getBijlageUrl(id)
+    return res.ok && res.url ? res.url : null
+  }
+
+  // De zekerheid over het geheel: het gemiddelde van de velden die het dossier
+  // dragen. Die drie bepalen of een aanvraag bruikbaar is; een perfect gelezen
+  // telefoonnummer maakt een ontbrekend adres niet goed.
+  const kernZekerheid = useMemo(() => {
+    const kern = ['omschrijving', 'werkadres_straat', 'categorie_voorstel']
+    const som = kern.reduce((a, k) => a + (zekerheid[k] ?? 0), 0)
+    return Math.round((som / kern.length) * 100) / 100
+  }, [zekerheid])
+
+  /**
+   * De velden die aandacht vragen, meest onzekere eerst.
+   *
+   * Alles onder de betrouwbaarheidsdrempel komt hier terecht, plus wat leeg is
+   * gebleven terwijl het dossier het nodig heeft. De invoer is dezelfde toestand
+   * als in het formulier ernaast -- twee plekken met dezelfde waarde die uit elkaar
+   * kunnen lopen zou erger zijn dan geen tweede plek.
+   */
+  // De velden die aandacht vragen; het samenstellen ervan staat bij het paneel.
+  const twijfelVelden = bouwTwijfelVelden({
+    zekerheid, bewerkbaar, categorieen, werkmaatschappijen,
+    klantId, klantNaam, setKlantNaam, setKlantZoek,
+    omschrijving, setOmschrijving,
+    straat, setStraat, huisnummer, setHuisnummer, adresBevestigd,
+    categorieId, setCategorieId, werkmaatschappijId, setWerkmaatschappijId,
+  })
+
   return (
     // Zelfde container als de overige overzichtsschermen; zonder deze klasse plakt
     // de driekolomsindeling tegen de schermrand.
@@ -437,12 +453,15 @@ export default function BerichtBehandelen({
         gap: 14, alignItems: 'start',
       }}>
 
-        {/* ── Links: de mail ── */}
-        <MailPaneel
-          bericht={b}
-          bijlagen={detail.bijlagen}
-          groepsMails={detail.groepsMails}
-          onOpenBijlage={openBijlage}
+        {/* ── Links: waar EVA over twijfelt ──
+            De mail stond hier eerst. Die lees je één keer; de velden waar EVA
+            onzeker over is zijn waar de tijd in gaat, en die horen dus vooraan. */}
+        <TwijfelPaneel
+          zekerheid={kernZekerheid}
+          soortLabel={b.soort ? (MAIL_SOORT_LABELS[b.soort as MailSoort] ?? b.soort) : 'Nog niet beoordeeld'}
+          soortVertrouwen={b.soort_vertrouwen != null ? Number(b.soort_vertrouwen) : null}
+          redenVoorleggen={redenVoorleggen}
+          velden={twijfelVelden}
         />
 
         {/* ── Midden: wat ermee gebeurt ── */}
@@ -587,6 +606,19 @@ export default function BerichtBehandelen({
               </select>
             </Veld>
           </div>
+
+          {/* De calculator. EVA vult hem nooit zelf in: wie er calculeert volgt niet
+              uit de mail, en hem afleiden uit wie de intake doet is een andere rol.
+              Wie het bij binnenkomst al weet, hoeft er nu niet voor terug te komen. */}
+          <Veld label="Calculator">
+            <select
+              style={veldStijl} value={calculatorId} disabled={!bewerkbaar}
+              onChange={e => setCalculatorId(e.target.value)}
+            >
+              <option value="">— nog niet toewijzen —</option>
+              {medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
+            </select>
+          </Veld>
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
             <Veld label="Straat" score={zekerheid.werkadres_straat}>
@@ -734,6 +766,15 @@ export default function BerichtBehandelen({
         </div>
 
         {/* ── Rechts: waarop berust dit ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <MailPaneel
+          bericht={b}
+          bijlagen={detail.bijlagen}
+          groepsMails={detail.groepsMails}
+          onOpenBijlage={openBijlage}
+          haalBijlageUrl={haalBijlageUrl}
+        />
+
         <BeoordelingPaneel
           bericht={b}
           toelichting={detail.extractie?.toelichting ?? null}
@@ -746,6 +787,7 @@ export default function BerichtBehandelen({
           objectId={objectId}
           setObjectId={setObjectId}
         />
+        </div>
       </div>
     </div>
   )
