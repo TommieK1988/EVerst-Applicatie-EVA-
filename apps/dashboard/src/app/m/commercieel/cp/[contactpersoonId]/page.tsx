@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { vereisCommercieelToegang } from '@/lib/commercie/mobiel-auth'
 import { getContactpersoonBeeld } from '@/lib/commercie/contactpersoon-beeld'
+import { leesToewijsbareMedewerkers } from '@/lib/commercie/toewijsbare-medewerkers'
 import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import AppHeader from '@/components/mobiel/AppHeader'
@@ -17,9 +18,10 @@ export default async function ContactpersoonPage(
   const { contactpersoonId } = await props.params
   const medewerker = await vereisCommercieelToegang('lezen', '/m')
 
-  const [beeld, rechten] = await Promise.all([
+  const [beeld, rechten, medewerkers] = await Promise.all([
     getContactpersoonBeeld(contactpersoonId),
     getEffectieveRechten(medewerker),
+    leesToewijsbareMedewerkers(),
   ])
 
   if (!beeld) notFound()
@@ -39,7 +41,11 @@ export default async function ContactpersoonPage(
       <ContactpersoonView
         beeld={beeld}
         currentMedewerkerId={medewerker.id}
+        // Twee verschillende rechten, net als op het klantbeeld: een notitie hangt aan de
+        // relatie, een verkoopkans is een rij in het dossier-domein.
         magSchrijven={heeftModuleToegang(rechten, 'relaties', 'schrijven')}
+        magVerkoopkans={heeftModuleToegang(rechten, 'dossiers', 'schrijven')}
+        medewerkers={medewerkers}
       />
     </>
   )

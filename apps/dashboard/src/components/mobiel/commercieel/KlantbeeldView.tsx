@@ -195,8 +195,8 @@ export default function KlantbeeldView({
       </div>
 
       <VastleggenSheet
-        relatieId={relatie.id}
-        relatieNaam={relatie.naam}
+        relaties={[{ id: relatie.id, naam: relatie.naam }]}
+        titelVoorvoegsel={relatie.naam}
         contactpersonen={beeld.contactpersonen.map(c => ({ id: c.id, naam: c.naam }))}
         medewerkers={medewerkers}
         currentMedewerkerId={currentMedewerkerId}

@@ -13,6 +13,13 @@
  *
  * Tabjes waarvoor het recht ontbreekt verschijnen niet. Een formulier tonen dat bij opslaan
  * "geen toegang" geeft is erger dan het weglaten.
+ *
+ * Dezelfde sheet hangt onder het klantbeeld en onder de kaart van één contactpersoon. Het
+ * verschil zit in wat al vaststaat: bij de klant weet je de opdrachtgever maar niet met wie
+ * je sprak, bij de persoon precies andersom. Vandaar `relaties` als lijst (één element =
+ * geen keuze, meer = een keuzelijst) en `vasteContactpersoonId` in plaats van de "met wie"-
+ * vraag. Een notitie kan niet zonder opdrachtgever — `relatie_notities.relatie_id` is `not
+ * null` — dus zonder werkgever blijft dat tabje weg.
  */
 
 import React from 'react'
@@ -42,12 +49,21 @@ function vandaag(): string {
 }
 
 export default function VastleggenSheet({
-  relatieId, relatieNaam, contactpersonen, medewerkers, currentMedewerkerId,
-  magNotitie, magVerkoopkans,
+  relaties, titelVoorvoegsel, contactpersonen, vasteContactpersoonId, medewerkers,
+  currentMedewerkerId, magNotitie, magVerkoopkans,
 }: {
-  relatieId: string
-  relatieNaam: string
+  /**
+   * De opdrachtgever(s) waar een notitie of verkoopkans aan hangt. Eén element = vast, meer
+   * dan één = een keuzelijst (een contactpersoon kan bij meerdere organisaties werken), leeg
+   * = alleen een losse actie.
+   */
+  relaties: { id: string; naam: string }[]
+  /** Waar de actietitel mee begint: de klantnaam of de naam van de persoon die je sprak. */
+  titelVoorvoegsel: string
+  /** Kandidaten voor "met wie sprak je?"; leeg als dat al vaststaat. */
   contactpersonen: { id: string; naam: string }[]
+  /** Staat de persoon al vast (je kijkt naar zijn kaart), dan vervalt die vraag. */
+  vasteContactpersoonId?: string | null
   /** Alle actieve medewerkers met een account; draagt de keuze "wie pakt dit op". */
   medewerkers: { id: string; naam: string; authUserId: string | null }[]
   currentMedewerkerId: string | null
@@ -60,11 +76,15 @@ export default function VastleggenSheet({
   const [fout, setFout]   = React.useState<string | null>(null)
 
   const tabs: Tab[] = [
-    ...(magNotitie ? ['notitie' as const] : []),
+    ...(magNotitie && relaties.length > 0 ? ['notitie' as const] : []),
     ...(magVerkoopkans ? ['kans' as const] : []),
     'actie' as const,
   ]
   const [tab, setTab] = React.useState<Tab>(tabs[0] ?? 'actie')
+
+  // Bij welke opdrachtgever het hoort. De eerste is de primaire werkgever, en dat is in
+  // verreweg de meeste gevallen de juiste.
+  const [relatieId, setRelatieId] = React.useState(relaties[0]?.id ?? '')
 
   // Notitie
   const [tekst, setTekst] = React.useState('')
@@ -85,7 +105,8 @@ export default function VastleggenSheet({
   async function bewaarNotitie() {
     const inhoud = tekst.trim()
     if (!inhoud) { setFout('Schrijf of spreek eerst iets in.'); return }
-    const res = await plaatsRelatieNotitie(relatieId, inhoud, cpId || null)
+    if (!relatieId) { setFout('Kies bij welke opdrachtgever dit hoort.'); return }
+    const res = await plaatsRelatieNotitie(relatieId, inhoud, vasteContactpersoonId || cpId || null)
     if (!res.ok) { setFout(res.error); return }
     toast.success('Notitie vastgelegd')
     sluit(); router.refresh()
@@ -99,7 +120,7 @@ export default function VastleggenSheet({
       uitleg: tekstKans,
       actiehouderId: houderId,
       deadline,
-      relatieId,
+      relatieId: relatieId || undefined,
     })
     if (!res.ok) { setFout(res.error); return }
     toast.success('Verkoopkans aangemaakt')
@@ -145,7 +166,7 @@ export default function VastleggenSheet({
       <MobielStickyFooter>
         <button
           type="button"
-          onClick={() => { setOpen(true); setActieTitel(`${relatieNaam}: `) }}
+          onClick={() => { setOpen(true); setActieTitel(`${titelVoorvoegsel}: `) }}
           style={{ ...primaireKnop, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
         >
           <Plus size={19} aria-hidden />
@@ -178,6 +199,24 @@ export default function VastleggenSheet({
             ))}
           </div>
 
+          {/* Werkt iemand bij meerdere organisaties, dan bepaalt deze keuze waar de notitie of
+              de kans landt. Bij één opdrachtgever is er niets te kiezen en blijft hij weg. */}
+          {relaties.length > 1 && tab !== 'actie' && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={label} htmlFor="vastleg-relatie">Bij welke opdrachtgever?</label>
+              <select
+                id="vastleg-relatie"
+                value={relatieId}
+                onChange={e => setRelatieId(e.target.value)}
+                style={veld}
+              >
+                {relaties.map(r => (
+                  <option key={r.id} value={r.id}>{r.naam}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {tab === 'notitie' && (
             <>
               <label style={label} htmlFor="notitie-tekst">Wat is er besproken?</label>
@@ -189,7 +228,7 @@ export default function VastleggenSheet({
                 rows={4}
                 style={veld}
               />
-              {contactpersonen.length > 0 && (
+              {!vasteContactpersoonId && contactpersonen.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   <label style={label} htmlFor="notitie-cp">Met wie sprak je?</label>
                   <select

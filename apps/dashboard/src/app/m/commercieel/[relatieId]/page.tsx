@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
-import { createAdminClient } from '@everts/database/server'
 import { vereisCommercieelToegang } from '@/lib/commercie/mobiel-auth'
 import { getKlantbeeld } from '@/lib/commercie/klantbeeld'
+import { leesToewijsbareMedewerkers } from '@/lib/commercie/toewijsbare-medewerkers'
 import { getRelatieNotities } from '@/lib/relaties/notities-actions'
 import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
@@ -13,28 +13,6 @@ export const metadata = { title: 'Klantbeeld · EVA Mobiel' }
 
 /** Het klantbeeld verandert per gesprek; een gecachete versie is hier onbruikbaar. */
 export const dynamic = 'force-dynamic'
-
-/**
- * Wie een verkoopkans of actie toegewezen kan krijgen.
- *
- * Begrensd op actieve medewerkers: enkele tientallen, ruim onder de 1000 rijen waarop
- * PostgREST stil afkapt, en precies de groep die iets kan oppakken. Wie geen `auth_user_id`
- * heeft kan geen actie toegewezen krijgen (die landt via `task_assignees` op de auth-user);
- * dat filtert `VastleggenSheet` af, zodat zo iemand wél een verkoopkans kan krijgen.
- */
-async function leesToewijsbareMedewerkers() {
-  const { data } = await createAdminClient()
-    .from('medewerkers')
-    .select('id, voornaam, tussenvoegsel, achternaam, auth_user_id')
-    .eq('actief', true)
-    .order('voornaam')
-
-  return (data ?? []).map(m => ({
-    id: m.id,
-    naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ').trim() || 'Naamloos',
-    authUserId: m.auth_user_id,
-  }))
-}
 
 export default async function KlantbeeldPage(props: { params: Promise<{ relatieId: string }> }) {
   const { relatieId } = await props.params

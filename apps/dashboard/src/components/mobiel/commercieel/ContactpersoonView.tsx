@@ -21,6 +21,7 @@ import type { ContactpersoonBeeld } from '@/lib/commercie/contactpersoon-beeld'
 import KlapBlok from './KlapBlok'
 import DossierRegel from './DossierRegel'
 import NotitieLijst from './NotitieLijst'
+import VastleggenSheet from './VastleggenSheet'
 import { GRIJS, OPPERVLAK, RAND, TEKST, lijstRij } from './stijl'
 
 const GESLACHT_LABEL: Record<string, string> = {
@@ -86,11 +87,16 @@ const telHref = (nummer: string | null): string | null =>
   nummer ? `tel:${nummer.replace(/[^\d+]/g, '')}` : null
 
 export default function ContactpersoonView({
-  beeld, currentMedewerkerId, magSchrijven,
+  beeld, currentMedewerkerId, magSchrijven, magVerkoopkans, medewerkers,
 }: {
   beeld: ContactpersoonBeeld
   currentMedewerkerId: string | null
+  /** Recht `relaties` op schrijven — draagt notities. */
   magSchrijven: boolean
+  /** Recht `dossiers` op schrijven — draagt de verkoopkans. */
+  magVerkoopkans: boolean
+  /** `authUserId` is nodig om een actie toe te wijzen; zonder account kan dat niet. */
+  medewerkers: { id: string; naam: string; authUserId: string | null }[]
 }) {
   // Mobiel vóór vast: op het kantoornummer krijg je de receptie, op zijn mobiel hemzelf.
   const belNummer = beeld.mobiel || beeld.telefoon
@@ -217,7 +223,7 @@ export default function ContactpersoonView({
           titel="Gesprekken met hem"
           aantal={beeld.notities.length}
           standaardOpen={beeld.notities.length > 0}
-          leegTekst="Nog geen gesprek met deze persoon vastgelegd. Leg er een vast bij de opdrachtgever en kies hem in de lijst."
+          leegTekst="Nog geen gesprek met deze persoon vastgelegd. Dat doe je met de knop onderaan."
         >
           <NotitieLijst
             notities={beeld.notities}
@@ -226,6 +232,20 @@ export default function ContactpersoonView({
           />
         </KlapBlok>
       </div>
+
+      {/* Dezelfde knop als op het klantbeeld, maar met deze persoon al ingevuld: je legt vast
+          wat je met hém besprak. Werkt hij bij meerdere organisaties, dan vraagt de sheet bij
+          welke het hoort — de primaire staat voor. */}
+      <VastleggenSheet
+        relaties={beeld.organisaties.map(o => ({ id: o.relatieId, naam: o.naam }))}
+        titelVoorvoegsel={beeld.naam}
+        contactpersonen={[]}
+        vasteContactpersoonId={beeld.id}
+        medewerkers={medewerkers}
+        currentMedewerkerId={currentMedewerkerId}
+        magNotitie={magSchrijven}
+        magVerkoopkans={magVerkoopkans}
+      />
     </>
   )
 }
