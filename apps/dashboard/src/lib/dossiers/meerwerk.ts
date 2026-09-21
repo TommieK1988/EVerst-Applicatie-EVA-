@@ -19,6 +19,7 @@ import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt } from './meerwerk-termijn'
 import { leesMeerwerkOfferte, leesTermijnschemaPerOfferte } from './meerwerk-offerte'
+import { overnameBijAkkoord } from './meerwerk-werkbegroting'
 import type { TermijnschemaRegel } from './termijnen-schema'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
@@ -594,6 +595,18 @@ export async function setMeerwerkStatus(
       // Herkansing via de cron — alleen voor déze regel, niet voor historisch meerwerk.
       await supabase.from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', id)
     }
+  }
+
+  /*
+   * Is er voor dit meerwerk een calculatie gemaakt, dan horen die kostprijsregels bij akkoord in de
+   * werkbegroting te staan — onder de bewakingscode die hierboven is uitgedeeld. Is er nog geen
+   * werkbegroting (die ontstaat pas als iemand het tabblad opent), dan doet dit niets en pakt de
+   * inhaalslag in `laadWerkbegrotingSnapshot` het later alsnog op.
+   */
+  if (status === 'akkoord') {
+    const wbRes = await overnameBijAkkoord(id)
+    if (wbRes.melding) meldingen.push(wbRes.melding)
+    if (wbRes.waarschuwing) waarschuwing = [waarschuwing, wbRes.waarschuwing].filter(Boolean).join(' ')
   }
 
   // Akkoord meerwerk krijgt een bewakingscode en telt mee in de projectcijfers; die kant komt

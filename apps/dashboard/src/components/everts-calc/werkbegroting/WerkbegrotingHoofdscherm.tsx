@@ -33,6 +33,12 @@ interface Props {
 export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, projectNummer, projectStatus, dossierId, ingesloten = false }: Props) {
   const [wb, setWb] = useState<Werkbegroting | null>(null)
   const [scenarioId, setScenarioId] = useState<string | null>(null)
+  /**
+   * Moment waarop deze client de werkbegroting ophaalde. Reist mee in de sync-payload en begrenst
+   * daar de soft-delete: rijen die pas ná dit moment server-side zijn toegevoegd, kent deze tab niet
+   * en mag hij dus niet wegzetten. Zie stap 4 in `syncWerkbegrotingNaarSupabase`.
+   */
+  const geladenOpRef = useRef<string | null>(null)
   /** True zolang de gedeelde werkbegroting uit Supabase wordt geladen. */
   const [initBezig, setInitBezig] = useState(true)
   /** Mag de ingelogde gebruiker de prognose naar Bouw7 sturen (controller/directie)? */
@@ -87,6 +93,9 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
 
     let actief = true
     setInitBezig(true)
+    // Vóór het ophalen, niet erna: alles wat server-side ná dit moment bij de werkbegroting komt,
+    // heeft deze client niet gezien en mag zijn sync dus niet als "verwijderd" wegzetten.
+    geladenOpRef.current = new Date().toISOString()
     ;(async () => {
       if (dossierId) {
         try {
@@ -175,7 +184,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     const regelIds = new Set(regels.map(r => r.id))
     const componenten = getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id))
     const wijzigingen = getWerkbegrotingWijzigingen().filter(w => w.werkbegroting_id === wb.id)
-    return { wb, regels, componenten, wijzigingen, dossierId: dossierId ?? null }
+    return { wb, regels, componenten, wijzigingen, dossierId: dossierId ?? null, geladenOp: geladenOpRef.current }
   }, [wb, dossierId])
 
   /** Regel-goedkeuringsstatus verversen (badges + headerteller). */

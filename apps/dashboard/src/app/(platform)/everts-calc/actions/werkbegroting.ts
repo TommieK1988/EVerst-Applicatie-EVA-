@@ -8,6 +8,7 @@ import type { Bouw7ControlResponse, Bouw7ContractOrderLine, Bouw7CostTypeId } fr
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { dossierBouw7Id, leesDossierBron, ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type { AthenaControlPayload, ContractOrderLinesPayload } from '@/lib/bouw7/snapshot-bronnen'
+import { haalGoedgekeurdMeerwerkNaarWerkbegroting } from '@/lib/dossiers/meerwerk-werkbegroting'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
 
 export interface SyncWerkbegrotingResultaat {
@@ -23,6 +24,11 @@ export interface WerkbegrotingPayload {
   componenten: WerkbegrotingComponent[]
   wijzigingen: WerkbegrotingWijziging[]
   dossierId: string | null
+  /**
+   * Wanneer deze client de werkbegroting ophaalde. Begrenst de soft-delete tot rijen die hij ook
+   * echt gezien heeft; zie stap 4 in `syncWerkbegrotingNaarSupabase`. Leeg = oud gedrag.
+   */
+  geladenOp?: string | null
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -51,7 +57,7 @@ export async function syncWerkbegrotingNaarSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = (await createClient()) as any
   const nu = new Date().toISOString()
-  const { wb, regels, componenten, wijzigingen, dossierId } = payload
+  const { wb, regels, componenten, wijzigingen, dossierId, geladenOp } = payload
 
   try {
     // 1. Upsert werkbegroting header. Synthetische project-ids ("wb-direct-…",
@@ -111,22 +117,33 @@ export async function syncWerkbegrotingNaarSupabase(
       if (compErr) throw new Error(`Componenten sync: ${compErr.message}`)
     }
 
-    // 4. Server-side rijen die niet (meer) in de payload staan → soft delete.
-    //    (Client verwijdert regels soms hard uit localStorage; de server bewaart
-    //    ze als is_verwijderd zodat snapshots en bestellingen verklaarbaar blijven.)
+    /*
+     * 4. Server-side rijen die niet (meer) in de payload staan → soft delete.
+     *    (Client verwijdert regels soms hard uit localStorage; de server bewaart
+     *    ze als is_verwijderd zodat snapshots en bestellingen verklaarbaar blijven.)
+     *
+     *    Begrensd op rijen die deze client ook echt gezien heeft: `geladenOp` is het moment waarop
+     *    hij de werkbegroting ophaalde. Zonder die grens wist een tab die al openstond alles wat er
+     *    daarna server-side bij kwam — bijvoorbeeld de calculatieregels die een akkoord op meerwerk
+     *    toevoegt (zie `haalMeerwerkNaarWerkbegroting`). Dat verlies is stil: er komt geen fout, de
+     *    regels staan er gewoon niet meer. Oudere clients sturen geen `geladenOp`; die houden het
+     *    oude, ongefilterde gedrag.
+     */
     const inLijst = (ids: string[]) => `(${ids.map(id => `"${id}"`).join(',')})`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const alleenGezien = (q: any) => (geladenOp ? q.lte('aangemaakt_op', geladenOp) : q)
     const regelIds = regels.map(r => r.id)
     if (regelIds.length > 0) {
-      await db
+      await alleenGezien(db
         .from('werkbegroting_regels')
         .update({ is_verwijderd: true, bijgewerkt_op: nu })
         .eq('werkbegroting_id', wb.id)
-        .not('id', 'in', inLijst(regelIds))
+        .not('id', 'in', inLijst(regelIds)))
     } else {
-      await db
+      await alleenGezien(db
         .from('werkbegroting_regels')
         .update({ is_verwijderd: true, bijgewerkt_op: nu })
-        .eq('werkbegroting_id', wb.id)
+        .eq('werkbegroting_id', wb.id))
     }
     const compIds = componenten.map(c => c.id)
     if (regelIds.length > 0) {
@@ -135,7 +152,7 @@ export async function syncWerkbegrotingNaarSupabase(
         .update({ is_verwijderd: true, bijgewerkt_op: nu })
         .in('werkbegroting_regel_id', regelIds)
       if (compIds.length > 0) verwijderQuery = verwijderQuery.not('id', 'in', inLijst(compIds))
-      await verwijderQuery
+      await alleenGezien(verwijderQuery)
     }
 
     // 5. Wijzigingen (append-only)
@@ -244,6 +261,17 @@ export interface WerkbegrotingSnapshot {
 export async function laadWerkbegrotingSnapshot(dossierId: string): Promise<WerkbegrotingSnapshot | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createAdminClient() as any
+
+  /*
+   * Inhaalslag vóór het lezen: goedgekeurd meerwerk waarvan de calculatieregels nog niet in de
+   * werkbegroting staan, alsnog overhalen. Normaal gebeurt dat al bij het akkoord zelf, maar niet
+   * als de werkbegroting toen nog niet bestond — en meerwerk dat vóór deze functie akkoord ging,
+   * heeft die overname nooit gehad. Dit moet vóór de select, anders mist de client de nieuwe regels
+   * tot de volgende keer openen. Best effort: hij mag de werkbegroting nooit tegenhouden.
+   */
+  try {
+    await haalGoedgekeurdMeerwerkNaarWerkbegroting(dossierId)
+  } catch { /* de werkbegroting tonen is belangrijker dan de inhaalslag */ }
 
   const { data: wbRow } = await db
     .from('werkbegrotingen')

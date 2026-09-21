@@ -9176,6 +9176,7 @@ export type Database = {
           termijn_wijze: string | null
           updated_at: string
           volgnummer: number
+          wb_overgehaald_op: string | null
         }
         Insert: {
           afgewezen_reden?: string | null
@@ -9217,6 +9218,7 @@ export type Database = {
           termijn_wijze?: string | null
           updated_at?: string
           volgnummer?: number
+          wb_overgehaald_op?: string | null
         }
         Update: {
           afgewezen_reden?: string | null
@@ -9258,6 +9260,7 @@ export type Database = {
           termijn_wijze?: string | null
           updated_at?: string
           volgnummer?: number
+          wb_overgehaald_op?: string | null
         }
         Relationships: [
           {
