@@ -18,7 +18,7 @@
 
 import React from 'react'
 
-import { Card } from '@/components/ui'
+import { Button, Card } from '@/components/ui'
 import { VELD_BETROUWBAAR } from '@/lib/mailintake/types'
 
 import { klein, veldStijl } from './velden'
@@ -40,8 +40,25 @@ function tint(score: number): { bg: string; fg: string } {
   return { bg: 'var(--da-100, #fee2e2)', fg: 'var(--da-800, #991b1b)' }
 }
 
+export interface AfhandelingProps {
+  bewerkbaar: boolean
+  bezig: boolean
+  /** Alle verplichte velden zijn gevuld; anders staat de knop uit. */
+  compleet: boolean
+  /** Null als deze route geen dossier aanmaakt — een opdracht wint een offerte. */
+  onAanmaken: (() => void) | null
+  onGeenAanvraag: () => void
+  onNegeren: () => void
+  onOpnieuwLezen: () => void
+  medewerkers: { id: string; naam: string }[]
+  calculatorId: string
+  setCalculatorId: (v: string) => void
+  actie: { titel: string; medewerkerId: string; dagen: number }
+  setActie: (v: { titel: string; medewerkerId: string; dagen: number }) => void
+}
+
 export default function TwijfelPaneel({
-  zekerheid, soortLabel, soortVertrouwen, velden, redenVoorleggen,
+  zekerheid, soortLabel, soortVertrouwen, velden, redenVoorleggen, afhandeling,
 }: {
   /** De zekerheid over het geheel, 0 tot 1. */
   zekerheid: number
@@ -50,6 +67,12 @@ export default function TwijfelPaneel({
   /** De velden die aandacht vragen, meest onzekere eerst. */
   velden: TwijfelVeld[]
   redenVoorleggen?: string | null
+  /**
+   * Wat je met dit bericht kunt doen. Staat hier en niet bij het formulier, omdat
+   * dit de kolom is waar je langsloopt: eerst nakijken wat onzeker is, dan wie het
+   * oppakt, dan wegzetten.
+   */
+  afhandeling: AfhandelingProps
 }) {
   const pct = Math.round(zekerheid * 100)
   const kleur = tint(zekerheid)
@@ -107,6 +130,95 @@ export default function TwijfelPaneel({
             )
           })}
         </div>
+      )}
+
+      {afhandeling.bewerkbaar && (
+        <>
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* ── Wie pakt het op ──
+              De calculator vult EVA nooit zelf in: wie er calculeert volgt niet uit
+              de mail, en afleiden uit wie de intake doet is een andere rol. */}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={klein}>Calculator</span>
+            <select
+              style={veldStijl} value={afhandeling.calculatorId}
+              onChange={e => afhandeling.setCalculatorId(e.target.value)}
+            >
+              <option value="">— nog niet toewijzen —</option>
+              {afhandeling.medewerkers.map(m => (
+                <option key={m.id} value={m.id}>{m.naam}</option>
+              ))}
+            </select>
+          </label>
+
+          {/* ── De eerste actie ──
+              Vaak weet je bij het inlezen al wat er moet gebeuren -- opname
+              inplannen, bestek opvragen. Dit is de goedkoopste plek om dat vast te
+              leggen; hem later alsnog aanmaken kost een omweg langs het dossier. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={klein}>Actie op het nieuwe dossier</span>
+            <input
+              style={veldStijl}
+              value={afhandeling.actie.titel}
+              onChange={e => afhandeling.setActie({ ...afhandeling.actie, titel: e.target.value })}
+              placeholder="Bijvoorbeeld: opname inplannen"
+            />
+            {afhandeling.actie.titel.trim() && (
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 6 }}>
+                <select
+                  style={veldStijl} value={afhandeling.actie.medewerkerId}
+                  onChange={e => afhandeling.setActie({ ...afhandeling.actie, medewerkerId: e.target.value })}
+                >
+                  <option value="">— zelfde als de calculator —</option>
+                  {afhandeling.medewerkers.map(m => (
+                    <option key={m.id} value={m.id}>{m.naam}</option>
+                  ))}
+                </select>
+                <select
+                  style={veldStijl} value={afhandeling.actie.dagen}
+                  onChange={e => afhandeling.setActie({ ...afhandeling.actie, dagen: Number(e.target.value) })}
+                >
+                  <option value={1}>morgen</option>
+                  <option value={3}>3 dagen</option>
+                  <option value={7}>een week</option>
+                  <option value={14}>twee weken</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* ── Wegzetten ──
+              Deze knoppen staan hier omdat dit de kolom is waar je langsloopt. Ze
+              gelden voor elke route: ook een opdracht kan achteraf geen aanvraag
+              blijken, en dan moet je hem ergens kwijt kunnen. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {afhandeling.onAanmaken && (
+              <>
+                <Button onClick={afhandeling.onAanmaken} disabled={!afhandeling.compleet || afhandeling.bezig}>
+                  {afhandeling.bezig ? 'Bezig…' : 'Dossier aanmaken'}
+                </Button>
+                {!afhandeling.compleet && (
+                  <span style={klein}>
+                    Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het
+                    volledige werkadres in.
+                  </span>
+                )}
+              </>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <Button variant="outline" onClick={afhandeling.onGeenAanvraag} disabled={afhandeling.bezig}>
+                Geen aanvraag
+              </Button>
+              <Button variant="outline" onClick={afhandeling.onNegeren} disabled={afhandeling.bezig}>
+                Negeren
+              </Button>
+              <Button variant="ghost" onClick={afhandeling.onOpnieuwLezen} disabled={afhandeling.bezig}>
+                Opnieuw laten lezen
+              </Button>
+            </div>
+          </div>
+        </>
       )}
     </Card>
   )

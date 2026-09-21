@@ -125,6 +125,9 @@ export default function BerichtBehandelen({
   // calculator op een dossier leidt de hele planning om.
   const [calculatorId, setCalculatorId] = useState<string>('')
 
+  // De eerste actie op het nieuwe dossier. Leeg laten betekent: geen actie.
+  const [actie, setActie] = useState({ titel: '', medewerkerId: '', dagen: 3 })
+
   const [bezig, setBezig] = useState(false)
 
   // Negeren, "geen aanvraag", opnieuw lezen en heropenen zijn een eigen onderwerp
@@ -279,6 +282,7 @@ export default function BerichtBehandelen({
         referentie, vveCode, categorieId, werkmaatschappijId, deadline, mandaat, regie,
         opmerkingen,
         factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
+        actie,
       })
 
       // ── Proef ─────────────────────────────────────────────────────────────
@@ -462,6 +466,18 @@ export default function BerichtBehandelen({
           soortVertrouwen={b.soort_vertrouwen != null ? Number(b.soort_vertrouwen) : null}
           redenVoorleggen={redenVoorleggen}
           velden={twijfelVelden}
+          afhandeling={{
+            bewerkbaar, bezig: inActie, compleet,
+            // Op de opdrachtroute wint een bestaande offerte en wordt er geen dossier
+            // gemaakt; dan hoort die knop er ook niet te staan.
+            onAanmaken: route === 'offerte_winnen' && !forceerNieuw ? null : aanmaken,
+            onGeenAanvraag: geenAanvraag,
+            onNegeren: negeren,
+            onOpnieuwLezen: opnieuwLezen,
+            medewerkers,
+            calculatorId, setCalculatorId,
+            actie, setActie,
+          }}
         />
 
         {/* ── Midden: wat ermee gebeurt ── */}
@@ -607,19 +623,6 @@ export default function BerichtBehandelen({
             </Veld>
           </div>
 
-          {/* De calculator. EVA vult hem nooit zelf in: wie er calculeert volgt niet
-              uit de mail, en hem afleiden uit wie de intake doet is een andere rol.
-              Wie het bij binnenkomst al weet, hoeft er nu niet voor terug te komen. */}
-          <Veld label="Calculator">
-            <select
-              style={veldStijl} value={calculatorId} disabled={!bewerkbaar}
-              onChange={e => setCalculatorId(e.target.value)}
-            >
-              <option value="">— nog niet toewijzen —</option>
-              {medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
-          </Veld>
-
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
             <Veld label="Straat" score={zekerheid.werkadres_straat}>
               <input style={veldStijl} value={straat} onChange={e => { setStraat(e.target.value); setAdresBevestigd(false) }} disabled={!bewerkbaar} />
@@ -705,16 +708,6 @@ export default function BerichtBehandelen({
             </label>
           )}
 
-          {bewerkbaar && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-              <Button onClick={aanmaken} disabled={!compleet || bezig}>
-                {bezig ? 'Bezig…' : 'Dossier aanmaken'}
-              </Button>
-            </div>
-          )}
-          {bewerkbaar && !compleet && (
-            <span style={klein}>Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het volledige werkadres in.</span>
-          )}
         </Card>
         ) : null}
 
@@ -750,17 +743,6 @@ export default function BerichtBehandelen({
               onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
             />
           </details>
-        )}
-
-        {/* Wegleggen kan altijd, welke route dit bericht ook heeft. Stonden eerst in
-            het aanvraagformulier, waardoor ze op de opdrachtroute verdwenen -- en dan
-            kun je een mail die geen aanvraag blijkt nergens meer wegzetten. */}
-        {bewerkbaar && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: -4 }}>
-            <Button variant="outline" onClick={geenAanvraag} disabled={inActie}>Geen aanvraag</Button>
-            <Button variant="outline" onClick={negeren} disabled={inActie}>Negeren</Button>
-            <Button variant="ghost" onClick={opnieuwLezen} disabled={inActie}>Opnieuw laten lezen</Button>
-          </div>
         )}
 
         </div>

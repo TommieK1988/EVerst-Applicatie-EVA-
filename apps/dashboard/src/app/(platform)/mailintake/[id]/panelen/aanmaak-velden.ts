@@ -41,6 +41,8 @@ export interface AanmaakSchermToestand {
     postcode: string | null
     plaats: string | null
   } | null
+  /** De eerste actie op het nieuwe dossier; zonder titel gebeurt er niets. */
+  actie: { titel: string; medewerkerId: string; dagen: number }
 }
 
 export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
@@ -95,5 +97,15 @@ export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
     opmerkingen: s.opmerkingen.trim() || null,
     meerdereWerkadressen: false,
     vertrouwen: {},
+
+    // Zonder titel gebeurt er niets. Een lege eigenaar betekent "dezelfde als de
+    // calculator"; dat wordt bij het aanmaken ingevuld.
+    actie: s.actie.titel.trim()
+      ? {
+          titel: s.actie.titel.trim(),
+          medewerkerId: s.actie.medewerkerId || null,
+          dagen: s.actie.dagen,
+        }
+      : null,
   }
 }

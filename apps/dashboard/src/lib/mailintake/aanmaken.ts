@@ -52,6 +52,13 @@ export interface AanmaakInvoer {
    * en gaat mee naar Bouw7; nooit afgeleid uit wie de intake uitvoert.
    */
   calculatorId?: string | null
+  /**
+   * Een actie die meteen op het nieuwe dossier moet staan. Vaak weet de behandelaar
+   * bij het inlezen al wat de eerste stap is -- opname inplannen, bewoners
+   * informeren, bestek opvragen -- en dan is dit de goedkoopste plek om dat vast te
+   * leggen. Zonder titel gebeurt er niets.
+   */
+  actie?: { titel: string; medewerkerId: string | null; dagen: number } | null
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -246,6 +253,22 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     const { updateDossierRollen } = await import('@/lib/dossiers/actions')
     await updateDossierRollen(dossierId, { calculator_id: inv.calculatorId }, { schrijfBouw7: true })
       .catch(() => undefined)
+  }
+
+  // De eerste actie op het dossier, als de behandelaar die al wist. Loopt via
+  // dezelfde helper als de controletaak: die is ongegate (de cron heeft geen
+  // sessie) en hangt de taak aan het bericht én aan het dossier. Valt terug op de
+  // calculator als er geen eigenaar is gekozen -- die is dan toch degene die ermee
+  // verder moet.
+  if (inv.actie?.titel?.trim()) {
+    await maakIntakeActie({
+      berichtId: inv.berichtId,
+      dossierId,
+      titel: inv.actie.titel.trim().slice(0, 200),
+      medewerkerId: inv.actie.medewerkerId ?? inv.calculatorId ?? null,
+      dagen: inv.actie.dagen,
+      toelichting: 'Vastgelegd bij het inlezen van de binnengekomen mail.',
+    })
   }
 
   // Mandaat en facturatiemethode kunnen niet mee in maakAanvraag -- die velden kent
