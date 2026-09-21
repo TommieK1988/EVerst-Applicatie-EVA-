@@ -149,7 +149,9 @@ async function faseCode(
 async function bewakingscodeVerplicht(dossier_id: string): Promise<boolean> {
   const { getPlanningBewakingscodes } = await import('@/lib/planning/bewakingscodes')
   const codes = await getPlanningBewakingscodes(dossier_id)
-  return codes.length > 0
+  // Alleen codes die de kiezer ook tóónt. Codes zonder herkomst zijn restanten van het
+  // projectsjabloon: die staan verborgen, en dan valt er niets af te dwingen.
+  return codes.some(c => c.in_gebruik)
 }
 
 /**

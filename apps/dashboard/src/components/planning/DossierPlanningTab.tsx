@@ -45,7 +45,8 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
     // is een array (een relatie kan zowel leverancier als onderaannemer zijn).
     supabase.from('relaties').select('id, naam, types').overlaps('types', ['onderaannemer', 'leverancier']).eq('actief', true).order('naam'),
     supabase.from('planning_fasen').select('*').eq('dossier_id', dossier_id).order('volgorde'),
-    // Keuzelijst voor de verplichte bewakingscode per activiteit; komt uit de snapshot, niet live.
+    // Keuzelijst voor de verplichte bewakingscode per activiteit: Bouw7-snapshot + werkbegroting
+    // + stelposten/meerwerk, alles uit de database en nooit live uit Bouw7.
     getPlanningBewakingscodes(dossier_id),
   ])
 

@@ -428,7 +428,9 @@ function NieuwPlanItemDialog({
     haalPlanningBewakingscodes(form.dossier_id).then(res => {
       if (!actief) return
       setCodesLaden(false)
-      if (res.ok) setCodes([...res.codes].sort((a, b) => a.code.localeCompare(b.code, 'nl')))
+      // Alleen codes waar op dit dossier iets aan hangt. Een code zonder herkomst bestaat in
+      // Bouw7 wel maar is nergens in gebruik, en die hoort niet in een snelinvoer-lijstje.
+      if (res.ok) setCodes(res.codes.filter(c => c.in_gebruik).sort((a, b) => a.code.localeCompare(b.code, 'nl')))
       else setCodesFout(res.error)
     }).catch(e => {
       if (!actief) return
@@ -566,7 +568,8 @@ function NieuwPlanItemDialog({
             )}
             {codes && codes.length === 0 && (
               <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
-                Dit dossier heeft (nog) geen bewakingscodes in Bouw7.
+                Dit dossier heeft (nog) geen bewakingscodes in gebruik. Ze ontstaan in de werkbegroting,
+                bij een stelpost of bij goedgekeurd meerwerk.
               </div>
             )}
           </div>

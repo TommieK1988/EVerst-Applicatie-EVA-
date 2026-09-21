@@ -102,7 +102,7 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
       id, bouw7_id, bron, start_dt, eind_dt, uren, activiteit_id,
       medewerkers!medewerker_id ( bouw7_id ),
       planning_activiteiten!activiteit_id (
-        titel, omschrijving, bouw7_security_code_id,
+        id, dossier_id, titel, omschrijving, bewakingscode, bouw7_security_code_id,
         dossiers!dossier_id (
           bouw7_id,
           projectleider:medewerkers!project_manager_id ( voornaam, tussenvoegsel, achternaam )
@@ -141,12 +141,43 @@ async function laadContext(itemId: string): Promise<ItemContext | null> {
     startDt:        data.start_dt,
     eindDt:         data.eind_dt,
     hours:          Number(data.uren) || 0,
-    securityCodeId: act?.bouw7_security_code_id ?? null,
+    securityCodeId: await securityCodeId(act),
     projectleider:  pl ? {
       voornaam:      (pl.voornaam ?? '').trim() || null,
       volledigeNaam: [pl.voornaam, pl.tussenvoegsel, pl.achternaam].filter(Boolean).join(' ').trim(),
     } : null,
   }
+}
+
+/**
+ * Het Bouw7 `securityCode.id` van de activiteit, met een inhaalslag voor codes die in EVA zijn
+ * ontstaan.
+ *
+ * Een bewakingscode die de calculator in de werkbegroting aanmaakt is in de detailplanning
+ * meteen kiesbaar, maar bestaat op dat moment nog niet in Bouw7 — de activiteit krijgt dan wel
+ * de code, maar geen id. Zonder id hangt dit planitem in Bouw7 aan niets, en dat zou zo blijven,
+ * ook nadat de code daar allang is aangemaakt. Daarom zoeken we het id alsnog op zodra de
+ * snapshot het kent, en schrijven we het terug op de activiteit zodat dit eenmalig is.
+ */
+async function securityCodeId(act: {
+  id?: string | null
+  dossier_id?: string | null
+  bewakingscode?: string | null
+  bouw7_security_code_id?: number | null
+} | null): Promise<number | null> {
+  if (act?.bouw7_security_code_id != null) return act.bouw7_security_code_id
+  if (!act?.bewakingscode || !act.dossier_id || !act.id) return null
+
+  const { zoekBouw7SecurityCodeId } = await import('@/lib/planning/bewakingscodes')
+  const gevonden = await zoekBouw7SecurityCodeId(act.dossier_id, act.bewakingscode).catch(() => null)
+  if (gevonden == null) return null
+
+  await db()
+    .from('planning_activiteiten')
+    .update({ bouw7_security_code_id: gevonden })
+    .eq('id', act.id)
+    .is('bouw7_security_code_id', null)
+  return gevonden
 }
 
 /**

@@ -362,6 +362,10 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 // Een planitem wordt via zijn activiteit op een bewakingscode geboekt. Zonder code vallen de
 // geplande uren buiten de bewaking (ze verdwijnen uit de kolom "Gepland" bovenin), dus kiest
 // elke activiteit er één. De fase kan de keuze voorzeggen: haar code erft naar alles eronder.
+//
+// De keuzelijst komt uit `getPlanningBewakingscodes` en bevat naast de Bouw7-codes ook de codes
+// uit de werkbegroting, de stelposten en het goedgekeurde meerwerk — die zijn hier meteen
+// kiesbaar, zonder te wachten tot de werkbegroting is geaccordeerd en naar Bouw7 gepusht.
 
 /** Codes zijn niet uniek op nummer — hetzelfde nummer kan in twee hoofdstukken staan met een
  *  eigen omschrijving. De keuzelijst identificeert een regel daarom op nummer + omschrijving. */
@@ -379,6 +383,14 @@ function codeLabel(c: PlanningBewakingscode): string {
   return c.naam ? `${c.code} — ${c.naam}` : c.code
 }
 
+/** De codes die de kiezer standaard toont: alles waar op dit dossier iets aan hangt. */
+function bruikbareCodes(codes: PlanningBewakingscode[]): PlanningBewakingscode[] {
+  return codes.filter(c => c.in_gebruik)
+}
+
+/** Sentinelwaarde van de optie die de verborgen codes alsnog tevoorschijn haalt. */
+const TOON_ALLE_CODES = '␟toon-alles␟'
+
 function BewakingscodeSelect({ codes, waarde, onKies, disabled, legeTekst, style }: {
   codes: PlanningBewakingscode[]
   /** De gekozen code (het kale nummer), of null. */
@@ -388,16 +400,31 @@ function BewakingscodeSelect({ codes, waarde, onKies, disabled, legeTekst, style
   legeTekst?: string
   style?: React.CSSProperties
 }) {
-  const gekozen = zoekCode(codes, waarde)
+  /**
+   * Codes zónder herkomst bestaan in Bouw7 wel, maar er hangt op dit dossier niets aan: geen
+   * begroting, geen kosten, niet in de werkbegroting, nergens gepland. Dat zijn restanten van
+   * een projectsjabloon en ze maken de lijst alleen maar troebel. Ze staan daarom achter één
+   * klik — weggooien doen we ze niet, want heel soms wil iemand er wél op plannen.
+   */
+  const [toonAlles, setToonAlles] = useState(false)
+  const zichtbaar = useMemo(
+    // De al gekozen code blijft hoe dan ook staan; anders wist het openen van dit venster
+    // een bestaande keuze.
+    () => codes.filter(c => toonAlles || c.in_gebruik || c.code === waarde),
+    [codes, toonAlles, waarde],
+  )
+  const verborgen = codes.length - zichtbaar.length
+
+  const gekozen = zoekCode(zichtbaar, waarde)
   const groepen = useMemo(() => {
     const m = new Map<string, PlanningBewakingscode[]>()
-    for (const c of codes) {
+    for (const c of zichtbaar) {
       const k = c.hoofdstuk ?? 'Overig'
       const lijst = m.get(k) ?? []
       lijst.push(c); m.set(k, lijst)
     }
     return [...m.entries()]
-  }, [codes])
+  }, [zichtbaar])
 
   return (
     <select
@@ -405,7 +432,10 @@ function BewakingscodeSelect({ codes, waarde, onKies, disabled, legeTekst, style
       disabled={disabled}
       style={style}
       value={gekozen ? codeSleutel(gekozen) : ''}
-      onChange={e => onKies(codes.find(c => codeSleutel(c) === e.target.value) ?? null)}
+      onChange={e => {
+        if (e.target.value === TOON_ALLE_CODES) { setToonAlles(true); return }
+        onKies(zichtbaar.find(c => codeSleutel(c) === e.target.value) ?? null)
+      }}
     >
       <option value="">{legeTekst ?? '— kies bewakingscode —'}</option>
       {groepen.length === 1
@@ -415,6 +445,11 @@ function BewakingscodeSelect({ codes, waarde, onKies, disabled, legeTekst, style
               {lijst.map(c => <option key={codeSleutel(c)} value={codeSleutel(c)}>{codeLabel(c)}</option>)}
             </optgroup>
           ))}
+      {verborgen > 0 && (
+        <option value={TOON_ALLE_CODES}>
+          ⋯ ook {verborgen} ongebruikte code{verborgen === 1 ? '' : 's'} tonen
+        </option>
+      )}
     </select>
   )
 }
@@ -471,7 +506,8 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   // Uit Bouw7 gesyncte activiteiten dragen de code van hun plan-item daar; die hier wijzigen
   // zou de volgende sync stil terugdraaien, dus is het veld dan alleen-lezen.
   const uitBouw7 = activiteit.bron === 'bouw7'
-  const codeVerplicht = bewakingscodes.length > 0 && !uitBouw7
+  const kiesbaar = useMemo(() => bruikbareCodes(bewakingscodes), [bewakingscodes])
+  const codeVerplicht = kiesbaar.length > 0 && !uitBouw7
   const faseStandaard = fasen.find(f => f.id === faseId)?.bewakingscode ?? null
 
   async function opslaan() {
@@ -553,8 +589,8 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
             <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
               {uitBouw7
                 ? 'Deze activiteit komt uit Bouw7; de bewakingscode volgt de planning daar.'
-                : bewakingscodes.length === 0
-                  ? 'Dit dossier kent nog geen bewakingscodes in Bouw7.'
+                : kiesbaar.length === 0
+                  ? 'Dit dossier kent nog geen bewakingscodes. Ze ontstaan in de werkbegroting, bij een stelpost of bij goedgekeurd meerwerk.'
                   : 'Hierop worden de geplande uren van deze activiteit geboekt.'}
             </p>
           </div>
@@ -1041,8 +1077,8 @@ function FaseEditModal({ fase, bewakingscodes, activiteitenInFase, onOpslaan, on
             <BewakingscodeSelect codes={bewakingscodes} waarde={code?.code ?? null} onKies={setCode}
               legeTekst="— geen; per activiteit kiezen —" />
             <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
-              {bewakingscodes.length === 0
-                ? 'Dit dossier kent nog geen bewakingscodes in Bouw7.'
+              {bruikbareCodes(bewakingscodes).length === 0
+                ? 'Dit dossier kent nog geen bewakingscodes. Ze ontstaan in de werkbegroting, bij een stelpost of bij goedgekeurd meerwerk.'
                 : code
                   ? `Nieuwe activiteiten in deze fase krijgen ${code.code}.`
                     + (zonderCode > 0 ? ` ${zonderCode} activiteit${zonderCode === 1 ? '' : 'en'} zonder code krijgt hem nu ook.` : '')
@@ -1506,7 +1542,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [editFase,      setEditFase]      = useState<PlanningFase | null>(null)
 
   // Een code is verplicht zodra dit dossier er kent; kent het er geen, dan valt er niets te kiezen.
-  const codeVerplicht = bewakingscodes.length > 0
+  const kiesbareCodes = useMemo(() => bruikbareCodes(bewakingscodes), [bewakingscodes])
+  const codeVerplicht = kiesbareCodes.length > 0
   /** De code die een nieuwe activiteit krijgt als de planner zelf niets kiest: die van de fase. */
   const nieuweFaseCode = zoekCode(bewakingscodes, fasen.find(f => f.id === nieuweFId)?.bewakingscode ?? null)
   const nieuweEffectieveCode = nieuweCode ?? nieuweFaseCode
@@ -2016,7 +2053,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
       {toonNwFase && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, padding: '8px 12px', background: 'var(--bg-elev)', borderRadius: 8, border: '1px solid var(--border)', alignItems: 'center' }}>
           <input className="eva-input" autoFocus placeholder="Naam van de fase" value={nwFaseNaam} onChange={e => setNwFaseNaam(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleNieuweFase(); if (e.key === 'Escape') setToonNwFase(false) }} style={{ flex: 1, fontSize: 13 }} />
-          {bewakingscodes.length > 0 && (
+          {kiesbareCodes.length > 0 && (
             <BewakingscodeSelect codes={bewakingscodes} waarde={nwFaseCode?.code ?? null} onKies={setNwFaseCode}
               legeTekst="— bewakingscode (optioneel) —" style={{ width: 260, fontSize: 13 }} />
           )}
@@ -2160,7 +2197,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                   {fasen.map(f => <option key={f.id} value={f.id}>{f.naam}</option>)}
                 </select>
               )}
-              {bewakingscodes.length > 0 && (
+              {kiesbareCodes.length > 0 && (
                 <BewakingscodeSelect codes={bewakingscodes} waarde={nieuweEffectieveCode?.code ?? null} onKies={setNieuweCode}
                   legeTekst={nieuweFaseCode ? `— van de fase: ${nieuweFaseCode.code} —` : '— bewakingscode * —'}
                   style={{ width: 240, fontSize: 13 }} />
