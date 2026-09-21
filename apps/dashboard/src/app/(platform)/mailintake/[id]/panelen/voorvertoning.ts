@@ -18,6 +18,7 @@ export interface Voorstel {
   werkadres: string | null
   aanvraagdatum: string | null
   deadline: string | null
+  plaatsing?: { fase: string; substatus: string; bouw7Status: string }
 }
 
 export interface ProefVoorScherm {
@@ -42,7 +43,10 @@ export function bouwVoorvertoning(proef: ProefVoorScherm): string {
     regel('Werkadres', v.werkadres),
     regel('Aanvraagdatum', v.aanvraagdatum),
     regel('Uiterste datum', v.deadline),
-    'Fase: Aanvraag, substatus Nieuw',
+    v.plaatsing
+      ? `Komt in fase ${v.plaatsing.fase}, substatus ${v.plaatsing.substatus}` +
+        ` — in Bouw7 op "${v.plaatsing.bouw7Status}"`
+      : 'Fase: Aanvraag, substatus Nieuw',
     '',
     proef.bestanden.length
       ? `Naar de dossiermap (${proef.bestanden.length}):\n` +

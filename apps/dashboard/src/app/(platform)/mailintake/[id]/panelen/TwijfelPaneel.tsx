@@ -55,6 +55,11 @@ export interface AfhandelingProps {
   setCalculatorId: (v: string) => void
   actie: { titel: string; medewerkerId: string; dagen: number }
   setActie: (v: { titel: string; medewerkerId: string; dagen: number }) => void
+  /**
+   * Waar dit dossier terechtkomt. Null op de opdrachtroute: daar wint een
+   * bestaande offerte en bepaalt dat dossier zelf waar het staat.
+   */
+  plaatsing: { fase: string; substatus: string; bouw7Status: string } | null
 }
 
 export default function TwijfelPaneel({
@@ -187,6 +192,25 @@ export default function TwijfelPaneel({
               </div>
             )}
           </div>
+
+          {/* ── Waar het heen gaat ──
+              Stond alleen in de bevestigingsdialoog, en dus pas in beeld nadat je
+              had besloten. Wie beoordeelt moet vóór de klik weten in welke fase
+              en substatus het dossier landt -- dat bepaalt wie het oppakt en op
+              welk bord het verschijnt. */}
+          {afhandeling.plaatsing && (
+            <div style={{
+              fontSize: 12, lineHeight: 1.45, padding: '7px 9px', borderRadius: 6,
+              background: 'var(--surface-2, var(--bg))', border: '1px solid var(--border)',
+            }}>
+              Komt in fase{' '}
+              <strong>{afhandeling.plaatsing.fase}</strong>, substatus{' '}
+              <strong>{afhandeling.plaatsing.substatus}</strong>
+              <span style={{ ...klein, display: 'block' }}>
+                In Bouw7 op &ldquo;{afhandeling.plaatsing.bouw7Status}&rdquo;
+              </span>
+            </div>
+          )}
 
           {/* ── Wegzetten ──
               Deze knoppen staan hier omdat dit de kolom is waar je langsloopt. Ze

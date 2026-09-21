@@ -103,8 +103,10 @@ export async function leesTerugNaAanmaken(
   // De fase is geen veld uit het voorstel maar een vaste eis: een aanvraag hoort in
   // fase Aanvraag met substatus Nieuw te staan. Staat hij ergens anders, dan heeft
   // een trigger of een parallelle sync iets gedaan en klopt het beeld niet meer.
-  vergelijk('Fase', 'aanvraag', d.hoofdstatus)
-  vergelijk('Substatus', 'nieuw', d.aanvraag_substatus)
+  // Tegen de plaatsing uit het voorstel, niet tegen twee losse letterlijke waarden:
+  // gaat de route ooit ergens anders heen, dan verschuift de controle mee.
+  vergelijk('Fase', v.plaatsing.fase.toLowerCase(), d.hoofdstatus)
+  vergelijk('Substatus', v.plaatsing.substatus.toLowerCase(), d.aanvraag_substatus)
 
   // Het werkadres wordt als losse velden weggeschreven; vergelijken op de delen die
   // ook echt in het dossier staan.

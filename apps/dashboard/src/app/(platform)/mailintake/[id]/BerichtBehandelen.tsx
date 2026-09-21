@@ -27,6 +27,7 @@ import {
   type MailSoort,
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
+import { PLAATSING_NIEUWE_AANVRAAG } from '@/lib/mailintake/types'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
@@ -477,6 +478,7 @@ export default function BerichtBehandelen({
             medewerkers,
             calculatorId, setCalculatorId,
             actie, setActie,
+            plaatsing: route === 'offerte_winnen' && !forceerNieuw ? null : PLAATSING_NIEUWE_AANVRAAG,
           }}
         />
 

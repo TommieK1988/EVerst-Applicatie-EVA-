@@ -8,6 +8,19 @@
 
 export type PostbusSoort = 'offerteaanvraag' | 'opdracht' | 'servicedesk'
 
+/**
+ * Waar `maakAanvraag` een nieuw dossier neerzet.
+ *
+ * Eén plek, drie lezers: de voorvertoning, de terugleescontrole na het aanmaken,
+ * en het beoordeelscherm. Staat hier en niet in `proef.ts`, want dat bestand is
+ * server-only en het behandelscherm is een client-component.
+ */
+export const PLAATSING_NIEUWE_AANVRAAG = {
+  fase: 'Aanvraag',
+  substatus: 'Nieuw',
+  bouw7Status: '01. Offerte',
+} as const
+
 export type BerichtStatus =
   | 'nieuw' | 'bezig' | 'wacht_op_mens' | 'verwerkt' | 'genegeerd' | 'geen_aanvraag' | 'mislukt'
 
