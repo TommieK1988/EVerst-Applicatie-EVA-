@@ -34,6 +34,7 @@ import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import { PortaalChatBlok } from './PortaalChatBlok'
 import DatumsBlok, { type DatumVeld } from './DatumsBlok'
+import BetrokkenenBlok from './BetrokkenenBlok'
 import type { DossierNotitie } from '@/lib/dossiers/notities-actions'
 import FinancieelGereedDialog from '../FinancieelGereedDialog'
 import ActiveerSjabloonDialog from '../ActiveerSjabloonDialog'
@@ -2307,6 +2308,12 @@ export function InformatieTab({
             </div>
         </InklapbareCard>
 
+
+        {/* Betrokkenen — iedereen die bij deze opdracht hoort: de contactpersoon van de
+            opdrachtgever, het VvE-bestuur of de assetmanager achter het factuuradres, en wie
+            er verder bij hoort (architect, opzichter, beheerder). Naast Rollen, want dat is
+            hetzelfde in het klein maar dan intern. Het blok haalt zijn eigen data op. */}
+        <BetrokkenenBlok dossierId={dossier.id} readOnly={readOnly} />
 
         {/* Dossier-toggles */}
         <DossierTogglesPaneel dossierId={dossier.id} />

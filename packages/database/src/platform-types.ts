@@ -262,6 +262,26 @@ export type ContactpersoonFactuuradres = {
   created_by: string | null
 }
 
+/**
+ * Een handmatig toegevoegde betrokkene bij een dossier.
+ *
+ * Kan een persoon zijn, een organisatie, of allebei ("Jan de Vries namens Bureau X"); minstens
+ * één van de twee is gevuld. De contactpersoon van het dossier zelf en de personen bij het
+ * factuuradres staan hier NIET in — die komen uit hun eigen bron en worden pas in het scherm
+ * samengevoegd.
+ */
+export type DossierBetrokkene = {
+  id: string
+  dossier_id: string
+  relatie_id: string | null
+  contactpersoon_id: string | null
+  /** Rol bij déze opdracht: Architect, Opzichter, VvE-voorzitter, Beheerder… */
+  rol: string | null
+  opmerkingen: string | null
+  created_at: string
+  created_by: string | null
+}
+
 export type ContactpersoonSamenvoeging = {
   id: string
   blijver_id: string

@@ -2420,6 +2420,61 @@ export type Database = {
           },
         ]
       }
+      dossier_betrokkenen: {
+        Row: {
+          contactpersoon_id: string | null
+          created_at: string
+          created_by: string | null
+          dossier_id: string
+          id: string
+          opmerkingen: string | null
+          relatie_id: string | null
+          rol: string | null
+        }
+        Insert: {
+          contactpersoon_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          dossier_id: string
+          id?: string
+          opmerkingen?: string | null
+          relatie_id?: string | null
+          rol?: string | null
+        }
+        Update: {
+          contactpersoon_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          dossier_id?: string
+          id?: string
+          opmerkingen?: string | null
+          relatie_id?: string | null
+          rol?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_betrokkenen_contactpersoon_id_fkey"
+            columns: ["contactpersoon_id"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_betrokkenen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_betrokkenen_relatie_id_fkey"
+            columns: ["relatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossier_bestand_app_zichtbaar: {
         Row: {
           bouw7_bestand_id: number

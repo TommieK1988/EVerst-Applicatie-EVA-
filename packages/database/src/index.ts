@@ -24,6 +24,7 @@ export type {
   ContactpersoonEmail,
   ContactpersoonOrganisatie,
   ContactpersoonFactuuradres,
+  DossierBetrokkene,
   ContactpersoonMetLink,
   ContactpersoonSamenvoeging,
   Particulier,

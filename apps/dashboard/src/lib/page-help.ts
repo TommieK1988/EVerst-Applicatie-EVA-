@@ -281,7 +281,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Offerte — detail',
     description: 'Het dossier van een uitgebrachte offerte. Links kies je een tabblad: Informatie, Bewaking, Bestanden, Calculatie, Uitvraag en Acties.',
     sections: [
-      { title: 'Tabblad Informatie', body: 'Klant, werkadres, bedragen, rollen en de procesdatums van dit dossier. Ook het blok Notities staat hier.' },
+      { title: 'Tabblad Informatie', body: 'Klant, werkadres, bedragen, rollen en de procesdatums van dit dossier. Ook de blokken Betrokkenen en Notities staan hier.' },
       { title: 'Tabblad Bewaking', body: 'De commerciële opvolging: wie is eigenaar, wie is nu aan zet, wat is de volgende stap en wanneer. Hier leg je na een klantcontact de uitkomst vast.' },
       { title: 'Tabblad Calculatie', body: 'De calculaties en offertes bij dit dossier, met hun versies. Van hieruit maak je een revisie of een nieuwe offerteversie.' },
       { title: 'Opdracht geworden', body: 'Zet je de fase op Gewonnen, dan wordt het dossier automatisch een opdracht en verhuist het naar Opdrachten. De offerteversie waarop dat akkoord is gegeven blijft bewaard.' },
@@ -314,6 +314,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Tabblad Financieel', body: 'Hier stel je termijnfacturen en de eindfactuur op. De eindfactuur is pas beschikbaar nadat de oplevering is goedgekeurd. Bij openstaande opleverpunten wordt een inhouding van 5% automatisch berekend.' },
       { title: 'Urenregistratie', body: 'Medewerkers schrijven uren via de werkbon. Uren zijn alleen in te voeren op opdrachten met status "In uitvoering" of "Opgeleverd onder voorbehoud". Bij ZZP/uitzend worden uren later gematcht met de inkoopfactuur.' },
       { title: 'Tabblad KAM/VGM', body: 'Kwaliteit, VCA, de oplevering en de ingevulde formulieren staan samen onder KAM/VGM, elk op een eigen knop bovenin het tabblad. Oplevering en formulieren zijn er altijd; de VCA-administratie verschijnt zodra de VCA-toggle op de Informatie-tab aanstaat.' },
+      { title: 'Betrokkenen', body: 'Op de Informatie-tab staat het blok Betrokkenen: iedereen met wie je over deze opdracht schakelt. De contactpersoon van de opdrachtgever en de mensen bij het gekozen factuuradres — het VvE-bestuur, de assetmanager — staan er automatisch in en volgen hun bron. Daarnaast voeg je er zelf personen of bedrijven aan toe, zoals een architect of een opzichter, met hun rol bij deze opdracht.' },
       { title: 'Klantportaal', body: 'Het klantportaal heeft geen eigen tabblad meer: op de Informatie-tab staat het blok Klantportaal met de stand van zaken, en achter "Instellingen" bepaal je wat de opdrachtgever ziet en wie er mag meekijken.' },
     ],
   }],
