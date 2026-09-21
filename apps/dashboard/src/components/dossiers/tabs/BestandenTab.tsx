@@ -16,7 +16,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui'
 import { UploadCloud } from 'lucide-react'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import {
-  getDossierBestanden, getAppZichtbareBestandIds, setBestandAppZichtbaar,
+  getDossierBestanden, getAppZichtbareBestandSleutels, setBestandAppZichtbaar,
   type DossierBestandenData,
 } from '@/lib/dossiers/bestanden'
 import {
@@ -82,7 +82,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
   const [bouw7, setBouw7] = useState<DossierBestandenData | null>(null)
   const [sharepoint, setSharepoint] = useState<DossierSharePointData | null>(null)
-  const [inApp, setInApp] = useState<Set<number>>(new Set())
+  const [inApp, setInApp] = useState<Set<string>>(new Set())
   // null = deze gebruiker heeft geen recht op het klantportaal; dan verdwijnt
   // de kolom in plaats van uitgegrijsd te blijven staan.
   const [inPortaal, setInPortaal] = useState<Set<string> | null>(null)
@@ -95,8 +95,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
     getDossierBestanden(dossierId)
       .then(setBouw7)
       .catch(() => setBouw7({ beschikbaar: false, bestanden: [], opgehaaldOp: null }))
-    getAppZichtbareBestandIds(dossierId)
-      .then(ids => setInApp(new Set(ids)))
+    getAppZichtbareBestandSleutels(dossierId)
+      .then(sleutels => setInApp(new Set(sleutels)))
       .catch(() => setInApp(new Set()))
     getPortaalBestandSleutels(dossierId)
       .then(sleutels => setInPortaal(sleutels ? new Set(sleutels) : null))
@@ -108,21 +108,22 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
   // Optimistisch omzetten: de lijst hoeft niet opnieuw geladen te worden voor een
   // vinkje. Faalt de opslag, dan zetten we het vinkje terug.
-  function toggleApp(bestandId: number, zichtbaar: boolean) {
+  function toggleApp(rij: BestandRij, zichtbaar: boolean) {
     setInApp(vorig => {
       const nieuw = new Set(vorig)
-      if (zichtbaar) nieuw.add(bestandId); else nieuw.delete(bestandId)
+      if (zichtbaar) nieuw.add(rij.sleutel); else nieuw.delete(rij.sleutel)
       return nieuw
     })
-    setBestandAppZichtbaar(dossierId, bestandId, zichtbaar).then(res => {
-      if (!res.ok) {
-        setInApp(vorig => {
-          const terug = new Set(vorig)
-          if (zichtbaar) terug.delete(bestandId); else terug.add(bestandId)
-          return terug
-        })
-      }
-    })
+    setBestandAppZichtbaar(dossierId, { sleutel: rij.sleutel, bouw7Id: rij.bouw7Id }, zichtbaar)
+      .then(res => {
+        if (!res.ok) {
+          setInApp(vorig => {
+            const terug = new Set(vorig)
+            if (zichtbaar) terug.delete(rij.sleutel); else terug.add(rij.sleutel)
+            return terug
+          })
+        }
+      })
   }
 
   /**

@@ -90,19 +90,22 @@ export default function BestandenLijst({
   inPortaal, onTogglePortaal,
 }: {
   rijen: BestandRij[]
-  /** Bouw7-bestanden die de buitendienst in de mobiele app ziet (opt-in). */
-  inApp: Set<number>
-  onToggleApp: (bestandId: number, zichtbaar: boolean) => void
+  /**
+   * Sleutels van bestanden die de buitendienst in de mobiele app ziet (opt-in).
+   * Net als de portaalkolom op de bronoverstijgende sleutel, dus ook voor
+   * SharePoint-bestanden. Ontbreekt de prop, dan is de kolom er niet.
+   */
+  inApp?: Set<string>
+  onToggleApp?: (rij: BestandRij, zichtbaar: boolean) => void
   /** Bestanden met een leesvenster in EVA (mail, markdown) melden zich hier. */
   onOpenVenster: (rij: BestandRij) => void
   voettekst: React.ReactNode
   /** Tekst als er niets te tonen valt — zoeken levert iets anders op dan een lege lijst. */
   legeTekst?: string
   /**
-   * Sleutels van bestanden die in het klantportaal staan (opt-in). Anders dan de
-   * app-kolom werkt dit óók voor SharePoint: de sleutel is bronoverstijgend.
-   * Ontbreekt de prop, dan is de kolom er niet — bijvoorbeeld voor wie geen
-   * recht op het klantportaal heeft.
+   * Sleutels van bestanden die in het klantportaal staan (opt-in). Ontbreekt de
+   * prop, dan is de kolom er niet — bijvoorbeeld voor wie geen recht op het
+   * klantportaal heeft.
    */
   inPortaal?: Set<string>
   onTogglePortaal?: (rij: BestandRij, zichtbaar: boolean) => void | Promise<void>
@@ -151,7 +154,7 @@ export default function BestandenLijst({
     }
   }
 
-  const toonAppKolom = rijen.some(r => r.bouw7Id != null)
+  const toonAppKolom = !!inApp && !!onToggleApp
   const toonPortaalKolom = !!inPortaal && !!onTogglePortaal
 
   return (
@@ -195,7 +198,21 @@ export default function BestandenLijst({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead>
-            <tr className="border-y border-neutral-200 bg-neutral-50/70 text-left">
+            <tr className="border-y border-neutral-200 bg-neutral-50/70 text-left [&>th:first-child]:pl-3">
+              {/* De vinkjes staan vooraan: het zijn de enige kolommen waarin je iets
+                  doet, en je loopt de lijst af om te bepalen wat mee moet naar de
+                  telefoon of naar de opdrachtgever. Achteraan schoven ze op met de
+                  breedte van de bestandsnamen en was er telkens opnieuw naar zoeken. */}
+              {toonAppKolom && (
+                <th className={`${KOP} text-center`} title="Zichtbaar in de mobiele app voor de buitendienst">
+                  In app
+                </th>
+              )}
+              {toonPortaalKolom && (
+                <th className={`${KOP} text-center`} title="Zichtbaar voor de opdrachtgever in het klantportaal">
+                  In portaal
+                </th>
+              )}
               {KOLOMMEN.map(k => (
                 <th
                   key={k.veld}
@@ -212,22 +229,34 @@ export default function BestandenLijst({
                   </button>
                 </th>
               ))}
-              {toonAppKolom && (
-                <th className={`${KOP} text-center`} title="Zichtbaar in de mobiele app voor de buitendienst">
-                  In app
-                </th>
-              )}
-              {toonPortaalKolom && (
-                <th className={`${KOP} text-center`} title="Zichtbaar voor de opdrachtgever in het klantportaal">
-                  In portaal
-                </th>
-              )}
             </tr>
           </thead>
           <tbody>
             {zichtbaar.map(r => (
-              <tr key={r.sleutel} className="border-b border-neutral-100 hover:bg-neutral-50/70">
-                <td className={`${CEL} pl-3 whitespace-normal`}>
+              <tr key={r.sleutel} className="border-b border-neutral-100 hover:bg-neutral-50/70 [&>td:first-child]:pl-3">
+                {toonAppKolom && (
+                  <td className={`${CEL} text-center`}>
+                    <input
+                      type="checkbox"
+                      checked={inApp!.has(r.sleutel)}
+                      onChange={e => onToggleApp!(r, e.target.checked)}
+                      aria-label={`${r.naam} zichtbaar in de app`}
+                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                    />
+                  </td>
+                )}
+                {toonPortaalKolom && (
+                  <td className={`${CEL} text-center`}>
+                    <input
+                      type="checkbox"
+                      checked={inPortaal!.has(r.sleutel)}
+                      onChange={e => onTogglePortaal!(r, e.target.checked)}
+                      aria-label={`${r.naam} zichtbaar in het klantportaal`}
+                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                    />
+                  </td>
+                )}
+                <td className={`${CEL} whitespace-normal`}>
                   {/* Vet = staat in het klantportaal. Zo zie je bij het scrollen
                       meteen wat er buiten de deur ligt, zonder de vinkkolom af
                       te speuren. */}
@@ -254,32 +283,6 @@ export default function BestandenLijst({
                 <td className={`${CEL} text-right tabular-nums text-neutral-500`}>{formatteerGrootte(r.grootte)}</td>
                 <td className={`${CEL} tabular-nums text-neutral-500`}>{r.datum ?? '—'}</td>
                 <td className={`${CEL} text-neutral-500`}>{r.door ?? '—'}</td>
-                {toonAppKolom && (
-                  <td className={`${CEL} text-center`}>
-                    {r.bouw7Id != null ? (
-                      <input
-                        type="checkbox"
-                        checked={inApp.has(r.bouw7Id)}
-                        onChange={e => onToggleApp(r.bouw7Id!, e.target.checked)}
-                        aria-label={`${r.naam} zichtbaar in de app`}
-                        className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
-                      />
-                    ) : (
-                      <span className="text-neutral-300">—</span>
-                    )}
-                  </td>
-                )}
-                {toonPortaalKolom && (
-                  <td className={`${CEL} text-center`}>
-                    <input
-                      type="checkbox"
-                      checked={inPortaal!.has(r.sleutel)}
-                      onChange={e => onTogglePortaal!(r, e.target.checked)}
-                      aria-label={`${r.naam} zichtbaar in het klantportaal`}
-                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
-                    />
-                  </td>
-                )}
               </tr>
             ))}
             {zichtbaar.length === 0 && (

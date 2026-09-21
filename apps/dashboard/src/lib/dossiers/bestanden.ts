@@ -66,25 +66,29 @@ export async function getDossierBestanden(dossierId: string): Promise<DossierBes
  *
  * Bewust opt-in: alleen bestanden die hier als zichtbaar staan verschijnen op de
  * telefoon. Zonder rij is een bestand dus NIET zichtbaar — de buitendienst krijgt
- * niet de hele projectmap mee. Bestanden zelf blijven read-only uit Bouw7; alleen
- * deze keuze leggen we in EVA vast.
+ * niet de hele projectmap mee.
+ *
+ * De sleutel is bronoverstijgend (`bouw7:<id>` / `sharepoint:<itemId>`, zie
+ * `BestandRij.sleutel`), zodat het vinkje ook werkt voor bestanden uit de
+ * SharePoint-dossiermap. Precies dezelfde sleutel gebruikt het klantportaal, dus de
+ * twee vinkjes in de lijst delen één schrijfwijze.
  */
 /** Array (geen Set): dit is een server action, en die moet serialiseerbaar teruggeven. */
-export async function getAppZichtbareBestandIds(dossierId: string): Promise<number[]> {
+export async function getAppZichtbareBestandSleutels(dossierId: string): Promise<string[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossier_bestand_app_zichtbaar')
-    .select('bouw7_bestand_id')
+    .select('sleutel')
     .eq('dossier_id', dossierId)
     .eq('zichtbaar', true)
 
-  return ((data ?? []) as { bouw7_bestand_id: number }[]).map(r => Number(r.bouw7_bestand_id))
+  return ((data ?? []) as { sleutel: string }[]).map(r => r.sleutel)
 }
 
 export async function setBestandAppZichtbaar(
   dossierId: string,
-  bestandId: number,
+  bestand: { sleutel: string; bouw7Id: number | null },
   zichtbaar: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const medewerker = await getCurrentMedewerker()
@@ -95,11 +99,14 @@ export async function setBestandAppZichtbaar(
     .from('dossier_bestand_app_zichtbaar')
     .upsert({
       dossier_id: dossierId,
-      bouw7_bestand_id: bestandId,
+      sleutel: bestand.sleutel,
+      // Verouderd, maar blijft gevuld zolang de kolom bestaat: de vorige build leest
+      // hem nog. Zie migratie 20260921a.
+      bouw7_bestand_id: bestand.bouw7Id,
       zichtbaar,
       gewijzigd_op: new Date().toISOString(),
       gewijzigd_door: medewerker?.id ?? null,
-    }, { onConflict: 'dossier_id,bouw7_bestand_id' })
+    }, { onConflict: 'dossier_id,sleutel' })
 
   if (error) return { ok: false, error: error.message }
 

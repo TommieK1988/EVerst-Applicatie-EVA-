@@ -2,9 +2,9 @@
  * bestand-rijen.ts
  *
  * Bouw7- en SharePoint-bestanden samenvoegen tot één rijenset voor de bestandenlijst.
- * Beide bronnen leveren vrijwel dezelfde velden; het verschil zit in hoe je bij de
- * bytes komt en in wat er per bron wél of niet kan (de mobiele-app-vinkjes bestaan
- * alleen voor Bouw7-bestanden).
+ * Beide bronnen leveren vrijwel dezelfde velden; het verschil zit vooral in hoe je bij
+ * de bytes komt. `sleutel` is bronoverstijgend en is daarmee de sleutel waarop de
+ * vinkjes "In app" en "In portaal" worden bewaard.
  *
  * Pure helpers zonder server-afhankelijkheden — de tab draait op de client.
  */
@@ -29,7 +29,7 @@ export type BestandRij = {
   datum: string | null
   door: string | null
   soort: BestandSoort
-  /** Alleen gevuld voor Bouw7 — bepaalt of het app-vinkje getoond kan worden. */
+  /** Alleen gevuld voor Bouw7; wordt nog meegeschreven in de verouderde kolom (migratie 20260921a). */
   bouw7Id: number | null
   /** Querystring voor /api/dossier-bestand (zonder leidende `?`). */
   bronQuery: string
@@ -74,8 +74,8 @@ export function soortVan(extensie: string | null): BestandSoort {
   return 'document'
 }
 
-/** Naam met extensie, voor de Content-Disposition van de downloadproxy. */
-function naamMetExtensie(naam: string, extensie: string | null): string {
+/** Naam met extensie, voor de Content-Disposition van de downloadproxy en de mobiele lijst. */
+export function naamMetExtensie(naam: string, extensie: string | null): string {
   if (!extensie) return naam
   return naam.toLowerCase().endsWith(`.${extensie.toLowerCase()}`) ? naam : `${naam}.${extensie}`
 }
