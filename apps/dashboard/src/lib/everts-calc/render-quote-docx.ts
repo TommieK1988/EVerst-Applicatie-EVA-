@@ -14,6 +14,7 @@
  */
 
 import { buildRenderContext, type BedrijfContext, type LayoutContext, type DossierContext } from './quote-renderer'
+import { htmlNaarOoxml } from './html-naar-ooxml'
 import { stripHtml, type OnderstreeptSplitsing } from './docx-utils'
 import type { Quote } from './types-quotes'
 import { renderDocx, loadTemplateBuffer, fetchImageDataUrl, bufferNaarDataUrl } from '../documenten/render-docx'
@@ -93,9 +94,13 @@ export async function renderQuoteDocx(
       inleiding: stripHtml(ctx.offerte.inleiding),
       slottekst: stripHtml(ctx.offerte.slottekst),
     },
-    voorwaarden: stripHtml(ctx.voorwaarden),
-    uitsluitingen: stripHtml(ctx.uitsluitingen),
-    opmerkingen: stripHtml(ctx.opmerkingen),
+    // Eén opgemaakt tekstblok als OOXML, voor de raw-tag {@offerteteksten}. Alleen zo
+    // komen vet, cursief en opsommingen echt in Word terecht — een gewone tag kan
+    // alleen platte tekst dragen.
+    offerteteksten: htmlNaarOoxml(ctx.offerteteksten),
+    // De drie losse tags worden bewust niet meer gevuld: hun inhoud zit nu in het blok
+    // hierboven. Een sjabloon dat ze nog gebruikt toont daar niets meer — vervang
+    // {voorwaarden}/{uitsluitingen}/{opmerkingen} door {@offerteteksten}.
     // Image-tags (base64 data-URLs — nooit kale Buffers, zie bufferNaarDataUrl)
     logo,
     logo_wit: logoWit,

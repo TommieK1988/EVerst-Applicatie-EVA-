@@ -15,6 +15,9 @@ import { randomUUID } from 'crypto'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { BIJLAGE_BUCKET } from '@/lib/everts-calc/pdf-bijlagen'
+import { haalBestandBytes, type BestandBron } from '@/lib/dossiers/bestand-bytes'
+import { getDossierBestanden } from '@/lib/dossiers/bestanden'
+import { getDossierSharePointBestanden } from '@/lib/dossiers/sharepoint-bestanden'
 
 /** Zelfde grens als de bucket zelf afdwingt; hier voor een nette melding. */
 const MAX_BYTES = 25 * 1024 * 1024
@@ -150,9 +153,26 @@ export async function uploadCalculatieBijlage(
     return { ok: false, error: `"${file.name}" is te groot (max. 25 MB).` }
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
+  return bewaarBijlage(projectId, scenarioId, file.name, Buffer.from(await file.arrayBuffer()))
+}
+
+/**
+ * Valideert een PDF en bewaart hem als bijlage bij de calculatie. Gedeeld door de
+ * upload vanaf de pc en het overnemen uit de dossiermap, zodat beide wegen dezelfde
+ * controles doorlopen.
+ */
+async function bewaarBijlage(
+  projectId: string,
+  scenarioId: string,
+  bestandsnaam: string,
+  buffer: Buffer,
+): Promise<Resultaat<CalculatieBijlage>> {
+  if (buffer.byteLength === 0) return { ok: false, error: `"${bestandsnaam}" is leeg.` }
+  if (buffer.byteLength > MAX_BYTES) {
+    return { ok: false, error: `"${bestandsnaam}" is te groot (max. 25 MB).` }
+  }
   if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
-    return { ok: false, error: `"${file.name}" is geen PDF-bestand.` }
+    return { ok: false, error: `"${bestandsnaam}" is geen PDF-bestand.` }
   }
 
   let paginas: number | null = null
@@ -162,7 +182,7 @@ export async function uploadCalculatieBijlage(
   } catch {
     return {
       ok: false,
-      error: `"${file.name}" kan niet worden gelezen. Is de PDF beveiligd met een wachtwoord, sla hem dan zonder beveiliging op.`,
+      error: `"${bestandsnaam}" kan niet worden gelezen. Is de PDF beveiligd met een wachtwoord, sla hem dan zonder beveiliging op.`,
     }
   }
 
@@ -176,7 +196,7 @@ export async function uploadCalculatieBijlage(
     return { ok: false, error: `Maximaal ${MAX_BIJLAGEN} bijlages per calculatie.` }
   }
 
-  const pad = `calculatie/${projectId}/${scenarioId}/${randomUUID()}-${veiligeNaam(file.name)}`
+  const pad = `calculatie/${projectId}/${scenarioId}/${randomUUID()}-${veiligeNaam(bestandsnaam)}`
   const { error: upErr } = await db.storage
     .from(BIJLAGE_BUCKET)
     .upload(pad, buffer, { contentType: 'application/pdf', upsert: false })
@@ -198,7 +218,7 @@ export async function uploadCalculatieBijlage(
     .insert({
       project_id: projectId,
       scenario_id: scenarioId,
-      bestandsnaam: file.name,
+      bestandsnaam,
       pad,
       bytes: buffer.byteLength,
       paginas,
@@ -330,4 +350,115 @@ export async function kopieerBijlagenNaarScenario(
     gekopieerd++
   }
   return { ok: true, data: { gekopieerd } }
+}
+
+// ─── Kiezen uit de dossiermap ─────────────────────────────────────────────────
+
+export interface DossierPdf {
+  /** Stabiele sleutel voor de lijst; draagt ook de bron-aanduiding. */
+  sleutel: string
+  naam: string
+  bron: 'SharePoint' | 'Bouw7'
+  grootte: number | null
+  datum: string | null
+}
+
+/** De bron-aanduiding gecodeerd in één sleutel, zodat de client hem kan teruggeven. */
+function codeer(bron: BestandBron): string {
+  return bron.bron === 'sharepoint'
+    ? `sharepoint:${bron.driveId}:${bron.itemId}`
+    : `bouw7:${bron.hash ?? ''}:${bron.id ?? ''}`
+}
+
+function decodeerSleutel(sleutel: string): BestandBron | null {
+  const [soort, a, b] = sleutel.split(':')
+  if (soort === 'sharepoint' && a && b) return { bron: 'sharepoint', driveId: a, itemId: b }
+  if (soort === 'bouw7' && (a || b)) return { bron: 'bouw7', hash: a || null, id: b || null }
+  return null
+}
+
+/**
+ * De PDF's die al in de dossiermap staan — SharePoint én Bouw7 — zodat je een bijlage
+ * kunt kiezen in plaats van hem eerst te downloaden en opnieuw te uploaden.
+ *
+ * Alleen PDF's: alles wat hier gekozen wordt gaat ongewijzigd de offerte-PDF in.
+ */
+export async function getDossierPdfs(dossierId: string): Promise<DossierPdf[]> {
+  try {
+    await vereisRecht('everts_calc', 'lezen')
+  } catch {
+    return []
+  }
+  if (!dossierId) return []
+
+  const isPdf = (naam: string) => naam.toLowerCase().endsWith('.pdf')
+  const uit: DossierPdf[] = []
+
+  // Beide bronnen zijn best-effort: valt SharePoint of Bouw7 weg, dan toont de kiezer
+  // gewoon wat er wél is in plaats van helemaal leeg te blijven.
+  const [sp, b7] = await Promise.all([
+    getDossierSharePointBestanden(dossierId).catch(() => null),
+    getDossierBestanden(dossierId).catch(() => null),
+  ])
+
+  for (const f of (sp?.bestanden ?? [])) {
+    // Zonder driveId kunnen we de bytes later niet ophalen, dus die rij heeft geen zin.
+    if (!isPdf(f.naam) || !f.driveId) continue
+    uit.push({
+      sleutel: codeer({ bron: 'sharepoint', driveId: f.driveId, itemId: f.id }),
+      naam: f.naam,
+      bron: 'SharePoint',
+      grootte: f.grootte ?? null,
+      datum: f.datum ?? null,
+    })
+  }
+
+  for (const f of (b7?.bestanden ?? [])) {
+    if (!isPdf(f.naam)) continue
+    uit.push({
+      sleutel: codeer({ bron: 'bouw7', hash: f.fileHash ?? null, id: f.id != null ? String(f.id) : null }),
+      naam: f.naam,
+      bron: 'Bouw7',
+      grootte: f.grootte ?? null,
+      datum: f.datum ?? null,
+    })
+  }
+
+  uit.sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
+  return uit
+}
+
+/**
+ * Neemt een bestand uit de dossiermap over als bijlage bij de calculatie.
+ *
+ * Het bestand wordt echt gekopieerd naar de bijlagebucket en niet als verwijzing
+ * bewaard: een offerte moet blijven tonen wat er is verstuurd, ook als het bestand
+ * later uit de dossiermap verdwijnt of wordt vervangen.
+ */
+export async function neemDossierBestandOverAlsBijlage(
+  projectId: string,
+  scenarioId: string,
+  sleutel: string,
+): Promise<Resultaat<CalculatieBijlage>> {
+  try {
+    await vereisRecht('everts_calc', 'schrijven')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Geen toegang' }
+    throw e
+  }
+
+  const bron = decodeerSleutel(sleutel)
+  if (!bron) return { ok: false, error: 'Onbekend bestand' }
+
+  let bytes: Buffer
+  let naam: string
+  try {
+    const res = await haalBestandBytes(bron)
+    bytes = res.data
+    naam = res.fileName ?? 'Bijlage.pdf'
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bestand kon niet worden opgehaald' }
+  }
+
+  return bewaarBijlage(projectId, scenarioId, naam, bytes)
 }

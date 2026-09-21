@@ -220,9 +220,7 @@ export default function OfferteAanmakenModal({
         voorwaardenId: actiefScenario?.algemene_voorwaarden_id ?? null,
         // Vrije offerte-teksten van de calculatie (leeg → standaardsjabloon).
         inleidingTekst: actiefScenario?.inleiding_tekst ?? null,
-        voorwaardenTekst: actiefScenario?.voorwaarden_tekst ?? null,
-        uitsluitingenTekst: actiefScenario?.uitsluitingen_tekst ?? null,
-        opmerkingenTekst: actiefScenario?.opmerkingen_tekst ?? null,
+        offerteteksten: actiefScenario?.offerteteksten ?? null,
         // Meerwerk-offerte: koppel aan de meerwerkregel (leeg → gewone offerte).
         meerwerkRegelId: meerwerkRegelId ?? null,
         importRegels,

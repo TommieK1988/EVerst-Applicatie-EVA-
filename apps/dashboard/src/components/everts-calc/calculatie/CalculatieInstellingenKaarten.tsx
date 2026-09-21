@@ -14,11 +14,15 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useDialogen } from '@/components/ui/dialogen'
 import OfferteBijlagenKaart from './OfferteBijlagenKaart'
+import OfferteTekstEditor from './OfferteTekstEditor'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
   projectId: string
+  /** Dossier waar deze calculatie bij hoort — nodig om bijlages uit de dossiermap
+   *  te kunnen kiezen. Leeg bij een calculatie buiten een dossier. */
+  dossierId?: string
   /** Calculatie waar de keuzes op horen. Leeg → standaard/eerste scenario. Geef dit
    *  mee vanuit een geopende calculatie: na een revisie is het geopende scenario een
    *  ander dan het standaard-scenario, en de offerte wordt van het geopende gemaakt. */
@@ -30,7 +34,41 @@ interface Props {
   onVoltooid?: () => void
 }
 
-export default function CalculatieInstellingenKaarten({ projectId, scenarioId, vereist = false, onVoltooid }: Props) {
+/**
+ * De drie standaardteksten uit het offerte-sjabloon als één opgemaakt blok. Ze staan
+ * daar nog als platte tekst met streepjes-opsommingen; die worden hier echte bullets,
+ * zodat "Laden uit standaardsjabloon" meteen bruikbare opmaak oplevert.
+ */
+function sjabloonAlsBlok(sjabloon: {
+  standaard_voorwaarden: string | null
+  standaard_uitsluitingen: string | null
+  standaard_opmerkingen: string | null
+}): string {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const blok = (kop: string, tekst: string | null): string => {
+    const regels = (tekst ?? '').split(/\r?\n/).map(r => r.trim()).filter(r => r !== '')
+    if (regels.length === 0) return ''
+    const uit: string[] = [`<p><strong>${kop}</strong></p>`]
+    let inLijst = false
+    for (const regel of regels) {
+      const bullet = /^[-•*]\s+|^\d+[.)]\s+/.test(regel)
+      if (bullet && !inLijst) { uit.push('<ul>'); inLijst = true }
+      if (!bullet && inLijst) { uit.push('</ul>'); inLijst = false }
+      uit.push(bullet
+        ? `<li>${esc(regel.replace(/^[-•*]\s+|^\d+[.)]\s+/, ''))}</li>`
+        : `<p>${esc(regel)}</p>`)
+    }
+    if (inLijst) uit.push('</ul>')
+    return uit.join('')
+  }
+  return [
+    blok('Voorwaarden', sjabloon.standaard_voorwaarden),
+    blok('Uitsluitingen', sjabloon.standaard_uitsluitingen),
+    blok('Opmerkingen', sjabloon.standaard_opmerkingen),
+  ].join('')
+}
+
+export default function CalculatieInstellingenKaarten({ projectId, dossierId, scenarioId, vereist = false, onVoltooid }: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
@@ -126,23 +164,15 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
     if (!standaardSjabloon) return
     if (!await bevestig({
       titel: 'Huidige teksten overschrijven met het standaardsjabloon?',
-      omschrijving: 'Inleiding, voorwaarden, uitsluitingen en opmerkingen worden vervangen.',
+      omschrijving: 'De inleidende tekst en het offertetekstblok worden vervangen.',
       bevestigLabel: 'Overschrijven',
     })) return
     wijzig({
-      inleiding_tekst:     standaardSjabloon.standaard_inleiding ?? '',
-      voorwaarden_tekst:   standaardSjabloon.standaard_voorwaarden ?? '',
-      uitsluitingen_tekst: standaardSjabloon.standaard_uitsluitingen ?? '',
-      opmerkingen_tekst:   standaardSjabloon.standaard_opmerkingen ?? '',
+      inleiding_tekst: standaardSjabloon.standaard_inleiding ?? '',
+      offerteteksten: sjabloonAlsBlok(standaardSjabloon),
     }, true)
   }
 
-  const TEKSTVELDEN: { key: 'inleiding_tekst' | 'voorwaarden_tekst' | 'uitsluitingen_tekst' | 'opmerkingen_tekst'; label: string; placeholder: string }[] = [
-    { key: 'inleiding_tekst',     label: 'Inleidende tekst', placeholder: 'Inleiding bovenaan de offerte…' },
-    { key: 'voorwaarden_tekst',   label: 'Voorwaarden',   placeholder: 'Voorwaarden voor deze offerte…' },
-    { key: 'uitsluitingen_tekst', label: 'Uitsluitingen', placeholder: 'Wat is niet inbegrepen…' },
-    { key: 'opmerkingen_tekst',   label: 'Opmerkingen',   placeholder: 'Aanvullende opmerkingen…' },
-  ]
 
   const beideGekozen = !!scenario.betalingsconditie_id && !!scenario.algemene_voorwaarden_id
 
@@ -205,32 +235,46 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
           )}
         </CardHeader>
         <CardBody>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {TEKSTVELDEN.map(veld => (
-              <div key={veld.key}>
-                <label className="text-xs font-medium text-slate-500 block mb-1.5">{veld.label}</label>
-                <textarea
-                  value={scenario[veld.key] ?? ''}
-                  onChange={e => wijzig({ [veld.key]: e.target.value })}
-                  rows={8}
-                  placeholder={veld.placeholder}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-y leading-relaxed"
-                />
-              </div>
-            ))}
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1.5">Inleidende tekst</label>
+              <textarea
+                value={scenario.inleiding_tekst ?? ''}
+                onChange={e => wijzig({ inleiding_tekst: e.target.value })}
+                rows={4}
+                placeholder="Inleiding bovenaan de offerte…"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts resize-y leading-relaxed"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Verschijnt waar in de offerte-layout
+                <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{offerte.inleiding}'}</code>
+                staat. Leeg → de tekst uit het standaardsjabloon.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1.5">Offertetekst</label>
+              <OfferteTekstEditor
+                waarde={scenario.offerteteksten ?? ''}
+                onChange={html => wijzig({ offerteteksten: html })}
+                readOnly={!!scenario.bevroren_op}
+                placeholder="Voorwaarden, uitsluitingen, opmerkingen… — opmaken met de knoppen hierboven."
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Eén blok voor alles wat je bij de offerte wilt vermelden. Vet, cursief en opsommingen
+                komen mee in de PDF, op de plek van
+                <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{@offerteteksten}'}</code>
+                in de offerte-layout.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-2">
-            Deze teksten worden op de offerte overgenomen. Laat je een veld leeg, dan gebruikt de offerte
-            het standaardsjabloon. De inleidende tekst verschijnt waar in de offerte-layout de variabele
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{offerte.inleiding}'}</code>
-            staat.
-          </p>
         </CardBody>
       </Card>
 
       {/* ─── PDF-bijlages (eigen tabel, niet de scenario-snapshot) ───────────── */}
       <OfferteBijlagenKaart
         projectId={projectId}
+        dossierId={dossierId}
         scenarioId={scenario.id}
         readOnly={!!scenario.bevroren_op}
       />

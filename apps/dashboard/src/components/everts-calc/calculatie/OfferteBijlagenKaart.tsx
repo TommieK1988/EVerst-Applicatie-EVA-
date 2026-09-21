@@ -13,20 +13,24 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Paperclip, Trash2, ArrowUp, ArrowDown, ExternalLink, Loader2 } from 'lucide-react'
+import { Paperclip, Trash2, ArrowUp, ArrowDown, ExternalLink, Loader2, FolderOpen, Upload } from 'lucide-react'
 import {
   getCalculatieBijlagen,
   uploadCalculatieBijlage,
   verwijderCalculatieBijlage,
   herordenCalculatieBijlagen,
   heeftOfferteVoorScenario,
+  getDossierPdfs,
+  neemDossierBestandOverAlsBijlage,
   type CalculatieBijlage,
+  type DossierPdf,
 } from '@/app/(platform)/everts-calc/actions/offerte-bijlagen'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { useDialogen } from '@/components/ui/dialogen'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog'
 
 /** Boven deze omvang past de offerte niet meer als mailbijlage door Graph heen. */
 const WAARSCHUW_BYTES = 2.5 * 1024 * 1024
@@ -38,17 +42,24 @@ function toonBytes(bytes: number): string {
 
 interface Props {
   projectId: string
+  /** Dossier van deze calculatie; leeg → geen kiezer uit de dossiermap. */
+  dossierId?: string
   scenarioId: string
   /** Bevroren calculatie (offerte verzonden) — dan alleen tonen, niet wijzigen. */
   readOnly?: boolean
 }
 
-export default function OfferteBijlagenKaart({ projectId, scenarioId, readOnly = false }: Props) {
+export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId, readOnly = false }: Props) {
   const [bijlagen, setBijlagen] = useState<CalculatieBijlage[]>([])
   const [laden, setLaden]       = useState(true)
   const [bezig, setBezig]       = useState(false)
   const [offerte, setOfferte]   = useState<{ bestaat: boolean; alleenConcept: boolean }>({ bestaat: false, alleenConcept: true })
   const { bevestig } = useDialogen()
+
+  // Kiezer met de PDF's die al in de dossiermap staan.
+  const [kiezerOpen, setKiezerOpen]   = useState(false)
+  const [dossierPdfs, setDossierPdfs] = useState<DossierPdf[] | null>(null)
+  const [gekozen, setGekozen]         = useState<Set<string>>(new Set())
 
   const herlaad = useCallback(async () => {
     const lijst = await getCalculatieBijlagen(projectId, scenarioId)
@@ -110,6 +121,29 @@ export default function OfferteBijlagenKaart({ projectId, scenarioId, readOnly =
     setBijlagen(nieuw)                       // meteen zichtbaar; server volgt
     const res = await herordenCalculatieBijlagen(nieuw.map(b => b.id))
     if (!res.ok) { toast.error(res.error); await herlaad() }
+  }
+
+  const openKiezer = async () => {
+    if (!dossierId) return
+    setKiezerOpen(true)
+    setGekozen(new Set())
+    setDossierPdfs(null)              // toont "laden…" tot de lijst binnen is
+    setDossierPdfs(await getDossierPdfs(dossierId))
+  }
+
+  const neemOver = async () => {
+    setBezig(true)
+    try {
+      let mislukt = 0
+      for (const sleutel of gekozen) {
+        const res = await neemDossierBestandOverAlsBijlage(projectId, scenarioId, sleutel)
+        if (!res.ok) { toast.error(res.error); mislukt++ }
+      }
+      if (mislukt < gekozen.size) await herlaad()
+      if (mislukt === 0) setKiezerOpen(false)
+    } finally {
+      setBezig(false)
+    }
   }
 
   const totaal = bijlagen.reduce((n, b) => n + b.bytes, 0)
@@ -195,6 +229,16 @@ export default function OfferteBijlagenKaart({ projectId, scenarioId, readOnly =
               </ul>
             )}
 
+            {!readOnly && dossierId && (
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={openKiezer} disabled={bezig}>
+                  <FolderOpen className="mr-1.5 h-4 w-4" />
+                  Kiezen uit de dossiermap
+                </Button>
+                <span className="text-xs text-slate-400">of sleep een bestand hieronder</span>
+              </div>
+            )}
+
             {!readOnly && (
               <FileUpload
                 accept=".pdf,application/pdf"
@@ -234,6 +278,68 @@ export default function OfferteBijlagenKaart({ projectId, scenarioId, readOnly =
           </div>
         )}
       </CardBody>
+
+      {/* Kiezer: de PDF's die al in de dossiermap staan. Een webpagina kan het
+          bestandsvenster van Windows niet in een map laten starten, dus tonen we de
+          map zelf — dat scheelt ook downloaden en opnieuw uploaden. */}
+      <Dialog open={kiezerOpen} onOpenChange={setKiezerOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bijlage kiezen uit de dossiermap</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            {dossierPdfs === null ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" /> Dossiermap lezen…
+              </div>
+            ) : dossierPdfs.length === 0 ? (
+              <p className="py-6 text-sm text-slate-500">
+                Geen PDF&apos;s gevonden in de dossiermap. Sleep het bestand in plaats daarvan
+                rechtstreeks naar het vak in de kaart.
+              </p>
+            ) : (
+              <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                {dossierPdfs.map(f => (
+                  <label
+                    key={f.sleutel}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={gekozen.has(f.sleutel)}
+                      onChange={e => {
+                        const next = new Set(gekozen)
+                        if (e.target.checked) next.add(f.sleutel); else next.delete(f.sleutel)
+                        setGekozen(next)
+                      }}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{f.naam}</span>
+                    <span className="shrink-0 text-xs text-slate-400">
+                      {f.bron}{f.grootte != null && ` · ${toonBytes(f.grootte)}`}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setKiezerOpen(false)}>Annuleren</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={gekozen.size === 0 || bezig}
+                onClick={neemOver}
+              >
+                <Upload className="mr-1.5 h-4 w-4" />
+                {bezig
+                  ? 'Toevoegen…'
+                  : gekozen.size <= 1 ? 'Toevoegen' : `${gekozen.size} toevoegen`}
+              </Button>
+            </div>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

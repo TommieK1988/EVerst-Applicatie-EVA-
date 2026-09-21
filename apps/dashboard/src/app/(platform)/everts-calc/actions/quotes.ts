@@ -21,6 +21,41 @@ const kies = (calc: string | null | undefined, sjabloon: string | null | undefin
   return c !== '' ? c : (sjabloon ?? '')
 }
 
+/**
+ * De standaardteksten van het offerte-sjabloon als één opgemaakt blok (HTML).
+ * Terugval wanneer de calculatie zelf geen tekst heeft; de drie kolommen in
+ * `quote_templates` blijven bestaan zolang die sjablonen niet zijn omgezet.
+ */
+function sjabloonAlsTekstblok(template: {
+  standaard_voorwaarden?: string | null
+  standaard_uitsluitingen?: string | null
+  standaard_opmerkingen?: string | null
+} | null | undefined): string {
+  if (!template) return ''
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const blok = (kop: string, tekst: string | null | undefined): string => {
+    const regels = (tekst ?? '').split(/\r?\n/).map(r => r.trim()).filter(r => r !== '')
+    if (regels.length === 0) return ''
+    const uit: string[] = [`<p><strong>${kop}</strong></p>`]
+    let inLijst = false
+    for (const regel of regels) {
+      const bullet = /^[-•*]\s+|^\d+[.)]\s+/.test(regel)
+      if (bullet && !inLijst) { uit.push('<ul>'); inLijst = true }
+      if (!bullet && inLijst) { uit.push('</ul>'); inLijst = false }
+      uit.push(bullet
+        ? `<li>${esc(regel.replace(/^[-•*]\s+|^\d+[.)]\s+/, ''))}</li>`
+        : `<p>${esc(regel)}</p>`)
+    }
+    if (inLijst) uit.push('</ul>')
+    return uit.join('')
+  }
+  return [
+    blok('Voorwaarden', template.standaard_voorwaarden),
+    blok('Uitsluitingen', template.standaard_uitsluitingen),
+    blok('Opmerkingen', template.standaard_opmerkingen),
+  ].join('')
+}
+
 /** Eén bijlagerij zoals de twee helpers hieronder hem lezen. */
 interface BijlageBronRij {
   id?: string
@@ -296,6 +331,9 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   voorwaardenId?: string | null
   /** Vrije offerte-teksten van de calculatie; leeg → terugval op standaardsjabloon. */
   inleidingTekst?: string | null
+  /** Eén opgemaakt tekstblok (HTML) — vervangt de drie losse teksten hieronder. */
+  offerteteksten?: string | null
+  /** @deprecated Alleen nog voor aanroepers van vóór september 2026. */
   voorwaardenTekst?: string | null
   uitsluitingenTekst?: string | null
   opmerkingenTekst?: string | null
@@ -412,14 +450,13 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   // Voeg de vrije offerte-teksten in. De calculatie-teksten (Offerte-instellingen)
   // winnen; is een veld daar leeg, dan valt het terug op het standaardsjabloon.
   {
-    const teksten: Record<TermType, string> = {
-      voorwaarden:   kies(params.voorwaardenTekst,   template?.standaard_voorwaarden),
-      uitsluitingen: kies(params.uitsluitingenTekst, template?.standaard_uitsluitingen),
-      opmerkingen:   kies(params.opmerkingenTekst,   template?.standaard_opmerkingen),
-    }
-    const terms = (Object.keys(teksten) as TermType[])
-      .filter(type => teksten[type] !== '')
-      .map(type => ({ quote_id: quote.id, type, inhoud: teksten[type], volgorde: 0 }))
+    // Eén rij: het opgemaakte tekstblok. De drie losse soorten worden niet meer
+    // geschreven — hun inhoud zit hierin. Is het blok leeg, dan valt het terug op de
+    // standaardteksten van het sjabloon, samengevoegd tot hetzelfde ene blok.
+    const { schoonOfferteHtml } = await import('@/lib/everts-calc/html-naar-ooxml')
+    const blok = schoonOfferteHtml(kies(params.offerteteksten, sjabloonAlsTekstblok(template)))
+    const terms: { quote_id: string; type: TermType; inhoud: string; volgorde: number }[] =
+      blok === '' ? [] : [{ quote_id: quote.id, type: 'offerteteksten', inhoud: blok, volgorde: 0 }]
     if (terms.length) await supabase.from('quote_terms').insert(terms)
   }
 

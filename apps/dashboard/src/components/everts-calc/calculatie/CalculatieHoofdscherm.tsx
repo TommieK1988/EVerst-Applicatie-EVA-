@@ -555,10 +555,23 @@ export default function CalculatieHoofdscherm({
             <div className="ml-auto flex items-center gap-2">
               <div id="calc-grid-toolbar-slot" className="flex items-center gap-2" />
 
+            {/* Offerte-instellingen & bijlages — eigen knop, niet weggestopt in Opties:
+                dit wordt bij elke offerte aangeraakt (teksten, voorwaarden, bijlages). */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={readOnly}
+              onClick={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
+              title="Offerte-instellingen & bijlages — teksten, betalingscondities, algemene voorwaarden, PDF-bijlages"
+            >
+              <Receipt className="w-3.5 h-3.5 text-slate-400" />
+              <span className="hidden lg:inline">Offerte-instellingen</span>
+            </Button>
+
             {/* Opties dropdown — helemaal rechts */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="Opties — offerte, betalingscondities, import/export">
+                <Button variant="outline" size="sm" title="Opties — offerte aanmaken, reviseren, import/export">
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                   <span className="hidden lg:inline">Opties</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -581,14 +594,6 @@ export default function CalculatieHoofdscherm({
                       <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                     </>
                   )}
-                  {/* Betalingscondities + Algemene voorwaarden (per calculatie/offerte). */}
-                  <DropdownMenu.Item
-                    className={ddItem}
-                    onSelect={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
-                    disabled={readOnly}
-                  >
-                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Offerte-instellingen &amp; bijlages
-                  </DropdownMenu.Item>
                   {scenario?.bevroren_op && magDezeReviseren && (
                     <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
                       <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
@@ -735,6 +740,7 @@ export default function CalculatieHoofdscherm({
             </p>
             <CalculatieInstellingenKaarten
               projectId={projectId}
+              dossierId={dossierContext?.dossierId}
               scenarioId={scenario.id}
               vereist={instellingenVereist}
               onVoltooid={handleInstellingenVoltooid}

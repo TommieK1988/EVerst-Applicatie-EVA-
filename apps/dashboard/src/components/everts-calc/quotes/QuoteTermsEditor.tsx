@@ -24,7 +24,7 @@ export default function QuoteTermsEditor({ quoteId, terms, templates = [] }: Pro
     templates.find(t => t.is_standaard)?.id ?? templates[0]?.id ?? ''
   )
 
-  const termByType: Record<TermType, string> = {
+  const termByType: Partial<Record<TermType, string>> = {
     voorwaarden:   terms.find(t => t.type === 'voorwaarden')?.inhoud ?? '',
     uitsluitingen: terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? '',
     opmerkingen:   terms.find(t => t.type === 'opmerkingen')?.inhoud ?? '',
@@ -46,7 +46,7 @@ export default function QuoteTermsEditor({ quoteId, terms, templates = [] }: Pro
       omschrijving: 'Voorwaarden, uitsluitingen en opmerkingen worden vervangen door de sjabloonteksten.',
       bevestigLabel: 'Overschrijven',
     })) return
-    const nieuw: Record<TermType, string> = {
+    const nieuw: Partial<Record<TermType, string>> = {
       voorwaarden:   tmpl.standaard_voorwaarden ?? '',
       uitsluitingen: tmpl.standaard_uitsluitingen ?? '',
       opmerkingen:   tmpl.standaard_opmerkingen ?? '',

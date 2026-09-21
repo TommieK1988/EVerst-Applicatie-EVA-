@@ -129,8 +129,14 @@ export interface Scenario {
   /** Inleidende tekst bovenaan de offerte; komt op `quotes.inleiding` terecht en is in
    *  het Word-sjabloon te plaatsen als `{offerte.inleiding}`. */
   inleiding_tekst?: string | null
+  /** Eén opgemaakt tekstblok (HTML) dat de drie losse velden hieronder vervangt. */
+  offerteteksten?: string | null
+  /** @deprecated Vervangen door `offerteteksten`. Alleen nog gelezen voor calculaties
+   *  van vóór september 2026, zodat hun tekst niet verdwijnt; nooit meer schrijven. */
   voorwaarden_tekst?: string | null
+  /** @deprecated Zie `voorwaarden_tekst`. */
   uitsluitingen_tekst?: string | null
+  /** @deprecated Zie `voorwaarden_tekst`. */
   opmerkingen_tekst?: string | null
   /** Gezet wanneer deze calculatie de calculatie van een meerwerkregel is (i.p.v. een
    *  contractversie). Zo blijft het meerwerk in hetzelfde dossier-project maar apart

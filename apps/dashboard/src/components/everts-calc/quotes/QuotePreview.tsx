@@ -1,5 +1,6 @@
 import type { Quote, QuoteSection, QuoteLine } from '@/lib/everts-calc/types-quotes'
 import { groepeerBtwPerTarief } from '@/lib/everts-calc/quote-renderer'
+import { schoonOfferteHtml } from '@/lib/everts-calc/html-naar-ooxml'
 
 export interface BedrijfsInstellingen {
   naam: string
@@ -237,10 +238,12 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
     }
   }
 
-  const voorwaarden   = terms.find(t => t.type === 'voorwaarden')?.inhoud   ?? ''
-  const uitsluitingen = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''
-  const opmerkingen   = terms.find(t => t.type === 'opmerkingen')?.inhoud   ?? ''
-  const heeftTerms    = !!(voorwaarden || uitsluitingen || opmerkingen)
+  const voorwaarden    = terms.find(t => t.type === 'voorwaarden')?.inhoud   ?? ''
+  const uitsluitingen  = terms.find(t => t.type === 'uitsluitingen')?.inhoud ?? ''
+  const opmerkingen    = terms.find(t => t.type === 'opmerkingen')?.inhoud   ?? ''
+  // Nieuwe offertes hebben één opgemaakt blok (HTML); oude de drie losse teksten.
+  const offerteteksten = terms.find(t => t.type === 'offerteteksten')?.inhoud ?? ''
+  const heeftTerms     = !!(offerteteksten || voorwaarden || uitsluitingen || opmerkingen)
 
   const heeftStelposten = stelpostLines.length > 0
   const heeftOpties = optieSections.length > 0
@@ -552,6 +555,15 @@ export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
               <div style={{ fontSize: '13pt', fontWeight: 800, marginBottom: '6mm', color: '#0f172a', borderBottom: '2px solid #1a56db', paddingBottom: '2mm' }}>
                 Voorwaarden &amp; opmerkingen
               </div>
+
+              {/* Het opgemaakte blok is HTML uit onze eigen editor (vet/cursief/lijsten);
+                  de drie oude velden eronder zijn platte tekst van bestaande offertes. */}
+              {offerteteksten && (
+                <div
+                  style={{ lineHeight: 1.7, color: '#475569', fontSize: '9pt' }}
+                  dangerouslySetInnerHTML={{ __html: schoonOfferteHtml(offerteteksten) }}
+                />
+              )}
 
               {voorwaarden && (
                 <div style={{ marginBottom: '6mm' }}>
