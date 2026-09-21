@@ -970,8 +970,12 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
  * Match op de type-**naam**, niet op id 7: de id's zijn afgeleid uit de data (er is geen
  * `/list/contact-types`-endpoint) en een omgeving met andere nummering mag hier niet stilletjes
  * alle contacten doorlaten.
+ *
+ * Niet geëxporteerd: dit is een `'use server'`-module, en daar mag alleen een async functie uit.
+ * Een sync export komt door `tsc` heen maar laat de Next-build vallen op "Server Actions must be
+ * async functions" — zie ook `lib/net/deadline.ts`. Buiten dit bestand wordt hij niet gebruikt.
  */
-export function isKlantContact(c: { type?: { id?: number; name?: string } | null }): boolean {
+function isKlantContact(c: { type?: { id?: number; name?: string } | null }): boolean {
   return (c.type?.name ?? '').toLowerCase() === 'customer'
 }
 
