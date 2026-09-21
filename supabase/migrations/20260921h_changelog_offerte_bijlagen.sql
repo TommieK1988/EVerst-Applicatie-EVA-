@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-21','nieuw','Offertes','Eigen bijlages en een inleidende tekst bij een offerte',
+   'Je kunt nu PDF''s aan een calculatie hangen — een productblad, een kwaliteitsverklaring, een detailtekening. Ze komen in de offerte ná jouw tekst en vóór de algemene voorwaarden, in de volgorde die je zelf bepaalt. Daarnaast is er een veld voor een inleidende tekst, die je in de offerte-opmaak op de gewenste plek laat verschijnen. Allebei vind je onder Opties, bij "Offerte-instellingen & bijlages". De voorvertoning toont voortaan hetzelfde document als de klant ontvangt, inclusief de algemene voorwaarden.');
