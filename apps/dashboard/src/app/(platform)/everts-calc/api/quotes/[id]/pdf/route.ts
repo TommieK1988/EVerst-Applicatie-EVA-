@@ -29,7 +29,7 @@ import { haalBewerkteOfferteDocxVoorUitvoer, WordBronError } from '@/lib/everts-
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { haalOp } from '@/lib/net/deadline'
+import { voegPdfsSamen, haalQuoteBijlagenPdfs, haalVoorwaardenPdf } from '@/lib/everts-calc/pdf-bijlagen'
 
 export const dynamic = 'force-dynamic'
 
@@ -170,27 +170,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const filename = encodeURIComponent(`offerte-${quote.quote_nummer}.pdf`)
 
-    // ── 6. Algemene voorwaarden als bijlage samenvoegen ──────────────────────
-    let finalPdf: Uint8Array = pdfBuffer
+    // ── 6. Eigen bijlages en daarna de algemene voorwaarden aanplakken ───────
+    // Vaste volgorde: offerte → bijlages → algemene voorwaarden. Beide staan op hun
+    // eigen papier; het briefpapier is hierboven al onder de offertepagina's gelegd.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const avBestand = (quote as any).algemene_voorwaarden
-
-    if (avBestand?.bestand_url) {
-      try {
-        const { PDFDocument } = await import('pdf-lib')
-        const avRes = await haalOp(avBestand.bestand_url, { dienst: 'Voorwaarden-PDF', timeoutMs: 20_000 })
-        if (avRes.ok) {
-          const avBytes = await avRes.arrayBuffer()
-          const mainDoc = await PDFDocument.load(pdfBuffer)
-          const avDoc = await PDFDocument.load(avBytes)
-          const avPages = await mainDoc.copyPages(avDoc, avDoc.getPageIndices())
-          avPages.forEach((p) => mainDoc.addPage(p))
-          finalPdf = await mainDoc.save()
-        }
-      } catch (mergeErr) {
-        console.warn('AV samenvoegen mislukt, PDF zonder bijlage:', mergeErr)
-      }
-    }
+    let finalPdf: Uint8Array = await voegPdfsSamen(pdfBuffer, [
+      ...await haalQuoteBijlagenPdfs(id),
+      await haalVoorwaardenPdf(avBestand?.bestand_url),
+    ])
 
     // ── 7. CONCEPT-watermerk zolang niet goedgekeurd ─────────────────────────
     if (!verzendbaar) {

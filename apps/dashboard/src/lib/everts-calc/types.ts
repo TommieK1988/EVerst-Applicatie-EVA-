@@ -126,6 +126,9 @@ export interface Scenario {
   algemene_voorwaarden_id?: string | null
   // Vrije offerte-teksten per calculatie. Winnen bij het aanmaken van de offerte;
   // leeg → terugval op het standaard offerte-sjabloon (quote_templates).
+  /** Inleidende tekst bovenaan de offerte; komt op `quotes.inleiding` terecht en is in
+   *  het Word-sjabloon te plaatsen als `{offerte.inleiding}`. */
+  inleiding_tekst?: string | null
   voorwaarden_tekst?: string | null
   uitsluitingen_tekst?: string | null
   opmerkingen_tekst?: string | null

@@ -2,7 +2,9 @@
  * GET /everts-calc/api/quotes/[id]/pdf-preview
  *
  * Rendert de offerte naar een echte PDF (Word-template → docxtemplater →
- * Microsoft Graph) en legt daar het briefpapier als achtergrond onder. Geeft de
+ * Microsoft Graph) en legt daar het briefpapier als achtergrond onder. Bij een
+ * echte offerte komen de eigen bijlages en de algemene voorwaarden erachter, zodat
+ * de voorvertoning hetzelfde document toont als de download en de mail. Geeft de
  * PDF *inline* terug zodat de layout-editor exact het eindresultaat toont —
  * inclusief briefpapier, kleuren en Word-opmaak.
  *
@@ -35,6 +37,7 @@ import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground, tekenConceptWatermerk } from '@/lib/everts-calc/briefpapier'
 import { buildDemoQuote, DEMO_BEDRIJF, buildDemoDossierContext } from '@/lib/everts-calc/demo-quote'
 import { haalOp } from '@/lib/net/deadline'
+import { voegPdfsSamen, haalQuoteBijlagenPdfs, haalVoorwaardenPdf } from '@/lib/everts-calc/pdf-bijlagen'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +83,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           sections:quote_sections(*, lines:quote_lines(*, btw_tarief:btw_tarieven(id, label, percentage, verlegd))),
           terms:quote_terms(*),
           layout:quote_layouts(*),
-          betalingsconditie:betalingscondities(*)
+          betalingsconditie:betalingscondities(*),
+          algemene_voorwaarden:algemene_voorwaarden(*)
         `)
         .eq('id', id)
         .order('volgorde', { referencedTable: 'quote_sections', ascending: true })
@@ -211,7 +215,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // ── 6. CONCEPT-watermerk voor een echte, nog niet goedgekeurde offerte ────
+    // ── 6. Eigen bijlages en algemene voorwaarden erachter ───────────────────
+    // Zodat de voorvertoning hetzelfde document toont als de download en de mail;
+    // hiervóór liet de preview die pagina's weg en zag de medewerker iets anders
+    // dan de klant. Niet bij demo of een template-override: die previews gaan over
+    // het sjabloon, niet over deze offerte.
+    if (!isDemo && !templateOverride) {
+      pdfBytes = await voegPdfsSamen(pdfBytes, [
+        ...await haalQuoteBijlagenPdfs(id),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await haalVoorwaardenPdf((quote as any).algemene_voorwaarden?.bestand_url),
+      ])
+    }
+
+    // ── 7. CONCEPT-watermerk voor een echte, nog niet goedgekeurde offerte ────
     // (niet bij demo of een template-override-preview in de layout-editor).
     if (!isDemo && !templateOverride) {
       try {

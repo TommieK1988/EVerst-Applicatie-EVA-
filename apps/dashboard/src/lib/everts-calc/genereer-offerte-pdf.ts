@@ -5,7 +5,7 @@ import { laadOfferteContext } from './offerte-context'
 import { haalBewerkteOfferteDocxVoorUitvoer } from './offerte-word'
 import { convertDocxToPdf } from '@/lib/o365/docx-to-pdf'
 import { fetchBriefpapier, mergeBriefpapierBackground } from './briefpapier'
-import { haalOp } from '@/lib/net/deadline'
+import { voegPdfsSamen, haalQuoteBijlagenPdfs, haalVoorwaardenPdf } from './pdf-bijlagen'
 
 // `laadOfferteContext` woont in offerte-context.ts (gedeeld met de Word Online-module);
 // deze re-export houdt de bestaande import-paden werkend.
@@ -18,7 +18,8 @@ export interface OffertePdfResultaat {
   dossier: DossierContext
   ctx: RenderContext
   quoteNummer: string
-  /** Offerte-PDF met briefpapier, zónder voorwaarden-append en zónder watermerk. */
+  /** Offerte-PDF met briefpapier en de eigen bijlages erachter, zónder
+   *  voorwaarden-append en zónder watermerk. */
   offertePdf: Uint8Array
   /** Losse algemene-voorwaarden-PDF (of null als niet gekoppeld). */
   voorwaardenPdf: Uint8Array | null
@@ -53,9 +54,12 @@ export async function laadOfferteDocx(
 }
 
 /**
- * Genereert de definitieve offerte-PDF voor verzending: briefpapier eronder, de
- * algemene voorwaarden apart (losse bijlage) en géén CONCEPT-watermerk. Geeft ook
- * de render-context terug voor de mailvariabelen.
+ * Genereert de definitieve offerte-PDF voor verzending: briefpapier eronder, de eigen
+ * bijlages erachter, de algemene voorwaarden apart (losse mailbijlage) en géén
+ * CONCEPT-watermerk. Geeft ook de render-context terug voor de mailvariabelen.
+ *
+ * Doordat de bijlages hier al in `offertePdf` zitten, hoeven de twee aanroepers
+ * (verzenden en de dossier-route) er niets van te weten.
  */
 export async function genereerOffertePdfMetBijlagen(quoteId: string): Promise<OffertePdfResultaat> {
   const { quote, rawLayout, layout, bedrijf, dossier, ctx } = await laadOfferteContext(quoteId)
@@ -69,15 +73,13 @@ export async function genereerOffertePdfMetBijlagen(quoteId: string): Promise<Of
     catch (e) { console.warn('Briefpapier-merge mislukt:', e) }
   }
 
+  // Eigen bijlages achter de offerte — vóór de algemene voorwaarden, en op eigen
+  // papier: het briefpapier is hierboven al onder de offertepagina's gelegd.
+  const bijlagen = await haalQuoteBijlagenPdfs(quoteId)
+  if (bijlagen.length) offertePdf = await voegPdfsSamen(offertePdf, bijlagen)
+
   // Algemene voorwaarden als losse bijlage.
-  let voorwaardenPdf: Uint8Array | null = null
-  const av = quote.algemene_voorwaarden
-  if (av?.bestand_url) {
-    try {
-      const r = await haalOp(av.bestand_url, { dienst: 'Voorwaarden-PDF', timeoutMs: 20_000 })
-      if (r.ok) voorwaardenPdf = new Uint8Array(await r.arrayBuffer())
-    } catch (e) { console.warn('Voorwaarden ophalen mislukt:', e) }
-  }
+  const voorwaardenPdf = await haalVoorwaardenPdf(quote.algemene_voorwaarden?.bestand_url)
 
   return { quote, bedrijf, dossier, ctx, quoteNummer: quote.quote_nummer, offertePdf, voorwaardenPdf }
 }

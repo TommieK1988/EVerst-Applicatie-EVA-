@@ -47,9 +47,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ dossier
     return pdfAntwoord(Buffer.from(await data.arrayBuffer()), bron.naam)
   }
 
-  // EVA-offerte: live renderen, inclusief briefpapier. De algemene voorwaarden komen erachter en
-  // zolang de offerte niet is goedgekeurd krijgt hij het CONCEPT-stempel — dezelfde regels als de
-  // download op de desktop, zodat er geen schone PDF van een ongoedgekeurde offerte rondgaat.
+  // EVA-offerte: live renderen, inclusief briefpapier. Daarachter de eigen bijlages en dan de
+  // algemene voorwaarden, en zolang de offerte niet is goedgekeurd krijgt hij het CONCEPT-stempel
+  // — dezelfde regels als de download op de desktop, zodat er geen schone PDF van een
+  // ongoedgekeurde offerte rondgaat.
   try {
     const { genereerOffertePdfMetBijlagen } = await import('@/lib/everts-calc/genereer-offerte-pdf')
     const { tekenConceptWatermerk } = await import('@/lib/everts-calc/briefpapier')
@@ -57,19 +58,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ dossier
 
     const { offertePdf, voorwaardenPdf, quoteNummer } = await genereerOffertePdfMetBijlagen(bron.quoteId)
 
-    let pdf: Uint8Array = offertePdf
-    if (voorwaardenPdf) {
-      try {
-        const { PDFDocument } = await import('pdf-lib')
-        const doc = await PDFDocument.load(offertePdf)
-        const av = await PDFDocument.load(voorwaardenPdf)
-        const paginas = await doc.copyPages(av, av.getPageIndices())
-        paginas.forEach(p => doc.addPage(p))
-        pdf = await doc.save()
-      } catch (e) {
-        console.warn('Voorwaarden samenvoegen mislukt, offerte zonder bijlage:', e)
-      }
-    }
+    // `offertePdf` bevat de eigen bijlages al; hier komen alleen de voorwaarden nog achteraan.
+    const { voegPdfsSamen } = await import('@/lib/everts-calc/pdf-bijlagen')
+    let pdf: Uint8Array = await voegPdfsSamen(offertePdf, [voorwaardenPdf])
 
     // Bij twijfel stempelen: een schone PDF van een ongoedgekeurde offerte is de verkeerde fout.
     const verzendbaar = await assertOfferteVerzendbaar(bron.quoteId).then(r => r.ok).catch(() => false)

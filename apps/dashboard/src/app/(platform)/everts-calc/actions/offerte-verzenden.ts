@@ -50,6 +50,9 @@ async function isInterneBegroting(quoteId: string): Promise<boolean> {
 const NIET_MAILBAAR =
   'Een interne begroting kan niet vanuit EVA worden gemaild: de begrotingsstaat bevat kostprijzen en marges. Download het document als je het toch wilt delen.'
 
+/** Graph weigert een /me/sendMail-body boven ~4 MB; bijlages gaan er base64 in. */
+const MAX_MAIL_BYTES = 3 * 1024 * 1024
+
 /** Laadt de toolbar-status voor de inline offerte-detailweergave in het dossier. */
 export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteDetailStatus> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -276,6 +279,19 @@ export async function verstuurOfferte(
   ]
   if (voorwaardenPdf) {
     attachments.push({ naam: 'Algemene voorwaarden.pdf', contentType: 'application/pdf', inhoud: voorwaardenPdf })
+  }
+
+  // Graph zet bijlages inline als base64 in /me/sendMail en weigert een request-body
+  // boven ~4 MB. Zonder deze grens krijgt de gebruiker een kale HTTP-fout, en pas ná
+  // een minuut PDF-renderen. Sinds de offerte eigen bijlages kan meedragen is dat een
+  // realistisch scenario.
+  const totaalBytes = attachments.reduce((n, a) => n + a.inhoud.byteLength, 0)
+  if (totaalBytes > MAX_MAIL_BYTES) {
+    const mb = (totaalBytes / 1024 / 1024).toFixed(1)
+    return {
+      ok: false,
+      error: `De offerte met bijlages is te groot om te mailen (${mb} MB, max. 3 MB). Verklein de bijlages of stuur ze apart.`,
+    }
   }
 
   // ── Verzenden (202 Accepted = geslaagd) ─────────────────────────────────────

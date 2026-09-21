@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, FileText } from 'lucide-react'
+import { Check, FileText, Paperclip } from 'lucide-react'
 import { getLayouts } from '@/app/(platform)/everts-calc/actions/quote-instellingen'
 import { getBetalingscondities } from '@/app/(platform)/everts-calc/actions/betalingscondities'
 import { maakQuoteVanuitProjectMetImport } from '@/app/(platform)/everts-calc/actions/quotes'
@@ -57,6 +57,7 @@ export default function OfferteAanmakenModal({
   const [gekozenLayoutId, setGekozenLayoutId] = useState<string | null>(null)
   const [heeftBetalingscondities, setHeeftBetalingscondities] = useState(true)
   const [aantalRegels, setAantalRegels] = useState<number | null>(null)
+  const [aantalBijlagen, setAantalBijlagen] = useState(0)
   const [loading, setLoading] = useState(false)
   const [fetchingData, setFetchingData] = useState(false)
 
@@ -96,6 +97,12 @@ export default function OfferteAanmakenModal({
         const groepen = actief ? getGroepen(actief.id) : []
         const count = groepen.reduce((sum, g) => sum + getCalculatieregels(g.id).length, 0)
         setAantalRegels(count)
+
+        // PDF-bijlages staan in een eigen tabel (niet in de snapshot), dus apart ophalen.
+        if (actief) {
+          const { getCalculatieBijlagen } = await import('@/app/(platform)/everts-calc/actions/offerte-bijlagen')
+          setAantalBijlagen((await getCalculatieBijlagen(projectId, actief.id)).length)
+        }
       } catch {
         setAantalRegels(0)
       }
@@ -212,6 +219,7 @@ export default function OfferteAanmakenModal({
         betalingsconditieId: actiefScenario?.betalingsconditie_id ?? null,
         voorwaardenId: actiefScenario?.algemene_voorwaarden_id ?? null,
         // Vrije offerte-teksten van de calculatie (leeg → standaardsjabloon).
+        inleidingTekst: actiefScenario?.inleiding_tekst ?? null,
         voorwaardenTekst: actiefScenario?.voorwaarden_tekst ?? null,
         uitsluitingenTekst: actiefScenario?.uitsluitingen_tekst ?? null,
         opmerkingenTekst: actiefScenario?.opmerkingen_tekst ?? null,
@@ -317,6 +325,16 @@ export default function OfferteAanmakenModal({
                 ? 'Geen calculatieregels gevonden — je kunt ze later handmatig toevoegen.'
                 : `${aantalRegels} calculatieregel${aantalRegels !== 1 ? 's' : ''} worden geïmporteerd.`
               }
+            </div>
+          )}
+
+          {/* Bijlages komen in de PDF ná de offerte en vóór de algemene voorwaarden. */}
+          {aantalBijlagen > 0 && (
+            <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-xl px-3 py-2.5">
+              <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              {aantalBijlagen === 1
+                ? '1 bijlage gaat mee in de offerte-PDF.'
+                : `${aantalBijlagen} bijlages gaan mee in de offerte-PDF.`}
             </div>
           )}
         </DialogBody>

@@ -71,6 +71,16 @@ export async function reviseerCalculatie(
   // Deel de nieuwe versie meteen met de server (gedeelde blob).
   await bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
 
+  // De PDF-bijlages staan in een eigen tabel en zitten dus niet in de blob die
+  // `kopieerScenario` dupliceert. Zonder deze aanroep verliest een revisie ze stil.
+  // Best-effort: de nieuwe versie bestaat al en mag hier niet op stuklopen.
+  try {
+    const { kopieerBijlagenNaarScenario } = await import('@/app/(platform)/everts-calc/actions/offerte-bijlagen')
+    await kopieerBijlagenNaarScenario(projectId, scenarioId, nieuw.id)
+  } catch (e) {
+    console.error('Bijlages niet meegekopieerd naar de nieuwe calculatieversie:', e)
+  }
+
   return nieuw
 }
 

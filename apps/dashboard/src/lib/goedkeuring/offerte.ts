@@ -129,25 +129,36 @@ export async function offerteGoedkeuringVereist(quoteId: string): Promise<Offert
 }
 
 /**
- * Actuele inhouds-hash van een offerte (regels + subtotaal, plus de versie van een
- * gekoppeld Word-document).
+ * Actuele inhouds-hash van een offerte (regels + subtotaal, de versie van een
+ * gekoppeld Word-document, en de meegestuurde bijlages + inleidende tekst).
  *
  * De Word-versie leest hier uit de database, niet live bij SharePoint: dit wordt
  * ook bij elke voorvertoning aangeroepen. Op de momenten die tellen — goedkeuren
  * en verzenden — wordt `ververWordVersie()` eerst uitgevoerd, zodat de hash daar
  * op de werkelijke SharePoint-versie is gebaseerd.
+ *
+ * Bijlages en inleiding tellen mee om dezelfde reden als de Word-versie: ze gaan
+ * wél mee naar de klant maar raken de regels in de database niet, dus zonder ze
+ * zou een wissel ná de goedkeuring onopgemerkt de deur uit gaan.
  */
 export async function berekenOfferteHash(quoteId: string): Promise<string> {
   const d = db()
-  const [{ data: quote }, { data: lines }] = await Promise.all([
-    d.from('quotes').select('subtotaal_ex_btw, word_item_id, word_etag').eq('id', quoteId).maybeSingle(),
+  const [{ data: quote }, { data: lines }, { data: bijlagen }] = await Promise.all([
+    d.from('quotes').select('subtotaal_ex_btw, word_item_id, word_etag, inleiding').eq('id', quoteId).maybeSingle(),
     d.from('quote_lines').select('id, omschrijving, hoeveelheid, eenheidsprijs, btw_pct').eq('quote_id', quoteId),
+    d.from('quote_bijlagen').select('pad, bytes, volgorde').eq('quote_id', quoteId)
+      .order('volgorde', { ascending: true }).limit(50),
   ])
   const wordVersie = quote?.word_item_id ? `${quote.word_item_id}:${quote.word_etag ?? ''}` : null
   return hashOfferte(
     ((lines ?? []) as HashbareOfferteRegel[]),
     Number(quote?.subtotaal_ex_btw) || 0,
     wordVersie,
+    {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      bijlagen: ((bijlagen ?? []) as any[]).map(b => ({ pad: b.pad, bytes: Number(b.bytes ?? 0) })),
+      inleiding: quote?.inleiding ?? null,
+    },
   )
 }
 

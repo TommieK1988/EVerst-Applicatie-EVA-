@@ -587,7 +587,7 @@ export default function CalculatieHoofdscherm({
                     onSelect={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
                     disabled={readOnly}
                   >
-                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Betalingscondities &amp; voorwaarden
+                    <Receipt className="w-3.5 h-3.5 text-slate-400" /> Offerte-instellingen &amp; bijlages
                   </DropdownMenu.Item>
                   {scenario?.bevroren_op && magDezeReviseren && (
                     <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
@@ -727,7 +727,7 @@ export default function CalculatieHoofdscherm({
       >
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Betalingscondities &amp; voorwaarden</DialogTitle>
+            <DialogTitle>Offerte-instellingen &amp; bijlages</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <p className="text-xs text-slate-500 mb-3">

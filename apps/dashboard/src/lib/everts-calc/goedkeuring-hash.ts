@@ -135,11 +135,24 @@ export type HashbareOfferteRegel = {
  * onopgemerkt de deur uit gaan: de regels in de database veranderen daar immers
  * niet van. Het veld wordt alléén toegevoegd wanneer er een Word-document hangt,
  * zodat de hash van alle bestaande (sjabloon-)offertes ongewijzigd blijft.
+ *
+ * `extra` werkt volgens dezelfde regel voor de twee dingen die ná de goedkeuring
+ * óók stil de deur uit zouden kunnen gaan: de meegestuurde PDF-bijlages en de
+ * inleidende tekst. Het wordt als object gepusht — nooit als losse string — zodat
+ * het niet kan botsen met een `wordVersie` op dezelfde positie.
  */
+export interface OfferteHashExtra {
+  /** Bevroren bijlages, op volgorde: pad + omvang per stuk. */
+  bijlagen?: { pad: string; bytes: number | null }[]
+  /** Inleidende tekst bovenaan de offerte. */
+  inleiding?: string | null
+}
+
 export async function hashOfferte(
   regels: HashbareOfferteRegel[],
   subtotaalExBtw: number,
   wordVersie?: string | null,
+  extra?: OfferteHashExtra | null,
 ): Promise<string> {
   const rs = regels
     .slice()
@@ -147,5 +160,14 @@ export async function hashOfferte(
     .map(r => [r.id, str(r.omschrijving), num(r.hoeveelheid), num(r.eenheidsprijs), num(r.btw_pct)])
   const canoniek: unknown[] = [num(subtotaalExBtw), rs]
   if (wordVersie) canoniek.push(wordVersie)
+
+  const bijlagen = extra?.bijlagen ?? []
+  const inleiding = str(extra?.inleiding)
+  if (bijlagen.length > 0 || inleiding !== '') {
+    canoniek.push({
+      bijlagen: bijlagen.map(b => [str(b.pad), num(b.bytes)]),
+      inleiding,
+    })
+  }
   return sha256(JSON.stringify(canoniek))
 }

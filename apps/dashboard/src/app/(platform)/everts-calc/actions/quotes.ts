@@ -11,6 +11,121 @@ import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
 
 const PAD = '/quotes'
 
+/**
+ * Vrije offerte-tekst kiezen: de tekst van de calculatie wint, is die leeg dan valt
+ * het terug op het standaard offerte-sjabloon (`quote_templates`). Niet geëxporteerd —
+ * een `'use server'`-bestand mag alleen async functies exporteren.
+ */
+const kies = (calc: string | null | undefined, sjabloon: string | null | undefined) => {
+  const c = (calc ?? '').trim()
+  return c !== '' ? c : (sjabloon ?? '')
+}
+
+/**
+ * Kopieert de PDF-bijlages van een calculatie naar de offerte en bevriest ze daarmee.
+ *
+ * Gaat bewust via de admin-client: op `calculatie_bijlagen`/`quote_bijlagen` staat
+ * alleen een select-policy, muteren hoort via de service role te lopen.
+ *
+ * Per bijlage best-effort, maar luid gelogd — een bijlage die stil uit een verzonden
+ * offerte verdwijnt is erger dan een zichtbare fout. Lukt er géén enkele terwijl er
+ * wel bijlages waren, dan gooit deze functie: dan is er iets structureel mis en moet
+ * het aanmaken niet doen alsof het gelukt is.
+ */
+async function bevriesBijlagenOpQuote(
+  projectId: string,
+  scenarioId: string,
+  quoteId: string,
+): Promise<void> {
+  const { randomUUID } = await import('crypto')
+  const { BIJLAGE_BUCKET } = await import('@/lib/everts-calc/pdf-bijlagen')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = (await import('@everts/database/server')).createAdminClient() as any
+
+  const { data: bronnen } = await admin
+    .from('calculatie_bijlagen')
+    .select('id, bestandsnaam, pad, bytes, volgorde')
+    .eq('project_id', projectId)
+    .eq('scenario_id', scenarioId)
+    .order('volgorde', { ascending: true })
+    .limit(50)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rijen = (bronnen ?? []) as any[]
+  if (rijen.length === 0) return
+
+  let gelukt = 0
+  for (const bron of rijen) {
+    const naam = String(bron.bestandsnaam).replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120)
+    const doelPad = `offerte/${quoteId}/${randomUUID()}-${naam}`
+    const { error: copyErr } = await admin.storage.from(BIJLAGE_BUCKET).copy(bron.pad, doelPad)
+    if (copyErr) {
+      console.error(`Bijlage "${bron.bestandsnaam}" niet bevroren op offerte ${quoteId}:`, copyErr)
+      continue
+    }
+    const { error } = await admin.from('quote_bijlagen').insert({
+      quote_id: quoteId,
+      bestandsnaam: bron.bestandsnaam,
+      pad: doelPad,
+      bytes: bron.bytes,
+      volgorde: bron.volgorde ?? 0,
+      bron_bijlage_id: bron.id,
+    })
+    if (error) {
+      await admin.storage.from(BIJLAGE_BUCKET).remove([doelPad]).catch(() => null)
+      console.error(`Bijlagerij "${bron.bestandsnaam}" niet aangemaakt op offerte ${quoteId}:`, error)
+      continue
+    }
+    gelukt++
+  }
+
+  if (gelukt === 0) {
+    throw new Error('De bijlages konden niet aan de offerte worden toegevoegd. Probeer het opnieuw.')
+  }
+}
+
+/**
+ * Kopieert de bevroren bijlages van de ene offerte naar de andere (bij reviseren).
+ * Best-effort per bijlage: een mislukte kopie mag de revisie niet blokkeren, maar
+ * wordt wel gelogd.
+ */
+async function kopieerQuoteBijlagen(bronQuoteId: string, doelQuoteId: string): Promise<void> {
+  const { randomUUID } = await import('crypto')
+  const { BIJLAGE_BUCKET } = await import('@/lib/everts-calc/pdf-bijlagen')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = (await import('@everts/database/server')).createAdminClient() as any
+
+  const { data } = await admin
+    .from('quote_bijlagen')
+    .select('bestandsnaam, pad, bytes, volgorde, bron_bijlage_id')
+    .eq('quote_id', bronQuoteId)
+    .order('volgorde', { ascending: true })
+    .limit(50)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const bron of ((data ?? []) as any[])) {
+    const naam = String(bron.bestandsnaam).replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120)
+    const doelPad = `offerte/${doelQuoteId}/${randomUUID()}-${naam}`
+    const { error: copyErr } = await admin.storage.from(BIJLAGE_BUCKET).copy(bron.pad, doelPad)
+    if (copyErr) {
+      console.error(`Bijlage "${bron.bestandsnaam}" niet meegekopieerd naar offerteversie ${doelQuoteId}:`, copyErr)
+      continue
+    }
+    const { error } = await admin.from('quote_bijlagen').insert({
+      quote_id: doelQuoteId,
+      bestandsnaam: bron.bestandsnaam,
+      pad: doelPad,
+      bytes: bron.bytes,
+      volgorde: bron.volgorde ?? 0,
+      bron_bijlage_id: bron.bron_bijlage_id ?? null,
+    })
+    if (error) {
+      await admin.storage.from(BIJLAGE_BUCKET).remove([doelPad]).catch(() => null)
+      console.error(`Bijlagerij "${bron.bestandsnaam}" niet aangemaakt op offerteversie ${doelQuoteId}:`, error)
+    }
+  }
+}
+
 // Helper: cast Supabase client naar any (nieuwe tabellen zijn nog niet in auto-gen types)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getDb(): Promise<any> {
@@ -164,6 +279,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   /** Gekozen algemene voorwaarden uit het Offerte-instellingen-blok. */
   voorwaardenId?: string | null
   /** Vrije offerte-teksten van de calculatie; leeg → terugval op standaardsjabloon. */
+  inleidingTekst?: string | null
   voorwaardenTekst?: string | null
   uitsluitingenTekst?: string | null
   opmerkingenTekst?: string | null
@@ -176,7 +292,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+    .select('id, geldigheid_dagen, standaard_inleiding, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
     .eq('is_standaard', true)
     .single()
 
@@ -229,6 +345,9 @@ export async function maakQuoteVanuitProjectMetImport(params: {
         ? `Interne begroting — ${params.projectNaam}`
         : `Offerte — ${params.projectNaam}`,
       referentie: params.projectNummer ?? null,
+      // Inleidende tekst van de calculatie ({offerte.inleiding} in het Word-sjabloon);
+      // leeg → de tekst uit het standaard offerte-sjabloon.
+      inleiding: kies(params.inleidingTekst, template?.standaard_inleiding) || null,
       datum,
       geldig_tot,
       project_id: params.projectId,
@@ -277,10 +396,6 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   // Voeg de vrije offerte-teksten in. De calculatie-teksten (Offerte-instellingen)
   // winnen; is een veld daar leeg, dan valt het terug op het standaardsjabloon.
   {
-    const kies = (calc: string | null | undefined, sjabloon: string | null | undefined) => {
-      const c = (calc ?? '').trim()
-      return c !== '' ? c : (sjabloon ?? '')
-    }
     const teksten: Record<TermType, string> = {
       voorwaarden:   kies(params.voorwaardenTekst,   template?.standaard_voorwaarden),
       uitsluitingen: kies(params.uitsluitingenTekst, template?.standaard_uitsluitingen),
@@ -290,6 +405,13 @@ export async function maakQuoteVanuitProjectMetImport(params: {
       .filter(type => teksten[type] !== '')
       .map(type => ({ quote_id: quote.id, type, inhoud: teksten[type], volgorde: 0 }))
     if (terms.length) await supabase.from('quote_terms').insert(terms)
+  }
+
+  // Bevries de PDF-bijlages van de calculatie op deze offerte. De bestanden worden
+  // echt gekopieerd naar een eigen pad: een offerte moet blijven tonen wat er is
+  // verstuurd, ook als iemand de bijlage bij de calculatie later weggooit.
+  if (params.scenarioId) {
+    await bevriesBijlagenOpQuote(params.projectId, params.scenarioId, quote.id)
   }
 
   // Importeer calculatieregels direct (geen AutoImporter nodig)
@@ -480,6 +602,10 @@ export async function dupliceerQuoteAlsNieuweVersie(quoteId: string): Promise<{ 
     return { ...trest, quote_id: nieuw.id }
   })
   if (nieuweTerms.length) await supabase.from('quote_terms').insert(nieuweTerms)
+
+  // Bijlages meenemen naar de nieuwe versie. Elke versie krijgt eigen bestanden, zodat
+  // het weggooien van een bijlage bij de ene versie de andere niet uitholt.
+  await kopieerQuoteBijlagen(quoteId, nieuw.id)
 
   await herbereken(nieuw.id)
   revalidatePath(PAD)

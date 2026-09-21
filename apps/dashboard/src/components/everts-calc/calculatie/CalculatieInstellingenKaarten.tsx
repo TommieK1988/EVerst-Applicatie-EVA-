@@ -13,6 +13,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useDialogen } from '@/components/ui/dialogen'
+import OfferteBijlagenKaart from './OfferteBijlagenKaart'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
   // Standaard offerte-sjabloon (quote_templates) — bron voor "Laden uit standaardsjabloon".
   const [standaardSjabloon, setStandaardSjabloon]   = useState<{
+    standaard_inleiding: string | null
     standaard_voorwaarden: string | null
     standaard_uitsluitingen: string | null
     standaard_opmerkingen: string | null
@@ -63,7 +65,7 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
     supabase.from('algemene_voorwaarden').select('*').order('naam')
       .then(({ data }: { data: AlgemeneVoorwaarden[] | null }) => setAlgVoorwaarden(data ?? []))
     supabase.from('quote_templates')
-      .select('standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
+      .select('standaard_inleiding, standaard_voorwaarden, standaard_uitsluitingen, standaard_opmerkingen')
       .eq('is_standaard', true).maybeSingle()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then(({ data }: { data: any }) => setStandaardSjabloon(data ?? null))
@@ -124,17 +126,19 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
     if (!standaardSjabloon) return
     if (!await bevestig({
       titel: 'Huidige teksten overschrijven met het standaardsjabloon?',
-      omschrijving: 'Voorwaarden, uitsluitingen en opmerkingen worden vervangen.',
+      omschrijving: 'Inleiding, voorwaarden, uitsluitingen en opmerkingen worden vervangen.',
       bevestigLabel: 'Overschrijven',
     })) return
     wijzig({
+      inleiding_tekst:     standaardSjabloon.standaard_inleiding ?? '',
       voorwaarden_tekst:   standaardSjabloon.standaard_voorwaarden ?? '',
       uitsluitingen_tekst: standaardSjabloon.standaard_uitsluitingen ?? '',
       opmerkingen_tekst:   standaardSjabloon.standaard_opmerkingen ?? '',
     }, true)
   }
 
-  const TEKSTVELDEN: { key: 'voorwaarden_tekst' | 'uitsluitingen_tekst' | 'opmerkingen_tekst'; label: string; placeholder: string }[] = [
+  const TEKSTVELDEN: { key: 'inleiding_tekst' | 'voorwaarden_tekst' | 'uitsluitingen_tekst' | 'opmerkingen_tekst'; label: string; placeholder: string }[] = [
+    { key: 'inleiding_tekst',     label: 'Inleidende tekst', placeholder: 'Inleiding bovenaan de offerte…' },
     { key: 'voorwaarden_tekst',   label: 'Voorwaarden',   placeholder: 'Voorwaarden voor deze offerte…' },
     { key: 'uitsluitingen_tekst', label: 'Uitsluitingen', placeholder: 'Wat is niet inbegrepen…' },
     { key: 'opmerkingen_tekst',   label: 'Opmerkingen',   placeholder: 'Aanvullende opmerkingen…' },
@@ -193,7 +197,7 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
       {/* ─── Vrije offerte-teksten (per calculatie) ──────────────────────────── */}
       <Card>
         <CardHeader>
-          <span>Voorwaarden &amp; opmerkingen</span>
+          <span>Offerteteksten</span>
           {standaardSjabloon && (
             <Button variant="secondary" size="sm" onClick={laadUitSjabloon}>
               Laden uit standaardsjabloon
@@ -201,7 +205,7 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
           )}
         </CardHeader>
         <CardBody>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {TEKSTVELDEN.map(veld => (
               <div key={veld.key}>
                 <label className="text-xs font-medium text-slate-500 block mb-1.5">{veld.label}</label>
@@ -216,10 +220,20 @@ export default function CalculatieInstellingenKaarten({ projectId, scenarioId, v
             ))}
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            Deze teksten worden op de offerte overgenomen. Laat je een veld leeg, dan gebruikt de offerte het standaardsjabloon.
+            Deze teksten worden op de offerte overgenomen. Laat je een veld leeg, dan gebruikt de offerte
+            het standaardsjabloon. De inleidende tekst verschijnt waar in de offerte-layout de variabele
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{offerte.inleiding}'}</code>
+            staat.
           </p>
         </CardBody>
       </Card>
+
+      {/* ─── PDF-bijlages (eigen tabel, niet de scenario-snapshot) ───────────── */}
+      <OfferteBijlagenKaart
+        projectId={projectId}
+        scenarioId={scenario.id}
+        readOnly={!!scenario.bevroren_op}
+      />
 
       {vereist && (
         <div className="flex justify-end">
