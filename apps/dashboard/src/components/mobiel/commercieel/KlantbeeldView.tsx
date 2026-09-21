@@ -5,7 +5,7 @@
  * nodig hebt.
  *
  * Van boven naar beneden: hoe bereik ik ze, wat zijn ze ons waard, waar moet ik op letten, en
- * dan pas de lijsten. Alle blokken starten dicht: je ziet in één scherm wát er is — negen
+ * dan pas de lijsten. Alle blokken starten dicht: je ziet in één scherm wát er is — tien
  * koppen met een aantal — en klapt open waar het gesprek heen gaat. Bij een klant met honderd
  * dossiers is dat het verschil tussen een overzicht en een scrollmarathon.
  *
@@ -106,12 +106,24 @@ export default function KlantbeeldView({
           {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
         </KlapBlok>
 
+        {/* Eerder één blok "Lopend werk". Bij een vastgoedbeheerder zijn dat er al gauw
+            veertig, en dan staat een renovatie van een ton tussen de lekkagemeldingen. Twee
+            blokken, omdat het twee gesprekken zijn — en omdat de servicedeskbonnen bijna altijd
+            de lange lijst vormen die het andere blok onleesbaar maakte. */}
         <KlapBlok
-          titel="Lopend werk"
-          aantal={beeld.lopendWerk.length}
-          leegTekst="Er loopt op dit moment geen werk."
+          titel="Opdrachten"
+          aantal={beeld.opdrachten.length}
+          leegTekst="Er loopt op dit moment geen opdracht."
         >
-          {beeld.lopendWerk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+          {beeld.opdrachten.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+        </KlapBlok>
+
+        <KlapBlok
+          titel="Servicedesk"
+          aantal={beeld.servicedesk.length}
+          leegTekst="Er staat geen servicedeskwerk open."
+        >
+          {beeld.servicedesk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
         </KlapBlok>
 
         {/* Zonder het recht `financieel` verschijnt dit blok niet — geen lege kaart die

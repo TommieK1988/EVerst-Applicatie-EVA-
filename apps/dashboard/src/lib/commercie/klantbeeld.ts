@@ -36,7 +36,8 @@ import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
 import { bewakingsStatus } from './types'
 import { berekenScore } from './klantbeeld-score'
 import {
-  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isNietDoorgegaan, jaarVoorKlantbeeld,
+  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isNietDoorgegaan, isWerkGereed,
+  jaarVoorKlantbeeld,
   type Klantbeeld, type KlantContactpersoon, type KlantFactuur, type KlantObject,
   type KlantOfferte, type KlantSignalen,
 } from './klantbeeld-types'
@@ -223,14 +224,12 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
 
   const supabase = createAdminClient()
 
-  const [relatieRes, dossierData, contactRes, facturen] = await Promise.all([
+  const [relatieRes, dossierData, contactRes] = await Promise.all([
     supabase.from('relaties')
       .select('id, naam, adres_straat, adres_postcode, adres_plaats, telefoon, email')
       .eq('id', relatieId).maybeSingle(),
     getKlantDossiers(relatieId),
     getContactpersonenVoorOrganisatie(relatieId),
-    // Geeft zelf een lege lijst terug zonder het recht `financieel`.
-    getDebiteurenVoorRelatie(relatieId),
   ])
 
   if (!relatieRes.data) return null
@@ -247,7 +246,12 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
 
   const offertesInDeMaak = lopend.filter(d => d.fase === 'aanvraag')
   const offertesOpen     = lopend.filter(d => d.fase === 'offerte')
-  const lopendWerk       = lopend.filter(d => d.fase === 'opdracht' || d.fase === 'servicedesk')
+  // Opdracht en servicedesk apart: een renovatie van een ton en een lekkagemelding van
+  // tweehonderd euro zijn twee gesprekken, ook al noemt `fase` ze allebei lopend.
+  // `isWerkGereed` haalt de opdrachten op Financieel gereed er alvast uit — die horen bij het
+  // uitgevoerde werk, net als de servicedeskbonnen met diezelfde status.
+  const opdrachten  = lopend.filter(d => d.fase === 'opdracht' && !isWerkGereed(d))
+  const servicedesk = lopend.filter(d => d.fase === 'servicedesk')
 
   const ditJaar = new Date().getFullYear()
   const uitgevoerdVanafJaar = ditJaar - UITGEVOERD_JAREN_TERUG
@@ -257,7 +261,7 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     const jaar = jaarVoorKlantbeeld(d)
     return jaar !== null && jaar >= uitgevoerdVanafJaar
   }
-  const uitgevoerd = lopend.filter(d => d.fase === 'afgesloten' && inVenster(d))
+  const uitgevoerd = lopend.filter(d => (d.fase === 'afgesloten' || isWerkGereed(d)) && inVenster(d))
   const nietDoorgegaan = nietDoor.filter(inVenster)
 
   // Voor de bewaking: welke dossiers zijn commercieel klaar? Zelfde regel als `isAfgerond`
@@ -267,10 +271,15 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     dossiers.map(d => [d.id, d.fase === 'opdracht' || d.fase === 'afgesloten']),
   )
 
-  const [objecten, offerteWijAanZet, offertesOpenVerrijkt] = await Promise.all([
+  // De facturen zaten eerder in de eerste leesronde, maar hebben nu de dossier-ids nodig: een
+  // factuur staat lang niet altijd op naam van de opdrachtgever (zie `getDebiteurenVoorRelatie`).
+  // Ze schuiven mee in deze tweede ronde, dus het kost geen extra wachttijd.
+  const [objecten, offerteWijAanZet, offertesOpenVerrijkt, facturen] = await Promise.all([
     leesObjecten(supabase, dossiers),
     telWijAanZet(supabase, relatieId, dossiers.map(d => d.id), afgerondPerDossier),
     verrijkOffertes(supabase, offertesOpen),
+    // Geeft zelf een lege lijst terug zonder het recht `financieel`.
+    getDebiteurenVoorRelatie(relatieId, dossiers.map(d => d.id)),
   ])
 
   const vandaagMs = Date.parse(`${vandaagNL()}T00:00:00Z`)
@@ -285,6 +294,9 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     .map((f): KlantFactuur => ({
       id: f.id,
       factuurnummer: f.factuurnummer,
+      // Alleen invullen als de factuur écht bij een ander hoort; anders zou elke regel de
+      // naam herhalen die al boven het scherm staat.
+      opNaamVan: f.klant_relatie_id && f.klant_relatie_id !== relatieId ? f.klant_naam : null,
       bedrag: f.bedrag,
       vervaldatum: f.vervaldatum,
       dagenTeLaat: f.dagen_na_vervaldatum,
@@ -330,7 +342,8 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     signalen,
     offertesOpen: offertesOpenVerrijkt,
     offertesInDeMaak,
-    lopendWerk,
+    opdrachten,
+    servicedesk,
     uitgevoerd,
     nietDoorgegaan,
     facturen: klantFacturen,

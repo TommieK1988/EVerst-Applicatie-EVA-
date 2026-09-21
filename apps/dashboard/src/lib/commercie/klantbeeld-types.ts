@@ -85,6 +85,31 @@ export function isNietDoorgegaan(d: {
   return false
 }
 
+/**
+ * Is het werk op dit dossier af — ook al staat het dossier nog niet definitief dicht?
+ *
+ * De opdrachtladder eindigt op twee statussen: **Financieel gereed** (uitgevoerd, gefactureerd,
+ * wachtend op de definitieve afsluiting) en **Financieel afgesloten** (die afsluiting gedaan).
+ * `bepaalFase` telt alleen de tweede als `afgesloten` — terecht, want tot dat moment mag er nog
+ * op geboekt worden en hoort het dossier op het opdrachtenbord te blijven staan.
+ *
+ * Voor de servicedesk ligt dat anders: daar ís `financieel_gereed` het eindpunt, en `bepaalFase`
+ * zet zo'n bon dus wél op `afgesloten`. Gevolg in het klantbeeld: twee dossiers die allebei
+ * "Financieel gereed" op het scherm zetten belandden in verschillende blokken — de servicedesk-
+ * bon bij het uitgevoerde werk, de opdracht bij het lopende werk. Aan de telefoon is dat niet
+ * uit te leggen.
+ *
+ * Deze helper trekt ze gelijk: klaar is klaar. Bewust alleen hier en niet in `bepaalFase` —
+ * daar zou hij de opdrachtenkanban, de werkvoorraad en de actief-tellingen meeverschuiven, en
+ * dat is een andere beslissing dan deze.
+ */
+export function isWerkGereed(d: {
+  hoofdstatus: string
+  opdracht_substatus: string | null
+}): boolean {
+  return d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_gereed'
+}
+
 /** Hele dagen tussen een ISO-datum en vandaag; negatief als de datum in de toekomst ligt. */
 export function dagenSindsDatum(datum: string | null, vandaagMs: number): number | null {
   if (!datum) return null
@@ -128,6 +153,13 @@ export type KlantSignalen = {
 export type KlantFactuur = {
   id: string
   factuurnummer: string | null
+  /**
+   * De partij op wiens naam de factuur staat, maar alleen als dat iemand anders is dan de klant
+   * van wie je het beeld bekijkt — anders `null`. Bij VvE- en vastgoedbeheer is de beheerder de
+   * opdrachtgever en de VvE de geadresseerde; zonder dit veld zou het blok facturen tonen die de
+   * beheerder zelf niet in zijn administratie terugvindt.
+   */
+  opNaamVan: string | null
   bedrag: number | null
   vervaldatum: string | null
   dagenTeLaat: number | null
@@ -186,10 +218,17 @@ export type Klantbeeld = {
   kengetallen: KlantKengetallen
   score: KlantScore
   signalen: KlantSignalen
-  /** De zes dossierlijsten, in de volgorde waarin ze op het scherm staan. */
+  /** De dossierlijsten, in de volgorde waarin ze op het scherm staan. */
   offertesOpen: KlantOfferte[]
   offertesInDeMaak: RelatieDossier[]
-  lopendWerk: RelatieDossier[]
+  /**
+   * Lopend werk, gesplitst. Het stond eerder in één blok "Lopend werk", en bij een beheerder
+   * met 38 lopende dossiers is dat een bak waarin een renovatie van een ton naast een
+   * lekkagemelding van tweehonderd euro staat. Het zijn twee gesprekken, dus twee blokken.
+   */
+  opdrachten: RelatieDossier[]
+  servicedesk: RelatieDossier[]
+  /** Inclusief opdrachten op Financieel gereed — zie `isWerkGereed`. */
   uitgevoerd: RelatieDossier[]
   /**
    * Verloren en vervallen offertes plus afgewezen en vervallen aanvragen, over dezelfde

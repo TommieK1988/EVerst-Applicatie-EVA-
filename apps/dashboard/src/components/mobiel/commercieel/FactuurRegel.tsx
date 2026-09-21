@@ -7,11 +7,14 @@
  * Het verkeerslicht komt uit `lib/debiteuren/actions.ts` (groen = nog niet vervallen,
  * oranje < 30 dagen te laat, rood 30+), dus het klantbeeld en het Debiteuren-scherm kleuren
  * dezelfde factuur nooit verschillend.
+ *
+ * Staat de factuur op naam van een ander dan de klant die je bekijkt, dan zegt de regel dat
+ * erbij — zie `opNaamVan` in `klantbeeld-types.ts`.
  */
 
 import React from 'react'
 import type { KlantFactuur } from '@/lib/commercie/klantbeeld-types'
-import { OPPERVLAK, RAND, TEKST } from './stijl'
+import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
 
 const STOPLICHT_KLEUR: Record<KlantFactuur['stoplicht'], string> = {
   groen:  '#009439',
@@ -49,6 +52,16 @@ export default function FactuurRegel({ factuur }: { factuur: KlantFactuur }) {
         <div style={{ fontSize: 12.5, color: kleur, marginTop: 2, fontWeight: 600 }}>
           {dagenTekst(factuur.dagenTeLaat)}
         </div>
+        {/* Bij VvE- en vastgoedbeheer staat de factuur op de eigenaar terwijl het dossier van
+            de beheerder is. Zonder deze regel zou de beheerder een factuurnummer zien dat hij
+            in zijn eigen administratie niet kan vinden. */}
+        {factuur.opNaamVan && (
+          // Mag afbreken in plaats van afkappen: "St. Bewaarder Woningmaatschap Waddinxveen"
+          // wordt op een telefoon anders "St. Bewaarder Woni…", en dan weet je nog niets.
+          <div style={{ fontSize: 12, color: GRIJS, marginTop: 3, lineHeight: 1.35 }}>
+            op naam van {factuur.opNaamVan}
+          </div>
+        )}
       </div>
       <div style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: TEKST }}>
         {factuur.bedrag != null ? euro(factuur.bedrag) : '—'}

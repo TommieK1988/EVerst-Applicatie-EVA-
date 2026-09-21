@@ -18,6 +18,11 @@ export type DebiteurRij = {
   id: string
   factuurnummer: string | null
   klant_naam: string | null
+  /**
+   * De relatie op wiens naam de factuur staat. Hoeft niet de opdrachtgever van het dossier te
+   * zijn: bij VvE-beheer staat het dossier op de beheerder en de factuur op de VvE.
+   */
+  klant_relatie_id: string | null
   project_titel: string | null
   dossier_id: string | null
   bouw7_project_id: string | null
@@ -81,18 +86,45 @@ const VERPLICHTE_VELDEN_DREMPEL_DAGEN = 60
  * mobiele klantbeeld. Privé en niet geëxporteerd — dit is een `'use server'`-module, en een
  * export die geen action hoort te zijn is er één te veel.
  */
+const DEBITEUR_KOLOMMEN =
+  'id, factuurnummer, klant_naam, klant_relatie_id, project_titel, dossier_id, bouw7_project_id, projectleider_id, bedrag, factuurdatum, vervaldatum, status, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum, opvolgstatus, task_id, interne_notitie'
+
+/**
+ * Hoeveel dossier-ids er per `.in()` mee mogen.
+ *
+ * PostgREST leest een select als GET, dus alle ids belanden in de URL. Bij 500 dossiers
+ * (de grens van `MAX_RIJEN` in `lib/relaties/dossiers.ts`) is dat ~19 kB en loop je tegen de
+ * URL-limiet van de proxy. In blokken van 150 blijft elke aanroep ruim onder de grens.
+ */
+const IDS_PER_QUERY = 150
+
 async function leesDebiteuren(
-  filter: { relatieId?: string; includeBetaald?: boolean } = {},
+  filter: { relatieId?: string; dossierIds?: string[]; includeBetaald?: boolean } = {},
 ): Promise<DebiteurRij[]> {
   const supabase = db()
-  let q = supabase
-    .from('debiteuren')
-    .select('id, factuurnummer, klant_naam, project_titel, dossier_id, bouw7_project_id, projectleider_id, bedrag, factuurdatum, vervaldatum, status, reden_code_id, actie, actiehouder_id, verwachte_betaaldatum, opvolgdatum, opvolgstatus, task_id, interne_notitie')
-  if (!filter.includeBetaald) q = q.eq('status', 'open')
-  // Begrenst de query tot een handvol rijen; de kolom is geïndexeerd en overal gevuld.
-  if (filter.relatieId) q = q.eq('klant_relatie_id', filter.relatieId)
-  const { data: rows } = await q
-  const debiteuren: Record<string, unknown>[] = rows ?? []
+  const basis = () => {
+    const q = supabase.from('debiteuren').select(DEBITEUR_KOLOMMEN)
+    return filter.includeBetaald ? q : q.eq('status', 'open')
+  }
+
+  // Twee ingangen naar dezelfde factuur, want een factuur hoeft niet op naam van de
+  // opdrachtgever te staan: bij VvE-beheer is het dossier van de beheerder en de factuur van
+  // de VvE (zie `getDebiteurenVoorRelatie`). Los bevraagd en daarna ontdubbeld op id —
+  // PostgREST kan `eq` en `in` niet in één filter combineren zonder een `or()`-string waarin
+  // alle ids meegaan, en dan zit je alsnog aan de URL-limiet.
+  const queries: unknown[] = []
+  if (filter.relatieId) queries.push(basis().eq('klant_relatie_id', filter.relatieId))
+  for (let i = 0; i < (filter.dossierIds?.length ?? 0); i += IDS_PER_QUERY) {
+    queries.push(basis().in('dossier_id', filter.dossierIds!.slice(i, i + IDS_PER_QUERY)))
+  }
+  if (queries.length === 0) queries.push(basis())
+
+  const resultaten = await Promise.all(queries as Promise<{ data: Record<string, unknown>[] | null }>[])
+  const perId = new Map<string, Record<string, unknown>>()
+  for (const res of resultaten) {
+    for (const rij of res.data ?? []) perId.set(rij.id as string, rij)
+  }
+  const debiteuren: Record<string, unknown>[] = [...perId.values()]
   if (debiteuren.length === 0) return []
 
   // Lookups: redencode-label, medewerker-naam (projectleider + actiehouder), logboek-aanwezigheid.
@@ -133,6 +165,7 @@ async function leesDebiteuren(
       id: d.id as string,
       factuurnummer: (d.factuurnummer as string | null) ?? null,
       klant_naam: (d.klant_naam as string | null) ?? null,
+      klant_relatie_id: (d.klant_relatie_id as string | null) ?? null,
       project_titel: (d.project_titel as string | null) ?? null,
       dossier_id: (d.dossier_id as string | null) ?? null,
       bouw7_project_id: (d.bouw7_project_id as string | null) ?? null,
@@ -180,8 +213,23 @@ export async function getDebiteuren(opts?: { includeBetaald?: boolean }): Promis
  * Filtert op `klant_relatie_id` en niet op `klant_naam`: namen zijn geen sleutel. Er bestaan
  * verschillende vestigingen met bijna dezelfde naam, en op naam matchen zou facturen aan de
  * verkeerde klant hangen. De kolom is in productie overal gevuld (345 van 345).
+ *
+ * Maar die kolom alléén laat facturen wegvallen. Bij VvE- en vastgoedbeheer is de beheerder de
+ * opdrachtgever van het dossier terwijl de factuur naar de eigenaar gaat — de VvE, de
+ * bewaarstichting, het fonds. Bouw7 zet die factuurpartij als eigen relatie neer, dus
+ * `klant_relatie_id` wijst naar iemand die zelf nul dossiers heeft. Gemeten op productie:
+ * 51 van de 120 openstaande facturen (€782k) staan zo op een andere relatie dan het dossier.
+ * Concreet: bij Schep Vastgoed Managers bleven de vier Peuleyen-facturen onzichtbaar omdat ze
+ * op "St. Bewaarder Woningmaatschap Waddinxveen" staan.
+ *
+ * Daarom een tweede ingang: `dossierIds` — de dossiers waarvan deze relatie de opdrachtgever
+ * is. Wat via die weg binnenkomt houdt zijn eigen `klant_relatie_id`, zodat het scherm kan
+ * tonen dat de factuur op naam van een ander staat.
  */
-export async function getDebiteurenVoorRelatie(relatieId: string): Promise<DebiteurRij[]> {
+export async function getDebiteurenVoorRelatie(
+  relatieId: string,
+  dossierIds: string[] = [],
+): Promise<DebiteurRij[]> {
   try {
     await vereisRecht('financieel', 'lezen')
   } catch (e) {
@@ -191,7 +239,7 @@ export async function getDebiteurenVoorRelatie(relatieId: string): Promise<Debit
     if (e instanceof GeenToegangError) return []
     throw e
   }
-  return leesDebiteuren({ relatieId })
+  return leesDebiteuren({ relatieId, dossierIds })
 }
 
 /** Mag de huidige gebruiker debiteuren-opvolging bewerken/corrigeren? (administratie/beheer). */
