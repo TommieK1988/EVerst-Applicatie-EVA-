@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-21','verbeterd','Planning','Medewerkerplanning: volle dagen zijn ook volle vakjes, en weeknummers zijn klikbaar',
+   'In Maand, Kwartaal en Jaar vulde een volledig ingeplande werkdag maar een stukje van het dagvakje. De lege ruimte ernaast leek vrije tijd, terwijl de man al vol zat. Een volle dag vult nu het hele vakje en een halve dag precies de helft, gemeten op de werkdag uit het rooster. De balk met weeknummers staat voortaan in elke weergave; klik op een weeknummer en je springt naar die week. Er is een nieuwe Dag-weergave met uren, en een vaste vrije dag van iemand die parttime werkt is nu herkenbaar gearceerd in plaats van net zo grijs als het weekend.');
