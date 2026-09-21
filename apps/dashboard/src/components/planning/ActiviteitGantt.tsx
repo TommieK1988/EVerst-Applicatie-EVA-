@@ -4,7 +4,7 @@ import React, { useState, useTransition, useMemo, useRef, useEffect } from 'reac
 import {
   format,
   addMonths, addDays, isToday, isWeekend, parseISO,
-  differenceInDays, startOfDay, getISOWeek,
+  differenceInDays, differenceInCalendarDays, startOfDay, getISOWeek,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -19,6 +19,7 @@ import {
   maakPlanningActiviteit, updatePlanningActiviteit, verwijderPlanningActiviteit,
   maakPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
   maakPlanningFase, updatePlanningFase, verschuifPlanningFase, verwijderPlanningFase,
+  kopieerPlanningFase,
   maakAfhankelijkheid, verwijderAfhankelijkheid,
 } from '@/app/(platform)/planning/actions'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
@@ -1096,14 +1097,127 @@ function FaseEditModal({ fase, bewakingscodes, activiteitenInFase, onOpslaan, on
   )
 }
 
+// ─── FaseKopieerModal ─────────────────────────────────────────────────────────
+
+/**
+ * Kopieert een fase met alles wat eronder hangt naar een nieuwe startdatum.
+ *
+ * De verschuiving wordt afgeleid uit de eerste startdatum van de fase: elke activiteit en elk
+ * planitem schuift hetzelfde aantal dagen op, zodat de onderlinge verhoudingen — een week
+ * ertussen blijft een week — overeind blijven. Staan er nog geen datums in de fase, dan valt
+ * er niets te verschuiven en komt de kopie er net zo leeg bij te staan.
+ */
+function FaseKopieerModal({ fase, activiteitenInFase, aantalItems, faseStart, faseEind, onKopieer, onClose }: {
+  fase: PlanningFase
+  activiteitenInFase: PlanningActiviteit[]
+  aantalItems: number
+  faseStart: string | null
+  faseEind: string | null
+  onKopieer: (v: { naam: string; verschuifDagen: number; metPlanning: boolean }) => Promise<void>
+  onClose: () => void
+}) {
+  const [naam, setNaam] = useState(`${fase.naam} (kopie)`)
+  // Standaard pal achter het origineel: de dag na de laatste deadline van de fase.
+  const [nieuweStart, setNieuweStart] = useState(() =>
+    faseEind ? format(addDays(parseISO(faseEind), 1), 'yyyy-MM-dd') : '')
+  const [metPlanning, setMetPlanning] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const heeftDatums = !!faseStart
+  const verschuifDagen = heeftDatums && nieuweStart
+    ? differenceInCalendarDays(parseISO(nieuweStart), parseISO(faseStart!))
+    : 0
+
+  const aantalActiviteiten = activiteitenInFase.length
+  const uitBouw7 = activiteitenInFase.filter(a => a.bron === 'bouw7').length
+
+  async function kopieer() {
+    if (!naam.trim() || busy) return
+    setBusy(true)
+    await onKopieer({ naam: naam.trim(), verschuifDagen, metPlanning })
+    setBusy(false)
+  }
+
+  return (
+    <div style={S.backdrop}>
+      <div className="eva-card" style={{ padding: '24px 28px', width: 480, maxWidth: '95vw' }}>
+        <h3 style={S.dlgTitle}>Fase kopiëren</h3>
+        <p style={S.dlgSub}>
+          {aantalActiviteiten === 0
+            ? 'Deze fase is nog leeg; je kopieert alleen de fase zelf.'
+            : `${aantalActiviteiten} activiteit${aantalActiviteiten === 1 ? '' : 'en'}`
+              + (aantalItems > 0 ? ` en ${aantalItems} planitem${aantalItems === 1 ? '' : 's'}` : '')
+              + ' gaan mee, met dezelfde bewakingscode.'}
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={S.lbl}>Naam van de kopie</label>
+            <input className="eva-input" value={naam} autoFocus onChange={e => setNaam(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') kopieer() }} />
+          </div>
+
+          {heeftDatums ? (
+            <div>
+              <label style={S.lbl}>Startdatum van de kopie</label>
+              <input className="eva-input" type="date" value={nieuweStart}
+                onChange={e => setNieuweStart(e.target.value)} />
+              <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+                {!nieuweStart
+                  ? `De fase begint nu op ${format(parseISO(faseStart!), 'd MMM yyyy', { locale: nl })}.`
+                  : verschuifDagen === 0
+                    ? 'De kopie komt op precies dezelfde dagen te staan als het origineel.'
+                    : `Alles schuift ${Math.abs(verschuifDagen)} dag${Math.abs(verschuifDagen) === 1 ? '' : 'en'} `
+                      + `naar ${verschuifDagen > 0 ? 'later' : 'eerder'}.`}
+              </p>
+            </div>
+          ) : (
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-muted)' }}>
+              De activiteiten in deze fase hebben nog geen datums, dus er valt niets te verschuiven.
+            </p>
+          )}
+
+          {aantalItems > 0 && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--fg-soft)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={metPlanning} onChange={e => setMetPlanning(e.target.checked)}
+                style={{ marginTop: 2 }} />
+              <span>
+                Ingeplande medewerkers meekopiëren
+                <span style={{ display: 'block', color: 'var(--fg-muted)', fontSize: 11 }}>
+                  Uit staat betekent: alleen de activiteiten, nog niemand erop ingepland.
+                </span>
+              </span>
+            </label>
+          )}
+
+          {uitBouw7 > 0 && (
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-muted)' }}>
+              {uitBouw7} activiteit{uitBouw7 === 1 ? '' : 'en'} komt uit Bouw7. De kopie is EVA-werk en
+              volgt Bouw7 dus niet meer; de planning wordt wel naar Bouw7 geschreven.
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button className="eva-btn-ghost" onClick={onClose}>Annuleren</button>
+          <button className="eva-btn-primary" onClick={kopieer} disabled={busy || !naam.trim()}>
+            {busy ? 'Kopiëren…' : 'Kopiëren'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── FaseRij ──────────────────────────────────────────────────────────────────
 
-function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onVerwijder, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
+function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingeklapt, onToggleInklap, onEdit, onNieuweActiviteit, onKopieer, onVerwijder, onShift, dragHandleDown, dragHandleMove, dragHandleUp, isDragging, isDropIndicatorAbove }: {
   fase: PlanningFase; totalW: number
   vs: Date; ppd: number; totalDays: number
   faseStart: string | null; faseEind: string | null
   ingeklapt: boolean; onToggleInklap: () => void
   onEdit: () => void; onNieuweActiviteit: () => void
+  onKopieer: () => void
   onVerwijder: () => void
   onShift: (delta: number) => void
   dragHandleDown: (ev: React.PointerEvent) => void
@@ -1164,6 +1278,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
         )}
         <button title="Fase bewerken (naam + bewakingscode)" onClick={onEdit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>✎</button>
         <button title="Activiteit toevoegen" onClick={onNieuweActiviteit} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 14, color: 'var(--accent)' }}>+</button>
+        <button title="Fase kopiëren (met activiteiten en planning)" onClick={onKopieer} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>⧉</button>
         <button title="Fase verwijderen" onClick={onVerwijder} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>🗑</button>
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: totalW, height: FASE_HOOGTE, opacity: 0.85, background: 'repeating-linear-gradient(90deg, transparent 0px, transparent calc(100% - 1px), var(--border) 100%)' }}>
@@ -1540,6 +1655,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const [nwFaseCode,    setNwFaseCode]    = useState<PlanningBewakingscode | null>(null)
   const [savingF,       setSavingF]       = useState(false)
   const [editFase,      setEditFase]      = useState<PlanningFase | null>(null)
+  const [kopieerFase,   setKopieerFase]   = useState<PlanningFase | null>(null)
 
   // Een code is verplicht zodra dit dossier er kent; kent het er geen, dan valt er niets te kiezen.
   const kiesbareCodes = useMemo(() => bruikbareCodes(bewakingscodes), [bewakingscodes])
@@ -1824,6 +1940,41 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
     const result = await verschuifPlanningFase(faseId, deltaDagen)
     if (!result.ok) toast.error(result.error)
     else startT(() => router.refresh())
+  }
+
+  /**
+   * Kopieert een fase met alles eronder. De server bouwt de hele kopie in één keer op — te
+   * veel losse rijen om lokaal bij te houden — dus we halen het resultaat op met een refresh
+   * in plaats van de state hier bij te werken.
+   */
+  async function handleKopieerFase(
+    fase: PlanningFase,
+    v: { naam: string; verschuifDagen: number; metPlanning: boolean },
+  ) {
+    const opties = { naam: v.naam, verschuif_dagen: v.verschuifDagen, met_planning: v.metPlanning }
+    let result = await kopieerPlanningFase(fase.id, opties)
+
+    // Het budget van een uursoort raakt bij een kopie al snel vol — dat is te verwachten en
+    // mag de planner niet klemzetten, dus vragen we het na in plaats van te weigeren.
+    if (!result.ok && result.overschrijding) {
+      const toch = await bevestig({
+        titel: 'Budget wordt overschreden',
+        omschrijving: `${result.error}. De kopie telt bovenop wat er al gepland staat. Toch kopiëren?`,
+        bevestigLabel: 'Toch kopiëren',
+      })
+      if (!toch) return
+      result = await kopieerPlanningFase(fase.id, { ...opties, overrule: true })
+    }
+
+    if (!result.ok) { toast.error(result.error); return }
+
+    setKopieerFase(null)
+    const delen = [
+      `${result.activiteiten} activiteit${result.activiteiten === 1 ? '' : 'en'}`,
+      result.items > 0 ? `${result.items} planitem${result.items === 1 ? '' : 's'}` : null,
+    ].filter(Boolean).join(', ')
+    toast.success(`Fase gekopieerd${delen ? ` — ${delen}` : ''}`)
+    startT(() => router.refresh())
   }
 
   async function handleVerwijderActiviteit(activiteit: PlanningActiviteit) {
@@ -2117,6 +2268,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                     faseEind={faseBereik[row.fase.id]?.eind ?? null}
                     onEdit={() => setEditFase(row.fase)}
                     onNieuweActiviteit={() => { setNieuweFId(row.fase.id); setNieuweStart(''); setToonNieuw(true) }}
+                    onKopieer={() => setKopieerFase(row.fase)}
                     onVerwijder={() => handleVerwijderFase(row.fase)}
                     onShift={(d) => handleFaseShift(row.fase.id, d)}
                     ingeklapt={ingeklapteFasen.has(row.fase.id)}
@@ -2229,6 +2381,20 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
           activiteitenInFase={activiteiten.filter(a => a.fase_id === editFase.id)}
           onOpslaan={v => handleFaseOpslaan(editFase, v)}
           onClose={() => setEditFase(null)}
+        />
+      )}
+
+      {kopieerFase && (
+        <FaseKopieerModal
+          fase={kopieerFase}
+          activiteitenInFase={activiteiten.filter(a => a.fase_id === kopieerFase.id)}
+          aantalItems={activiteiten
+            .filter(a => a.fase_id === kopieerFase.id)
+            .reduce((n, a) => n + (itemsPerActiviteit[a.id]?.length ?? 0), 0)}
+          faseStart={faseBereik[kopieerFase.id]?.start ?? null}
+          faseEind={faseBereik[kopieerFase.id]?.eind ?? null}
+          onKopieer={v => handleKopieerFase(kopieerFase, v)}
+          onClose={() => setKopieerFase(null)}
         />
       )}
 

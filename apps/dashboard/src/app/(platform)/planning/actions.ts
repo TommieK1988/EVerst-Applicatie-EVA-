@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type {
   PlanningActiviteitStatus,
@@ -10,7 +11,7 @@ import type {
   PlanningFase, PlanningAfhankelijkheid, AfhankelijkheidsType,
 } from '@everts/database/platform-types'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
-import { vereisSessie } from '@/lib/auth/rechten'
+import { vereisRecht, vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 
@@ -898,6 +899,36 @@ export async function updatePlanningFase(
   return { ok: true, activiteiten_bijgewerkt: bijgewerkt }
 }
 
+/** Minuten-offset van Europe/Amsterdam op dit moment (60 in de winter, 120 in de zomer). */
+function nlOffsetMinuten(d: Date): number {
+  const naam = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Amsterdam', timeZoneName: 'longOffset' })
+    .formatToParts(d)
+    .find(p => p.type === 'timeZoneName')?.value ?? 'GMT+01:00'
+  const m = /GMT([+-])(\d{2}):(\d{2})/.exec(naam)
+  if (!m) return 60
+  return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]))
+}
+
+/** Kale datum (yyyy-mm-dd) een aantal dagen opschuiven. */
+function schuifDatum(datum: string | null, dagen: number): string | null {
+  if (!datum) return null
+  return new Date(new Date(datum).getTime() + dagen * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * Tijdstip een heel aantal dagen opschuiven, mét behoud van de Nederlandse kloktijd.
+ *
+ * Kaal dagen-in-milliseconden optellen verschuift over een zomertijdgrens de kloktijd een uur:
+ * een blok dat om 08:00 begon landde dan op 07:00 (of 09:00). De server draait in UTC, dus dat
+ * uur moet expliciet worden teruggerekend uit het offsetverschil tussen bron en doel.
+ */
+function schuifTijdstip(ts: string, dagen: number): string {
+  const bron = new Date(ts)
+  const ruw  = new Date(bron.getTime() + dagen * 86_400_000)
+  const correctieMs = (nlOffsetMinuten(bron) - nlOffsetMinuten(ruw)) * 60_000
+  return new Date(ruw.getTime() + correctieMs).toISOString()
+}
+
 export async function verschuifPlanningFase(
   fase_id: string,
   delta_dagen: number,
@@ -912,17 +943,12 @@ export async function verschuifPlanningFase(
 
   if (aErr) return { ok: false, error: aErr.message }
 
-  const deltaMs = delta_dagen * 24 * 60 * 60 * 1000
   let aShift = 0, iShift = 0
 
   for (const a of activiteiten ?? []) {
     const patch: { gewenste_start?: string; deadline?: string } = {}
-    if (a.gewenste_start) {
-      patch.gewenste_start = new Date(new Date(a.gewenste_start).getTime() + deltaMs).toISOString().slice(0, 10)
-    }
-    if (a.deadline) {
-      patch.deadline = new Date(new Date(a.deadline).getTime() + deltaMs).toISOString().slice(0, 10)
-    }
+    if (a.gewenste_start) patch.gewenste_start = schuifDatum(a.gewenste_start, delta_dagen)!
+    if (a.deadline)       patch.deadline       = schuifDatum(a.deadline,       delta_dagen)!
     if (Object.keys(patch).length === 0) continue
     const { error: uErr } = await supabase.from('planning_activiteiten').update(patch).eq('id', a.id)
     if (uErr) return { ok: false, error: uErr.message }
@@ -934,15 +960,237 @@ export async function verschuifPlanningFase(
       .eq('activiteit_id', a.id)
 
     for (const item of items ?? []) {
-      const ns = new Date(new Date(item.start_dt).getTime() + deltaMs).toISOString()
-      const ne = new Date(new Date(item.eind_dt).getTime()  + deltaMs).toISOString()
-      await supabase.from('planning_items').update({ start_dt: ns, eind_dt: ne }).eq('id', item.id)
+      await supabase.from('planning_items').update({
+        start_dt: schuifTijdstip(item.start_dt, delta_dagen),
+        eind_dt:  schuifTijdstip(item.eind_dt,  delta_dagen),
+      }).eq('id', item.id)
       iShift++
     }
   }
 
   await naPlanningWijziging()
   return { ok: true, activiteiten_verschoven: aShift, items_verschoven: iShift }
+}
+
+/**
+ * Kopieert een hele fase: de fase zelf, haar activiteiten, optioneel de planning van de
+ * medewerkers eronder, en de afhankelijkheden tussen die activiteiten onderling — alles een
+ * gekozen aantal dagen opgeschoven.
+ *
+ * Waarom dit één actie is en geen reeks losse kopieën vanuit de client: de kopie moet als
+ * geheel kloppen. De activiteiten wijzen naar de nieuwe fase, de afhankelijkheden naar de
+ * nieuwe activiteiten, en de budgetcontrole gaat over het totaal in plaats van per planitem.
+ * Per item zou de eerste overschrijding halverwege afbreken en een halve fase achterlaten.
+ *
+ * De kopie is altijd `bron='eva'`, ook als het origineel uit Bouw7 kwam: hij bestaat daar nog
+ * niet en is dus geen afgeleide van een Bouw7-rij. De planitems worden wél naar Bouw7
+ * gespiegeld, net als elk ander in EVA gemaakt planitem.
+ *
+ * Afhankelijkheden naar activiteiten buiten deze fase gaan bewust niet mee: die zouden de
+ * kopie aan de buren van het origineel vastklinken.
+ */
+export async function kopieerPlanningFase(
+  fase_id: string,
+  opties: {
+    naam?: string
+    verschuif_dagen?: number
+    /** Neemt de planitems (welke medewerker wanneer) mee. Standaard aan. */
+    met_planning?: boolean
+    /** Kopieer ook als het budget van een uursoort daarmee wordt overschreden. */
+    overrule?: boolean
+  } = {},
+): Promise<
+  | { ok: true; fase: PlanningFase; activiteiten: number; items: number }
+  | { ok: false; error: string; overschrijding?: true }
+> {
+  // Een kopie legt in een klap een fase, activiteiten en planning aan. Dat is planningswerk,
+  // dus het hangt aan het recht dat daarover gaat; de admin-client hieronder bypast RLS, dus
+  // zonder deze controle zou elke ingelogde gebruiker dit kunnen aanroepen.
+  try {
+    await vereisRecht('planning', 'schrijven')
+  } catch {
+    return { ok: false, error: 'Je hebt geen rechten om de planning te wijzigen.' }
+  }
+
+  const supabase = db()
+  const dagen = Math.trunc(opties.verschuif_dagen ?? 0)
+  const metPlanning = opties.met_planning ?? true
+
+  const { data: fase } = await supabase
+    .from('planning_fasen')
+    .select('*')
+    .eq('id', fase_id)
+    .maybeSingle()
+  if (!fase) return { ok: false, error: 'Fase niet gevonden.' }
+  await assertDossierBewerkbaar(fase.dossier_id)
+
+  // Begrensd door fase_id; een fase houdt hooguit enkele tientallen activiteiten.
+  const { data: bronActiviteiten, error: aErr } = await supabase
+    .from('planning_activiteiten')
+    .select('*')
+    .eq('fase_id', fase_id)
+    .order('volgorde')
+  if (aErr) return { ok: false, error: aErr.message }
+
+  const activiteiten = (bronActiviteiten ?? []) as PlanningActiviteit[]
+  const bronIds = activiteiten.map(a => a.id)
+
+  let bronItems: PlanningItem[] = []
+  if (metPlanning && bronIds.length > 0) {
+    const { data, error } = await supabase
+      .from('planning_items')
+      .select('*')
+      .in('activiteit_id', bronIds)
+    if (error) return { ok: false, error: error.message }
+    bronItems = (data ?? []) as PlanningItem[]
+  }
+
+  // Budget: één controle per uursoort over álle te kopiëren uren samen.
+  if (bronItems.length > 0 && !opties.overrule) {
+    const uursoortVan = new Map(activiteiten.map(a => [a.id, a.uursoort_id]))
+    const urenPerUursoort = new Map<string, number>()
+    for (const item of bronItems) {
+      const uursoort = uursoortVan.get(item.activiteit_id) ?? null
+      if (!uursoort) continue
+      urenPerUursoort.set(uursoort, (urenPerUursoort.get(uursoort) ?? 0) + (item.uren ?? 0))
+    }
+    for (const [uursoort_id, uren] of urenPerUursoort) {
+      const budget = await checkBudget(fase.dossier_id, uursoort_id, uren)
+      if (!budget.ok) return { ok: false, error: budget.error, overschrijding: true }
+    }
+  }
+
+  // De kopie komt direct onder het origineel; alles daaronder schuift één plek op. De
+  // volgorde is 1..n en aaneengesloten (zie het herordenen in de Gantt), dus dat gat moet
+  // eerst gemaakt worden.
+  const { data: laterFasen } = await supabase
+    .from('planning_fasen')
+    .select('id, volgorde')
+    .eq('dossier_id', fase.dossier_id)
+    .gt('volgorde', fase.volgorde)
+    .order('volgorde', { ascending: false })
+  for (const f of (laterFasen ?? []) as { id: string; volgorde: number }[]) {
+    await supabase.from('planning_fasen').update({ volgorde: f.volgorde + 1 }).eq('id', f.id)
+  }
+
+  const { data: nieuweFase, error: fErr } = await supabase
+    .from('planning_fasen')
+    .insert({
+      dossier_id:             fase.dossier_id,
+      naam:                   (opties.naam?.trim() || `${fase.naam} (kopie)`).slice(0, 200),
+      volgorde:               fase.volgorde + 1,
+      bewakingscode:          fase.bewakingscode,
+      bouw7_security_code_id: fase.bouw7_security_code_id,
+      bron:                   'eva',
+    })
+    .select('*')
+    .single()
+  if (fErr || !nieuweFase) return { ok: false, error: fErr?.message ?? 'Fase kopiëren mislukt.' }
+
+  // Ids vooraf zelf uitdelen: de afhankelijkheden en planitems moeten straks naar de júiste
+  // kopie wijzen, en dan is meegaan op de volgorde waarin de insert zijn rijen teruggeeft te
+  // wankel om op te bouwen.
+  const nieuweIdVan = new Map<string, string>(activiteiten.map(a => [a.id, randomUUID()]))
+
+  /**
+   * Haalt een half aangelegde kopie weer weg. De activiteiten gaan eerst: `fase_id` is geen
+   * cascade, dus alleen de fase verwijderen laat ze als losse activiteiten op het dossier
+   * achter — precies de rommel die deze kopie niet mag opleveren.
+   */
+  async function draaiKopieTerug(): Promise<void> {
+    const ids = [...nieuweIdVan.values()]
+    if (ids.length > 0) await supabase.from('planning_activiteiten').delete().in('id', ids)
+    await supabase.from('planning_fasen').delete().eq('id', nieuweFase.id)
+  }
+
+  if (activiteiten.length > 0) {
+    const { error } = await supabase.from('planning_activiteiten').insert(
+      activiteiten.map(a => ({
+        id:               nieuweIdVan.get(a.id),
+        dossier_id:       a.dossier_id,
+        uursoort_id:      a.uursoort_id,
+        onderaannemer_id: a.onderaannemer_id,
+        fase_id:          nieuweFase.id,
+        titel:            a.titel,
+        omschrijving:     a.omschrijving,
+        geschatte_uren:   a.geschatte_uren,
+        benodigde_skills: a.benodigde_skills ?? [],
+        gewenste_start:   schuifDatum(a.gewenste_start, dagen),
+        deadline:         schuifDatum(a.deadline, dagen),
+        locatie_adres:    a.locatie_adres,
+        // De kopie begint opnieuw: je kopieert een afgeronde fase juist om het werk nog een
+        // keer te doen, dus 'opgeleverd' of 'in uitvoering' gaat niet mee.
+        volgorde:         a.volgorde,
+        status:           'backlog',
+        // Geen eigen code? Dan die van de fase, net als bij een nieuwe activiteit.
+        bewakingscode:          a.bewakingscode ?? fase.bewakingscode,
+        bouw7_security_code_id: a.bewakingscode ? a.bouw7_security_code_id : fase.bouw7_security_code_id,
+        bron:                   'eva',
+      })),
+    )
+    if (error) {
+      await draaiKopieTerug()
+      return { ok: false, error: error.message }
+    }
+  }
+
+  let nieuweItemIds: string[] = []
+  if (bronItems.length > 0) {
+    const { data, error } = await supabase
+      .from('planning_items')
+      .insert(bronItems.map(item => ({
+        activiteit_id:  nieuweIdVan.get(item.activiteit_id),
+        medewerker_id:  item.medewerker_id,
+        start_dt:       schuifTijdstip(item.start_dt, dagen),
+        eind_dt:        schuifTijdstip(item.eind_dt, dagen),
+        uren:           item.uren,
+        overrule:       item.overrule || !!opties.overrule,
+        overrule_reden: opties.overrule ? `Fase "${fase.naam}" gekopieerd boven budget` : item.overrule_reden,
+        bron:           'eva',
+      })))
+      .select('id')
+    if (error) {
+      await draaiKopieTerug()
+      return { ok: false, error: error.message }
+    }
+    nieuweItemIds = ((data ?? []) as { id: string }[]).map(r => r.id)
+  }
+
+  // Afhankelijkheden binnen de fase overnemen.
+  if (bronIds.length > 0) {
+    const { data: afhankelijkheden } = await supabase
+      .from('planning_activiteit_afhankelijkheden')
+      .select('van_activiteit_id, naar_activiteit_id, type, vertraging_dagen')
+      .in('van_activiteit_id', bronIds)
+    const intern = ((afhankelijkheden ?? []) as PlanningAfhankelijkheid[])
+      .filter(d => nieuweIdVan.has(d.naar_activiteit_id))
+    if (intern.length > 0) {
+      // Niet-blokkerend: de kopie staat er al. Een ontbrekende pijl tekent de planner zo
+      // opnieuw; hem hiervoor de hele fase laten weggooien is erger dan het gemis.
+      const { error } = await supabase.from('planning_activiteit_afhankelijkheden').insert(
+        intern.map(d => ({
+          van_activiteit_id:  nieuweIdVan.get(d.van_activiteit_id),
+          naar_activiteit_id: nieuweIdVan.get(d.naar_activiteit_id),
+          type:               d.type,
+          vertraging_dagen:   d.vertraging_dagen,
+        })),
+      )
+      if (error) console.error('[planning] afhankelijkheden van fasekopie niet overgenomen:', error.message)
+    }
+  }
+
+  // Eén voor één naar Bouw7; elke write doet daar meerdere aanroepen en is fail-soft.
+  for (const id of nieuweItemIds) await spiegelNaarBouw7(id)
+
+  await naPlanningWijziging()
+  revalidatePath(`/aanvragen/${fase.dossier_id}/planning`)
+  revalidatePath(`/opdrachten/${fase.dossier_id}/planning`)
+  return {
+    ok: true,
+    fase: nieuweFase as PlanningFase,
+    activiteiten: activiteiten.length,
+    items: nieuweItemIds.length,
+  }
 }
 
 /**
