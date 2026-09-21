@@ -593,7 +593,7 @@ export type Bouw7Project = {
   reference?: string
   /**
    * Maatwerkvelden (custom attributes) — komen plat mee op /list/projects met `ca`-prefix.
-   * Andere aanwezige velden: caVveCode, caVerfleverancier, caWillenWeDezeMaken, caFactuuradres.
+   * Andere aanwezige velden: caVveCode, caVerfleverancier, caWillenWeDezeMaken.
    * `caEindverantwoordelijkeOfferte` bevat de naam van de eindverantwoordelijke en wordt in de
    * sync gematcht op een medewerker → dossier-rol Controller. Alleen gevuld in de Offerte-fase.
    */
@@ -611,6 +611,13 @@ export type Bouw7Project = {
    * Zie `lib/dossiers/bouw7-rollen.ts`.
    */
   caCalculator?: string | null
+  /**
+   * Maatwerkveld "Factuuradres" — **vrije tekst** met de naam van het contact dat de factuur
+   * krijgt. Bij een beheerder is dat zelden de opdrachtgever zelf: Schep geeft de opdracht, de
+   * onderliggende VvE betaalt. De sync matcht deze naam op een relatie en hangt het adres onder
+   * de opdrachtgever; zie `lib/bouw7/factuuradres-sync.ts`.
+   */
+  caFactuuradres?: string | null
 }
 
 /**

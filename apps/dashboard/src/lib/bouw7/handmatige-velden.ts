@@ -39,6 +39,7 @@ export const BOUW7_DOSSIER_VELDEN = [
   'verwacht_startdatum',
   'verwacht_einddatum',
   'object_id',
+  'factuuradres_id',
   'servicedesk_substatus',
   // Tweerichting: alleen gemarkeerd zolang een write-back naar Bouw7 openstaat.
   'project_manager_id',

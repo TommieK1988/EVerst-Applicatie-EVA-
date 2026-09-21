@@ -15,6 +15,7 @@ import type { KanaalRechten } from '@everts/database/platform-types'
 import { leesRechtenDocument, mergeKanaal, leegKanaal, niveauHaalt } from '@everts/database/rechten'
 import { BOUW7_RELATIE_VELDEN, BOUW7_CONTACTPERSOON_VELDEN } from '@/lib/relaties/sync-velden'
 import { alleSpiegelsAlsMap } from '@/lib/bouw7/relatie-spiegel'
+import { bepaalFactuuradressen } from './factuuradres-sync'
 import {
   metBehoudVanHandmatigeVelden, BOUW7_DOSSIER_VELDEN, BOUW7_MEDEWERKER_VELDEN, BOUW7_BANK_VELDEN,
 } from './handmatige-velden'
@@ -1548,6 +1549,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         // Gedeelde substatus met de tweede Bouw7-app: moet in de fingerprint, anders slaat de
         // incrementele sync een dossier over waarvan alléén dit veld is gewijzigd.
         casub:     p.caOfferteSubstatus ?? null,
+        // Maatwerkveld "Factuuradres": moet in de fingerprint, anders slaat de incrementele sync
+        // een dossier over waarvan alléén de factuurpartij in Bouw7 is gewijzigd.
+        cafact:    p.caFactuuradres ?? null,
         q:       q ? { id: q.id, date: q.quotationDate ?? null, st: q.quotationStatus?.name ?? null, sub: q.subtotal ?? null, tot: q.total ?? null, emp: q.employee?.id ?? null } : null,
         vst:       verstuurdAggMap.get(key) ? { n: verstuurdAggMap.get(key)!.aantal, s: Math.round(verstuurdAggMap.get(key)!.somExcl * 100) } : null,
       })
@@ -1819,6 +1823,35 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         [String(o.bouw7_property_asset_id), o.id]),
     )
 
+    // ── Factuuradressen ───────────────────────────────────────────────
+    // Bouw7-maatwerkveld "Factuuradres" (vrije tekst met een contactnaam) → een adresrij onder de
+    // opdrachtgever. Móét vóór de upsert, want `dossiers.factuuradres_id` verwijst ernaar.
+    // Zie lib/bouw7/factuuradres-sync.ts voor de matchregel en waarom die zo streng is.
+    const factuuradresMap = new Map<string, string>()
+    try {
+      const fa = await bepaalFactuuradressen(
+        supabase,
+        changedProjects.map(p => ({
+          bouw7ProjectId: String(p.id),
+          klantId:        p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
+          caFactuuradres: p.caFactuuradres,
+        })),
+      )
+      for (const [k, v] of fa.perProject) factuuradresMap.set(k, v)
+      if (fa.aangemaakt > 0 || fa.nietGematcht.length > 0) {
+        await supabase.from('sync_log').insert({
+          integratie: 'bouw7', entiteit: 'factuuradressen', richting: 'in',
+          aantal_nieuw: fa.aangemaakt, aantal_bijgewerkt: fa.perProject.size, aantal_fout: 0, duur_ms: 0,
+          fout_melding: fa.nietGematcht.length
+            ? `Niet gematcht op een relatie: ${fa.nietGematcht.slice(0, 20).join('; ')}`
+            : null,
+        })
+      }
+    } catch (e) {
+      // Een dossier houdt dan gewoon het factuuradres dat het had; de projectsync loopt door.
+      console.warn(`[sync] factuuradressen overgeslagen: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
     const rows: Record<string, unknown>[] = []
     // Servicedesk-substatuswijzigingen voor de doorlooptijd-historie (na de upsert weggeschreven).
     const substatusWijzigingen: { bouw7_id: string; substatus: string }[] = []
@@ -1905,6 +1938,10 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         dossiernummer:            p.fullProjectNumber ?? p.projectCode ?? p.projectNumber ?? null,
         titel:                    p.name,
         klant_id:                 p.contact?.id ? (relatieMap.get(String(p.contact.id)) ?? null) : null,
+        // Factuuradres uit het Bouw7-maatwerkveld. Zelfde regel als object en rollen: Bouw7 wint
+        // zodra het er een noemt, noemt het er geen dan blijft de EVA-waarde staan. Een leeg
+        // maatwerkveld mag een in EVA gekozen factuuradres niet wissen.
+        factuuradres_id:          factuuradresMap.get(bouw7IdStr) ?? existing?.factuuradres_id ?? null,
         // Rollen: Bouw7 wint zodra het project er een noemt; noemt het er geen, dan blijft de
         // in EVA gezette rol staan (zelfde regel als calculator/controller hieronder). Een
         // Bouw7-project zonder projectleider mag een EVA-toewijzing niet wissen.
