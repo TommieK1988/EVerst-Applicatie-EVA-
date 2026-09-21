@@ -29,8 +29,24 @@ const LEEG: FormState = {
   email: '', telefoon: '', functie: '',
 }
 
-export default function NieuweContactpersoonModal({ onSluit }: { onSluit: () => void }) {
-  const [form, setForm] = useState<FormState>(LEEG)
+/**
+ * Nieuwe contactpersoon. Met `organisatieId` wordt de persoon meteen aan die relatie gehangen —
+ * dat is de route vanaf de relatiekaart. Zonder, vanaf het relatieoverzicht, ontstaat een losse
+ * persoon en springt het scherm naar zijn kaart.
+ */
+export default function NieuweContactpersoonModal({
+  onSluit,
+  organisatieId = null,
+  beginFunctie = '',
+  onAangemaakt,
+}: {
+  onSluit: () => void
+  organisatieId?: string | null
+  /** Al ingevulde functie uit het koppelscherm, zodat die niet verloren gaat. */
+  beginFunctie?: string
+  onAangemaakt?: (id: string) => void
+}) {
+  const [form, setForm] = useState<FormState>({ ...LEEG, functie: beginFunctie })
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -48,10 +64,12 @@ export default function NieuweContactpersoonModal({ onSluit }: { onSluit: () => 
         email: form.email || null,
         telefoon: form.telefoon || null,
         functie: form.functie || null,
+        organisatie_id: organisatieId,
       })
       if (!res.ok) { toast.error(res.error); return }
-      toast.success('Contactpersoon aangemaakt')
-      router.push(`/relaties/contactpersonen/${res.id}`)
+      toast.success(organisatieId ? 'Contactpersoon aangemaakt en gekoppeld' : 'Contactpersoon aangemaakt')
+      if (onAangemaakt) onAangemaakt(res.id)
+      else router.push(`/relaties/contactpersonen/${res.id}`)
       onSluit()
     })
   }

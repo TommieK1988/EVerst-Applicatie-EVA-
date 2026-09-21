@@ -7,6 +7,7 @@ import { BOUW7_CONTACTPERSOON_VELDEN, beschermdeVelden } from './sync-velden'
 import { ontmarkeerHandmatig } from '@/lib/bouw7/handmatige-velden'
 import { schrijfBouw7Contactpersoon, schrijfBouw7ContactpersoonFunctie } from '@/lib/bouw7/contact-write'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
@@ -142,6 +143,67 @@ export async function getAlleContactpersonen(): Promise<(Contactpersoon & { orga
 
   return personen.map((p: Contactpersoon) => ({
     ...p,
+    organisaties: orgMap.get(p.id) ?? [],
+  }))
+}
+
+/**
+ * Zoek contactpersonen op naam of e-mail, voor het koppelscherm op de relatiekaart. Elk woord
+ * uit de zoekterm moet ergens in de naam of het e-mailadres voorkomen, zodat "jan vries" ook
+ * Jan de Vries vindt. Samengevoegde en inactieve personen blijven buiten beeld: dat zijn
+ * doorverwijzingen en opgeruimde rijen, geen mensen om aan een relatie te hangen.
+ */
+export async function zoekContactpersonen(
+  term: string,
+  limiet = 25
+): Promise<{ id: string; naam: string; email: string | null; organisaties: string[] }[]> {
+  await vereisRecht('relaties', 'lezen')
+
+  const woorden = term.trim().split(/\s+/).filter(Boolean)
+  if (woorden.length === 0) return []
+
+  // Bewust zonder any-cast: beide tabellen staan in `database.types.ts`.
+  const supabase = createAdminClient()
+  let query = supabase
+    .from('contactpersonen')
+    .select('id, voornaam, tussenvoegsel, achternaam, email')
+    .is('samengevoegd_in', null)
+    .neq('actief', false)
+    .order('achternaam')
+    .limit(limiet)
+
+  for (const woord of woorden) {
+    // Komma en punt zijn scheidingstekens in een PostgREST-or(); eruit halen voorkomt een
+    // onbegrijpelijke 400 op een zoekterm als "jan@everts.nl, inkoop".
+    const veilig = woord.replace(/[,().*]/g, '')
+    if (!veilig) continue
+    query = query.or(
+      `voornaam.ilike.*${veilig}*,tussenvoegsel.ilike.*${veilig}*,achternaam.ilike.*${veilig}*,email.ilike.*${veilig}*`
+    )
+  }
+
+  const { data } = await query
+  const personen = (data ?? []) as { id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null; email: string | null }[]
+  if (personen.length === 0) return []
+
+  // Waar werkt deze persoon al? Dat onderscheidt twee naamgenoten in de lijst. Begrensd door
+  // de gevonden ids, dus ruim onder de PostgREST-grens.
+  const { data: koppelingen } = await supabase
+    .from('contactpersoon_organisaties')
+    .select('contactpersoon_id, organisatie:relaties(naam)')
+    .in('contactpersoon_id', personen.map(p => p.id))
+
+  const orgMap = new Map<string, string[]>()
+  for (const k of (koppelingen ?? []) as { contactpersoon_id: string; organisatie: { naam: string } | null }[]) {
+    const lijst = orgMap.get(k.contactpersoon_id) ?? []
+    if (k.organisatie?.naam) lijst.push(k.organisatie.naam)
+    orgMap.set(k.contactpersoon_id, lijst)
+  }
+
+  return personen.map(p => ({
+    id: p.id,
+    naam: [p.voornaam, p.tussenvoegsel, p.achternaam].filter(Boolean).join(' '),
+    email: p.email,
     organisaties: orgMap.get(p.id) ?? [],
   }))
 }

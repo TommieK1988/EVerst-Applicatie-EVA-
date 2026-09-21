@@ -42,6 +42,7 @@ import {
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import type { RelatieObject } from '@/lib/objecten/types'
 import OpnamePrijslijstBeheer from '@/components/relaties/OpnamePrijslijstBeheer'
+import KoppelContactpersoonModal from '@/components/relaties/KoppelContactpersoonModal'
 
 /* ─── Shared UI primitives ───────────────────────────────────────────── */
 
@@ -389,6 +390,7 @@ type ContactpersoonLink = ContactpersoonOrganisatie & { contactpersoon: Contactp
 
 function ContactpersonenBlok({ relatieId, initial }: { relatieId: string; initial: ContactpersoonLink[] }) {
   const [links, setLinks] = useState<ContactpersoonLink[]>(initial)
+  const [koppelOpen, setKoppelOpen] = useState(false)
   const [bezig, setBezig] = useState(false)
   const router = useRouter()
   const { bevestig } = useDialogen()
@@ -411,16 +413,22 @@ function ContactpersonenBlok({ relatieId, initial }: { relatieId: string; initia
     <Blok
       titel={`Contactpersonen${links.length > 0 ? ` · ${links.length}` : ''}`}
       actie={
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/relaties/contactpersonen?koppel=${relatieId}`}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-            Toevoegen
-          </Link>
+        <Button variant="ghost" size="sm" onClick={() => setKoppelOpen(true)}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Toevoegen
         </Button>
       }
     >
+      {koppelOpen && (
+        <KoppelContactpersoonModal
+          relatieId={relatieId}
+          alGekoppeld={links.map(l => l.contactpersoon_id)}
+          onSluit={() => setKoppelOpen(false)}
+          onKlaar={() => router.refresh()}
+        />
+      )}
       {links.length === 0 ? (
         <EmptyState size="sm" tone="neutral" title="Geen contactpersonen" description="Koppel een contactpersoon aan deze organisatie." />
       ) : (
