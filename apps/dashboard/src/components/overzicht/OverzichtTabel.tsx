@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useCallback, useRef, useEffect, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
   useReactTable,
@@ -88,6 +87,11 @@ type Props<T extends { id: string }> = {
   kolommen:   KolomDefinitie<T>[]
   layouts:    GebruikerLayout[]
   user_id:    string | null
+  /**
+   * Wat er gebeurt als je op een rij klikt. Zonder dit zijn de rijen niet klikbaar: `scherm` is
+   * een sleutel voor de bewaarde werkstand en geen route, dus daar valt geen adres uit af te
+   * leiden — een tabel die er toch een verzon (`/uren-onkosten/<id>`) leverde een 404 op.
+   */
   onRijKlik?: (item: T) => void
   /** Toon de selectie-checkboxkolom (default true). */
   selecteerbaar?: boolean
@@ -104,7 +108,7 @@ type Props<T extends { id: string }> = {
   beginFilters?: ColumnFiltersState
   /** Compacte rij-dichtheid (minder verticaal padding) — opt-in voor data-dichte schermen. */
   dicht?: boolean
-  /** Toon de per-rij actieknop (⋯) rechts (default true). Rijen blijven klikbaar zonder de knop. */
+  /** Toon de per-rij actieknop (⋯) rechts (default true, en alleen met `onRijKlik`). Rijen blijven klikbaar zonder de knop. */
   toonRijActie?: boolean
   /**
    * Optioneel: rijen bundelen onder in-/uitklapbare groepsregels. Weglaten = platte tabel.
@@ -391,7 +395,6 @@ function MultiSelectFilter({
 export default function OverzichtTabel<T extends { id: string }>({
   scherm, data, kolommen, layouts: initialLayouts, user_id, onRijKlik, selecteerbaar = true, acties, beginSortering, beginFilters, dicht = false, toonRijActie = true, groepering, eenregelig = false, afvinkKolom, onGefilterd, onSelectie, exportExtraRijen,
 }: Props<T>) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   // ── Werkstand: kolommen, sortering, filters en zoekterm overleven het scherm ──
@@ -813,12 +816,18 @@ export default function OverzichtTabel<T extends { id: string }>({
     .map(key => kolommen.find(k => k.key === key))
     .filter(Boolean) as KolomDefinitie<T>[]
 
+  /**
+   * De ⋯-kolom verschijnt alleen als er iets te openen valt. Zonder `onRijKlik` zou de knop
+   * nergens heen gaan, dus dan kost hij alleen ruimte.
+   */
+  const rijActie = toonRijActie && !!onRijKlik
+
   /** Aantal kolommen dat een groeps- of lege-staat-regel moet overspannen. */
   const kolomAantal =
     columnOrder.filter(k => columnVisibility[k] !== false).length
     + (selecteerbaar ? 1 : 0)
     + (afvinkKolom ? 1 : 0)
-    + (toonRijActie ? 1 : 0)
+    + (rijActie ? 1 : 0)
 
   // ── Gefilterde rijen terugmelden ──────────────────────────────────────────
   // De callback in een ref, zodat een aanroeper die hem niet memoïseert geen
@@ -1231,7 +1240,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                     if (columnVisibility[header.id] === false) return null
                     return <col key={header.id} style={{ width: header.getSize() }} />
                   })}
-                  {toonRijActie && <col style={{ width: 44 }} />}
+                  {rijActie && <col style={{ width: 44 }} />}
                 </colgroup>
                 <thead>
                   <tr>
@@ -1277,7 +1286,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                     })}
 
                     {/* Acties kolom */}
-                    {toonRijActie && <th style={{ ...thStyle, width: 44 }} />}
+                    {rijActie && <th style={{ ...thStyle, width: 44 }} />}
                   </tr>
 
                   {/* Filter row */}
@@ -1308,7 +1317,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                           </th>
                         )
                       })}
-                      {toonRijActie && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
+                      {rijActie && <th style={{ ...thStyle, padding: '5px 10px', background: 'var(--bg)' }} />}
                     </tr>
                   )}
                 </thead>
@@ -1356,7 +1365,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                       <tr
                         key={row.id}
                         className="overzicht-rij"
-                        style={{ cursor: 'pointer', background: isSelected ? 'var(--brand-50)' : undefined }}
+                        style={{ cursor: onRijKlik ? 'pointer' : 'default', background: isSelected ? 'var(--brand-50)' : undefined }}
                       >
                         {/* Checkbox cell */}
                         {selecteerbaar && (
@@ -1409,7 +1418,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                           if (columnVisibility[cell.column.id] === false) return null
                           return (
                             <td key={cell.id} style={tdStyle}
-                              onClick={() => onRijKlik ? onRijKlik(row.original) : router.push(`/${scherm}/${row.original.id}`)}
+                              onClick={onRijKlik ? () => onRijKlik(row.original) : undefined}
                             >
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
@@ -1417,10 +1426,10 @@ export default function OverzichtTabel<T extends { id: string }>({
                         })}
 
                         {/* ⋯ actie-knop */}
-                        {toonRijActie && (
+                        {rijActie && onRijKlik && (
                           <td style={{ ...tdStyle, width: 44, padding: '12px 8px' }}>
                             <button
-                              onClick={e => { e.stopPropagation(); onRijKlik ? onRijKlik(row.original) : router.push(`/${scherm}/${row.original.id}`) }}
+                              onClick={e => { e.stopPropagation(); onRijKlik(row.original) }}
                               style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 0, width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', color: 'var(--fg-muted)' }}
                               className="tbl-action-btn"
                             >
