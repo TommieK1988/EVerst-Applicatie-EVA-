@@ -23,7 +23,9 @@ import toast from 'react-hot-toast'
 import { Button, BulletTextarea, useDialogen } from '@/components/ui'
 import { hervatSamenvatting, bewaarSamenvatting } from '@/lib/mailintake/actions'
 
-const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
+import { klein, veldStijl } from './velden'
+
+
 
 type Deel = 'scope' | 'buiten_scope' | 'aandachtspunten'
 
@@ -60,10 +62,13 @@ function Vak({
         onChange={opWijzig}
         onBlur={bewaren}
         minRows={minRows}
-        maxRows={14}
+        maxRows={16}
         toonKnop={bewerkbaar}
         disabled={!bewerkbaar}
         placeholder={uitleg}
+        // Dezelfde omlijsting als de andere velden op dit scherm. Dat scherm werkt
+        // met inline stijlen en niet met Tailwind-klassen, dus die gaan hier mee.
+        style={veldStijl}
       />
     </div>
   )

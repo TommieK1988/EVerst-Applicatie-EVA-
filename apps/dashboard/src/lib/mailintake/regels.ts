@@ -13,10 +13,21 @@
 
 import type { MailSoort, PostbusSoort } from './types'
 
-/** De categorie waarvoor de schilders-werkmaatschappij geldt; al het andere gaat naar bouw. */
-const SCHILDER_CATEGORIE = 'schilderwerk'
 const WM_SCHILDERS = 'everts onderhoudsschilders'
 const WM_BOUW = 'bouwbedrijf morgenstond'
+
+/**
+ * Categorieën die de werkmaatschappij op zichzelf al bepalen.
+ *
+ * Schilderwerk gaat altijd naar de schilders. Renovatie, Mutatie en Dagelijks
+ * onderhoud gaan altijd naar Morgenstond -- die dekt daar de hele lading, ook als
+ * er schilderwerk in zit. Alleen **Bouwkundig Onderhoud** is een echt twijfelgeval,
+ * want dat loopt van een enkele gevelreparatie tot een compleet renovatietraject.
+ *
+ * Kleine letters, want er wordt genormaliseerd vergeleken.
+ */
+const CATEGORIE_SCHILDERS = ['schilderwerk']
+const CATEGORIE_BOUW = ['renovatie', 'mutatie', 'dagelijks onderhoud']
 
 /**
  * De twee categorieën waaraan een dossier als servicedeskwerk wordt herkend.
@@ -58,14 +69,25 @@ export type AardVanHetWerk = 'schilderwerk' | 'bouwkundig' | 'gemengd' | 'onduid
 /**
  * Welke werkmaatschappij hoort bij dit werk?
  *
- * De regel komt uit de intakebeschrijving en is er één van vier gevallen:
+ * **De categorie beslist, waar hij dat kan.** Vier van de zes categorieën laten
+ * geen ruimte:
  *
- *  | zuiver of overwegend schilderwerk            | Everts Onderhoudsschilders |
- *  | bouwkundig werk                              | Bouwbedrijf Morgenstond    |
- *  | bouwkundig met een klein deel schilderwerk   | Bouwbedrijf Morgenstond    |
+ *  | Schilderwerk                                 | Everts Onderhoudsschilders |
+ *  | Renovatie, Mutatie, Dagelijks onderhoud      | Bouwbedrijf Morgenstond    |
+ *
+ * Morgenstond dekt bij die drie altijd de lading, ook als er schilderwerk in zit.
+ * Daar hoeft dus niet over geoordeeld te worden, en dat is winst: hoe minder er te
+ * wegen valt, hoe minder er te missen valt.
+ *
+ * **Alleen Bouwkundig Onderhoud is een twijfelgeval**, want dat loopt van een
+ * enkele gevelreparatie tot een compleet renovatietraject. Daar telt het oordeel
+ * over de aard van het werk:
+ *
+ *  | overwegend schilderwerk                      | Everts Onderhoudsschilders |
+ *  | bouwkundig, ook met wat schilderwerk erbij   | Bouwbedrijf Morgenstond    |
  *  | gemengd of onduidelijk                       | voorleggen aan een mens    |
  *
- * Twee dingen daarin zijn geen detail.
+ * Twee dingen daarbij zijn geen detail.
  *
  * **Alleen deze twee werkmaatschappijen.** Schildersbedrijf Everts en
  * Dakdekkersbedrijf Dakplan komen bij een intake niet in aanmerking, ook niet als
@@ -73,7 +95,7 @@ export type AardVanHetWerk = 'schilderwerk' | 'bouwkundig' | 'gemengd' | 'onduid
  * waardoor een terloopse zin in een handtekening of een doorgestuurde kop het werk
  * bij de verkeerde onderneming kon zetten.
  *
- * **Gemengd is een eigen uitkomst, geen terugval.** Hiervoor viel alles wat de
+ * **Voorleggen is een eigen uitkomst, geen terugval.** Hiervoor viel alles wat de
  * categorie niet besliste stilzwijgend op de standaard van de postbus. Dat is
  * precies het gokken dat hier niet hoort: liever leeg, met de vraag erbij, dan een
  * keuze die niemand gemaakt heeft. Een leeg veld dwingt het bericht vanzelf naar
@@ -87,6 +109,19 @@ export function kiesWerkmaatschappij(
   const zoek = (voorvoegsel: string) =>
     lijst.find(w => w.naam.toLowerCase().startsWith(voorvoegsel))?.id ?? null
 
+  const cat = (categorieNaam ?? '').trim().toLowerCase()
+
+  // ── De categorie beslist ──────────────────────────────────────────────────
+  if (CATEGORIE_SCHILDERS.includes(cat)) {
+    const id = zoek(WM_SCHILDERS)
+    if (id) return { id, via: 'categorie' }
+  }
+  if (CATEGORIE_BOUW.includes(cat)) {
+    const id = zoek(WM_BOUW)
+    if (id) return { id, via: 'categorie' }
+  }
+
+  // ── Bouwkundig Onderhoud, Overige of geen categorie: de aard beslist ──────
   if (aard === 'schilderwerk') {
     const id = zoek(WM_SCHILDERS)
     if (id) return { id, via: 'aard' }
@@ -97,13 +132,6 @@ export function kiesWerkmaatschappij(
   }
   if (aard === 'gemengd' || aard === 'onduidelijk') {
     return { id: null, via: 'voorleggen' }
-  }
-
-  // Zonder oordeel over de aard valt de categorie terug op dezelfde tweedeling.
-  const cat = (categorieNaam ?? '').trim().toLowerCase()
-  if (cat) {
-    const id = zoek(cat === SCHILDER_CATEGORIE ? WM_SCHILDERS : WM_BOUW)
-    if (id) return { id, via: 'categorie' }
   }
 
   return { id: null, via: 'geen' }

@@ -1,15 +1,15 @@
 /**
- * Toets op de werkmaatschappij-regel uit de intakebeschrijving.
+ * Toets op de werkmaatschappij-regel.
  *
  * Draaien: npx tsx scratch/toets-werkmaatschappij.ts
  *
  * regels.ts is bewust vrij van server-only en van netwerk, juist zodat deze regel
  * zonder omwegen te toetsen is.
  *
- * De regel kent vier gevallen, en het vierde is het belangrijkste: gemengd of
- * onduidelijk werk krijgt géén werkmaatschappij en gaat naar een mens. Daar zat
- * eerder een stille terugval op de standaard van de postbus, en dat is precies het
- * gokken dat bij een intake niet hoort.
+ * De regel is in twee lagen opgebouwd, en die volgorde is het hele punt: vier van
+ * de zes categorieën beslissen op zichzelf al, en alleen Bouwkundig Onderhoud is
+ * een echt twijfelgeval. Wat daar gemengd of onduidelijk blijkt, krijgt géén
+ * werkmaatschappij en gaat naar een mens.
  */
 
 import { kiesWerkmaatschappij } from '../apps/dashboard/src/lib/mailintake/regels'
@@ -30,58 +30,64 @@ function main() {
     console.log(`  ${gelukt ? 'ok   ' : 'FOUT '} ${naam}${gelukt ? '' : ` -- ${detail}`}`)
   }
 
-  console.log('\n-- De vier gevallen -----------------------------------------')
-  const schilder = kiesWerkmaatschappij('schilderwerk', null, lijst)
-  toets('zuiver of overwegend schilderwerk -> Everts Onderhoudsschilders',
-    schilder.id === 'eos' && schilder.via === 'aard', JSON.stringify(schilder))
-
-  // "Hoofdzakelijk bouwkundig met een klein deel schilderwerk" valt voor het model
-  // onder bouwkundig; de beschrijving zet die twee bewust op dezelfde uitkomst.
-  const bouw = kiesWerkmaatschappij('bouwkundig', null, lijst)
-  toets('bouwkundig werk -> Bouwbedrijf Morgenstond',
-    bouw.id === 'bbm' && bouw.via === 'aard', JSON.stringify(bouw))
-
-  const gemengd = kiesWerkmaatschappij('gemengd', null, lijst)
-  toets('gemengd -> leeg laten en voorleggen',
-    gemengd.id === null && gemengd.via === 'voorleggen', JSON.stringify(gemengd))
-
-  const onduidelijk = kiesWerkmaatschappij('onduidelijk', null, lijst)
-  toets('onduidelijk -> leeg laten en voorleggen',
-    onduidelijk.id === null && onduidelijk.via === 'voorleggen', JSON.stringify(onduidelijk))
-
-  console.log('\n-- Het oordeel gaat voor op de categorie ---------------------')
-  // Anders zou een gemengde klus met categorie Schilderwerk alsnog stilzwijgend bij
-  // de schilders belanden -- precies wat voorgelegd had moeten worden.
-  toets('gemengd met categorie Schilderwerk blijft leeg',
-    kiesWerkmaatschappij('gemengd', 'Schilderwerk', lijst).id === null)
-
-  console.log('\n-- Zonder oordeel valt de categorie terug --------------------')
-  const catS = kiesWerkmaatschappij(null, 'Schilderwerk', lijst)
-  toets('Schilderwerk -> Everts Onderhoudsschilders',
-    catS.id === 'eos' && catS.via === 'categorie', JSON.stringify(catS))
-  for (const cat of ['Bouwkundig Onderhoud', 'Dagelijks onderhoud', 'Mutatie', 'Renovatie', 'Overige']) {
-    toets(`${cat} -> Morgenstond`, kiesWerkmaatschappij(null, cat, lijst).id === 'bbm')
+  console.log('\n-- De categorie beslist, ongeacht de aard -------------------')
+  // Morgenstond dekt bij deze drie altijd de lading, ook als er schilderwerk in zit.
+  for (const cat of ['Renovatie', 'Mutatie', 'Dagelijks onderhoud']) {
+    const uit = kiesWerkmaatschappij(null, cat, lijst)
+    toets(`${cat} -> Morgenstond`, uit.id === 'bbm' && uit.via === 'categorie', JSON.stringify(uit))
+    // Zelfs als het model "gemengd" of "schilderwerk" zegt, blijft de categorie leidend.
+    for (const aard of ['gemengd', 'onduidelijk', 'schilderwerk'] as const) {
+      toets(`${cat} blijft Morgenstond bij aard=${aard}`,
+        kiesWerkmaatschappij(aard, cat, lijst).id === 'bbm')
+    }
   }
+
+  const schild = kiesWerkmaatschappij(null, 'Schilderwerk', lijst)
+  toets('Schilderwerk -> Everts Onderhoudsschilders',
+    schild.id === 'eos' && schild.via === 'categorie', JSON.stringify(schild))
+  toets('Schilderwerk blijft Everts bij aard=gemengd',
+    kiesWerkmaatschappij('gemengd', 'Schilderwerk', lijst).id === 'eos')
+
+  console.log('\n-- Bouwkundig Onderhoud is het twijfelgeval -----------------')
+  const bo = (aard: 'schilderwerk' | 'bouwkundig' | 'gemengd' | 'onduidelijk' | null) =>
+    kiesWerkmaatschappij(aard, 'Bouwkundig Onderhoud', lijst)
+
+  toets('overwegend schilderwerk -> Everts Onderhoudsschilders',
+    bo('schilderwerk').id === 'eos' && bo('schilderwerk').via === 'aard')
+  toets('bouwkundig -> Morgenstond',
+    bo('bouwkundig').id === 'bbm' && bo('bouwkundig').via === 'aard')
+  toets('gemengd -> leeg laten en voorleggen',
+    bo('gemengd').id === null && bo('gemengd').via === 'voorleggen')
+  toets('onduidelijk -> leeg laten en voorleggen',
+    bo('onduidelijk').id === null && bo('onduidelijk').via === 'voorleggen')
+  toets('geen oordeel over de aard -> ook leeg',
+    bo(null).id === null && bo(null).via === 'geen', JSON.stringify(bo(null)))
+
+  console.log('\n-- Overige en geen categorie: de aard beslist ---------------')
+  toets('Overige met bouwkundig -> Morgenstond',
+    kiesWerkmaatschappij('bouwkundig', 'Overige', lijst).id === 'bbm')
+  toets('Overige met gemengd -> voorleggen',
+    kiesWerkmaatschappij('gemengd', 'Overige', lijst).id === null)
+  toets('geen categorie met schilderwerk -> Everts',
+    kiesWerkmaatschappij('schilderwerk', null, lijst).id === 'eos')
+  const niets = kiesWerkmaatschappij(null, null, lijst)
+  toets('niets bekend -> leeg', niets.id === null && niets.via === 'geen', JSON.stringify(niets))
 
   console.log('\n-- Dakplan en Schildersbedrijf Everts nooit ------------------')
   const alle = [
-    kiesWerkmaatschappij('schilderwerk', null, lijst),
-    kiesWerkmaatschappij('bouwkundig', null, lijst),
-    kiesWerkmaatschappij('gemengd', null, lijst),
-    kiesWerkmaatschappij('onduidelijk', null, lijst),
-    kiesWerkmaatschappij(null, 'Schilderwerk', lijst),
-    kiesWerkmaatschappij(null, 'Renovatie', lijst),
-    kiesWerkmaatschappij(null, 'Overige', lijst),
+    ...['Renovatie', 'Mutatie', 'Dagelijks onderhoud', 'Schilderwerk', 'Bouwkundig Onderhoud', 'Overige']
+      .flatMap(c => [null, 'schilderwerk', 'bouwkundig', 'gemengd', 'onduidelijk'] as const)
+      .map((a, i) => kiesWerkmaatschappij(a, ['Renovatie', 'Mutatie', 'Dagelijks onderhoud',
+        'Schilderwerk', 'Bouwkundig Onderhoud', 'Overige'][Math.floor(i / 5)] ?? null, lijst)),
+    kiesWerkmaatschappij(null, null, lijst),
   ]
   toets('geen enkele route levert Dakplan op', !alle.some(u => u.id === 'dakplan'))
   toets('geen enkele route levert Schildersbedrijf Everts op', !alle.some(u => u.id === 'sbe'))
 
-  console.log('\n-- Niets bekend ---------------------------------------------')
-  const niets = kiesWerkmaatschappij(null, null, lijst)
-  toets('zonder aard en zonder categorie blijft het leeg',
-    niets.id === null && niets.via === 'geen', JSON.stringify(niets))
-  toets('schilderwerk zonder schildersbedrijf in de lijst blijft leeg',
-    kiesWerkmaatschappij('schilderwerk', null, [{ id: 'bbm', naam: 'Bouwbedrijf Morgenstond B.V.' }]).id === null)
+  console.log('\n-- Ontbrekende werkmaatschappij levert geen verkeerde ---------')
+  toets('Schilderwerk zonder schildersbedrijf in de lijst blijft leeg',
+    kiesWerkmaatschappij(null, 'Schilderwerk',
+      [{ id: 'bbm', naam: 'Bouwbedrijf Morgenstond B.V.' }]).id === null)
 
   console.log(fouten === 0 ? '\nAlles goed\n' : `\n${fouten} fout(en)\n`)
   process.exit(fouten === 0 ? 0 : 1)

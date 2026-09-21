@@ -218,12 +218,17 @@ export function BulletTextarea({
           </button>}
         </div>
       )}
+      {/* `w-full` hoort in de basis en niet bij elke aanroeper. Een textarea is van
+          zichzelf ongeveer twintig tekens breed; wie die klasse vergeet krijgt een
+          kolom van drie woorden breed met een schuifbalk ernaast, zonder dat er
+          iets kapot lijkt. Wie hem tóch smal wil zet er `w-auto` achter -- de eigen
+          klassen komen na deze en winnen dus. */}
       <textarea
         ref={ref}
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={toetsAanslag}
-        className={cn('resize-none', className)}
+        className={cn('w-full resize-none', className)}
         {...props}
       />
     </div>

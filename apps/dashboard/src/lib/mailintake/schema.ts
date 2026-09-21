@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-21.1'
+export const PROMPT_VERSIE = '2026-09-21.2'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -214,11 +214,14 @@ export const LEVER_EXTRACTIE_TOOL = {
         type: 'string',
         enum: ['schilderwerk', 'bouwkundig', 'gemengd', 'onduidelijk'],
         description:
-          'Waar gaat het werk in hoofdzaak over? "schilderwerk" bij zuiver of overwegend schilderwerk. ' +
-          '"bouwkundig" bij bouwkundig werk, ook als daar een klein deel schilderwerk bij hoort. ' +
-          '"gemengd" als beide substantieel zijn en geen van beide duidelijk overheerst. ' +
-          '"onduidelijk" als de stukken het niet zeggen. Gok niet: gemengd en onduidelijk worden ' +
-          'aan een mens voorgelegd, en dat is beter dan een verkeerde werkmaatschappij.',
+          'Waar gaat het werk in hoofdzaak over? "schilderwerk" bij zuiver of overwegend ' +
+          'schilderwerk. "bouwkundig" bij bouwkundig werk, ook als daar een deel schilderwerk ' +
+          'bij hoort. "gemengd" als beide substantieel zijn en geen van beide duidelijk ' +
+          'overheerst. "onduidelijk" als de stukken het niet zeggen. ' +
+          'Dit veld telt alleen mee bij categorie "Bouwkundig Onderhoud" en "Overige"; bij ' +
+          'Schilderwerk, Renovatie, Mutatie en Dagelijks onderhoud staat de werkmaatschappij ' +
+          'al vast. Gok dus niet: gemengd en onduidelijk worden aan een mens voorgelegd, en ' +
+          'dat is beter dan een verkeerde werkmaatschappij.',
       },
       aanvraagdatum: { type: 'string', description: 'Datum van de aanvraag als ISO-datum (JJJJ-MM-DD).' },
       deadline: { type: 'string', description: 'Uiterste datum als ISO-datum (JJJJ-MM-DD).' },
