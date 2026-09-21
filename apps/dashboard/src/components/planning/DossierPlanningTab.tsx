@@ -39,7 +39,10 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
       .from('planning_werkbegroting_regels')
       .select('*, planning_uursoorten ( naam, kleur, code )')
       .eq('dossier_id', dossier_id),
-    supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true),
+    // Alleen uursoorten voor gewerkte tijd: op een planning-activiteit staat werk dat uitgevoerd
+    // moet worden, geen verlof, ziekte of feestdag. Die laatste komen via de weekstaat binnen en
+    // hebben op de detailplanning niets te zoeken.
+    supabase.from('planning_uursoorten').select('id, naam, kleur, code').eq('actief', true).eq('uren_categorie', 'werk'),
     supabase.from('dossiers').select('everts_calc_project_id, titel, dossiernummer, bouw7_id').eq('id', dossier_id).single(),
     // Externe partijen die aan een activiteit gekoppeld kunnen worden. `relaties.types`
     // is een array (een relatie kan zowel leverancier als onderaannemer zijn).

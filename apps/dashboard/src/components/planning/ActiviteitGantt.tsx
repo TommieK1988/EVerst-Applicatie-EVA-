@@ -322,7 +322,9 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 
   return (
     <div style={S.backdrop}>
-      <div className="eva-card" style={{ padding: '20px 24px', width: 340, maxWidth: '95vw' }}>
+      {/* Breed genoeg voor twee datumvelden naast elkaar: bij 340px werd dd-mm-jjjj samen met
+          het kalendericoon afgekapt. */}
+      <div className="eva-card" style={{ padding: '20px 24px', width: 420, maxWidth: '95vw' }}>
         <h3 style={S.dlgTitle}>Medewerker toewijzen</h3>
         <p style={S.dlgSub}>{activiteit.titel}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -479,7 +481,6 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   const [partijId,     setPartijId]     = useState(activiteit.onderaannemer_id ?? '')
   const [start,        setStart]        = useState(activiteit.gewenste_start ?? '')
   const [deadline,     setDeadline]     = useState(activiteit.deadline ?? '')
-  const [uren,         setUren]         = useState(activiteit.geschatte_uren != null ? String(activiteit.geschatte_uren) : '')
   const [omschrijving, setOmschrijving] = useState(activiteit.omschrijving ?? '')
   const [busy,         setBusy]         = useState(false)
   const [toewijzenOpen, setToewijzenOpen] = useState(false)
@@ -521,7 +522,10 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
     const codePatch = uitBouw7
       ? {}
       : { bewakingscode: effectief?.code ?? null, bouw7_security_code_id: effectief?.bouw7_security_code_id ?? null }
-    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: partijId || null, gewenste_start: start || null, deadline: deadline || null, geschatte_uren: uren ? parseFloat(uren) : null, omschrijving: omschrijving || null, ...codePatch })
+    // `geschatte_uren` staat bewust niet in dit formulier: de geplande uren volgen uit de
+    // planitems (werkdagen × rooster) en de Bouw7-sync vult het veld zelf. Een handmatige
+    // schatting zou daar alleen naast gaan zitten, dus laten we de opgeslagen waarde staan.
+    await onSave({ titel: titel.trim(), uursoort_id: uursoortId || null, fase_id: faseId || null, onderaannemer_id: partijId || null, gewenste_start: start || null, deadline: deadline || null, omschrijving: omschrijving || null, ...codePatch })
     setBusy(false); onClose()
   }
 
@@ -608,10 +612,9 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div><label style={S.lbl}>Start</label><input className="eva-input" type="date" value={start} onChange={e => setStart(e.target.value)} /></div>
             <div><label style={S.lbl}>Deadline</label><input className="eva-input" type="date" value={deadline} onChange={e => setDeadline(e.target.value)} /></div>
-            <div><label style={S.lbl}>Uren</label><input className="eva-input" type="number" min="0" step="0.5" placeholder="0" value={uren} onChange={e => setUren(e.target.value)} /></div>
           </div>
 
           <div>
