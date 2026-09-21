@@ -36,13 +36,13 @@ import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
 import { bewakingsStatus } from './types'
 import { berekenScore } from './klantbeeld-score'
 import {
-  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, jaarVoorKlantbeeld,
+  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isNietDoorgegaan, jaarVoorKlantbeeld,
   type Klantbeeld, type KlantContactpersoon, type KlantFactuur, type KlantObject,
   type KlantOfferte, type KlantSignalen,
 } from './klantbeeld-types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 
-/** Hoeveel jaar terug "uitgevoerd werk" toont: dit jaar en vorig jaar. */
+/** Hoeveel jaar terug "uitgevoerd werk" en "niet doorgegaan" tonen: dit jaar en vorig jaar. */
 const UITGEVOERD_JAREN_TERUG = 1
 
 const rond = (n: number): number => Math.round(n * 100) / 100
@@ -237,18 +237,28 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
   const r = relatieRes.data
   const dossiers = dossierData.rijen
 
-  // Fase per dossier is al bepaald door `bepaalFase` in de leeslaag.
-  const offertesInDeMaak = dossiers.filter(d => d.fase === 'aanvraag')
-  const offertesOpen     = dossiers.filter(d => d.fase === 'offerte')
-  const lopendWerk       = dossiers.filter(d => d.fase === 'opdracht' || d.fase === 'servicedesk')
+  // Fase per dossier is al bepaald door `bepaalFase` in de leeslaag. Wat niet is doorgegaan
+  // gaat er eerst uit: `fase` zet een verloren offerte bij het uitgevoerde werk en een
+  // afgewezen aanvraag bij de offertes in de maak, en dat leest allebei als het tegendeel
+  // van wat er gebeurd is.
+  const nietDoor = dossiers.filter(isNietDoorgegaan)
+  const nietDoorIds = new Set(nietDoor.map(d => d.id))
+  const lopend = dossiers.filter(d => !nietDoorIds.has(d.id))
+
+  const offertesInDeMaak = lopend.filter(d => d.fase === 'aanvraag')
+  const offertesOpen     = lopend.filter(d => d.fase === 'offerte')
+  const lopendWerk       = lopend.filter(d => d.fase === 'opdracht' || d.fase === 'servicedesk')
 
   const ditJaar = new Date().getFullYear()
   const uitgevoerdVanafJaar = ditJaar - UITGEVOERD_JAREN_TERUG
-  const uitgevoerd = dossiers.filter(d => {
-    if (d.fase !== 'afgesloten') return false
+  // Zelfde venster voor beide eindlijsten: wat drie jaar geleden niet doorging draagt geen
+  // gesprek meer, en de grootste klant heeft er 34 waarvan 24 binnen dit venster.
+  const inVenster = (d: RelatieDossier): boolean => {
     const jaar = jaarVoorKlantbeeld(d)
     return jaar !== null && jaar >= uitgevoerdVanafJaar
-  })
+  }
+  const uitgevoerd = lopend.filter(d => d.fase === 'afgesloten' && inVenster(d))
+  const nietDoorgegaan = nietDoor.filter(inVenster)
 
   // Voor de bewaking: welke dossiers zijn commercieel klaar? Zelfde regel als `isAfgerond`
   // in actions.ts — let op dat 'gewonnen' als substatus niet bestaat (de trigger promoveert
@@ -322,6 +332,7 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     offertesInDeMaak,
     lopendWerk,
     uitgevoerd,
+    nietDoorgegaan,
     facturen: klantFacturen,
     objecten,
     contactpersonen,

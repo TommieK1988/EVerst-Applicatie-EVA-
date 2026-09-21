@@ -58,6 +58,12 @@ export type RelatieDossier = {
    * dus doorgeven kost niets — ze afleiden uit `fase` zou giswerk zijn.
    */
   hoofdstatus: string
+  /**
+   * Niet in `FASE_KOLOMMEN`: `bepaalFase` heeft hem niet nodig. Het klantbeeld wel — het is
+   * de enige plek waar "afgewezen aanvraag" van "we werken eraan" te onderscheiden valt
+   * (`isNietDoorgegaan`).
+   */
+  aanvraag_substatus: string | null
   offerte_substatus: string | null
   opdracht_substatus: string | null
   servicedesk_substatus: string | null

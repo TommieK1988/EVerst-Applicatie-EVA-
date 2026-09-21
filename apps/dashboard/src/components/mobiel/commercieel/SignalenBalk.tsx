@@ -4,8 +4,8 @@
  * Waar je op moet letten voordat je begint te praten.
  *
  * Alleen de niet-nul signalen verschijnen; is er niets aan de hand, dan blijft de balk weg in
- * plaats van drie keer "0" te tonen. Een chip aantikken scrolt naar het bijbehorende blok en
- * opent het — niet naar een nieuw scherm, want je bent midden in een gesprek.
+ * plaats van drie keer "0" te tonen. Een chip aantikken opent het bijbehorende blok en scrolt
+ * ernaartoe — niet naar een nieuw scherm, want je bent midden in een gesprek.
  *
  * De drempels staan in `lib/commercie/klantbeeld-types.ts` (60 dagen te laat, 30 dagen
  * langliggend) met de motivatie erbij.
@@ -16,30 +16,41 @@ import { AlertTriangle, Clock, PhoneCall } from 'lucide-react'
 import type { KlantSignalen } from '@/lib/commercie/klantbeeld-types'
 import { ORANJE, ROOD } from './stijl'
 
-type Chip = { sleutel: string; tekst: string; kleur: string; Icon: typeof AlertTriangle; naar: string }
+/** Welk blok een chip opent. De namen komen terug in `KlantbeeldView`, dat de blokken kent. */
+export type SignaalBlok = 'facturen' | 'offertesOpen'
 
-export default function SignalenBalk({ signalen }: { signalen: KlantSignalen }) {
+type Chip = {
+  sleutel: string; tekst: string; kleur: string; Icon: typeof AlertTriangle; naar: SignaalBlok
+}
+
+export default function SignalenBalk({
+  signalen, onOpen,
+}: {
+  signalen: KlantSignalen
+  /** Opent het doelblok en scrolt ernaartoe; alle blokken staan standaard dicht. */
+  onOpen: (blok: SignaalBlok) => void
+}) {
   const chips: Chip[] = []
 
   if (signalen.factuurTeLaat > 0) {
     chips.push({
       sleutel: 'facturen',
       tekst: `${signalen.factuurTeLaat} ${signalen.factuurTeLaat === 1 ? 'factuur' : 'facturen'} >60 dgn te laat`,
-      kleur: ROOD, Icon: AlertTriangle, naar: 'blok-facturen',
+      kleur: ROOD, Icon: AlertTriangle, naar: 'facturen',
     })
   }
   if (signalen.offerteWijAanZet > 0) {
     chips.push({
       sleutel: 'aanzet',
       tekst: `${signalen.offerteWijAanZet}× wij aan zet`,
-      kleur: ORANJE, Icon: PhoneCall, naar: 'blok-offertes-open',
+      kleur: ORANJE, Icon: PhoneCall, naar: 'offertesOpen',
     })
   }
   if (signalen.offerteLangliggend > 0) {
     chips.push({
       sleutel: 'langliggend',
       tekst: `${signalen.offerteLangliggend} ${signalen.offerteLangliggend === 1 ? 'offerte ligt' : 'offertes liggen'} >30 dgn`,
-      kleur: ORANJE, Icon: Clock, naar: 'blok-offertes-open',
+      kleur: ORANJE, Icon: Clock, naar: 'offertesOpen',
     })
   }
 
@@ -54,12 +65,7 @@ export default function SignalenBalk({ signalen }: { signalen: KlantSignalen }) 
         <button
           key={sleutel}
           type="button"
-          onClick={() => {
-            // Beide doelblokken (facturen, openstaande offertes) staan standaard open, dus
-            // scrollen is genoeg. Zou dat ooit veranderen, dan moet KlapBlok een van buiten
-            // stuurbare open-stand krijgen — een attribuut zetten doet niets.
-            document.getElementById(naar)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }}
+          onClick={() => onOpen(naar)}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '7px 11px', borderRadius: 999,

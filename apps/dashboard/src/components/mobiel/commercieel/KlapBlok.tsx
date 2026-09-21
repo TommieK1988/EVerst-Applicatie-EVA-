@@ -3,10 +3,13 @@
 /**
  * Uitklapbaar blok met een kop, een aantal en maximaal een handvol rijen.
  *
- * Twee lagen begrenzing, allebei nodig op een telefoon. Blokken die niet over lopend geld
- * gaan (uitgevoerd werk, objecten, contactpersonen, notities) starten dicht, en een blok dat
+ * Twee lagen begrenzing, allebei nodig op een telefoon. Elk blok start dicht, en een blok dat
  * open staat toont er vijf met "Toon alle N" eronder. De grootste klant heeft 114 dossiers;
  * zonder dit sta je te scrollen in plaats van te praten.
+ *
+ * Dicht beginnen is een keuze van de gebruiker: je opent een kaart om te zien wát er is — een
+ * rij koppen met een aantal erachter — en klapt open waar het gesprek heen gaat. Vandaar
+ * `openVerzoek`: een chip in de signalenbalk moet een blok van buitenaf kunnen openen.
  *
  * Uitklappen doet geen netwerkverkeer: alle rijen zitten al in de payload van de pagina. Dat
  * is een bewuste afweging — 114 rijen is ongeveer 20 kB, en een tweede fetch op een
@@ -20,26 +23,38 @@ import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
 const STANDAARD_ZICHTBAAR = 5
 
 export default function KlapBlok({
-  titel, aantal, standaardOpen = false, id, leegTekst, children,
+  titel, aantal, id, leegTekst, openVerzoek = 0, children,
 }: {
   titel: string
   aantal: number
-  standaardOpen?: boolean
   /** Anker voor de signalenbalk, die hiernaartoe scrolt. */
   id?: string
   leegTekst?: string
+  /**
+   * Teller die bij elke ophoging dit blok opent en in beeld scrolt. Een boolean zou maar één
+   * keer werken: tikt de gebruiker dezelfde chip nog eens aan nadat hij het blok zelf heeft
+   * dichtgeklapt, dan verandert de prop niet en gebeurt er niets.
+   */
+  openVerzoek?: number
   /** De rijen. Worden afgekapt op vijf tenzij "Toon alle" is aangetikt. */
   children: React.ReactNode
 }) {
-  const [open, setOpen] = React.useState(standaardOpen)
+  const [open, setOpen] = React.useState(false)
   const [alles, setAlles] = React.useState(false)
+  const sectie = React.useRef<HTMLElement>(null)
+
+  React.useEffect(() => {
+    if (openVerzoek <= 0) return
+    setOpen(true)
+    sectie.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [openVerzoek])
 
   const rijen = React.Children.toArray(children)
   const zichtbaar = alles ? rijen : rijen.slice(0, STANDAARD_ZICHTBAAR)
   const verborgen = rijen.length - zichtbaar.length
 
   return (
-    <section id={id} style={{ marginBottom: 14, scrollMarginTop: 12 }}>
+    <section ref={sectie} id={id} style={{ marginBottom: 14, scrollMarginTop: 12 }}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}

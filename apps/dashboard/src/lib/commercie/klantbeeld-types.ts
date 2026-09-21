@@ -59,6 +59,32 @@ export function jaarVoorKlantbeeld(d: {
   return Number.isFinite(jaar) && jaar > 1990 ? jaar : null
 }
 
+/**
+ * Is dit dossier niet doorgegaan — een verloren of vervallen offerte, of een afgewezen of
+ * vervallen aanvraag?
+ *
+ * Bewust op de ruwe substatussen en niet op `fase`. Die gooit een verloren offerte op één
+ * hoop met een financieel afgesloten opdracht (`afgesloten`), en laat een afgewezen aanvraag
+ * juist in `aanvraag` staan. Aan de telefoon zijn dat drie verschillende dingen: werk dat we
+ * gedaan hebben, werk dat we niet kregen, en werk dat we nog aan het uitwerken zijn.
+ *
+ * Zelfde afbakening als `isDossierAfgesloten` in `components/dossiers/types.ts`, minus de
+ * opdrachtkant — wijzigt daar de statusladder, dan hier ook kijken.
+ */
+export function isNietDoorgegaan(d: {
+  hoofdstatus: string
+  offerte_substatus: string | null
+  aanvraag_substatus?: string | null
+}): boolean {
+  if (d.hoofdstatus === 'offerte') {
+    return d.offerte_substatus === 'verloren' || d.offerte_substatus === 'vervallen'
+  }
+  if (d.hoofdstatus === 'aanvraag') {
+    return d.aanvraag_substatus === 'afgewezen' || d.aanvraag_substatus === 'vervallen'
+  }
+  return false
+}
+
 /** Hele dagen tussen een ISO-datum en vandaag; negatief als de datum in de toekomst ligt. */
 export function dagenSindsDatum(datum: string | null, vandaagMs: number): number | null {
   if (!datum) return null
@@ -160,16 +186,22 @@ export type Klantbeeld = {
   kengetallen: KlantKengetallen
   score: KlantScore
   signalen: KlantSignalen
-  /** De vijf lijsten, in de volgorde waarin ze op het scherm staan. */
+  /** De zes dossierlijsten, in de volgorde waarin ze op het scherm staan. */
   offertesOpen: KlantOfferte[]
   offertesInDeMaak: RelatieDossier[]
   lopendWerk: RelatieDossier[]
   uitgevoerd: RelatieDossier[]
+  /**
+   * Verloren en vervallen offertes plus afgewezen en vervallen aanvragen, over dezelfde
+   * periode als `uitgevoerd`. Stond eerder tussen het uitgevoerde werk — bij de klant met
+   * 28 niet-doorgegane offertes op 31 dossiers las dat als "dit hebben we voor u gedaan".
+   */
+  nietDoorgegaan: RelatieDossier[]
   facturen: KlantFactuur[]
   objecten: KlantObject[]
   contactpersonen: KlantContactpersoon[]
   /** False zonder het recht `financieel`: het facturenblok wordt dan weggelaten. */
   toontFacturen: boolean
-  /** Vanaf welk jaar "uitgevoerd werk" wordt getoond; draagt de koptekst. */
+  /** Vanaf welk jaar "uitgevoerd werk" en "niet doorgegaan" tonen; draagt beide koppen. */
   uitgevoerdVanafJaar: number
 }

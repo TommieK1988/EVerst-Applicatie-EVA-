@@ -51,12 +51,13 @@ const rond = (n: number): number => Math.round(n * 100) / 100
  * `string`. Dan komt er `GenericStringError[]` uit en heb je weer een any-cast op de client nodig.
  */
 const DOSSIER_KOLOMMEN =
-  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, bouw7_aanmaakdatum, aanvraagdatum, verzonden_op, object_id, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
+  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, aanvraag_substatus, bouw7_aanmaakdatum, aanvraagdatum, verzonden_op, object_id, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
 
 type RuweDossierRij = FaseVelden & {
   id: string
   dossiernummer: string | null
   titel: string
+  aanvraag_substatus: string | null
   bouw7_aanmaakdatum: string | null
   aanvraagdatum: string | null
   verzonden_op: string | null
@@ -95,6 +96,7 @@ function naarRij(d: RuweDossierRij, bedrag: number | null, rollen: BetrokkenRol[
     aanvraagdatum: d.aanvraagdatum,
     created_at: d.created_at,
     hoofdstatus: d.hoofdstatus,
+    aanvraag_substatus: d.aanvraag_substatus,
     offerte_substatus: d.offerte_substatus,
     opdracht_substatus: d.opdracht_substatus,
     servicedesk_substatus: d.servicedesk_substatus,

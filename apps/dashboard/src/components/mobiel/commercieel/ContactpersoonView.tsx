@@ -211,7 +211,6 @@ export default function ContactpersoonView({
         <KlapBlok
           titel="Dossiers op zijn naam"
           aantal={beeld.dossiers.length}
-          standaardOpen={beeld.dossiers.length > 0 && beeld.dossiers.length <= 5}
           leegTekst="Er staat geen dossier op deze contactpersoon."
         >
           {beeld.dossiers.map(d => (
@@ -222,7 +221,6 @@ export default function ContactpersoonView({
         <KlapBlok
           titel="Gesprekken met hem"
           aantal={beeld.notities.length}
-          standaardOpen={beeld.notities.length > 0}
           leegTekst="Nog geen gesprek met deze persoon vastgelegd. Dat doe je met de knop onderaan."
         >
           <NotitieLijst

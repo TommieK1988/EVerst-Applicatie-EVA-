@@ -5,12 +5,12 @@
  * nodig hebt.
  *
  * Van boven naar beneden: hoe bereik ik ze, wat zijn ze ons waard, waar moet ik op letten, en
- * dan pas de lijsten. De drie blokken over lopend geld (openstaande offertes, wat er in de
- * maak is, wat er loopt) staan open; de rest start dicht — anders is het scherm een
- * scrollmarathon bij een klant met honderd dossiers.
+ * dan pas de lijsten. Alle blokken starten dicht: je ziet in één scherm wát er is — negen
+ * koppen met een aantal — en klapt open waar het gesprek heen gaat. Bij een klant met honderd
+ * dossiers is dat het verschil tussen een overzicht en een scrollmarathon.
  *
- * De blok-ids (`blok-offertes-open`, `blok-facturen`) zijn de scrolldoelen van
- * `SignalenBalk`; hernoem je er een, hernoem hem daar ook.
+ * Omdat ze dicht staan, opent een chip in de signalenbalk zijn doelblok via `openVerzoek` —
+ * een teller per blok. Scrollen alleen zou je bij een dichte kop afleveren.
  *
  * Bij de openstaande offertes staat het offertebedrag excl. btw én — als er een offerte te
  * vinden is — een knop die hem als PDF opent. Dat is wat de klant aan de telefoon vraagt:
@@ -23,7 +23,7 @@ import type { RelatieNotitie } from '@/lib/relaties/notities-types'
 import { onthoudKlant } from './recent'
 import ContactKnoppen from './ContactKnoppen'
 import KengetallenRij from './KengetallenRij'
-import SignalenBalk from './SignalenBalk'
+import SignalenBalk, { type SignaalBlok } from './SignalenBalk'
 import KlapBlok from './KlapBlok'
 import DossierRegel from './DossierRegel'
 import FactuurRegel, { factuurTotaal } from './FactuurRegel'
@@ -50,6 +50,14 @@ export default function KlantbeeldView({
   // Waar de terugknop van een geopend dossier heen moet: hierheen, niet naar de dossierlijst.
   const terugNaar = `/m/commercieel/${relatie.id}`
 
+  // Hoe vaak een signaalchip om welk blok vroeg. Ophogen is het signaal, niet de waarde zelf —
+  // zo werkt dezelfde chip ook de tweede keer, nadat je het blok weer had dichtgeklapt.
+  const [verzoek, setVerzoek] = React.useState<Record<SignaalBlok, number>>({
+    facturen: 0, offertesOpen: 0,
+  })
+  const vraagOpen = (blok: SignaalBlok) =>
+    setVerzoek(v => ({ ...v, [blok]: v[blok] + 1 }))
+
   // Deze klant bovenaan "recent geopend" zetten. In een effect omdat localStorage pas na
   // hydratatie bestaat.
   React.useEffect(() => {
@@ -65,7 +73,7 @@ export default function KlantbeeldView({
       />
 
       <KengetallenRij kengetallen={kengetallen} score={score} />
-      <SignalenBalk signalen={signalen} />
+      <SignalenBalk signalen={signalen} onOpen={vraagOpen} />
 
       <div style={{ padding: '18px 16px 16px' }}>
         <KlapBlok
@@ -74,7 +82,7 @@ export default function KlantbeeldView({
           // offerte wegdrukken, en dat is juist wat je op de regel wilt lezen.
           titel="Openstaande offertes · excl. btw"
           aantal={beeld.offertesOpen.length}
-          standaardOpen
+          openVerzoek={verzoek.offertesOpen}
           leegTekst="Er staat nu niets open bij deze klant."
         >
           {beeld.offertesOpen.map(d => (
@@ -93,7 +101,6 @@ export default function KlantbeeldView({
         <KlapBlok
           titel="Offertes in de maak"
           aantal={beeld.offertesInDeMaak.length}
-          standaardOpen
           leegTekst="We zijn nu niets aan het uitwerken."
         >
           {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
@@ -102,7 +109,6 @@ export default function KlantbeeldView({
         <KlapBlok
           titel="Lopend werk"
           aantal={beeld.lopendWerk.length}
-          standaardOpen
           leegTekst="Er loopt op dit moment geen werk."
         >
           {beeld.lopendWerk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
@@ -119,7 +125,7 @@ export default function KlantbeeldView({
                 : 'Open facturen'
             }
             aantal={beeld.facturen.length}
-            standaardOpen
+            openVerzoek={verzoek.facturen}
             leegTekst="Alles is betaald."
           >
             {beeld.facturen.map(f => <FactuurRegel key={f.id} factuur={f} />)}
@@ -133,6 +139,23 @@ export default function KlantbeeldView({
         >
           {beeld.uitgevoerd.map(d => (
             <DossierRegel key={d.id} dossier={d} toonBedrag toonJaar terugNaar={terugNaar} />
+          ))}
+        </KlapBlok>
+
+        {/* Stond eerder tussen het uitgevoerde werk, omdat `fase` beide "afgesloten" noemt.
+            Bij een klant met 28 verloren offertes op 31 dossiers las dat als een lijst van
+            wat we voor hem gedaan hebben. Geen bedrag op de regel: bij een niet-doorgegane
+            offerte is de gefactureerde omzet leeg, en het offertebedrag erbij halen kost een
+            tweede leesronde voor een lijst die je zelden opent. Het woord "offertes" staat
+            niet in de kop: met het jaartal erbij brak hij op een telefoon over twee regels,
+            en dan is dit de enige kop die twee keer zo hoog is als de rest. */}
+        <KlapBlok
+          titel={`Vervallen/afgewezen ${beeld.uitgevoerdVanafJaar}–${kengetallen.ditJaar}`}
+          aantal={beeld.nietDoorgegaan.length}
+          leegTekst="Alles is doorgegaan in deze periode."
+        >
+          {beeld.nietDoorgegaan.map(d => (
+            <DossierRegel key={d.id} dossier={d} toonJaar terugNaar={terugNaar} />
           ))}
         </KlapBlok>
 

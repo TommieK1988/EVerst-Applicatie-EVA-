@@ -29,15 +29,17 @@ const ALLE_STATUSSEN = [
  * Label en kleur bij de actieve substatus.
  *
  * Eigen variant van `components/mobiel/dossier-status.ts`: die verwacht een volledige
- * `Dossier`-rij, en het klantbeeld heeft alleen de vier statuskolommen. De kleuren zijn
- * gelijkgehouden zodat een dossier hier niet anders oplicht dan in de dossierlijst.
+ * `Dossier`-rij, en het klantbeeld heeft alleen de vier statuskolommen. De keuze van de
+ * kolom en de kleuren zijn gelijkgehouden zodat een dossier hier niet anders oplicht dan in
+ * de dossierlijst — inclusief de aanvraagkolom, anders draagt een afgewezen aanvraag de
+ * grijze badge "Aanvraag" terwijl hij in de dossierlijst rood "Afgewezen" heet.
  */
 function statusVan(d: RelatieDossier): { label: string; kleur: string } {
   const sleutel =
     d.servicedesk_substatus
     ?? (d.hoofdstatus === 'opdracht' ? d.opdracht_substatus
       : d.hoofdstatus === 'offerte' ? d.offerte_substatus
-      : null)
+      : d.aanvraag_substatus)
 
   // Een afgesloten dossier zonder substatus: de trigger heeft 'gewonnen' weggeschreven, of
   // het is een oude import. "Afgerond" is dan eerlijker dan een lege badge.
