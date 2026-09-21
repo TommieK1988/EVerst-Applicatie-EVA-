@@ -3,8 +3,8 @@
 import { useMemo } from 'react'
 import { addDays, differenceInCalendarDays, differenceInDays, parseISO, startOfDay } from 'date-fns'
 import { PPD_PER_VIEW, VANDAAG_ANCHOR, WEEKEND_FACTOR } from './constants'
-import { buildGridUnits, buildHeader, cumulatief, DAG_MS, dagOffset, viewBereik } from './tijdas'
-import type { GridUnit, HCol, HSpan, View } from './tijdas'
+import { buildGridUnits, buildHeader, buildWeekBand, cumulatief, DAG_MS, dagOffset, viewBereik } from './tijdas'
+import type { GridUnit, HCol, HSpan, View, WeekCel } from './tijdas'
 
 /**
  * De rekenkant van de tijdlijn staat in `./tijdas` — zonder React, zodat de
@@ -34,12 +34,22 @@ export type PlanningLayout = {
   spans:       HSpan[]
   cols:        HCol[]
   gridUnits:   GridUnit[]
+  /** Weekcellen over het hele bereik — de klikbare weekbalk in de kopregel. */
+  weekBand:    WeekCel[]
   /** Aantal dagen vanaf vs (negatief mogelijk). */
   dagOffset:   (iso: string) => number
   /** Pixel-positie (left) van een ISO-datum/-tijd, weekend- en tijd-bewust, geclamped op [0..totalW]. */
   xVoor:       (iso: string) => number
   /** Pixelbreedte tussen twee ISO-datum/-tijden (weekend-bewust). */
   breedteVoor: (startIso: string, eindIso: string) => number
+  /**
+   * Als `xVoor`, maar dan schaalt de dagbreedte op het wérkvenster (minuten na
+   * middernacht) in plaats van op 24 uur: 07:30 staat links tegen de dagrand,
+   * 16:15 rechts. Bedoeld voor de uitgezoomde views, waar een dagvakje te smal is
+   * om een tijdstip uit af te lezen en de witruimte naast een balk ten onrechte
+   * leest als vrije werktijd. Tijden buiten het venster plakken tegen de randen.
+   */
+  xVoorInVenster: (iso: string, vanMin: number, totMin: number) => number
   /** Inverse van xVoor: de dag (00:00) die op pixel-positie `px` staat — voor drag-naar-datum. */
   dagVoorX:    (px: number) => Date
 }
@@ -73,6 +83,7 @@ export function usePlanningLayout({
   const totalW     = geo.totalW
   const { spans, cols } = useMemo(() => buildHeader(view, vs, ve, ppd, weekendFactor), [view, vs, ve, ppd, weekendFactor])
   const gridUnits  = useMemo(() => buildGridUnits(view, vs, ve, ppd, weekendFactor), [view, vs, ve, ppd, weekendFactor])
+  const weekBand   = useMemo(() => buildWeekBand(vs, ve, ppd, weekendFactor), [vs, ve, ppd, weekendFactor])
 
   const vs0 = startOfDay(vs).getTime()
   const dagOff = (iso: string) => dagOffset(iso, vs)
@@ -89,6 +100,18 @@ export function usePlanningLayout({
   }
   const breedteVoor = (startIso: string, eindIso: string) => Math.max(0, xVoor(eindIso) - xVoor(startIso))
 
+  const xVoorInVenster = (iso: string, vanMin: number, totMin: number) => {
+    const spanMin = totMin - vanMin
+    if (!(spanMin > 0)) return xVoor(iso)
+    const t = parseISO(iso)
+    const dayIdx = differenceInCalendarDays(t, vs)
+    if (dayIdx < 0) return 0
+    if (dayIdx >= geo.widths.length) return totalW
+    const min = t.getHours() * 60 + t.getMinutes()
+    const frac = Math.max(0, Math.min(1, (min - vanMin) / spanMin))
+    return geo.lefts[dayIdx] + frac * geo.widths[dayIdx]
+  }
+
   const dagVoorX = (px: number) => {
     if (px <= 0) return startOfDay(vs)
     for (let i = 0; i < geo.lefts.length; i++) {
@@ -99,7 +122,7 @@ export function usePlanningLayout({
 
   return {
     view, peildatum, vs, ve, periodeVs, periodeVe,
-    ppd, totalDays, totalW, spans, cols, gridUnits,
-    dagOffset: dagOff, xVoor, breedteVoor, dagVoorX,
+    ppd, totalDays, totalW, spans, cols, gridUnits, weekBand,
+    dagOffset: dagOff, xVoor, breedteVoor, xVoorInVenster, dagVoorX,
   }
 }

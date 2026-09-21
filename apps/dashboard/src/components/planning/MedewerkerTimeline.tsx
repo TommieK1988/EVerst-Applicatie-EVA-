@@ -32,14 +32,14 @@ import { haalPlanningBewakingscodes } from '@/app/(platform)/planning/actions'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
 import {
   KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
-  usePlanningController, verschuifTs, type PlanningLayout,
+  usePlanningController, verschuifTs, type PlanningLayout, type View,
 } from './layout/index'
 import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
 import { useDialogen } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import {
-  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster,
+  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
 } from './conflict'
 
@@ -55,8 +55,29 @@ const GROEP_H = 24
 
 const CREW_KLEUREN = ['#7c3aed', '#0f9b8e', '#2f9e44', '#1f8a5b', '#f59e0b', '#3b82f6']
 
+/** Zoomniveaus van de Medewerkerplanning. Dag = uur-detail van één dag. */
+const MEDEWERKER_VIEWS: View[] = ['dag', 'week', '2weken', 'maand', 'kwartaal', 'jaar']
+
+/**
+ * Views waarin een balk op de wérkdag wordt geschaald in plaats van op 24 uur:
+ * een dag die van dagstart tot dageind is ingepland, vult dan ook het hele
+ * dagvakje. Uitgezoomd is het tijdstip-binnen-de-dag toch niet af te lezen, en de
+ * witruimte naast een balk werd gelezen als "hier kan nog werk bij" terwijl de
+ * man al vol zit. In Dag/Week/2 weken blijft de echte klok leidend: daar staat
+ * een uurraster onder de balken.
+ */
+const VULT_WERKDAG: View[] = ['maand', 'kwartaal', 'jaar']
+
 /** Dag-achtergrond per afwezigheidstype. Verlof = duidelijk licht rood — bewust een
  *  lichte achtergrond-tint zodat het niet verward wordt met verzadigde (rode) PL-balkkleuren. */
+/**
+ * Dag die buiten het rooster van de medewerker valt (parttime: bijv. altijd vrijdag
+ * vrij). Bewust een arcering en niet nóg een grijstint: vlak grijs las als weekend,
+ * en daarmee zag niemand dat die vrijdag structureel niet inplanbaar is.
+ */
+const BUITEN_ROOSTER_BG =
+  'repeating-linear-gradient(45deg, rgba(100,116,139,0.20) 0 3px, rgba(100,116,139,0.05) 3px 7px)'
+
 const AFWEZIGHEID_BG: Record<MedewerkerAfwezigheidType, string> = {
   verlof:   'rgba(248,113,113,0.32)',
   ziek:     'rgba(220,38,38,0.16)',
@@ -938,8 +959,17 @@ function TimelineRij({
   onConflictKlik:    (conflict: ConflictDetail) => void
   kopieerModus:      boolean
 }) {
-  const { ppd, totalW, xVoor, breedteVoor } = layout
+  const { ppd, totalW, xVoor, breedteVoor, xVoorInVenster } = layout
   const dagLenW = totalW
+
+  // Uitgezoomd loopt de dagcel van dagstart tot dageind i.p.v. van 0:00 tot 24:00.
+  const vulWerkdag = VULT_WERKDAG.includes(layout.view)
+  /** Linkerrand van een tijdstip, op de schaal die bij deze view hoort. */
+  function xBalk(iso: string, dagVanDeBalk: Date): number {
+    if (!vulWerkdag) return xVoor(iso)
+    const { van, tot } = werkvensterOpDag(dagVanDeBalk, roosters)
+    return xVoorInVenster(iso, van, tot)
+  }
 
   function afwezigheidOpDag(dag: Date): MedewerkerAfwezigheid | undefined {
     const iso = format(dag, 'yyyy-MM-dd')
@@ -958,15 +988,17 @@ function TimelineRij({
         const feest  = feestdagenDagen.has(iso)
         const atv    = atvDagen.has(iso)
         const cellId = `tcell-${medewerker.id}-${iso}`
+        const vrijeDag = buiten && !isWeekend(dag)
         const bg     = feest ? 'rgba(251,146,60,0.12)'
                      : atv   ? 'rgba(8,145,178,0.10)'
                      : afwez ? AFWEZIGHEID_BG[afwez.type]
-                     : (buiten && !isWeekend(dag)) ? 'rgba(0,0,0,0.04)'
+                     : vrijeDag ? BUITEN_ROOSTER_BG
                      : 'transparent'
         const geblokkeerd = feest || atv
         const cellTitle   = feest ? feestdagenNamen[iso]
                           : atv   ? 'ATV-dag'
                           : afwez ? medewerkerAfwezigheidLabels[afwez.type]
+                          : vrijeDag ? `Vaste vrije dag volgens het rooster (${format(dag, 'EEEE', { locale: nl })})`
                           : undefined
         return (
           <DroppableTimelineCell
@@ -997,8 +1029,9 @@ function TimelineRij({
 
       {/* Werk-taken op één strook (geen stapeling) */}
       {entries.map(entry => {
-        const left  = xVoor(entry.start_dt)
-        const rawW  = breedteVoor(entry.start_dt, entry.eind_dt)
+        const startDag = parseISO(entry.start_dt)
+        const left  = xBalk(entry.start_dt, startDag)
+        const rawW  = xBalk(entry.eind_dt, startDag) - left
         const width = Math.max(MIN_BAR_W, rawW)
         if (left + width <= 0 || left >= dagLenW) return null
         const cLeft  = Math.max(0, left)
@@ -1031,8 +1064,9 @@ function TimelineRij({
 
       {/* Conflict-gloed — overlappend werk of werk tijdens verlof/feestdag/ATV */}
       {conflicten.map((seg, i) => {
-        const left  = xVoor(new Date(seg.s).toISOString())
-        const rawW  = xVoor(new Date(seg.e).toISOString()) - left
+        const segDag = new Date(seg.s)
+        const left  = xBalk(segDag.toISOString(), segDag)
+        const rawW  = xBalk(new Date(seg.e).toISOString(), segDag) - left
         const width = Math.max(MIN_BAR_W, rawW)
         if (left + width <= 0 || left >= dagLenW) return null
         const cLeft  = Math.max(0, left)
@@ -1094,7 +1128,7 @@ export default function MedewerkerTimeline({
 
   const {
     view, peildatum, layout, wrapRef, scrollRef,
-    handlePeildatum, handleView, handleVandaag, handleScrub,
+    handlePeildatum, handleView, handleVandaag, handleScrub, handleWeekKlik,
   } = usePlanningController({ defaultView: 'maand' })
   const { vs, ve, ppd } = layout
 
@@ -1531,6 +1565,7 @@ export default function MedewerkerTimeline({
         ['Overig',    AFWEZIGHEID_BG.overig],
         ['Feestdag',  'rgba(251,146,60,0.25)'],
         ['ATV',       'rgba(8,145,178,0.20)'],
+        ['Vrije dag (rooster)', BUITEN_ROOSTER_BG],
       ] as const).map(([label, kleur]) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 12, height: 12, borderRadius: 2, background: kleur, border: '1px solid var(--border)' }} />
@@ -1603,6 +1638,7 @@ export default function MedewerkerTimeline({
             <PeriodeNav
               peildatum={peildatum}
               view={view}
+              views={MEDEWERKER_VIEWS}
               onPeildatum={handlePeildatum}
               onView={handleView}
               onVandaag={handleVandaag}
@@ -1623,6 +1659,7 @@ export default function MedewerkerTimeline({
           scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
           preHeaderStrip={legeStaat}
           labelHeader="Medewerker"
+          onWeekKlik={handleWeekKlik}
           labelKolom={labelKolom}
           body={body}
           bodyHoogte={bodyHoogte}

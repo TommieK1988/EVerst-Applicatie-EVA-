@@ -5,6 +5,8 @@ export const LABEL_W            = 280
 export const RIJ_HOOGTE         = 44
 export const HEADER_SPAN_HOOGTE = 24
 export const HEADER_COL_HOOGTE  = 28
+/** Hoogte van de weekbalk — de klikbare rij met weeknummers in de kopregel. */
+export const HEADER_WEEK_HOOGTE = 20
 
 /** Minimale dag-breedte (px) — fit-to-screen valt nooit onder dit getal.
  *  Alleen nog relevant voor de oude fit-to-screen-helpers; de planning-pagina's

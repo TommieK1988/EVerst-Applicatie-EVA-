@@ -35,7 +35,7 @@ const SORT_OPTIES: { key: SortKey; label: string }[] = [
 export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] }) {
   const {
     view, peildatum, layout, wrapRef, scrollRef,
-    handlePeildatum, handleView, handleVandaag, handleScrub,
+    handlePeildatum, handleView, handleVandaag, handleScrub, handleWeekKlik,
   } = usePlanningController({ defaultView: 'maand' })
 
   const [kleurModus, setKleurModus] = useState<'status' | 'projectleider'>('projectleider')
@@ -344,6 +344,7 @@ export default function GanttBord({ opdrachten }: { opdrachten: OpdrachtRij[] })
           }
           scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
           labelHeader="Opdracht"
+          onWeekKlik={handleWeekKlik}
           labelKolom={labelKolom}
           body={body}
           bodyHoogte={bodyHoogte}

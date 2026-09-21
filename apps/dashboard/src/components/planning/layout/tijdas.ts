@@ -274,3 +274,63 @@ export function verschuifTs(iso: string, days: number): string {
 export function verschuifDatum(yyyymmdd: string, days: number): string {
   return format(addDays(parseISO(yyyymmdd), days), 'yyyy-MM-dd')
 }
+
+// ─── Weekbalk ────────────────────────────────────────────────────────────────
+
+export type WeekCel = {
+  key: string
+  /** ISO-weeknummer. */
+  week: number
+  /** Maandag van deze week — wat een klik als nieuwe peildatum oplevert. */
+  maandag: Date
+  /** Volledige tekst ("Week 38"); bij weinig ruimte valt de balk terug op `kort`. */
+  label: string
+  kort: string
+  left: number
+  width: number
+  /** Bevat deze cel de dag van vandaag? */
+  isHuidig: boolean
+}
+
+/**
+ * Weekcellen over het hele gerenderde bereik. De medewerkerplanning toont deze balk
+ * in élke view (week t/m jaar) en maakt hem klikbaar: het weeknummer is voor de
+ * uitvoering de vaste eenheid waarin over werk gepraat wordt, ook als je naar een
+ * kwartaal kijkt.
+ */
+export function buildWeekBand(vs: Date, ve: Date, ppd: number, weekendFactor = WEEKEND_FACTOR): WeekCel[] {
+  const { days, lefts, widths } = cumulatief(vs, ve, ppd, weekendFactor)
+  const nuKey = format(startOfISOWeek(new Date()), 'yyyy-MM-dd')
+  const cellen = new Map<string, WeekCel>()
+  for (let i = 0; i < days.length; i++) {
+    const d  = days[i]
+    const ma = startOfISOWeek(d)
+    const k  = format(ma, 'yyyy-MM-dd')
+    let cel  = cellen.get(k)
+    if (!cel) {
+      const week = getISOWeek(d)
+      cel = {
+        key: k, week, maandag: ma,
+        label: `Week ${week}`, kort: String(week),
+        left: lefts[i], width: 0, isHuidig: k === nuKey,
+      }
+      cellen.set(k, cel)
+    }
+    cel.width += widths[i]
+  }
+  return [...cellen.values()]
+}
+
+/**
+ * Waar de weekbalk in de kopregel landt. In Week/2 weken zegt de spans-rij al
+ * "Week 38" — daar vervángt de balk die rij (en wordt hij klikbaar). In Kwartaal
+ * zijn de kolommen zélf weken; daar neemt de balk de kolomrij over. In Jaar zijn de
+ * kolommen maanden en hoort de week dáár weer onder. In de overige views komt hij
+ * er als eigen rij tussen. De kopregel leest zo altijd grof → fijn.
+ */
+export function weekbalkPositie(view: View): 'spans' | 'cols' | 'tussen' | 'onder' {
+  if (view === 'week' || view === '2weken') return 'spans'
+  if (view === 'kwartaal') return 'cols'
+  if (view === 'jaar') return 'onder'
+  return 'tussen'
+}

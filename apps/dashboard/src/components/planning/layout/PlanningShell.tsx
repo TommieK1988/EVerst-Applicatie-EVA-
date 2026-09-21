@@ -3,8 +3,9 @@
 import { startOfDay } from 'date-fns'
 import type { ReactNode, RefObject } from 'react'
 import {
-  HEADER_COL_HOOGTE, HEADER_SPAN_HOOGTE, KLEUR, LABEL_W,
+  HEADER_COL_HOOGTE, HEADER_SPAN_HOOGTE, HEADER_WEEK_HOOGTE, KLEUR, LABEL_W,
 } from './constants'
+import { weekbalkPositie } from './tijdas'
 import type { PlanningLayout } from './usePlanningLayout'
 
 export type PlanningShellProps = {
@@ -29,6 +30,8 @@ export type PlanningShellProps = {
   labelHeader?:     ReactNode
   /** Custom width voor de label-kolom (default: LABEL_W). */
   labelW?:          number
+  /** Klik op een weeknummer in de weekbalk. Zonder handler is de balk niet klikbaar. */
+  onWeekKlik?:      (maandag: Date) => void
   /** Vulmodus: de shell vult de beschikbare hoogte en het roostergebied is het enige
    *  scrollvlak (beide assen), met de datumbalk sticky in beeld. Vereist dat de pagina
    *  eromheen zelf niet scrollt — zie `.eva-page-vol` in globals.css. */
@@ -37,11 +40,69 @@ export type PlanningShellProps = {
 
 export default function PlanningShell({
   layout, scrollRef, toolbar, scrubber, preHeaderStrip,
-  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W, vulHoogte,
+  labelKolom, body, bodyHoogte, legenda, labelHeader, labelW = LABEL_W, onWeekKlik, vulHoogte,
 }: PlanningShellProps) {
-  const { spans, cols, gridUnits, totalW } = layout
+  const { spans, cols, gridUnits, weekBand, totalW } = layout
 
-  const headerHoogte = HEADER_SPAN_HOOGTE + HEADER_COL_HOOGTE
+  // De weekbalk staat in élke view in beeld. Waar de spans- of kolomrij zelf al
+  // weken toont, neemt de balk die rij over in plaats van er een derde bij te zetten.
+  const weekPos   = weekbalkPositie(layout.view)
+  const toonSpans = weekPos !== 'spans'
+  const toonCols  = weekPos !== 'cols'
+
+  const headerHoogte = (toonSpans ? HEADER_SPAN_HOOGTE : 0)
+    + HEADER_WEEK_HOOGTE
+    + (toonCols ? HEADER_COL_HOOGTE : 0)
+
+  // Weekbalk — klikken zoomt naar de weekweergave van die week.
+  const weekbalk = (
+    <div style={{
+      position: 'relative', height: HEADER_WEEK_HOOGTE,
+      background: KLEUR.bgElev,
+      borderBottom: `1px solid ${KLEUR.border}`,
+    }}>
+      {weekBand.map(w => {
+        // Onder ~54px past "Week 38" niet meer; onder ~16px ook het kale
+        // nummer niet — dan blijft de cel leeg maar wél klikbaar.
+        const tekst = w.width >= 54 ? w.label : w.width >= 16 ? w.kort : ''
+        // Uitgezoomd op één dag is een weekcel duizenden pixels breed; een
+        // gecentreerd label staat dan buiten beeld. Breed → links en meescrollend.
+        const breed = w.width > 400
+        return (
+          <div
+            key={w.key}
+            role={onWeekKlik ? 'button' : undefined}
+            tabIndex={onWeekKlik ? 0 : undefined}
+            title={onWeekKlik ? `${w.label} — klik voor de weekweergave` : w.label}
+            onClick={onWeekKlik ? () => onWeekKlik(w.maandag) : undefined}
+            onKeyDown={onWeekKlik
+              ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onWeekKlik(w.maandag) } }
+              : undefined}
+            style={{
+              position: 'absolute', left: w.left, width: w.width, top: 0, bottom: 0,
+              display: 'flex', alignItems: 'center',
+              justifyContent: breed ? 'flex-start' : 'center',
+              fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '0.04em',
+              color: w.isHuidig ? KLEUR.accent : KLEUR.fgMuted,
+              background: w.isHuidig ? KLEUR.vandaagHeaderBg : 'transparent',
+              borderRight: `1px solid ${KLEUR.border}`,
+              overflow: breed ? 'visible' : 'hidden', whiteSpace: 'nowrap',
+              cursor: onWeekKlik ? 'pointer' : 'default',
+              userSelect: 'none',
+            }}
+          >
+            <span style={breed ? { position: 'sticky', left: 0, padding: '0 10px' } : undefined}>
+              {tekst}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const eersteVandaagIdx = cols.findIndex(c => c.isToday)
+
   // Gecentreerd op de dagkolom (12:00 → midden van de dag, weekend-bewust).
   const vandaagNoon = startOfDay(new Date()).getTime() + 12 * 3600_000
   const vandaagOffset = layout.xVoor(new Date(vandaagNoon).toISOString())
@@ -94,32 +155,37 @@ export default function PlanningShell({
 
               <div style={{ width: totalW, flexShrink: 0 }}>
                 {/* Header — spans (boven) */}
-                <div style={{
-                  position: 'relative', height: HEADER_SPAN_HOOGTE,
-                  background: KLEUR.bgElev,
-                  borderBottom: `1px solid ${KLEUR.border}`,
-                }}>
-                  {spans.map(s => (
-                    <div key={s.key} style={{
-                      position: 'absolute', left: s.left, width: s.width, top: 0, bottom: 0,
-                      padding: '4px 8px',
-                      fontSize: 10, fontWeight: 700,
-                      color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
-                      borderRight: `1px solid ${KLEUR.border}`,
-                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    }}>
-                      {s.label}
-                    </div>
-                  ))}
-                </div>
+                {toonSpans && (
+                  <div style={{
+                    position: 'relative', height: HEADER_SPAN_HOOGTE,
+                    background: KLEUR.bgElev,
+                    borderBottom: `1px solid ${KLEUR.border}`,
+                  }}>
+                    {spans.map(s => (
+                      <div key={s.key} style={{
+                        position: 'absolute', left: s.left, width: s.width, top: 0, bottom: 0,
+                        padding: '4px 8px',
+                        fontSize: 10, fontWeight: 700,
+                        color: KLEUR.fgMuted, textTransform: 'uppercase', letterSpacing: '0.06em',
+                        borderRight: `1px solid ${KLEUR.border}`,
+                        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                      }}>
+                        {s.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {weekPos !== 'onder' && weekbalk}
 
                 {/* Header — cols (onder) */}
+                {toonCols && (
                 <div style={{
                   position: 'relative', height: HEADER_COL_HOOGTE,
                   background: KLEUR.bgElev,
                   borderBottom: `1px solid ${KLEUR.border}`,
                 }}>
-                  {cols.map(c => (
+                  {cols.map((c, ci) => (
                     <div key={c.key} style={{
                       position: 'absolute', left: c.left, width: c.width, top: 0, bottom: 0,
                       textAlign: 'center', padding: '4px 0',
@@ -131,8 +197,10 @@ export default function PlanningShell({
                       lineHeight: 1.1,
                       overflow: 'visible',
                     }}>
-                      {/* Vandaag-vlag chip — DS spec: bovenin de vandaag-kolom */}
-                      {c.isToday && (
+                      {/* Vandaag-vlag chip — DS spec: bovenin de vandaag-kolom.
+                          Alleen op de eerste vandaag-kolom: in de Dag-view is élk
+                          van de 24 uurvakjes "vandaag". */}
+                      {c.isToday && ci === eersteVandaagIdx && (
                         <div style={{
                           position: 'absolute',
                           top: -1,
@@ -170,6 +238,9 @@ export default function PlanningShell({
                     </div>
                   ))}
                 </div>
+                )}
+
+                {weekPos === 'onder' && weekbalk}
               </div>
             </div>
 

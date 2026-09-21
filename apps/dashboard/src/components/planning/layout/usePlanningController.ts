@@ -71,6 +71,14 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
     setPeildatum(viewBereik(view, new Date()).vs)
   }, [view])
 
+  // Klik op een weeknummer in de weekbalk — naar de weekweergave van díe week.
+  // Niet via handleView: die springt bewust terug naar vandaag.
+  const handleWeekKlik = useCallback((maandag: Date) => {
+    anchorRef.current = 'period'
+    setView('week')
+    setPeildatum(viewBereik('week', maandag).vs)
+  }, [])
+
   // Scrubber — per dag scrubben: anker op de exacte aangewezen dag (op 1/6),
   // de gerenderde periode volgt die dag.
   const handleScrub = useCallback((newVs: Date) => {
@@ -82,6 +90,6 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
   return {
     view, peildatum, availableW, layout: layout as PlanningLayout,
     wrapRef, scrollRef,
-    handlePeildatum, handleView, handleVandaag, handleScrub,
+    handlePeildatum, handleView, handleVandaag, handleScrub, handleWeekKlik,
   }
 }

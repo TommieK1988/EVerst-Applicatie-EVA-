@@ -62,15 +62,38 @@ export function afwezigheidInterval(a: MedewerkerAfwezigheid): Interval {
   return { s: parseISO(a.start_datum).getTime(), e: parseISO(a.eind_datum).getTime() + DAG_MS }
 }
 
+/** Werkvenster als er (nog) geen rooster is vastgelegd. */
+export const STANDAARD_WERKVENSTER = { van: 7 * 60, tot: 16 * 60 }
+
+function minuten(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/** Het actieve rooster van de medewerker op `dag` (lokale datum), of undefined. */
+export function roosterOpDag(dag: Date, roosters: MedewerkerRooster[]): MedewerkerRooster | undefined {
+  const iso = format(dag, 'yyyy-MM-dd')
+  return roosters.find(r => iso >= r.geldig_vanaf && iso <= (r.geldig_tot ?? '9999-12-31'))
+}
+
+/**
+ * Begin en eind van de werkdag in minuten na middernacht. Hiermee kan de tijdlijn
+ * een dagvakje op de wérkdag schalen in plaats van op 24 uur: een dag die van
+ * dagstart tot dageind is ingepland, vult dan ook de hele dagcel.
+ */
+export function werkvensterOpDag(dag: Date, roosters: MedewerkerRooster[]): { van: number; tot: number } {
+  const actief = roosterOpDag(dag, roosters)
+  if (!actief) return STANDAARD_WERKVENSTER
+  const van = minuten(actief.dagstart)
+  const tot = minuten(actief.dageind)
+  return tot > van ? { van, tot } : STANDAARD_WERKVENSTER
+}
+
 /** Valt `dag` buiten het actieve rooster van de medewerker? Zonder rooster: weekend. */
 export function buitenRooster(dag: Date, roosters: MedewerkerRooster[]): boolean {
   // Lokale datum — dag.toISOString() zou vóór 01:00/02:00 NL de vórige dag geven (UTC).
-  const iso    = format(dag, 'yyyy-MM-dd')
   const dagNum = dag.getDay() === 0 ? 7 : dag.getDay()
-  const actief = roosters.find(r => {
-    const tot = r.geldig_tot ?? '9999-12-31'
-    return iso >= r.geldig_vanaf && iso <= tot
-  })
+  const actief = roosterOpDag(dag, roosters)
   if (!actief) return isWeekend(dag)
   return !(actief.werkdagen ?? []).includes(dagNum)
 }
