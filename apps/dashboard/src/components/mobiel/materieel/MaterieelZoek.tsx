@@ -19,12 +19,16 @@ import { GRIJS, RAND, ROOD, veld } from './stijl'
  * niet in zijn geheel over een bouwverbinding te gaan. Vanaf twee tekens, met
  * een korte typepauze ertussen, zodat het één query per woord blijft.
  *
- * De gewone lijsten van het beginscherm ("Op mijn naam", "Nog geen sticker")
- * komen als `children` binnen en staan in beeld zolang er niet gezocht wordt.
- * Tijdens het zoeken maken ze plaats voor de treffers — anders sta je op een
+ * De gewone lijsten van het beginscherm komen als `boven` (wat er boven het
+ * zoekveld hoort: het materieel dat aan jou is toegewezen) en `children` (de
+ * rest) binnen en staan in beeld zolang er niet gezocht wordt. Tijdens het
+ * zoeken maken ze allebei plaats voor de treffers — anders sta je op een
  * telefoon langs twee lijsten te scrollen om te zien welke de jouwe is.
  */
-export default function MaterieelZoek({ children }: { children?: React.ReactNode }) {
+export default function MaterieelZoek({ boven, children }: {
+  boven?: React.ReactNode
+  children?: React.ReactNode
+}) {
   const [term, setTerm] = React.useState('')
   const [treffers, setTreffers] = React.useState<MaterieelTreffer[] | null>(null)
   const [zoekt, setZoekt] = React.useState(false)
@@ -45,9 +49,13 @@ export default function MaterieelZoek({ children }: { children?: React.ReactNode
     return () => { afgebroken = true; clearTimeout(timer) }
   }, [schoon])
 
+  const stil = treffers === null && !fout
+
   return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ position: 'relative' }}>
+    <div style={{ marginTop: boven ? 0 : 16 }}>
+      {stil && boven}
+
+      <div style={{ position: 'relative', marginTop: stil && boven ? 18 : 0 }}>
         <input
           value={term}
           onChange={(e) => setTerm(e.target.value)}
@@ -83,7 +91,7 @@ export default function MaterieelZoek({ children }: { children?: React.ReactNode
         </div>
       )}
 
-      {treffers === null && !fout && children}
+      {stil && children}
 
       {treffers !== null && !fout && (
         <div style={{ marginTop: 12 }}>
