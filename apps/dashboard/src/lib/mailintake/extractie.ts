@@ -30,6 +30,7 @@ import {
   SERVICEDESK_CATEGORIEEN, type AardVanHetWerk,
 } from './regels'
 import { SYSTEM_PROMPT, bouwTekstBlok, type PromptContext } from './prompt'
+import { isLeesbaarOfficeBestand, leesOfficeTekst } from './office-tekst'
 import { VELD_BETROUWBAAR } from './types'
 
 /**
@@ -174,9 +175,23 @@ export async function extraheer(
       inhoud.push({ type: 'text', text: '</bijlage>' })
       gelezen.push(b.bestandsnaam)
       plaatjes++
+    } else if (isLeesbaarOfficeBestand(b.contentType, b.bestandsnaam)) {
+      // Word en Excel gaan als platte tekst mee. Een werkomschrijving wordt in Word
+      // geschreven, niet in PDF -- dat bestand overslaan betekent de hele scope
+      // missen bij een mail die alleen zegt "zie bijgaand werkomschrijving".
+      const tekst = leesOfficeTekst(b.bytes, b.bestandsnaam)
+      if (!tekst) {
+        overgeslagen.push({ naam: b.bestandsnaam, reden: 'kon er geen tekst uit halen' })
+      } else {
+        inhoud.push({
+          type: 'text',
+          text: `<bijlage naam="${b.bestandsnaam}" soort="document">\n${tekst.slice(0, 60_000)}\n</bijlage>`,
+        })
+        gelezen.push(b.bestandsnaam)
+      }
     } else {
-      // Word, Excel, dwg, zip: die kunnen we niet als document meesturen. Ze zijn
-      // wél gearchiveerd, en de bestandsnaam staat in de metadata.
+      // dwg, zip en het oude .doc: die kunnen we niet uitpakken. Ze zijn wél
+      // gearchiveerd, en de bestandsnaam staat in de metadata.
       overgeslagen.push({ naam: b.bestandsnaam, reden: `bestandstype ${type || 'onbekend'} kan niet gelezen worden` })
     }
   }

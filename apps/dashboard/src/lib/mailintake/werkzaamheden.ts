@@ -30,9 +30,10 @@ import { z } from 'zod'
 
 import { MODEL } from './extractie'
 import { kortIn } from './prompt'
+import { isLeesbaarOfficeBestand, leesOfficeTekst } from './office-tekst'
 
 /** Bump bij elke inhoudelijke wijziging van prompt of schema. */
-export const WERKZAAMHEDEN_PROMPT_VERSIE = '2026-09-10.2'
+export const WERKZAAMHEDEN_PROMPT_VERSIE = '2026-09-21.1'
 
 /** Ruimer dan de veldextractie: dit is de ronde waar het bestek juist wél in moet. */
 const MAX_TOKENS = 8000
@@ -56,7 +57,7 @@ const PRIJS_UITVOER_PER_MTOK = 25.0
 const PDF_TYPES = new Set(['application/pdf'])
 const AFBEELDING_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'])
 
-export type RegelSoort = 'werk' | 'optie' | 'voorwaardelijk' | 'verzameling' | 'onduidelijk'
+export type RegelSoort = 'werk' | 'optie' | 'voorwaardelijk' | 'verzameling' | 'uitsluiting' | 'onduidelijk'
 
 export const werkzaamhedenSchema = z.object({
   kop: z.string().trim().max(200).catch(''),
@@ -302,6 +303,20 @@ export async function vatWerkzaamhedenSamen(inv: WerkzaamhedenInvoer): Promise<W
       gelezen.push(b.bestandsnaam)
       totaal += b.bytes.length
       plaatjes++
+    } else if (isLeesbaarOfficeBestand(b.contentType, b.bestandsnaam)) {
+      // De werkomschrijving is bijna altijd een Word-bestand. Die als "kan niet
+      // gelezen worden" wegzetten betekent bij deze ronde -- die juist over de
+      // scope gaat -- dat je de scope zelf mist.
+      const tekst = leesOfficeTekst(b.bytes, b.bestandsnaam)
+      if (!tekst) {
+        gemist.push(`${b.bestandsnaam} (kon er geen tekst uit halen)`)
+      } else {
+        inhoud.push({
+          type: 'text',
+          text: `<bijlage naam="${b.bestandsnaam}" soort="document">\n${tekst.slice(0, 60_000)}\n</bijlage>`,
+        })
+        gelezen.push(b.bestandsnaam)
+      }
     } else {
       gemist.push(`${b.bestandsnaam} (bestandstype ${type || 'onbekend'} kan niet gelezen worden)`)
     }
