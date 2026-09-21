@@ -16,6 +16,8 @@ import DubbelenPaneel from '@/components/relaties/DubbelenPaneel'
 import RelatieDubbelenPaneel from '@/components/relaties/RelatieDubbelenPaneel'
 import type { DubbelGroep, SamenvoegingLog } from '@/lib/relaties/ontdubbelen'
 import type { DubbelRelatieGroep, RelatieSamenvoegingLog } from '@/lib/relaties/ontdubbelen-relaties'
+import type { ContactpersoonOrganisatieRegel } from '@/lib/relaties/contactpersonen-actions'
+import { bezorgadres, type Bezorgadres } from '@/lib/relaties/kerstkaart'
 
 /* ─── types ───────────────────────────────────────────────────────── */
 
@@ -43,7 +45,17 @@ export type Organisatie = {
 }
 
 type ContactpersoonRij = Contactpersoon & {
-  organisaties: { naam: string; functie: string | null }[]
+  organisaties: ContactpersoonOrganisatieRegel[]
+}
+
+/**
+ * Waar de kerstkaart van deze persoon heen gaat — de werkgever staat vooraan in de lijst.
+ * Krijgt hij geen kaart, dan blijven de adresvelden leeg: ze horen bij de kaart, niet bij de
+ * persoon, en anders sleept een export van de lijst adressen mee van mensen die er niet op staan.
+ */
+function kaartBezorgadres(r: ContactpersoonRij): Bezorgadres {
+  if (!r.kerstkaart) return { organisatie: null, straat: null, postcode: null, plaats: null, land: null, regel: null }
+  return bezorgadres(r.kerstkaart_adres, r, r.organisaties[0] ?? null)
 }
 
 type ParticulierRij = Particulier
@@ -227,6 +239,11 @@ const KOLOMMEN_ORGANISATIES: KolomDefinitie<Organisatie>[] = [
   },
 ]
 
+/** Adresveld in een cel; leeg is hier normaal, dus een streepje volstaat. */
+function AdresCel({ waarde }: { waarde: string | null }) {
+  return <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{waarde || '—'}</span>
+}
+
 const KOLOMMEN_CONTACTPERSONEN: KolomDefinitie<ContactpersoonRij>[] = [
   {
     key: 'naam',
@@ -352,6 +369,55 @@ const KOLOMMEN_CONTACTPERSONEN: KolomDefinitie<ContactpersoonRij>[] = [
     render: r => r.kerstkaart
       ? <Badge variant="outline" tone="success" dot>{r.kerstkaart_adres === 'zakelijk' ? 'Zakelijk' : 'Privé'}</Badge>
       : <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>,
+  },
+  // Het bezorgadres van de kaart, uit elkaar getrokken zodat de export rechtstreeks als
+  // etikettenbestand te gebruiken is. Bij "Zakelijk" is dit het adres van de werkgever,
+  // bij "Privé" het privé-adres van de persoon.
+  {
+    key: 'kerstkaart_tav',
+    label: 'Kerstkaart t.a.v.',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    sorteerWaarde: r => kaartBezorgadres(r).organisatie ?? '',
+    render: r => <AdresCel waarde={kaartBezorgadres(r).organisatie} />,
+  },
+  {
+    key: 'kerstkaart_straat',
+    label: 'Kerstkaart straat',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    sorteerWaarde: r => kaartBezorgadres(r).straat ?? '',
+    render: r => <AdresCel waarde={kaartBezorgadres(r).straat} />,
+  },
+  {
+    key: 'kerstkaart_postcode',
+    label: 'Kerstkaart postcode',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    sorteerWaarde: r => kaartBezorgadres(r).postcode ?? '',
+    render: r => <AdresCel waarde={kaartBezorgadres(r).postcode} />,
+  },
+  {
+    key: 'kerstkaart_plaats',
+    label: 'Kerstkaart plaats',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    sorteerWaarde: r => kaartBezorgadres(r).plaats ?? '',
+    render: r => <AdresCel waarde={kaartBezorgadres(r).plaats} />,
+  },
+  {
+    // Eén regel om snel te zien of het adres compleet is; "geen adres" wijst de gaten aan.
+    key: 'kerstkaart_bezorgadres',
+    label: 'Kerstkaart bezorgadres',
+    standaard_zichtbaar: false,
+    filterType: 'tekst',
+    sorteerWaarde: r => kaartBezorgadres(r).regel ?? '',
+    render: r => {
+      const adres = kaartBezorgadres(r)
+      if (!r.kerstkaart) return <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>—</span>
+      if (!adres.regel) return <span style={{ fontSize: 12.5, color: 'var(--warning-700)' }}>geen adres</span>
+      return <span style={{ fontSize: 13, color: 'var(--fg-soft)' }}>{adres.regel}</span>
+    },
   },
 ]
 

@@ -21,6 +21,7 @@ import DossierLijstBlok from '@/components/relaties/DossierLijstBlok'
 import SamenvoegenModal from '@/components/relaties/SamenvoegenModal'
 import EmailadressenBlok from '@/components/relaties/EmailadressenBlok'
 import AdreskoppelingenBlok from '@/components/relaties/AdreskoppelingenBlok'
+import { adresRegel, bezorgadres, bezorgadresWaarschuwing } from '@/lib/relaties/kerstkaart'
 
 const baseInput: React.CSSProperties = {
   width: '100%', padding: '7px 10px',
@@ -59,18 +60,6 @@ function VeldInput({ label, value, onChange, type = 'text', placeholder }: { lab
       <input type={type} value={value} onChange={e => onChange(e.target.value)} style={baseInput} placeholder={placeholder} />
     </div>
   )
-}
-
-/**
- * Adres als één leesbare regel; leeg blijft leeg. Nederland laten we weg — dat is de regel,
- * geen informatie.
- */
-function adresRegel(a: { straat?: string | null; postcode?: string | null; plaats?: string | null; land?: string | null }): string | null {
-  return [
-    a.straat,
-    [a.postcode, a.plaats].filter(Boolean).join('  '),
-    a.land && a.land !== 'Nederland' ? a.land : null,
-  ].filter(Boolean).join(', ') || null
 }
 
 const AANHEF_OPTIES = ['', 'De heer', 'Mevrouw', 'Dhr.', 'Mevr.', 'Dr.', 'Prof. dr.', 'Ir.', 'Mr.']
@@ -235,35 +224,22 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
 
   // ── Kerstkaart: waar komt hij aan? ──
   // De werkgever is de primaire koppeling; die staat vooraan (gesorteerd op is_primair).
-  const werkgever = cp.koppelingen[0] ?? null
-  const zakelijkAdres = werkgever ? adresRegel({
-    straat: werkgever.organisatie.adres_straat,
-    postcode: werkgever.organisatie.adres_postcode,
-    plaats: werkgever.organisatie.adres_plaats,
-    land: werkgever.organisatie.adres_land,
-  }) : null
-  /** Het adres waar de kaart heen gaat; null betekent: we hebben het niet, dus hij kan niet weg. */
-  function kaartAdres(keuze: KerstkaartAdres, prive: { straat: string | null; postcode: string | null; plaats: string | null; land: string | null }): string | null {
-    if (keuze === 'zakelijk') return werkgever && zakelijkAdres ? `${werkgever.organisatie.naam}, ${zakelijkAdres}` : null
-    return adresRegel(prive)
+  const werkgever = cp.koppelingen[0]?.organisatie ?? null
+  /** Het adres waar de kaart heen gaat; leeg betekent: we hebben het niet, dus hij kan niet weg. */
+  function kaartAdres(keuze: KerstkaartAdres, prive: typeof cp): string | null {
+    const adres = bezorgadres(keuze, prive, werkgever)
+    if (!adres.regel) return null
+    return adres.organisatie ? `${adres.organisatie}, ${adres.regel}` : adres.regel
   }
-  const kaartAdresOpgeslagen = kaartAdres(cp.kerstkaart_adres, {
-    straat: cp.prive_adres_straat, postcode: cp.prive_adres_postcode,
-    plaats: cp.prive_adres_plaats, land: cp.prive_adres_land,
-  })
+  const kaartAdresOpgeslagen = kaartAdres(cp.kerstkaart_adres, cp)
   const kaartAdresForm = kaartAdres(form.kerstkaart_adres, {
-    straat: form.prive_adres_straat || null, postcode: form.prive_adres_postcode || null,
-    plaats: form.prive_adres_plaats || null, land: form.prive_adres_land || null,
+    ...cp,
+    prive_adres_straat: form.prive_adres_straat || null,
+    prive_adres_postcode: form.prive_adres_postcode || null,
+    prive_adres_plaats: form.prive_adres_plaats || null,
+    prive_adres_land: form.prive_adres_land || null,
   })
-  /** Waarom er geen adres is — dat is bruikbaarder dan een streepje bij "Gaat naar". */
-  function kaartWaarschuwing(keuze: KerstkaartAdres): string {
-    const oorzaak = keuze === 'zakelijk'
-      ? werkgever
-        ? `Bij ${werkgever.organisatie.naam} staat geen adres — vul dat op de relatiekaart in.`
-        : 'Deze persoon is aan geen enkele organisatie gekoppeld.'
-      : 'Er staat nog geen privé-adres bij Privégegevens.'
-    return `${oorzaak} De kaart heeft zo geen bezorgadres.`
-  }
+  const kaartWaarschuwing = (keuze: KerstkaartAdres) => bezorgadresWaarschuwing(keuze, werkgever?.naam ?? null)
   // Radio's krijgen een unieke naam: een vaste name is paginabreed en botst met andere groepen.
   const radioNaam = useId()
 

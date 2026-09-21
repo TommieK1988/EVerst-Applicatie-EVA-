@@ -112,15 +112,35 @@ export async function getContactpersoonById(id: string): Promise<ContactpersoonM
   }
 }
 
-export async function getAlleContactpersonen(): Promise<(Contactpersoon & { organisaties: { naam: string; functie: string | null }[] })[]> {
+/** Eén werkgever in de lijst; het adres zit erbij omdat de kerstkaart daarheen kan gaan. */
+export type ContactpersoonOrganisatieRegel = {
+  naam: string
+  functie: string | null
+  is_primair: boolean
+  adres_straat: string | null
+  adres_postcode: string | null
+  adres_plaats: string | null
+  adres_land: string | null
+}
+
+export async function getAlleContactpersonen(): Promise<(Contactpersoon & { organisaties: ContactpersoonOrganisatieRegel[] })[]> {
   const supabase = createAdminClient() as any
   // Gepagineerd: beide tabellen zijn de 1000-rijengrens van PostgREST voorbij of naderen hem,
   // en een afkapping komt zonder foutmelding — dan mist een contactpersoon stil zijn organisatie.
   const koppelingen = await haalAlleRijen<{
-    contactpersoon_id: string; functie: string | null; organisatie: { naam: string } | null
+    contactpersoon_id: string
+    functie: string | null
+    is_primair: boolean | null
+    organisatie: {
+      naam: string
+      adres_straat: string | null
+      adres_postcode: string | null
+      adres_plaats: string | null
+      adres_land: string | null
+    } | null
   }>((van, tot) => supabase
     .from('contactpersoon_organisaties')
-    .select('contactpersoon_id, functie, organisatie:relaties(naam)')
+    .select('contactpersoon_id, functie, is_primair, organisatie:relaties(naam, adres_straat, adres_postcode, adres_plaats, adres_land)')
     .order('id')
     .range(van, tot))
 
@@ -135,12 +155,22 @@ export async function getAlleContactpersonen(): Promise<(Contactpersoon & { orga
 
   if (!personen) return []
 
-  const orgMap = new Map<string, { naam: string; functie: string | null }[]>()
+  const orgMap = new Map<string, ContactpersoonOrganisatieRegel[]>()
   for (const k of koppelingen ?? []) {
     const lijst = orgMap.get(k.contactpersoon_id) ?? []
-    lijst.push({ naam: k.organisatie?.naam ?? '?', functie: k.functie })
+    lijst.push({
+      naam: k.organisatie?.naam ?? '?',
+      functie: k.functie,
+      is_primair: k.is_primair ?? false,
+      adres_straat: k.organisatie?.adres_straat ?? null,
+      adres_postcode: k.organisatie?.adres_postcode ?? null,
+      adres_plaats: k.organisatie?.adres_plaats ?? null,
+      adres_land: k.organisatie?.adres_land ?? null,
+    })
     orgMap.set(k.contactpersoon_id, lijst)
   }
+  // Primair vooraan, net als op het contactpersoonscherm: dat is de werkgever waar de post heen gaat.
+  for (const lijst of orgMap.values()) lijst.sort((a, b) => Number(b.is_primair) - Number(a.is_primair))
 
   return personen.map((p: Contactpersoon) => ({
     ...p,
