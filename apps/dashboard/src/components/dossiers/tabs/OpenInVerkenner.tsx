@@ -5,6 +5,7 @@ import { Copy, Check } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
 } from '@/components/ui'
+import { getDossierMapLokaalPad } from '@/lib/o365/onedrive-pad'
 
 /**
  * Opent de SharePoint-dossiermap in Windows Verkenner in plaats van in de browser.
@@ -15,20 +16,22 @@ import {
  * werking staan in `scripts/eva-verkenner/LEESMIJ.md`.
  *
  * **Waarom hier zoveel omheen staat.** Die handler moet per pc geïnstalleerd zijn, en
- * is dat lang niet overal. Ontbreekt hij, dan doet de browser er precies niets mee:
- * geen foutmelding, geen venster, niets. De knop leek daardoor kapot terwijl er alleen
- * iets miste. Daarom meet deze component of er na de klik íéts gebeurde (de pagina
- * raakt zijn focus kwijt zodra Verkenner opent of de browser om toestemming vraagt),
- * en toont hij anders zelf het netwerkpad. Dat pad werkt zónder installatie: plakken in
- * de adresbalk van Verkenner is genoeg.
+ * hij start PowerShell — iets wat beveiligingssoftware een browser vaak verbiedt. In
+ * beide gevallen doet de browser er precies niets mee: geen foutmelding, geen venster,
+ * niets. De knop leek daardoor kapot terwijl er buiten EVA iets in de weg stond.
+ * Daarom meet deze component of er na de klik íéts gebeurde (de pagina raakt zijn focus
+ * kwijt zodra Verkenner opent of de browser om toestemming vraagt), en wijst hij anders
+ * zelf de weg naar dezelfde map op de eigen schijf.
  *
- * Alleen zichtbaar op Windows — elders bestaat Verkenner niet en is het WebDAV-pad
- * onbruikbaar. De gewone SharePoint-link staat er altijd naast.
+ * Alleen zichtbaar op Windows — elders bestaat Verkenner niet. De gewone
+ * SharePoint-link staat er altijd naast.
  */
-export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
+export default function OpenInVerkenner({ dossierId, mapUrl }: { dossierId: string; mapUrl: string }) {
   const [opWindows, setOpWindows] = useState(false)
   const [hulpOpen, setHulpOpen] = useState(false)
   const [gekopieerd, setGekopieerd] = useState(false)
+  // undefined = nog niet opgehaald, null = niet te bepalen.
+  const [lokaalPad, setLokaalPad] = useState<string | null | undefined>(undefined)
   const timer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -36,9 +39,14 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
     return () => { if (timer.current) window.clearTimeout(timer.current) }
   }, [])
 
-  if (!opWindows) return null
+  // Pas ophalen als het venster nodig is: het kost de eerste keer drie Graph-aanroepen,
+  // en op een pc waar de snelkoppeling gewoon werkt komt het venster nooit in beeld.
+  useEffect(() => {
+    if (!hulpOpen || lokaalPad !== undefined) return
+    getDossierMapLokaalPad(dossierId).then(setLokaalPad).catch(() => setLokaalPad(null))
+  }, [hulpOpen, lokaalPad, dossierId])
 
-  const netwerkpad = webdavPad(mapUrl)
+  if (!opWindows) return null
 
   function openen() {
     // Navigeren binnen de klik-afhandeling: browsers starten een eigen protocol
@@ -61,9 +69,9 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
   }
 
   async function kopieer() {
-    if (!netwerkpad) return
+    if (!lokaalPad) return
     try {
-      await navigator.clipboard.writeText(netwerkpad)
+      await navigator.clipboard.writeText(lokaalPad)
       setGekopieerd(true)
       window.setTimeout(() => setGekopieerd(false), 2000)
     } catch {
@@ -89,13 +97,16 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
             <div className="pr-8">
               <DialogTitle>Verkenner ging niet open</DialogTitle>
               <DialogDescription>
-                Deze pc kent de EVA-snelkoppeling nog niet. Die is eenmalig te installeren;
-                vraag dat aan wie de werkplekken beheert. Tot die tijd kom je er zo:
+                Deze pc kan de EVA-snelkoppeling niet starten; meld dat bij wie de
+                werkplekken beheert. Synchroniseer je de dossiermappen met OneDrive, dan
+                kom je er intussen zo:
               </DialogDescription>
             </div>
           </DialogHeader>
           <DialogBody className="space-y-3">
-            {netwerkpad ? (
+            {lokaalPad === undefined ? (
+              <p className="text-[13px] text-neutral-500">Pad opzoeken…</p>
+            ) : lokaalPad ? (
               <>
                 <ol className="list-decimal space-y-1 pl-5 text-[13px] text-neutral-700">
                   <li>Kopieer het pad hieronder.</li>
@@ -104,7 +115,7 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
                 </ol>
                 <div className="flex items-start gap-2">
                   <code className="min-w-0 flex-1 break-all rounded border border-neutral-200 bg-neutral-50 px-2 py-1.5 text-[11.5px] text-neutral-700">
-                    {netwerkpad}
+                    {lokaalPad}
                   </code>
                   <button
                     type="button"
@@ -117,13 +128,14 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
                   </button>
                 </div>
                 <p className="text-[11.5px] text-neutral-500">
-                  Synchroniseer je de bibliotheek met OneDrive, dan staat dezelfde map ook
-                  gewoon onder <em>OneDrive – Everts Groep</em> op je eigen schijf.
+                  Verkenner vult <code>%OneDriveCommercial%</code> zelf in. Krijg je
+                  &ldquo;kan niet vinden&rdquo;, dan synchroniseer je deze map niet of op een
+                  ander niveau — gebruik dan de link &ldquo;Open map in SharePoint&rdquo;.
                 </p>
               </>
             ) : (
               <p className="text-[13px] text-neutral-700">
-                Van deze map is geen netwerkpad te maken. Gebruik de link
+                Van deze map is geen lokaal pad te bepalen. Gebruik de link
                 &ldquo;Open map in SharePoint&rdquo; ernaast.
               </p>
             )}
@@ -141,29 +153,4 @@ export default function OpenInVerkenner({ mapUrl }: { mapUrl: string }) {
       </Dialog>
     </>
   )
-}
-
-/**
- * Het WebDAV-netwerkpad van een SharePoint-map:
- * `https://tenant.sharepoint.com/sites/X/Y` → `\\tenant.sharepoint.com@SSL\DavWWWRoot\sites\X\Y`.
- *
- * Verkenner opent dit zonder dat er iets geïnstalleerd hoeft te zijn. Dezelfde afleiding
- * doet de `eva://`-handler als de bibliotheek niet met OneDrive gesynchroniseerd is —
- * zie `scripts/eva-verkenner/eva-verkenner.ps1`.
- *
- * Padsegmenten worden per stuk gedecodeerd (`Shared%20Documents` → `Shared Documents`);
- * eerst decoderen en dan splitsen zou een `%2F` in een mapnaam als mapscheiding laten
- * werken.
- */
-function webdavPad(mapUrl: string): string | null {
-  try {
-    const u = new URL(mapUrl)
-    if (u.protocol !== 'https:') return null
-    const segmenten = u.pathname.split('/').filter(Boolean).map(decodeURIComponent)
-    if (segmenten.length === 0) return null
-    if (segmenten.some(s => s === '.' || s === '..' || s.includes('\\'))) return null
-    return `\\\\${u.hostname}@SSL\\DavWWWRoot\\${segmenten.join('\\')}`
-  } catch {
-    return null
-  }
 }

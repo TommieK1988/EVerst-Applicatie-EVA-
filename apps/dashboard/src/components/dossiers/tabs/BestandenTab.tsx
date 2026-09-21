@@ -289,6 +289,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   // De koppelacties zijn identiek in de lege staat en in de voetregel; één keer
   // opschrijven scheelt twee blokken die uit elkaar kunnen gaan lopen.
   const koppelActies = {
+    dossierId,
     readOnly,
     bezig,
     onKies: () => setPickerOpen(true),
@@ -445,9 +446,10 @@ function MapActies({ onKies, onOntkoppel, bezig }: { onKies: () => void; onOntko
  * eigen kaart; nu de bestanden in één lijst staan hoort het bij de voetregel.
  */
 function SharePointKoppeling({
-  data, bouw7Beschikbaar, readOnly, bezig, onKies, onOntkoppel, onOpnieuw, onKiesKandidaat,
+  data, dossierId, bouw7Beschikbaar, readOnly, bezig, onKies, onOntkoppel, onOpnieuw, onKiesKandidaat,
 }: {
   data: DossierSharePointData | null
+  dossierId: string
   bouw7Beschikbaar?: boolean
   readOnly: boolean
   bezig: boolean
@@ -470,7 +472,7 @@ function SharePointKoppeling({
         </span>
         <span className="flex items-center gap-3">
           {!readOnly && <MapActies onKies={onKies} onOntkoppel={onOntkoppel} bezig={bezig} />}
-          {data.mapUrl && <OpenInVerkenner mapUrl={data.mapUrl} />}
+          {data.mapUrl && <OpenInVerkenner dossierId={dossierId} mapUrl={data.mapUrl} />}
           {data.mapUrl && (
             <a href={data.mapUrl} target="_blank" rel="noopener noreferrer"
               className="text-[11px] font-medium text-brand-600 hover:underline">
