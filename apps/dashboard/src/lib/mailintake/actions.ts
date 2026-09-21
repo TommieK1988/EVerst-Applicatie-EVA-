@@ -21,6 +21,7 @@ import { toetsPostbus } from '@/lib/o365/inbox'
 import { zetOfferteGewonnenUitBericht, toetsOfferteDossier } from './opdracht'
 
 import { maakDossierUitBericht, koppelAanDossier, onthoudAlias } from './aanmaken'
+import { proefAanmaak } from './proef'
 import { haalPostbusOp } from './ophalen'
 import { verwerkBericht } from './verwerken'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
@@ -45,6 +46,22 @@ export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; u
 // ─── Behandelen ───────────────────────────────────────────────────────────────
 
 /**
+ * De proef: laat zien wat er zou gebeuren en schrijft niets.
+ *
+ * Draait vóór het akkoord, zodat de bevestiging over het werkelijke voorstel gaat
+ * en niet over een benadering ervan. Hetzelfde resultaat gaat daarna mee naar
+ * `maakDossierVanBericht`, want dat is waartegen er wordt teruggelezen.
+ */
+export async function proefDossierVanBericht(
+  berichtId: string,
+  velden: GekeurdeVelden & { relatieId: string | null; contactpersoonId: string | null },
+  omschrijving: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null },
+) {
+  await vereisRecht('mailintake', 'lezen')
+  return proefAanmaak(berichtId, velden, omschrijving)
+}
+
+/**
  * Maakt een dossier aan vanuit het behandelscherm.
  *
  * De duplicaatcontrole is hier bewust géén blokkade: het scherm heeft de
@@ -62,7 +79,20 @@ export async function maakDossierVanBericht(
     buitenScope?: string | null
     aandachtspunten?: string | null
   },
-): Promise<{ ok: boolean; dossierId?: string; dossiernummer?: string | null; bouw7Ok?: boolean; bouw7Fout?: string; error?: string }> {
+  /** Het voorstel uit de proef; waartegen er na het aanmaken wordt teruggelezen. */
+  proef?: Awaited<ReturnType<typeof proefAanmaak>>,
+): Promise<{
+  ok: boolean
+  dossierId?: string
+  dossiernummer?: string | null
+  bouw7Ok?: boolean
+  bouw7Fout?: string
+  /** Verschillen tussen het voorstel en wat er na het aanmaken werkelijk staat. */
+  afwijkingen?: { veld: string; verstuurd: string | null; teruggelezen: string | null }[]
+  /** false = er week iets af, dus de bestanden staan nog klaar in plaats van in de map. */
+  bestandenGeplaatst?: boolean
+  error?: string
+}> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
   const supabase = createAdminClient()
 
@@ -86,6 +116,7 @@ export async function maakDossierVanBericht(
       buitenScope: velden.buitenScope ?? null,
       aandachtspunten: velden.aandachtspunten ?? null,
     },
+    proef,
     automatisch: false,
     medewerkerId: medewerker.id,
     behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,
@@ -113,6 +144,8 @@ export async function maakDossierVanBericht(
   return {
     ok: true, dossierId: res.dossierId, dossiernummer: res.dossiernummer,
     bouw7Ok: res.bouw7Ok, bouw7Fout: res.bouw7Fout,
+    afwijkingen: res.afwijkingen ?? [],
+    bestandenGeplaatst: res.bestandenGeplaatst !== false,
   }
 }
 

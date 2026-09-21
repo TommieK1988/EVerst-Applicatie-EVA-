@@ -13,6 +13,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
+import type { Json } from '@everts/database'
 
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
@@ -20,6 +21,8 @@ import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 import type { GekeurdeVelden } from './extractie'
 import { maakIntakeActie } from './taken'
 import { bouwOmschrijvingHtml } from './omschrijving'
+import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
+import type { ProefResultaat } from './proef'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
 export interface AanmaakInvoer {
@@ -36,6 +39,11 @@ export interface AanmaakInvoer {
    * samen als HTML naar Bouw7; wat de behandelaar heeft bijgeschaafd is leidend.
    */
   omschrijving?: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null }
+  /**
+   * Het voorstel zoals het in de proef stond. Zonder dit wordt er niet teruggelezen
+   * -- dan is er namelijk niets om tegen te vergelijken.
+   */
+  proef?: ProefResultaat
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -45,7 +53,17 @@ export interface AanmaakInvoer {
 }
 
 export type AanmaakResultaat =
-  | { ok: true; dossierId: string; dossiernummer: string | null; bouw7Ok: boolean; bouw7Fout?: string }
+  | {
+      ok: true
+      dossierId: string
+      dossiernummer: string | null
+      bouw7Ok: boolean
+      bouw7Fout?: string
+      /** Verschillen tussen het voorstel en wat er daadwerkelijk staat. */
+      afwijkingen?: { veld: string; verstuurd: string | null; teruggelezen: string | null }[]
+      /** false = er is een verschil gevonden, dus de bestanden staan nog klaar. */
+      bestandenGeplaatst?: boolean
+    }
   | { ok: false; error: string }
 
 /** Projectnaam zoals de aanvraagmodal hem samenstelt: "{Straat huisnr}, {Stad} - {Omschrijving}". */
@@ -266,9 +284,35 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     },
   })
 
+  // ── Teruglezen ─────────────────────────────────────────────────────────────
+  // "Gelukt" van een schrijfactie betekent alleen dat er geen fout terugkwam, niet
+  // dat het veld gevuld is. Daarom hier een vergelijking tussen wat er verstuurd is
+  // en wat er werkelijk staat.
+  //
+  // Bij een verschil gaan de bestanden er níét in. Dat is de regel uit de
+  // intakebeschrijving en het is de goede kant om op te falen: een half dossier is
+  // te repareren, een dossiermap vol stukken onder het verkeerde project veel
+  // minder. De controle zelf mag nooit een bestaand dossier omverhalen, vandaar de
+  // catch eromheen -- maar dan geldt het als "niet gecontroleerd" en blijven de
+  // bestanden alsnog staan.
+  let controle: ControleResultaat | null = null
+  if (inv.proef) {
+    controle = await leesTerugNaAanmaken(dossierId, inv.proef).catch(() => null)
+    if (controle && !controle.klopt) {
+      await supabase.from('mailintake_besluiten').insert({
+        bericht_id: inv.berichtId, actor: 'systeem', actie: 'teruglezing_wijkt_af',
+        details: { dossier_id: dossierId, afwijkingen: controle.afwijkingen } as unknown as Json,
+      })
+    }
+  }
+
+  const mochtUploaden = controle == null ? true : controle.klopt
+
   // De bijlagen horen bij het dossier, niet bij de mailbox. Best-effort: mislukt
   // dit, dan blijft het dossier gewoon staan en probeert de bewakingscron opnieuw.
-  await zetBijlagenInSharePoint(inv.berichtId, dossierId).catch(() => {})
+  if (mochtUploaden) {
+    await zetBijlagenInSharePoint(inv.berichtId, dossierId).catch(() => {})
+  }
 
   // Bij een automatisch dossier hoort altijd een mens die er nog naar kijkt.
   if (inv.automatisch) {
@@ -286,6 +330,8 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     dossiernummer: res.data.dossiernummer ?? null,
     bouw7Ok: res.bouw7.ok,
     bouw7Fout: res.bouw7.error,
+    afwijkingen: controle?.afwijkingen ?? [],
+    bestandenGeplaatst: mochtUploaden,
   }
 }
 

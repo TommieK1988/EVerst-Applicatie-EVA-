@@ -13,25 +13,23 @@ import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-import { Button, Badge, Card, useDialogen } from '@/components/ui'
+import { Button, Card, useDialogen } from '@/components/ui'
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres } from '@/lib/adres/pdok'
 // Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
 import { dossierHref } from '@/lib/dossiers/href'
 import {
-  maakDossierVanBericht, koppelBerichtAanDossier, negeerBericht,
-  markeerGeenAanvraag, leesOpnieuw, getBijlageUrl, heropenBericht,
+  maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier,
 } from '@/lib/mailintake/actions'
-import {
-  MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL,
-  bepaalRoute,
-} from '@/lib/mailintake/types'
+import { DUPLICAAT_TWIJFEL, bepaalRoute } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
-import { klein, zacht, kop, veldStijl, Veld } from './panelen/velden'
+import { bouwVoorvertoning, bouwAfwijkingTekst } from './panelen/voorvertoning'
+import { useWeglegActies } from './panelen/wegleg-acties'
+import { klein, kop, veldStijl, Veld } from './panelen/velden'
 
 type Detail = {
   bericht: any
@@ -116,6 +114,16 @@ export default function BerichtBehandelen({
   )
 
   const [bezig, setBezig] = useState(false)
+
+  // Negeren, "geen aanvraag", opnieuw lezen en heropenen zijn een eigen onderwerp
+  // en staan in panelen/wegleg-acties.ts.
+  const {
+    bezig: weglegBezig, negeren, geenAanvraag, opnieuwLezen, heropen, openBijlage,
+  } = useWeglegActies(b)
+
+  // Eén vlag voor het hele scherm: ook tijdens een wegleg-actie horen de knoppen
+  // uit te staan, anders kun je tijdens het negeren nog een dossier aanmaken.
+  const inActie = bezig || weglegBezig
 
   // Categorie voorvullen op naam uit de extractie.
   React.useEffect(() => {
@@ -250,7 +258,7 @@ export default function BerichtBehandelen({
 
     setBezig(true)
     try {
-      const res = await maakDossierVanBericht(b.id, {
+      const teVersturen = {
         relatieId: klantId,
         contactpersoonId,
         objectId,
@@ -287,9 +295,48 @@ export default function BerichtBehandelen({
         opmerkingen: opmerkingen.trim() || null,
         meerdereWerkadressen: false,
         vertrouwen: {},
+      }
+
+      // ── Proef ─────────────────────────────────────────────────────────────
+      // Eerst laten zien wat er precies weggeschreven wordt, en niets doen. De
+      // bevestiging hieronder gaat daarmee over het werkelijke voorstel en niet
+      // over een benadering ervan; ditzelfde resultaat is straks ook waartegen er
+      // wordt teruggelezen.
+      const proef = await proefDossierVanBericht(b.id, teVersturen, {
+        scope: projectOmschrijving.scope.trim() || null,
+        buitenScope: projectOmschrijving.buitenScope.trim() || null,
+        aandachtspunten: projectOmschrijving.aandachtspunten.trim() || null,
       })
 
+      if (proef.blokkades.length > 0) {
+        await meld({
+          titel: 'Dit kan nog niet aangemaakt worden',
+          omschrijving: proef.blokkades.map(r => `- ${r}`).join('\n'),
+        })
+        return
+      }
+
+      const akkoord = await bevestig({
+        titel: 'Dit wordt er aangemaakt',
+        omschrijving: bouwVoorvertoning(proef),
+        bevestigLabel: 'Aanmaken',
+        annuleerLabel: 'Annuleren',
+      })
+      if (!akkoord) return
+
+      const res = await maakDossierVanBericht(b.id, teVersturen, proef)
+
       if (!res.ok) { toast.error(res.error ?? 'Aanmaken mislukt'); return }
+
+      // ── Teruglezen ────────────────────────────────────────────────────────
+      // Wijkt er iets af, dan staan de bestanden bewust nog niet in de map: liever
+      // een half dossier dan stukken onder het verkeerde project.
+      if ((res.afwijkingen?.length ?? 0) > 0) {
+        await meld({
+          titel: 'Het dossier staat er, maar wijkt af van het voorstel',
+          omschrijving: bouwAfwijkingTekst(res.afwijkingen ?? [], res.bestandenGeplaatst !== false),
+        })
+      }
 
       toast.success(`Dossier ${res.dossiernummer ?? ''} aangemaakt`.trim())
       if (!res.bouw7Ok) {
@@ -327,81 +374,6 @@ export default function BerichtBehandelen({
     } finally {
       setBezig(false)
     }
-  }
-
-  async function negeren() {
-    if (b.relatie?.id) {
-      const ok = await bevestig({
-        titel: 'Dit bericht komt van een bekende klant',
-        omschrijving: `${b.relatie.naam} staat als opdrachtgever in EVA. Weet je zeker dat hier niets mee hoeft?`,
-        bevestigLabel: 'Ja, negeren',
-        destructief: true,
-      })
-      if (!ok) return
-    }
-    const reden = await vraagTekst({
-      titel: 'Waarom kan dit genegeerd worden?',
-      omschrijving: 'Eén regel is genoeg. Dit is later terug te lezen.',
-      verplicht: true,
-      meerregelig: true,
-    })
-    if (!reden) return
-
-    setBezig(true)
-    try {
-      const res = await negeerBericht(b.id, reden)
-      if (!res.ok) { toast.error(res.error ?? 'Negeren mislukt'); return }
-      toast.success('Bericht genegeerd')
-      router.push('/mailintake')
-    } finally {
-      setBezig(false)
-    }
-  }
-
-  async function geenAanvraag() {
-    const reden = await vraagTekst({
-      titel: 'Geen aanvraag',
-      omschrijving: 'Wat is het wél? (nieuwsbrief, factuur, reclame…)',
-      verplicht: false,
-    })
-    setBezig(true)
-    try {
-      await markeerGeenAanvraag(b.id, reden ?? '')
-      toast.success('Weggezet als geen aanvraag')
-      router.push('/mailintake')
-    } finally {
-      setBezig(false)
-    }
-  }
-
-  async function opnieuwLezen() {
-    setBezig(true)
-    try {
-      const res = await leesOpnieuw(b.id)
-      if (!res.ok) toast.error(res.error ?? 'Opnieuw lezen mislukt')
-      else toast.success('Opnieuw gelezen')
-      router.refresh()
-    } finally {
-      setBezig(false)
-    }
-  }
-
-  async function heropen() {
-    setBezig(true)
-    try {
-      const res = await heropenBericht(b.id)
-      if (!res.ok) toast.error(res.error ?? 'Heropenen mislukt')
-      else { toast.success('Terug op de lijst'); router.refresh() }
-    } finally {
-      setBezig(false)
-    }
-  }
-
-  /** Laat EVA de mail en de bijlagen opnieuw lezen voor de scope-samenvatting. */
-  async function openBijlage(id: string) {
-    const res = await getBijlageUrl(id)
-    if (!res.ok || !res.url) { toast.error(res.error ?? 'Bijlage niet beschikbaar'); return }
-    window.open(res.url, '_blank', 'noopener,noreferrer')
   }
 
   // ── Weergave ───────────────────────────────────────────────────────────────
@@ -448,7 +420,7 @@ export default function BerichtBehandelen({
         }}>
           Dit bericht is afgehandeld{b.dossier?.dossiernummer ? ` — dossier ${b.dossier.dossiernummer}` : ''}.
           {b.status === 'genegeerd' && magSchrijven && (
-            <Button variant="ghost" onClick={heropen} disabled={bezig} style={{ marginLeft: 8 }}>
+            <Button variant="ghost" onClick={heropen} disabled={inActie} style={{ marginLeft: 8 }}>
               Terugzetten op de lijst
             </Button>
           )}
@@ -753,9 +725,9 @@ export default function BerichtBehandelen({
             kun je een mail die geen aanvraag blijkt nergens meer wegzetten. */}
         {bewerkbaar && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: -4 }}>
-            <Button variant="outline" onClick={geenAanvraag} disabled={bezig}>Geen aanvraag</Button>
-            <Button variant="outline" onClick={negeren} disabled={bezig}>Negeren</Button>
-            <Button variant="ghost" onClick={opnieuwLezen} disabled={bezig}>Opnieuw laten lezen</Button>
+            <Button variant="outline" onClick={geenAanvraag} disabled={inActie}>Geen aanvraag</Button>
+            <Button variant="outline" onClick={negeren} disabled={inActie}>Negeren</Button>
+            <Button variant="ghost" onClick={opnieuwLezen} disabled={inActie}>Opnieuw laten lezen</Button>
           </div>
         )}
 
