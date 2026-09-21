@@ -19,6 +19,7 @@
 import React from 'react'
 
 import { Button, Card } from '@/components/ui'
+import { INTAKE_PLAATSINGEN, type IntakeFase } from '@/lib/mailintake/types'
 import { VELD_BETROUWBAAR } from '@/lib/mailintake/types'
 
 import { klein, veldStijl } from './velden'
@@ -59,7 +60,79 @@ export interface AfhandelingProps {
    * Waar dit dossier terechtkomt. Null op de opdrachtroute: daar wint een
    * bestaande offerte en bepaalt dat dossier zelf waar het staat.
    */
-  plaatsing: { fase: string; substatus: string; bouw7Status: string } | null
+  fase: IntakeFase | null
+  setFase: (v: IntakeFase) => void
+  /**
+   * Waarom een fase nu niet kan, per fase. Komt uit de proef -- servicedesk vraagt
+   * een categorie uit die hoek, en omgekeerd hóórt die categorie daar.
+   */
+  faseBezwaar: Partial<Record<IntakeFase, string>>
+}
+
+/**
+ * De drie bestemmingen, als keuze.
+ *
+ * Bewust knoppen en geen select: het zijn er drie, ze sluiten elkaar uit, en wat
+ * je kiest heeft gevolgen die je erbij wilt lezen. In een uitklaplijst zie je de
+ * uitleg pas als je hem al hebt dichtgeklapt.
+ */
+function FaseKiezer({
+  gekozen, kies, bezwaar, bewerkbaar,
+}: {
+  gekozen: IntakeFase
+  kies: (v: IntakeFase) => void
+  bezwaar: Partial<Record<IntakeFase, string>>
+  bewerkbaar: boolean
+}) {
+  const plaatsing = INTAKE_PLAATSINGEN[gekozen]
+  return (
+    <div style={{
+      padding: '8px 9px', borderRadius: 6,
+      background: 'var(--surface-2, var(--bg))', border: '1px solid var(--border)',
+    }}>
+      <div style={{ ...klein, marginBottom: 5 }}>Waar dit dossier terechtkomt</div>
+      <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
+        {(Object.keys(INTAKE_PLAATSINGEN) as IntakeFase[]).map(f => {
+          const actief = f === gekozen
+          const reden = bezwaar[f]
+          return (
+            <button
+              key={f}
+              type="button"
+              onClick={() => kies(f)}
+              disabled={!bewerkbaar}
+              title={reden ?? INTAKE_PLAATSINGEN[f].uitleg}
+              style={{
+                flex: 1, padding: '5px 4px', borderRadius: 5, fontSize: 12.5,
+                cursor: bewerkbaar ? 'pointer' : 'default',
+                border: `1px solid ${actief ? 'hsl(var(--primary))' : 'var(--border)'}`,
+                background: actief ? 'hsl(var(--primary))' : 'var(--bg)',
+                color: actief ? 'hsl(var(--primary-foreground))' : 'var(--fg)',
+                fontWeight: actief ? 600 : 400,
+                // Een bezwaar zet de knop niet uit: de weg eruit is soms de
+                // categorie wijzigen, en dan moet je wel kunnen zien welke kant je
+                // op wilde. De blokkade zelf houdt het aanmaken tegen.
+                opacity: reden && !actief ? 0.55 : 1,
+              }}
+            >
+              {INTAKE_PLAATSINGEN[f].fase}
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 12, lineHeight: 1.45 }}>
+        Substatus <strong>{plaatsing.substatus}</strong>
+        <span style={{ ...klein, display: 'block' }}>
+          {plaatsing.uitleg} In Bouw7 op &ldquo;{plaatsing.bouw7Status}&rdquo;.
+        </span>
+      </div>
+      {bezwaar[gekozen] && (
+        <div style={{ ...klein, marginTop: 5, color: 'var(--warning-700, #92400e)' }}>
+          {bezwaar[gekozen]}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function TwijfelPaneel({
@@ -194,22 +267,18 @@ export default function TwijfelPaneel({
           </div>
 
           {/* ── Waar het heen gaat ──
-              Stond alleen in de bevestigingsdialoog, en dus pas in beeld nadat je
-              had besloten. Wie beoordeelt moet vóór de klik weten in welke fase
-              en substatus het dossier landt -- dat bepaalt wie het oppakt en op
-              welk bord het verschijnt. */}
-          {afhandeling.plaatsing && (
-            <div style={{
-              fontSize: 12, lineHeight: 1.45, padding: '7px 9px', borderRadius: 6,
-              background: 'var(--surface-2, var(--bg))', border: '1px solid var(--border)',
-            }}>
-              Komt in fase{' '}
-              <strong>{afhandeling.plaatsing.fase}</strong>, substatus{' '}
-              <strong>{afhandeling.plaatsing.substatus}</strong>
-              <span style={{ ...klein, display: 'block' }}>
-                In Bouw7 op &ldquo;{afhandeling.plaatsing.bouw7Status}&rdquo;
-              </span>
-            </div>
+              Stond eerst alleen in de bevestigingsdialoog, en dus pas in beeld
+              nadat je had besloten -- en het stond vast op Aanvraag. Niet elke bon
+              is een aanvraag: een opdracht zonder offerte vooraf hoort meteen in
+              de opdrachtfase, en een onderhoudsbon op het servicedeskbord. Dat is
+              hier te kiezen, met erbij wat het betekent. */}
+          {afhandeling.fase && (
+            <FaseKiezer
+              gekozen={afhandeling.fase}
+              kies={afhandeling.setFase}
+              bezwaar={afhandeling.faseBezwaar}
+              bewerkbaar={afhandeling.bewerkbaar && !afhandeling.bezig}
+            />
           )}
 
           {/* ── Wegzetten ──

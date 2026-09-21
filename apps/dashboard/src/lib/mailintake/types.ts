@@ -9,17 +9,107 @@
 export type PostbusSoort = 'offerteaanvraag' | 'opdracht' | 'servicedesk'
 
 /**
- * Waar `maakAanvraag` een nieuw dossier neerzet.
+ * Waar een nieuw dossier uit de intake terechtkomt.
  *
- * Eén plek, drie lezers: de voorvertoning, de terugleescontrole na het aanmaken,
- * en het beoordeelscherm. Staat hier en niet in `proef.ts`, want dat bestand is
- * server-only en het behandelscherm is een client-component.
+ * Drie bestemmingen, en de keuze is niet vrij van de rest van het formulier:
+ *
+ *  * **Aanvraag** -- het gewone pad. Er moet nog geprijsd en geofferteerd worden.
+ *  * **Opdracht** -- een bon zonder voorafgaande offerte. Slaat de offertefase over.
+ *  * **Servicedesk** -- een onderhoudsbon of mutatie. Dit is géén eigen hoofdstatus:
+ *    servicedesk wordt in heel EVA afgeleid uit de categorie (zie
+ *    `isServicedeskDossier` en `getDossiersVoorServicedesk`). Daarom hoort deze
+ *    keuze alleen bij de categorieën Dagelijks onderhoud en Mutatie, en horen die
+ *    categorieën omgekeerd altijd bij deze keuze.
+ *
+ * `kolommen` en `bouw7Status` staan er niet voor de sier: ze zijn de bron voor het
+ * wegschrijven én voor de terugleescontrole. Zou het scherm iets anders beloven dan
+ * er wordt weggeschreven, dan is dat precies de stille fout waar die controle voor
+ * bestaat.
+ *
+ * Let op de Bouw7-kant. Een verse servicedeskbon gaat naar **02. Nieuwe opdracht**,
+ * niet naar 01. Offerte: de lees-sync vertaalt 01 voor een servicedeskcategorie naar
+ * substatus `offerte_uitgebracht` (zie BOUW7_NAAR_SERVICEDESK_SUBSTATUS), en dan
+ * staat een bon waar nooit een offerte voor is gemaakt op het bord onder "Offerte
+ * uitgebracht". Op 02 leidt dezelfde tabel 'nieuw' af. Zo landt het dossier waar de
+ * sync het toch al zou neerzetten -- er komt geen nieuwe regel bij.
+ *
+ * Staat hier en niet in `proef.ts`, want dat bestand is server-only en het
+ * behandelscherm is een client-component.
  */
-export const PLAATSING_NIEUWE_AANVRAAG = {
-  fase: 'Aanvraag',
-  substatus: 'Nieuw',
-  bouw7Status: '01. Offerte',
-} as const
+export type IntakeFase = 'aanvraag' | 'opdracht' | 'servicedesk'
+
+export interface IntakePlaatsing {
+  /** Het woord dat de gebruiker leest. */
+  fase: string
+  substatus: string
+  /** De projectstatus die het Bouw7-project krijgt. */
+  bouw7Status: string
+  /** Wanneer je dit kiest, in één zin. */
+  uitleg: string
+  /** Wat er na het aanmaken in de dossierkolommen moet staan. */
+  kolommen: {
+    hoofdstatus: 'aanvraag' | 'opdracht'
+    aanvraag_substatus: string | null
+    opdracht_substatus: string | null
+    servicedesk_substatus: string | null
+  }
+  /**
+   * De opdracht-substatus waaruit de Bouw7-projectstatus wordt afgeleid, of null
+   * als `maakAanvraag` het project al goed neerzet (01. Offerte).
+   */
+  bouw7Via: 'nieuwe_opdracht' | null
+}
+
+export const INTAKE_PLAATSINGEN: Record<IntakeFase, IntakePlaatsing> = {
+  aanvraag: {
+    fase: 'Aanvraag',
+    substatus: 'Nieuw',
+    bouw7Status: '01. Offerte',
+    uitleg: 'Er moet nog geprijsd en geofferteerd worden.',
+    kolommen: {
+      hoofdstatus: 'aanvraag', aanvraag_substatus: 'nieuw',
+      opdracht_substatus: null, servicedesk_substatus: null,
+    },
+    bouw7Via: null,
+  },
+  opdracht: {
+    fase: 'Opdracht',
+    substatus: 'Nieuwe opdracht',
+    bouw7Status: '02. Nieuwe opdracht',
+    uitleg: 'Een bon zonder offerte vooraf; het werk is al gegund.',
+    kolommen: {
+      hoofdstatus: 'opdracht', aanvraag_substatus: null,
+      opdracht_substatus: 'nieuwe_opdracht', servicedesk_substatus: null,
+    },
+    bouw7Via: 'nieuwe_opdracht',
+  },
+  servicedesk: {
+    fase: 'Servicedesk',
+    substatus: 'Nieuw',
+    bouw7Status: '02. Nieuwe opdracht',
+    uitleg: 'Een onderhoudsbon of mutatie; komt op het servicedeskbord.',
+    kolommen: {
+      // Servicedesk draait op een eigen ladder náást de aanvraagfase; zo staan alle
+      // bestaande servicedeskdossiers in de database ook.
+      hoofdstatus: 'aanvraag', aanvraag_substatus: 'nieuw',
+      opdracht_substatus: null, servicedesk_substatus: 'nieuw',
+    },
+    bouw7Via: 'nieuwe_opdracht',
+  },
+}
+
+/**
+ * De twee categorieën waaraan heel EVA een servicedeskdossier herkent.
+ *
+ * Hoofdlettergevoelig, want `isServicedeskDossier` en `getDossiersVoorServicedesk`
+ * vergelijken op exact deze namen.
+ */
+export const SERVICEDESK_CATEGORIEEN = ['Dagelijks onderhoud', 'Mutatie']
+
+/** Hoort deze categorie bij de servicedesk? */
+export function isServicedeskCategorie(naam: string | null | undefined): boolean {
+  return SERVICEDESK_CATEGORIEEN.includes((naam ?? '').trim())
+}
 
 export type BerichtStatus =
   | 'nieuw' | 'bezig' | 'wacht_op_mens' | 'verwerkt' | 'genegeerd' | 'geen_aanvraag' | 'mislukt'

@@ -11,6 +11,8 @@
  * de voorvertoning een voorstel dat niet bestaat.
  */
 
+import type { IntakeFase } from '@/lib/mailintake/types'
+
 export interface AanmaakSchermToestand {
   /** De ruwe lezing van het model; levert de velden die niet op het scherm staan. */
   velden: Record<string, unknown>
@@ -43,12 +45,15 @@ export interface AanmaakSchermToestand {
   } | null
   /** De eerste actie op het nieuwe dossier; zonder titel gebeurt er niets. */
   actie: { titel: string; medewerkerId: string; dagen: number }
+  /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
+  fase: IntakeFase
 }
 
 export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
   const v = s.velden
 
   return {
+    fase: s.fase,
     relatieId: s.klantId as string,
     contactpersoonId: s.contactpersoonId,
     objectId: s.objectId,

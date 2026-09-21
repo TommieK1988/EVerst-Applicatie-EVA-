@@ -61,7 +61,7 @@ export async function leesTerugNaAanmaken(
     .from('dossiers')
     // Eén tekenreeks, niet met + aan elkaar geplakt: de getypeerde client leest de
     // kolomlijst tijdens het compileren en kan een samengestelde string niet lezen.
-    .select('id, dossiernummer, bouw7_id, titel, klant_id, contactpersoon_id, werkmaatschappij_id, bouw7_categorie_id, hoofdstatus, aanvraag_substatus, aanvraagdatum, deadline, vve_code, referentie, opmerkingen, werkadres_straat, werkadres_postcode, werkadres_stad')
+    .select('id, dossiernummer, bouw7_id, titel, klant_id, contactpersoon_id, werkmaatschappij_id, bouw7_categorie_id, hoofdstatus, aanvraag_substatus, opdracht_substatus, servicedesk_substatus, aanvraagdatum, deadline, vve_code, referentie, opmerkingen, werkadres_straat, werkadres_postcode, werkadres_stad')
     .eq('id', dossierId)
     .maybeSingle()
 
@@ -100,13 +100,16 @@ export async function leesTerugNaAanmaken(
   vergelijk('Referentie', v.referentie, d.referentie)
   vergelijk('Omschrijving', v.omschrijvingHtml, d.opmerkingen)
 
-  // De fase is geen veld uit het voorstel maar een vaste eis: een aanvraag hoort in
-  // fase Aanvraag met substatus Nieuw te staan. Staat hij ergens anders, dan heeft
-  // een trigger of een parallelle sync iets gedaan en klopt het beeld niet meer.
-  // Tegen de plaatsing uit het voorstel, niet tegen twee losse letterlijke waarden:
-  // gaat de route ooit ergens anders heen, dan verschuift de controle mee.
-  vergelijk('Fase', v.plaatsing.fase.toLowerCase(), d.hoofdstatus)
-  vergelijk('Substatus', v.plaatsing.substatus.toLowerCase(), d.aanvraag_substatus)
+  // De fase komt niet uit de mail maar uit de keuze van de behandelaar, en die
+  // keuze raakt vier kolommen tegelijk. Alle vier vergelijken en niet alleen
+  // `hoofdstatus`: een opdracht die onderweg toch op de aanvraagladder belandt, of
+  // een servicedeskbon zonder ladderwaarde, is onzichtbaar op zijn eigen bord. Dat
+  // is precies de stille fout waar deze terugleesronde voor bestaat.
+  const k = v.plaatsing.kolommen
+  vergelijk('Fase', k.hoofdstatus, d.hoofdstatus)
+  vergelijk('Aanvraag-substatus', k.aanvraag_substatus, d.aanvraag_substatus)
+  vergelijk('Opdracht-substatus', k.opdracht_substatus, d.opdracht_substatus)
+  vergelijk('Servicedesk-substatus', k.servicedesk_substatus, d.servicedesk_substatus)
 
   // Het werkadres wordt als losse velden weggeschreven; vergelijken op de delen die
   // ook echt in het dossier staan.

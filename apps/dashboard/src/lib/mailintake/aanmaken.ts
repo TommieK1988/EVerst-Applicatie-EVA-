@@ -27,6 +27,7 @@ import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
 import type { ProefResultaat } from './proef'
+import type { IntakeFase } from './types'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
 export interface AanmaakInvoer {
@@ -43,6 +44,11 @@ export interface AanmaakInvoer {
    * samen als HTML naar Bouw7; wat de behandelaar heeft bijgeschaafd is leidend.
    */
   omschrijving?: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null }
+  /**
+   * Waar het dossier terechtkomt: de gewone aanvraagroute, meteen als opdracht, of
+   * op het servicedeskbord. Standaard `aanvraag`.
+   */
+  fase?: IntakeFase
   /**
    * Het voorstel zoals het in de proef stond. Zonder dit wordt er niet teruggelezen
    * -- dan is er namelijk niets om tegen te vergelijken.
@@ -265,6 +271,24 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   if (!res.ok) return { ok: false, error: res.error }
 
   const dossierId = res.data.id
+
+  // De fase, meteen als eerste. `maakAanvraag` zet elk nieuw dossier op
+  // Aanvraag/Nieuw; koos de behandelaar Opdracht of Servicedesk, dan verhuist het
+  // hier. Vóór de rollen en de actie, want die hangen aan de fase: een
+  // opdracht-dossier hoort de opdracht-triggers te krijgen.
+  const fase: IntakeFase = inv.fase ?? 'aanvraag'
+  if (fase !== 'aanvraag') {
+    const { zetFaseNaAanmaken } = await import('./fase')
+    const faseRes = await zetFaseNaAanmaken(dossierId, fase, res.data.bouw7_id ?? null)
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: inv.berichtId,
+      actor: 'systeem',
+      actie: faseRes.ok && faseRes.bouw7Ok ? 'fase_gezet' : 'fase_gezet_met_fout',
+      details: faseRes.ok
+        ? { fase, bouw7_ok: faseRes.bouw7Ok, bouw7_fout: faseRes.bouw7Fout }
+        : { fase, fout: faseRes.fout },
+    })
+  }
 
   // De scope-samenvatting hoort bij het dossier, niet bij het bericht: dit is wat
   // een calculator als eerste leest. Valt terug op wat er bij de intake is

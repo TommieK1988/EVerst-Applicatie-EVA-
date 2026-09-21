@@ -27,7 +27,7 @@ import { verwerkBericht } from './verwerken'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { voerNabehandelingUit, planNabehandeling } from './nabehandeling'
 import type { GekeurdeVelden } from './extractie'
-import type { PostbusPatch } from './types'
+import type { PostbusPatch, IntakeFase } from './types'
 
 /** Kortlopende downloadlink voor één bijlage uit de privébucket. */
 export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; url?: string; error?: string }> {
@@ -54,11 +54,16 @@ export async function getBijlageUrl(bijlageId: string): Promise<{ ok: boolean; u
  */
 export async function proefDossierVanBericht(
   berichtId: string,
-  velden: GekeurdeVelden & { relatieId: string | null; contactpersoonId: string | null },
+  velden: GekeurdeVelden & {
+    relatieId: string | null
+    contactpersoonId: string | null
+    /** Waar het dossier heen moet; bepaalt de plaatsing in het voorstel. */
+    fase?: IntakeFase
+  },
   omschrijving: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null },
 ) {
   await vereisRecht('mailintake', 'lezen')
-  return proefAanmaak(berichtId, velden, omschrijving)
+  return proefAanmaak(berichtId, velden, omschrijving, velden.fase ?? 'aanvraag')
 }
 
 /**
@@ -82,6 +87,8 @@ export async function maakDossierVanBericht(
     calculatorId?: string | null
     /** Een eerste actie op het nieuwe dossier. */
     actie?: { titel: string; medewerkerId: string | null; dagen: number } | null
+    /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
+    fase?: IntakeFase
   },
   /** Het voorstel uit de proef; waartegen er na het aanmaken wordt teruggelezen. */
   proef?: Awaited<ReturnType<typeof proefAanmaak>>,
@@ -121,6 +128,7 @@ export async function maakDossierVanBericht(
       aandachtspunten: velden.aandachtspunten ?? null,
     },
     proef,
+    fase: velden.fase ?? 'aanvraag',
     calculatorId: velden.calculatorId ?? null,
     actie: velden.actie ?? null,
     automatisch: false,

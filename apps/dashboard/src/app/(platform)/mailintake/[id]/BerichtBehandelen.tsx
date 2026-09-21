@@ -18,7 +18,7 @@ import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/ac
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { zoekAdres } from '@/lib/adres/pdok'
 // Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
-import { dossierHref } from '@/lib/dossiers/href'
+import { dossierHref, dossierSegment } from '@/lib/dossiers/href'
 import {
   maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier, getBijlageUrl,
 } from '@/lib/mailintake/actions'
@@ -27,13 +27,14 @@ import {
   type MailSoort,
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
-import { PLAATSING_NIEUWE_AANVRAAG } from '@/lib/mailintake/types'
+import { INTAKE_PLAATSINGEN, type IntakeFase } from '@/lib/mailintake/types'
 import MailPaneel from './panelen/MailPaneel'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { bouwVoorvertoning, bouwAfwijkingTekst } from './panelen/voorvertoning'
 import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
+import { useFase } from './panelen/fase-keuze'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
 
@@ -204,6 +205,12 @@ export default function BerichtBehandelen({
   const route = bepaalRoute(b.soort, offerteKandidaten.length > 0, isRegie)
   const isServicedesk = b.soort === 'servicedeskbon'
 
+  // Waar het dossier heen gaat. De regel staat in `fase-keuze.ts`: de categorie
+  // beslist over de servicedesk, niet de mailsoort en niet de behandelaar.
+  const { fase, setFase, bezwaar: faseBezwaar } = useFase(
+    categorieen.find(c => c.id === categorieId)?.name ?? null, b.soort,
+  )
+
   // Bij regie maakt EVA een nieuw dossier: de prijs staat niet vast, dus er is geen
   // aanneemsom om te winnen. Soms is zo'n bon tóch het akkoord op een offerte --
   // dan hoort dat te kunnen, maar niet als standaard. Vandaar een uitklapblok,
@@ -283,7 +290,7 @@ export default function BerichtBehandelen({
         referentie, vveCode, categorieId, werkmaatschappijId, deadline, mandaat, regie,
         opmerkingen,
         factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
-        actie,
+        actie, fase,
       })
 
       // ── Proef ─────────────────────────────────────────────────────────────
@@ -336,10 +343,17 @@ export default function BerichtBehandelen({
             'Je kunt dat later opnieuw proberen vanaf de dossierpagina.',
         })
       }
-      // maakDossierUitBericht loopt via maakAanvraag, dus dit dossier staat in de aanvraagfase.
+      // Naar de sectie waar het dossier werkelijk terechtkwam. Stond vast op
+      // 'aanvraag'; sinds de fase te kiezen is zou dat op een opdracht- of
+      // servicedeskdossier het verkeerde scherm openen. Niet op de fasenaam maar op
+      // de kolommen: een servicedeskdossier hééft hoofdstatus 'aanvraag' en wordt
+      // alleen aan zijn ladderwaarde herkend -- `dossierSegment` doet precies die
+      // afweging al, en zonder die stap belandt een bon op /opdrachten en dus op 404.
       // `dossierId` is optioneel in het retourtype; zonder id is er niets om heen te springen —
       // dan blijft het scherm staan in plaats van naar /undefined te navigeren.
-      if (res.dossierId) router.push(dossierHref(res.dossierId, 'aanvraag'))
+      const k = INTAKE_PLAATSINGEN[fase].kolommen
+      const segment = dossierSegment(k.hoofdstatus, k.servicedesk_substatus)
+      if (res.dossierId && segment) router.push(`/${segment}/${res.dossierId}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Aanmaken mislukt')
     } finally {
@@ -478,7 +492,8 @@ export default function BerichtBehandelen({
             medewerkers,
             calculatorId, setCalculatorId,
             actie, setActie,
-            plaatsing: route === 'offerte_winnen' && !forceerNieuw ? null : PLAATSING_NIEUWE_AANVRAAG,
+            fase: route === 'offerte_winnen' && !forceerNieuw ? null : fase,
+            setFase, faseBezwaar,
           }}
         />
 

@@ -4,7 +4,10 @@ import { createAdminClient } from '@everts/database/server'
 import { controleerBouw7Gereed } from './bouw7-gereed'
 import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 import { splitsBijlagen } from './bijlagen-filter'
-import { PLAATSING_NIEUWE_AANVRAAG } from './types'
+import {
+  INTAKE_PLAATSINGEN, isServicedeskCategorie, SERVICEDESK_CATEGORIEEN,
+  type IntakeFase, type IntakePlaatsing,
+} from './types'
 import type { GekeurdeVelden } from './extractie'
 
 /**
@@ -57,7 +60,7 @@ export interface ProefResultaat {
      * het over dezelfde plek hebben. Wie beoordeelt hoort te zien waar het heen
      * gaat vóórdat hij klikt.
      */
-    plaatsing: { fase: string; substatus: string; bouw7Status: string }
+    plaatsing: IntakePlaatsing
   }
   /** Bestanden die naar de dossiermap gaan. */
   bestanden: ProefBestand[]
@@ -88,6 +91,8 @@ export async function proefAanmaak(
     contactpersoonId: string | null
   },
   omschrijving: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null },
+  /** Waar het dossier heen moet. Standaard de gewone aanvraagroute. */
+  fase: IntakeFase = 'aanvraag',
 ): Promise<ProefResultaat> {
   const supabase = createAdminClient()
 
@@ -107,6 +112,26 @@ export async function proefAanmaak(
   })
   blokkades.push(...bouw7.ontbreekt)
   openPunten.push(...bouw7.waarschuwingen)
+
+  // ── Fase en categorie moeten elkaar niet tegenspreken ──────────────────────
+  // Servicedesk is geen eigen hoofdstatus maar een afleiding uit de categorie: de
+  // borden filteren op "Dagelijks onderhoud" en "Mutatie", en de lees-sync dwingt
+  // die twee categorieën bij elke ronde terug naar de servicedeskladder. Een keuze
+  // die daarvan afwijkt houdt het dus hooguit tot de eerstvolgende sync, en dat is
+  // precies het soort stille terugval dat niemand opmerkt.
+  const servicedeskCategorie = isServicedeskCategorie(velden.categorieNaam)
+  if (fase === 'servicedesk' && !servicedeskCategorie) {
+    blokkades.push(
+      `Servicedesk vraagt categorie ${SERVICEDESK_CATEGORIEEN.join(' of ')}; nu staat er ` +
+      `${velden.categorieNaam ? `"${velden.categorieNaam}"` : 'nog geen categorie'}.`,
+    )
+  }
+  if (fase !== 'servicedesk' && servicedeskCategorie) {
+    blokkades.push(
+      `Categorie "${velden.categorieNaam}" hoort bij de servicedesk. Kies die fase, of een ` +
+      'andere categorie -- anders zet de eerstvolgende Bouw7-sync het dossier daar alsnog neer.',
+    )
+  }
 
   // ── De partijen erbij zoeken, zodat de voorvertoning namen toont ───────────
   const [klant, cp, wm] = await Promise.all([
@@ -205,7 +230,7 @@ export async function proefAanmaak(
       vveCode: velden.vveCode,
       referentie: velden.referentie,
       mandaatBedrag: velden.mandaatBedrag,
-      plaatsing: PLAATSING_NIEUWE_AANVRAAG,
+      plaatsing: INTAKE_PLAATSINGEN[fase],
       omschrijvingHtml: bouwOmschrijvingHtml({
         scope: omschrijving.scope,
         buitenScope: omschrijving.buitenScope,
