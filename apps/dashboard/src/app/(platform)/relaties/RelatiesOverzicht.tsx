@@ -14,8 +14,8 @@ import NieuweContactpersoonModal from '@/components/relaties/NieuweContactpersoo
 import NieuweParticulierModal from '@/components/relaties/NieuweParticulierModal'
 import DubbelenPaneel from '@/components/relaties/DubbelenPaneel'
 import RelatieDubbelenPaneel from '@/components/relaties/RelatieDubbelenPaneel'
-import type { DubbelGroep, SamenvoegingLog } from '@/lib/relaties/ontdubbelen'
-import type { DubbelRelatieGroep, RelatieSamenvoegingLog } from '@/lib/relaties/ontdubbelen-relaties'
+import type { DubbelGroep, SamenvoegingLog, CpNietDubbelMarkering } from '@/lib/relaties/ontdubbelen'
+import type { DubbelRelatieGroep, RelatieSamenvoegingLog, NietDubbelMarkering } from '@/lib/relaties/ontdubbelen-relaties'
 import type { ContactpersoonOrganisatieRegel } from '@/lib/relaties/contactpersonen-actions'
 import { bezorgadres, type Bezorgadres } from '@/lib/relaties/kerstkaart'
 
@@ -589,12 +589,14 @@ type Props = {
   /** Mogelijke dubbele relaties — Bouw7 dupliceert een bedrijf per rol. */
   dubbeleRelaties: DubbelRelatieGroep[]
   recenteRelatieSamenvoegingen: RelatieSamenvoegingLog[]
+  nietDubbeleRelaties: NietDubbelMarkering[]
+  nietDubbeleContactpersonen: CpNietDubbelMarkering[]
   layouts: GebruikerLayout[]
   user_id: string | null
   laatsteSync: string | null
 }
 
-export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, layouts, user_id, laatsteSync }: Props) {
+export default function RelatiesOverzicht({ organisaties, contactpersonen, particulieren, dubbelen, recenteSamenvoegingen, dubbeleRelaties, recenteRelatieSamenvoegingen, nietDubbeleRelaties, nietDubbeleContactpersonen, layouts, user_id, laatsteSync }: Props) {
   const router = useRouter()
   const [actieveTab, setActieveTab] = useState<Tab>('organisaties')
   const [showNieuweOrganisatie, setShowNieuweOrganisatie] = useState(false)
@@ -701,11 +703,11 @@ export default function RelatiesOverzicht({ organisaties, contactpersonen, parti
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <section>
             <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Relaties</h2>
-            <RelatieDubbelenPaneel groepen={dubbeleRelaties} recent={recenteRelatieSamenvoegingen} />
+            <RelatieDubbelenPaneel groepen={dubbeleRelaties} recent={recenteRelatieSamenvoegingen} nietDubbel={nietDubbeleRelaties} />
           </section>
           <section>
             <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>Contactpersonen</h2>
-            <DubbelenPaneel groepen={dubbelen} recent={recenteSamenvoegingen} />
+            <DubbelenPaneel groepen={dubbelen} recent={recenteSamenvoegingen} nietDubbel={nietDubbeleContactpersonen} />
           </section>
         </div>
       )}

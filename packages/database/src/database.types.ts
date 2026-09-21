@@ -1929,6 +1929,45 @@ export type Database = {
           },
         ]
       }
+      contactpersoon_niet_dubbel: {
+        Row: {
+          contactpersoon_a: string
+          contactpersoon_b: string
+          created_at: string
+          door: string | null
+          id: string
+        }
+        Insert: {
+          contactpersoon_a: string
+          contactpersoon_b: string
+          created_at?: string
+          door?: string | null
+          id?: string
+        }
+        Update: {
+          contactpersoon_a?: string
+          contactpersoon_b?: string
+          created_at?: string
+          door?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contactpersoon_niet_dubbel_contactpersoon_a_fkey"
+            columns: ["contactpersoon_a"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contactpersoon_niet_dubbel_contactpersoon_b_fkey"
+            columns: ["contactpersoon_b"]
+            isOneToOne: false
+            referencedRelation: "contactpersonen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contactpersoon_organisaties: {
         Row: {
           contactpersoon_id: string
@@ -14318,6 +14357,45 @@ export type Database = {
           {
             foreignKeyName: "relatie_inkoop_prijsafspraken_relatie_id_fkey"
             columns: ["relatie_id"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      relatie_niet_dubbel: {
+        Row: {
+          created_at: string
+          door: string | null
+          id: string
+          relatie_a: string
+          relatie_b: string
+        }
+        Insert: {
+          created_at?: string
+          door?: string | null
+          id?: string
+          relatie_a: string
+          relatie_b: string
+        }
+        Update: {
+          created_at?: string
+          door?: string | null
+          id?: string
+          relatie_a?: string
+          relatie_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatie_niet_dubbel_relatie_a_fkey"
+            columns: ["relatie_a"]
+            isOneToOne: false
+            referencedRelation: "relaties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relatie_niet_dubbel_relatie_b_fkey"
+            columns: ["relatie_b"]
             isOneToOne: false
             referencedRelation: "relaties"
             referencedColumns: ["id"]

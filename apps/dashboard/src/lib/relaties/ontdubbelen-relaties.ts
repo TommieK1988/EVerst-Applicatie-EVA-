@@ -64,6 +64,15 @@ function postcodeSleutel(pc: string | null): string | null {
   return s.length >= 6 ? s : null
 }
 
+/**
+ * Sleutel van een relatiepaar, los van de volgorde waarin de twee toevallig langskomen.
+ * Dezelfde volgorde als de `relatie_a < relatie_b`-check in de database, zodat een markering
+ * uit de tabel en een paar uit de suggestielaag altijd dezelfde sleutel opleveren.
+ */
+function paarSleutel(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
 /** Ruwe trigram-gelijkenis, genoeg om bijna-gelijke namen te vinden zonder pg_trgm. */
 function gelijkenis(a: string, b: string): number {
   const tri = (s: string) => {
@@ -96,6 +105,12 @@ export type DubbelRelatie = {
   inkoopfacturen: number
   debiteuren: number
   contactpersonen: number
+  /**
+   * Groepsgenoten waarvan al is vastgesteld dat het een ánder bedrijf is. In een drietal kan
+   * één paar beoordeeld zijn terwijl de groep blijft staan om de twee paren die nog open
+   * staan; dan mag het scherm dat oordeel niet alsnog wegdrukken bij het samenvoegen.
+   */
+  geenDubbelMet: string[]
 }
 
 export type DubbelRelatieGroep = {
@@ -138,6 +153,13 @@ export async function getDubbeleRelaties(): Promise<DubbelRelatieGroep[]> {
     .order('id')
     .range(van, tot),
   )
+
+  // Paren die al beoordeeld zijn als "niet hetzelfde bedrijf". De suggesties worden elke keer
+  // opnieuw gerekend — zonder deze lijst komt Den Dulk Afbouw naast Den Dulk Brandwerend
+  // eeuwig terug en went iedereen eraan het scherm over te slaan.
+  const nietDubbel = new Set((await haalAlleRijen<{ relatie_a: string; relatie_b: string }>((van, tot) => supabase
+    .from('relatie_niet_dubbel').select('relatie_a, relatie_b').order('id').range(van, tot))
+    .catch(() => [])).map(r => paarSleutel(r.relatie_a, r.relatie_b)))
 
   // Wat er per relatie aan vastzit. Vier gepagineerde scans in plaats van 4×N losse counts;
   // gepagineerd omdat inkoopfacturen en dossiers allang boven de 1000 rijen zitten en
@@ -189,6 +211,8 @@ export async function getDubbeleRelaties(): Promise<DubbelRelatieGroep[]> {
     inkoopfacturen: inkoopTel.get(r.id) ?? 0,
     debiteuren: debTel.get(r.id) ?? 0,
     contactpersonen: cpTel.get(r.id) ?? 0,
+    // Wordt hieronder gevuld, als de groep eenmaal vaststaat.
+    geenDubbelMet: [],
   })
 
   const index = new Map<string, KandidaatRij>()
@@ -261,7 +285,27 @@ export async function getDubbeleRelaties(): Promise<DubbelRelatieGroep[]> {
     }
   }
 
-  return [...groepen.values()].sort((a, b) =>
+  // Beoordeelde paren eruit. Per páár, niet per groep: in een drietal kan één relatie los
+  // staan van de andere twee terwijl die twee wél hetzelfde bedrijf zijn. Een relatie blijft
+  // dus staan zolang ze met minstens één ander groepslid nog een onbeoordeeld paar vormt.
+  const overgebleven = new Map<string, DubbelRelatieGroep>()
+  for (const groep of groepen.values()) {
+    const over = groep.relaties.filter(r => groep.relaties.some(
+      ander => ander.id !== r.id && !nietDubbel.has(paarSleutel(r.id, ander.id))))
+    if (over.length < 2) continue
+    const metOordeel = over.map(r => ({
+      ...r,
+      geenDubbelMet: over.filter(a => a.id !== r.id && nietDubbel.has(paarSleutel(r.id, a.id))).map(a => a.id),
+    }))
+    const sleutel = over.map(r => r.id).sort().join('|')
+    // Twee groepen kunnen na het uitdunnen op dezelfde overblijvers uitkomen; houd de
+    // sterkste reden, net als bij het opbouwen.
+    const bestaand = overgebleven.get(sleutel)
+    if (bestaand && ZEKERHEID_ORDE[bestaand.zekerheid] <= ZEKERHEID_ORDE[groep.zekerheid]) continue
+    overgebleven.set(sleutel, { ...groep, sleutel, relaties: metOordeel })
+  }
+
+  return [...overgebleven.values()].sort((a, b) =>
     ZEKERHEID_ORDE[a.zekerheid] - ZEKERHEID_ORDE[b.zekerheid]
     || a.relaties[0].naam.localeCompare(b.relaties[0].naam))
 }
@@ -364,5 +408,90 @@ export async function getRecenteRelatieSamenvoegingen(limiet = 15): Promise<Rela
     verliezer_naam: r.verliezer?.naam ?? '?',
     created_at: r.created_at,
     teruggedraaid_op: r.teruggedraaid_op,
+  }))
+}
+
+/* ─── geen dubbel ─────────────────────────────────────────────────── */
+
+export type NietDubbelMarkering = {
+  id: string
+  namen: string[]
+  created_at: string
+}
+
+/**
+ * Leg vast dat deze relaties níet hetzelfde bedrijf zijn. Alle paren binnen de groep gaan
+ * apart de tabel in: verschijnt er later een derde gelijkende relatie, dan wordt die groep
+ * opnieuw voorgelegd zonder dat het oordeel over de eerste twee verdwijnt.
+ */
+export async function markeerNietDubbel(relatieIds: string[]): Promise<ActionResult> {
+  let medewerker
+  try {
+    ({ medewerker } = await vereisRecht('relaties', 'schrijven'))
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt geen rechten om relaties te wijzigen.' }
+    throw e
+  }
+
+  const ids = [...new Set(relatieIds)]
+  if (ids.length < 2) return { ok: false, error: 'Er zijn minstens twee relaties nodig.' }
+
+  const paren: { relatie_a: string; relatie_b: string; door: string | null }[] = []
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const [a, b] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]]
+      paren.push({ relatie_a: a, relatie_b: b, door: medewerker.auth_user_id ?? null })
+    }
+  }
+
+  // `ignoreDuplicates`: twee mensen kunnen dezelfde groep wegzetten, en een groep kan een paar
+  // bevatten dat al eerder los is beoordeeld. Dat is geen fout.
+  const { error } = await db()
+    .from('relatie_niet_dubbel')
+    .upsert(paren, { onConflict: 'relatie_a,relatie_b', ignoreDuplicates: true })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/relaties')
+  return { ok: true }
+}
+
+/** Haal de markering weg; de groep komt daarna weer als suggestie terug. */
+export async function maakNietDubbelOngedaan(id: string): Promise<ActionResult> {
+  try {
+    await vereisRecht('relaties', 'schrijven')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt geen rechten om relaties te wijzigen.' }
+    throw e
+  }
+
+  const { error } = await db().from('relatie_niet_dubbel').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/relaties')
+  return { ok: true }
+}
+
+type NietDubbelRij = {
+  id: string
+  created_at: string
+  a: { naam: string } | null
+  b: { naam: string } | null
+}
+
+/**
+ * De beoordeelde paren, voor het lijstje onderaan het dubbelenscherm. Begrensd: dit is een
+ * naslaglijst om een verkeerd oordeel terug te draaien, geen archief.
+ */
+export async function getNietDubbelMarkeringen(limiet = 50): Promise<NietDubbelMarkering[]> {
+  await vereisRecht('relaties', 'lezen')
+  const { data } = await db()
+    .from('relatie_niet_dubbel')
+    .select('id, created_at, a:relaties!relatie_a(naam), b:relaties!relatie_b(naam)')
+    .order('created_at', { ascending: false })
+    .limit(limiet)
+
+  return ((data ?? []) as unknown as NietDubbelRij[]).map(r => ({
+    id: r.id,
+    namen: [r.a?.naam ?? '?', r.b?.naam ?? '?'],
+    created_at: r.created_at,
   }))
 }

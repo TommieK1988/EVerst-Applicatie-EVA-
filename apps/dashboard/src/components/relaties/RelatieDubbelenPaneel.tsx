@@ -8,6 +8,11 @@
  * "… Alfa B.V." en "… Romeo Foxtrot B.V." delen een adres en zijn drie eigen bedrijven. Die
  * laatste beoordeling is mensenwerk — daarom kiest de gebruiker zelf de blijver en ziet hij
  * per rij wat eraan hangt.
+ *
+ * "Beide behouden" is daarvan de andere helft. De suggesties worden elke keer opnieuw gerekend,
+ * dus een groep die géén duplicaat is komt zonder vastgelegd oordeel eindeloos terug — en een
+ * lijst die nooit leeg raakt leert iedereen hem over te slaan. Het oordeel gaat per paar de
+ * database in en is hieronder terug te draaien.
  */
 
 import React, { useState, useTransition } from 'react'
@@ -16,8 +21,9 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, useDialogen } from '@/components/ui'
 import {
-  voegRelatiesSamen, maakRelatieSamenvoegingOngedaan,
+  voegRelatiesSamen, maakRelatieSamenvoegingOngedaan, markeerNietDubbel, maakNietDubbelOngedaan,
   type DubbelRelatieGroep, type DubbelRelatie, type RelatieSamenvoegingLog,
+  type NietDubbelMarkering,
 } from '@/lib/relaties/ontdubbelen-relaties'
 
 const ZEKERHEID_TONE = { zeker: 'success', waarschijnlijk: 'warning', mogelijk: 'neutral' } as const
@@ -54,10 +60,12 @@ function watErAanHangt(r: DubbelRelatie): string {
   return delen.length > 0 ? delen.join(' · ') : 'niets aan gekoppeld'
 }
 
-function RelatieKaart({ relatie, gekozen, blijver, onKies, onUitsluiten }: {
+function RelatieKaart({ relatie, gekozen, blijver, beoordeeld, onKies, onUitsluiten }: {
   relatie: DubbelRelatie
   gekozen: boolean
   blijver: boolean
+  /** Van dit paar is al vastgesteld dat het twee bedrijven zijn. */
+  beoordeeld: boolean
   onKies: () => void
   onUitsluiten: () => void
 }) {
@@ -82,6 +90,7 @@ function RelatieKaart({ relatie, gekozen, blijver, onKies, onUitsluiten }: {
         </Link>
         {blijver && <Badge tone="brand" size="sm">Blijft</Badge>}
         {!blijver && gekozen && <Badge tone="warning" size="sm">Gaat op in de blijver</Badge>}
+        {!blijver && !gekozen && beoordeeld && <Badge tone="neutral" size="sm">Ander bedrijf</Badge>}
         {!relatie.actief && <Badge tone="neutral" size="sm">Inactief</Badge>}
       </div>
       <div style={{ fontSize: 12, color: 'var(--fg-muted)', lineHeight: 1.6 }}>
@@ -105,7 +114,10 @@ function RelatieKaart({ relatie, gekozen, blijver, onKies, onUitsluiten }: {
 
 function Groep({ groep }: { groep: DubbelRelatieGroep }) {
   const [blijverId, setBlijverId] = useState(groep.relaties[0].id)
-  const [uitgesloten, setUitgesloten] = useState<string[]>([])
+  // Paren die al als "ander bedrijf" zijn weggezet doen niet mee. De groep staat er alleen nog
+  // om de paren die wél open staan; zonder deze startwaarde zou "Samenvoegen" een eerder
+  // genomen beslissing stilletjes terugdraaien.
+  const [uitgesloten, setUitgesloten] = useState<string[]>(groep.relaties[0].geenDubbelMet)
   const [bezig, startTransition] = useTransition()
   const router = useRouter()
   const { bevestig } = useDialogen()
@@ -115,7 +127,8 @@ function Groep({ groep }: { groep: DubbelRelatieGroep }) {
 
   function kies(relatie: DubbelRelatie) {
     if (relatie.id === blijverId) return
-    setUitgesloten(prev => prev.filter(i => i !== relatie.id))
+    // Handmatige uitsluitingen blijven staan; die van de nieuwe blijver komen erbij.
+    setUitgesloten(prev => [...new Set([...prev.filter(i => i !== relatie.id), ...relatie.geenDubbelMet])])
     setBlijverId(relatie.id)
   }
 
@@ -123,6 +136,25 @@ function Groep({ groep }: { groep: DubbelRelatieGroep }) {
   // de winst, dus het staat in de bevestiging.
   const rollenNa = [...new Set([blijver, ...verliezers].flatMap(r => r.types))]
     .map(t => TYPE_LABEL[t] ?? t)
+
+  async function geenDubbel() {
+    const namen = groep.relaties.map(r => r.naam)
+    const ok = await bevestig({
+      titel: groep.relaties.length === 2 ? 'Beide behouden?' : 'Alle rijen behouden?',
+      omschrijving:
+        `${namen.join(' en ')} blijven los van elkaar bestaan. Deze groep verdwijnt uit de lijst en `
+        + 'komt niet meer terug. Er verandert niets aan de relaties zelf — terug te draaien onderaan '
+        + 'dit scherm.',
+      bevestigLabel: 'Beide behouden',
+    })
+    if (!ok) return
+    startTransition(async () => {
+      const res = await markeerNietDubbel(groep.relaties.map(r => r.id))
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Gemarkeerd als geen dubbel')
+      router.refresh()
+    })
+  }
 
   async function samenvoegen() {
     if (verliezers.length === 0) return
@@ -150,9 +182,14 @@ function Groep({ groep }: { groep: DubbelRelatieGroep }) {
           <Badge tone={ZEKERHEID_TONE[groep.zekerheid]} size="sm">{ZEKERHEID_LABEL[groep.zekerheid]}</Badge>
           <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg-muted)' }}>{groep.reden}</span>
         </span>
-        <Button variant="primary" size="sm" onClick={samenvoegen} disabled={bezig || verliezers.length === 0}>
-          {bezig ? 'Bezig…' : `Samenvoegen in ${blijver.naam}`}
-        </Button>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button variant="ghost" size="sm" onClick={geenDubbel} disabled={bezig}>
+            {groep.relaties.length === 2 ? 'Beide behouden' : 'Geen dubbel'}
+          </Button>
+          <Button variant="primary" size="sm" onClick={samenvoegen} disabled={bezig || verliezers.length === 0}>
+            {bezig ? 'Bezig…' : `Samenvoegen in ${blijver.naam}`}
+          </Button>
+        </span>
       </CardHeader>
       <CardBody>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -162,6 +199,7 @@ function Groep({ groep }: { groep: DubbelRelatieGroep }) {
               relatie={r}
               blijver={r.id === blijverId}
               gekozen={!uitgesloten.includes(r.id)}
+              beoordeeld={r.geenDubbelMet.includes(blijverId)}
               onKies={() => kies(r)}
               onUitsluiten={() => setUitgesloten(prev => prev.includes(r.id) ? prev.filter(i => i !== r.id) : [...prev, r.id])}
             />
@@ -169,18 +207,30 @@ function Groep({ groep }: { groep: DubbelRelatieGroep }) {
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg-muted)' }}>
           Klik op een kaart om die als blijver te kiezen — dat is de rij die blijft bestaan.
+          Zijn het twee verschillende bedrijven? Kies dan “{groep.relaties.length === 2 ? 'Beide behouden' : 'Geen dubbel'}”,
+          dan verdwijnt deze groep voorgoed uit de lijst.
         </div>
       </CardBody>
     </Card>
   )
 }
 
-export default function RelatieDubbelenPaneel({ groepen, recent }: {
+export default function RelatieDubbelenPaneel({ groepen, recent, nietDubbel }: {
   groepen: DubbelRelatieGroep[]
   recent: RelatieSamenvoegingLog[]
+  nietDubbel: NietDubbelMarkering[]
 }) {
   const [bezig, startTransition] = useTransition()
   const router = useRouter()
+
+  function weerBeoordelen(markering: NietDubbelMarkering) {
+    startTransition(async () => {
+      const res = await maakNietDubbelOngedaan(markering.id)
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Staat weer in de lijst')
+      router.refresh()
+    })
+  }
 
   function ongedaan(log: RelatieSamenvoegingLog) {
     startTransition(async () => {
@@ -205,10 +255,34 @@ export default function RelatieDubbelenPaneel({ groepen, recent }: {
       {groepen.length === 0 ? (
         <EmptyState
           title="Geen dubbele relaties gevonden"
-          description="Er zijn geen relaties die op hetzelfde bedrijf lijken."
+          description={nietDubbel.length > 0
+            ? 'Alles is beoordeeld: wat erop leek is samengevoegd of als geen dubbel weggezet.'
+            : 'Er zijn geen relaties die op hetzelfde bedrijf lijken.'}
         />
       ) : (
         groepen.map(g => <Groep key={g.sleutel} groep={g} />)
+      )}
+
+      {nietDubbel.length > 0 && (
+        <Card>
+          <CardHeader><span>Beoordeeld als geen dubbel</span></CardHeader>
+          <CardBody>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {nietDubbel.map(m => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12, color: 'var(--fg-soft)' }}>
+                  <span>
+                    <strong style={{ color: 'var(--fg)' }}>{m.namen[0]}</strong> en{' '}
+                    <strong style={{ color: 'var(--fg)' }}>{m.namen[1]}</strong> zijn twee bedrijven
+                    {' · '}{new Date(m.created_at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => weerBeoordelen(m)} disabled={bezig}>
+                    Toch beoordelen
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
       )}
 
       {terugdraaibaar.length > 0 && (

@@ -57,6 +57,15 @@ function telefoonSleutel(nr: string | null): string | null {
 }
 
 /**
+ * Sleutel van een paar, los van de volgorde waarin de twee toevallig langskomen. Dezelfde
+ * volgorde als de `contactpersoon_a < contactpersoon_b`-check in de database, zodat een
+ * markering en een paar uit de suggestielaag altijd dezelfde sleutel opleveren.
+ */
+function paarSleutel(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
+/**
  * Postbussen die een heel kantoor deelt. Deze adressen mogen nóóit tot een suggestie leiden:
  * drie collega's van dezelfde beheerder zijn geen dubbele persoon.
  */
@@ -93,6 +102,12 @@ export type DubbelPersoon = {
   /** Aantal dossiers waarop deze persoon de contactpersoon is; zwaarder weegt = houd deze. */
   dossiers: number
   laatst: string
+  /**
+   * Groepsgenoten waarvan al is vastgesteld dat het een ánder mens is. In een drietal kan één
+   * paar beoordeeld zijn terwijl de groep blijft staan om de paren die nog open staan; dan mag
+   * samenvoegen dat oordeel niet stilletjes terugdraaien.
+   */
+  geenDubbelMet: string[]
 }
 
 export type DubbelGroep = {
@@ -160,6 +175,13 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
     .range(van, tot),
   )
 
+  // Paren die al beoordeeld zijn als "twee verschillende mensen". Zonder deze lijst komen twee
+  // naamgenoten bij twee opdrachtgevers bij elke herberekening terug en went iedereen eraan het
+  // scherm over te slaan.
+  const nietDubbel = new Set((await haalAlleRijen<{ contactpersoon_a: string; contactpersoon_b: string }>((van, tot) => supabase
+    .from('contactpersoon_niet_dubbel').select('contactpersoon_a, contactpersoon_b').order('id').range(van, tot))
+    .catch(() => [])).map(r => paarSleutel(r.contactpersoon_a, r.contactpersoon_b)))
+
   const dossierTelling = new Map<string, number>()
   for (const d of dossiers ?? []) {
     if (!d.contactpersoon_id) continue
@@ -189,6 +211,8 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
     organisaties: orgPerPersoon.get(p.id) ?? [],
     dossiers: dossierTelling.get(p.id) ?? 0,
     laatst: p.updated_at,
+    // Wordt hieronder gevuld, als de groep eenmaal vaststaat.
+    geenDubbelMet: [],
   })
 
   // Alleen echte mensen; een als contactpersoon geregistreerde VvE of postbus doet niet mee.
@@ -246,7 +270,28 @@ export async function getDubbelKandidaten(): Promise<DubbelGroep[]> {
     voegToe(ids, 'mogelijk', 'Zelfde naam, verder geen overeenkomst')
   }
 
-  return [...groepen.values()].sort((a, b) =>
+  // Beoordeelde paren eruit. Een persoon blijft in de groep zolang ze met minstens één ander
+  // groepslid nog een onbeoordeeld paar vormt; in een drietal blijft het beoordeelde paar dus
+  // zichtbaar, maar het scherm zet die rij standaard op "niet meenemen".
+  const overgebleven = new Map<string, DubbelGroep>()
+  for (const groep of groepen.values()) {
+    const over = groep.personen.filter(p => groep.personen.some(
+      ander => ander.id !== p.id && !nietDubbel.has(paarSleutel(p.id, ander.id))))
+    if (over.length < 2) continue
+    const sleutel = over.map(p => p.id).sort().join('|')
+    const bestaand = overgebleven.get(sleutel)
+    if (bestaand && ZEKERHEID_ORDE[bestaand.zekerheid] <= ZEKERHEID_ORDE[groep.zekerheid]) continue
+    overgebleven.set(sleutel, {
+      ...groep,
+      sleutel,
+      personen: over.map(p => ({
+        ...p,
+        geenDubbelMet: over.filter(a => a.id !== p.id && nietDubbel.has(paarSleutel(p.id, a.id))).map(a => a.id),
+      })),
+    })
+  }
+
+  return [...overgebleven.values()].sort((a, b) =>
     ZEKERHEID_ORDE[a.zekerheid] - ZEKERHEID_ORDE[b.zekerheid]
     || a.personen[0].naam.localeCompare(b.personen[0].naam))
 }
@@ -423,4 +468,113 @@ export async function zetContactpersoonSoort(id: string, soort: ContactpersoonSo
   revalidatePath('/relaties')
   revalidatePath(`/relaties/contactpersonen/${id}`)
   return { ok: true }
+}
+
+/* ─── geen dubbel ─────────────────────────────────────────────────── */
+
+export type CpNietDubbelMarkering = {
+  id: string
+  namen: string[]
+  created_at: string
+}
+
+/**
+ * Leg vast dat deze rijen níet dezelfde mens zijn. Alle paren binnen de groep gaan apart de
+ * tabel in: duikt er later een derde naamgenoot op, dan wordt die groep opnieuw voorgelegd
+ * zonder dat het oordeel over de eerste twee verdwijnt.
+ *
+ * Naast "Dit is een postbus", dat een ándere vraag beantwoordt: dáár is de rij zelf geen mens,
+ * hier zijn het twee mensen die toevallig op elkaar lijken.
+ */
+export async function markeerCpNietDubbel(persoonIds: string[]): Promise<ActionResult> {
+  let medewerker
+  try {
+    ({ medewerker } = await vereisRecht('relaties', 'schrijven'))
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt geen rechten om relaties te wijzigen.' }
+    throw e
+  }
+
+  const ids = [...new Set(persoonIds)]
+  if (ids.length < 2) return { ok: false, error: 'Er zijn minstens twee rijen nodig.' }
+
+  const paren: { contactpersoon_a: string; contactpersoon_b: string; door: string | null }[] = []
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const [a, b] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]]
+      paren.push({ contactpersoon_a: a, contactpersoon_b: b, door: medewerker.auth_user_id ?? null })
+    }
+  }
+
+  // `ignoreDuplicates`: twee mensen kunnen dezelfde groep wegzetten, en een groep kan een paar
+  // bevatten dat al eerder los is beoordeeld. Dat is geen fout.
+  const { error } = await db()
+    .from('contactpersoon_niet_dubbel')
+    .upsert(paren, { onConflict: 'contactpersoon_a,contactpersoon_b', ignoreDuplicates: true })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/relaties')
+  return { ok: true }
+}
+
+/** Haal de markering weg; de groep komt daarna weer als suggestie terug. */
+export async function maakCpNietDubbelOngedaan(id: string): Promise<ActionResult> {
+  try {
+    await vereisRecht('relaties', 'schrijven')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt geen rechten om relaties te wijzigen.' }
+    throw e
+  }
+
+  const { error } = await db().from('contactpersoon_niet_dubbel').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/relaties')
+  return { ok: true }
+}
+
+type CpNietDubbelZijde = {
+  voornaam: string | null
+  tussenvoegsel: string | null
+  achternaam: string | null
+  contactpersoon_organisaties: { organisatie: { naam: string } | null }[] | null
+} | null
+
+type CpNietDubbelRij = {
+  id: string
+  created_at: string
+  a: CpNietDubbelZijde
+  b: CpNietDubbelZijde
+}
+
+/**
+ * "Jan Jansen (Vidomes)". De organisatie hoort erbij: de zwakste suggestielaag is juist
+ * "zelfde naam, verder geen overeenkomst", en dan staat er zonder bedrijf twee keer dezelfde
+ * naam in het lijstje en weet niemand meer welke twee rijen beoordeeld zijn.
+ */
+const volledigeNaam = (p: CpNietDubbelZijde): string => {
+  if (!p) return '?'
+  const naam = [p.voornaam, p.tussenvoegsel, p.achternaam].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '?'
+  const org = (p.contactpersoon_organisaties ?? []).map(k => k.organisatie?.naam).filter(Boolean)[0]
+  return org ? `${naam} (${org})` : naam
+}
+
+/**
+ * De beoordeelde paren, voor het lijstje onderaan het dubbelenscherm. Begrensd: een naslaglijst
+ * om een verkeerd oordeel terug te draaien, geen archief.
+ */
+export async function getCpNietDubbelMarkeringen(limiet = 50): Promise<CpNietDubbelMarkering[]> {
+  await vereisRecht('relaties', 'lezen')
+  const { data } = await db()
+    .from('contactpersoon_niet_dubbel')
+    .select('id, created_at'
+      + ', a:contactpersonen!contactpersoon_a(voornaam, tussenvoegsel, achternaam, contactpersoon_organisaties(organisatie:relaties(naam)))'
+      + ', b:contactpersonen!contactpersoon_b(voornaam, tussenvoegsel, achternaam, contactpersoon_organisaties(organisatie:relaties(naam)))')
+    .order('created_at', { ascending: false })
+    .limit(limiet)
+
+  return ((data ?? []) as unknown as CpNietDubbelRij[]).map(r => ({
+    id: r.id,
+    namen: [volledigeNaam(r.a), volledigeNaam(r.b)],
+    created_at: r.created_at,
+  }))
 }
