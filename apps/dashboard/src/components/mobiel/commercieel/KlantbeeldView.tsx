@@ -14,7 +14,14 @@
  *
  * Bij de openstaande offertes staat het offertebedrag excl. btw én — als er een offerte te
  * vinden is — een knop die hem als PDF opent. Dat is wat de klant aan de telefoon vraagt:
- * "waar ging die offerte ook alweer over, en om welk bedrag?"
+ * "waar ging die offerte ook alweer over, en om welk bedrag?" Daaronder staat de afgesproken
+ * volgende stap en de laatste aantekening, zodat je aan tafel niet hoeft te reconstrueren wie
+ * aan zet is en wat er de vorige keer gezegd is.
+ *
+ * Elke dossierregel draagt de contactpersoon van dat dossier. Bij een beheerder als Schep
+ * hangen 131 dossiers onder één relatie, verdeeld over een handvol mensen; zonder die naam is
+ * "bij wie hoorde dit ook alweer?" een vraag die je alleen ín het dossier beantwoord krijgt.
+ * Op de contactpersoonkaart blijft hij weg — daar is het antwoord de pagina zelf.
  */
 
 import React from 'react'
@@ -90,10 +97,14 @@ export default function KlantbeeldView({
               key={d.id}
               dossier={d}
               terugNaar={terugNaar}
+              toonContactpersoon
+              volledigeTitel
               // Het offertebedrag, niet de gefactureerde omzet: die bestaat hier nog niet.
               bedrag={d.bedragExclBtw}
               pdfHref={d.offerteDocument ? `/api/dossiers/${d.id}/offerte/pdf` : null}
               pdfLabel={d.offerteDocument}
+              stap={d.stap}
+              opmerkingen={d.opmerkingen}
             />
           ))}
         </KlapBlok>
@@ -103,7 +114,7 @@ export default function KlantbeeldView({
           aantal={beeld.offertesInDeMaak.length}
           leegTekst="We zijn nu niets aan het uitwerken."
         >
-          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         {/* Eerder één blok "Lopend werk". Bij een vastgoedbeheerder zijn dat er al gauw
@@ -115,7 +126,7 @@ export default function KlantbeeldView({
           aantal={beeld.opdrachten.length}
           leegTekst="Er loopt op dit moment geen opdracht."
         >
-          {beeld.opdrachten.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+          {beeld.opdrachten.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         <KlapBlok
@@ -123,7 +134,7 @@ export default function KlantbeeldView({
           aantal={beeld.servicedesk.length}
           leegTekst="Er staat geen servicedeskwerk open."
         >
-          {beeld.servicedesk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} />)}
+          {beeld.servicedesk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         {/* Zonder het recht `financieel` verschijnt dit blok niet — geen lege kaart die
@@ -150,7 +161,7 @@ export default function KlantbeeldView({
           leegTekst="Geen afgerond werk in deze periode."
         >
           {beeld.uitgevoerd.map(d => (
-            <DossierRegel key={d.id} dossier={d} toonBedrag toonJaar terugNaar={terugNaar} />
+            <DossierRegel key={d.id} dossier={d} toonBedrag toonJaar terugNaar={terugNaar} toonContactpersoon />
           ))}
         </KlapBlok>
 
@@ -167,7 +178,7 @@ export default function KlantbeeldView({
           leegTekst="Alles is doorgegaan in deze periode."
         >
           {beeld.nietDoorgegaan.map(d => (
-            <DossierRegel key={d.id} dossier={d} toonJaar terugNaar={terugNaar} />
+            <DossierRegel key={d.id} dossier={d} toonJaar terugNaar={terugNaar} toonContactpersoon />
           ))}
         </KlapBlok>
 

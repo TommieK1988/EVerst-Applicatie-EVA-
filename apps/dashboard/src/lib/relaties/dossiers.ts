@@ -51,7 +51,7 @@ const rond = (n: number): number => Math.round(n * 100) / 100
  * `string`. Dan komt er `GenericStringError[]` uit en heb je weer een any-cast op de client nodig.
  */
 const DOSSIER_KOLOMMEN =
-  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, aanvraag_substatus, bouw7_aanmaakdatum, aanvraagdatum, verzonden_op, object_id, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad` as const
+  `id, dossiernummer, titel, ${FASE_KOLOMMEN}, aanvraag_substatus, bouw7_aanmaakdatum, aanvraagdatum, verzonden_op, object_id, created_at, updated_at, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad, contactpersoon:contactpersonen!contactpersoon_id ( id, voornaam, tussenvoegsel, achternaam )` as const
 
 type RuweDossierRij = FaseVelden & {
   id: string
@@ -68,6 +68,12 @@ type RuweDossierRij = FaseVelden & {
   werkadres_huisnummer: string | null
   werkadres_postcode: string | null
   werkadres_stad: string | null
+  /**
+   * Ingesloten via de expliciete FK-hint `!contactpersoon_id`. Zonder die hint moet PostgREST
+   * de relatie raden, en een verkeerde gok levert géén fout maar een lege `data` — zie de
+   * bestellingen in `leesBetrokkenDossiers`. To-one, dus een object of null.
+   */
+  contactpersoon: { id: string; voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null } | null
 }
 
 function adresRegel(d: RuweDossierRij): string | null {
@@ -75,6 +81,14 @@ function adresRegel(d: RuweDossierRij): string | null {
   const plaats = [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' ').trim()
   const regel = [straat, plaats].filter(Boolean).join(', ')
   return regel || null
+}
+
+/** "Voornaam tussenvoegsel Achternaam", of null als er niemand aan hangt. */
+function contactpersoonVan(d: RuweDossierRij): RelatieDossier['contactpersoon'] {
+  const c = d.contactpersoon
+  if (!c) return null
+  const naam = [c.voornaam, c.tussenvoegsel, c.achternaam].filter(Boolean).join(' ').trim()
+  return { id: c.id, naam: naam || 'Naamloos' }
 }
 
 function naarRij(d: RuweDossierRij, bedrag: number | null, rollen: BetrokkenRol[] = []): RelatieDossier {
@@ -90,6 +104,7 @@ function naarRij(d: RuweDossierRij, bedrag: number | null, rollen: BetrokkenRol[
     updated_at: d.updated_at,
     bedrag,
     rollen,
+    contactpersoon: contactpersoonVan(d),
     verzonden_op: d.verzonden_op,
     object_id: d.object_id,
     bouw7_aanmaakdatum: d.bouw7_aanmaakdatum,

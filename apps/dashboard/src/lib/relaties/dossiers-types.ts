@@ -34,6 +34,15 @@ export type RelatieDossier = {
   bedrag: number | null
   /** Alleen gevuld bij de inkoopvariant. */
   rollen: BetrokkenRol[]
+  /**
+   * De contactpersoon op het dossier — bij wie hoort dit werk?
+   *
+   * Op een contactpersoonkaart is dat overbodig (je weet bij wie je kijkt), maar op het beeld
+   * van een beheerder is het de vraag die je aan tafel als eerste stelt: met wie ging dit ook
+   * alweer? Bij Schep hangen 131 dossiers onder één relatie, verdeeld over een handvol mensen.
+   * Gevuld op 1001 van de 1099 dossiers.
+   */
+  contactpersoon: { id: string; naam: string } | null
   /* ── Velden voor het mobiele klantbeeld (lib/commercie/klantbeeld.ts) ──────────────────
      De tabellen op de relatiepagina gebruiken ze niet; ze staan hier omdat ze uit dezelfde
      query komen en een tweede leesronde zouden kosten. */

@@ -18,7 +18,9 @@ import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
 } from '@/components/dossiers/types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
+import type { OfferteOpmerking, OfferteStap } from '@/lib/commercie/klantbeeld-types'
 import { metTerug } from '@/lib/mobiel/terug'
+import OfferteDetails from './OfferteDetails'
 import { GRIJS, GROEN, RAND, TEKST, lijstRij } from './stijl'
 
 const ALLE_STATUSSEN = [
@@ -62,8 +64,9 @@ const euro = (n: number): string =>
   n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export default function DossierRegel({
-  dossier, toonBedrag = false, bedrag, toonJaar = false,
-  terugNaar = null, pdfHref = null, pdfLabel = null,
+  dossier, toonBedrag = false, bedrag, toonJaar = false, toonContactpersoon = false,
+  volledigeTitel = false,
+  terugNaar = null, pdfHref = null, pdfLabel = null, stap = null, opmerkingen = [],
 }: {
   dossier: RelatieDossier
   /** Bij uitgevoerd werk is het gefactureerde bedrag het interessantste getal. */
@@ -74,6 +77,23 @@ export default function DossierRegel({
    */
   bedrag?: number | null
   toonJaar?: boolean
+  /**
+   * Toon bij wie op kantoor van de klant dit dossier hoort.
+   *
+   * Uit op de contactpersoonkaart — daar is elk dossier per definitie van die persoon en zou
+   * het dezelfde naam onder elke regel zetten. Aan op het klantbeeld van een relatie, waar de
+   * dossiers over meerdere mensen verdeeld zijn.
+   */
+  toonContactpersoon?: boolean
+  /**
+   * Laat de titel over maximaal drie regels lopen in plaats van hem op één regel af te kappen.
+   *
+   * Aan bij de openstaande offertes: daar is de titel de offerte zelf, en "Aanpassen spouwlood
+   * boven b…" beantwoordt niet de vraag waar hij over ging. In de lange lijsten (uitgevoerd
+   * werk, vervallen) blijft afkappen beter — daar scan je op adres en jaar, en drie regels per
+   * dossier maakt van vijftig rijen een muur.
+   */
+  volledigeTitel?: boolean
   /** Het scherm waar deze regel op staat; wordt de terugknop van het dossier. */
   terugNaar?: string | null
   /** Link naar de offerte-PDF; zonder link blijft de knop weg. */
@@ -83,6 +103,10 @@ export default function DossierRegel({
    * bestandsnaam, dus je hoort te zien wát je opent voordat je hem voor een klant openklapt.
    */
   pdfLabel?: string | null
+  /** De afgesproken volgende stap; alleen gevuld bij een openstaande offerte. */
+  stap?: OfferteStap | null
+  /** Aantekeningen bij dit dossier, nieuwste eerst. */
+  opmerkingen?: OfferteOpmerking[]
 }) {
   const { label, kleur } = statusVan(dossier)
   const teTonenBedrag = bedrag !== undefined ? bedrag : (toonBedrag ? dossier.bedrag : null)
@@ -92,7 +116,11 @@ export default function DossierRegel({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{
           flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: TEKST, lineHeight: 1.3,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          ...(volledigeTitel
+            // Line-clamp in plaats van een vaste hoogte: een korte titel houdt één regel.
+            ? { display: '-webkit-box', WebkitBoxOrient: 'vertical' as const, WebkitLineClamp: 3 }
+            : { textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }),
         }}>
           {dossier.titel}
         </span>
@@ -126,6 +154,23 @@ export default function DossierRegel({
           {dossier.adres}
         </div>
       )}
+
+      {/* Geen regel als er niemand aan hangt: bij 98 van de 1099 dossiers is het veld leeg, en
+          "Contactpersoon: —" vertelt niets wat de lege plek niet al zegt. */}
+      {toonContactpersoon && dossier.contactpersoon && (
+        <div style={{
+          fontSize: 12.5, color: GRIJS, marginTop: 3,
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {dossier.contactpersoon.naam}
+          </span>
+        </div>
+      )}
     </>
   )
 
@@ -133,14 +178,16 @@ export default function DossierRegel({
     ? metTerug(`/m/dossiers/${dossier.id}/informatie`, terugNaar)
     : null
 
-  if (!pdfHref) {
+  // Alles wat zijn eigen klik heeft staat ónder de link, niet erin: een <a> of <button> in de
+  // <a> die de hele regel is, is ongeldige HTML — de browser sluit de buitenste dan
+  // vroegtijdig af en het onderste deel valt buiten de kaart.
+  const heeftVoet = !!pdfHref || !!stap || opmerkingen.length > 0
+
+  if (!heeftVoet) {
     if (!dossierHref) return <div style={{ ...lijstRij, cursor: 'default' }}>{inhoud}</div>
     return <Link href={dossierHref} style={lijstRij}>{inhoud}</Link>
   }
 
-  // Met PDF-knop wordt de rij een kaartje met twee aparte doelen. De hele regel één grote link
-  // maken kan hier niet: een <a> in een <a> is ongeldige HTML en de browser sluit de buitenste
-  // dan vroegtijdig af, waarna de knop buiten de kaart valt.
   return (
     <div style={{ ...lijstRij, display: 'block', padding: 0, overflow: 'hidden' }}>
       {dossierHref ? (
@@ -150,6 +197,10 @@ export default function DossierRegel({
       ) : (
         <div style={{ padding: '13px 14px' }}>{inhoud}</div>
       )}
+
+      <OfferteDetails stap={stap} opmerkingen={opmerkingen} />
+
+      {pdfHref && (
       <a
         href={pdfHref}
         target="_blank"
@@ -170,6 +221,7 @@ export default function DossierRegel({
         </span>
         <span style={{ flexShrink: 0, marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: GRIJS }}>PDF</span>
       </a>
+      )}
     </div>
   )
 }

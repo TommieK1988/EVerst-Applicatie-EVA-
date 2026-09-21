@@ -33,13 +33,13 @@ import { laadKaartBedragen } from '@/lib/dossiers/kaart-bedragen'
 import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import type { DossierRij } from '@/components/dossiers/types'
 import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
-import { bewakingsStatus } from './types'
+import { bewakingsStatus, stapOmschrijving } from './types'
 import { berekenScore } from './klantbeeld-score'
 import {
-  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isNietDoorgegaan, isWerkGereed,
-  jaarVoorKlantbeeld,
+  FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isBruikbareOpmerking,
+  isNietDoorgegaan, isWerkGereed, jaarVoorKlantbeeld,
   type Klantbeeld, type KlantContactpersoon, type KlantFactuur, type KlantObject,
-  type KlantOfferte, type KlantSignalen,
+  type KlantOfferte, type KlantSignalen, type OfferteOpmerking, type OfferteStap,
 } from './klantbeeld-types'
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
 
@@ -131,15 +131,17 @@ async function telWijAanZet(
 }
 
 /**
- * De openstaande offertes verrijken met hun bedrag en met de vraag of er een PDF te openen is.
+ * De openstaande offertes verrijken met alles wat je erbij wilt hebben als je met de klant om
+ * tafel zit: het bedrag, de offerte-PDF, de afgesproken volgende stap en de opmerkingen.
  *
  * Het bedrag komt uit `berekenKaartBedrag` — dezelfde rekenregel als het offertebord en het
  * Informatie-tab, zodat de telefoon geen derde getal introduceert. De velden die daarvoor nodig
  * zijn staan niet in `RelatieDossier` (dat draagt gefactureerde omzet, en die is bij een offerte
  * per definitie leeg), dus ze worden hier apart gelezen.
  *
- * Begrensd: dit loopt over de openstaande offertes van één klant — hoogstens twintig op
- * productie, gemiddeld drie.
+ * De stap komt uit `commercie_bewaking` en de opmerkingen uit `dossier_notities`. Beide zijn
+ * begrensd met `.in()` op de offerte-ids die we al hebben — dit loopt over de openstaande
+ * offertes van één klant, hoogstens twintig op productie en gemiddeld drie.
  */
 async function verrijkOffertes(
   supabase: ReturnType<typeof createAdminClient>,
@@ -163,9 +165,11 @@ async function verrijkOffertes(
   }
   const ruw = (data ?? []) as unknown as Ruw[]
 
-  const [kaartVelden, bronnen] = await Promise.all([
+  const [kaartVelden, bronnen, stappen, opmerkingen] = await Promise.all([
     laadKaartBedragen(ruw.map(r => ({ id: r.id, everts_calc_project_id: r.everts_calc_project_id }))),
     kiesOfferteBronnen(ids),
+    leesStappen(supabase, ids),
+    leesOpmerkingen(supabase, ids),
   ])
 
   const bedragPer = new Map<string, number | null>()
@@ -180,7 +184,78 @@ async function verrijkOffertes(
     ...d,
     bedragExclBtw: bedragPer.get(d.id) ?? null,
     offerteDocument: bronnen.get(d.id)?.naam ?? null,
+    stap: stappen.get(d.id) ?? null,
+    opmerkingen: opmerkingen.get(d.id) ?? [],
   }))
+}
+
+/**
+ * De afgesproken volgende stap per offerte, uit de offertebewaking.
+ *
+ * `afgerond: false` staat er hard in: dit draait alleen over openstaande offertes, en een
+ * openstaande offerte is per definitie niet commercieel klaar. Een afgevinkte kaart (`afgerond_op`)
+ * levert geen stap — dan is er niets meer afgesproken en zegt het scherm dat ook niet.
+ *
+ * Hangen er meerdere kaarten aan één dossier, dan wint de laatst bijgewerkte: dat is de stap
+ * waar iemand het meest recent iets over besloten heeft.
+ */
+async function leesStappen(
+  supabase: ReturnType<typeof createAdminClient>,
+  dossierIds: string[],
+): Promise<Map<string, OfferteStap>> {
+  const per = new Map<string, OfferteStap>()
+  if (dossierIds.length === 0) return per
+
+  const { data } = await supabase
+    .from('commercie_bewaking')
+    .select('dossier_id, stap_soort, stap_tekst, stap_datum, wacht_op, afgerond_op')
+    .in('dossier_id', dossierIds)
+    .order('updated_at', { ascending: false })
+
+  const vandaag = vandaagNL()
+  type Rij = {
+    dossier_id: string | null
+    stap_soort: 'actie' | 'wachten' | null
+    stap_tekst: string | null
+    stap_datum: string | null
+    wacht_op: 'klant' | 'intern' | 'extern' | null
+    afgerond_op: string | null
+  }
+  for (const rij of (data ?? []) as Rij[]) {
+    if (!rij.dossier_id || rij.afgerond_op || per.has(rij.dossier_id)) continue
+    const regel = stapOmschrijving(rij)
+    if (!regel) continue
+    per.set(rij.dossier_id, { status: bewakingsStatus(rij, { vandaag, afgerond: false }), regel })
+  }
+  return per
+}
+
+/** Hoeveel opmerkingen per offerte meegaan naar het scherm. */
+const OPMERKINGEN_PER_OFFERTE = 5
+
+/** De opmerkingen per offerte, nieuwste eerst. Zie `isBruikbareOpmerking` voor de selectie. */
+async function leesOpmerkingen(
+  supabase: ReturnType<typeof createAdminClient>,
+  dossierIds: string[],
+): Promise<Map<string, OfferteOpmerking[]>> {
+  const per = new Map<string, OfferteOpmerking[]>()
+  if (dossierIds.length === 0) return per
+
+  const { data } = await supabase
+    .from('dossier_notities')
+    .select('id, dossier_id, inhoud, bouw7_bron, created_at')
+    .in('dossier_id', dossierIds)
+    .order('created_at', { ascending: false })
+
+  type Rij = { id: string; dossier_id: string; inhoud: string; bouw7_bron: string | null; created_at: string }
+  for (const rij of (data ?? []) as Rij[]) {
+    if (!isBruikbareOpmerking(rij)) continue
+    const lijst = per.get(rij.dossier_id) ?? []
+    if (lijst.length >= OPMERKINGEN_PER_OFFERTE) continue
+    lijst.push({ id: rij.id, datum: rij.created_at.slice(0, 10), tekst: rij.inhoud.trim() })
+    per.set(rij.dossier_id, lijst)
+  }
+  return per
 }
 
 /** Objecten waar voor deze klant werk aan is of was, met het aantal dossiers per object. */

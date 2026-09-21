@@ -6,6 +6,7 @@
  */
 
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
+import type { BewakingStatus } from './types'
 
 /* ── Drempels ──────────────────────────────────────────────────────────────────────────── */
 
@@ -184,8 +185,56 @@ export type KlantContactpersoon = {
 }
 
 /**
- * Een openstaande offerte in het klantbeeld: de dossierrij plus de twee dingen die je aan de
- * telefoon nodig hebt en die niet in `RelatieDossier` passen.
+ * Wat er op deze offerte moet gebeuren, uit de offertebewaking.
+ *
+ * `status` is de afleiding uit `bewakingsStatus()` — dezelfde die de werklijst en het
+ * offertebord kleuren, zodat een offerte hier nooit anders oplicht dan daar. `regel` is de
+ * zin uit `stapOmschrijving()`: "Offerte nabellen — 6 juli" of "Wachten op klant tot 1 februari".
+ */
+export type OfferteStap = {
+  status: BewakingStatus
+  regel: string
+}
+
+/**
+ * Een opmerking bij een offerte, zoals hij aan tafel voorgelezen kan worden.
+ *
+ * Komt uit `dossier_notities`, maar niet alles daaruit: zie `isBruikbareOpmerking`.
+ */
+export type OfferteOpmerking = {
+  id: string
+  /** YYYY-MM-DD. */
+  datum: string
+  tekst: string
+}
+
+/**
+ * Welke `dossier_notities`-regels aan tafel iets toevoegen.
+ *
+ * Die tabel draagt drie soorten, en maar twee daarvan zijn een opmerking:
+ *
+ *  - **Eigen invoer** (1012 rijen) — "Ligt bij Cees. Waarschijnlijk volgend jaar",
+ *    "17-6 dhr. Mooijman, naar ander bedrijf gegaan". Dit is waar het om gaat.
+ *  - **Offerte-herinneringen uit Bouw7** (`bouw7_bron = 'reminder'`, 62 rijen) — kort en
+ *    concreet ("Goede orde ontvangen?"), dus die horen erbij.
+ *  - **De Bouw7-omschrijving** (`bouw7_bron = 'note'`, 589 rijen, gemiddeld 352 tekens) — dat
+ *    is de werkomschrijving van het project, geen aantekening. Die staat al in het dossier en
+ *    zou hier elke offerte een half scherm geven.
+ *
+ * Daarnaast valt de herkomstregel van de Gilde-import weg (398 rijen): "Overgenomen uit de
+ * Gilde-offertebewaking … Offertenummer OF25700139 …". Feitelijk juist, maar het is
+ * administratie over wáár het dossier vandaan komt, niet iets wat je een klant voorleest.
+ * Match op de letterlijke aanhef, want die is door onze eigen import geschreven en staat vast.
+ */
+export function isBruikbareOpmerking(n: { bouw7_bron: string | null; inhoud: string }): boolean {
+  if (n.bouw7_bron === 'note') return false
+  if (n.inhoud.startsWith('Overgenomen uit de Gilde-offertebewaking')) return false
+  return n.inhoud.trim().length > 0
+}
+
+/**
+ * Een openstaande offerte in het klantbeeld: de dossierrij plus de dingen die je aan de
+ * telefoon of aan tafel nodig hebt en die niet in `RelatieDossier` passen.
  *
  * `bedrag` op `RelatieDossier` is gefactureerde omzet uit `management_projecten` en is bij een
  * offerte per definitie leeg — die staat nog niet in die tabel. Vandaar een eigen veld.
@@ -204,6 +253,10 @@ export type KlantOfferte = RelatieDossier & {
    * dan hoort op de knop te staan wát je opent. Zie `lib/dossiers/offerte-bron.ts`.
    */
   offerteDocument: string | null
+  /** De afgesproken volgende stap, of `null` als er niets is afgesproken. */
+  stap: OfferteStap | null
+  /** Nieuwste eerst. Het scherm toont er één en klapt de rest open op verzoek. */
+  opmerkingen: OfferteOpmerking[]
 }
 
 export type Klantbeeld = {
