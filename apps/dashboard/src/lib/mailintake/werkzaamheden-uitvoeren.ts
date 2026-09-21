@@ -21,7 +21,7 @@ import type { Json } from '@everts/database'
 
 import { appGraphFetch } from '@/lib/o365/graph'
 
-import { vatWerkzaamhedenSamen, herkomstregel, type BronBestand, type WerkzaamhedenResultaat } from './werkzaamheden'
+import { vatWerkzaamhedenSamen, herkomstregel, type BronBestand, type WerkzaamhedenResultaat, deelTeksten } from './werkzaamheden'
 
 /** Zelfde rem als in werkzaamheden.ts: één Anthropic-verzoek mag maximaal 32 MB. */
 const MAX_TOTAAL_BYTES = 20 * 1024 * 1024
@@ -183,7 +183,15 @@ async function budgetOp(postbusId: string): Promise<boolean> {
  */
 export async function maakWerkzaamhedenSamenvatting(
   berichtId: string,
-): Promise<{ ok: boolean; tekst: string | null; fout: string | null; kostenCent: number }> {
+): Promise<{
+  ok: boolean
+  /** Het Scope-deel. */
+  tekst: string | null
+  buitenScope: string | null
+  aandachtspunten: string | null
+  fout: string | null
+  kostenCent: number
+}> {
   const supabase = createAdminClient()
 
   const { data: b } = await supabase
@@ -192,10 +200,10 @@ export async function maakWerkzaamhedenSamenvatting(
     .eq('id', berichtId)
     .maybeSingle()
 
-  if (!b) return { ok: false, tekst: null, fout: 'Bericht niet gevonden.', kostenCent: 0 }
+  if (!b) return { ok: false, tekst: null, buitenScope: null, aandachtspunten: null, fout: 'Bericht niet gevonden.', kostenCent: 0 }
 
   if (await budgetOp(b.postbus_id)) {
-    return { ok: false, tekst: null, fout: 'Het dagbudget voor deze postbus is bereikt.', kostenCent: 0 }
+    return { ok: false, tekst: null, buitenScope: null, aandachtspunten: null, fout: 'Het dagbudget voor deze postbus is bereikt.', kostenCent: 0 }
   }
 
   const { data: laatsteExtractie } = await supabase
@@ -224,18 +232,34 @@ export async function maakWerkzaamhedenSamenvatting(
   await bewaarExtractie(berichtId, res)
 
   if (!res.ok) {
-    return { ok: false, tekst: null, fout: res.fout, kostenCent: res.kostenCent }
+    return {
+      ok: false, tekst: null, buitenScope: null, aandachtspunten: null,
+      fout: res.fout, kostenCent: res.kostenCent,
+    }
   }
 
+  // De omschrijving heeft drie delen. Ze worden apart bewaard omdat de behandelaar
+  // ze los bijschaaft en omdat een uitsluiting tussen de werkzaamheden als werk leest.
+  const delen = res.data ? deelTeksten(res.data) : { scope: '', buitenScope: '', aandachtspunten: '' }
+
   await supabase.from('mailintake_berichten').update({
-    gevraagde_werkzaamheden: res.tekst,
+    gevraagde_werkzaamheden: delen.scope || null,
+    buiten_scope: delen.buitenScope || null,
+    aandachtspunten: delen.aandachtspunten || null,
     gevraagde_werkzaamheden_bronnen: res.gelezen,
     gevraagde_werkzaamheden_gemist: [...res.gemist, ...gemist],
     gevraagde_werkzaamheden_op: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq('id', berichtId)
 
-  return { ok: true, tekst: res.tekst, fout: null, kostenCent: res.kostenCent }
+  return {
+    ok: true,
+    tekst: delen.scope || null,
+    buitenScope: delen.buitenScope || null,
+    aandachtspunten: delen.aandachtspunten || null,
+    fout: null,
+    kostenCent: res.kostenCent,
+  }
 }
 
 /** Legt de aanroep vast als tweede soort extractie, zodat de kostenmeter klopt. */

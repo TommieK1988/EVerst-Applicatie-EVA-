@@ -524,12 +524,28 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     // ── Uitvoeren ───────────────────────────────────────────────────────────
     if (besluit.automatisch && besluit.route === 'nieuw_dossier' && afz.relatieId) {
       log.stap('dossier aanmaken')
+
+      // De drie delen van de omschrijving staan bij het bericht: de scope-ronde
+      // hierboven heeft ze daar net weggeschreven. Zonder dit zou een automatisch
+      // dossier in Bouw7 met een lege Omschrijving landen.
+      const { data: delen } = await supabase
+        .from('mailintake_berichten')
+        .select('gevraagde_werkzaamheden, buiten_scope, aandachtspunten')
+        .eq('id', berichtId)
+        .maybeSingle()
+
       const res = await maakDossierUitBericht({
         berichtId,
         relatieId: afz.relatieId,
         contactpersoonId: afz.contactpersoonId,
         velden,
         objectId: objectTreffer.objectId,
+        gevraagdeWerkzaamheden: delen?.gevraagde_werkzaamheden ?? null,
+        omschrijving: {
+          scope: delen?.gevraagde_werkzaamheden ?? null,
+          buitenScope: delen?.buiten_scope ?? null,
+          aandachtspunten: delen?.aandachtspunten ?? null,
+        },
         automatisch: true,
         medewerkerId: null,
         behandelaarId,

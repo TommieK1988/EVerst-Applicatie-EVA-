@@ -62,7 +62,7 @@ export const werkzaamhedenSchema = z.object({
   kop: z.string().trim().max(200).catch(''),
   regels: z.array(z.object({
     tekst: z.string().trim().min(1).max(400),
-    soort: z.enum(['werk', 'optie', 'voorwaardelijk', 'verzameling', 'onduidelijk']).catch('werk'),
+    soort: z.enum(['werk', 'optie', 'voorwaardelijk', 'verzameling', 'uitsluiting', 'onduidelijk']).catch('werk'),
   })).max(30).catch([]),
 })
 
@@ -91,15 +91,21 @@ VIER REGELS DIE ERTOE DOEN
 3. Gaat het om veel kleine verspreide werkzaamheden, schrijf dan EEN regel die dat zegt, met het
    aantal en waar het staat: "Circa 40 kleine herstelpunten verspreid over het complex, zie bijlage 2."
    Soort "verzameling". Som ze niet op — een lijst die net zo lang is als het bestek helpt niemand.
-4. Wat onduidelijk is krijgt een eigen regel die begint met "Onduidelijk:" en soort "onduidelijk".
+4. Staat er letterlijk dat iets NIET bij het werk hoort -- "exclusief steigerwerk", "asbestsanering
+   valt buiten deze aanvraag", "het binnenwerk doen wij zelf" -- dan is dat een regel met soort
+   "uitsluiting". Schrijf hem als het uitgesloten werk zelf, dus "Steigerwerk" en niet "exclusief
+   steigerwerk". VERZIN HIER NOOIT IETS BIJ. Een uitsluiting die jij bedenkt leest later als een
+   afspraak met de klant en daar wordt op gecalculeerd. Staat er niets uitgesloten, lever dan geen
+   enkele regel van dit soort.
+5. Wat onduidelijk is krijgt een eigen regel die begint met "Onduidelijk:" en soort "onduidelijk".
    Maar wees hier streng: HOOGSTENS DRIE zulke regels, en alleen voor iets dat de prijsvorming
    echt blokkeert of waar de aanvraag zichzelf tegenspreekt. Dat er geen maten, oppervlaktes,
    tekeningen of foto's zijn meegestuurd is bij een aanvraag of opdracht de normale gang van zaken en
    komt uit de opname — dat is dus GEEN onduidelijkheid en noem je niet.
 
 VOLGORDE
-Eerst de werkzaamheden (soorten werk, voorwaardelijk, optie, verzameling), daarna pas de
-onduidelijkheden. Iemand die dit leest wil eerst weten wat er gevraagd wordt.
+Eerst de werkzaamheden (soorten werk, voorwaardelijk, optie, verzameling), dan de uitsluitingen,
+dan pas de onduidelijkheden. Iemand die dit leest wil eerst weten wat er gevraagd wordt.
 
 LENGTE VAN EEN VERZAMELREGEL
 Houd een "verzameling" kort: het aantal, waar het staat, en hooguit twee voorbeelden. Niet de hele
@@ -145,11 +151,12 @@ export const LEVER_WERKZAAMHEDEN_TOOL = {
             },
             soort: {
               type: 'string',
-              enum: ['werk', 'optie', 'voorwaardelijk', 'verzameling', 'onduidelijk'],
+              enum: ['werk', 'optie', 'voorwaardelijk', 'verzameling', 'uitsluiting', 'onduidelijk'],
               description:
                 'werk = gewoon gevraagd werk. voorwaardelijk = hangt af van een bevinding ter plaatse. ' +
                 'optie = moet apart aangeboden worden. verzameling = veel kleine verspreide punten in ' +
-                'één regel. onduidelijk = moet nagevraagd worden.',
+                'één regel. uitsluiting = staat er letterlijk dat het NIET bij het werk hoort. ' +
+                'onduidelijk = moet nagevraagd worden.',
             },
           },
           required: ['tekst', 'soort'],
@@ -212,8 +219,31 @@ function gewicht(naam: string): number {
  * kwaliteit, de tekst is het resultaat.
  */
 export function rendertekst(data: Werkzaamheden): string {
-  const regels = data.regels.map(r => `- ${r.tekst.replace(/^[-•*]\s*/, '')}`)
-  return regels.join('\n')
+  return deelTeksten(data).scope
+}
+
+/**
+ * De drie delen van de projectomschrijving, elk als eigen tekstvak.
+ *
+ * Drie in plaats van één, omdat de omschrijving in Bouw7 altijd uit Scope, Buiten
+ * scope en Aandachtspunten bestaat, en omdat de behandelaar ze los moet kunnen
+ * bijschaven. Een uitsluiting die tussen de werkzaamheden staat leest namelijk als
+ * werk -- en dat is precies de verwarring die je bij een calculatie niet wilt.
+ */
+export function deelTeksten(data: Werkzaamheden): {
+  scope: string
+  buitenScope: string
+  aandachtspunten: string
+} {
+  const schoon = (r: { tekst: string }) => `- ${r.tekst.replace(/^[-•*]\s*/, '')}`
+  const van = (soorten: string[]) =>
+    data.regels.filter(r => soorten.includes(r.soort)).map(schoon).join('\n')
+
+  return {
+    scope: van(['werk', 'voorwaardelijk', 'optie', 'verzameling']),
+    buitenScope: van(['uitsluiting']),
+    aandachtspunten: van(['onduidelijk']),
+  }
 }
 
 /**

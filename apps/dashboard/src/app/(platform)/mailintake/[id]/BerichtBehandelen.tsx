@@ -103,7 +103,12 @@ export default function BerichtBehandelen({
     velden.mandaat_bedrag != null ? String(velden.mandaat_bedrag) : '',
   )
 
-  const [werkzaamheden, setWerkzaamheden] = useState<string>(b.gevraagde_werkzaamheden ?? '')
+  // De projectomschrijving in de drie delen waarin hij ook in Bouw7 terechtkomt.
+  const [projectOmschrijving, setProjectOmschrijving] = useState({
+    scope: b.gevraagde_werkzaamheden ?? '',
+    buitenScope: b.buiten_scope ?? '',
+    aandachtspunten: b.aandachtspunten ?? '',
+  })
 
   // Voorkeur: wat er al aan het bericht hangt; anders de verse treffer.
   const [objectId, setObjectId] = useState<string | null>(
@@ -249,7 +254,9 @@ export default function BerichtBehandelen({
         relatieId: klantId,
         contactpersoonId,
         objectId,
-        gevraagdeWerkzaamheden: werkzaamheden.trim() || null,
+        gevraagdeWerkzaamheden: projectOmschrijving.scope.trim() || null,
+        buitenScope: projectOmschrijving.buitenScope.trim() || null,
+        aandachtspunten: projectOmschrijving.aandachtspunten.trim() || null,
         omschrijving: omschrijving.trim(),
         klantNaam,
         contactpersoonNaam: null,
@@ -578,11 +585,15 @@ export default function BerichtBehandelen({
 
           <WerkzaamhedenBlok
             berichtId={b.id}
-            opgeslagen={b.gevraagde_werkzaamheden ?? null}
+            opgeslagen={{
+              scope: b.gevraagde_werkzaamheden ?? null,
+              buitenScope: b.buiten_scope ?? null,
+              aandachtspunten: b.aandachtspunten ?? null,
+            }}
             bronnen={b.gevraagde_werkzaamheden_bronnen ?? null}
             gemist={b.gevraagde_werkzaamheden_gemist ?? null}
-            waarde={werkzaamheden}
-            opWijzig={setWerkzaamheden}
+            waarden={projectOmschrijving}
+            opWijzig={setProjectOmschrijving}
             bewerkbaar={bewerkbaar}
           />
 

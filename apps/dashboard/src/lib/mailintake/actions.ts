@@ -59,6 +59,8 @@ export async function maakDossierVanBericht(
     contactpersoonId: string | null
     objectId?: string | null
     gevraagdeWerkzaamheden?: string | null
+    buitenScope?: string | null
+    aandachtspunten?: string | null
   },
 ): Promise<{ ok: boolean; dossierId?: string; dossiernummer?: string | null; bouw7Ok?: boolean; bouw7Fout?: string; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
@@ -79,6 +81,11 @@ export async function maakDossierVanBericht(
     velden,
     objectId: velden.objectId ?? null,
     gevraagdeWerkzaamheden: velden.gevraagdeWerkzaamheden ?? null,
+    omschrijving: {
+      scope: velden.gevraagdeWerkzaamheden ?? null,
+      buitenScope: velden.buitenScope ?? null,
+      aandachtspunten: velden.aandachtspunten ?? null,
+    },
     automatisch: false,
     medewerkerId: medewerker.id,
     behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,
@@ -458,30 +465,53 @@ export async function leesOpnieuw(berichtId: string): Promise<{ ok: boolean; err
  */
 export async function hervatSamenvatting(
   berichtId: string,
-): Promise<{ ok: boolean; tekst?: string | null; error?: string }> {
+): Promise<{
+  ok: boolean
+  tekst?: string | null
+  buitenScope?: string | null
+  aandachtspunten?: string | null
+  error?: string
+}> {
   await vereisRecht('mailintake', 'schrijven')
   const res = await maakWerkzaamhedenSamenvatting(berichtId)
   revalidatePath(`/mailintake/${berichtId}`)
-  return res.ok ? { ok: true, tekst: res.tekst } : { ok: false, error: res.fout ?? 'Samenvatten mislukt.' }
+  return res.ok
+    ? { ok: true, tekst: res.tekst, buitenScope: res.buitenScope, aandachtspunten: res.aandachtspunten }
+    : { ok: false, error: res.fout ?? 'Samenvatten mislukt.' }
 }
 
-/** Slaat de door een mens bijgeschaafde samenvatting op bij het bericht. */
+/**
+ * Slaat een door een mens bijgeschaafd deel van de omschrijving op bij het bericht.
+ *
+ * Drie delen, elk met een eigen kolom: Scope, Buiten scope en Aandachtspunten. Ze
+ * worden apart bewaard omdat ze in Bouw7 ook apart onder een kopje komen, en omdat
+ * een uitsluiting tussen de werkzaamheden als werk leest.
+ */
 export async function bewaarSamenvatting(
   berichtId: string,
   tekst: string,
+  deel: 'scope' | 'buiten_scope' | 'aandachtspunten' = 'scope',
 ): Promise<{ ok: boolean; error?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
   const supabase = createAdminClient()
 
+  // Uitgeschreven in plaats van met een berekende sleutel: zo controleert
+  // TypeScript nog steeds of de kolom werkelijk bestaat.
+  const waarde = tekst.trim() || null
+  const patch =
+    deel === 'buiten_scope' ? { buiten_scope: waarde }
+      : deel === 'aandachtspunten' ? { aandachtspunten: waarde }
+        : { gevraagde_werkzaamheden: waarde }
+
   const { error } = await supabase.from('mailintake_berichten').update({
-    gevraagde_werkzaamheden: tekst.trim() || null,
+    ...patch,
     updated_at: new Date().toISOString(),
   }).eq('id', berichtId)
   if (error) return { ok: false, error: error.message }
 
   await supabase.from('mailintake_besluiten').insert({
     bericht_id: berichtId, actor: 'medewerker', medewerker_id: medewerker.id,
-    actie: 'samenvatting_aangepast', details: { lengte: tekst.trim().length },
+    actie: 'samenvatting_aangepast', details: { deel, lengte: tekst.trim().length },
   })
   return { ok: true }
 }

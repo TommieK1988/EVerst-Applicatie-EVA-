@@ -6557,6 +6557,8 @@ export type Database = {
       mailintake_berichten: {
         Row: {
           aan: string[]
+          aandachtspunten: string | null
+          buiten_scope: string | null
           behandeld_door: string | null
           behandeld_op: string | null
           besluit: string | null
@@ -6607,6 +6609,8 @@ export type Database = {
         }
         Insert: {
           aan?: string[]
+          aandachtspunten?: string | null
+          buiten_scope?: string | null
           behandeld_door?: string | null
           behandeld_op?: string | null
           besluit?: string | null
@@ -6657,6 +6661,8 @@ export type Database = {
         }
         Update: {
           aan?: string[]
+          aandachtspunten?: string | null
+          buiten_scope?: string | null
           behandeld_door?: string | null
           behandeld_op?: string | null
           besluit?: string | null

@@ -19,6 +19,7 @@ import { uploadBuffersNaarDossierMap } from '@/lib/o365/dossier-map'
 
 import type { GekeurdeVelden } from './extractie'
 import { maakIntakeActie } from './taken'
+import { bouwOmschrijvingHtml } from './omschrijving'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
 export interface AanmaakInvoer {
@@ -30,6 +31,11 @@ export interface AanmaakInvoer {
   objectId?: string | null
   /** De (eventueel bijgeschaafde) scope-samenvatting uit het behandelscherm. */
   gevraagdeWerkzaamheden?: string | null
+  /**
+   * De drie delen van de projectomschrijving, zoals ze op het scherm staan. Gaan
+   * samen als HTML naar Bouw7; wat de behandelaar heeft bijgeschaafd is leidend.
+   */
+  omschrijving?: { scope: string | null; buitenScope: string | null; aandachtspunten: string | null }
   /** true = door de cron, zonder mens. Bepaalt de melding en de controletaak. */
   automatisch: boolean
   /** De medewerker die op de knop drukte; null bij de cron. */
@@ -185,7 +191,15 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     vve_code: v.vveCode,
     aanvraagdatum: v.aanvraagdatum,
     deadline: v.deadline,
-    opmerkingen: v.opmerkingen,
+    // Gaat naar Bouw7 als `information` en staat daar onder Omschrijving. Altijd
+    // in drie delen -- Scope, Buiten scope, Aandachtspunten -- en als eigen HTML,
+    // want Bouw7 rendert HTML maar zet Markdown niet om en negeert losse enters.
+    opmerkingen: bouwOmschrijvingHtml({
+      scope: inv.omschrijving?.scope ?? null,
+      buitenScope: inv.omschrijving?.buitenScope ?? null,
+      aandachtspunten: [inv.omschrijving?.aandachtspunten, v.opmerkingen]
+        .filter(Boolean).join('\n') || null,
+    }) || v.opmerkingen,
     werkadres_straat: v.werkadresStraat,
     werkadres_huisnummer: v.werkadresHuisnummer,
     werkadres_postcode: v.werkadresPostcode,
