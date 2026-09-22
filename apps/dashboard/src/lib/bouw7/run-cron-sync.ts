@@ -10,12 +10,18 @@ import { amsterdamUur } from '@/lib/cron/lokaal-venster'
  * Beoogde lokale (Europe/Amsterdam) starttijd per mode. Vercel Cron draait alleen in
  * UTC en volgt géén zomer-/wintertijd, daarom vuurt de cron op beide kandidaat-UTC-uren
  * (zie apps/dashboard/vercel.json) en laat deze guard alleen de uitvoering door die op
- * het juiste lokale uur valt. Zo draait de sync het hele jaar om 06:30 resp. 12:45,
+ * het juiste lokale uur valt. Zo draait de sync het hele jaar om 02:30 resp. 12:30,
  * ongeacht DST.
+ *
+ * **Die twee UTC-uren moeten H-2 en H-1 zijn** (zomertijd is UTC+2, wintertijd UTC+1).
+ * Staan ze ergens anders, dan valt géén van beide firings in het venster en draait de
+ * cron het hele jaar niet — stil, want een overgeslagen run logt niets. Dat is tussen
+ * 9 september en 22 september 2026 met de full sync gebeurd. Verzet je een tijd hier,
+ * verzet dan het paar in vercel.json mee.
  */
 const DOEL_LOKAAL_UUR: Record<SyncMode, number> = {
-  full: 6, // 06:30 lokaal
-  incremental: 12, // 12:45 lokaal
+  full: 2, // 02:30 lokaal — zwaar werk buiten kantooruren (UTC 00:30 zomer / 01:30 winter)
+  incremental: 12, // 12:30 lokaal (UTC 10:30 zomer / 11:30 winter)
 }
 
 /**

@@ -24,8 +24,12 @@ export const dynamic = 'force-dynamic'
  * Beveiliging: Authorization: Bearer <CRON_SECRET>.
  */
 
-/** Beoogde lokale (Europe/Amsterdam) starttijden: 07:00 na de full sync, 13:15 na de incremental. */
-const DOEL_LOKALE_UREN = [7, 13]
+/**
+ * Beoogde lokale (Europe/Amsterdam) starttijden: 03:00 na de full sync, 13:30 na de incremental.
+ * De UTC-paren in vercel.json moeten per doeluur H gelijk zijn aan H-2 en H-1 — anders valt geen
+ * enkele firing in dit venster en draait de warmer stilzwijgend nooit (zie run-cron-sync.ts).
+ */
+const DOEL_LOKALE_UREN = [3, 13]
 
 function leesModus(mode: string): WarmModus {
   return mode === 'dossiers' || mode === 'overig' ? mode : 'alles'

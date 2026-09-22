@@ -6,11 +6,11 @@
   "crons": [
     {
       "path": "/api/cron/bouw7-sync/full",
-      "schedule": "30 0,2 * * *"
+      "schedule": "30 0,1 * * *"
     },
     {
       "path": "/api/cron/bouw7-snapshots/alles",
-      "schedule": "30 1,3 * * *"
+      "schedule": "0 1,2 * * *"
     },
     {
       "path": "/api/cron/ulu-sync",
@@ -42,15 +42,15 @@
     },
     {
       "path": "/api/cron/bouw7-sync/incremental",
-      "schedule": "30 10,12 * * *"
+      "schedule": "30 10,11 * * *"
     },
     {
       "path": "/api/cron/bouw7-snapshots/alles",
-      "schedule": "30 11,13 * * *"
+      "schedule": "30 11,12 * * *"
     },
     {
       "path": "/api/cron/uren",
-      "schedule": "0 12,14 * * 1-5"
+      "schedule": "0 12,13 * * 1-5"
     },
     {
       "path": "/api/cron/ulu-sync",
