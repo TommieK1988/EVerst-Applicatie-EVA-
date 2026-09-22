@@ -16,14 +16,13 @@ import toast from 'react-hot-toast'
 import { Button, Card, useDialogen } from '@/components/ui'
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
-import { zoekAdres } from '@/lib/adres/pdok'
 // Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
 import { dossierHref, dossierSegment } from '@/lib/dossiers/href'
 import {
   maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier, getBijlageUrl,
 } from '@/lib/mailintake/actions'
 import {
-  DUPLICAAT_TWIJFEL, VELD_BETROUWBAAR, MAIL_SOORT_LABELS, bepaalRoute,
+  DUPLICAAT_TWIJFEL, MAIL_SOORT_LABELS, bepaalRoute,
   type MailSoort,
 } from '@/lib/mailintake/types'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
@@ -35,6 +34,8 @@ import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { Voorvertoning, Afwijkingen } from './panelen/voorvertoning'
 import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
 import { useFase } from './panelen/fase-keuze'
+import { useWerkmaatschappij } from './panelen/gebruik-werkmaatschappij'
+import { useWerkadres } from './panelen/gebruik-werkadres'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
 
@@ -69,7 +70,7 @@ export default function BerichtBehandelen({
   magSchrijven: boolean
 }) {
   const router = useRouter()
-  const { bevestig, meld, vraagTekst } = useDialogen()
+  const { bevestig, meld } = useDialogen()
   const b = detail.bericht
   const velden = (detail.extractie?.velden ?? {}) as Record<string, any>
   // Wat EVA er na de keuring van maakte. `velden` is de ruwe uitvoer van het model;
@@ -90,18 +91,23 @@ export default function BerichtBehandelen({
   const [contactpersoonId, setContactpersoonId] = useState<string | null>(b.contactpersoon?.id ?? null)
 
   const [omschrijving, setOmschrijving] = useState(velden.omschrijving ?? '')
-  const [werkmaatschappijId, setWerkmaatschappijId] = useState(b.postbus?.standaard_werkmaatschappij_id ?? '')
   const [categorieId, setCategorieId] = useState<number | ''>('')
   const [referentie, setReferentie] = useState(velden.referentie ?? '')
   const [vveCode, setVveCode] = useState(velden.vve_code ?? '')
   const [deadline, setDeadline] = useState(velden.deadline ?? '')
   const [opmerkingen, setOpmerkingen] = useState(velden.opmerkingen ?? '')
 
-  const [straat, setStraat] = useState(velden.werkadres_straat ?? '')
-  const [huisnummer, setHuisnummer] = useState(velden.werkadres_huisnummer ?? '')
-  const [postcode, setPostcode] = useState(velden.werkadres_postcode ?? '')
-  const [stad, setStad] = useState(velden.werkadres_stad ?? '')
-  const [adresBevestigd, setAdresBevestigd] = useState(false)
+  // Het werkadres met de adresservice erachter; zie `gebruik-werkadres.ts`.
+  const {
+    straat, setStraat, huisnummer, setHuisnummer, postcode, setPostcode, stad, setStad,
+    bevestigd: adresBevestigd, controleer: controleerAdres,
+  } = useWerkadres({
+    straat: velden.werkadres_straat ?? null,
+    huisnummer: velden.werkadres_huisnummer ?? null,
+    postcode: velden.werkadres_postcode ?? null,
+    stad: velden.werkadres_stad ?? null,
+    bewerkbaar,
+  })
 
   const [regie, setRegie] = useState<boolean>(Boolean(velden.regie))
   const [factuuradresOvernemen, setFactuuradresOvernemen] = useState(true)
@@ -179,25 +185,6 @@ export default function BerichtBehandelen({
     return () => { actief = false; clearTimeout(t) }
   }, [klantZoek])
 
-  async function controleerAdres() {
-    if (!(postcode && huisnummer) && !(straat && huisnummer && stad)) return
-    try {
-      const treffers = await zoekAdres({ postcode, huisnummer, straat, stad, rows: 1 })
-      const t = treffers[0]
-      if (t) {
-        setStraat(t.straat || straat)
-        setPostcode(t.postcode || postcode)
-        setStad(t.stad || stad)
-        setAdresBevestigd(true)
-      } else {
-        setAdresBevestigd(false)
-        toast.error('Dit adres is niet gevonden — controleer postcode en huisnummer.')
-      }
-    } catch {
-      setAdresBevestigd(false)
-    }
-  }
-
   // Welke route hoort bij dit bericht? Een opdracht maakt geen nieuw dossier maar
   // wint een bestaande offerte; het scherm toont dan een ander paneel.
   const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
@@ -205,11 +192,20 @@ export default function BerichtBehandelen({
   const route = bepaalRoute(b.soort, offerteKandidaten.length > 0, isRegie)
   const isServicedesk = b.soort === 'servicedeskbon'
 
+  const gekozenCategorieNaam = categorieen.find(c => c.id === categorieId)?.name ?? null
+
   // Waar het dossier heen gaat. De regel staat in `fase-keuze.ts`: de categorie
   // beslist over de servicedesk, niet de mailsoort en niet de behandelaar.
-  const { fase, setFase, bezwaar: faseBezwaar } = useFase(
-    categorieen.find(c => c.id === categorieId)?.name ?? null, b.soort,
-  )
+  const { fase, setFase, bezwaar: faseBezwaar } = useFase(gekozenCategorieNaam, b.soort)
+
+  // De werkmaatschappij volgt uit de categorie en beweegt mee als je die corrigeert.
+  // Zie `gebruik-werkmaatschappij.ts`; alleen Bouwkundig Onderhoud blijft twijfel.
+  const { werkmaatschappijId, setWerkmaatschappijId } = useWerkmaatschappij({
+    categorieNaam: gekozenCategorieNaam,
+    aard: (velden.aard_van_het_werk as string | null) ?? null,
+    werkmaatschappijen,
+    standaard: b.postbus?.standaard_werkmaatschappij_id ?? null,
+  })
 
   // Bij regie maakt EVA een nieuw dossier: de prijs staat niet vast, dus er is geen
   // aanneemsom om te winnen. Soms is zo'n bon tóch het akkoord op een offerte --
@@ -421,6 +417,7 @@ export default function BerichtBehandelen({
     klantId, klantNaam, setKlantNaam, setKlantZoek,
     omschrijving, setOmschrijving,
     straat, setStraat, huisnummer, setHuisnummer, adresBevestigd,
+    controleerAdres,
     categorieId, setCategorieId, werkmaatschappijId, setWerkmaatschappijId,
   })
 
@@ -647,18 +644,18 @@ export default function BerichtBehandelen({
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
             <Veld label="Straat" score={zekerheid.werkadres_straat}>
-              <input style={veldStijl} value={straat} onChange={e => { setStraat(e.target.value); setAdresBevestigd(false) }} disabled={!bewerkbaar} />
+              <input style={veldStijl} value={straat} onChange={e => setStraat(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
             </Veld>
             <Veld label="Huisnummer" score={zekerheid.werkadres_huisnummer}>
-              <input style={veldStijl} value={huisnummer} onChange={e => { setHuisnummer(e.target.value); setAdresBevestigd(false) }} onBlur={controleerAdres} disabled={!bewerkbaar} />
+              <input style={veldStijl} value={huisnummer} onChange={e => setHuisnummer(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
             </Veld>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
             <Veld label="Postcode" score={zekerheid.werkadres_postcode}>
-              <input style={veldStijl} value={postcode} onChange={e => { setPostcode(e.target.value); setAdresBevestigd(false) }} onBlur={controleerAdres} disabled={!bewerkbaar} />
+              <input style={veldStijl} value={postcode} onChange={e => setPostcode(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
             </Veld>
             <Veld label="Plaats" score={zekerheid.werkadres_stad}>
-              <input style={veldStijl} value={stad} onChange={e => { setStad(e.target.value); setAdresBevestigd(false) }} disabled={!bewerkbaar} />
+              <input style={veldStijl} value={stad} onChange={e => setStad(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
             </Veld>
           </div>
           {adresBevestigd && <span style={{ ...klein, color: 'var(--su-700, #15803d)' }}>Adres bevestigd door de adresservice.</span>}

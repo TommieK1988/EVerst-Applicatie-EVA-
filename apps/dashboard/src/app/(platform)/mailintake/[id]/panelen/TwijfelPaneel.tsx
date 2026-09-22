@@ -348,6 +348,8 @@ export function bouwTwijfelVelden(a: {
   huisnummer: string
   setHuisnummer: (v: string) => void
   adresBevestigd: boolean
+  /** Adres aanvullen bij de adresservice; draait als je het veld verlaat. */
+  controleerAdres: () => void
   categorieId: number | ''
   setCategorieId: (v: number | '') => void
   werkmaatschappijId: string
@@ -390,10 +392,13 @@ export function bouwTwijfelVelden(a: {
       reden: a.adresBevestigd ? null : 'Niet door PDOK bevestigd.',
       invoer: (
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 6 }}>
+          {/* Ook hier de adresservice op blur: dit is de kolom waar je de
+              onzekere velden bijwerkt, en dan hoort de postcode er vanzelf bij
+              te komen in plaats van dat je hem in het formulier ernaast ophaalt. */}
           <input style={veldStijl} value={a.straat} disabled={!a.bewerkbaar}
-            onChange={e => a.setStraat(e.target.value)} placeholder="Straat" />
+            onChange={e => a.setStraat(e.target.value)} onBlur={a.controleerAdres} placeholder="Straat" />
           <input style={veldStijl} value={a.huisnummer} disabled={!a.bewerkbaar}
-            onChange={e => a.setHuisnummer(e.target.value)} placeholder="Nr." />
+            onChange={e => a.setHuisnummer(e.target.value)} onBlur={a.controleerAdres} placeholder="Nr." />
         </div>
       ),
     })
