@@ -1781,11 +1781,13 @@ export default function MedewerkerTimeline({
             dossierMap={dossierMap}
             projectleiders={projectleiders}
             zichtbaar={{ van: vs.getTime(), tot: ve.getTime() + DAG_MS }}
-            onApplied={wijzigingen => {
-              setEntries(prev => prev.map(e => {
-                const w = wijzigingen.find(x => x.id === e.id)
-                return w ? { ...e, start_dt: w.start_dt, eind_dt: w.eind_dt } : e
-              }))
+            onApplied={(wijzigingen, verwijderd) => {
+              setEntries(prev => prev
+                .filter(e => !(verwijderd ?? []).includes(e.id))
+                .map(e => {
+                  const w = wijzigingen.find(x => x.id === e.id)
+                  return w ? { ...e, start_dt: w.start_dt, eind_dt: w.eind_dt } : e
+                }))
               startTransition(() => router.refresh())
             }}
             onClose={() => setOplosConflict(null)}

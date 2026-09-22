@@ -710,10 +710,19 @@ export async function verwijderPlanningItem(
   // gespiegelde plan-item als wees in Bouw7 achterblijven.
   const { data: bron } = await db()
     .from('planning_items')
-    .select('bouw7_id, bron, medewerkers!medewerker_id ( bouw7_id ), planning_activiteiten!activiteit_id ( dossier_id )')
+    .select('bouw7_id, bron, medewerkers!medewerker_id ( bouw7_id ), planning_activiteiten!activiteit_id ( dossier_id, planning_uursoorten!uursoort_id ( naam, uren_categorie ) )')
     .eq('id', id)
     .maybeSingle()
   if (bron?.planning_activiteiten?.dossier_id) await assertDossierBewerkbaar(bron.planning_activiteiten.dossier_id)
+
+  // Alleen werkzaamheden zijn vanuit de planning te verwijderen. Verlof, ziekte, ATV en
+  // feestdagen komen uit de verlofadministratie (medewerker_afwezigheid / Bouw7 day-offs);
+  // die daar weghalen hoort daar te gebeuren, niet met een prullenbak op een planbalk.
+  const categorie = bron?.planning_activiteiten?.planning_uursoorten?.uren_categorie
+  if (['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(categorie ?? '')) {
+    const soort = bron?.planning_activiteiten?.planning_uursoorten?.naam ?? 'Verlof'
+    return { ok: false, error: `“${soort}” is geen werkzaamheid en kan niet uit de planning verwijderd worden.` }
+  }
 
   // Uit Bouw7 geïmporteerd: eerst dáár de medewerker van het plan-item halen (of het item weg
   // als dit de laatste was), en pas daarna in EVA. Lukt Bouw7 niet, dan weigeren we: anders

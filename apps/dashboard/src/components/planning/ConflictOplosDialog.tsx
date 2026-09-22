@@ -2,12 +2,12 @@
 
 import { addDays, eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { AlertTriangle, Check, GripVertical, RotateCcw, X } from 'lucide-react'
+import { AlertTriangle, Check, GripVertical, RotateCcw, Trash2, X } from 'lucide-react'
 import { useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 
 import type { Medewerker, MedewerkerRooster } from '@everts/database/platform-types'
-import { verplaatsPlanningItem } from '@/app/(platform)/planning/actions'
+import { verplaatsPlanningItem, verwijderPlanningItem } from '@/app/(platform)/planning/actions'
 import { crewKleur } from '@/lib/utils/crew'
 import {
   DAG_MS, berekenConflicten, buitenRooster, clusterVoorConflict,
@@ -52,8 +52,11 @@ type Props = {
   projectleiders: Record<string, { kleur: string | null; naam: string | null }>
   /** Zichtbare periode van de timeline — voor de "verschoven naar …"-melding. */
   zichtbaar:      { van: number; tot: number }
-  /** Succesvol opgeslagen wijzigingen (kan een deel zijn bij een fout halverwege). */
-  onApplied:      (wijzigingen: Wijziging[]) => void
+  /**
+   * Succesvol opgeslagen wijzigingen (kan een deel zijn bij een fout halverwege),
+   * plus de id's van de planitems die daadwerkelijk verwijderd zijn.
+   */
+  onApplied:      (wijzigingen: Wijziging[], verwijderd?: string[]) => void
   onClose:        () => void
 }
 
@@ -64,6 +67,9 @@ export default function ConflictOplosDialog({
   const [isPending, startTransition] = useTransition()
   // Draft: alleen afwijkingen t.o.v. het origineel; opslaan gebeurt pas bij "Toepassen".
   const [draft, setDraft] = useState<Record<string, { start_dt: string; eind_dt: string }>>({})
+  // Als verwijderd gemarkeerde planitems — pas bij "Toepassen" gaan ze echt weg.
+  const [teVerwijderen, setTeVerwijderen] = useState<string[]>([])
+  const verwijderdSet = useMemo(() => new Set(teVerwijderen), [teVerwijderen])
 
   const cluster    = useMemo(() => clusterVoorConflict(conflict, conflicten), [conflict, conflicten])
   const clusterIds = useMemo(() => new Set(cluster.map(e => e.id)), [cluster])
@@ -73,12 +79,19 @@ export default function ConflictOplosDialog({
     [entriesRij, draft],
   )
 
+  // Wat er ná de draft overblijft: verwijderde items tellen niet meer mee in de
+  // conflictberekening, zodat de statusregel meteen laat zien dat de overlap weg is.
+  const actieveEntries = useMemo(
+    () => draftEntries.filter(e => !verwijderdSet.has(e.id)),
+    [draftEntries, verwijderdSet],
+  )
+
   const naarWork = (list: EntryMetDossier[]): WerkInterval[] =>
     list.map(e => ({ s: parseISO(e.start_dt).getTime(), e: parseISO(e.eind_dt).getTime(), entry: e }))
 
   const draftConflicten = useMemo(
-    () => berekenConflicten(naarWork(draftEntries), blokken),
-    [draftEntries, blokken],
+    () => berekenConflicten(naarWork(actieveEntries), blokken),
+    [actieveEntries, blokken],
   )
 
   const raaktCluster = (c: ConflictDetail) =>
@@ -86,7 +99,9 @@ export default function ConflictOplosDialog({
 
   const resterend = draftConflicten.filter(raaktCluster)
   const opgelost  = resterend.length === 0
-  const aantalWijzigingen = Object.keys(draft).length
+  // Een verwijderd item telt als één wijziging; een verschuiving eronder vervalt dan.
+  const aantalWijzigingen =
+    Object.keys(draft).filter(id => !verwijderdSet.has(id)).length + teVerwijderen.length
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -108,6 +123,15 @@ export default function ConflictOplosDialog({
 
   function zetDraft(id: string, start: Date, eind: Date) {
     setDraft(prev => ({ ...prev, [id]: { start_dt: start.toISOString(), eind_dt: eind.toISOString() } }))
+  }
+
+  /** Markeer voor verwijdering; een eventuele verschuiving eronder heeft dan geen zin meer. */
+  function markeerVerwijderen(id: string) {
+    setTeVerwijderen(prev => (prev.includes(id) ? prev : [...prev, id]))
+    setDraft(prev => { const rest = { ...prev }; delete rest[id]; return rest })
+  }
+  function herstelVerwijderen(id: string) {
+    setTeVerwijderen(prev => prev.filter(x => x !== id))
   }
 
   // ─── Sleepbare tijdlijn ─────────────────────────────────────────────────────
@@ -220,7 +244,7 @@ export default function ConflictOplosDialog({
 
   // Context: niet-cluster werk-taken die in het venster vallen (om per ongeluk
   // erbovenop slepen zichtbaar te maken).
-  const contextWerk = draftEntries.filter(
+  const contextWerk = actieveEntries.filter(
     e => !clusterIds.has(e.id)
       && parseISO(e.eind_dt).getTime() > venster.vanMs
       && parseISO(e.start_dt).getTime() < venster.totMs,
@@ -228,12 +252,31 @@ export default function ConflictOplosDialog({
 
   // ─── Opslaan ────────────────────────────────────────────────────────────────
 
+  // Geen extra bevestigvraag: het markeren (rode kaart) en daarna pas "Toepassen" ís de
+  // bevestiging. Een genest AlertDialog zou bovendien achter dit venster vallen (z-index).
   function handleToepassen() {
     startTransition(async () => {
+      const verwijderdOk: string[] = []
+      // Eerst de verwijderingen: die maken vaak juist de ruimte vrij waar de
+      // verschuivingen hieronder in moeten passen.
+      for (const id of teVerwijderen) {
+        const e = entriesRij.find(x => x.id === id)
+        const result = await verwijderPlanningItem(id)
+        if (!result.ok) {
+          toast.error(`${e ? korteNaam(e) : 'Planitem'}: ${result.error}`)
+          if (verwijderdOk.length > 0) {
+            onApplied([], verwijderdOk)
+            setTeVerwijderen(prev => prev.filter(x => !verwijderdOk.includes(x)))
+          }
+          return
+        }
+        verwijderdOk.push(id)
+      }
+
       const toegepast: Wijziging[] = []
       for (const [id, w] of Object.entries(draft)) {
         const e = entriesRij.find(x => x.id === id)
-        if (!e) continue
+        if (!e || verwijderdSet.has(id)) continue
         const result = await verplaatsPlanningItem(id, {
           start_dt:    w.start_dt,
           eind_dt:     w.eind_dt,
@@ -243,9 +286,10 @@ export default function ConflictOplosDialog({
         })
         if (!result.ok) {
           toast.error(`${korteNaam(e)}: ${result.error}`)
-          if (toegepast.length > 0) {
+          if (toegepast.length > 0 || verwijderdOk.length > 0) {
             // Deels opgeslagen: parent bijwerken, rest van de draft blijft staan.
-            onApplied(toegepast)
+            onApplied(toegepast, verwijderdOk)
+            setTeVerwijderen([])
             setDraft(prev => {
               const rest = { ...prev }
               for (const t of toegepast) delete rest[t.id]
@@ -265,10 +309,16 @@ export default function ConflictOplosDialog({
       if (buitenBeeld.length > 0) {
         const e = entriesRij.find(x => x.id === buitenBeeld[0].id)
         toast.success(`${opgelost ? 'Conflict opgelost' : 'Planning aangepast'} — “${e ? korteNaam(e) : 'planitem'}” staat nu op ${fmtKort(parseISO(buitenBeeld[0].start_dt))} (buiten beeld)`)
+      } else if (verwijderdOk.length > 0 && toegepast.length === 0) {
+        toast.success(
+          verwijderdOk.length === 1
+            ? 'Planitem verwijderd'
+            : `${verwijderdOk.length} planitems verwijderd`,
+        )
       } else {
         toast.success(opgelost ? 'Conflict opgelost' : 'Planning aangepast')
       }
-      onApplied(toegepast)
+      onApplied(toegepast, verwijderdOk)
       onClose()
     })
   }
@@ -384,6 +434,8 @@ export default function ConflictOplosDialog({
                     <span style={{
                       fontSize: 10, fontWeight: 600, color: 'var(--fg)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      textDecoration: verwijderdSet.has(e.id) ? 'line-through' : 'none',
+                      opacity: verwijderdSet.has(e.id) ? 0.55 : 1,
                     }}>
                       {korteNaam(e)}
                     </span>
@@ -476,31 +528,39 @@ export default function ConflictOplosDialog({
                   const l  = pct(Math.max(s, venster.vanMs))
                   const w  = Math.max(1.2, pct(Math.min(en, venster.totMs)) - l)
                   const actief = sleeptId === e.id
+                  const weg    = verwijderdSet.has(e.id)
                   return (
                     <div
                       key={`bar-${e.id}`}
-                      onPointerDown={ev => barPointerDown(ev, e)}
-                      onPointerMove={barPointerMove}
-                      onPointerUp={barPointerUp}
-                      title={`${titelVan(e)} · ${fmt(s)} – ${fmt(en)}\nSleep om te verschuiven`}
+                      onPointerDown={weg ? undefined : ev => barPointerDown(ev, e)}
+                      onPointerMove={weg ? undefined : barPointerMove}
+                      onPointerUp={weg ? undefined : barPointerUp}
+                      title={weg
+                        ? `${titelVan(e)}\nWordt verwijderd bij Toepassen`
+                        : `${titelVan(e)} · ${fmt(s)} – ${fmt(en)}\nSleep om te verschuiven`}
                       style={{
                         position: 'absolute',
                         top: i * LANE_H + 6, height: LANE_H - 12,
                         left: `${l}%`, width: `${w}%`,
                         borderRadius: 5, background: kleurVan(e),
                         boxShadow: actief ? '0 4px 14px rgba(0,0,0,0.35)' : '0 1px 2px rgba(0,0,0,0.15)',
-                        cursor: actief ? 'grabbing' : 'grab',
+                        cursor: weg ? 'default' : actief ? 'grabbing' : 'grab',
                         display: 'flex', alignItems: 'center', gap: 2,
                         paddingLeft: 4, paddingRight: 4, overflow: 'hidden',
                         userSelect: 'none', touchAction: 'none',
                         zIndex: actief ? 6 : 5,
                         outline: actief ? '2px solid rgba(255,255,255,0.8)' : 'none',
+                        opacity: weg ? 0.35 : 1,
+                        filter: weg ? 'grayscale(1)' : 'none',
                       }}
                     >
-                      <GripVertical size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />
+                      {weg
+                        ? <Trash2 size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />
+                        : <GripVertical size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />}
                       <span style={{
                         fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'white',
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        textDecoration: weg ? 'line-through' : 'none',
                       }}>
                         {format(s, 'HH:mm', { locale: nl })}
                       </span>
@@ -522,15 +582,21 @@ export default function ConflictOplosDialog({
             </div>
           </div>
 
-          {/* Handmatig verschuiven per planitem — precieze tijden en grote sprongen */}
+          {/* Handmatig verschuiven of verwijderen per planitem — precieze tijden en grote sprongen */}
           <div>
-            <label style={labelStyle}>Handmatig verschuiven</label>
+            <label style={labelStyle}>Verschuiven of verwijderen</label>
+            {/* Verlof, ziekte, ATV en feestdagen staan hier bewust niet tussen: die komen uit de
+                verlofadministratie en zijn in dit venster alleen de rode banen op de tijdlijn. */}
+            <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: -2, marginBottom: 6 }}>
+              Alleen werkzaamheden. Verlof en feestdagen horen bij de verlofadministratie en zijn hier niet te verwijderen.
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {cluster.map(orig => {
                 const d       = draftVan(orig.id)
                 const startDt = parseISO(d.start_dt)
                 const eindDt  = parseISO(d.eind_dt)
                 const gewijzigd = !!draft[orig.id]
+                const weg       = verwijderdSet.has(orig.id)
                 const zetVelden = (patch: Partial<{ sd: string; st: string; ed: string; et: string }>) => {
                   const sd = patch.sd ?? format(startDt, 'yyyy-MM-dd')
                   const st = patch.st ?? format(startDt, 'HH:mm')
@@ -546,29 +612,71 @@ export default function ConflictOplosDialog({
                 }
                 return (
                   <div key={orig.id} style={{
-                    border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px',
+                    border: `1px solid ${weg ? 'rgba(239,68,68,0.5)' : 'var(--border)'}`,
+                    background: weg ? 'rgba(239,68,68,0.06)' : 'transparent',
+                    borderRadius: 8, padding: '10px 12px',
                     display: 'flex', flexDirection: 'column', gap: 8,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: kleurVan(orig), flexShrink: 0 }} />
+                      <div style={{
+                        width: 10, height: 10, borderRadius: 3, background: kleurVan(orig), flexShrink: 0,
+                        opacity: weg ? 0.4 : 1,
+                      }} />
                       <div style={{
                         fontSize: 12, fontWeight: 600, color: 'var(--fg)', minWidth: 0, flex: 1,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        textDecoration: weg ? 'line-through' : 'none',
+                        opacity: weg ? 0.6 : 1,
                       }}>
                         {titelVan(orig)}
                       </div>
                       <span style={{ fontSize: 10, color: 'var(--fg-muted)', flexShrink: 0 }}>{orig.uren}u</span>
-                      {gewijzigd && (
+                      {weg ? (
                         <button
                           type="button"
-                          onClick={() => setDraft(prev => { const rest = { ...prev }; delete rest[orig.id]; return rest })}
+                          onClick={() => herstelVerwijderen(orig.id)}
                           className="eva-btn-ghost"
                           style={{ padding: '2px 6px', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
                         >
                           <RotateCcw size={11} /> Herstel
                         </button>
+                      ) : (
+                        <>
+                          {gewijzigd && (
+                            <button
+                              type="button"
+                              onClick={() => setDraft(prev => { const rest = { ...prev }; delete rest[orig.id]; return rest })}
+                              className="eva-btn-ghost"
+                              style={{ padding: '2px 6px', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+                            >
+                              <RotateCcw size={11} /> Herstel
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => markeerVerwijderen(orig.id)}
+                            className="eva-btn-ghost"
+                            title="Dit planitem verwijderen in plaats van verschuiven"
+                            style={{
+                              padding: '2px 6px', fontSize: 10, color: '#b91c1c',
+                              display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                            }}
+                          >
+                            <Trash2 size={11} /> Verwijderen
+                          </button>
+                        </>
                       )}
                     </div>
+
+                    {weg ? (
+                      <div style={{
+                        border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)',
+                        borderRadius: 6, padding: '6px 10px', fontSize: 10, color: 'var(--fg)',
+                      }}>
+                        Wordt verwijderd zodra je op Toepassen klikt.
+                        {orig.bron === 'bouw7' && ' Het item wordt dan ook in Bouw7 weggehaald.'}
+                      </div>
+                    ) : (<>
 
                     {orig.bron === 'bouw7' && (
                       <div style={{
@@ -607,6 +715,7 @@ export default function ConflictOplosDialog({
                           onChange={e => e.target.value && zetVelden({ et: e.target.value })} />
                       </div>
                     </div>
+                    </>)}
                   </div>
                 )
               })}
