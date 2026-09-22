@@ -29,6 +29,7 @@ import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur } from './triage'
 import { behandelaarVoorMail, voorleggen, meldVoorgelegd } from './melden'
 import { beoordeelBijlage } from './bijlagen-filter'
+import { storingTekst, type AiStoring } from './ai-storing'
 import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
@@ -51,6 +52,11 @@ export interface VerwerkResultaat {
   reden: string
   fout: string | null
   kostenCent: number
+  /**
+   * Het lag niet aan dit bericht maar aan de AI. De batch hoort dan te stoppen: de
+   * volgende mail loopt op dezelfde muur en kost alleen tijd. Zie `ai-storing.ts`.
+   */
+  storing?: AiStoring | null
 }
 
 // ─── Hulpjes ──────────────────────────────────────────────────────────────────
@@ -279,7 +285,24 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     }
 
     if (!ex.ok || !ex.data) {
-      // De AI viel om. Niet weggooien: leg het voor, met de fout erbij.
+      // ── Ligt het aan de AI of aan deze mail? ──
+      // Bij een storing gaat het bericht terug in de wachtrij met de poging
+      // teruggedraaid: het is niet geprobeerd, het kwam niet eens aan. Zou het als
+      // mislukking tellen, dan is elke wachtende mail na drie ronden "voorgelegd"
+      // met een stuk JSON erbij -- terwijl er niets met die mails mis is.
+      if (ex.storing) {
+        await supabase.from('mailintake_berichten').update({
+          status: 'nieuw', pogingen: geclaimd.pogingen ?? 0,
+          laatste_fout: storingTekst(ex.storing),
+        }).eq('id', berichtId)
+        log.mislukt(`AI-storing (${ex.storing.soort}): ${ex.fout ?? ''}`)
+        return {
+          ...uit, status: 'nieuw', fout: ex.fout, storing: ex.storing,
+          reden: storingTekst(ex.storing),
+        }
+      }
+
+      // De AI viel om op dít bericht. Niet weggooien: leg het voor, met de fout erbij.
       const eindStatus = pogingen >= MAX_POGINGEN ? 'wacht_op_mens' : 'mislukt'
       await supabase.from('mailintake_berichten').update({
         status: eindStatus, pogingen, laatste_fout: ex.fout,
@@ -675,7 +698,67 @@ export async function verwerkBatch(max = BATCH): Promise<VerwerkResultaat[]> {
 
   const uit: VerwerkResultaat[] = []
   for (const r of data ?? []) {
-    uit.push(await verwerkBericht(r.id))
+    const res = await verwerkBericht(r.id)
+    uit.push(res)
+
+    // Stoppen bij een storing. De volgende mail loopt op dezelfde muur; doorgaan
+    // levert niets op en kost bij een rate limit alleen maar meer afwijzingen.
+    if (res.storing) {
+      await meldAiStoring(res.storing, r.id)
+      break
+    }
   }
   return uit
+}
+
+/**
+ * Meldt één keer dat de mailintake stilligt.
+ *
+ * Eén keer per zes uur, want de cron draait elke tien minuten en niemand wordt
+ * geholpen door zesendertig belletjes met dezelfde boodschap. De ontdubbeling
+ * loopt via het besluitenlog: dat is append-only en staat er toch al.
+ */
+async function meldAiStoring(storing: AiStoring, berichtId: string): Promise<void> {
+  const supabase = createAdminClient()
+  const grens = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
+
+  const { data: eerder } = await supabase
+    .from('mailintake_besluiten')
+    .select('id')
+    .eq('actie', 'ai_storing')
+    .gte('moment', grens)
+    .limit(1)
+  if (eerder?.length) return
+
+  await supabase.from('mailintake_besluiten').insert({
+    bericht_id: berichtId, actor: 'systeem', actie: 'ai_storing',
+    details: { soort: storing.soort, uitleg: storing.uitleg },
+  })
+
+  // Naar wie de postbussen in de gaten houdt. Zij merken het anders pas doordat er
+  // niets meer binnenkomt, en dat is precies de stille storing die deze module
+  // hoort te voorkomen.
+  const { data: postbussen } = await supabase
+    .from('mailintake_postbussen')
+    .select('notificatie_medewerkers')
+    .eq('actief', true)
+    .limit(20)
+
+  const ids = [...new Set((postbussen ?? []).flatMap(p => p.notificatie_medewerkers ?? []))]
+  if (!ids.length) return
+
+  const { data: mensen } = await supabase
+    .from('medewerkers').select('auth_user_id')
+    .in('id', ids).eq('actief', true).not('auth_user_id', 'is', null).limit(50)
+
+  const { maakNotificatie } = await import('@/lib/notificaties/maak')
+  for (const m of mensen ?? []) {
+    await maakNotificatie({
+      user_id: m.auth_user_id as string,
+      type: 'mailintake_ai_storing',
+      titel: 'De mailintake ligt stil',
+      body: storing.uitleg,
+      url: '/mailintake',
+    }).catch(() => undefined)
+  }
 }

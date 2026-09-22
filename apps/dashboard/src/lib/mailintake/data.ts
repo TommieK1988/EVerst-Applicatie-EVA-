@@ -131,6 +131,33 @@ export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promis
   }))
 }
 
+/**
+ * Ligt de mailintake stil?
+ *
+ * Afgeleid uit de post zelf en niet uit een losse vlag: berichten die op een
+ * AI-storing stuitten staan terug op `nieuw` met de uitleg in `laatste_fout`.
+ * Daarmee ruimt de melding zichzelf op -- zodra de cron ze alsnog leest, zijn ze
+ * geen `nieuw` meer en is het bericht weg. Een opgeslagen vlag zou blijven staan
+ * tot iemand hem uitzet, en dan is "stil" al gauw een leugen.
+ */
+export async function getAiStoring(): Promise<{ uitleg: string; aantal: number } | null> {
+  const supabase = createAdminClient()
+  const { data, count } = await supabase
+    .from('mailintake_berichten')
+    .select('laatste_fout', { count: 'exact' })
+    .eq('status', 'nieuw')
+    .ilike('laatste_fout', 'De mailintake ligt stil%')
+    .order('ontvangen_op', { ascending: false })
+    .limit(1)
+
+  const rij = data?.[0]
+  if (!rij?.laatste_fout) return null
+  return {
+    uitleg: rij.laatste_fout.replace(/^De mailintake ligt stil:\s*/i, ''),
+    aantal: count ?? 1,
+  }
+}
+
 /** Bovengrens per tabblad, gelijk aan die van de lijst. Daarboven staat er "500+". */
 const TELLER_GRENS = 500
 

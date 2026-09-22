@@ -22,6 +22,8 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 
+import { bepaalAiStoring, type AiStoring } from './ai-storing'
+
 import { zoekAdres, eersteHuisnummer } from '@/lib/adres/pdok'
 
 import { LEVER_EXTRACTIE_TOOL, PROMPT_VERSIE, veiligParse, type Extractie } from './schema'
@@ -89,6 +91,12 @@ export interface ExtractieResultaat {
   gelezenBijlagen: string[]
   /** Bestandsnamen die zijn overgeslagen, met reden. */
   overgeslagenBijlagen: { naam: string; reden: string }[]
+  /**
+   * Gevuld als het niet aan dit bericht ligt maar aan de AI zelf: geen tegoed, geen
+   * sleutel, te druk, onbereikbaar. De aanroeper hoort dan te stoppen in plaats van
+   * pogingen op te souperen. Zie `ai-storing.ts`.
+   */
+  storing: AiStoring | null
   ruweUitvoer: string | null
 }
 
@@ -111,13 +119,15 @@ export async function extraheer(
   bijlagen: BijlageVoorAI[],
 ): Promise<ExtractieResultaat> {
   const leeg: ExtractieResultaat = {
-    ok: false, data: null, fout: null, model: MODEL, promptVersie: PROMPT_VERSIE,
+    ok: false, data: null, fout: null, storing: null, model: MODEL, promptVersie: PROMPT_VERSIE,
     invoerTokens: 0, uitvoerTokens: 0, kostenCent: 0,
     gelezenBijlagen: [], overgeslagenBijlagen: [], ruweUitvoer: null,
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return { ...leeg, fout: 'ANTHROPIC_API_KEY ontbreekt.' }
+  if (!apiKey) {
+    return { ...leeg, fout: 'ANTHROPIC_API_KEY ontbreekt.', storing: bepaalAiStoring('ANTHROPIC_API_KEY ontbreekt') }
+  }
 
   // ── Bijlagen selecteren ────────────────────────────────────────────────────
   const overgeslagen: { naam: string; reden: string }[] = []
@@ -268,12 +278,16 @@ export async function extraheer(
     }
 
     return {
-      ok: true, data: geparsed.data, fout: null, model: MODEL, promptVersie: PROMPT_VERSIE,
+      ok: true, data: geparsed.data, fout: null, storing: null, model: MODEL, promptVersie: PROMPT_VERSIE,
       invoerTokens: invoer, uitvoerTokens: uitvoer, kostenCent,
       gelezenBijlagen: gelezen, overgeslagenBijlagen: overgeslagen, ruweUitvoer: ruw,
     }
   } catch (e) {
-    return { ...leeg, fout: e instanceof Error ? e.message : String(e), overgeslagenBijlagen: overgeslagen }
+    const melding = e instanceof Error ? e.message : String(e)
+    return {
+      ...leeg, fout: melding, storing: bepaalAiStoring(melding),
+      overgeslagenBijlagen: overgeslagen,
+    }
   }
 }
 

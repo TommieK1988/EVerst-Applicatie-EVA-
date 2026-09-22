@@ -7,7 +7,7 @@ import { vereisRecht } from '@/lib/auth/rechten'
 // die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
 // dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
-import { getPostvakRijen, getPostvakTellers, type PostvakTab } from '@/lib/mailintake/data'
+import { getPostvakRijen, getPostvakTellers, getAiStoring, type PostvakTab } from '@/lib/mailintake/data'
 
 import Postvak from './Postvak'
 
@@ -35,16 +35,18 @@ export default async function MailintakePage({
     /* geen sessie */
   }
 
-  const [rijen, tellers, layouts] = await Promise.all([
+  const [rijen, tellers, layouts, storing] = await Promise.all([
     getPostvakRijen(tab),
     getPostvakTellers(),
     user_id ? laadLayouts(user_id, 'mailintake') : [],
+    getAiStoring(),
   ])
 
   return (
     <Postvak
       rijen={rijen}
       tellers={tellers}
+      storing={storing}
       actieveTab={tab}
       layouts={layouts}
       user_id={user_id}

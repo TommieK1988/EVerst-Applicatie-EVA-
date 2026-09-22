@@ -210,10 +210,12 @@ const KOLOMMEN: KolomDefinitie<PostvakRij>[] = [
 ]
 
 export default function Postvak({
-  rijen, tellers, actieveTab, layouts, user_id, magSchrijven, magBeheren,
+  rijen, tellers, storing, actieveTab, layouts, user_id, magSchrijven, magBeheren,
 }: {
   rijen: PostvakRij[]
   tellers: Record<string, PostvakTeller>
+  /** Gevuld als EVA de post niet kan lezen; dan is er niets mis met de mail zelf. */
+  storing: { uitleg: string; aantal: number } | null
   actieveTab: PostvakTab
   layouts: GebruikerLayout[]
   user_id: string | null
@@ -287,9 +289,29 @@ export default function Postvak({
         })}
       </div>
 
+      {/* ── De AI ligt eruit ──
+          Boven alles, want zolang dit staat is er niets mis met de post en heeft
+          het geen zin om er iets mee te doen. Zonder deze regel merk je het alleen
+          doordat er niets meer binnenkomt -- of doordat er ineens een stapel mail
+          op Te behandelen staat met een brok JSON erbij. */}
+      {storing && (
+        <div style={{
+          padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10,
+          background: 'var(--da-50, #fef2f2)', border: '1px solid var(--da-200, #fecaca)',
+          color: 'var(--da-900, #7f1d1d)',
+        }}>
+          <strong>De mailintake ligt stil.</strong> {storing.uitleg}
+          {' '}
+          {storing.aantal === 1
+            ? 'Eén bericht wacht tot het weer kan.'
+            : `${storing.aantal} berichten wachten tot het weer kan.`}
+          {' '}Er is niets mis met die post; zodra dit is opgelost leest EVA hem vanzelf.
+        </div>
+      )}
+
       {/* De wachtrij. Zichtbaar zodra er iets in staat, want deze berichten vallen
           buiten elk tabblad behalve Alles -- en dan lijkt er niets te liggen. */}
-      {wachtrij > 0 && (
+      {!storing && wachtrij > 0 && (
         <p style={{ ...klein, marginBottom: 10 }}>
           {wachtrij === 1 ? 'Eén bericht wacht' : `${wachtrij} berichten wachten`} nog op verwerking
           door EVA. Ze verschijnen bij <em>Te behandelen</em> zodra ze gelezen zijn; staat dit er
