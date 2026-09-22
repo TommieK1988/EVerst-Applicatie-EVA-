@@ -1,5 +1,7 @@
-import { Suspense } from 'react'
+import { Suspense, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
+import { SubTabs } from '@/components/ui'
+import { servicedeskGroep, servicedeskDeel } from './servicedesk-tabs'
 import { getDossierById, getMedewerkers, getFactuuradressen, getCategorieOpties, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
@@ -159,8 +161,37 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
   )
 }
 
-async function renderTabContent({ id, tab, sectie, deel }: Props, dossier: DossierRij | null) {
+// Expliciet retourtype omdat deze functie zichzelf aanroept voor de servicedesk-groepen:
+// zonder annotatie kan TypeScript het type niet afleiden uit zijn eigen retour.
+async function renderTabContent(
+  { id, tab, sectie, deel }: Props,
+  dossier: DossierRij | null,
+): Promise<ReactNode> {
   const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
+
+  // Een servicedeskbon heeft vijf tabs in plaats van veertien (zie servicedesk-tabs.ts). Een
+  // groep tekent alleen zijn deelnavigatie en laat daarna de bestaande tab-tak hieronder het
+  // werk doen — zo blijft er precies één plek waar een tab wordt gerenderd, voor beide secties.
+  const groep = sectie === 'servicedesk' ? servicedeskGroep(tab) : undefined
+  if (groep) {
+    const gekozen = servicedeskDeel(groep, deel)
+    return (
+      /* `--deelbalk-hoogte` is er voor de delen die zelf schermvullend zijn (de werkbegroting
+       * rekent met `100dvh`). Zonder dit valt hun onderkant onder de vouw zodra er een balk
+       * boven staat. De waarde is de hoogte van het blok hieronder: 28 padding + 34 balk +
+       * 20 marge onder de balk. */
+      <div style={{ '--deelbalk-hoogte': '82px' } as CSSProperties}>
+        <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
+          <SubTabs delen={groep.delen.map(d => ({
+            deel: d.deel, label: d.label, actief: d.deel === gekozen.deel,
+          }))} />
+        </div>
+        {/* `deel` gaat bewust niet mee naar binnen: hij hoort bij deze groep, en een tab die
+            zelf een `deel` kent (KAM/VGM) zou hem anders verkeerd uitleggen. */}
+        {await renderTabContent({ id, tab: gekozen.tab, sectie, deel: undefined }, dossier)}
+      </div>
+    )
+  }
 
   if (tab === 'informatie' && dossier) {
     // Ook dit tab kan op Bouw7 wachten (het meerwerk-aggregaat), dus net als de tabs hieronder

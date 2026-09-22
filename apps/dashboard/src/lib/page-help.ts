@@ -1,3 +1,5 @@
+import { servicedeskGroep, servicedeskDeel } from '@/components/dossiers/servicedesk-tabs'
+
 export type HelpSection = {
   title: string
   body: string
@@ -1478,10 +1480,12 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
 //   aanvragen & offertes → informatie · bestanden · calculatie · uitvraag · acties
 //   opdrachten           → + uitvraag · werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
-//   servicedesk          → dezelfde set als opdrachten, maar zonder houtrot; KAM/VGM
-//                          hangt er aan de VCA-toggle omdat een bon geen oplevering kent
-// De KAM/VGM-tab heeft zelf drie onderdelen (?deel=kwaliteit|oplevering|formulieren);
-// die krijgen elk hun eigen hulp, want het zijn drie losse werkschermen.
+//   servicedesk          → vijf gebundelde tabs (bon · voorbereiding · uitvoering · inkoop ·
+//                          facturatie), elk met dezelfde onderdelen eronder achter `?deel=`;
+//                          zie components/dossiers/servicedesk-tabs.ts
+// Tabs met eigen onderdelen (KAM/VGM, en elke servicedeskgroep) zetten die in `?deel=`. De
+// hulp wordt daarom opgezocht op het onderliggende onderdeel: één set teksten voor alle
+// secties, ongeacht hoe de tabs gebundeld zijn.
 const DOSSIER_ROOT_LABELS: Record<string, string> = {
   aanvragen:   'Aanvraag',
   offertes:    'Offerte',
@@ -1518,6 +1522,14 @@ function formulierenHelp(T: TabHelpBouwer): PageHelp {
 function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | null {
   const rootLabel = DOSSIER_ROOT_LABELS[root]
   if (!rootLabel) return null
+
+  // Een servicedeskbon heeft vijf gebundelde tabs; de hulp hangt aan het onderdeel dat je
+  // werkelijk voor je hebt. Vertaal groep + deel dus naar de onderliggende tab, zodat elke
+  // tekst hieronder blijft werken zonder dat er een tweede set hoeft te bestaan.
+  if (root === 'servicedesk') {
+    const groep = servicedeskGroep(tab)
+    if (groep) tab = servicedeskDeel(groep, deel).tab
+  }
   const isOpdracht = root === 'opdrachten'
   const isServicedesk = root === 'servicedesk'
   const T = (tabLabel: string, description: string, sections?: HelpSection[]): PageHelp =>

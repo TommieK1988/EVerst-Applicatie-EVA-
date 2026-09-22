@@ -269,8 +269,9 @@ type TopBarProps = {
 
 export default function TopBar({ dark, setDark, aantalOngelezen = 0, aantalNieuweUpdates = 0 }: TopBarProps) {
   const pathname = usePathname()
-  // Een tab met eigen onderdelen (KAM/VGM) zet die in `?deel=`; de hulp hoort dan bij
-  // het onderdeel dat open staat, niet bij de tab als geheel.
+  // Een tab met eigen onderdelen zet die in `?deel=` — KAM/VGM, en op een servicedeskbon
+  // elk van de vijf gebundelde tabs. De hulp hoort dan bij het onderdeel dat open staat,
+  // niet bij de tab als geheel.
   const deel = useSearchParams().get('deel') ?? undefined
   const { title, breadcrumb, withTabs } = resolveLabel(pathname)
   const breadcrumbCtx = useBreadcrumb()

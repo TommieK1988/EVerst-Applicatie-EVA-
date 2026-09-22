@@ -60,7 +60,14 @@ export function OpdrachtWerkbegrotingTab({ aanvraagId, naam, nummer, gekoppeldPr
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
+    /* Schermvullend: de werkbegroting scrollt vanbinnen, niet als pagina. De 56px is de
+     * topbalk. `--deelbalk-hoogte` trekt daar de deelnavigatie vanaf wanneer dit scherm ónder
+     * zo'n balk hangt — op een servicedeskbon is de werkbegroting een deel van de tab Inkoop.
+     * Staat de variabele er niet (opdracht, aanvraag), dan is hij 0 en verandert er niets. */
+    <div style={{
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      height: 'calc(100dvh - 56px - var(--deelbalk-hoogte, 0px))',
+    }}>
       <WerkbegrotingHoofdscherm
         projectId={projectId}
         projectNaam={naam}

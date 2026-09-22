@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { SECTIE_ROUTE } from '@/components/dossiers/open-dossier'
+import { SERVICEDESK_OUDE_TABS } from '@/components/dossiers/servicedesk-tabs'
 import type { DossierSectie } from '@/components/dossiers/types'
 
 /**
@@ -22,8 +23,14 @@ const OUDE_TABS: Record<string, string> = {
  * dus tegen de tijd dat de content rendert is er al gestreamd en wordt het een
  * client-side redirect — met een zichtbare foutflits ertussen. Vanuit de page gaat het
  * om een gewone 307 vóór het eerste byte.
+ *
+ * De servicedesk-omleidingen staan apart omdat ze alléén daar gelden: op een opdracht is
+ * `verkoop` nog gewoon een eigen tab, op een servicedeskbon is het een deel van Facturatie.
+ * Ze worden afgeleid uit dezelfde tabel die de tabs tekent, zodat de twee niet uit elkaar
+ * kunnen lopen.
  */
 export function redirectOudeTab(sectie: DossierSectie, id: string, tab: string): void {
-  const nieuweTab = OUDE_TABS[tab]
+  const nieuweTab = (sectie === 'servicedesk' ? SERVICEDESK_OUDE_TABS[tab] : undefined)
+    ?? OUDE_TABS[tab]
   if (nieuweTab) redirect(`/${SECTIE_ROUTE[sectie]}/${id}/${nieuweTab}`)
 }
