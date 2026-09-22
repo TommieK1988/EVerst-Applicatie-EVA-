@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
@@ -14,6 +14,11 @@ import {
  * De uren worden live berekend zodra de medewerker een periode kiest: weekenden en feestdagen
  * vallen er vanzelf uit. Dat is het antwoord op de vraag die iedereen stelt -- "hoeveel kost me
  * dit?" -- en voorkomt dat iemand een week aanvraagt en er een dag naast zit.
+ *
+ * Naast hele dagen kan iemand een deel van een dag vrij vragen (tandarts, school, een middag weg).
+ * Dat is bewust beperkt tot één dag: bij een venster over meerdere dagen is niet te zeggen of je
+ * elke dag die uren vrij bent of alleen de eerste. De uren volgen dan uit het venster, nooit meer
+ * dan een hele roosterdag.
  */
 
 const veld: React.CSSProperties = {
@@ -32,6 +37,11 @@ const STATUS: Record<string, { label: string; kleur: string; achtergrond: string
   goedgekeurd: { label: 'Goedgekeurd', kleur: '#009439', achtergrond: '#e6f5ec' },
   afgewezen: { label: 'Afgewezen', kleur: '#c0392b', achtergrond: '#fdecea' },
   ingetrokken: { label: 'Ingetrokken', kleur: '#8a8c86', achtergrond: '#f1f3f4' },
+}
+
+/** "13:00-17:00" achter de periode, alleen bij een deel van een dag. */
+function venster(a: VerlofAanvraag) {
+  return a.startTijd && a.eindTijd ? ` · ${a.startTijd}-${a.eindTijd}` : ''
 }
 
 function periode(start: string, eind: string) {
@@ -56,31 +66,53 @@ export default function VerlofClient({
   const [soortId, setSoortId] = useState(soorten[0]?.id ?? '')
   const [start, setStart] = useState('')
   const [eind, setEind] = useState('')
+  const [heleDagen, setHeleDagen] = useState(true)
+  const [vanTijd, setVanTijd] = useState('08:00')
+  const [totTijd, setTotTijd] = useState('12:00')
   const [toelichting, setToelichting] = useState('')
   const [berekend, setBerekend] = useState<{ uren: number; dagen: number; overgeslagen: string[] } | null>(null)
 
   // Zodra er een geldige periode staat: laten zien wat het kost. Weekenden en feestdagen zitten
   // er al uit, dus dit is het getal dat straks van het saldo af gaat.
+  const tot = heleDagen ? eind : start
   useEffect(() => {
-    if (!start || !eind || eind < start) { setBerekend(null); return }
+    if (!start || !tot || tot < start) { setBerekend(null); return }
     let levend = true
-    berekenMijnVerlofUren(start, eind)
+    berekenMijnVerlofUren(start, tot)
       .then(r => { if (levend) setBerekend(r) })
       .catch(() => { if (levend) setBerekend(null) })
     return () => { levend = false }
-  }, [start, eind])
+  }, [start, tot])
+
+  // Wat het venster kost. Nooit meer dan een hele roosterdag: wie 07:00-19:00 kiest neemt geen
+  // anderhalve dag verlof op. Hetzelfde plafond geldt op de server.
+  const vensterUren = useMemo(() => {
+    const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+    const minuten = m(totTijd) - m(vanTijd)
+    if (!(minuten > 0)) return 0
+    return Math.round((minuten / 60) * 100) / 100
+  }, [vanTijd, totTijd])
+
+  const kosten = heleDagen
+    ? (berekend?.uren ?? 0)
+    : Math.min(berekend?.uren ?? 0, vensterUren)
+  const kanVersturen = !!berekend && berekend.dagen > 0 && kosten > 0
 
   async function verstuur() {
-    if (!start || !eind) { toast.error('Kies een periode.'); return }
+    if (!start || !tot) { toast.error(heleDagen ? 'Kies een periode.' : 'Kies een dag.'); return }
     setBezig(true)
     const r = await vraagVerlofAan({
-      uursoortId: soortId, startDatum: start, eindDatum: eind,
-      heleDagen: true, toelichting: toelichting || null,
+      uursoortId: soortId, startDatum: start, eindDatum: tot,
+      heleDagen,
+      startTijd: heleDagen ? null : vanTijd,
+      eindTijd: heleDagen ? null : totTijd,
+      toelichting: toelichting || null,
     })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
     toast.success('Aanvraag verstuurd.')
     setOpen(false); setStart(''); setEind(''); setToelichting(''); setBerekend(null)
+    setHeleDagen(true)
     ververs()
   }
 
@@ -115,7 +147,7 @@ export default function VerlofClient({
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
-                    {periode(a.startDatum, a.eindDatum)}
+                    {periode(a.startDatum, a.eindDatum)}{venster(a)}
                   </div>
                   <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>
                     {a.uursoortNaam} · {a.urenTotaal.toLocaleString('nl-NL')} uur
@@ -205,27 +237,76 @@ export default function VerlofClient({
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={labelStijl}>Van</label>
-                  <input type="date" value={start} onChange={e => setStart(e.target.value)} style={veld} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={labelStijl}>Tot en met</label>
-                  <input type="date" value={eind} min={start || undefined}
-                    onChange={e => setEind(e.target.value)} style={veld} />
+              <div>
+                <label style={labelStijl}>Hoe lang</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={() => setHeleDagen(true)} style={keuze(heleDagen)}>
+                    Hele dag(en)
+                  </button>
+                  <button type="button" onClick={() => setHeleDagen(false)} style={keuze(!heleDagen)}>
+                    Deel van een dag
+                  </button>
                 </div>
               </div>
+
+              {heleDagen ? (
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStijl}>Van</label>
+                    <input type="date" value={start} onChange={e => setStart(e.target.value)} style={veld} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStijl}>Tot en met</label>
+                    <input type="date" value={eind} min={start || undefined}
+                      onChange={e => setEind(e.target.value)} style={veld} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label style={labelStijl}>Dag</label>
+                    <input type="date" value={start} onChange={e => setStart(e.target.value)} style={veld} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStijl}>Vanaf</label>
+                      <input type="time" value={vanTijd} step={300}
+                        onChange={e => setVanTijd(e.target.value)} style={veld} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStijl}>Tot</label>
+                      <input type="time" value={totTijd} step={300} min={vanTijd}
+                        onChange={e => setTotTijd(e.target.value)} style={veld} />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {berekend && (
                 <div style={{
                   padding: '12px 14px', borderRadius: 10,
-                  background: berekend.dagen === 0 ? '#fdf3e3' : '#eef6f1',
-                  color: berekend.dagen === 0 ? '#a15c00' : '#0d5c30',
+                  background: kanVersturen ? '#eef6f1' : '#fdf3e3',
+                  color: kanVersturen ? '#0d5c30' : '#a15c00',
                   fontSize: 13, lineHeight: 1.5,
                 }}>
                   {berekend.dagen === 0 ? (
-                    'In deze periode vallen geen roosterdagen — er is dan geen verlof op te nemen.'
+                    heleDagen
+                      ? 'In deze periode vallen geen roosterdagen — er is dan geen verlof op te nemen.'
+                      : 'Op deze dag werk je volgens je rooster niet — er is dan geen verlof op te nemen.'
+                  ) : !heleDagen ? (
+                    vensterUren <= 0 ? (
+                      'De eindtijd moet ná de begintijd liggen.'
+                    ) : (
+                      <>
+                        <strong>{kosten.toLocaleString('nl-NL')} uur</strong>
+                        {vensterUren > berekend.uren && (
+                          <div style={{ marginTop: 4 }}>
+                            Meer dan een hele werkdag kan niet — er gaat één roosterdag
+                            ({berekend.uren.toLocaleString('nl-NL')} uur) af.
+                          </div>
+                        )}
+                      </>
+                    )
                   ) : (
                     <>
                       <strong>{berekend.dagen} roosterdag{berekend.dagen === 1 ? '' : 'en'} ·{' '}
@@ -255,10 +336,10 @@ export default function VerlofClient({
                 Annuleren
               </button>
               <button type="button" onClick={verstuur}
-                disabled={bezig || !berekend || berekend.dagen === 0}
+                disabled={bezig || !kanVersturen}
                 style={{
                   ...actieKnop, background: '#009439', color: '#fff', border: 'none',
-                  opacity: bezig || !berekend || berekend.dagen === 0 ? 0.5 : 1,
+                  opacity: bezig || !kanVersturen ? 0.5 : 1,
                 }}>
                 {bezig ? 'Bezig…' : 'Aanvragen'}
               </button>
@@ -268,6 +349,17 @@ export default function VerlofClient({
       )}
     </>
   )
+}
+
+/** Segmentknop voor "Hele dag(en)" / "Deel van een dag". */
+function keuze(actief: boolean): React.CSSProperties {
+  return {
+    flex: 1, padding: '11px 0', borderRadius: 10, cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+    border: `1px solid ${actief ? '#009439' : 'var(--border)'}`,
+    background: actief ? '#e6f5ec' : 'var(--bg)',
+    color: actief ? '#0d5c30' : '#6b757c',
+  }
 }
 
 const actieKnop: React.CSSProperties = {

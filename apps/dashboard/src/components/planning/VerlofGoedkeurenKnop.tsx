@@ -32,6 +32,11 @@ function periode(start: string, eind: string) {
 
 const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
 
+/** Bij een deel van een dag hoort de beoordelaar te zien wélk deel — dat bepaalt of het uitkomt. */
+function venster(a: VerlofAanvraag) {
+  return a.startTijd && a.eindTijd ? ` · ${a.startTijd}-${a.eindTijd}` : ''
+}
+
 export default function VerlofGoedkeurenKnop({ initieelAantal = 0 }: { initieelAantal?: number }) {
   const router = useRouter()
   const [, startT] = useTransition()
@@ -144,7 +149,7 @@ export default function VerlofGoedkeurenKnop({ initieelAantal = 0 }: { initieelA
                       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13 }}>
                         <strong>{a.medewerkerNaam}</strong>
                         <span style={{ color: 'var(--fg-muted)' }}>
-                          {' '}· {a.uursoortNaam} · {periode(a.startDatum, a.eindDatum)} · {uur(a.urenTotaal)} uur
+                          {' '}· {a.uursoortNaam} · {periode(a.startDatum, a.eindDatum)}{venster(a)} · {uur(a.urenTotaal)} uur
                         </span>
                       </div>
                       {a.toelichting && (

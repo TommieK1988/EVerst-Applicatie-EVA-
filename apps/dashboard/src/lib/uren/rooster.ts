@@ -115,6 +115,42 @@ export function urenPerWerkdag(rooster: Rooster): number {
   return Math.round((rooster.contracturen_per_week / dagen) * 100) / 100
 }
 
+type Afwezigheid = {
+  start_datum: string
+  eind_datum: string
+  start_tijd: string | null
+  eind_tijd: string | null
+  type: string
+  opmerking: string | null
+}
+
+/**
+ * "13:00" of "13:00:00" -> minuten sinds middernacht. Postgres levert een `time` met seconden
+ * terug, dus nooit op een kale HH:MM rekenen.
+ */
+export function minutenVanTijd(tijd: string): number {
+  const [u, m] = tijd.split(':')
+  return Number(u) * 60 + Number(m ?? 0)
+}
+
+/**
+ * Wat een afwezigheidsdag van de weekstaat afhaalt. Zonder tijden is dat een hele roosterdag;
+ * staat er een venster op (een middag verlof), dan alleen dat venster -- anders zou een halve
+ * dag vrij toch een hele dag verlof kosten.
+ */
+function urenVanAfwezigheid(af: Afwezigheid, perDag: number): number {
+  if (!af.start_tijd || !af.eind_tijd) return perDag
+  const minuten = minutenVanTijd(af.eind_tijd) - minutenVanTijd(af.start_tijd)
+  if (!(minuten > 0)) return perDag
+  return Math.min(perDag, Math.round((minuten / 60) * 100) / 100)
+}
+
+/** "(13:00-17:00)" achter de omschrijving, zodat de weekstaat laat zien wélk deel van de dag. */
+function tijdvenster(af: Afwezigheid): string {
+  if (!af.start_tijd || !af.eind_tijd) return ''
+  return `(${af.start_tijd.slice(0, 5)}-${af.eind_tijd.slice(0, 5)})`
+}
+
 export type VoorgevuldeRegel = {
   datum: string
   uren: number
@@ -154,7 +190,7 @@ export async function getVoorgevuldeRegels(
       .gte('eind_datum', weekStart),
     supabase
       .from('medewerker_afwezigheid')
-      .select('start_datum, eind_datum, type, opmerking')
+      .select('start_datum, eind_datum, start_tijd, eind_tijd, type, opmerking')
       .eq('medewerker_id', medewerkerId)
       .lte('start_datum', weekEind)
       .gte('eind_datum', weekStart),
@@ -177,15 +213,15 @@ export async function getVoorgevuldeRegels(
     }
   }
 
-  for (const af of (afwezig ?? []) as Array<{ start_datum: string; eind_datum: string; type: string; opmerking: string | null }>) {
+  for (const af of (afwezig ?? []) as Afwezigheid[]) {
     for (const datum of dagen) {
       if (datum < af.start_datum || datum > af.eind_datum) continue
       if (!werkdag(datum) || bezet.has(datum)) continue
       bezet.add(datum)
       regels.push({
-        datum, uren: perDag, bron: 'bouw7_verlof',
+        datum, uren: urenVanAfwezigheid(af, perDag), bron: 'bouw7_verlof',
         afwezigheidType: af.type,
-        omschrijving: af.opmerking?.trim() || af.type,
+        omschrijving: [af.opmerking?.trim() || af.type, tijdvenster(af)].filter(Boolean).join(' '),
       })
     }
   }

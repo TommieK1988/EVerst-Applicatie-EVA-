@@ -27,7 +27,7 @@ import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
-import { getRooster, isoWeekdag, datumSleutel } from './rooster'
+import { getRooster, isoWeekdag, datumSleutel, minutenVanTijd } from './rooster'
 import { getUrenInstellingen } from './instellingen'
 import {
   bepaalBeoordelendeAfdeling, haalPoolLeden, magVerlofBeoordelen,
@@ -47,6 +47,9 @@ export type VerlofAanvraag = {
   startDatum: string
   eindDatum: string
   heleDagen: boolean
+  /** Alleen gevuld bij een deel van de dag; 'HH:MM'. */
+  startTijd: string | null
+  eindTijd: string | null
   urenTotaal: number
   toelichting: string | null
   status: VerlofStatus
@@ -115,7 +118,6 @@ export async function vraagVerlofAan(invoer: {
   heleDagen: boolean
   startTijd?: string | null
   eindTijd?: string | null
-  urenTotaal?: number | null
   toelichting?: string | null
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const medewerker = await vereisSessie()
@@ -150,15 +152,34 @@ export async function vraagVerlofAan(invoer: {
   }
 
   const berekend = await berekenVerlofUren(medewerker.id, invoer.startDatum, invoer.eindDatum)
-  const uren = invoer.heleDagen ? berekend.uren : (invoer.urenTotaal ?? 0)
-  if (!(uren > 0)) {
+  if (berekend.dagen === 0) {
     return {
       ok: false,
-      error: berekend.dagen === 0
+      error: invoer.heleDagen
         ? 'In deze periode vallen geen roosterdagen — er is dan geen verlof op te nemen.'
-        : 'Vul het aantal uren in.',
+        : 'Op deze dag werk je volgens je rooster niet — er is dan geen verlof op te nemen.',
     }
   }
+
+  // Een deel van een dag is per definitie één dag: met een venster over meerdere dagen is niet te
+  // zeggen of iemand elke dag die uren vrij is of alleen de eerste, en Bouw7 kan dat ook niet
+  // vastleggen. Wie langer weg is, vraagt hele dagen aan.
+  let startTijd: string | null = null
+  let eindTijd: string | null = null
+  let uren = berekend.uren
+  if (!invoer.heleDagen) {
+    if (invoer.eindDatum !== invoer.startDatum) {
+      return { ok: false, error: 'Verlof voor een deel van de dag kan maar voor één dag tegelijk.' }
+    }
+    startTijd = normaliseerTijd(invoer.startTijd)
+    eindTijd = normaliseerTijd(invoer.eindTijd)
+    if (!startTijd || !eindTijd) return { ok: false, error: 'Vul een begin- en een eindtijd in.' }
+    const minuten = minutenVanTijd(eindTijd) - minutenVanTijd(startTijd)
+    if (minuten <= 0) return { ok: false, error: 'De eindtijd moet ná de begintijd liggen.' }
+    // Nooit meer dan een hele roosterdag: anders kost 07:00-19:00 meer verlof dan de dag waard is.
+    uren = Math.min(berekend.uren, Math.round((minuten / 60) * 100) / 100)
+  }
+  if (!(uren > 0)) return { ok: false, error: 'Vul het aantal uren in.' }
 
   // De pool bepalen vóór de insert: we bevriezen alleen een afdeling waar ook echt iemand in zit.
   const inst = await getUrenInstellingen()
@@ -186,8 +207,8 @@ export async function vraagVerlofAan(invoer: {
     start_datum: invoer.startDatum,
     eind_datum: invoer.eindDatum,
     hele_dagen: invoer.heleDagen,
-    start_tijd: invoer.heleDagen ? null : (invoer.startTijd ?? null),
-    eind_tijd: invoer.heleDagen ? null : (invoer.eindTijd ?? null),
+    start_tijd: startTijd,
+    eind_tijd: eindTijd,
     uren_totaal: uren,
     toelichting: invoer.toelichting?.trim() || null,
     beoordelende_afdeling: afdeling,
@@ -196,8 +217,11 @@ export async function vraagVerlofAan(invoer: {
   if (error) return { ok: false, error: error.message }
 
   const ontvangers = pool.length ? pool : await poolLidVan(terugval)
+  const wanneer = startTijd && eindTijd
+    ? `${periodeTekst(invoer.startDatum, invoer.eindDatum)} ${startTijd}-${eindTijd}`
+    : periodeTekst(invoer.startDatum, invoer.eindDatum)
   await meldAllen(ontvangers, 'Verlofaanvraag',
-    `${medewerker.voornaam ?? 'Een collega'} vraagt ${uren.toLocaleString('nl-NL')} uur ${soort.naam.toLowerCase()} aan (${periodeTekst(invoer.startDatum, invoer.eindDatum)}).`,
+    `${medewerker.voornaam ?? 'Een collega'} vraagt ${uren.toLocaleString('nl-NL')} uur ${soort.naam.toLowerCase()} aan (${wanneer}).`,
     '/planning/medewerker')
 
   revalidatePath('/m/verlof')
@@ -272,7 +296,7 @@ async function leesAanvragen(filter: {
   const supabase = db()
   let q = supabase
     .from('verlof_aanvragen')
-    .select('id, uursoort_id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam), aanvrager:medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam), beoordelaar:medewerkers!verlof_aanvragen_beoordeeld_door_fkey(voornaam, tussenvoegsel, achternaam)')
+    .select('id, uursoort_id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam), aanvrager:medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam), beoordelaar:medewerkers!verlof_aanvragen_beoordeeld_door_fkey(voornaam, tussenvoegsel, achternaam)')
     .order('start_datum', { ascending: false })
     .limit(100)
 
@@ -290,6 +314,9 @@ async function leesAanvragen(filter: {
     startDatum: a.start_datum,
     eindDatum: a.eind_datum,
     heleDagen: a.hele_dagen,
+    // Postgres geeft een `time` terug als '13:00:00'; de UI en de invoervelden willen 'HH:MM'.
+    startTijd: a.start_tijd ? String(a.start_tijd).slice(0, 5) : null,
+    eindTijd: a.eind_tijd ? String(a.eind_tijd).slice(0, 5) : null,
     urenTotaal: Number(a.uren_totaal),
     toelichting: a.toelichting,
     status: a.status as VerlofStatus,
@@ -350,6 +377,10 @@ export async function keurVerlofGoed(
     type: /ziek/i.test(a.planning_uursoorten?.naam ?? '') ? 'ziek' : 'verlof',
     start_datum: a.start_datum,
     eind_datum: a.eind_datum,
+    // Het venster moet mee: de planning laat de monteur dan de rest van de dag beschikbaar zien,
+    // en de weekstaat vult alleen die uren voor in plaats van een hele dag.
+    start_tijd: a.hele_dagen ? null : a.start_tijd,
+    eind_tijd: a.hele_dagen ? null : a.eind_tijd,
     opmerking: a.toelichting ?? a.planning_uursoorten?.naam ?? null,
     bron: 'eva',
   }).select('id').single()
@@ -435,7 +466,7 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
   const supabase = db()
   const { data: a } = await supabase
     .from('verlof_aanvragen')
-    .select('id, start_datum, eind_datum, hele_dagen, uren_totaal, toelichting, bouw7_day_off_id, afwezigheid_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
+    .select('id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, bouw7_day_off_id, afwezigheid_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
     .eq('id', aanvraagId)
     .maybeSingle()
   if (!a) return false
@@ -451,11 +482,16 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
 
   try {
     const client = await getBouw7Client()
+    // Bouw7 leest startDate/endDate als datum óf datetime. Bij een deel van de dag zetten we het
+    // tijdvenster erin, zodat de kalender daar hetzelfde laat zien als EVA; bij hele dagen blijft
+    // het een kale datum, precies zoals de lees-sync het terugleest.
+    const metTijd = (datum: string, tijd: string | null) =>
+      !a.hele_dagen && tijd ? `${datum}T${String(tijd).slice(0, 5)}:00` : datum
     const res = await client.post<{ id?: number }>('/organization/day-off-per-employee', {
       ...(a.bouw7_day_off_id ? { id: Number(a.bouw7_day_off_id) } : {}),
       employee: { id: employeeId },
-      startDate: a.start_datum,
-      endDate: a.eind_datum,
+      startDate: metTijd(a.start_datum, a.start_tijd),
+      endDate: metTijd(a.eind_datum, a.eind_tijd),
       isAllDay: a.hele_dagen,
       hours: String(a.uren_totaal),
       remark: a.toelichting || a.planning_uursoorten?.naam || 'Verlof via EVA',
@@ -486,6 +522,15 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
 }
 
 /* ── Intern ───────────────────────────────────────────────────────── */
+
+/**
+ * 'HH:MM' uit wat de browser stuurt. Een `<input type="time">` geeft 'HH:MM', maar een tijd die
+ * uit de database komt heeft seconden ('13:00:00'); beide moeten hier hetzelfde uit komen.
+ */
+function normaliseerTijd(tijd: string | null | undefined): string | null {
+  const t = (tijd ?? '').trim()
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(t) ? t.slice(0, 5) : null
+}
 
 /** "Jan de Vries" uit los voornaam/tussenvoegsel/achternaam; leeg als er niets is. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
