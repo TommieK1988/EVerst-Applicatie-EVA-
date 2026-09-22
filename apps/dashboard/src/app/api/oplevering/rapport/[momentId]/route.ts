@@ -5,6 +5,7 @@ import {
 } from '@everts/database'
 import { getOplevermomentRapport, type OpleverPuntView } from '@/lib/dossiers/oplevering'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
+import { getBedrijfsIdentiteit } from '@/lib/bedrijf/identiteit'
 
 const esc = (s: unknown): string =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
@@ -67,7 +68,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
       ${bewijsHtml(p)}
       ${p.reacties.length ? `<div class="reacties">${p.reacties.map(r => `
         <div class="reactie">
-          <strong>${esc(r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Everts'))}</strong>
+          <strong>${esc(r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Projectteam'))}</strong>
           ${r.opmerking ? `<span>${esc(r.opmerking)}</span>` : ''}
           ${r.foto_urls.length ? `<div class="fotos">${r.foto_urls.map(u => `<img src="${esc(u)}" alt="foto" />`).join('')}</div>` : ''}
         </div>`).join('')}</div>` : ''}
@@ -102,6 +103,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
 
   const aantalGeaccepteerd = punten.filter(p => p.status === 'geaccepteerd').length
 
+  // Merk en kleur komen uit Instellingen → Organisatiegegevens; dit rapport gaat naar de klant.
+  const identiteit = await getBedrijfsIdentiteit()
+  const merkkleur = identiteit.kleur_primair ?? '#009439'
+  const afzender = identiteit.naam ? `Opgesteld via EVA — ${identiteit.naam}. ` : ''
+
   const html = `<!doctype html>
 <html lang="nl"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -111,8 +117,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1f24; margin: 0; background: #f4f6f5; }
   .page { max-width: 780px; margin: 0 auto; background: #fff; padding: 40px 44px; }
   .toolbar { max-width: 780px; margin: 12px auto; text-align: right; }
-  .toolbar button { background: #009439; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #009439; padding-bottom: 16px; margin-bottom: 20px; }
+  .toolbar button { background: ${esc(merkkleur)}; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid ${esc(merkkleur)}; padding-bottom: 16px; margin-bottom: 20px; }
   .merk { font-weight: 800; letter-spacing: 0.06em; font-size: 20px; }
   h1 { font-size: 20px; margin: 0 0 2px; }
   .sub { color: #6b757c; font-size: 13px; }
@@ -159,7 +165,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
         <h1>Opleverrapport</h1>
         <div class="sub">${esc(opleverMomentTypeLabels[moment.type])} · ${esc(opleverMomentStatusLabels[moment.status])}</div>
       </div>
-      <div class="merk">EVERTS.</div>
+      <div class="merk">${esc(identiteit.naam)}</div>
     </header>
 
     <div class="info">
@@ -178,7 +184,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
 
     ${handtekeningenHtml}
 
-    <footer>Opgesteld via EVA — Everts. Dit rapport geeft de opleverpunten en hun status weer op het moment van afdrukken.</footer>
+    <footer>${esc(afzender)}Dit rapport geeft de opleverpunten en hun status weer op het moment van afdrukken.</footer>
   </div>
 </body></html>`
 

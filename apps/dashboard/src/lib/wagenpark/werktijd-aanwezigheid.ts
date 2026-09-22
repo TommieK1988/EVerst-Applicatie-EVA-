@@ -292,9 +292,8 @@ function bepaalVenster(
     ctx.ankerKeuzes.get(ankerSleutel(ctx.userId, ctx.datum, 'R10')),
   )
 
-  const pauzeInRooster = ctx.roosterPauzes.some(
-    (p) => p.geldig_vanaf <= ctx.datum && (p.geldig_tot == null || p.geldig_tot >= ctx.datum),
-  )
+  const geldendePauzes = pauzesOpDag(ctx.roosterPauzes, ctx.datum)
+  const pauzeInRooster = geldendePauzes.length > 0
   const leeg = (reden: GeenVensterReden): DagAanwezigheid => ({
     aankomst: aankomst?.minuten != null ? hm(aankomst.minuten) : null,
     vertrek: vertrek?.minuten != null ? hm(vertrek.minuten) : null,
@@ -318,7 +317,7 @@ function bepaalVenster(
   const bruto = vertrek.minuten - aankomst.minuten
   if (bruto <= 0) return leeg('omgekeerd')
 
-  const pauzeMinuten = pauzeOverlap(ctx.roosterPauzes, ctx.datum, aankomst.minuten, vertrek.minuten)
+  const pauzeMinuten = pauzeOverlap(geldendePauzes, aankomst.minuten, vertrek.minuten)
 
   return {
     aankomst: hm(aankomst.minuten),
@@ -332,6 +331,30 @@ function bepaalVenster(
 }
 
 /**
+ * De pauzes die op deze dag gelden.
+ *
+ * Dekt geen enkel rooster de datum, dan pakken we het dichtstbijzijnde — exact
+ * dezelfde terugval als `verwachteTijden` voor de roostertijden maakt, en om
+ * dezelfde reden: de roosters zijn pas ingevoerd toen EVA er was, dus elke
+ * analyse van een periode dáárvoor valt buiten hun geldigheid. Zonder deze
+ * terugval liepen de twee uit elkaar — de dag toonde wél een roosterstart van
+ * 07:30 (als benadering) maar géén pauze, en dan leest een bruto dag als een
+ * netto dag en lijkt iedereen drie kwartier langer te werken.
+ *
+ * De rijen komen aflopend op `geldig_vanaf` binnen, dus de eerste is de nieuwste.
+ */
+function pauzesOpDag(pauzes: PauzeRij[], datum: string): PauzeRij[] {
+  const dekkend = pauzes.filter(
+    (p) => p.geldig_vanaf <= datum && (p.geldig_tot == null || p.geldig_tot >= datum),
+  )
+  if (dekkend.length > 0 || pauzes.length === 0) return dekkend
+
+  const oudsteVanaf = pauzes[pauzes.length - 1].geldig_vanaf
+  const dichtstbij = datum < oudsteVanaf ? oudsteVanaf : pauzes[0].geldig_vanaf
+  return pauzes.filter((p) => p.geldig_vanaf === dichtstbij)
+}
+
+/**
  * De pauzeminuten die binnen het aanwezigheidsvenster vallen.
  *
  * Overlap en niet de volle pauzeduur: wie om 12:15 vertrekt heeft van de
@@ -339,11 +362,9 @@ function bepaalVenster(
  * buiten het venster valt telt niet mee — anders krijgt iemand die 's ochtends
  * al weg is alsnog een halfuur afgetrokken.
  */
-function pauzeOverlap(pauzes: PauzeRij[], datum: string, vanaf: number, tot: number): number {
+function pauzeOverlap(pauzes: PauzeRij[], vanaf: number, tot: number): number {
   let som = 0
   for (const p of pauzes) {
-    if (p.geldig_vanaf > datum) continue
-    if (p.geldig_tot != null && p.geldig_tot < datum) continue
     const start = parseHM(p.pauze_start)
     const eind = parseHM(p.pauze_eind)
     if (start == null || eind == null || eind <= start) continue

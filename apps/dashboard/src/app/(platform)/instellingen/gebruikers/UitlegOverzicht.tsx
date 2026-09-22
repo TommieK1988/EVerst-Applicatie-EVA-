@@ -91,6 +91,9 @@ export default function UitlegOverzicht() {
                           {'inbegrepenVanaf' in f && f.inbegrepenVanaf && (
                             <span style={{ fontSize: 10.5 }}> (standaard aan vanaf {f.inbegrepenVanaf})</span>
                           )}
+                          {'kanalen' in f && f.kanalen && (
+                            <span style={{ fontSize: 10.5 }}> (alleen {f.kanalen.join(' · ')})</span>
+                          )}
                         </div>
                       ))}
                     </div>
