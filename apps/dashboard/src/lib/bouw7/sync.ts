@@ -1542,7 +1542,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         catNm:     p.category?.name ?? null,
         price:     p.fixedPrice ?? null,
         ctrl:      p.caEindverantwoordelijkeOfferte ?? null,
-        // Uitwijkveld voor de calculator als `workPlanner` bezet is door de projectleider — moet
+        // Uitwijkveld voor de calculator als `workPlanner` botst met een andere rol — moet
         // in de fingerprint, anders slaat de incrementele sync een dossier over waarvan alléén
         // dit veld is gewijzigd.
         cacalc:    p.caCalculator ?? null,
@@ -1911,8 +1911,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       const btwSplitsing = quoteIsBron ? (det?.btwSplitsing ?? null) : null
 
       // Calculator ≡ Werkvoorbereider (Bouw7 `workPlanner`): op de informatietab bestaat alleen nog
-      // de rol Calculator. Bouw7 verbiedt echter dat de projectleider tevens werkvoorbereider is,
-      // terwijl EVA dat wél toestaat. Voor die dossiers laat EVA `workPlanner` leeg en draagt het
+      // de rol Calculator. Bouw7 eist echter drie verschillende medewerkers in projectleider /
+      // werkvoorbereider / uitvoerder, terwijl EVA dubbele rollen wél toestaat. Botst de calculator
+      // met de projectleider of de uitvoerder, dan laat EVA `workPlanner` leeg en draagt het
       // maatwerkveld "Calculator" (`caCalculator`, vrije-tekstnaam) de rol — zie bouw7-rollen.ts.
       // Leesvolgorde: workPlanner → caCalculator → bestaande (handmatig gezette) waarde.
       const calculatorId =
@@ -1944,7 +1945,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         factuuradres_id:          factuuradresMap.get(bouw7IdStr) ?? existing?.factuuradres_id ?? null,
         // Rollen: Bouw7 wint zodra het project er een noemt; noemt het er geen, dan blijft de
         // in EVA gezette rol staan (zelfde regel als calculator/controller hieronder). Een
-        // Bouw7-project zonder projectleider mag een EVA-toewijzing niet wissen.
+        // Bouw7-project zonder projectleider mag een EVA-toewijzing niet wissen. Die terugval
+        // draagt ook de uitvoerder die in Bouw7 moest wijken voor de projectleider (zie
+        // bouw7-rollen.ts): die rol bestaat dan alleen nog hier.
         project_manager_id:       (p.projectLeader?.id ? (medewerkerMap.get(String(p.projectLeader.id)) ?? null) : null)
                                     ?? existing?.project_manager_id ?? null,
         uitvoerder_id:            (p.executor?.id ? (medewerkerMap.get(String(p.executor.id)) ?? null) : null)

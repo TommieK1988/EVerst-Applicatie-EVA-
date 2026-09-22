@@ -160,7 +160,7 @@ Body: `Project` · DELETE: `CondensedProject { id }` (soft-delete; zie `/restore
 | `contactPerson` | `CondensedContactPerson { id }` | opt | |
 | `category` | `CondensedProjectCategory { id }` | opt | |
 | `branch` | `CondensedBranch { id }` | opt | vestiging |
-| `projectLeader`, `workPlanner`, `executor` | `CondensedEmployee { id }` | opt | rollen |
+| `projectLeader`, `workPlanner`, `executor` | `CondensedEmployee { id }` | opt | rollen — moeten **drie verschillende** medewerkers zijn; dezelfde in twee velden geeft `400 validation_error … "already in use by the property …"`. EVA lost dat op in `dossiers/bouw7-rollen.ts` (prioriteit projectleider > uitvoerder > calculator) |
 | `employees[]` | `CondensedEmployee[]` | opt | toegewezen team |
 | `startDate`, `endDate`, `deliveryDate` | string (ATOM) | opt | |
 | `fixedPrice`, `generalCostsAmount`, `additionalWork`, `provisionalCosts`, `profitAndRisk` | string | opt | financieel |

@@ -1419,9 +1419,11 @@ export async function updateDossierRollen(
  * meegenomen; een rol met waarde `null` maakt het Bouw7-veld leeg.
  *
  * Uitzondering: de calculator raakt twee Bouw7-velden (`workPlanner` + maatwerkveld "Calculator")
- * en botst met de projectleider — zie `bouw7-rollen.ts`. Dat paar wordt daarom herberekend zodra
- * één van beide rollen is aangeraakt, op basis van de **effectieve** stand van het dossier (de
- * EVA-update is op dit punt al doorgevoerd, dus de dossierrij ís de nieuwe waarheid).
+ * en kan botsen met de projectleider of de uitvoerder — zie `bouw7-rollen.ts`. Dat paar wordt
+ * daarom herberekend zodra één van die drie rollen is aangeraakt, op basis van de **effectieve**
+ * stand van het dossier (de EVA-update is op dit punt al doorgevoerd, dus de dossierrij ís de
+ * nieuwe waarheid). Het oplossen van de botsing zelf gebeurt in `bouw7-rollen.ts`, dat de huidige
+ * Bouw7-bezetting erbij heeft.
  */
 async function schrijfDossierRollenNaarBouw7(
   supabase: any,
@@ -1430,17 +1432,19 @@ async function schrijfDossierRollenNaarBouw7(
 ): Promise<Bouw7WriteResult> {
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('bouw7_id, project_manager_id, calculator_id')
+    .select('bouw7_id, project_manager_id, calculator_id, uitvoerder_id')
     .eq('id', dossierId)
     .maybeSingle()
   if (!dossier?.bouw7_id) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
 
   // Verzamel de medewerker-uuids die we moeten opzoeken: de gewijzigde rollen, plus de effectieve
-  // projectleider en calculator (nodig voor de botsingscheck, ook als ze zelf niet wijzigden).
+  // projectleider, calculator en uitvoerder (die bepalen samen de botsing, ook als ze zelf niet
+  // wijzigden).
   const uuids = [
     ...['project_manager_id', 'calculator_id', 'uitvoerder_id', 'controller_id'].map((k) => payload[k]),
     dossier.project_manager_id,
     dossier.calculator_id,
+    dossier.uitvoerder_id,
   ].filter((v): v is string => !!v)
 
   const medMap = new Map<string, { bouw7_id: string | null; naam: string }>()
@@ -1481,17 +1485,16 @@ async function schrijfDossierRollenNaarBouw7(
   }
 
   // Calculator → `workPlanner` + maatwerkveld "Calculator". Ook een wijziging van de projectleider
-  // kan de botsing veroorzaken (Bouw7: projectleider ≠ werkvoorbereider) of juist opheffen, dus
-  // herbereken het paar zodra één van beide rollen is aangeraakt.
-  if ('calculator_id' in payload || 'project_manager_id' in payload) {
-    const calc  = dossier.calculator_id ? medMap.get(dossier.calculator_id) : null
-    const plB7  = dossier.project_manager_id ? (medMap.get(dossier.project_manager_id)?.bouw7_id ?? null) : null
+  // of de uitvoerder kan de botsing veroorzaken (Bouw7 eist drie verschillende medewerkers) of juist
+  // opheffen, dus herbereken het paar zodra één van die drie rollen is aangeraakt. De botsing zelf
+  // wordt in `bouw7-rollen.ts` opgelost — dat kent de huidige Bouw7-bezetting.
+  if ('calculator_id' in payload || 'project_manager_id' in payload || 'uitvoerder_id' in payload) {
+    const calc   = dossier.calculator_id ? medMap.get(dossier.calculator_id) : null
     const calcB7 = calc?.bouw7_id ?? null
-    const botst = !!calcB7 && !!plB7 && calcB7 === plB7
 
-    // Geen calculator, een calculator zonder Bouw7-koppeling, of een botsing met de projectleider
-    // → `workPlanner` leegmaken; het maatwerkveld draagt de rol dan alleen.
-    rollen.workPlannerId  = calcB7 && !botst ? Number(calcB7) : null
+    // Geen calculator of een calculator zonder Bouw7-koppeling → `workPlanner` leegmaken; het
+    // maatwerkveld draagt de rol dan alleen.
+    rollen.workPlannerId  = calcB7 ? Number(calcB7) : null
     rollen.calculatorNaam = calc?.naam ?? ''
   }
 

@@ -9,19 +9,24 @@
  *  - Controller    → custom attribute "Eindverantwoordelijke offerte" (vrije tekst = medewerkersnaam)
  *  - Teamleider    → géén Bouw7-veld (EVA-eigen rol), wordt niet teruggeschreven.
  *
- * ── Projectleider == calculator ──────────────────────────────────────────────
- * Bouw7 staat niet toe dat dezelfde medewerker projectleider én werkvoorbereider is; EVA staat dat
- * wél toe (bij Everts is dat een normale combinatie). Een naïeve write levert daar een Bouw7-fout op:
- * `400 validation_error — "projectLeader refers to an employee that is already in use by workPlanner"`.
+ * ── Eén medewerker, twee rollen ──────────────────────────────────────────────
+ * Bouw7 eist dat `projectLeader`, `workPlanner` en `executor` **drie verschillende** medewerkers
+ * zijn; EVA staat dubbele rollen wél toe (bij Everts is dat een normale combinatie). Een naïeve
+ * write levert daar een Bouw7-fout op — voor elk van de paren:
+ * `400 validation_error — "workPlanner refers to an employee with ID #… that is already in use by
+ * the property executor"`.
  *
- * Oplossing: het maatwerkveld **"Calculator"** (`caCalculator`, fieldType `employee` = vrije-tekstnaam,
- * id 21012) is de tweede drager van de rol. Bij elke rol-write geldt:
- *  - `caCalculator` krijgt **altijd** de naam van de EVA-calculator (leeg = veld leegmaken);
- *  - `workPlanner` krijgt de calculator **alleen** als die niet de projectleider is; botst het, dan
- *    wordt `workPlanner` juist leeggemaakt en draagt `caCalculator` de rol in z'n eentje.
+ * Oplossing: EVA kiest bij een botsing wélk Bouw7-veld de medewerker houdt, in deze volgorde:
+ * **projectleider > uitvoerder > calculator**. De verliezer wordt in Bouw7 juist leeggemaakt; EVA
+ * blijft de volledige waarheid houden:
+ *  - de calculator valt terug op het maatwerkveld **"Calculator"** (`caCalculator`, fieldType
+ *    `employee` = vrije-tekstnaam, id 21012). Dat krijgt **altijd** de naam van de EVA-calculator
+ *    (leeg = veld leegmaken), of `workPlanner` nu bezet raakt of niet;
+ *  - de uitvoerder heeft geen uitwijkveld: die staat alleen in EVA. De sync laat `uitvoerder_id`
+ *    staan zodra Bouw7 geen `executor` noemt, dus de rol gaat niet verloren.
  *
  * De sync leest gespiegeld terug: `workPlanner` → anders `caCalculator` (zie sync.ts). Zo round-trip't
- * de rol in beide gevallen en ontstaat er nooit een Bouw7-validatiefout.
+ * de rol in alle gevallen en ontstaat er nooit een Bouw7-validatiefout.
  *
  * Read-modify-write: GET /project/{id} voor het verplichte `type` (+ de huidige rolbezetting en
  * maatwerkvelden), dan POST /project met `id`, `type` en alleen de gewijzigde velden.
@@ -92,19 +97,31 @@ export async function schrijfBouw7Rollen(
 
     const huidigePl = project.projectLeader?.id ?? null
     const huidigeWp = project.workPlanner?.id ?? null
+    const huidigeEx = project.executor?.id ?? null
 
-    // Doelstand = wat de aanroeper meegeeft, aangevuld met wat er nu in Bouw7 staat.
+    // Doelstand = wat de aanroeper meegeeft, aangevuld met wat er nu in Bouw7 staat. Die aanvulling
+    // is nodig omdat een botsing ook kan ontstaan door een rol die zélf niet wijzigt.
     const doelPl = rollen.projectLeaderId !== undefined ? rollen.projectLeaderId : huidigePl
     const doelWp = rollen.workPlannerId !== undefined ? rollen.workPlannerId : huidigeWp
+    const doelEx = rollen.executorId !== undefined ? rollen.executorId : huidigeEx
 
-    // Vangnet: Bouw7 weigert projectleider == werkvoorbereider. Botst het, dan laten we `workPlanner`
-    // leeg en draagt het maatwerkveld "Calculator" de rol. Dit vangt óók de aanroeper die alléén de
-    // projectleider wijzigt naar de persoon die al werkvoorbereider is.
-    const botst = doelPl != null && doelWp != null && Number(doelPl) === Number(doelWp)
+    const zelfde = (a: RolRef, b: RolRef) => a != null && b != null && Number(a) === Number(b)
+
+    // Vangnet: Bouw7 weigert dezelfde medewerker in twee van de drie rolvelden. Bij een botsing
+    // wijkt het veld met de laagste prioriteit (projectleider > uitvoerder > calculator). Dit vangt
+    // óók de aanroeper die alléén de projectleider wijzigt naar de persoon die al uitvoerder is.
+    let executorId = rollen.executorId
+    let effectieveEx = doelEx
+    if (zelfde(doelPl, doelEx)) {
+      // Leegmaken is hier verplicht, niet alleen "niet zetten": zolang Bouw7 de medewerker nog als
+      // uitvoerder kent, weigert het de projectleider-write. EVA houdt `uitvoerder_id` zelf vast.
+      executorId = null
+      effectieveEx = null
+    }
 
     let calculatorNaam = rollen.calculatorNaam
     let workPlannerId = rollen.workPlannerId
-    if (botst) {
+    if (zelfde(doelWp, doelPl) || zelfde(doelWp, effectieveEx)) {
       workPlannerId = null
       // Weet de aanroeper de calculator-naam niet, val dan terug op de werkvoorbereider die we
       // zojuist verdringen — anders zou de rol bij het leegmaken van `workPlanner` verdampen.
@@ -114,7 +131,7 @@ export async function schrijfBouw7Rollen(
     const body: Record<string, unknown> = { id: Number(bouw7Id), type }
     if (rollen.projectLeaderId !== undefined) body.projectLeader = rollen.projectLeaderId != null ? { id: rollen.projectLeaderId } : null
     if (workPlannerId !== undefined)          body.workPlanner   = workPlannerId          != null ? { id: workPlannerId }          : null
-    if (rollen.executorId !== undefined)      body.executor      = rollen.executorId      != null ? { id: rollen.executorId }      : null
+    if (executorId !== undefined)             body.executor      = executorId             != null ? { id: executorId }             : null
 
     // Maatwerkvelden (Controller + Calculator) → één gemergede `customAttributeValues`, zodat de
     // overige velden (VvE-code, …) behouden blijven. Attribuut-id's via GET /list/custom-attributes
