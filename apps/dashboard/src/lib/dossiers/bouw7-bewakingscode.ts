@@ -126,10 +126,15 @@ async function zorgVoorPsl(
   if (!doelBd) return { ok: false, error: `bewakingscode "${doel.code}" staat niet in de projectstructuur van Bouw7.` }
 
   if (doelBd[veld] == null) doelBd[veld] = '0'
-  // Arbeid: Bouw7 eist dat bij laborCosts óók laborHours en laborHourlyRate gevuld zijn.
+  // Arbeid en materieel rekenen met uren; Bouw7 eist dat de uren en het uurtarief erbij staan en
+  // weigert anders de hele structuur met een 400 (gemeten op materieel, sep 2026).
   if (kostensoort === 1) {
     if (doelBd.laborHours == null) doelBd.laborHours = '0'
     if (doelBd.laborHourlyRate == null) doelBd.laborHourlyRate = '0'
+  }
+  if (kostensoort === 4) {
+    if (doelBd.equipmentHours == null) doelBd.equipmentHours = '0'
+    if (doelBd.equipmentHourlyRate == null) doelBd.equipmentHourlyRate = '0'
   }
 
   try {

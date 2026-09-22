@@ -87,6 +87,13 @@ type FunctieVorm = {
    * Een expliciete `false` in de rechten wint hier altijd van.
    */
   readonly inbegrepenVanaf?: ModuleRechten
+  /**
+   * In welke kanalen deze functie iets dóét. Weglaten = alle kanalen waarin de
+   * module bestaat. Zet dit wanneer een functie maar één kant op werkt: een
+   * vinkje dat nergens wordt gelezen leest als een recht dat je kunt geven, en
+   * dan is het beheerscherm aan het liegen.
+   */
+  readonly kanalen?: readonly Kanaal[]
 }
 
 type ModuleVorm = {
@@ -136,6 +143,17 @@ export const RECHTEN_CATALOGUS = [
         key: 'dossiers.bestand_extern_mailen',
         label: 'Bestanden naar buiten mailen',
         uitleg: 'Een dossierbestand rechtstreeks naar een opdrachtgever of leverancier mailen.',
+      },
+      {
+        key: 'dossiers.status_wijzigen',
+        label: 'Status wijzigen in de app',
+        uitleg:
+          'De statuskiezer op een dossier in de telefoon-app; de keuze gaat ook naar Bouw7. '
+          + 'Op de desktop hangt de status aan het niveau, niet aan deze functie.',
+        // Alleen mobiel: op de desktop bepaalt het niveau op Dossiers wie de status zet.
+        // Zou dit vinkje ook in de desktopmatrix staan, dan beloofde het daar iets dat
+        // nergens wordt gecontroleerd.
+        kanalen: ['mobiel'],
       },
     ],
   },
@@ -601,9 +619,11 @@ export type ModuleFunctie =
   Omit<FunctieVorm, 'key'> & { key: FunctieKey; module: RechtenModule }
 
 /** De functies van één onderdeel, bruikbaar getypeerd. */
-export function functiesVan(module: RechtenModule): readonly ModuleFunctie[] {
+export function functiesVan(module: RechtenModule, kanaal?: Kanaal): readonly ModuleFunctie[] {
   const m = MODULE_INDEX[module]
-  return ('functies' in m ? m.functies : []).map(f => ({ ...f, module }))
+  return ('functies' in m ? m.functies : [])
+    .map(f => ({ ...f, module }) as ModuleFunctie)
+    .filter(f => !kanaal || !f.kanalen || f.kanalen.includes(kanaal))
 }
 
 export const MODULE_INDEX = Object.fromEntries(

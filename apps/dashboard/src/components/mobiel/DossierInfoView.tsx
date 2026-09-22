@@ -57,7 +57,16 @@ const knop: React.CSSProperties = {
   WebkitTapHighlightColor: 'transparent',
 }
 
-export default function DossierInfoView({ info }: { info: DossierInfo }) {
+export default function DossierInfoView({
+  info, statusKiezer,
+}: {
+  info: DossierInfo
+  /**
+   * De statuskiezer, als de gebruiker de status mag wijzigen. Komt van buiten omdat dit
+   * scherm niets van rechten hoeft te weten; zonder kiezer blijft het de kale badge.
+   */
+  statusKiezer?: React.ReactNode
+}) {
   const telefoon = info.contact_telefoon?.replace(/\s/g, '') || null
   const periode = [info.begindatum, info.einddatum].filter(Boolean).join(' – ') || null
 
@@ -68,7 +77,7 @@ export default function DossierInfoView({ info }: { info: DossierInfo }) {
         <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--fg)', lineHeight: 1.25 }}>
           {info.titel}
         </div>
-        <StatusBadge label={info.statusLabel} color={info.statusColor} lg />
+        {statusKiezer ?? <StatusBadge label={info.statusLabel} color={info.statusColor} lg />}
       </div>
 
       {/* De twee dingen die je in het veld daadwerkelijk doet */}

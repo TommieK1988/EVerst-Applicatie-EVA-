@@ -118,7 +118,7 @@ export default function RechtenMatrix({
                 const effectief: Niveau = erft ? geerfd : (eigen ?? null)
                 const slot = vergrendeld?.(m.key) ?? null
                 const uitgeklapt = open.has(m.key)
-                const functies = functiesVan(m.key)
+                const functies = functiesVan(m.key, kanaal)
 
                 return (
                   <React.Fragment key={m.key}>

@@ -9,9 +9,13 @@ import DossierActiesBlok from '@/components/mobiel/DossierActiesBlok'
 import BezoekStartKnop from '@/components/mobiel/BezoekStartKnop'
 import { getTakenVoorDossier } from '@/lib/taken/services/taken'
 import { createClient } from '@everts/database/server'
-import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getCurrentMedewerker, getRechtenBundel, heeftFunctie, kiesKanaal } from '@/lib/auth/rechten'
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
-import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
+import {
+  dossierStatusBadge, dossierSectie, actieveSubstatus, mobieleStatusopties, sluitDossierAf,
+} from '@/components/mobiel/dossier-status'
+import StatusKiezer from '@/components/mobiel/StatusKiezer'
+import { isDossierAfgesloten } from '@/components/dossiers/types'
 import DetailplanningView from '@/components/mobiel/dossier-tabs/DetailplanningView'
 import VoortgangView from '@/components/mobiel/dossier-tabs/VoortgangView'
 import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
@@ -86,6 +90,15 @@ export default async function MobielDossierTabPage(
   const { label } = dossierStatusBadge(res.data)
   const kop = d.dossiernummer ? `${d.dossiernummer}` : (d.titel ?? 'Dossier')
 
+  /**
+   * Mag deze gebruiker de status vanaf zijn telefoon zetten? Standaard niet — de functie
+   * staat uit tenzij een beheerder hem aanzet (zie de rechtencatalogus). Een afgesloten
+   * dossier is sowieso overal alleen-lezen, dus dan ook hier geen kiezer.
+   */
+  const magStatusWijzigen =
+    !isDossierAfgesloten(res.data)
+    && heeftFunctie(kiesKanaal(await getRechtenBundel(), 'mobiel'), 'dossiers.status_wijzigen')
+
   return (
     <>
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref={terug ?? '/m/dossiers'} />
@@ -96,7 +109,9 @@ export default async function MobielDossierTabPage(
 
       {actief === 'informatie' && (
         <>
-          <InformatieTab d={d} statusLabel={label} />
+          <InformatieTab
+            d={d} statusLabel={label} dossierId={id} magStatusWijzigen={magStatusWijzigen}
+          />
           {/* Acties apart in Suspense: de takenquery mag de infokaarten niet ophouden. */}
           <Suspense fallback={null}><ActiesBlok dossierId={id} magBezoekStarten={isUitvoering} /></Suspense>
         </>
@@ -152,8 +167,13 @@ async function ActiesBlok(
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function InformatieTab({ d, statusLabel }: { d: Record<string, any>; statusLabel: string }) {
+function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  d: Record<string, any>
+  statusLabel: string
+  dossierId: string
+  magStatusWijzigen: boolean
+}) {
   const werkadres = [
     d.werkadres_straat,
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
@@ -187,5 +207,24 @@ function InformatieTab({ d, statusLabel }: { d: Record<string, any>; statusLabel
     rollen,
   }
 
-  return <DossierInfoView info={info} />
+  // De kiezer krijgt dezelfde fase-gating als de statuskiezer op de desktop; de opties worden
+  // hier op de server berekend zodat het hele dossierobject niet naar de telefoon hoeft.
+  const sectie = dossierSectie(d as never)
+  const opties = mobieleStatusopties(d as never)
+
+  return (
+    <DossierInfoView
+      info={info}
+      statusKiezer={magStatusWijzigen ? (
+        <StatusKiezer
+          dossierId={dossierId}
+          sectie={sectie}
+          huidig={actieveSubstatus(d as never)}
+          opties={opties}
+          afsluitend={opties.filter(o => sluitDossierAf(d as never, o.key)).map(o => o.key)}
+          magWijzigen
+        />
+      ) : undefined}
+    />
+  )
 }
