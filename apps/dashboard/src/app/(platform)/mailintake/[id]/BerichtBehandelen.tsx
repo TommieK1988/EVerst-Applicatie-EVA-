@@ -373,9 +373,22 @@ export default function BerichtBehandelen({
   }
 
   async function koppelen(dossierId: string, soort: 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen', label: string) {
+    // Bij meerwerk verandert er iets op het dossier zelf; dat hoort in de
+    // bevestiging te staan en niet pas in de toast achteraf.
     const ok = await bevestig({
       titel: label,
-      omschrijving: 'Het bericht wordt aan dit dossier gekoppeld en verdwijnt uit je postvak.',
+      omschrijving: soort === 'meerwerk' ? (
+        <span className="block">
+          <span className="block">
+            Het bericht wordt aan dit dossier gekoppeld en verdwijnt uit je postvak.
+          </span>
+          <span className="mt-2 block">
+            Staat er precies één meerwerkregel open, dan zet EVA die op akkoord — met een
+            bewakingscode naar Bouw7. Staat er geen of staan er meerdere, dan krijgt de
+            projectleider een actie; EVA maakt zelf nooit een meerwerkregel aan.
+          </span>
+        </span>
+      ) : 'Het bericht wordt aan dit dossier gekoppeld en verdwijnt uit je postvak.',
       bevestigLabel: 'Koppelen',
     })
     if (!ok) return
@@ -383,7 +396,7 @@ export default function BerichtBehandelen({
     try {
       const res = await koppelBerichtAanDossier(b.id, dossierId, soort)
       if (!res.ok) { toast.error(res.error ?? 'Koppelen mislukt'); return }
-      toast.success('Gekoppeld')
+      toast.success(res.melding ?? 'Gekoppeld')
       router.push('/mailintake')
     } finally {
       setBezig(false)

@@ -473,7 +473,8 @@ opnieuw.
 - **Een opdracht als losse aanvraag inschrijven.** Vindt EVA geen offerte, dan gaat het naar
   een mens.
 - **Een bestaande termijnstaat overschrijven.**
-- **Een meerwerkregel aanmaken of op akkoord zetten.**
+- **Een meerwerkregel aanmaken.** Op akkoord zetten mag wél, maar alleen een regel die er
+  al staat — zie hoofdstuk 11.
 - **Hoeveelheden, maten of prijzen verzinnen.**
 - **Iets in Bouw7 overschrijven** buiten de projectstatus en de aanneemsom die bij het winnen
   van een offerte horen.
@@ -482,8 +483,22 @@ opnieuw.
 
 ## 11. Wat er bewust nog niet in zit
 
-- **Meerwerk.** Een meerwerkmail wordt herkend en voorgelegd, maar de meerwerkregel maak je
-  zelf. Dat raakt de termijnenboekhouding en is een eigen traject.
+- **Een meerwerkregel aanmaken.** Koppel je een meerwerkmail aan een lopend dossier, dan kijkt
+  EVA welke meerwerkregels daar nog op een antwoord wachten:
+
+  | Wat EVA aantreft | Wat er gebeurt |
+  |---|---|
+  | Precies één regel die openstaat | Die gaat op akkoord, met een bewakingscode naar Bouw7 |
+  | Geen enkele regel | De projectleider krijgt een actie om er een aan te maken |
+  | Meerdere regels open | De projectleider krijgt een actie met de vraag welke bedoeld is |
+
+  Aanmaken doet EVA dus nooit zelf. Een regel aanmaken betekent een bedrag en een omschrijving
+  uit een bijlage kiezen, en dat bedrag telt mee in de contractsom — dat is een afspraak met de
+  klant, geen invulveld. De mail met de bijlage wordt wél meteen aan het dossier gekoppeld, zodat
+  het geoffreerde bedrag er al ligt als de projectleider eraan begint.
+
+  Het dossier moet wel lopen: een opdracht of een servicedeskbon. Op een aanvraag of een offerte
+  weigert EVA het, want daar is extra werk gewoon werk dat nog in de prijs hoort.
 - **Een afwijkende factuurpartij.** De controle gaat over het postadres. Moet een ándere
   relatie de factuur krijgen, dan regel je dat op de dossierpagina.
 - **Nog geen kwaliteitsscherm.** De cijfers over hoe vaak EVA het goed had, en wat de AI per

@@ -432,11 +432,43 @@ export async function koppelBerichtAanDossier(
   berichtId: string,
   dossierId: string,
   besluit: 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen' = 'gekoppeld_bestaand',
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; melding?: string }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')
+
+  // ── Meerwerk raakt de meerwerkregels, niet alleen het bericht ──
+  // Dit deed tot nu toe niets meer dan de mail aan het dossier hangen met het
+  // woord "meerwerk" erbij; op het Meerwerk-tabblad veranderde er niets. Vóór het
+  // koppelen, zodat een weigering (verkeerde fase, ongeldige overgang) het bericht
+  // niet al als afgehandeld achterlaat.
+  let melding: string | undefined
+  if (besluit === 'meerwerk') {
+    const { data: b } = await createAdminClient()
+      .from('mailintake_berichten')
+      .select('postbus:mailintake_postbussen(standaard_behandelaar_id)')
+      .eq('id', berichtId)
+      .maybeSingle()
+
+    const { zetMeerwerkAkkoordUitBericht } = await import('./meerwerk')
+    const res = await zetMeerwerkAkkoordUitBericht({
+      berichtId,
+      dossierId,
+      behandelaarId:
+        (b?.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id
+        ?? medewerker.id,
+    })
+
+    if (!res.ok) return { ok: false, error: res.fout }
+    melding =
+      res.soort === 'akkoord'
+        ? `Meerwerk "${res.omschrijving}" staat op akkoord.`
+        : res.soort === 'geen_regel'
+          ? `Er stond geen meerwerkregel open; ${res.taakVoor ?? 'de projectleider'} krijgt een actie om er een aan te maken.`
+          : `Er staan ${res.aantal} meerwerkregels open; ${res.taakVoor ?? 'de projectleider'} krijgt een actie om de juiste aan te wijzen.`
+  }
+
   await koppelAanDossier(berichtId, dossierId, medewerker.id, besluit)
   revalidatePath('/mailintake')
-  return { ok: true }
+  return { ok: true, melding }
 }
 
 /**
