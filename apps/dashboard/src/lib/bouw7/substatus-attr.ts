@@ -24,6 +24,7 @@ import {
   mergeCustomAttributeValue,
   type Bouw7CustomAttrValue,
 } from '@/lib/bouw7/custom-attributes'
+import type { Bouw7Projectstatus } from '@/lib/bouw7/status-map'
 import {
   bouw7SubstatusNaarEva,
   evaSubstatusNaarBouw7,
@@ -79,7 +80,13 @@ async function projectstatusPrefixVoor(
 }
 
 export type SubstatusWriteResult =
-  | { ok: true }
+  /**
+   * `projectstatus` = de projectstatus die deze write heeft meegetrokken (Gewonnen → 02.,
+   * Verloren/Vervallen → 08.). De aanroeper spiegelt hem in `bouw7_projectstatus_id`/`_naam`,
+   * want die EVA-kolommen worden verder alleen door de sync ververst terwijl de dossierborden
+   * er wél op filteren.
+   */
+  | { ok: true; projectstatus?: Bouw7Projectstatus }
   /** `conflict` = de andere app heeft dit veld gewijzigd sinds EVA het laatst zag. */
   | { ok: false; error: string; conflict?: { bouw7Label: string } }
 
@@ -151,22 +158,23 @@ export async function schrijfBouw7Substatus(
     // → 08. Afgewezen (alleen als álle offertes van het project afgeketst zijn). In dezelfde POST als
     // het maatwerkveld, zodat status en substatus niet uit elkaar kunnen lopen.
     const prefix = await projectstatusPrefixVoor(client, bouw7Id, sectie, nieuweSubstatus)
-    let statusId: number | null = null
+    let nieuweStatus: Bouw7Projectstatus | null = null
     if (prefix) {
       const lijst = (await client.get<Bouw7ListResponse<Bouw7ProjectStatus>>('/list/project-statuses', { q: 'LIMIT 200' })).items ?? []
-      statusId = lijst.find((s) => (s.name ?? '').trim().startsWith(prefix))?.id ?? null
-      if (statusId == null) {
+      const gevonden = lijst.find((s) => (s.name ?? '').trim().startsWith(prefix))
+      if (!gevonden) {
         return { ok: false, error: `Bouw7-projectstatus met prefix "${prefix}" niet gevonden.` }
       }
+      nieuweStatus = { id: gevonden.id, naam: (gevonden.name ?? '').trim() }
     }
 
     await client.post('/project', {
       id: Number(bouw7Id),
       type,
       customAttributeValues: mergeCustomAttributeValue(bestaand, attrId, nieuwLabel),
-      ...(statusId != null ? { status: { id: statusId } } : {}),
+      ...(nieuweStatus != null ? { status: { id: nieuweStatus.id } } : {}),
     })
-    return { ok: true }
+    return { ok: true, ...(nieuweStatus != null ? { projectstatus: nieuweStatus } : {}) }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij terugschrijven naar Bouw7.' }
   }

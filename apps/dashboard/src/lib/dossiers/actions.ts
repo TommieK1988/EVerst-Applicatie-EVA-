@@ -21,7 +21,7 @@ import { after } from 'next/server'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
-import { schrijfBouw7Projectstatus, type Bouw7WriteResult } from './bouw7-status'
+import { schrijfBouw7Projectstatus, projectstatusCacheVelden, type Bouw7WriteResult } from './bouw7-status'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { substatusSectie, type SubstatusSectie } from '@/lib/bouw7/substatus-map'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
@@ -409,14 +409,27 @@ const NIET_SERVICEDESK: [string, string] = [
  * zonder Bouw7-koppeling. Servicedesk-dossiers vallen eraf (zie {@link NIET_SERVICEDESK}), net
  * als alles wat langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel
  * gereed is gemeld — die staan op Afgesloten.
+ *
+ * De derde tak is een vangnet. `bouw7_projectstatus_naam` is een kopie van Bouw7 die alleen de
+ * sync ververst; tussen een statuswissel in EVA en de eerstvolgende sync kan die kopie achterlopen
+ * (een gewonnen offerte staat dan op hoofdstatus 'opdracht' naast een gecachete '01. Offerte').
+ * Die combinatie matchte op geen van de vier borden — het dossier was dan alleen nog via de
+ * zoekbalk te vinden. Een dossier dat in EVA een opdracht is hoort hier dus hoe dan ook thuis,
+ * op drie uitzonderingen na: 07 is het archief ({@link getDossiersAfgesloten}), 08 en 09 staan
+ * op Offertes. Die hebben een eigen bord en zouden anders dubbel verschijnen.
  */
 export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
   const prefixen = ['02.', '03.', '04.', '05.', '06.']
     .map(p => `bouw7_projectstatus_naam.ilike.${p}%`)
     .join(',')
 
+  const eigenBord = ['07.', '08.', '09.']
+    .map(p => `bouw7_projectstatus_naam.not.ilike.${p}%`)
+    .join(',')
+
   return haalDossierLijst(q => q
-    .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht)`)
+    .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht),`
+      + `and(${eigenBord},hoofdstatus.eq.opdracht)`)
     .or(NIET_SERVICEDESK[0])
     .or(NIET_SERVICEDESK[1])
     .or(nogNietVerlopenFinancieelGereed('opdracht_substatus'))
@@ -1179,7 +1192,9 @@ export async function updateDossierSubstatus(
     // Conflict → EVA-wijziging laten vervallen, mét het Bouw7-label zodat de UI kan vragen of de
     // gebruiker Bouw7 volgt of tóch overschrijft (die tweede weg komt terug met `forceerBouw7`).
     if (!res.ok && res.conflict) return { ok: false, error: res.error, conflict: res.conflict }
-    bouw7 = res.ok ? { ok: true } : { ok: false, error: res.error }
+    bouw7 = res.ok
+      ? { ok: true, ...(res.projectstatus ? { projectstatus: res.projectstatus } : {}) }
+      : { ok: false, error: res.error }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1217,7 +1232,11 @@ export async function updateDossierSubstatus(
   // weggeschreven veld mag een dossier niet als "zojuist volledig gesynct" laten ogen in de lijst.
   if (bouw7) {
     update = bouw7.ok
-      ? { ...update, bouw7_sync_status: 'synced', bouw7_sync_fout: null }
+      // De meegetrokken projectstatus (Gewonnen → 02.) meteen in de EVA-kopie. Die kolom wordt
+      // verder alleen door de sync gevuld, maar de vier dossierborden filteren er wél op: tot de
+      // volgende sync stond een zojuist gewonnen offerte anders als 'opdracht' naast een gecachete
+      // '01. Offerte' — een combinatie waar geen enkel bord op matcht, dus onvindbaar.
+      ? { ...update, ...projectstatusCacheVelden(bouw7), bouw7_sync_status: 'synced', bouw7_sync_fout: null }
       : { ...update, bouw7_sync_status: 'error', bouw7_sync_fout: bouw7.error }
   }
 
@@ -1252,7 +1271,7 @@ export async function updateDossierSubstatus(
     bouw7 = await schrijfBouw7Projectstatus(huidig.bouw7_id, nieuweSubstatus, 'opdracht')
     await supabase.from('dossiers').update(
       bouw7.ok
-        ? { bouw7_sync_status: 'synced', bouw7_sync_fout: null }
+        ? { ...projectstatusCacheVelden(bouw7), bouw7_sync_status: 'synced', bouw7_sync_fout: null }
         : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7.error },
     ).eq('id', id)
   }
@@ -1586,11 +1605,19 @@ export async function herhaalDossierStatusWriteBack(dossierId: string): Promise<
     const sub = d.hoofdstatus === 'aanvraag' ? d.aanvraag_substatus : d.offerte_substatus
     if (!sub) return { ok: false, error: 'Dossier zonder substatus.' }
     const r = await schrijfBouw7Substatus(d.bouw7_id, d.hoofdstatus, sub, null, { forceer: true })
-    res = r.ok ? { ok: true } : { ok: false, error: r.error }
+    res = r.ok
+      ? { ok: true, ...(r.projectstatus ? { projectstatus: r.projectstatus } : {}) }
+      : { ok: false, error: r.error }
   } else {
     return { ok: false, error: `Onbekende hoofdstatus ${d.hoofdstatus}.` }
   }
-  if (res.ok) await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, BOUW7_DOSSIER_STATUS_VELDEN)
+  if (res.ok) {
+    // Ook hier de EVA-kopie van de projectstatus gelijkzetten — de herkansing draait vlak vóór de
+    // lees-sync, maar die slaat een dossier over waarvan de fingerprint niet is gewijzigd.
+    const cache = projectstatusCacheVelden(res)
+    if (Object.keys(cache).length > 0) await supabase.from('dossiers').update(cache).eq('id', dossierId)
+    await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, BOUW7_DOSSIER_STATUS_VELDEN)
+  }
   return res
 }
 

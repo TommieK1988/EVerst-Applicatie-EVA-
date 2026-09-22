@@ -9,6 +9,14 @@
 
 import type { OpdrachtSubstatus } from '@everts/database'
 
+/**
+ * Een Bouw7-projectstatus zoals die zojuist naar een project is geschreven. Reist mee terug uit
+ * de write-helpers zodat de aanroeper de EVA-kopieën `bouw7_projectstatus_id`/`_naam` meteen
+ * gelijk kan zetten: die kolommen worden verder alleen door de sync ververst, terwijl de
+ * dossierborden er wél op filteren.
+ */
+export type Bouw7Projectstatus = { id: number; naam: string }
+
 /** Bouw7-projectstatus prefix → EVA opdracht-substatus (02 t/m 07). */
 export const OPDRACHT_PREFIX_NAAR_SUBSTATUS: Record<string, OpdrachtSubstatus> = {
   '02.': 'nieuwe_opdracht',

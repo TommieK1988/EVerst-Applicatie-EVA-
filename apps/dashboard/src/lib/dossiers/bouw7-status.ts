@@ -12,9 +12,30 @@
 
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import type { Bouw7ProjectStatus, Bouw7Project, Bouw7ListResponse } from '@/lib/bouw7/client'
-import { opdrachtSubstatusNaarPrefix } from '@/lib/bouw7/status-map'
+import { opdrachtSubstatusNaarPrefix, type Bouw7Projectstatus } from '@/lib/bouw7/status-map'
 
-export type Bouw7WriteResult = { ok: true } | { ok: false; error: string }
+export type { Bouw7Projectstatus }
+
+export type Bouw7WriteResult =
+  | { ok: true; projectstatus?: Bouw7Projectstatus }
+  | { ok: false; error: string }
+
+/**
+ * De dossierkolommen die de zojuist geschreven projectstatus spiegelen — bedoeld om in een
+ * bestaande `.update()` mee te nemen. Leeg als er geen status is meegeschreven.
+ *
+ * Geen beschermd veld (staat niet in BOUW7_DOSSIER_VELDEN): de eerstvolgende sync overschrijft
+ * deze kolommen gewoon weer met de stand uit Bouw7. Dit overbrugt alleen de tussentijd.
+ */
+export function projectstatusCacheVelden(
+  res: Bouw7WriteResult | undefined,
+): { bouw7_projectstatus_id: number; bouw7_projectstatus_naam: string } | Record<string, never> {
+  if (!res?.ok || !res.projectstatus) return {}
+  return {
+    bouw7_projectstatus_id:   res.projectstatus.id,
+    bouw7_projectstatus_naam: res.projectstatus.naam,
+  }
+}
 
 /** Alle Bouw7-projectstatussen ({ id, name }). Bron voor de status-id bij terugschrijven. */
 export async function getBouw7Projectstatussen(): Promise<Bouw7ProjectStatus[]> {
@@ -55,7 +76,7 @@ export async function schrijfBouw7Projectstatus(
 
     // 3. Status zetten (upsert: id aanwezig = update). Alleen id/type/status meesturen.
     await client.post('/project', { id: Number(bouw7Id), type, status: { id: status.id } })
-    return { ok: true }
+    return { ok: true, projectstatus: { id: status.id, naam: (status.name ?? '').trim() } }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij terugschrijven naar Bouw7.' }
   }
