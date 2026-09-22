@@ -54,6 +54,28 @@ describe('servicedesk-tabs: omleiden van oude links', () => {
   })
 })
 
+describe('servicedesk-tabs: sleutels die zowel groep als tab zijn', () => {
+  /**
+   * `kosten` rendert de tab `inkoop`, en `inkoop` is óók een groep. Dat mág, maar het legt een
+   * eis op aan de router: die moet een groep naar het rénderen van één tab sturen en niet naar
+   * zichzelf. Gebeurt dat wel, dan tekent hij de deelbalk twee keer en valt de deelkeuze weg —
+   * precies wat er in de browser gebeurde vóór `renderTabContent` en `renderEnkeleTab` uit
+   * elkaar zijn gehaald.
+   *
+   * Deze test legt het bestaan van zo'n sleutel vast. Ziet iemand hem later per ongeluk
+   * verdwijnen of juist verschijnen, dan is dit de plek waar de reden staat.
+   */
+  it('benoemt welke tab-sleutels tegelijk een groep zijn', () => {
+    const groepSlugs = new Set<string>(SERVICEDESK_GROEPEN.map(g => g.slug))
+    const botsend = SERVICEDESK_GROEPEN
+      .flatMap(g => g.delen)
+      .filter(d => groepSlugs.has(d.tab))
+      .map(d => d.tab)
+
+    expect(botsend).toEqual(['inkoop'])
+  })
+})
+
 describe('servicedesk-tabs: welke tabs een bon laat zien', () => {
   it('toont Opname & offerte niet op een gewone bon op regie', () => {
     const slugs = zichtbareServicedeskGroepen(GEEN_TOGGLES).map(g => g.slug)

@@ -161,26 +161,31 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
   )
 }
 
-// Expliciet retourtype omdat deze functie zichzelf aanroept voor de servicedesk-groepen:
-// zonder annotatie kan TypeScript het type niet afleiden uit zijn eigen retour.
-async function renderTabContent(
-  { id, tab, sectie, deel }: Props,
-  dossier: DossierRij | null,
-): Promise<ReactNode> {
-  const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
+/**
+ * Een servicedeskbon heeft vijf tabs in plaats van veertien (zie servicedesk-tabs.ts). Een
+ * groep tekent zijn deelnavigatie en laat `renderEnkeleTab` het eigenlijke werk doen.
+ *
+ * Die twee zijn bewust géén één recursieve functie. `inkoop` is zowel een groep-sleutel als de
+ * tab achter het deel "Geboekte kosten"; zou de groep zichzelf opnieuw aanroepen, dan kwam hij
+ * weer in deze tak terecht — deelbalk twee keer op het scherm, en de deelkeuze genegeerd omdat
+ * de tweede ronde geen `deel` meer meekrijgt. Met een aparte functie kan dat structureel niet.
+ */
+async function renderTabContent(props: Props, dossier: DossierRij | null): Promise<ReactNode> {
+  const groep = props.sectie === 'servicedesk' ? servicedeskGroep(props.tab) : undefined
+  if (!groep) return renderEnkeleTab(props, dossier)
 
-  // Een servicedeskbon heeft vijf tabs in plaats van veertien (zie servicedesk-tabs.ts). Een
-  // groep tekent alleen zijn deelnavigatie en laat daarna de bestaande tab-tak hieronder het
-  // werk doen — zo blijft er precies één plek waar een tab wordt gerenderd, voor beide secties.
-  const groep = sectie === 'servicedesk' ? servicedeskGroep(tab) : undefined
-  if (groep) {
-    const gekozen = servicedeskDeel(groep, deel)
-    return (
+  const gekozen = servicedeskDeel(groep, props.deel)
+  return (
       /* `--deelbalk-hoogte` is er voor de delen die zelf schermvullend zijn (de werkbegroting
        * rekent met `100dvh`). Zonder dit valt hun onderkant onder de vouw zodra er een balk
-       * boven staat. De waarde is de hoogte van het blok hieronder: 28 padding + 34 balk +
-       * 20 marge onder de balk. */
-      <div style={{ '--deelbalk-hoogte': '82px' } as CSSProperties}>
+       * boven staat.
+       *
+       * 86 = 28 padding boven + 38 balkhoogte + 20 marge eronder. In de browser gemeten, niet
+       * uitgerekend: een eerdere schatting van 82 zat er vier pixels naast en dat is precies
+       * wat er onderaan wegvalt. Verandert de opmaak van `SubTabs`, meet dan opnieuw — deze
+       * groep blijft bewust in de normale pagina-stroom, want de meeste delen (Informatie,
+       * Verkoop) moeten gewoon kunnen doorscrollen. */
+      <div style={{ '--deelbalk-hoogte': '86px' } as CSSProperties}>
         <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px) 0' }}>
           <SubTabs delen={groep.delen.map(d => ({
             deel: d.deel, label: d.label, actief: d.deel === gekozen.deel,
@@ -188,10 +193,17 @@ async function renderTabContent(
         </div>
         {/* `deel` gaat bewust niet mee naar binnen: hij hoort bij deze groep, en een tab die
             zelf een `deel` kent (KAM/VGM) zou hem anders verkeerd uitleggen. */}
-        {await renderTabContent({ id, tab: gekozen.tab, sectie, deel: undefined }, dossier)}
+        {await renderEnkeleTab({ ...props, tab: gekozen.tab, deel: undefined }, dossier)}
       </div>
     )
-  }
+}
+
+/** Rendert één tab, precies zoals hij altijd al werd gerenderd. */
+async function renderEnkeleTab(
+  { id, tab, sectie, deel }: Props,
+  dossier: DossierRij | null,
+): Promise<ReactNode> {
+  const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
 
   if (tab === 'informatie' && dossier) {
     // Ook dit tab kan op Bouw7 wachten (het meerwerk-aggregaat), dus net als de tabs hieronder
