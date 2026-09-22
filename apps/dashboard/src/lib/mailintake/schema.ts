@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-22.2'
+export const PROMPT_VERSIE = '2026-09-22.3'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -53,6 +53,21 @@ export const extractieSchema = z.object({
   werkadres_contact_naam: korteTekst,
   werkadres_contact_telefoon: korteTekst,
   werkadres_contact_email: korteTekst,
+
+  /**
+   * Iedereen die verder bij dit werk genoemd wordt: de technisch manager van de
+   * VvE, de opzichter namens de corporatie, de architect, de melder.
+   *
+   * Dit is een lijst námen, geen lijst mensen die EVA gaat aanmaken. De
+   * deterministische poort zoekt ze op tussen de contactpersonen die de klant al
+   * heeft; wie daar niet tussen staat, wordt niet verzonnen maar gemeld.
+   */
+  betrokkenen: z.array(z.object({
+    naam: z.string().trim().min(2).max(120),
+    rol: z.string().trim().max(80).nullable().catch(null),
+    email: z.string().trim().max(200).nullable().catch(null),
+    telefoon: z.string().trim().max(40).nullable().catch(null),
+  })).max(10).catch([]),
 
   // ── Kenmerken ──
   referentie: korteTekst,               // hún bestel-/ordernummer

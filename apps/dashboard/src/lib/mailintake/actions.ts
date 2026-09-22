@@ -192,16 +192,22 @@ async function leesWerkadresUitLezing(berichtId: string) {
     .limit(1)
     .maybeSingle()
 
-  const v = (data?.gekeurde_velden ?? null) as Record<string, string | null> | null
+  const v = (data?.gekeurde_velden ?? null) as Record<string, unknown> | null
   if (!v) return null
+  const tekst = (k: string) => (typeof v[k] === 'string' ? (v[k] as string) : null)
   return {
-    straat: v.werkadresStraat ?? null,
-    huisnummer: v.werkadresHuisnummer ?? null,
-    postcode: v.werkadresPostcode ?? null,
-    stad: v.werkadresStad ?? null,
-    naam: v.werkadresNaam ?? null,
-    telefoon: v.werkadresTelefoon ?? null,
-    email: v.werkadresEmail ?? null,
+    werkadres: {
+      straat: tekst('werkadresStraat'),
+      huisnummer: tekst('werkadresHuisnummer'),
+      postcode: tekst('werkadresPostcode'),
+      stad: tekst('werkadresStad'),
+      naam: tekst('werkadresNaam'),
+      telefoon: tekst('werkadresTelefoon'),
+      email: tekst('werkadresEmail'),
+    },
+    betrokkenen: Array.isArray(v.betrokkenen)
+      ? (v.betrokkenen as { naam: string; rol: string | null; email: string | null; telefoon: string | null }[])
+      : [],
   }
 }
 
@@ -238,6 +244,8 @@ export async function bevestigOpdrachtOpDossier(
   if (!bericht) return { ok: false, error: 'Bericht niet gevonden.' }
   if (bericht.status === 'verwerkt') return { ok: false, error: 'Dit bericht is al afgehandeld.' }
 
+  const uitLezing = await leesWerkadresUitLezing(berichtId)
+
   const res = await zetOfferteGewonnenUitBericht({
     berichtId,
     dossierId,
@@ -255,7 +263,8 @@ export async function bevestigOpdrachtOpDossier(
     // Uit de gekeurde lezing en niet uit het scherm: het opdrachtpaneel toont geen
     // adresvelden -- het adres komt van de offerte. Wat de mail erover zegt vult
     // alleen aan wat leeg was, meestal wie je ter plaatse moet hebben.
-    werkadres: await leesWerkadresUitLezing(berichtId),
+    werkadres: uitLezing?.werkadres ?? null,
+    betrokkenen: uitLezing?.betrokkenen ?? [],
   })
 
   revalidatePath('/mailintake')

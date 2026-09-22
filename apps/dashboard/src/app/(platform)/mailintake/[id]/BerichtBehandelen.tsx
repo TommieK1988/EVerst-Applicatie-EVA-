@@ -297,6 +297,7 @@ export default function BerichtBehandelen({
         opmerkingen,
         factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
         actie, fase,
+        betrokkenen: (gekeurd?.betrokkenen ?? []) as never,
       })
 
       // ── Proef ─────────────────────────────────────────────────────────────

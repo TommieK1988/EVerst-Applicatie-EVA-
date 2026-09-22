@@ -323,6 +323,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     const afz = await herkenAfzender({
       vanAdres: echteAfzender,
       klantNaamUitMail: gelezen.klant_naam,
+      // Nodig om te kiezen bij een gedeeld postbusadres van een beheerkantoor.
+      contactpersoonNaamUitMail: gelezen.contactpersoon_naam,
       doorgestuurd: isDoorstuur,
     })
 
@@ -619,6 +621,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
               naam: velden.werkadresNaam, telefoon: velden.werkadresTelefoon,
               email: velden.werkadresEmail,
             },
+            betrokkenen: velden.betrokkenen ?? [],
           })
         : { ok: false, error: 'De offerte was bij het uitvoeren niet meer te vinden.' }
 

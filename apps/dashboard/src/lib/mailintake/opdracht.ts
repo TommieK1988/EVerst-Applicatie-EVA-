@@ -69,6 +69,12 @@ export interface OpdrachtInvoer {
     email: string | null
   } | null
   /**
+   * Anderen die in de opdracht genoemd worden, met hun rol. Worden opgezocht tussen
+   * de contactpersonen van de klant; wie daar niet tussen staat wordt gemeld, niet
+   * aangemaakt.
+   */
+  betrokkenen?: { naam: string; rol: string | null; email: string | null; telefoon: string | null }[]
+  /**
    * Bouw7 heeft de substatus intussen zelf omgezet. Alleen true na een expliciete
    * tweede klik van een mens — nooit vanuit de automatische route.
    */
@@ -242,6 +248,26 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
     await supabase.from('mailintake_besluiten').insert({
       bericht_id: inv.berichtId, actor: 'systeem', actie: 'werkadres_aangevuld',
       details: { dossier_id: inv.dossierId, ...adres } as unknown as Json,
+    })
+  }
+
+  // ── 4c. Betrokkenen aanvullen ─────────────────────────────
+  // Dezelfde bon noemt meestal nog een paar mensen met een rol: de technisch
+  // manager van de VvE, de opzichter, de melder. Alleen wie al contactpersoon is
+  // bij deze klant wordt toegevoegd; EVA maakt niemand aan.
+  const { vulBetrokkenenAan } = await import('./betrokkenen-aanvullen')
+  const betrokkenen = inv.betrokkenen?.length
+    ? await vulBetrokkenenAan({
+        dossierId: inv.dossierId,
+        relatieId: inv.relatieId ?? null,
+        genoemd: inv.betrokkenen,
+      }).catch(() => null)
+    : null
+
+  if (betrokkenen && (betrokkenen.toegevoegd.length || betrokkenen.nietGevonden.length)) {
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: inv.berichtId, actor: 'systeem', actie: 'betrokkenen_aangevuld',
+      details: { dossier_id: inv.dossierId, ...betrokkenen } as unknown as Json,
     })
   }
 

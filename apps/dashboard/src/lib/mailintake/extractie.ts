@@ -313,6 +313,12 @@ export interface GekeurdeVelden {
   werkadresNaam: string | null
   werkadresTelefoon: string | null
   werkadresEmail: string | null
+  /**
+   * Anderen die in de opdracht genoemd worden, met hun rol. Alleen námen: welke
+   * contactpersoon erbij hoort -- of dat er geen bij hoort -- beslist
+   * `betrokkenen-aanvullen.ts` tegen de contactpersonen van de klant.
+   */
+  betrokkenen: { naam: string; rol: string | null; email: string | null; telefoon: string | null }[]
   referentie: string | null
   onzeReferentie: string | null
   vveCode: string | null
@@ -564,26 +570,65 @@ export async function keurEnKalibreer(
 
   // ── Contact ter plaatse ──
   // Dit gaat naar een dossierveld dat iemand op locatie gaat bellen; een verzonnen
-  // naam of nummer kost een verloren rit. Vandaar dezelfde poort als bij de rest:
-  // het moet letterlijk in de mail of de bijlagen staan.
-  const wpNaam = komtLetterlijkVoor(data.werkadres_contact_naam, brontekst)
-    ? (data.werkadres_contact_naam ?? '').trim().slice(0, 120) || null
-    : null
+  // naam of nummer kost een verloren rit. Vandaar een poort: het moet ergens in de
+  // bron staan.
+  //
+  // Maar "de bron" is meer dan `brontekst`. Een opdrachtbon van een VvE-beheerder
+  // noemt de technisch manager en de melder in de PDF, niet in de mail -- en de
+  // tekst van die PDF staat hier nergens, want het bestand gaat als document naar
+  // het model. De eerste versie verwierp daarom precies de gevallen waarvoor dit
+  // blok bedoeld is: bij dossier 20261.00282 stonden naam, telefoon en e-mail van
+  // S.J.R. Bollen keurig in de bon en bleef het Werkadres-blok leeg.
+  //
+  // Dus dezelfde uitweg als hierboven bij `regie`: staat het niet in de mailtekst
+  // maar zijn er bijlagen gelezen, dan overnemen met minder zekerheid. Zo'n bericht
+  // gaat toch langs een mens, en die ziet het veld staan.
+  const uitBijlage = (opties.bijlagenGelezen ?? 0) > 0
+  const cijfers = (w: string | null) => (w ?? '').replace(/[^0-9]/g, '')
+
+  const wpNaamRuw = (data.werkadres_contact_naam ?? '').trim().slice(0, 120)
+  const wpNaamInTekst = komtLetterlijkVoor(wpNaamRuw || null, brontekst)
+  const wpNaam = wpNaamRuw && (wpNaamInTekst || uitBijlage) ? wpNaamRuw : null
+
   // Alleen de cijfers vergelijken: de bon schrijft "06 - 126 876 43", het model
   // levert "06-12687643", en dat is hetzelfde nummer.
-  const cijfers = (w: string | null) => (w ?? '').replace(/\D/g, '')
   const wpTelefoonRuw = (data.werkadres_contact_telefoon ?? '').trim()
-  const wpTelefoon = cijfers(wpTelefoonRuw).length >= 9
-    && cijfers(brontekst).includes(cijfers(wpTelefoonRuw))
+  const wpTelefoonGeldig = cijfers(wpTelefoonRuw).length >= 9
+  const wpTelefoonInTekst = wpTelefoonGeldig && cijfers(brontekst).includes(cijfers(wpTelefoonRuw))
+  const wpTelefoon = wpTelefoonGeldig && (wpTelefoonInTekst || uitBijlage)
     ? wpTelefoonRuw.slice(0, 40)
     : null
-  const wpEmailRuw = (data.werkadres_contact_email ?? '').trim().toLowerCase()
-  const wpEmail = isEmail(wpEmailRuw) && brontekst.toLowerCase().includes(wpEmailRuw)
-    ? wpEmailRuw
-    : null
 
-  zet('werkadres_contact_naam', wpNaam, wpNaam ? Math.max(modelScore('werkadres_contact_naam'), 0.85) : 0)
-  zet('werkadres_contact_telefoon', wpTelefoon, wpTelefoon ? 1 : 0)
+  const wpEmailRuw = (data.werkadres_contact_email ?? '').trim().toLowerCase()
+  const wpEmailInTekst = isEmail(wpEmailRuw) && brontekst.toLowerCase().includes(wpEmailRuw)
+  const wpEmail = isEmail(wpEmailRuw) && (wpEmailInTekst || uitBijlage) ? wpEmailRuw : null
+
+  const wpScore = (inTekst: boolean, gevuld: boolean) =>
+    !gevuld ? 0 : inTekst ? 1 : 0.6
+
+  zet('werkadres_contact_naam', wpNaam,
+    wpNaam ? (wpNaamInTekst ? Math.max(modelScore('werkadres_contact_naam'), 0.85) : 0.6) : 0)
+  zet('werkadres_contact_telefoon', wpTelefoon, wpScore(wpTelefoonInTekst, Boolean(wpTelefoon)))
+  // Stond er niet: zonder deze regel bleef `werkadres_contact_email` uit de gekeurde
+  // velden, en dan is hij op het scherm ook niet te zien of te corrigeren.
+  zet('werkadres_contact_email', wpEmail, wpScore(wpEmailInTekst, Boolean(wpEmail)))
+
+  // ── Wie er verder genoemd wordt ──
+  // Dezelfde poort als hierboven, en om dezelfde reden: de technisch manager en de
+  // melder staan meestal in de bon en niet in de mailtekst. Hier is het risico wel
+  // kleiner -- een naam die nergens bestaat vindt `betrokkenen-aanvullen.ts` niet
+  // terug tussen de contactpersonen van de klant en wordt dus niet toegevoegd maar
+  // gemeld. De echte poort staat daar; dit is alleen het grofvuil eruit.
+  const genoemdePersonen = (data.betrokkenen ?? [])
+    .filter(p => (p.naam ?? '').trim().length >= 2)
+    .filter(p => uitBijlage || komtLetterlijkVoor(p.naam, brontekst))
+    .slice(0, 10)
+    .map(p => ({
+      naam: p.naam.trim().slice(0, 120),
+      rol: (p.rol ?? '').trim().slice(0, 80) || null,
+      email: isEmail((p.email ?? '').trim().toLowerCase()) ? (p.email ?? '').trim().toLowerCase() : null,
+      telefoon: cijfers(p.telefoon ?? null).length >= 9 ? (p.telefoon ?? '').trim().slice(0, 40) : null,
+    }))
 
   return {
     omschrijving: data.omschrijving,
@@ -599,6 +644,7 @@ export async function keurEnKalibreer(
     werkadresNaam: wpNaam,
     werkadresTelefoon: wpTelefoon,
     werkadresEmail: wpEmail,
+    betrokkenen: genoemdePersonen,
     referentie: data.referentie,
     onzeReferentie: data.onze_offerte_referentie,
     vveCode: data.vve_code,

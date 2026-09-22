@@ -67,6 +67,41 @@ export function gelijkenis(a: string, b: string): number {
 }
 
 /**
+ * Kiest uit meerdere contactpersonen op hetzelfde adres degene die de mail noemt.
+ *
+ * Alleen op de achternaam, en alleen bij precies één treffer. Het model levert de
+ * naam in allerlei vormen aan — "A. Gasieta", "Arif Gasieta", "dhr. Gasieta" — dus
+ * de voornaam of de voorletter vergelijken zegt weinig; de achternaam is wat er
+ * altijd staat. Bij twijfel liever niemand: een verkeerde naam op de beoordeling
+ * ziet niemand, een leeg veld wel.
+ */
+function kiesOpNaam<T extends { naam: string }>(treffers: T[], naamUitMail: string | null): T | null {
+  const gezocht = normaliseerPersoon(naamUitMail)
+  if (!gezocht) return null
+
+  const woorden = gezocht.split(' ').filter(w => w.length >= 3)
+  if (!woorden.length) return null
+
+  const passend = treffers.filter(t => {
+    const kandidaat = normaliseerPersoon(t.naam)
+    return kandidaat ? woorden.some(w => kandidaat.split(' ').includes(w)) : false
+  })
+  return passend.length === 1 ? passend[0] : null
+}
+
+/** Persoonsnaam vergelijkbaar maken: zonder titels, initialen, leestekens en diacrieten. */
+export function normaliseerPersoon(naam: string | null): string {
+  return (naam ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\b(dhr|mevr|mw|de heer|mevrouw|drs|ir|ing|mr)\b\.?/g, ' ')
+    .replace(/[^a-z ]/g, ' ')
+    .replace(/\b[a-z]\b/g, ' ')   // losse initialen zeggen niets
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
  * Zoekt de relatie bij een afzender.
  *
  * `klantNaamUitMail` komt van het taalmodel en is dus een aanwijzing, geen bewijs —
@@ -75,6 +110,12 @@ export function gelijkenis(a: string, b: string): number {
 export async function herkenAfzender(opts: {
   vanAdres: string | null
   klantNaamUitMail: string | null
+  /**
+   * De naam van de contactpersoon zoals het model hem in de mail las. Wordt alleen
+   * gebruikt om te kiezen tussen mensen die hetzelfde postbusadres delen — nooit om
+   * iemand te vinden die er anders niet bij zou zijn gekomen.
+   */
+  contactpersoonNaamUitMail?: string | null
   /** true als de mail door een eigen medewerker is doorgestuurd. */
   doorgestuurd?: boolean
 }): Promise<AfzenderTreffer> {
@@ -141,20 +182,65 @@ export async function herkenAfzender(opts: {
       data.push(cp)
     }
 
-    for (const cp of data) {
-      const koppels = (cp.contactpersoon_organisaties ?? []) as any[]
-      const primair = koppels.find(k => k.is_primair && k.organisatie?.actief) ?? koppels.find(k => k.organisatie?.actief)
-      if (primair?.organisatie) {
-        const naam = [cp.voornaam, cp.achternaam].filter(Boolean).join(' ')
+    // Iedereen die op dit adres uitkomt én bij een actieve relatie hoort.
+    const treffers = data
+      .map(cp => {
+        const koppels = (cp.contactpersoon_organisaties ?? []) as any[]
+        const primair = koppels.find(k => k.is_primair && k.organisatie?.actief)
+          ?? koppels.find(k => k.organisatie?.actief)
+        return primair?.organisatie
+          ? { cp, org: primair.organisatie, naam: [cp.voornaam, cp.achternaam].filter(Boolean).join(' ') }
+          : null
+      })
+      .filter((t): t is { cp: any; org: any; naam: string } => t !== null)
+
+    if (treffers.length) {
+      // ── Eén adres, meerdere mensen ────────────────────────────────────────
+      // Beheerkantoren mailen vanaf een postbusadres: denhaag@vve-nederland.nl
+      // hangt in EVA aan drie contactpersonen. De eerste versie pakte gewoon de
+      // eerste rij uit de query, en dan staat er een naam op de beoordeling die
+      // niets met deze mail te maken heeft -- bij dossier 20261.00282 "S. van
+      // Riel", terwijl de brief van Arif Gasieta was.
+      //
+      // Zo'n adres bewijst het bedríjf, niet de persoon. Dus: de naam uit de mail
+      // gebruiken om te kiezen, en lukt dat niet, dan de relatie wél teruggeven en
+      // de persoon leeg laten. Een leeg veld laat de behandelaar kiezen; een fout
+      // ingevuld veld laat hem niets merken.
+      const uniekeRelaties = new Set(treffers.map(t => t.org.id))
+      const gekozen = treffers.length === 1
+        ? treffers[0]
+        : kiesOpNaam(treffers, opts.contactpersoonNaamUitMail ?? null)
+
+      if (gekozen) {
         return {
-          relatieId: primair.organisatie.id,
-          relatieNaam: primair.organisatie.naam,
-          contactpersoonId: cp.id,
-          contactpersoonNaam: naam || null,
+          relatieId: gekozen.org.id,
+          relatieNaam: gekozen.org.naam,
+          contactpersoonId: gekozen.cp.id,
+          contactpersoonNaam: gekozen.naam || null,
           score: Math.min(1, plafond),
           via: 'email_contactpersoon',
-          kandidaten: [{ id: primair.organisatie.id, naam: primair.organisatie.naam }],
-          toelichting: `Herkend via het e-mailadres van ${naam || 'een contactpersoon'} bij ${primair.organisatie.naam}.`,
+          kandidaten: [{ id: gekozen.org.id, naam: gekozen.org.naam }],
+          toelichting: treffers.length === 1
+            ? `Herkend via het e-mailadres van ${gekozen.naam || 'een contactpersoon'} bij ${gekozen.org.naam}.`
+            : `${adres} is een gedeeld postbusadres; de naam in de mail wijst naar ${gekozen.naam}.`,
+        }
+      }
+
+      // Geen naam die uitsluitsel geeft. Alleen doorgaan als alle kandidaten bij
+      // dezelfde relatie horen -- anders weten we ook het bedrijf niet.
+      if (uniekeRelaties.size === 1) {
+        const org = treffers[0].org
+        return {
+          relatieId: org.id,
+          relatieNaam: org.naam,
+          contactpersoonId: null,
+          contactpersoonNaam: null,
+          score: Math.min(1, plafond),
+          via: 'email_contactpersoon',
+          kandidaten: [{ id: org.id, naam: org.naam }],
+          toelichting:
+            `${adres} is een gedeeld postbusadres van ${org.naam}; er hangen ${treffers.length} `
+            + 'contactpersonen aan en de mail noemt niet duidelijk wie. Kies zelf de juiste persoon.',
         }
       }
     }

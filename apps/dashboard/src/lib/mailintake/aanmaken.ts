@@ -28,6 +28,7 @@ export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
 import { haalMailBestand } from './mail-bestand'
 import { vulWerkadresAan } from './werkadres-aanvullen'
+import { vulBetrokkenenAan } from './betrokkenen-aanvullen'
 import type { ProefResultaat } from './proef'
 import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -362,6 +363,20 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     postcode: v.werkadresPostcode, stad: v.werkadresStad,
     naam: v.werkadresNaam, telefoon: v.werkadresTelefoon, email: v.werkadresEmail,
   }).catch(() => undefined)
+
+  // De overige mensen uit de opdracht: de technisch manager, de opzichter, de
+  // melder. Alleen wie al contactpersoon is bij deze klant komt erbij te staan --
+  // EVA maakt niemand aan. Zie `betrokkenen-aanvullen.ts`.
+  const betrokkenen = await vulBetrokkenenAan({
+    dossierId, relatieId: inv.relatieId, genoemd: v.betrokkenen ?? [],
+  }).catch(() => null)
+
+  if (betrokkenen && (betrokkenen.toegevoegd.length || betrokkenen.nietGevonden.length)) {
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: inv.berichtId, actor: 'systeem', actie: 'betrokkenen_aangevuld',
+      details: { dossier_id: dossierId, ...betrokkenen } as unknown as Json,
+    })
+  }
 
   // De scope-samenvatting hoort bij het dossier, niet bij het bericht: dit is wat
   // een calculator als eerste leest. Valt terug op wat er bij de intake is

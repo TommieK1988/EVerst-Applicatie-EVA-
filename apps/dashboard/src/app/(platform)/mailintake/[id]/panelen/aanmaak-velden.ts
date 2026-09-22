@@ -43,6 +43,12 @@ export interface AanmaakSchermToestand {
     postcode: string | null
     plaats: string | null
   } | null
+  /**
+   * Anderen die in de opdracht genoemd worden. Komt uit de gekeurde lezing en niet
+   * uit het formulier: het zijn námen, en wie daarbij hoort zoekt de server op
+   * tussen de contactpersonen van de klant.
+   */
+  betrokkenen: { naam: string; rol: string | null; email: string | null; telefoon: string | null }[]
   /** De eerste actie op het nieuwe dossier; zonder titel gebeurt er niets. */
   actie: { titel: string; medewerkerId: string; dagen: number }
   /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
@@ -84,6 +90,7 @@ export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
     werkadresNaam: (v.werkadres_contact_naam as string | null) ?? null,
     werkadresTelefoon: (v.werkadres_contact_telefoon as string | null) ?? null,
     werkadresEmail: (v.werkadres_contact_email as string | null) ?? null,
+    betrokkenen: s.betrokkenen,
 
     referentie: s.referentie.trim() || null,
     onzeReferentie: (v.onze_offerte_referentie as string | null) ?? null,
