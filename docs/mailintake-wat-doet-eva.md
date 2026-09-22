@@ -388,29 +388,48 @@ wat erin binnenkwam — ook als iemand anders het afhandelt.
 
 ## 7. Wanneer EVA het zelf mag doen
 
-Automatisch handelen staat nu **overal uit**. Zet je het aan voor een postbus, dan gelden deze
-voorwaarden — en faalt er één, dan komt het bericht in het Postvak met de reden erbij.
+Voor een postbus waar automatisch aanmaken aan staat gelden deze voorwaarden. Faalt er één,
+dan komt het bericht in het Postvak met de reden erbij.
 
 **Voor beide routes:**
 
-1. De AI is voor minstens 90 % zeker van de soort.
+1. De AI is voor minstens 80 % zeker van de soort.
 2. De afzender is voor minstens 85 % herkend, en er is precies één mogelijke opdrachtgever.
-3. De mail gaat niet over meerdere werkadressen tegelijk.
+3. De mail gaat niet over werk op verschillende stráten of plaatsen tegelijk. Meerdere
+   huisnummers in dezelfde straat is één locatie en dus geen bezwaar.
 4. Er zat geen bijlage bij die niet gelezen kon worden.
 5. Het dagbudget voor deze postbus is nog niet op.
 
 **Extra voor een nieuw dossier (route A):**
 
-6. Het is geen antwoord in een lopend gesprek (geen `RE:` of `FW:`).
-7. Alle verplichte velden zijn ingevuld en het werkadres is door PDOK bevestigd.
-8. Omschrijving, straat en categorie zijn elk voor minstens 80 % zeker.
-9. Bouw7 kan er een net project van maken.
-10. De hoogste duplicaatscore ligt onder 0,55.
+6. Alle verplichte velden zijn ingevuld, en er staat in elk geval een straat én een plaats.
+7. Straat en categorie zijn elk voor minstens 80 % zeker.
+8. Bouw7 kan er een net project van maken.
+9. De hoogste duplicaatscore ligt onder 0,65.
 
 **Extra voor het winnen van een offerte (route B):**
 
-6. Er is **precies één** offertetreffer boven de 0,80 — ons nummer letterlijk in de mail,
-   dezelfde mailconversatie of dezelfde bijlage.
+10. Er is **precies één** offertetreffer boven de 0,80 — ons nummer letterlijk in de mail,
+    dezelfde mailconversatie of dezelfde bijlage.
+
+### Waarom deze getallen zo staan
+
+De eerste ijking stond strenger: 90 % op de soort, een bevestigd adres, duplicaatdrempel 0,55.
+Van de eerste 35 berichten ging er daardoor **niets** vanzelf. Vier dingen zaten zichzelf in de weg:
+
+* **Doorgestuurde mail.** Bijna alle post komt binnen via info@everts.chat en wordt doorgezet
+  naar de intakebus. EVA topte de herkenning daarom af op 80 %, net onder de grens — terwijl
+  het adres van de klant gewoon in de doorstuurkop stond. Die aftopping geldt nu alleen nog als
+  de oorspronkelijke afzender níet te vinden is.
+* **De omschrijving.** Die werd beoordeeld op "staat het letterlijk in de mail?", terwijl het
+  juist een formulering is. Hij haalde gemiddeld 0,57 en zakte dus altijd door de ondergrens.
+* **Meerdere werkadressen.** "Steenlaan 32, 34 en 36 te Rijswijk" is één klus, geen
+  verzamelopdracht.
+* **Een adres zonder postcode.** Dat is niet fout maar onvolledig, en één veld werk achteraf.
+
+Wat bewust stréng is gebleven: de controle of Bouw7 het project goed kan aanmaken, de harde
+duplicaathit, het winnen van een offerte, en de regel dat EVA nooit zelf een relatie of een
+meerwerkregel aanmaakt. Dat zijn geen twijfelgevallen maar fouten die niemand terugvindt.
 
 Dat een opdracht een antwoord is op onze eigen offertemail blokkeert route B *niet*: zo komt
 een akkoord vrijwel altijd binnen. Voor een nieuwe aanvraag is een antwoord juist wél een
@@ -432,6 +451,12 @@ een vers bericht zijn die rollen leeg. Daarom heeft elke postbus een **standaard
 In te stellen bij Instellingen → Mailintake. Wordt een bericht voorgelegd, dan verschijnt er
 een **actie** op naam van die persoon, met de reden erbij en een looptijd van twee dagen. Het
 bericht zelf blijft zonder eigenaar in het Postvak staan.
+
+**Acties die bij het dossier horen, gaan naar de projectleider.** Kon EVA bijvoorbeeld geen
+verkooptermijnen aanmaken omdat de betalingsafspraak nog niet bekend is, dan komt daar een
+actie voor op het dossier zelf. Die hangt aan de ról en niet aan een persoon: zolang er geen
+projectleider gekoppeld is staat hij op het dossier, en zodra dat wel zo is komt hij vanzelf
+op diens naam te staan. Hetzelfde geldt voor de meerwerkacties uit hoofdstuk 11.
 
 > **Let op:** een medewerker zonder EVA-login kan geen acties ontvangen. Het instellingenscherm
 > zegt dat erbij, en de actie wordt wél aangemaakt zodat hij terug te vinden is zodra het

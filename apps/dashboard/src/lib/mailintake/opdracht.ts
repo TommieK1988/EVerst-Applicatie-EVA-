@@ -301,12 +301,24 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
     nazorg.termijnenReden = termijnen.error
     // Geen termijnen betekent dat er later niet gefactureerd kan worden. Dat mag
     // niet alleen in een logboek belanden.
+    //
+    // Op de rol van projectleider en niet op een persoon. Bij een verse opdracht is
+    // die rol vaak nog leeg -- de actie staat dan gewoon op het dossier, en zodra er
+    // een projectleider aan wordt gekoppeld komt hij vanzelf op diens naam. Hem nu
+    // aan de intakebehandelaar geven zou betekenen dat de termijnen blijven liggen
+    // bij iemand die het dossier daarna niet meer ziet.
     await maakIntakeActie({
       berichtId: inv.berichtId,
       dossierId: inv.dossierId,
       medewerkerId: inv.behandelaarId,
+      rollen: ['project_manager_id'],
       titel: `Verkooptermijnen instellen voor ${toets.dossiernummer ?? 'deze opdracht'}`,
-      toelichting: `EVA kon de termijnen niet zelf aanmaken: ${termijnen.error}`,
+      toelichting: [
+        `EVA kon de termijnen niet zelf aanmaken: ${termijnen.error}`,
+        '',
+        'Zonder termijnschema kan er op deze opdracht niet gefactureerd worden.',
+        'Stel het in op het tabblad Financieel zodra de betalingsafspraak bekend is.',
+      ].join('\n'),
       prioriteit: 'hoog',
       dagen: 2,
     })

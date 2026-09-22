@@ -137,3 +137,26 @@ export const GEVOLGEN_BIJ_OPDRACHT = [
   'Er gaat geen aanneemsom naar Bouw7.',
   'Er wordt geen termijnschema aangemaakt.',
 ]
+
+/**
+ * De fase die bij een binnengekomen bericht past.
+ *
+ * Volgorde is de rangorde: de categorie wint van de mailsoort, want servicedesk
+ * wordt in heel EVA uit de categorie afgeleid en de Bouw7-sync dwingt dat elke
+ * ronde terug. Daarna telt de soort mee -- een bon zonder offerte vooraf hoort
+ * meteen in de opdrachtfase en niet als aanvraag die nog geprijsd moet worden.
+ *
+ * Staat hier en niet bij het behandelscherm, omdat de automatische route hem ook
+ * nodig heeft. Toen deze regel alleen in een `'use client'`-bestand stond, viel
+ * elk automatisch aangemaakt dossier terug op "aanvraag" -- en dat was precies de
+ * reden dat een opdrachtbon nooit ongezien ingeschreven mocht worden.
+ */
+export function faseVoorstelVoor(
+  categorieNaam: string | null,
+  mailSoort: string | null,
+): DossierFase {
+  if (isServicedeskCategorie(categorieNaam)) return 'servicedesk'
+  if (mailSoort === 'servicedeskbon') return 'servicedesk'
+  if (mailSoort === 'opdrachtbon') return 'opdracht'
+  return 'aanvraag'
+}

@@ -19,25 +19,10 @@
 import React from 'react'
 
 import {
-  isServicedeskCategorie, SERVICEDESK_CATEGORIEEN, type DossierFase,
+  faseVoorstelVoor, isServicedeskCategorie, SERVICEDESK_CATEGORIEEN, type DossierFase,
 } from '@/components/dossiers/fase-plaatsing'
 
-/**
- * De fase die bij dit bericht past.
- *
- * Volgorde is de rangorde: de categorie wint van de mailsoort. Daarna telt de soort
- * mee -- een bon zonder offerte vooraf hoort meteen in de opdrachtfase, en niet als
- * aanvraag die nog geprijsd moet worden.
- */
-export function faseVoorstelVoor(
-  categorieNaam: string | null,
-  mailSoort: string | null,
-): DossierFase {
-  if (isServicedeskCategorie(categorieNaam)) return 'servicedesk'
-  if (mailSoort === 'servicedeskbon') return 'servicedesk'
-  if (mailSoort === 'opdrachtbon') return 'opdracht'
-  return 'aanvraag'
-}
+export { faseVoorstelVoor }
 
 /** Wat er aan elke keuze in de weg staat, in gewone taal. Leeg als er niets speelt. */
 export function faseBezwarenVoor(categorieNaam: string | null): Partial<Record<DossierFase, string>> {

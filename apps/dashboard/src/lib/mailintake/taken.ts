@@ -36,6 +36,16 @@ export interface IntakeActieInvoer {
   dagen?: number
   /** Korte toelichting; komt in de beschrijving van de taak. */
   toelichting?: string | null
+  /**
+   * Dossierrollen die deze actie horen te krijgen, bijvoorbeeld
+   * `['project_manager_id']`. De actie verhuist dan mee: wordt er later een
+   * projectleider aan het dossier gekoppeld, dan komt hij vanzelf op diens naam.
+   *
+   * Werkt alleen met een `dossierId`, en de taak moet in de actielijst van dat
+   * dossier staan -- de trigger `tg_dossier_rol_taken_reconcile` zoekt taken via
+   * `task_lists.dossier_id`, niet via `tasks.dossier_id`. Dat regelt deze functie.
+   */
+  rollen?: string[]
 }
 
 export interface IntakeActieResultaat {
@@ -88,6 +98,60 @@ export async function maakIntakeActie(inv: IntakeActieInvoer): Promise<IntakeAct
       }
     }
 
+    // ── Rolgebonden? Dan moet hij in de actielijst van het dossier ──────
+    // De reconcile-trigger loopt over `task_lists.dossier_id`. Een taak die alleen
+    // `tasks.dossier_id` heeft wordt nooit herkoppeld -- die blijft dan voor altijd
+    // bij wie hem als eerste kreeg, ook als de rol naar iemand anders gaat.
+    const rollen = (inv.rollen ?? []).filter(Boolean)
+    const rolgebonden = rollen.length > 0 && Boolean(inv.dossierId)
+    let lijstId: string | null = null
+
+    if (rolgebonden && inv.dossierId) {
+      const { data: bestaandeLijst } = await supabase
+        .from('task_lists')
+        .select('id')
+        .eq('dossier_id', inv.dossierId)
+        .eq('is_template', false)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle()
+
+      if (bestaandeLijst) {
+        lijstId = bestaandeLijst.id
+      } else {
+        const { data: nieuweLijst } = await supabase
+          .from('task_lists')
+          .insert({ naam: 'Acties', dossier_id: inv.dossierId, is_template: false, context: 'dossier' })
+          .select('id')
+          .single()
+        lijstId = nieuweLijst?.id ?? null
+      }
+    }
+
+    // Staat de rol al op het dossier, dan kan de actie meteen op naam. Zo niet, dan
+    // blijft hij zichtbaar op het dossier en pakt de trigger hem op zodra de rol
+    // wordt ingevuld.
+    if (rolgebonden && inv.dossierId && !authUserId) {
+      const { data: d } = await supabase
+        .from('dossiers')
+        .select(rollen.join(', '))
+        .eq('id', inv.dossierId)
+        .maybeSingle<Record<string, string | null>>()
+
+      const houderId = rollen.map(r => d?.[r]).find(Boolean) ?? null
+      if (houderId) {
+        const { data: m } = await supabase
+          .from('medewerkers')
+          .select('voornaam, tussenvoegsel, achternaam, auth_user_id')
+          .eq('id', houderId)
+          .maybeSingle()
+        if (m) {
+          naam = [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
+          authUserId = m.auth_user_id ?? null
+        }
+      }
+    }
+
     const deadline = new Date()
     deadline.setDate(deadline.getDate() + (inv.dagen ?? 1))
 
@@ -99,13 +163,14 @@ export async function maakIntakeActie(inv: IntakeActieInvoer): Promise<IntakeAct
         // hem leeg, dan landt de taak in een naamloze groep.
         medewerker_id: inv.medewerkerId,
         dossier_id: inv.dossierId ?? null,
+        lijst_id: lijstId,
         mailintake_bericht_id: inv.berichtId,
         status: 'open',
         prioriteit: inv.prioriteit ?? 'normaal',
         deadline: deadline.toISOString().slice(0, 10),
         deadline_handmatig: true,
-        assignee_type: 'direct',
-        dossier_rollen: [],
+        assignee_type: rolgebonden ? 'dossier_rol' : 'direct',
+        dossier_rollen: rolgebonden ? rollen : [],
         // De vorm is { text }: dat is wat omschrijvingNaarTekst leest, en dus wat
         // het taakscherm en de mobiele popup tonen. Een andere sleutel levert een
         // taak op met een lege omschrijving -- zichtbaar niets, stil weg.

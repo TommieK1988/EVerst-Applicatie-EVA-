@@ -33,6 +33,7 @@ import { storingTekst, type AiStoring } from './ai-storing'
 import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
+import { faseVoorstelVoor } from '@/components/dossiers/fase-plaatsing'
 import {
   DUPLICAAT_HARD, WERK_SOORTEN,
   type PostbusRij, type MailSoort,
@@ -213,9 +214,25 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     const eigen = await eigenDomeinen()
     const vanDomein = domeinVan(geclaimd.van_adres)
     const isDoorstuur = vanDomein != null && eigen.has(vanDomein)
-    const echteAfzender = isDoorstuur
-      ? (afzenderUitDoorstuur(geclaimd.body_tekst ?? '', eigen) ?? geclaimd.van_adres)
-      : geclaimd.van_adres
+
+    // De oorspronkelijke afzender uit de doorstuurkop. Vinden we die, dan is het
+    // bewijs niet tweedehands: het is hetzelfde adres dat de klant zelf gebruikte,
+    // alleen via een omweg binnengekomen.
+    //
+    // Dat onderscheid bleek het hele verschil te maken. Bijna alle post komt hier
+    // binnen via info@everts.chat en wordt doorgezet naar de intakebus, dus stond
+    // `doorgestuurd` vrijwel altijd aan -- en die vlag topte de herkenningsscore af
+    // op 0,80 terwijl de automatische route 0,85 eist. Van de eerste 35 berichten
+    // strandde daardoor vrijwel alles op "de afzender is niet zeker genoeg
+    // herkend", terwijl het adres van de klant gewoon in de kop stond.
+    //
+    // De aftopping hoort bij wat hij bedoelde te vangen: een doorstuur waarvan we
+    // de oorspronkelijke afzender niet kennen en dus op de collega afgaan.
+    const origineleAfzender = isDoorstuur
+      ? afzenderUitDoorstuur(geclaimd.body_tekst ?? '', eigen)
+      : null
+    const echteAfzender = origineleAfzender ?? geclaimd.van_adres
+    const bewijsIsTweedehands = isDoorstuur && origineleAfzender == null
 
     // ── AI ──────────────────────────────────────────────────────────────────
     log.stap('hulplijst relaties')
@@ -325,7 +342,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       klantNaamUitMail: gelezen.klant_naam,
       // Nodig om te kiezen bij een gedeeld postbusadres van een beheerkantoor.
       contactpersoonNaamUitMail: gelezen.contactpersoon_naam,
-      doorgestuurd: isDoorstuur,
+      doorgestuurd: bewijsIsTweedehands,
     })
 
     // ── Keuren ──────────────────────────────────────────────────────────────
@@ -514,6 +531,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       aantalRelatieKandidaten: afz.relatieId ? 1 : afz.kandidaten.length,
       veldenCompleet,
       adresBevestigd: velden.adresBevestigd,
+      adresCompleet: Boolean(velden.werkadresStraat && velden.werkadresStad),
       vertrouwen: velden.vertrouwen,
       duplicaatTopscore: topscore,
       offerteMatchGevonden,
@@ -589,6 +607,11 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         automatisch: true,
         medewerkerId: null,
         behandelaarId,
+        // Dezelfde afleiding als op het behandelscherm. Zonder deze regel viel elk
+        // automatisch dossier terug op "aanvraag", ook een opdrachtbon -- en dat
+        // was precies de reden dat een bon nooit ongezien ingeschreven mocht
+        // worden. Nu de fase meekomt, vervalt dat bezwaar.
+        fase: faseVoorstelVoor(velden.categorieNaam, gelezen.soort),
       })
       if (!res.ok) {
         await supabase.from('mailintake_berichten')

@@ -306,7 +306,11 @@ export const LEVER_EXTRACTIE_TOOL = {
       factuuradres_plaats: { type: 'string', description: 'Plaats van het factuuradres.' },
       meerdere_werkadressen: {
         type: 'boolean',
-        description: 'true als de mail werk op meerdere adressen tegelijk betreft (verzamelopdracht).',
+        description:
+          'true alleen bij een echte verzamelopdracht: werk op locaties in verschillende straten '
+          + 'of verschillende plaatsen, die elk een eigen dossier horen te worden. '
+          + 'Meerdere huisnummers in dezelfde straat ("Steenlaan 32, 34 en 36") is één locatie '
+          + 'en dus false; zet die nummers gewoon samen in het huisnummerveld.',
       },
       bijlage_rollen: {
         type: 'array',

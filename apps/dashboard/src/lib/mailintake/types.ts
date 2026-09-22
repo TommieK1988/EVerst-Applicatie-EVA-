@@ -47,7 +47,7 @@ export const WERK_SOORTEN: MailSoort[] = [
 
 /** Soorten waarvoor automatisch aanmaken überhaupt in beeld komt (fase 2). */
 export const AUTOMATISCH_TOEGESTANE_SOORTEN: MailSoort[] = [
-  'offerteaanvraag', 'servicedeskbon',
+  'offerteaanvraag', 'servicedeskbon', 'opdrachtbon',
 ]
 
 /**
@@ -76,14 +76,22 @@ export const ROUTE_LABELS: Record<IntakeRoute, string> = {
  * Staat hier en niet in beslis.ts omdat het behandelscherm hem ook nodig heeft, en
  * dat is een client-component. types.ts is de plek voor wat beide kanten delen.
  *
- * Een opdracht raakt altijd een bestaand dossier -- ook een opdrachtbon zonder
- * voorafgaande offerte. EVA schrijft een opdracht nooit in als losse aanvraag: dan
- * staat er een dossier in de verkeerde fase, en dat is achteraf lastig recht te
- * zetten. Vindt EVA geen offerte, dan wijst een mens het dossier aan.
+ * Twee soorten opdracht, en het verschil zit in de naam.
  *
- * Een servicedeskbon is het enige geval waarin de route van de omstandigheden
- * afhangt: is er een offerte, dan is het een opdracht; is die er niet, dan is het
- * nieuw werk.
+ * `opdracht_op_offerte` zegt zelf dat er een offerte van ons bij hoort. Vinden we
+ * die niet, dan is er iets mis met het zoeken en niet met de mail; dan hoort een
+ * mens het dossier aan te wijzen.
+ *
+ * `opdrachtbon` is een directe opdracht. Is er geen offerte te vinden, dan is dat
+ * meestal geen zoekfout maar de werkelijkheid: dit werk staat nog niet in EVA. Dan
+ * is een nieuw dossier in fáse Opdracht het goede antwoord. Dat stond eerder
+ * anders -- toen kon een opdracht alleen als aanvraag worden ingeschreven, en dat
+ * was inderdaad de verkeerde fase. Met een fasekeuze bij het aanmaken is dat
+ * bezwaar weg, en blijft er één over dat wel telt: de verkeerde offerte op
+ * gewonnen zetten. Dat blijft dus streng bewaakt, dit niet.
+ *
+ * Een servicedeskbon werkt hetzelfde: is er een offerte, dan is het een opdracht;
+ * is die er niet, dan is het nieuw werk.
  */
 export function bepaalRoute(
   soort: MailSoort | null,
@@ -101,7 +109,10 @@ export function bepaalRoute(
   // Alleen als er niets te winnen is, wordt een regie-opdracht een nieuw dossier.
   if (soort != null && OPDRACHT_SOORTEN.includes(soort)) {
     if (offerteMatchGevonden) return 'offerte_winnen'
-    return regie ? 'nieuw_dossier' : 'offerte_winnen'
+    if (regie) return 'nieuw_dossier'
+    // Zie hierboven: een bon zonder offerte is nieuw werk, een "opdracht op onze
+    // offerte" zonder offerte is een zoekvraag voor een mens.
+    return soort === 'opdrachtbon' ? 'nieuw_dossier' : 'offerte_winnen'
   }
   if (soort === 'servicedeskbon') {
     if (offerteMatchGevonden) return 'offerte_winnen'
@@ -126,23 +137,51 @@ export type BijlageRol = 'opdrachtbon' | 'bestek' | 'tekening' | 'foto' | 'offer
 export type DuplicaatSoort = 'duplicaat' | 'offerte_match' | 'meerwerk_kandidaat'
 
 // ─── Drempels ────────────────────────────────────────────────────────────────
-// Op één plek, omdat ze samen de belofte "bij twijfel altijd voorstellen" dragen.
-// Wie hier iets verandert, verandert hoeveel EVA zelfstandig doet.
+// Op één plek, omdat ze samen bepalen hoeveel EVA zelfstandig doet.
+//
+// DE AFWEGING IS VERZET (22 september 2026)
+// De eerste ijking stond op "bij twijfel altijd voorleggen", en die bleek in de
+// praktijk zo streng dat er van de eerste 35 berichten vrijwel niets doorheen
+// kwam. Dan is het een postvak met een dure AI ervoor, geen intake. De afweging
+// is daarom expliciet omgedraaid: liever achteraf iets aanvullen of corrigeren
+// dan elke mail met de hand beoordelen.
+//
+// Wat hieronder NÍET is verruimd: de controle of Bouw7 het project correct kan
+// aanmaken, de harde duplicaathit, en de regel dat EVA nooit zelf een relatie of
+// een meerwerkregel aanmaakt. Dat zijn geen twijfelgevallen maar fouten die
+// niemand terugvindt.
 
 /** Vanaf hier telt een afzender als "bekend" genoeg voor de automatische route. */
 export const AFZENDER_AUTOMATISCH = 0.85
 /** Onder deze score melden we expliciet dat de afzender onbekend is. */
 export const AFZENDER_ONBEKEND = 0.60
 
-/** Vanaf hier is de AI zeker genoeg over de soort om de automatische route te mogen ingaan. */
-export const SOORT_ZEKER = 0.90
+/**
+ * Vanaf hier is de AI zeker genoeg over de soort om de automatische route in te gaan.
+ *
+ * Stond op 0,90. In de praktijk levert een goed gelezen opdrachtbon 0,85 tot 0,88
+ * op -- het model is terecht terughoudend met scores boven 0,9, want dat staat zo
+ * in de prompt. De drempel sneed daarmee juist de berichten weg die goed gelezen
+ * waren. Een verkeerd gekozen soort is bovendien te herstellen: het dossier staat
+ * er, en de fase is achteraf te wijzigen.
+ */
+export const SOORT_ZEKER = 0.80
 /** Onder deze score vullen we de soort niet eens voor. */
 export const SOORT_ONZEKER = 0.60
 
 /** Harde duplicaat-hit: nooit automatisch, altijd waarschuwen. */
 export const DUPLICAAT_HARD = 0.80
-/** Twijfel: voorleggen, en de bevestigingsdialoog tonen bij handmatig aanmaken. */
-export const DUPLICAAT_TWIJFEL = 0.55
+/**
+ * Twijfel: voorleggen, en de bevestigingsdialoog tonen bij handmatig aanmaken.
+ *
+ * Stond op 0,55, en dat is precies de score van "zelfde klant + postcode +
+ * huisnummer" (0,45) plus een kleinigheid. Bij een beheerder die vaker op
+ * hetzelfde complex werkt is dat de normale toestand en geen duplicaat; het
+ * blokkeerde daardoor structureel. De harde hits -- zelfde mailconversatie,
+ * identieke bijlage, ons nummer letterlijk in de mail -- zitten op 0,80 en die
+ * blijven onveranderd tegenhouden.
+ */
+export const DUPLICAAT_TWIJFEL = 0.65
 
 /** Per veld: vanaf hier tonen we het als betrouwbaar ingevuld. */
 export const VELD_BETROUWBAAR = 0.80

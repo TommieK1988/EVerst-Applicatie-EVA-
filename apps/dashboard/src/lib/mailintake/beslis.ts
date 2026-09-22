@@ -44,7 +44,10 @@ export interface BeslisInvoer {
   aantalRelatieKandidaten: number
   /** Zijn de verplichte velden van het aanvraagformulier compleet? */
   veldenCompleet: boolean
+  /** PDOK kende dit adres; dan klopt het zeker. */
   adresBevestigd: boolean
+  /** Er staat in elk geval een straat én een plaats. */
+  adresCompleet: boolean
   vertrouwen: Record<string, number>
   duplicaatTopscore: number
   /** Is er een dossier in de offertefase gevonden dat hierbij hoort? */
@@ -173,7 +176,15 @@ export function beslis(inv: BeslisInvoer): Besluit {
       bezwaren.push('Deze soort wordt nooit ongezien ingeschreven.')
     }
     if (!inv.veldenCompleet) bezwaren.push('Niet alle verplichte velden konden worden ingevuld.')
-    if (!inv.adresBevestigd) bezwaren.push('Het werkadres kon niet worden bevestigd.')
+    // Een adres dat PDOK niet kent is meestal niet fout maar onvolledig: de bon
+    // noemt "Steenlaan te Rijswijk" zonder postcode, en dan geeft PDOK niets terug.
+    // Daarop het hele bericht tegenhouden kost meer dan het oplevert -- de straat en
+    // de plaats staan er gewoon, en een postcode erbij zoeken is één veld werk
+    // achteraf. Wat wél blijft tegenhouden: helemaal geen bruikbaar adres, want dan
+    // weet niemand waar het werk is.
+    if (!inv.adresCompleet) {
+      bezwaren.push('Er staat geen bruikbaar werkadres in de mail.')
+    }
     for (const veld of ['omschrijving', 'werkadres_straat', 'categorie_voorstel']) {
       if ((inv.vertrouwen[veld] ?? 0) < VELD_BETROUWBAAR) {
         bezwaren.push('EVA is niet zeker genoeg over de ingevulde gegevens.')

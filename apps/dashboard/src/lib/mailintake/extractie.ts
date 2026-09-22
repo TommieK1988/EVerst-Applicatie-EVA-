@@ -513,13 +513,30 @@ export async function keurEnKalibreer(
   zet('werkmaatschappij_voorstel', werkmaatschappijId,
     wmKeuze.via === 'aard' ? 1 : wmKeuze.via === 'categorie' ? 0.7 : 0)
 
-  // ── Tekstvelden: staat het er letterlijk? ─────────────────────────────────
-  for (const veld of ['omschrijving', 'klant_naam', 'contactpersoon_naam', 'contactpersoon_email', 'referentie', 'onze_offerte_referentie', 'vve_code'] as const) {
+  // ── Overgeschreven velden: staat het er letterlijk? ───────────────────────
+  // Alleen voor waarden die de mail létterlijk noemt: een naam, een nummer, een
+  // code. Staat zo'n waarde nergens in de bron, dan is hij waarschijnlijk verzonnen.
+  for (const veld of ['klant_naam', 'contactpersoon_naam', 'contactpersoon_email', 'referentie', 'onze_offerte_referentie', 'vve_code'] as const) {
     const waarde = data[veld] as string | null
     const basis = modelScore(veld)
     const score = komtLetterlijkVoor(waarde, brontekst) ? Math.max(basis, 0.85) : Math.min(basis, 0.5)
     zet(veld, waarde, score)
   }
+
+  // ── De omschrijving is een formulering, geen citaat ───────────────────────
+  // "Schilderwerk boeidelen bergingen" staat nergens zo in de bon, en dat is precies
+  // de bedoeling van het veld. Toch stond hij in de lijst hierboven, en zakte hij
+  // dus vrijwel altijd naar 0,5 -- ruim onder de 0,80 die de automatische route
+  // eist. Over de eerste dertig berichten haalde de omschrijving gemiddeld 0,57, en
+  // daarmee was dit in één klap de meest voorkomende reden om iets voor te leggen.
+  //
+  // Een citaattoets op een samenvatting is de verkeerde maat. Wat hier wél telt: is
+  // er überhaupt iets gelezen om op te baseren. Zo ja, dan is de zelfrapportage van
+  // het model het beste wat we hebben -- en een dossiertitel die niet lekker loopt
+  // is één veld om recht te zetten, geen reden om de hele mail voor te leggen.
+  const ietsGelezen = brontekst.trim().length > 200 || (opties.bijlagenGelezen ?? 0) > 0
+  zet('omschrijving', data.omschrijving,
+    data.omschrijving && ietsGelezen ? Math.max(modelScore('omschrijving'), 0.85) : 0)
 
   // De aanvraagdatum is de datum dat de mail binnenkwam, tenzij er in de stukken een
   // andere staat. De terugval is een feit en geen inschatting, vandaar 1,0.
