@@ -1,8 +1,8 @@
 {
   "budget": {
     "as_any": 757,
-    "ongegate_service_role_actions": 513,
-    "bestanden_boven_800_regels": 33
+    "ongegate_service_role_actions": 514,
+    "bestanden_boven_800_regels": 34
   },
   "per_bestand": {
     "as_any": {
@@ -295,7 +295,7 @@
       "apps/dashboard/src/app/(platform)/everts-calc/actions/offerte-verzenden.ts": 4,
       "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 21,
       "apps/dashboard/src/app/(platform)/everts-calc/actions/sync.ts": 6,
-      "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 26,
+      "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 27,
       "apps/dashboard/src/app/(platform)/formulieren/actions.ts": 23,
       "apps/dashboard/src/app/(platform)/instellingen/algemene-voorwaarden/actions.ts": 4,
       "apps/dashboard/src/app/(platform)/instellingen/bedrijfsinstellingen/actions.ts": 9,
@@ -366,38 +366,39 @@
     },
     "bestanden_boven_800_regels": {
       "apps/dashboard/src/app/(platform)/everts-calc/actions/bestellingen.ts": 1354,
-      "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 1162,
-      "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 2136,
-      "apps/dashboard/src/app/(platform)/instellingen/offerte-layout/[id]/LayoutEditorClient.tsx": 1086,
-      "apps/dashboard/src/app/(platform)/planning/actions.ts": 1090,
-      "apps/dashboard/src/app/(platform)/relaties/[id]/RelatieDetailView.tsx": 1387,
+      "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 1260,
+      "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 2251,
+      "apps/dashboard/src/app/(platform)/instellingen/offerte-layout/[id]/LayoutEditorClient.tsx": 1087,
+      "apps/dashboard/src/app/(platform)/planning/actions.ts": 1435,
+      "apps/dashboard/src/app/(platform)/relaties/[id]/RelatieDetailView.tsx": 1487,
       "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 999,
-      "apps/dashboard/src/components/dossiers/tabs/FactuurRegelVenster.tsx": 929,
-      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2415,
-      "apps/dashboard/src/components/dossiers/tabs/OpleveringTab.tsx": 1200,
+      "apps/dashboard/src/components/dossiers/tabs/FactuurRegelVenster.tsx": 936,
+      "apps/dashboard/src/components/dossiers/tabs/InformatieTab.tsx": 2529,
+      "apps/dashboard/src/components/dossiers/tabs/OpleveringTab.tsx": 1218,
       "apps/dashboard/src/components/everts-calc/bibliotheek/BiblioteekBeheer.tsx": 1273,
       "apps/dashboard/src/components/everts-calc/bibliotheek/SchilderwerkBibliotheek.tsx": 1241,
       "apps/dashboard/src/components/everts-calc/calculatie/CalculatieGrid.tsx": 3532,
       "apps/dashboard/src/components/everts-calc/werkbegroting/BestellingenPaneel.tsx": 1096,
-      "apps/dashboard/src/components/everts-calc/werkbegroting/WerkbegrotingGrid.tsx": 1868,
+      "apps/dashboard/src/components/everts-calc/werkbegroting/WerkbegrotingGrid.tsx": 1877,
       "apps/dashboard/src/components/formulieren/builder/FieldSettings.tsx": 1203,
       "apps/dashboard/src/components/formulieren/filler/FieldRenderer.tsx": 1115,
-      "apps/dashboard/src/components/overzicht/OverzichtTabel.tsx": 1503,
-      "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 2238,
-      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1768,
+      "apps/dashboard/src/components/overzicht/OverzichtTabel.tsx": 1527,
+      "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 2444,
+      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1810,
       "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 852,
-      "apps/dashboard/src/lib/bouw7/client.ts": 1420,
-      "apps/dashboard/src/lib/bouw7/sync.ts": 2559,
-      "apps/dashboard/src/lib/dossiers/actions.ts": 4089,
+      "apps/dashboard/src/lib/bouw7/client.ts": 1427,
+      "apps/dashboard/src/lib/bouw7/sync.ts": 3004,
+      "apps/dashboard/src/lib/dossiers/actions.ts": 4204,
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 975,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 1332,
-      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 1236,
+      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 1267,
       "apps/dashboard/src/lib/everts-calc/local-store.ts": 932,
-      "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 1380,
+      "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 1397,
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 844,
-      "apps/dashboard/src/lib/page-help.ts": 1680,
+      "apps/dashboard/src/lib/page-help.ts": 1681,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1089,
-      "packages/database/src/platform-types.ts": 1829
+      "packages/database/src/platform-types.ts": 1977,
+      "packages/database/src/rechten-catalogus.ts": 803
     }
   }
 }
