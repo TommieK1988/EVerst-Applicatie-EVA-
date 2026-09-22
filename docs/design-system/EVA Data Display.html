@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · Data Display</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-50:  #ecfaf0; --brand-100: #d2f2dd; --brand-200: #a5e4ba;
+    --brand-300: #6dd190; --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28; --brand-lime: #61ac2b;
+    --neutral-0:   #ffffff; --neutral-50:  #f8fafa; --neutral-100: #f1f4f5;
+    --neutral-200: #e3e8ea; --neutral-300: #cbd2d6; --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c; --neutral-600: #4d575e; --neutral-700: #364048;
+    --neutral-800: #232a30; --neutral-900: #161b20; --neutral-950: #1f2933;
+    --success-50: #ecfdf3; --success-500: #12b76a; --success-700: #027a48;
+    --warning-50: #fff6ec; --warning-500: #f08000; --warning-700: #b85a00;
+    --error-50:  #fef3f2; --error-500:  #e8453b; --error-700: #b42318;
+    --info-50:   #eff8ff; --info-500:   #2e90fa; --info-700: #175cd3;
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* Chart colours - consistent set */
+    --chart-1: #009439; --chart-2: #28a44a; --chart-3: #61ac2b;
+    --chart-4: #2e90fa; --chart-5: #f08000; --chart-6: #e8453b;
+    --chart-7: #8b5cf6; --chart-8: #14b8a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--neutral-50); color: var(--neutral-900); -webkit-font-smoothing: antialiased; }
+
+  /* DOC SHELL */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--neutral-200); background: var(--neutral-0); }
+  aside.doc-nav .doc-brand { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background-image: var(--polygon-bg); background-size: cover; background-position: center; color: white; position: relative; }
+  aside.doc-nav .doc-brand::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%); }
+  aside.doc-nav .doc-brand .mark { width: 30px; height: 30px; border-radius: 6px; background-image: url("brand-assets/eve-beeldmerk.png"); background-size: cover; z-index: 1; }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px; }
+  aside.doc-nav a { display: flex; justify-content: space-between; align-items: center; text-decoration: none; color: var(--neutral-700); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; transition: background 120ms; }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 44px 48px 120px; max-width: 1500px; }
+  header.page { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-500); margin-bottom: 12px; }
+  header.page h1 { font-size: 38px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 700; }
+  header.page .lede { font-size: 16px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 64px; scroll-margin-top: 24px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); }
+  section.tk > .head h2 { font-size: 24px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 24px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 24px 0 12px; }
+
+  .demo-box { background: var(--neutral-0); border: 1px solid var(--neutral-200); border-radius: 12px; padding: 24px; overflow: hidden; }
+  .demo-box.contrast { background: var(--neutral-950); border-color: var(--neutral-800); }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .meta-card { margin-top: 14px; padding: 14px 18px; border: 1px dashed var(--neutral-200); border-radius: 10px; font-size: 12px; color: var(--neutral-600); line-height: 1.55; }
+  .meta-card code { font-family: var(--font-mono); background: var(--neutral-100); padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px; }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; font-family: var(--font-sans); font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid transparent; transition: background 120ms; }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn.primary { background: var(--brand-500); color: white; border-color: var(--brand-500); }
+  .btn.primary:hover { background: var(--brand-600); }
+  .btn.outline { background: white; color: var(--neutral-800); border-color: var(--neutral-300); }
+  .btn.outline:hover { background: var(--neutral-50); }
+  .btn.ghost { background: transparent; color: var(--neutral-700); }
+  .btn.ghost:hover { background: var(--neutral-100); }
+  .ico { width: 16px; height: 16px; flex-shrink: 0; }
+  .ico-sm { width: 13px; height: 13px; flex-shrink: 0; }
+  .ico-lg { width: 20px; height: 20px; flex-shrink: 0; }
+
+  /* ═══════════════════════════════════════════════════════════
+     TABLE
+     ═══════════════════════════════════════════════════════════ */
+
+  .tbl-shell {
+    background: white; border: 1px solid var(--neutral-200);
+    border-radius: 10px; overflow: hidden;
+  }
+  .contrast .tbl-shell { background: var(--neutral-900); border-color: var(--neutral-800); }
+
+  /* Toolbar above table */
+  .tbl-toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px; border-bottom: 1px solid var(--neutral-200);
+    flex-wrap: wrap;
+  }
+  .contrast .tbl-toolbar { border-bottom-color: var(--neutral-800); }
+
+  .tbl-search {
+    display: flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 10px;
+    background: var(--neutral-50); border: 1px solid var(--neutral-200);
+    border-radius: 6px; min-width: 220px;
+    transition: border-color 120ms;
+  }
+  .tbl-search input { flex: 1; border: 0; outline: none; font-family: var(--font-sans); font-size: 12.5px; background: transparent; color: var(--neutral-900); }
+  .tbl-search input::placeholder { color: var(--neutral-400); }
+  .contrast .tbl-search { background: var(--neutral-950); border-color: var(--neutral-700); }
+  .contrast .tbl-search input { color: var(--neutral-100); }
+
+  .tbl-actions { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+  .tbl-count { font-size: 12px; color: var(--neutral-500); margin-right: 4px; }
+  .contrast .tbl-count { color: var(--neutral-400); }
+
+  /* Filter chips */
+  .tbl-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--neutral-100); background: var(--neutral-50); }
+  .contrast .tbl-filters { background: var(--neutral-950); border-bottom-color: var(--neutral-800); }
+  .tbl-filter-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px; border: 1px solid var(--brand-200);
+    background: var(--brand-50); color: var(--brand-700);
+    border-radius: 999px; font-size: 11.5px; font-weight: 500;
+  }
+  .contrast .tbl-filter-chip { background: rgba(34,163,74,0.15); border-color: rgba(34,163,74,0.3); color: var(--brand-300); }
+  .tbl-filter-chip .x { cursor: pointer; opacity: 0.7; }
+  .tbl-filter-chip .x:hover { opacity: 1; }
+
+  /* Table itself */
+  .eva-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .eva-table th {
+    text-align: left; padding: 10px 14px;
+    background: var(--neutral-50);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+    color: var(--neutral-600); border-bottom: 1px solid var(--neutral-200);
+    white-space: nowrap; user-select: none;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .contrast .eva-table th { background: var(--neutral-900); color: var(--neutral-400); border-bottom-color: var(--neutral-800); }
+  .eva-table th.sortable { cursor: pointer; }
+  .eva-table th.sortable:hover { color: var(--neutral-900); background: var(--neutral-100); }
+  .contrast .eva-table th.sortable:hover { color: var(--neutral-100); background: var(--neutral-800); }
+  .eva-table th.sort-asc, .eva-table th.sort-desc { color: var(--brand-700); }
+  .contrast .eva-table th.sort-asc, .contrast .eva-table th.sort-desc { color: var(--brand-300); }
+  .eva-table th .sort-ico { display: inline-flex; flex-direction: column; margin-left: 4px; opacity: 0.4; gap: 1px; vertical-align: middle; }
+  .eva-table th.sort-asc .sort-ico, .eva-table th.sort-desc .sort-ico { opacity: 1; color: var(--brand-500); }
+  .eva-table th .sort-ico span { font-size: 8px; line-height: 1; }
+  .eva-table th.right { text-align: right; }
+
+  .eva-table td {
+    padding: 12px 14px; color: var(--neutral-800);
+    border-bottom: 1px solid var(--neutral-100);
+    vertical-align: middle;
+  }
+  .contrast .eva-table td { color: var(--neutral-200); border-bottom-color: var(--neutral-800); }
+  .eva-table tr:last-child td { border-bottom: 0; }
+  .eva-table tr.hover-row:hover td { background: var(--neutral-50); }
+  .contrast .eva-table tr.hover-row:hover td { background: var(--neutral-800); }
+  .eva-table tr.selected td { background: var(--brand-50) !important; }
+  .contrast .eva-table tr.selected td { background: rgba(34,163,74,0.1) !important; }
+
+  /* Dense mode */
+  .eva-table.dense th { padding: 7px 12px; font-size: 10px; }
+  .eva-table.dense td { padding: 7px 12px; font-size: 12px; }
+
+  /* Checkbox cell */
+  .td-check { width: 40px; }
+  .tbl-checkbox {
+    width: 15px; height: 15px; border-radius: 4px;
+    border: 1.5px solid var(--neutral-300); background: white;
+    display: grid; place-items: center; cursor: pointer;
+    transition: background 100ms, border-color 100ms;
+    flex-shrink: 0;
+  }
+  .tbl-checkbox.checked, .tbl-checkbox.indeterminate { background: var(--brand-500); border-color: var(--brand-500); }
+  .tbl-checkbox.checked svg, .tbl-checkbox.indeterminate svg { display: block; color: white; }
+  .tbl-checkbox svg { display: none; }
+  .contrast .tbl-checkbox { background: var(--neutral-900); border-color: var(--neutral-600); }
+  .contrast .tbl-checkbox.checked, .contrast .tbl-checkbox.indeterminate { background: var(--brand-400); border-color: var(--brand-400); }
+  .contrast .tbl-checkbox.checked svg, .contrast .tbl-checkbox.indeterminate svg { color: var(--neutral-950); }
+
+  /* Number cells */
+  .td-num {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    color: var(--neutral-700);
+    letter-spacing: -0.01em;
+  }
+  .contrast .td-num { color: var(--neutral-300); }
+  .td-num.pos { color: var(--success-700); }
+  .td-num.neg { color: var(--error-500); }
+  .contrast .td-num.pos { color: #6ce9a6; }
+  .contrast .td-num.neg { color: #fda29b; }
+
+  /* Badge */
+  .tbl-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .tbl-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .tbl-badge.ok      { background: var(--success-50); color: var(--success-700); }
+  .tbl-badge.warn    { background: var(--warning-50); color: var(--warning-700); }
+  .tbl-badge.err     { background: var(--error-50); color: var(--error-700); }
+  .tbl-badge.info    { background: var(--info-50); color: var(--info-700); }
+  .tbl-badge.neutral { background: var(--neutral-100); color: var(--neutral-700); }
+  .contrast .tbl-badge.ok   { background: rgba(18,183,106,0.15); color: #6ce9a6; }
+  .contrast .tbl-badge.warn { background: rgba(240,128,0,0.15); color: #ffb866; }
+  .contrast .tbl-badge.err  { background: rgba(232,69,59,0.15); color: #fda29b; }
+  .contrast .tbl-badge.info { background: rgba(46,144,250,0.15); color: #84caff; }
+  .contrast .tbl-badge.neutral { background: var(--neutral-800); color: var(--neutral-300); }
+
+  /* Action button in table */
+  .tbl-action {
+    background: transparent; border: 0; cursor: pointer; padding: 0;
+    width: 28px; height: 28px; border-radius: 6px;
+    display: grid; place-items: center; color: var(--neutral-400);
+  }
+  .tbl-action:hover { background: var(--neutral-100); color: var(--neutral-700); }
+  .contrast .tbl-action:hover { background: var(--neutral-800); color: var(--neutral-200); }
+
+  /* Avatar tiny */
+  .av-xs {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 9px; font-weight: 700; color: white;
+    flex-shrink: 0;
+  }
+
+  /* Pagination */
+  .tbl-pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-top: 1px solid var(--neutral-200);
+    font-size: 12.5px; color: var(--neutral-600);
+  }
+  .contrast .tbl-pagination { border-top-color: var(--neutral-800); color: var(--neutral-400); }
+  .tbl-pagination .pag-info { display: flex; align-items: center; gap: 16px; }
+  .tbl-pagination .page-size {
+    display: flex; align-items: center; gap: 6px; font-size: 12px;
+  }
+  .tbl-pagination .page-size select {
+    height: 26px; padding: 0 6px; border: 1px solid var(--neutral-200);
+    border-radius: 5px; font-family: var(--font-sans); font-size: 12px;
+    background: white; cursor: pointer;
+  }
+  .contrast .tbl-pagination .page-size select { background: var(--neutral-900); border-color: var(--neutral-700); color: var(--neutral-200); }
+  .tbl-pagination .pag-nav { display: flex; align-items: center; gap: 3px; }
+  .pag-btn {
+    height: 28px; min-width: 28px; padding: 0 8px;
+    border: 1px solid var(--neutral-200); border-radius: 5px;
+    background: white; color: var(--neutral-700); font-size: 12.5px;
+    cursor: pointer; font-family: var(--font-sans);
+    display: grid; place-items: center;
+    transition: background 100ms;
+  }
+  .pag-btn:hover { background: var(--neutral-100); }
+  .pag-btn.active { background: var(--brand-500); color: white; border-color: var(--brand-500); font-weight: 600; }
+  .pag-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .contrast .pag-btn { background: var(--neutral-900); border-color: var(--neutral-700); color: var(--neutral-200); }
+  .contrast .pag-btn:hover { background: var(--neutral-800); }
+  .contrast .pag-btn.active { background: var(--brand-400); color: var(--neutral-950); border-color: var(--brand-400); }
+
+  /* ═══════════════════════════════════════════════════════════
+     STAT CARD
+     ═══════════════════════════════════════════════════════════ */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat-card {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 10px;
+    padding: 16px 18px; display: flex; align-items: flex-start; gap: 14px;
+  }
+  .contrast .stat-card { background: var(--neutral-900); border-color: var(--neutral-800); }
+  .s-ico {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .s-ico.brand   { background: var(--brand-50); color: var(--brand-600); }
+  .s-ico.success { background: var(--success-50); color: var(--success-700); }
+  .s-ico.warning { background: var(--warning-50); color: var(--warning-700); }
+  .s-ico.info    { background: var(--info-50); color: var(--info-700); }
+  .s-ico.error   { background: var(--error-50); color: var(--error-700); }
+  .s-ico.lime    { background: rgba(140,198,63,0.12); color: #5a8a10; }
+  .s-body { min-width: 0; flex: 1; }
+  .s-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--neutral-500); margin-bottom: 4px; }
+  .contrast .s-label { color: var(--neutral-400); }
+  .s-val { font-size: 28px; font-weight: 700; color: var(--neutral-900); letter-spacing: -0.025em; line-height: 1.1; }
+  .contrast .s-val { color: var(--neutral-100); }
+  .s-val .unit { font-size: 14px; font-weight: 500; color: var(--neutral-500); margin-left: 3px; }
+  .s-trend {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 600; margin-top: 4px;
+  }
+  .s-trend.up   { color: var(--success-700); }
+  .s-trend.down { color: var(--error-500); }
+  .s-trend.flat { color: var(--neutral-500); }
+  .contrast .s-trend.up   { color: #6ce9a6; }
+  .contrast .s-trend.down { color: #fda29b; }
+  .s-trend .compare { font-weight: 400; color: var(--neutral-500); margin-left: 3px; }
+
+  /* Sparkline in stat card */
+  .s-spark { margin-top: 10px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     DOSSIERKAART + KANBAN
+     ═══════════════════════════════════════════════════════════ */
+  .kanban-board {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    align-items: start;
+  }
+  .kanban-col { display: flex; flex-direction: column; gap: 8px; }
+  .kanban-col-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 8px;
+    background: var(--neutral-100);
+    font-size: 12px; font-weight: 700; color: var(--neutral-700);
+  }
+  .contrast .kanban-col-head { background: var(--neutral-900); color: var(--neutral-300); }
+  .kanban-col-head .col-count {
+    margin-left: auto;
+    background: var(--neutral-200); color: var(--neutral-600);
+    font-size: 10.5px; font-weight: 600;
+    padding: 1px 7px; border-radius: 999px;
+  }
+  .contrast .kanban-col-head .col-count { background: var(--neutral-800); color: var(--neutral-400); }
+  .kanban-col-head.status-new   .col-dot { background: var(--brand-500); }
+  .kanban-col-head.status-prog  .col-dot { background: var(--info-500); }
+  .kanban-col-head.status-wait  .col-dot { background: var(--warning-500); }
+  .kanban-col-head.status-done  .col-dot { background: var(--success-500); }
+  .col-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .dossier-kaart {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 8px;
+    padding: 12px 14px; cursor: grab;
+    transition: box-shadow 140ms, transform 140ms;
+    position: relative;
+  }
+  .contrast .dossier-kaart { background: var(--neutral-900); border-color: var(--neutral-800); }
+  .dossier-kaart:hover { box-shadow: 0 4px 8px -2px rgba(16,24,40,0.10); transform: translateY(-1px); }
+  .contrast .dossier-kaart:hover { box-shadow: 0 4px 8px -2px rgba(0,0,0,0.4); }
+  .dossier-kaart.priority-hoog::before {
+    content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
+    width: 3px; background: var(--error-500); border-radius: 0 2px 2px 0;
+  }
+  .dossier-kaart .dk-drag {
+    position: absolute; top: 8px; right: 8px;
+    color: var(--neutral-300); cursor: grab;
+  }
+  .contrast .dossier-kaart .dk-drag { color: var(--neutral-600); }
+  .dossier-kaart .dk-id {
+    font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400);
+    margin-bottom: 5px;
+  }
+  .dossier-kaart .dk-title {
+    font-size: 12.5px; font-weight: 600; color: var(--neutral-900);
+    line-height: 1.3; margin-bottom: 3px;
+  }
+  .contrast .dossier-kaart .dk-title { color: var(--neutral-100); }
+  .dossier-kaart .dk-client {
+    font-size: 11.5px; color: var(--neutral-500); margin-bottom: 9px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dossier-kaart .dk-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--neutral-100);
+  }
+  .contrast .dossier-kaart .dk-footer { border-top-color: var(--neutral-800); }
+  .dossier-kaart .dk-amount {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    color: var(--neutral-800);
+  }
+  .contrast .dossier-kaart .dk-amount { color: var(--neutral-200); }
+  .dossier-kaart .dk-meta {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--neutral-500);
+  }
+  .kanban-add {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 7px;
+    background: transparent; border: 1px dashed var(--neutral-300);
+    font-size: 12px; color: var(--neutral-500); cursor: pointer;
+    width: 100%; font-family: var(--font-sans);
+    transition: background 120ms, color 120ms, border-color 120ms;
+  }
+  .kanban-add:hover { background: var(--neutral-50); color: var(--neutral-700); border-color: var(--neutral-400); }
+  .contrast .kanban-add { border-color: var(--neutral-700); color: var(--neutral-500); }
+  .contrast .kanban-add:hover { background: var(--neutral-900); color: var(--neutral-300); }
+
+  /* ═══════════════════════════════════════════════════════════
+     CHARTS
+     ═══════════════════════════════════════════════════════════ */
+  .chart-card {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 10px;
+    padding: 20px 22px; position: relative;
+  }
+  .chart-brand {
+    position: absolute; top: 16px; right: 16px;
+    width: 22px; height: 22px; opacity: 0.45;
+    background: url("brand-assets/eve-beeldmerk.png") center/contain no-repeat;
+    pointer-events: none;
+  }
+  .contrast .chart-brand { opacity: 0.6; }
+  .contrast .chart-card { background: var(--neutral-900); border-color: var(--neutral-800); }
+  .chart-title { font-size: 14px; font-weight: 700; color: var(--neutral-900); margin-bottom: 3px; }
+  .contrast .chart-title { color: var(--neutral-100); }
+  .chart-sub { font-size: 12px; color: var(--neutral-500); margin-bottom: 16px; }
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .charts-bot { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  /* Legend */
+  .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--neutral-600); }
+  .contrast .leg-item { color: var(--neutral-400); }
+  .leg-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .leg-line { width: 18px; height: 2px; border-radius: 1px; }
+
+  /* Axis labels */
+  .ax-label { fill: var(--neutral-400); font-family: "Montserrat", sans-serif; font-size: 10px; }
+  .ax-grid { stroke: var(--neutral-100); }
+
+  /* Tooltip mock */
+  .chart-tooltip {
+    background: var(--neutral-900); color: white;
+    border-radius: 7px; padding: 9px 12px;
+    font-size: 11.5px; pointer-events: none;
+    box-shadow: 0 4px 12px rgba(16,24,40,0.18);
+    display: inline-block;
+  }
+  .chart-tooltip .ct-title { font-weight: 600; font-size: 11px; opacity: 0.7; margin-bottom: 5px; }
+  .chart-tooltip .ct-row { display: flex; justify-content: space-between; gap: 24px; }
+  .chart-tooltip .ct-row .ct-val { font-weight: 600; font-family: var(--font-mono); }
+
+  /* Donut center label */
+  .donut-center { font-family: var(--font-sans); }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 28px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .kanban-board { grid-template-columns: repeat(2, 1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .charts-bot { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="doc-shell">
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position:relative;z-index:1;"><div class="name">EVERTS.</div><div class="sub">EVA · Design System</div></div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html" class="active"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">Componenten</div>
+      <ol>
+        <li><a href="#table"><span>Table</span><span class="num">43</span></a></li>
+        <li><a href="#statcard"><span>StatCard</span><span class="num">44</span></a></li>
+        <li><a href="#dossierkaart"><span>DossierKaart</span><span class="num">45</span></a></li>
+        <li><a href="#kanban"><span>Kanban Board</span><span class="num">46</span></a></li>
+        <li><a href="#chart"><span>Chart</span><span class="num">47</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 7 · Data Display</div>
+      <h1>Gegevens helder gemaakt.</h1>
+      <p class="lede">
+        Vijf data-display componenten: een sorteerbare <b>Table</b> (TanStack-stijl),
+        <b>StatCard</b> met trendlijn, <b>DossierKaart</b> voor kanban-weergave,
+        een volledig <b>Kanban Board</b> en <b>Chart</b>-stijlen voor Recharts.
+        Alle tokens zijn gebaseerd op de Foundations-kleurschaal.
+      </p>
+      <div class="meta">
+        <div><b>Componenten</b>&nbsp;&nbsp;5</div>
+        <div><b>TanStack Table</b>&nbsp;&nbsp;v8 — sort, filter, paginering</div>
+        <div><b>Charts</b>&nbsp;&nbsp;Recharts-stijl (SVG-demo)</div>
+        <div><b>Kanban</b>&nbsp;&nbsp;@dnd-kit voor drag &amp; drop</div>
+      </div>
+    </header>
+
+    <!-- ═════════ 43 · TABLE ═════════ -->
+    <section class="tk" id="table">
+      <div class="head"><div class="ix">43</div><h2>Table · TanStack-stijl</h2></div>
+      <p class="desc">
+        Het meest gebruikte data-component in EVA — calculaties, dossiers, wagenpark, planning.
+        Sticky header, sorteerbare kolommen, checkbox-selectie, filter-toolbar, paginering en
+        een dense-variant voor maximale informatiedichtheid.
+      </p>
+
+      <h3 class="sub">Volledig · dossieroverzicht</h3>
+      <div class="tbl-shell">
+        <div class="tbl-toolbar">
+          <div class="tbl-search">
+            <svg class="ico-sm" style="color:var(--neutral-400);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input placeholder="Zoek dossier, relatie…">
+          </div>
+          <div class="tbl-actions">
+            <span class="tbl-count">148 dossiers</span>
+            <button class="btn outline sm">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              Filter
+            </button>
+            <button class="btn outline sm">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+            <button class="btn primary sm">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nieuw dossier
+            </button>
+          </div>
+        </div>
+        <div class="tbl-filters">
+          <span style="font-size:11px; font-weight:600; color:var(--neutral-500);">Filter:</span>
+          <span class="tbl-filter-chip">Status: In behandeling <span class="x">✕</span></span>
+          <span class="tbl-filter-chip">Calculator: Henk de Boer <span class="x">✕</span></span>
+          <button style="background:transparent;border:0;font-size:11.5px;color:var(--neutral-500);cursor:pointer;margin-left:4px;font-family:var(--font-sans);">Wis alles</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="eva-table" id="main-table">
+            <thead>
+              <tr>
+                <th class="td-check"><div class="tbl-checkbox indeterminate"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></div></th>
+                <th class="sortable" onclick="sortTable(this)" data-col="id">Dossier <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th class="sortable sort-asc" onclick="sortTable(this)" data-col="client">Opdrachtgever <span class="sort-ico" style="opacity:1;color:var(--brand-500);">▲</span></th>
+                <th class="sortable" onclick="sortTable(this)" data-col="status">Status <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th class="sortable" onclick="sortTable(this)" data-col="calculator">Calculator <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th class="sortable right" onclick="sortTable(this)" data-col="amount">Aanneemsom <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th class="sortable right" onclick="sortTable(this)" data-col="margin">Marge <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th class="sortable" onclick="sortTable(this)" data-col="date">Aangemaakt <span class="sort-ico"><span>▲</span><span>▼</span></span></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="hover-row selected">
+                <td class="td-check"><div class="tbl-checkbox checked"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></td>
+                <td><a style="color:var(--brand-700);font-weight:600;text-decoration:none;">D-1402</a></td>
+                <td>Vastgoed Centrum BV</td>
+                <td><span class="tbl-badge ok"><span class="dot"></span>In behandeling</span></td>
+                <td><div style="display:flex;align-items:center;gap:7px;"><div class="av-xs" style="background:linear-gradient(135deg,#2dd4bf,#0f766e);">HB</div>Henk de Boer</div></td>
+                <td class="td-num">€&nbsp;14.820</td>
+                <td class="td-num pos">23,1%</td>
+                <td style="color:var(--neutral-500);font-size:12px;">13 mei 2026</td>
+                <td><button class="tbl-action"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+              </tr>
+              <tr class="hover-row">
+                <td class="td-check"><div class="tbl-checkbox"></div></td>
+                <td><a style="color:var(--brand-700);font-weight:600;text-decoration:none;">D-1403</a></td>
+                <td>Woningcorporatie Noord</td>
+                <td><span class="tbl-badge warn"><span class="dot"></span>Wacht klant</span></td>
+                <td><div style="display:flex;align-items:center;gap:7px;"><div class="av-xs" style="background:linear-gradient(135deg,#7c3aed,#4c1d95);">MB</div>Maria Bakker</div></td>
+                <td class="td-num">€&nbsp;8.940</td>
+                <td class="td-num pos">18,4%</td>
+                <td style="color:var(--neutral-500);font-size:12px;">15 mei 2026</td>
+                <td><button class="tbl-action"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+              </tr>
+              <tr class="hover-row">
+                <td class="td-check"><div class="tbl-checkbox"></div></td>
+                <td><a style="color:var(--brand-700);font-weight:600;text-decoration:none;">D-1404</a></td>
+                <td>Beukenlaan BV</td>
+                <td><span class="tbl-badge neutral"><span class="dot"></span>Concept</span></td>
+                <td><div style="display:flex;align-items:center;gap:7px;"><div class="av-xs" style="background:linear-gradient(135deg,#ef4444,#991b1b);">JV</div>Jan de Vries</div></td>
+                <td class="td-num">€&nbsp;2.140</td>
+                <td class="td-num neg">7,2%</td>
+                <td style="color:var(--neutral-500);font-size:12px;">18 mei 2026</td>
+                <td><button class="tbl-action"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+              </tr>
+              <tr class="hover-row">
+                <td class="td-check"><div class="tbl-checkbox"></div></td>
+                <td><a style="color:var(--brand-700);font-weight:600;text-decoration:none;">D-1405</a></td>
+                <td>Hattem Vastgoed</td>
+                <td><span class="tbl-badge info"><span class="dot"></span>Gepland</span></td>
+                <td><div style="display:flex;align-items:center;gap:7px;"><div class="av-xs" style="background:linear-gradient(135deg,#10b981,#065f46);">EB</div>Erik den Berg</div></td>
+                <td class="td-num">€&nbsp;6.510</td>
+                <td class="td-num pos">21,8%</td>
+                <td style="color:var(--neutral-500);font-size:12px;">20 mei 2026</td>
+                <td><button class="tbl-action"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+              </tr>
+              <tr class="hover-row">
+                <td class="td-check"><div class="tbl-checkbox"></div></td>
+                <td><a style="color:var(--brand-700);font-weight:600;text-decoration:none;">D-1406</a></td>
+                <td>Marktplein Projecten</td>
+                <td><span class="tbl-badge err"><span class="dot"></span>Afgewezen</span></td>
+                <td><div style="display:flex;align-items:center;gap:7px;"><div class="av-xs" style="background:linear-gradient(135deg,#f59e0b,#92400e);">PJ</div>Piet Jansen</div></td>
+                <td class="td-num">€&nbsp;1.220</td>
+                <td class="td-num neg">5,1%</td>
+                <td style="color:var(--neutral-500);font-size:12px;">22 mei 2026</td>
+                <td><button class="tbl-action"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tbl-pagination">
+          <div class="pag-info">
+            <div style="color:var(--neutral-500); font-size:12px;">1 geselecteerd van 148</div>
+            <div class="page-size">
+              Rijen: <select><option>25</option><option>50</option><option>100</option></select>
+            </div>
+          </div>
+          <div class="pag-nav">
+            <button class="pag-btn" disabled><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button class="pag-btn active">1</button>
+            <button class="pag-btn">2</button>
+            <button class="pag-btn">3</button>
+            <button class="pag-btn" style="cursor:default;border:0;background:transparent;color:var(--neutral-400);">…</button>
+            <button class="pag-btn">6</button>
+            <button class="pag-btn"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Dense mode · calculatieregels</h3>
+      <div class="tbl-shell">
+        <div style="overflow-x:auto;">
+          <table class="eva-table dense">
+            <thead>
+              <tr>
+                <th>Omschrijving</th>
+                <th class="right" style="color:#1f6feb;">UUR/E.</th>
+                <th class="right" style="color:#1f6feb;background:rgba(31,111,235,0.05);">TARIEF AB</th>
+                <th class="right" style="color:#1f6feb;background:rgba(31,111,235,0.05);">BEDRAG AB</th>
+                <th class="right" style="color:#d23b8a;background:rgba(210,59,138,0.05);">PRIJS MA</th>
+                <th class="right" style="color:#d23b8a;background:rgba(210,59,138,0.05);">BEDRAG MA</th>
+                <th class="right" style="color:var(--brand-700);background:rgba(10,122,53,0.05);">TOT. KP</th>
+                <th class="right" style="color:#057a5c;background:rgba(5,122,92,0.05);">TOT. VP</th>
+                <th class="right">BTW</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="hover-row"><td>Bandraster in bestaand systeemplafond monteren</td><td class="td-num">2</td><td class="td-num">55,00</td><td class="td-num">110,00</td><td class="td-num">50,00</td><td class="td-num">50,00</td><td class="td-num pos">€&nbsp;160,00</td><td class="td-num" style="color:#057a5c;">€&nbsp;208,00</td><td class="td-num">21%</td></tr>
+              <tr class="hover-row"><td>Vloerafwerking verwijderen t.p.v. nieuwe wand</td><td class="td-num">4</td><td class="td-num">55,00</td><td class="td-num">220,00</td><td class="td-num">—</td><td class="td-num">—</td><td class="td-num pos">€&nbsp;220,00</td><td class="td-num" style="color:#057a5c;">€&nbsp;286,00</td><td class="td-num">21%</td></tr>
+              <tr class="hover-row"><td>MS wand plaatsen</td><td class="td-num">3,2</td><td class="td-num">55,00</td><td class="td-num">1.760,00</td><td class="td-num">—</td><td class="td-num">497,60</td><td class="td-num pos">€&nbsp;2.257,60</td><td class="td-num" style="color:#057a5c;">€&nbsp;2.934,88</td><td class="td-num">21%</td></tr>
+              <tr class="hover-row"><td>Naden smeren</td><td class="td-num">8</td><td class="td-num">60,00</td><td class="td-num">480,00</td><td class="td-num">100,00</td><td class="td-num">100,00</td><td class="td-num pos">€&nbsp;580,00</td><td class="td-num" style="color:#057a5c;">€&nbsp;754,00</td><td class="td-num">21%</td></tr>
+              <tr style="background:var(--neutral-50); border-top: 1px solid var(--neutral-200);">
+                <td colspan="3" style="font-weight:700; font-size:12px;">Totaal calculatie</td>
+                <td class="td-num" style="font-weight:700;">€&nbsp;2.614,00</td>
+                <td class="td-num"></td>
+                <td class="td-num"></td>
+                <td class="td-num pos" style="font-weight:700;">€&nbsp;9.108,00</td>
+                <td class="td-num" style="color:#057a5c; font-weight:700;">€&nbsp;11.840,40</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>TanStack Table v8:</b> <code>useReactTable</code> met <code>getSortedRowModel()</code>,
+        <code>getFilteredRowModel()</code>, <code>getPaginationRowModel()</code>.
+        Dense-modus via <code>data-density="dense"</code> op de tabel-wrapper — CSS-variabelen zorgen voor halvering van row-height.
+        Kolommen zijn persisted in localStorage per gebruiker.
+      </div>
+    </section>
+
+    <!-- ═════════ 44 · STATCARD ═════════ -->
+    <section class="tk" id="statcard">
+      <div class="head"><div class="ix">44</div><h2>StatCard · KPI met trend</h2></div>
+      <p class="desc">
+        Gebruikt in dashboard (Overzicht), Wagenpark en rapportages.
+        Trendlijn: ↑ groen (success), ↓ rood (error), → neutraal.
+        Vergelijkingstekst in grijs rechts van de trend.
+      </p>
+
+      <h3 class="sub">Light · 4-kolom grid</h3>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="s-ico brand"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+          <div class="s-body">
+            <div class="s-label">Actieve dossiers</div>
+            <div class="s-val">148</div>
+            <div class="s-trend up">↑ 12 <span class="compare">vs. vorige maand</span></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="s-ico success"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="s-body">
+            <div class="s-label">Omzet MTD</div>
+            <div class="s-val">€ 284k</div>
+            <div class="s-trend up">↑ 8,4% <span class="compare">vs. mei 2025</span></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="s-ico warning"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="s-body">
+            <div class="s-label">Openstaande offertes</div>
+            <div class="s-val">36</div>
+            <div class="s-trend down">↓ 4 <span class="compare">vs. vorige week</span></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="s-ico lime"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="s-body">
+            <div class="s-label">Gem. marge</div>
+            <div class="s-val">21,4<span class="unit">%</span></div>
+            <div class="s-trend flat">→ +0,2% <span class="compare">vs. target 20%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Dark</h3>
+      <div style="background:var(--neutral-950); border-radius:12px; padding:20px; border:1px solid var(--neutral-800);">
+        <div class="stat-grid contrast">
+          <div class="stat-card">
+            <div class="s-ico brand"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h22l-2 12H3L1 3z"/><circle cx="7" cy="19" r="1"/><circle cx="17" cy="19" r="1"/></svg></div>
+            <div class="s-body">
+              <div class="s-label">Actieve voertuigen</div>
+              <div class="s-val">16</div>
+              <div class="s-trend up">↑ 2 <span class="compare">deze maand</span></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="s-ico warning"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+            <div class="s-body">
+              <div class="s-label">Open bevindingen</div>
+              <div class="s-val">36</div>
+              <div class="s-trend down">↑ 4 <span class="compare">vs. vorige maand</span></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="s-ico success"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg></div>
+            <div class="s-body">
+              <div class="s-label">Zakelijk (maand)</div>
+              <div class="s-val">8.177<span class="unit">km</span></div>
+              <div class="s-trend up">↑ 12% <span class="compare">vs. vorig jaar</span></div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="s-ico info"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+            <div class="s-body">
+              <div class="s-label">Priv&eacute; (maand)</div>
+              <div class="s-val">6.013<span class="unit">km</span></div>
+              <div class="s-trend flat">→ −1% <span class="compare">vs. vorig jaar</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Token-recipe:</b> icon-wrap <code>42×42 · radius-10 · {status}-50 bg · {status}-700 stroke</code> ·
+        label <code>10.5/14 · 700 · uppercase · 0.08em</code> ·
+        value <code>28px · 700 · tracking −0.025em</code> ·
+        trend <code>12px · 600 · success-700 / error-500 / neutral-500</code>.
+      </div>
+    </section>
+
+    <!-- ═════════ 45 + 46 · DOSSIERKAART + KANBAN ═════════ -->
+    <section class="tk" id="dossierkaart">
+      <div class="head"><div class="ix">45–46</div><h2>DossierKaart + Kanban Board</h2></div>
+      <p class="desc">
+        De DossierKaart is de bouwsteen van het Kanban Board. Vier statuskolommen:
+        Nieuw, In behandeling, Wacht klant, Afgerond. Drag &amp; drop via
+        <b>@dnd-kit</b>. Klik op kaart opent Drawer met dossier-detail.
+        Rode left-strip voor hoge prioriteit.
+      </p>
+
+      <h3 class="sub">Kanban Board · licht</h3>
+      <div class="demo-box" style="background:var(--neutral-100); padding:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="font-size:15px; font-weight:700;">Aanvragen &amp; offertes</div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn outline sm">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              Filter
+            </button>
+            <button class="btn primary sm">+ Nieuwe aanvraag</button>
+          </div>
+        </div>
+        <div class="kanban-board">
+          <!-- Nieuw -->
+          <div class="kanban-col">
+            <div class="kanban-col-head status-new">
+              <div class="col-dot"></div>
+              Nieuw
+              <span class="col-count">3</span>
+            </div>
+            <div class="dossier-kaart">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1407</div>
+              <div class="dk-title">Dakisolatie renovatie — achtergevel</div>
+              <div class="dk-client">Hattem Vastgoed BV</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 12.400</div>
+                <div class="dk-meta">
+                  <div class="av-xs" style="background:linear-gradient(135deg,#7c3aed,#4c1d95);">MB</div>
+                  <span>28 mei</span>
+                </div>
+              </div>
+            </div>
+            <div class="dossier-kaart priority-hoog">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1408 <span style="color:var(--error-500);font-size:10px;font-weight:700;margin-left:4px;">● URGENT</span></div>
+              <div class="dk-title">Houtrot kozijnen zijgevel</div>
+              <div class="dk-client">Schilderweg 8 · Apeldoorn</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 3.200</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#ef4444,#991b1b);">JV</div><span>26 mei</span></div>
+              </div>
+            </div>
+            <div class="dossier-kaart">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1409</div>
+              <div class="dk-title">Buitenschilderwerk complex</div>
+              <div class="dk-client">Woningcorporatie Noord</div>
+              <div class="dk-footer">
+                <div class="dk-amount">—</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#10b981,#065f46);">EB</div><span>27 mei</span></div>
+              </div>
+            </div>
+            <button class="kanban-add"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nieuwe aanvraag</button>
+          </div>
+
+          <!-- In behandeling -->
+          <div class="kanban-col">
+            <div class="kanban-col-head status-prog">
+              <div class="col-dot"></div>
+              In behandeling
+              <span class="col-count">2</span>
+            </div>
+            <div class="dossier-kaart">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1402</div>
+              <div class="dk-title">Aanpassingen behandelkamer renovatie</div>
+              <div class="dk-client">Vastgoed Centrum BV</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 14.820</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#2dd4bf,#0f766e);">HB</div><span>13 mei</span></div>
+              </div>
+            </div>
+            <div class="dossier-kaart">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1405</div>
+              <div class="dk-title">Gevelonderhoud Hoofdweg 7</div>
+              <div class="dk-client">Hattem Vastgoed</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 6.510</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#10b981,#065f46);">EB</div><span>20 mei</span></div>
+              </div>
+            </div>
+            <button class="kanban-add"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Toevoegen</button>
+          </div>
+
+          <!-- Wacht klant -->
+          <div class="kanban-col">
+            <div class="kanban-col-head status-wait">
+              <div class="col-dot"></div>
+              Wacht klant
+              <span class="col-count">2</span>
+            </div>
+            <div class="dossier-kaart">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id">D-1403</div>
+              <div class="dk-title">Renovatie badkamer Keizerstraat 11</div>
+              <div class="dk-client">Woningcorporatie Noord</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 8.940</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#7c3aed,#4c1d95);">MB</div><span>15 mei</span></div>
+              </div>
+            </div>
+            <button class="kanban-add"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Toevoegen</button>
+          </div>
+
+          <!-- Afgerond -->
+          <div class="kanban-col">
+            <div class="kanban-col-head status-done">
+              <div class="col-dot"></div>
+              Afgerond
+              <span class="col-count">1</span>
+            </div>
+            <div class="dossier-kaart" style="opacity:0.75;">
+              <div class="dk-drag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg></div>
+              <div class="dk-id" style="display:flex;align-items:center;gap:6px;">D-1401 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success-700)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="dk-title">Dakrenovatie Van Leeuwenstr.</div>
+              <div class="dk-client">Deventer Woningen</div>
+              <div class="dk-footer">
+                <div class="dk-amount">€ 22.100</div>
+                <div class="dk-meta"><div class="av-xs" style="background:linear-gradient(135deg,#f59e0b,#92400e);">PJ</div><span>2 mei</span></div>
+              </div>
+            </div>
+            <button class="kanban-add"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Toevoegen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Drag &amp; drop:</b> <code>@dnd-kit/core</code> + <code>@dnd-kit/sortable</code>.
+        Kaart-drop updatet status via optimistic UI (Zustand) + API-call.
+        Kleur-code kolommen via <code>data-status</code> attribuut — niet hardcoded in component.
+      </div>
+    </section>
+
+    <!-- ═════════ 47 · CHART ═════════ -->
+    <section class="tk" id="chart">
+      <div class="head"><div class="ix">47</div><h2>Chart · Recharts stijl</h2></div>
+      <p class="desc">
+        Drie basisgrafieken voor EVA-rapportages: <b>lijndiagram</b> (trend over tijd),
+        <b>staafdiagram</b> (vergelijking per categorie), <b>donut</b> (verdeling).
+        Kleurschaal is de EVA chart-palette (<code>--chart-1</code> t/m <code>--chart-8</code>).
+        Grid-lijnen: <code>neutral-100</code>, labels <code>neutral-400</code>, tooltip <code>neutral-900</code>.
+      </p>
+
+      <div class="charts-grid">
+        <!-- Line chart -->
+        <div class="chart-card">
+          <div class="chart-brand"></div>
+          <div class="chart-title">Marge per maand</div>
+          <div class="chart-sub">Jan – Mei 2026 · doelstelling 20%</div>
+          <svg viewBox="0 0 560 200" style="width:100%;height:auto;overflow:visible;">
+            <!-- Grid -->
+            <line x1="50" y1="20" x2="540" y2="20" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="60" x2="540" y2="60" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="100" x2="540" y2="100" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="140" x2="540" y2="140" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="170" x2="540" y2="170" stroke="#e3e8ea" stroke-width="1"/>
+            <!-- Target line -->
+            <line x1="50" y1="100" x2="540" y2="100" stroke="#61ac2b" stroke-width="1.5" stroke-dasharray="6 4"/>
+            <text x="544" y="104" class="ax-label" fill="#5a8a10" font-size="10">20%</text>
+            <!-- Y labels -->
+            <text x="42" y="24" class="ax-label" text-anchor="end">25%</text>
+            <text x="42" y="64" class="ax-label" text-anchor="end">22%</text>
+            <text x="42" y="104" class="ax-label" text-anchor="end">20%</text>
+            <text x="42" y="144" class="ax-label" text-anchor="end">18%</text>
+            <text x="42" y="174" class="ax-label" text-anchor="end">16%</text>
+            <!-- Area fill -->
+            <defs>
+              <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#009439" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#009439" stop-opacity="0.02"/>
+              </linearGradient>
+            </defs>
+            <path d="M 94 130 L 193 108 L 292 120 L 391 90 L 490 72 L 490 170 L 94 170 Z" fill="url(#lineGrad)"/>
+            <!-- Line -->
+            <polyline points="94,130 193,108 292,120 391,90 490,72" fill="none" stroke="#009439" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- Dots -->
+            <circle cx="94"  cy="130" r="4" fill="white" stroke="#009439" stroke-width="2.5"/>
+            <circle cx="193" cy="108" r="4" fill="white" stroke="#009439" stroke-width="2.5"/>
+            <circle cx="292" cy="120" r="4" fill="white" stroke="#009439" stroke-width="2.5"/>
+            <circle cx="391" cy="90"  r="4" fill="white" stroke="#009439" stroke-width="2.5"/>
+            <circle cx="490" cy="72"  r="5" fill="#009439" stroke="white" stroke-width="2"/>
+            <!-- Active tooltip -->
+            <line x1="490" y1="20" x2="490" y2="170" stroke="#e3e8ea" stroke-width="1" stroke-dasharray="3 3"/>
+            <!-- X labels -->
+            <text x="94"  y="185" class="ax-label" text-anchor="middle">Jan</text>
+            <text x="193" y="185" class="ax-label" text-anchor="middle">Feb</text>
+            <text x="292" y="185" class="ax-label" text-anchor="middle">Mrt</text>
+            <text x="391" y="185" class="ax-label" text-anchor="middle">Apr</text>
+            <text x="490" y="185" class="ax-label" text-anchor="middle" font-weight="600" fill="#009439">Mei</text>
+          </svg>
+          <div class="chart-legend">
+            <div class="leg-item"><div class="leg-line" style="background:#009439;"></div> Marge %</div>
+            <div class="leg-item"><div class="leg-line" style="background:#61ac2b; border-top: 2px dashed #61ac2b; height:0;width:18px;"></div> Target 20%</div>
+          </div>
+        </div>
+
+        <!-- Donut -->
+        <div class="chart-card">
+          <div class="chart-brand"></div>
+          <div class="chart-title">Verdeling status</div>
+          <div class="chart-sub">148 actieve dossiers</div>
+          <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+            <svg viewBox="0 0 140 140" style="width:130px; height:130px; flex-shrink:0;">
+              <!-- Donut segments (pre-calculated) -->
+              <!-- In behandeling: 42% = ~150deg -->
+              <circle cx="70" cy="70" r="52" fill="none" stroke="#009439" stroke-width="22"
+                stroke-dasharray="137 200" stroke-dashoffset="50" transform="rotate(-90 70 70)"/>
+              <!-- Wacht klant: 24% = ~86deg -->
+              <circle cx="70" cy="70" r="52" fill="none" stroke="#f08000" stroke-width="22"
+                stroke-dasharray="78 260" stroke-dashoffset="-87" transform="rotate(-90 70 70)"/>
+              <!-- Nieuw: 20% = ~72deg -->
+              <circle cx="70" cy="70" r="52" fill="none" stroke="#2e90fa" stroke-width="22"
+                stroke-dasharray="65 272" stroke-dashoffset="-165" transform="rotate(-90 70 70)"/>
+              <!-- Afgerond: 14% = ~50deg -->
+              <circle cx="70" cy="70" r="52" fill="none" stroke="#12b76a" stroke-width="22"
+                stroke-dasharray="46 291" stroke-dashoffset="-230" transform="rotate(-90 70 70)"/>
+              <!-- Center --><image href="brand-assets/eve-beeldmerk.png" x="60" y="40" width="20" height="20" opacity="0.9"/>
+              <text x="70" y="75" text-anchor="middle" font-family="Montserrat" font-size="18" font-weight="700" fill="#161b20">148</text>
+              <text x="70" y="88" text-anchor="middle" font-family="Montserrat" font-size="8.5" fill="#9aa4ab">dossiers</text>
+            </svg>
+            <div style="display:flex; flex-direction:column; gap:8px; font-size:12px;">
+              <div class="leg-item"><div class="leg-dot" style="background:#009439;"></div> In behandeling <b style="margin-left:auto;color:var(--neutral-900);font-family:var(--font-mono);">62</b></div>
+              <div class="leg-item"><div class="leg-dot" style="background:#f08000;"></div> Wacht klant <b style="margin-left:auto;color:var(--neutral-900);font-family:var(--font-mono);">36</b></div>
+              <div class="leg-item"><div class="leg-dot" style="background:#2e90fa;"></div> Nieuw <b style="margin-left:auto;color:var(--neutral-900);font-family:var(--font-mono);">29</b></div>
+              <div class="leg-item"><div class="leg-dot" style="background:#12b76a;"></div> Afgerond <b style="margin-left:auto;color:var(--neutral-900);font-family:var(--font-mono);">21</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar chart -->
+      <div class="charts-bot">
+        <div class="chart-card">
+          <div class="chart-brand"></div>
+          <div class="chart-title">Omzet per categorie · 2026</div>
+          <div class="chart-sub">YTD in duizenden euro</div>
+          <svg viewBox="0 0 400 180" style="width:100%;height:auto;">
+            <line x1="50" y1="10" x2="390" y2="10" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="50" x2="390" y2="50" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="90" x2="390" y2="90" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="50" y1="130" x2="390" y2="130" stroke="#e3e8ea" stroke-width="1"/>
+            <text x="42" y="14" class="ax-label" text-anchor="end">200k</text>
+            <text x="42" y="54" class="ax-label" text-anchor="end">150k</text>
+            <text x="42" y="94" class="ax-label" text-anchor="end">100k</text>
+            <text x="42" y="134" class="ax-label" text-anchor="end">50k</text>
+            <!-- Bars -->
+            <rect x="62"  y="22" width="40" height="108" rx="4" fill="#009439"/>
+            <rect x="122" y="48" width="40" height="82"  rx="4" fill="#28a44a"/>
+            <rect x="182" y="72" width="40" height="58"  rx="4" fill="#61ac2b"/>
+            <rect x="242" y="55" width="40" height="75"  rx="4" fill="#2e90fa"/>
+            <rect x="302" y="98" width="40" height="32"  rx="4" fill="#f08000"/>
+            <!-- Labels -->
+            <text x="82"  y="148" class="ax-label" text-anchor="middle">Schilder</text>
+            <text x="142" y="148" class="ax-label" text-anchor="middle">Houtrot</text>
+            <text x="202" y="148" class="ax-label" text-anchor="middle">Renovatie</text>
+            <text x="262" y="148" class="ax-label" text-anchor="middle">Gevel</text>
+            <text x="322" y="148" class="ax-label" text-anchor="middle">Overig</text>
+            <!-- Values above bars -->
+            <text x="82"  y="18" class="ax-label" text-anchor="middle" fill="#009439" font-weight="600">€ 218k</text>
+            <text x="142" y="44" class="ax-label" text-anchor="middle" fill="#28a44a" font-weight="600">€ 164k</text>
+            <text x="202" y="68" class="ax-label" text-anchor="middle" fill="#5a8a10" font-weight="600">€ 116k</text>
+            <text x="262" y="51" class="ax-label" text-anchor="middle" fill="#2e90fa" font-weight="600">€ 150k</text>
+            <text x="322" y="94" class="ax-label" text-anchor="middle" fill="#b85a00" font-weight="600">€ 64k</text>
+          </svg>
+        </div>
+
+        <!-- Tooltip mock -->
+        <div class="chart-card" style="display:flex; flex-direction:column;">
+          <div class="chart-title">Tooltip patroon</div>
+          <div class="chart-sub">Recharts custom tooltip — donker, consistent</div>
+          <div style="flex:1; display:grid; place-items:center; padding:16px;">
+            <div>
+              <div class="chart-tooltip">
+                <div class="ct-title">Mei 2026 · Schilderwerk</div>
+                <div class="ct-row"><span>Omzet</span><span class="ct-val" style="color:#6dd190;">€ 218.400</span></div>
+                <div class="ct-row" style="margin-top:3px;"><span>Marge</span><span class="ct-val" style="color:#6dd190;">21,4%</span></div>
+                <div class="ct-row" style="margin-top:3px;"><span>Dossiers</span><span class="ct-val">34</span></div>
+              </div>
+              <div style="text-align:center; margin-top:14px; font-size:11.5px; color:var(--neutral-500); line-height:1.5;">
+                <code style="font-family:var(--font-mono); font-size:11px; background:var(--neutral-100); padding:2px 6px; border-radius:3px;">&lt;CustomTooltip&gt;</code><br>
+                bg <code style="font-family:var(--font-mono); font-size:11px;">neutral-900</code> ·
+                radius <code style="font-family:var(--font-mono); font-size:11px;">7px</code> ·
+                shadow <code style="font-family:var(--font-mono); font-size:11px;">elev.md</code>
+              </div>
+            </div>
+          </div>
+          <div class="meta-card" style="margin-top:0;">
+            <b>Chart kleurpalet:</b><br>
+            <code>--chart-1</code> #009439 · <code>--chart-2</code> #28a44a ·
+            <code>--chart-3</code> #61ac2b · <code>--chart-4</code> #2e90fa ·
+            <code>--chart-5</code> #f08000 · <code>--chart-6</code> #e8453b
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="meta-card" style="margin-top:48px;">
+      <b>Volgende stap?</b>
+      Data Display compleet. Resterende module-specifieke componenten (#48–52) zijn later:
+      CalculatieGrid, TotalsBar, WerkbonKaart, VoertuigKaart, WorkflowNode.
+      <br>
+      Directe vervolgopties: <i>Tailwind config exporteren</i> (tokens naar Next.js) of
+      <i>compositie-pagina Dossier-detail</i> (alle componenten in één realistisch scherm).
+    </div>
+  </main>
+</div>
+
+<script>
+  // Table sort toggle
+  function sortTable(th) {
+    const table = th.closest('table');
+    table.querySelectorAll('th.sortable').forEach(h => {
+      if (h !== th) { h.classList.remove('sort-asc','sort-desc'); }
+    });
+    if (th.classList.contains('sort-asc')) {
+      th.classList.remove('sort-asc'); th.classList.add('sort-desc');
+    } else if (th.classList.contains('sort-desc')) {
+      th.classList.remove('sort-desc');
+    } else {
+      th.classList.add('sort-asc');
+    }
+  }
+</script>
+</body>
+</html>

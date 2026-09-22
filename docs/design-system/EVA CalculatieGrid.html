@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · CalculatieGrid</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-50: #ecfaf0; --brand-100: #d2f2dd;
+    --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28;
+    --brand-800: #054f2e; --brand-900: #013a20;
+
+    --neutral-0:   #ffffff; --neutral-50:  #f8fafa;
+    --neutral-100: #f1f4f5; --neutral-200: #e3e8ea;
+    --neutral-300: #cbd2d6; --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c; --neutral-600: #4d575e;
+    --neutral-700: #364048; --neutral-800: #232a30;
+    --neutral-900: #161b20; --neutral-950: #1f2933;
+
+    --error-50: #fef3f2; --error-500: #e8453b; --error-700: #b42318;
+    --warning-50: #fff6ec; --warning-500: #f08000; --warning-700: #b85a00;
+    --success-50: #ecfdf3; --success-500: #12b76a; --success-700: #027a48;
+
+    /* Calculatie kolomgroep-kleuren (formeel vastgelegd) */
+    --calc-ab:    #1f6feb;
+    --calc-ab-bg: rgba(31, 111, 235, 0.04);
+    --calc-ab-hd: rgba(31, 111, 235, 0.08);
+    --calc-ma:    #c2185b;
+    --calc-ma-bg: rgba(194, 24, 91, 0.04);
+    --calc-ma-hd: rgba(194, 24, 91, 0.08);
+    --calc-oa:    #7b1fa2;
+    --calc-oa-bg: rgba(123, 31, 162, 0.04);
+    --calc-oa-hd: rgba(123, 31, 162, 0.08);
+    --calc-kp:    #009439;
+    --calc-kp-bg: rgba(0, 122, 61, 0.05);
+    --calc-kp-hd: rgba(0, 122, 61, 0.10);
+    --calc-vp:    #057a5c;
+    --calc-vp-bg: rgba(5, 122, 92, 0.05);
+    --calc-vp-hd: rgba(5, 122, 92, 0.10);
+    --calc-btw:   #b85a00;
+    --calc-btw-bg: rgba(184, 90, 0, 0.04);
+
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Grid row heights */
+    --row-h: 32px;
+    --row-h-group: 36px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--neutral-50); color: var(--neutral-900); -webkit-font-smoothing: antialiased; }
+
+  /* DOC SHELL */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--neutral-200); background: var(--neutral-0); }
+  aside.doc-nav .doc-brand { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background-image: var(--polygon-bg); background-size: cover; background-position: center; color: white; position: relative; }
+  aside.doc-nav .doc-brand::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%); }
+  aside.doc-nav .doc-brand .mark { width: 30px; height: 30px; border-radius: 6px; background-image: url("brand-assets/eve-beeldmerk.png"); background-size: cover; z-index: 1; }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px; }
+  aside.doc-nav a { display: flex; justify-content: space-between; align-items: center; text-decoration: none; color: var(--neutral-700); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; transition: background 120ms; }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 32px 40px 80px; max-width: 1800px; }
+  header.page { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-500); margin-bottom: 10px; }
+  header.page h1 { font-size: 34px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 10px; font-weight: 700; }
+  header.page .lede { font-size: 15px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 18px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 56px; scroll-margin-top: 20px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); }
+  section.tk > .head h2 { font-size: 22px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 20px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 20px 0 10px; }
+
+  .meta-card { margin-top: 12px; padding: 14px 18px; border: 1px dashed var(--neutral-200); border-radius: 10px; font-size: 12px; color: var(--neutral-600); line-height: 1.55; }
+  .meta-card code { font-family: var(--font-mono); background: var(--neutral-100); padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px; }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  .ico { width: 14px; height: 14px; flex-shrink: 0; }
+  .ico-sm { width: 12px; height: 12px; flex-shrink: 0; }
+
+  /* ═══════════════════════════════════════════════════════════
+     CALC TOOLBAR
+     ═══════════════════════════════════════════════════════════ */
+  .calc-toolbar {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 12px;
+    background: var(--neutral-0);
+    border-bottom: 1px solid var(--neutral-200);
+    flex-wrap: wrap;
+  }
+  .ct-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 28px; padding: 0 9px;
+    background: transparent; border: 0; border-radius: 5px;
+    font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+    color: var(--neutral-700); cursor: pointer;
+    transition: background 100ms, color 100ms;
+  }
+  .ct-btn:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  .ct-btn svg { width: 13px; height: 13px; }
+  .ct-sep { width: 1px; height: 18px; background: var(--neutral-200); margin: 0 4px; }
+  .ct-btn.primary {
+    background: var(--brand-500); color: white;
+    padding: 0 11px; font-weight: 600;
+  }
+  .ct-btn.primary:hover { background: var(--brand-600); }
+  .ct-dropdown {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 28px; padding: 0 9px;
+    background: transparent; border: 1px solid var(--neutral-200); border-radius: 5px;
+    font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+    color: var(--neutral-700); cursor: pointer;
+    transition: background 100ms;
+  }
+  .ct-dropdown:hover { background: var(--neutral-50); }
+  .ct-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     CALC GRID
+     ═══════════════════════════════════════════════════════════ */
+  .calc-shell {
+    background: var(--neutral-0);
+    border: 1px solid var(--neutral-200);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .calc-grid-wrap {
+    overflow-x: auto;
+    flex: 1;
+  }
+
+  .calc-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    min-width: 1400px;
+  }
+
+  /* ─── Column group headers ─── */
+  .calc-grid .cg-head {
+    background: var(--neutral-50);
+    border-bottom: 1px solid var(--neutral-200);
+  }
+  /* ─── Column group labels ─── */
+  .calc-grid .cg-head th {
+    padding: 4px 8px; font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    text-align: center; border-right: 1px solid var(--neutral-200);
+    background: var(--neutral-50);
+  }
+  .cgh-ab  { color: var(--calc-ab); }
+  .cgh-ma  { color: var(--calc-ma); }
+  .cgh-oa  { color: var(--calc-oa); }
+  .cgh-kp  { color: var(--calc-kp); }
+  .cgh-vp  { color: var(--calc-vp); }
+  .cgh-btw { color: var(--calc-btw); }
+
+  /* ─── Column headers — one neutral bg, only text color varies ─── */
+  .calc-grid thead tr.col-head th {
+    position: sticky; top: 0; z-index: 2;
+    padding: 7px 10px 6px;
+    background: var(--neutral-100);
+    border-bottom: 2px solid var(--neutral-200);
+    border-right: 1px solid var(--neutral-200);
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--neutral-500);
+    white-space: nowrap; text-align: right; user-select: none;
+  }
+  .calc-grid thead tr.col-head th.left { text-align: left; }
+  .calc-grid thead tr.col-head th.center { text-align: center; }
+  /* Only change text color — no background tinting on headers */
+  .calc-grid thead tr.col-head th.ab  { color: var(--calc-ab); }
+  .calc-grid thead tr.col-head th.ma  { color: var(--calc-ma); }
+  .calc-grid thead tr.col-head th.oa  { color: var(--calc-oa); }
+  .calc-grid thead tr.col-head th.kp  { color: var(--calc-kp); }
+  .calc-grid thead tr.col-head th.vp  { color: var(--calc-vp); }
+  .calc-grid thead tr.col-head th.btw { color: var(--calc-btw); }
+
+  /* ─── All cells — fijn, consistent sans-font ─── */
+  .calc-grid td {
+    padding: 0 10px;
+    height: var(--row-h);
+    border-bottom: 1px solid var(--neutral-100);
+    border-right: 1px solid var(--neutral-200);
+    vertical-align: middle;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    color: var(--neutral-600);
+    background: var(--neutral-0);
+    letter-spacing: 0;
+  }
+  /* Omschrijving col — iets meer contrast, geen bold */
+  .calc-grid td.txt {
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--neutral-800);
+  }
+  /* Links in grid: geen underline */
+  .calc-grid td.txt a {
+    color: var(--brand-700);
+    text-decoration: none;
+  }
+  .calc-grid td.txt a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .calc-grid td.right { text-align: right; }
+  .calc-grid td.center { text-align: center; }
+
+  /* Column group coloring — TEXT ONLY, no background, no bold */
+  .calc-grid td.ab  { color: var(--calc-ab);  }
+  .calc-grid td.ma  { color: var(--calc-ma);  }
+  .calc-grid td.oa  { color: var(--calc-oa);  }
+  .calc-grid td.kp  { color: var(--calc-kp);  }
+  .calc-grid td.vp  { color: var(--calc-vp);  }
+  .calc-grid td.btw { color: var(--calc-btw); }
+
+  /* Editable cell */
+  .calc-grid td[contenteditable="true"] {
+    outline: none; cursor: text;
+    min-width: 40px;
+  }
+  .calc-grid td[contenteditable="true"]:focus {
+    background: #fffef5 !important;
+    box-shadow: inset 0 0 0 2px var(--brand-500);
+    color: var(--neutral-900) !important;
+    position: relative; z-index: 1; border-radius: 2px;
+  }
+  /* Row hover — one subtle tint, no per-column color */
+  .calc-grid tr.data-row:hover td { background: var(--neutral-50); }
+  /* Selected row */
+  .calc-grid tr.row-selected td { background: #eef9f2 !important; }
+
+  /* ─── GROUP ROW ─── */
+  .calc-grid tr.group-row td {
+    background: var(--brand-800) !important;
+    color: white !important;
+    font-family: var(--font-sans);
+    font-weight: 500; font-size: 12.5px;
+    height: var(--row-h-group);
+    border-bottom: 0;
+    border-right-color: rgba(255,255,255,0.08);
+    padding: 0 10px;
+  }
+  .calc-grid tr.group-row td.totals {
+    font-size: 11px; font-weight: 400; opacity: 0.85;
+  }
+  .calc-grid tr.group-row:hover td { background: var(--brand-900) !important; }
+
+  /* ─── SUBGROUP ROW ─── */
+  .calc-grid tr.subgroup-row td {
+    background: var(--neutral-900) !important;
+    color: white !important;
+    font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+    height: 30px;
+    border-right-color: rgba(255,255,255,0.06);
+    padding: 0 10px;
+  }
+  .calc-grid tr.subgroup-row td.totals { font-size: 11px; font-weight: 400; opacity: 0.8; }
+  .calc-grid tr.subgroup-row:hover td { background: var(--neutral-800) !important; }
+
+  /* ─── DRAG HANDLE ─── */
+  td.drag-cell {
+    width: 24px; padding: 0 4px;
+    cursor: grab; text-align: center;
+    color: var(--neutral-300);
+  }
+  td.drag-cell svg { opacity: 0; transition: opacity 80ms; display: block; margin: 0 auto; }
+  tr.data-row:hover td.drag-cell svg { opacity: 1; }
+  td.drag-cell:active { cursor: grabbing; }
+
+  /* ─── OMSCHRIJVING CELL ─── */
+  .omsch-cell { display: flex; align-items: center; gap: 6px; }
+  .omsch-cell .expand-btn {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--neutral-400); width: 16px; height: 16px;
+    display: grid; place-items: center; flex-shrink: 0;
+    padding: 0;
+    transition: color 100ms, transform 120ms;
+  }
+  .omsch-cell .expand-btn:hover { color: var(--neutral-700); }
+  .omsch-cell .expand-btn.collapsed { transform: rotate(-90deg); }
+  .omsch-cell .row-num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-400); min-width: 24px; }
+  .omsch-cell .row-label { flex: 1; min-width: 0; }
+  .omsch-cell .row-label a { color: var(--brand-700); text-decoration: none; font-size: 12.5px; }
+  .omsch-cell .row-label a:hover { text-decoration: underline; }
+
+  /* ─── STATUS TAGS (STP, VRR) ─── */
+  .row-tag {
+    display: inline-flex; align-items: center;
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .row-tag.stp { background: var(--warning-50); color: var(--warning-700); }
+  .row-tag.vrr { background: var(--neutral-100); color: var(--neutral-600); }
+  .row-tag.opt { background: var(--brand-50); color: var(--brand-700); }
+
+  /* ─── UNIT SELECT / EXPAND ─── */
+  .unit-sel {
+    background: transparent; border: 0; border-radius: 3px;
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--neutral-700); cursor: pointer; padding: 0 2px;
+    max-width: 48px;
+  }
+  .unit-sel:hover { background: var(--neutral-100); }
+
+  /* ─── CHECKBOX ─── */
+  td.check-cell { width: 32px; text-align: center; padding: 0 6px; }
+  .cg-check {
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1.5px solid var(--neutral-300); background: white;
+    display: inline-grid; place-items: center; cursor: pointer;
+    vertical-align: middle; flex-shrink: 0;
+    transition: border-color 100ms, background 100ms;
+  }
+  .cg-check:hover { border-color: var(--brand-500); }
+
+  /* ─── EXPAND ARROW for rows ─── */
+  .row-expand {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--neutral-400); padding: 0; width: 14px; height: 14px;
+    display: grid; place-items: center;
+  }
+  .row-expand svg { width: 10px; height: 10px; }
+
+  /* ─── SELECTED ROW ─── */
+  .calc-grid tr.row-selected td { background: rgba(0,122,61,0.06) !important; }
+
+  /* ─── TOTALS BAR ─── */
+  .totals-bar {
+    display: flex; align-items: stretch;
+    border-top: 2px solid var(--neutral-200);
+    background: var(--brand-900);
+    color: white;
+    flex-shrink: 0;
+    min-height: 42px;
+    overflow-x: auto;
+  }
+  .totals-bar .tb-group {
+    display: flex; align-items: stretch;
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  .totals-bar .tb-item {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 6px 16px; min-width: 110px; flex-shrink: 0;
+  }
+  .totals-bar .tb-item .tb-label {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; opacity: 0.65; margin-bottom: 2px;
+  }
+  .totals-bar .tb-item .tb-val {
+    font-family: var(--font-mono); font-size: 13.5px; font-weight: 600;
+  }
+  .totals-bar .tb-item .tb-val.pos { color: #6dd190; }
+  .totals-bar .tb-item .tb-val.warn { color: #ffb866; }
+  .totals-bar .tb-item .tb-val.marge { color: #61ac2b; font-size: 15px; font-weight: 700; }
+  .totals-bar .tb-spacer { flex: 1; }
+  .totals-bar .tb-item.highlight {
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* ─── COLUMN VISIBILITY PANEL ─── */
+  .col-vis-panel {
+    background: white; border: 1px solid var(--neutral-200);
+    border-radius: 8px; box-shadow: 0 12px 24px -6px rgba(16,24,40,0.12);
+    padding: 12px; width: 220px;
+    position: absolute; top: 100%; right: 0; z-index: 10; margin-top: 4px;
+    display: none;
+  }
+  .col-vis-panel.open { display: block; }
+  .col-vis-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 4px; border-radius: 5px; cursor: pointer;
+    font-size: 12.5px; color: var(--neutral-800);
+  }
+  .col-vis-row:hover { background: var(--neutral-50); }
+  .col-vis-row .cvr-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .col-vis-row .cvr-chk {
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1.5px solid var(--neutral-300); margin-left: auto;
+    display: grid; place-items: center;
+  }
+  .col-vis-row .cvr-chk.on { background: var(--brand-500); border-color: var(--brand-500); }
+  .col-vis-row .cvr-chk.on::after { content: ""; width: 7px; height: 4px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); display: block; }
+
+  /* Demo sections */
+  .demo-box { background: var(--neutral-0); border: 1px solid var(--neutral-200); border-radius: 12px; overflow: hidden; }
+
+  /* Anatomy grid */
+  .anatomy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .anat-card {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 8px; overflow: hidden;
+  }
+  .anat-card .ac-head {
+    padding: 8px 12px; border-bottom: 1px solid var(--neutral-200);
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--neutral-600);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .anat-card .ac-body { padding: 12px; font-size: 12px; color: var(--neutral-700); line-height: 1.6; }
+  .anat-card code { font-family: var(--font-mono); font-size: 11px; background: var(--neutral-50); padding: 1px 5px; border-radius: 3px; color: var(--neutral-800); }
+
+  /* Spec token table */
+  .spec-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec-tbl th { text-align: left; padding: 7px 12px; background: var(--neutral-50); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--neutral-500); border-bottom: 1px solid var(--neutral-200); }
+  .spec-tbl td { padding: 8px 12px; border-bottom: 1px solid var(--neutral-100); }
+  .spec-tbl td:first-child { font-family: var(--font-mono); font-size: 11px; color: var(--neutral-900); font-weight: 600; }
+  .spec-tbl td:nth-child(2) { font-family: var(--font-mono); font-size: 11px; color: var(--neutral-700); }
+  .spec-tbl td:last-child { color: var(--neutral-500); }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 20px; }
+    .anatomy-grid { grid-template-columns: 1fr; }
+  }
+  /* ─── Tweakable variants ─── */
+  [data-colcolor="off"] .calc-grid td.ab,
+  [data-colcolor="off"] .calc-grid td.ma,
+  [data-colcolor="off"] .calc-grid td.oa,
+  [data-colcolor="off"] .calc-grid td.kp,
+  [data-colcolor="off"] .calc-grid td.vp,
+  [data-colcolor="off"] .calc-grid td.btw { color: var(--neutral-700); }
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.ab,
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.ma,
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.oa,
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.kp,
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.vp,
+  [data-colcolor="off"] .calc-grid thead tr.col-head th.btw,
+  [data-colcolor="off"] .cgh-ab, [data-colcolor="off"] .cgh-ma, [data-colcolor="off"] .cgh-oa,
+  [data-colcolor="off"] .cgh-kp, [data-colcolor="off"] .cgh-vp, [data-colcolor="off"] .cgh-btw { color: var(--neutral-500); }
+  [data-zebra="on"] .calc-grid tr.data-row:nth-of-type(even) td { background: var(--neutral-50); }
+</style>
+</head>
+<body data-colcolor="on" data-zebra="off" id="calcRoot">
+
+<div class="doc-shell">
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position:relative;z-index:1;">
+        <div class="name">EVERTS.</div>
+        <div class="sub">EVA · Design System</div>
+      </div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html" class="active"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">Onderdelen</div>
+      <ol>
+        <li><a href="#grid"><span>CalculatieGrid</span><span class="num">48</span></a></li>
+        <li><a href="#anatomy"><span>Rij-anatomie</span><span class="num">·</span></a></li>
+        <li><a href="#columns"><span>Kolomgroepen</span><span class="num">·</span></a></li>
+        <li><a href="#totalsbar"><span>TotalsBar</span><span class="num">49</span></a></li>
+        <li><a href="#tokens"><span>Tokens</span><span class="num">·</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 8 · Module-specifiek</div>
+      <h1>CalculatieGrid &amp; TotalsBar</h1>
+      <p class="lede">
+        Het hart van EVA — een spreadsheet-achtig grid voor het opstellen van calculaties.
+        Zes kolomgroepen (AB · MA · OA · KP · VP · BTW), drie rijtypen (groep · subgroep · regel),
+        inline editing, collapse en een sticky TotalsBar aan de onderkant.
+      </p>
+      <div class="meta">
+        <div><b>Component</b>&nbsp;&nbsp;#48 CalculatieGrid · #49 TotalsBar</div>
+        <div><b>Rijhoogte</b>&nbsp;&nbsp;32px (regels) · 36px (groepen)</div>
+        <div><b>Kolomgroepen</b>&nbsp;&nbsp;AB · MA · OA · KP · VP · BTW</div>
+        <div><b>Editbaar</b>&nbsp;&nbsp;Klik cel → inline edit</div>
+      </div>
+    </header>
+
+    <!-- ═════════ LIVE GRID ═════════ -->
+    <section class="tk" id="grid">
+      <div class="head"><div class="ix">48</div><h2>CalculatieGrid · live demo</h2></div>
+      <p class="desc">
+        Volledig interactieve demo. Klik op getallen om ze te bewerken, klik op de pijltjes
+        om groepen in te klappen, klik op kolomkoppen om groepen te tonen/verbergen.
+        Alle cel-kleuren zijn CSS-variabelen — wisselen per kolomgroep automatisch.
+      </p>
+
+      <div class="calc-shell">
+        <!-- Toolbar -->
+        <div class="calc-toolbar">
+          <button class="ct-btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="9" width="7" height="5" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v3.5a1 1 0 0 0 1 1H14"/><path d="M6.5 12.5V16"/></svg>
+            Structuur
+          </button>
+          <button class="ct-btn" id="collapseBtn" onclick="toggleAll()">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(90deg);"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><line x1="2" y1="12" x2="22" y2="12"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/></svg>
+            Inklappen
+          </button>
+          <div class="ct-sep"></div>
+          <button class="ct-btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            Ongedaan
+          </button>
+          <button class="ct-btn primary">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Opslaan
+          </button>
+          <div class="ct-sep"></div>
+          <button class="ct-btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12.5l10.5 -10.5 9.5 9.5 -10.5 10.5z"/><line x1="7" y1="9" x2="9" y2="11"/><line x1="10" y1="6" x2="13" y2="9"/><line x1="13" y1="3" x2="15" y2="5"/><line x1="6" y1="13" x2="8" y2="15"/></svg>
+            Meetstaat
+          </button>
+          <div class="ct-dropdown">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            CUF
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="ct-dropdown">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Bibliotheek
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="ct-right">
+            <div style="position:relative;">
+              <button class="ct-dropdown" onclick="toggleColVis()">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                Kolommen (4 verborgen)
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="col-vis-panel" id="colVisPanel">
+                <div style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--neutral-500); padding:4px 4px 8px;">Kolom zichtbaarheid</div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-ab);"></div>UUR/E. <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-ab);"></div>Tarief AB <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-ab);"></div>Bedrag AB <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-ma);"></div>Prijs MA <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-ma);"></div>Bedrag MA <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-oa);"></div>Prijs OA <div class="cvr-chk"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-oa);"></div>Bedrag OA <div class="cvr-chk"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-kp);"></div>KP/E. <div class="cvr-chk"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-kp);"></div>Tot. KP <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-kp);"></div>Opsl. % <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-vp);"></div>VP/E. <div class="cvr-chk"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-vp);"></div>Tot. VP <div class="cvr-chk on"></div></div>
+                <div class="col-vis-row"><div class="cvr-dot" style="background:var(--calc-btw);"></div>BTW % <div class="cvr-chk on"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid -->
+        <div class="calc-grid-wrap">
+          <table class="calc-grid" id="calcGrid">
+            <thead>
+              <!-- Column group labels -->
+              <tr class="cg-head">
+                <th colspan="6" style="background:var(--neutral-50); border-right:1px solid var(--neutral-200);"></th>
+                <th colspan="3" class="cgh-ab">Aanneemsom AB</th>
+                <th colspan="2" class="cgh-ma">Materialen MA</th>
+                <th colspan="1" style="background:var(--neutral-50); border-right:1px solid var(--neutral-200);"></th>
+                <th colspan="2" class="cgh-kp">Kostprijs</th>
+                <th colspan="1" style="background:var(--neutral-50); border-right:1px solid var(--neutral-200);"></th>
+                <th colspan="2" class="cgh-vp">Verkoopprijs</th>
+                <th colspan="1" class="cgh-btw">BTW</th>
+              </tr>
+              <!-- Column headers -->
+              <tr class="col-head">
+                <th class="left" style="width:24px;"></th><!-- drag -->
+                <th class="left" style="width:28px;"></th><!-- checkbox -->
+                <th class="left" style="width:36px;"></th><!-- expand + num -->
+                <th class="left" style="min-width:220px;">Omschrijving</th>
+                <th class="right" style="width:52px;">Aant.</th>
+                <th class="left" style="width:64px;">Eenh.</th>
+                <th class="ab right" style="width:60px;">Uur/E.</th>
+                <th class="ab right" style="width:72px;">Tarief AB</th>
+                <th class="ab right" style="width:80px;">Bedrag AB</th>
+                <th class="ma right" style="width:72px;">Prijs MA</th>
+                <th class="ma right" style="width:80px;">Bedrag MA</th>
+                <th class="right" style="width:68px;">Tot. Uren</th>
+                <th class="kp right" style="width:80px;">Tot. KP</th>
+                <th class="kp right" style="width:56px;">Opsl.%</th>
+                <th class="vp right" style="width:80px;">Tot. VP</th>
+                <th class="btw right" style="width:52px;">BTW %</th>
+              </tr>
+            </thead>
+            <tbody id="calcBody">
+            <!-- rows rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TotalsBar -->
+        <div class="totals-bar" id="totalsBar">
+          <div class="tb-group">
+            <div class="tb-item">
+              <div class="tb-label">Uurtarief AB</div>
+              <div class="tb-val">€ 45 /u</div>
+            </div>
+          </div>
+          <div class="tb-group">
+            <div class="tb-item">
+              <div class="tb-label">Kostprijs</div>
+              <div class="tb-val">€ 9.108</div>
+            </div>
+            <div class="tb-item">
+              <div class="tb-label">Opslag</div>
+              <div class="tb-val">30,00%</div>
+            </div>
+          </div>
+          <div class="tb-group">
+            <div class="tb-item">
+              <div class="tb-label">VP excl. BTW</div>
+              <div class="tb-val pos">€ 11.840</div>
+            </div>
+          </div>
+          <div class="tb-spacer"></div>
+          <div class="tb-group">
+            <div class="tb-item highlight">
+              <div class="tb-label">BTW 21%</div>
+              <div class="tb-val">€ 2.487</div>
+            </div>
+            <div class="tb-item highlight">
+              <div class="tb-label">Totaal incl. BTW</div>
+              <div class="tb-val pos">€ 14.327</div>
+            </div>
+            <div class="tb-item highlight">
+              <div class="tb-label">Marge</div>
+              <div class="tb-val marge">23,1%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ ROW ANATOMY ═════════ -->
+    <section class="tk" id="anatomy">
+      <div class="head"><div class="ix">·</div><h2>Rij-anatomie · drie typen</h2></div>
+      <div class="anatomy-grid">
+        <div class="anat-card">
+          <div class="ac-head">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--brand-800);"></div>
+            Groep-rij
+          </div>
+          <div class="ac-body">
+            <b>Gebruik:</b> top-level groepering (bv. "1 · Behtelpark Kroner").<br>
+            <b>Stijl:</b> bg <code>brand-800 (#054f2e)</code> · tekst wit · hoogte 36px · font 700 · collapsible.<br>
+            <b>Rechts:</b> subgroep-telling + MA/KP/VP totalen in mono 11px.<br>
+            <b>Klikbaar:</b> collapse/expand alle subgroepen erin.
+          </div>
+        </div>
+        <div class="anat-card">
+          <div class="ac-head">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--neutral-900);"></div>
+            Subgroep-rij
+          </div>
+          <div class="ac-body">
+            <b>Gebruik:</b> onderverdeling binnen een groep (bv. "1.1 · Behandelkamer 8").<br>
+            <b>Stijl:</b> bg <code>neutral-900</code> · tekst wit · hoogte 30px · font 600.<br>
+            <b>Rechts:</b> totalen in mono 11px, iets minder opacity.<br>
+            <b>Inspringen:</b> num-cel toont "1.1" patroon.
+          </div>
+        </div>
+        <div class="anat-card">
+          <div class="ac-head">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--neutral-200);"></div>
+            Regel-rij
+          </div>
+          <div class="ac-body">
+            <b>Gebruik:</b> één calculatieregel (materiaal, uren, stelpost).<br>
+            <b>Stijl:</b> bg wit · tekst <code>neutral-900</code> · hoogte 32px · editeerbaar.<br>
+            <b>Tags:</b> <code>[STP]</code> amber, <code>[VRR]</code> grijs, <code>[OPT]</code> groen.<br>
+            <b>Hover:</b> rij-bg <code>neutral-50</code> + drag-handle zichtbaar.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ COLUMN GROUPS ═════════ -->
+    <section class="tk" id="columns">
+      <div class="head"><div class="ix">·</div><h2>Kolomgroepen · tokens</h2></div>
+
+      <div class="demo-box" style="overflow:hidden;">
+        <table class="spec-tbl" style="width:100%;">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Kleur (text)</th>
+              <th>Cel-background</th>
+              <th>Header-background</th>
+              <th>Kolommen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color:var(--calc-ab);">calc.ab</td>
+              <td>#1F6FEB</td>
+              <td>rgba(31,111,235,0.04)</td>
+              <td>rgba(31,111,235,0.08)</td>
+              <td style="color:var(--neutral-600);">UUR/E · Tarief AB · Bedrag AB</td>
+            </tr>
+            <tr>
+              <td style="color:var(--calc-ma);">calc.ma</td>
+              <td>#C2185B</td>
+              <td>rgba(194,24,91,0.04)</td>
+              <td>rgba(194,24,91,0.08)</td>
+              <td style="color:var(--neutral-600);">Prijs MA · Bedrag MA</td>
+            </tr>
+            <tr>
+              <td style="color:var(--calc-oa);">calc.oa</td>
+              <td>#7B1FA2</td>
+              <td>rgba(123,31,162,0.04)</td>
+              <td>rgba(123,31,162,0.08)</td>
+              <td style="color:var(--neutral-600);">Prijs OA · Bedrag OA</td>
+            </tr>
+            <tr>
+              <td style="color:var(--calc-kp);">calc.kp</td>
+              <td>#009439</td>
+              <td>rgba(0,122,61,0.05)</td>
+              <td>rgba(0,122,61,0.10)</td>
+              <td style="color:var(--neutral-600);">KP/E · Tot. KP · Opsl.%</td>
+            </tr>
+            <tr>
+              <td style="color:var(--calc-vp);">calc.vp</td>
+              <td>#057A5C</td>
+              <td>rgba(5,122,92,0.05)</td>
+              <td>rgba(5,122,92,0.10)</td>
+              <td style="color:var(--neutral-600);">VP/E · Tot. VP</td>
+            </tr>
+            <tr>
+              <td style="color:var(--calc-btw);">calc.btw</td>
+              <td>#B85A00</td>
+              <td>rgba(184,90,0,0.04)</td>
+              <td>rgba(184,90,0,0.08)</td>
+              <td style="color:var(--neutral-600);">BTW %</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="meta-card">
+        <b>Kleur-principe:</b> elke kolomgroep heeft één "text/stroke" kleur (gebruikt voor header-tekst, cel-tekst en activering van focus-ring) en twee achtergrond-niveaus:
+        <code>bg-soft</code> (4–5% opacity) voor cel-rijen en <code>bg-header</code> (8–10% opacity) voor de kolomkoppen.
+        Dit zorgt voor duidelijke groupering zonder te veel contrast-ruis op de data.
+      </div>
+    </section>
+
+    <!-- ═════════ TOTALS BAR ═════════ -->
+    <section class="tk" id="totalsbar">
+      <div class="head"><div class="ix">49</div><h2>TotalsBar · sticky onderaan</h2></div>
+      <p class="desc">
+        Plakt aan de onderkant van de CalculatieGrid. Altijd zichtbaar, ook bij scrollen.
+        Toont: Uurtarief AB · Kostprijs + Opslag · VP excl. BTW (links, basis-info)
+        en BTW · Totaal incl. BTW · Marge (rechts, highlight-zone in donkerder bg).
+        Marge-kleur: groen &gt;20%, amber 12–20%, rood &lt;12%.
+      </p>
+
+      <!-- Marge-varianten -->
+      <h3 class="sub">Marge-kleur · drie staten</h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <div>
+          <div style="font-size:11px;color:var(--neutral-500);margin-bottom:6px;">Goed · &gt;20%</div>
+          <div class="totals-bar" style="border-radius:8px; overflow:hidden;">
+            <div class="tb-group"><div class="tb-item"><div class="tb-label">VP excl. BTW</div><div class="tb-val pos">€ 11.840</div></div></div>
+            <div class="tb-spacer"></div>
+            <div class="tb-group">
+              <div class="tb-item highlight"><div class="tb-label">Totaal incl. BTW</div><div class="tb-val pos">€ 14.327</div></div>
+              <div class="tb-item highlight"><div class="tb-label">Marge</div><div class="tb-val marge">23,1%</div></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--neutral-500);margin-bottom:6px;">Let op · 12–20%</div>
+          <div class="totals-bar" style="border-radius:8px; overflow:hidden;">
+            <div class="tb-group"><div class="tb-item"><div class="tb-label">VP excl. BTW</div><div class="tb-val">€ 9.420</div></div></div>
+            <div class="tb-spacer"></div>
+            <div class="tb-group">
+              <div class="tb-item highlight"><div class="tb-label">Totaal incl. BTW</div><div class="tb-val">€ 11.398</div></div>
+              <div class="tb-item highlight"><div class="tb-label">Marge</div><div class="tb-val warn">15,4%</div></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--neutral-500);margin-bottom:6px;">Kritisch · &lt;12%</div>
+          <div class="totals-bar" style="border-radius:8px; overflow:hidden;">
+            <div class="tb-group"><div class="tb-item"><div class="tb-label">VP excl. BTW</div><div class="tb-val">€ 8.180</div></div></div>
+            <div class="tb-spacer"></div>
+            <div class="tb-group">
+              <div class="tb-item highlight"><div class="tb-label">Totaal incl. BTW</div><div class="tb-val">€ 9.898</div></div>
+              <div class="tb-item highlight"><div class="tb-label">Marge</div><div class="tb-val" style="color:#fda29b;font-size:15px;font-weight:700;">8,2%</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card" style="margin-top:14px;">
+        <b>Marge-drempels:</b>
+        <code>&gt;20%</code> → <code>#61ac2b</code> (lime, brand-lime) ·
+        <code>12–20%</code> → <code>#ffb866</code> (warning-300) ·
+        <code>&lt;12%</code> → <code>#fda29b</code> (error-300) op donker bg.<br>
+        De TotalsBar is altijd <code>position: sticky; bottom: 0</code> binnen de calc-shell.
+        Op mobiel schuift hij mee maar toont alleen VP en Marge.
+      </div>
+    </section>
+
+    <!-- ═════════ TOKENS ═════════ -->
+    <section class="tk" id="tokens">
+      <div class="head"><div class="ix">·</div><h2>Tokens</h2></div>
+
+      <div class="demo-box" style="overflow:hidden;">
+        <table class="spec-tbl">
+          <thead><tr><th>Token</th><th>Waarde</th><th>Gebruik</th></tr></thead>
+          <tbody>
+            <tr><td>--row-h</td><td>32px</td><td>Hoogte regel-rij</td></tr>
+            <tr><td>--row-h-group</td><td>36px</td><td>Hoogte groep-rij</td></tr>
+            <tr><td>col header font</td><td>10px · 700 · uppercase</td><td>Kolomkop</td></tr>
+            <tr><td>cell font</td><td>JetBrains Mono · 12px</td><td>Alle numerieke cellen</td></tr>
+            <tr><td>omschrijving font</td><td>Montserrat · 12.5px</td><td>Omschrijving-kolom</td></tr>
+            <tr><td>focus ring</td><td>inset 0 0 0 2px brand-500</td><td>Actieve editeer-cel</td></tr>
+            <tr><td>group-row bg</td><td>brand-800 (#054f2e)</td><td>Groep-rij achtergrond</td></tr>
+            <tr><td>subgroup-row bg</td><td>neutral-900</td><td>Subgroep-rij achtergrond</td></tr>
+            <tr><td>totals-bar bg</td><td>brand-900</td><td>TotalsBar achtergrond</td></tr>
+            <tr><td>totals-bar highlight</td><td>rgba(255,255,255,0.06)</td><td>Rechter cluster (BTW/VP/Marge)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="meta-card">
+        <b>Implementatie-notities:</b><br>
+        • Gebruik <code>@tanstack/react-virtual</code> voor row virtualization — calculaties kunnen &gt;500 regels bevatten.<br>
+        • Kolom-zichtbaarheid persisteren per user in <code>localStorage</code> sleutel <code>calc-col-visibility</code>.<br>
+        • Inline editing: <code>contenteditable</code> op cellen + <code>onBlur</code> → save naar store. Geen apart edit-mode.<br>
+        • Tab-navigatie: Tab→ volgende cel, Shift+Tab← vorige, Enter↓ volgende rij.<br>
+        • Drag &amp; drop rijen: <code>@dnd-kit/sortable</code> met <code>DragOverlay</code> voor ghost-row.
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // ─────────────────────────────────────────────────────────────
+  // CalculatieGrid data + rendering
+  // ─────────────────────────────────────────────────────────────
+  const rows = [
+    { type: 'group', num: '1', label: 'Behtelpark Kroner', sub: '1 subgroep', uren: '118,0', ma: '2.614,00', kp: '9.108,00', vp: '11.840,40' },
+    { type: 'subgroup', num: '1.1', label: 'Behandelkamer 8', sub: '12 regels', uren: '118,0', ma: '2.614,00', kp: '9.108,00', vp: '11.840,40' },
+    { type: 'line', num: null, label: 'Bandraster in bestaand systeemplafond monteren', aant: '1', eenh: 'post', uurE: '2', tariefAb: '55', bedragAb: '110', prijsMa: '50', bedragMa: '50', uren: '2,00', kp: '€ 160,00', opsl: '30%', vp: '€ 208,00', btw: '21%' },
+    { type: 'line', num: null, label: 'Vloerafwerking verwijderen t.p.v. nieuwe wand', aant: '1', eenh: 'post', uurE: '4', tariefAb: '55', bedragAb: '220', prijsMa: '—', bedragMa: '—', uren: '4,00', kp: '€ 220,00', opsl: '30%', vp: '€ 286,00', btw: '21%' },
+    { type: 'line', num: null, label: 'MS wand plaatsen', aant: '10', eenh: 'm²', uurE: '3,2', tariefAb: '55', bedragAb: '1.760', prijsMa: '—', bedragMa: '497,6', uren: '32,00', kp: '€ 2.257,60', opsl: '30%', vp: '€ 2.934,88', btw: '21%' },
+    { type: 'line', num: null, label: 'Naden smeren', aant: '1', eenh: 'post', uurE: '8', tariefAb: '60', bedragAb: '480', prijsMa: '100', bedragMa: '100', uren: '8,00', kp: '€ 580,00', opsl: '30%', vp: '€ 754,00', btw: '21%' },
+    { type: 'line', num: null, label: 'Binnendeurkozijn met deur plaatsen en aftimm.', aant: '1', eenh: 'st', uurE: '6,00', tariefAb: '—', bedragAb: '288', prijsMa: '—', bedragMa: '166,4', uren: '6,00', kp: '€ 454,40', opsl: '30%', vp: '€ 590,72', btw: '21%' },
+    { type: 'line', num: null, label: 'Wasmachine aansluiting en afvoer realiseren', aant: '1', eenh: 'post', uurE: '4', tariefAb: '60', bedragAb: '240', prijsMa: '80', bedragMa: '80', uren: '4,00', kp: '€ 320,00', opsl: '30%', vp: '€ 416,00', btw: '21%' },
+    { type: 'line', tag: 'stp', num: null, label: 'Waterleiding en afvoer realiseren vanuit kruip.', aant: '1', eenh: 'Stelpost', uurE: '16', tariefAb: '60', bedragAb: '960', prijsMa: '200', bedragMa: '200', uren: '16,00', kp: '€ 1.160,00', opsl: '30%', vp: '€ 1.508,00', btw: '21%' },
+    { type: 'line', tag: 'vrr', num: null, label: 'Kist bouwen t.p.v. installaties die uit vloer om.', aant: '1', eenh: 'Verrekenb.', uurE: '4', tariefAb: '55', bedragAb: '220', prijsMa: '20', bedragMa: '20', uren: '4,00', kp: '€ 240,00', opsl: '30%', vp: '€ 312,00', btw: '21%' },
+    { type: 'line', num: null, label: 'Ikea keuken leveren', aant: '1', eenh: 'post', uurE: '—', tariefAb: '—', bedragAb: '—', prijsMa: '1.200', bedragMa: '1.200', uren: '—', kp: '€ 1.200,00', opsl: '30%', vp: '€ 1.560,00', btw: '21%' },
+    { type: 'line', num: null, label: 'Ikea keuken plaatsen en afmonteren', aant: '1', eenh: 'post', uurE: '24', tariefAb: '55', bedragAb: '1.320', prijsMa: '—', bedragMa: '—', uren: '24,00', kp: '€ 1.320,00', opsl: '30%', vp: '€ 1.716,00', btw: '21%' },
+    { type: 'line', num: null, label: 'Gootsteen en kraan aansluiten.', aant: '1', eenh: 'st', uurE: '2', tariefAb: '48', bedragAb: '96', prijsMa: '—', bedragMa: '—', uren: '2,00', kp: '€ 96,00', opsl: '30%', vp: '€ 124,80', btw: '21%' },
+    { type: 'line', num: null, label: 'Nieuwe wand sauzen en deurkozijn combinatie sc.', aant: '1', eenh: 'post', uurE: '16', tariefAb: '50', bedragAb: '800', prijsMa: '300', bedragMa: '300', uren: '16,00', kp: '€ 1.100,00', opsl: '30%', vp: '€ 1.430,00', btw: '21%' },
+    { type: 'total' }
+  ];
+
+  const states = { groups: {} };
+
+  function renderGrid() {
+    const tbody = document.getElementById('calcBody');
+    let html = '';
+    let skip = false;
+    let currentGroup = null;
+
+    rows.forEach((r, i) => {
+      if (r.type === 'group') {
+        currentGroup = i;
+        const collapsed = states.groups[i] || false;
+        html += `<tr class="group-row" data-group="${i}">
+          <td class="drag-cell">⠿</td>
+          <td></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button class="expand-btn ${collapsed ? 'collapsed' : ''}" onclick="toggleGroup(${i})" style="width:16px;height:16px;display:grid;place-items:center;background:transparent;border:0;cursor:pointer;color:rgba(255,255,255,0.7);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <span style="font-family:var(--font-mono);font-size:11px;opacity:0.7;">${r.num}</span>
+            </div>
+          </td>
+          <td class="txt" colspan="2">
+            ${r.label}
+            <span style="font-size:10.5px;font-weight:400;opacity:0.7;margin-left:8px;">· ${r.sub}</span>
+          </td>
+          <td></td>
+          <td></td><td></td>
+          <td></td><td></td>
+          <td class="totals right" style="font-size:11px;opacity:0.85;">${r.uren}&nbsp;u</td>
+          <td class="totals right" style="font-size:11px;opacity:0.85;">MA:&nbsp;€&nbsp;${r.ma}</td>
+          <td></td>
+          <td class="totals right" style="font-size:11px;opacity:0.85;color:#6dd190;">KP:&nbsp;€&nbsp;${r.kp}</td>
+          <td class="totals right" style="font-size:11px;opacity:0.85;color:#61ac2b;">VP:&nbsp;€&nbsp;${r.vp}</td>
+          <td></td>
+        </tr>`;
+        skip = false;
+      } else if (r.type === 'subgroup') {
+        const collapsed = states.groups[currentGroup] || false;
+        if (collapsed) return;
+        html += `<tr class="subgroup-row" data-subgroup="${i}">
+          <td class="drag-cell">⠿</td>
+          <td></td>
+          <td style="padding-left:20px;">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button style="width:14px;height:14px;display:grid;place-items:center;background:transparent;border:0;cursor:pointer;color:rgba(255,255,255,0.6);">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <span style="font-family:var(--font-mono);font-size:10.5px;opacity:0.65;">${r.num}</span>
+            </div>
+          </td>
+          <td class="txt" colspan="2">
+            ${r.label}
+            <span style="font-size:10px;font-weight:400;opacity:0.65;margin-left:6px;">· ${r.sub}</span>
+          </td>
+          <td></td><td></td><td></td>
+          <td></td><td></td>
+          <td class="totals right">${r.uren}&nbsp;u</td>
+          <td class="totals right">MA:&nbsp;€&nbsp;${r.ma}</td>
+          <td></td>
+          <td class="totals right" style="color:#6dd190;">KP:&nbsp;€&nbsp;${r.kp}</td>
+          <td class="totals right" style="color:#61ac2b;">VP:&nbsp;€&nbsp;${r.vp}</td>
+          <td></td>
+        </tr>`;
+      } else if (r.type === 'line') {
+        const collapsed = states.groups[currentGroup] || false;
+        if (collapsed) return;
+        const tagHtml = r.tag
+          ? `<span class="row-tag ${r.tag}">${r.tag.toUpperCase()}</span> `
+          : '';
+        html += `<tr class="data-row">
+          <td class="drag-cell"><svg width="10" height="14" viewBox="0 0 10 14" fill="none"><circle cx="3" cy="2.5" r="1.2" fill="currentColor"/><circle cx="7" cy="2.5" r="1.2" fill="currentColor"/><circle cx="3" cy="6.5" r="1.2" fill="currentColor"/><circle cx="7" cy="6.5" r="1.2" fill="currentColor"/><circle cx="3" cy="10.5" r="1.2" fill="currentColor"/><circle cx="7" cy="10.5" r="1.2" fill="currentColor"/></svg></td>
+          <td class="check-cell"><span class="cg-check"></span></td>
+          <td></td>
+          <td class="txt">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button class="row-expand"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+              ${tagHtml}
+              <a href="#">${r.label}</a>
+            </div>
+          </td>
+          <td class="right" contenteditable="true">${r.aant}</td>
+          <td><select class="unit-sel"><option>${r.eenh}</option><option>m²</option><option>m</option><option>st</option><option>post</option></select></td>
+          <td class="ab right" contenteditable="true">${r.uurE}</td>
+          <td class="ab right" contenteditable="true">${r.tariefAb}</td>
+          <td class="ab right">${r.bedragAb}</td>
+          <td class="ma right" contenteditable="true">${r.prijsMa}</td>
+          <td class="ma right">${r.bedragMa}</td>
+          <td class="right">${r.uren}</td>
+          <td class="kp right">${r.kp}</td>
+          <td class="kp right" contenteditable="true">${r.opsl}</td>
+          <td class="vp right">${r.vp}</td>
+          <td class="btw right" contenteditable="true">${r.btw}</td>
+        </tr>`;
+      } else if (r.type === 'total') {
+        html += `<tr>
+          <td colspan="3"></td>
+          <td class="txt" style="font-weight:700; font-size:13px; padding:10px 8px;">Totaal calculatie</td>
+          <td></td><td></td>
+          <td class="ab right"></td>
+          <td class="ab right"></td>
+          <td class="ab right" style="font-weight:700;">2.614,00</td>
+          <td class="ma right"></td>
+          <td class="ma right" style="font-weight:700;color:var(--calc-ma);">€ 2.614,00</td>
+          <td class="right" style="font-weight:700;">118,00</td>
+          <td class="kp right" style="font-weight:700;font-size:13px;">€ 9.108,00</td>
+          <td class="kp right"></td>
+          <td class="vp right" style="font-weight:700;font-size:13px;">€ 11.840,40</td>
+          <td class="btw right"></td>
+        </tr>`;
+      }
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  function toggleGroup(idx) {
+    states.groups[idx] = !states.groups[idx];
+    renderGrid();
+  }
+
+  let allCollapsed = false;
+  function toggleAll() {
+    allCollapsed = !allCollapsed;
+    rows.forEach((r, i) => {
+      if (r.type === 'group') states.groups[i] = allCollapsed;
+    });
+    document.getElementById('collapseBtn').querySelector('span') &&
+      (document.getElementById('collapseBtn').textContent = allCollapsed ? 'Uitklappen' : 'Inklappen');
+    renderGrid();
+  }
+
+  function toggleColVis() {
+    const panel = document.getElementById('colVisPanel');
+    panel.classList.toggle('open');
+  }
+
+  document.addEventListener('click', function(e) {
+    const panel = document.getElementById('colVisPanel');
+    if (!e.target.closest('#colVisPanel') && !e.target.closest('button[onclick="toggleColVis()"]')) {
+      panel.classList.remove('open');
+    }
+  });
+
+  renderGrid();
+</script>
+
+<!-- React + Babel for Tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<div id="tweaks-root"></div>
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "density": "compact",
+    "colColor": true,
+    "zebra": true
+  }/*EDITMODE-END*/;
+  const DENS = { compact: 28, regulier: 32, ruim: 40 };
+  function apply(t) {
+    const r = document.getElementById('calcRoot');
+    r.setAttribute('data-colcolor', t.colColor ? 'on' : 'off');
+    r.setAttribute('data-zebra', t.zebra ? 'on' : 'off');
+    document.documentElement.style.setProperty('--row-h', DENS[t.density] + 'px');
+  }
+  function CalcTweaks() {
+    const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+    React.useEffect(() => { apply(t); }, [t]);
+    return (
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Weergave" />
+        <TweakRadio label="Rijhoogte" value={t.density}
+          options={['compact', 'regulier', 'ruim']}
+          onChange={(v) => setTweak('density', v)} />
+        <TweakToggle label="Kolom-kleuren" value={t.colColor}
+          onChange={(v) => setTweak('colColor', v)} />
+        <TweakToggle label="Zebra-strepen" value={t.zebra}
+          onChange={(v) => setTweak('zebra', v)} />
+      </TweaksPanel>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('tweaks-root')).render(<CalcTweaks />);
+</script>
+</body>
+</html>

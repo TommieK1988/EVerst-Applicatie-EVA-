@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · Navigatie &amp; Layout</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     EVA · Navigatie & Layout
+     Bouwt op Foundations v0.2
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --brand-50:  #ecfaf0;
+    --brand-100: #d2f2dd;
+    --brand-200: #a5e4ba;
+    --brand-300: #6dd190;
+    --brand-400: #28a44a;
+    --brand-500: #009439;
+    --brand-600: #007530;
+    --brand-700: #0a5e28;
+    --brand-800: #054f2e;
+    --brand-900: #013a20;
+
+    --polygon-bg:   url("../../apps/dashboard/public/polygon-bg.png");
+    --polygon-top:  #28a44a;
+    --polygon-mid:  #009439;
+    --polygon-deep: #054f2e;
+
+    --neutral-0:   #ffffff;
+    --neutral-50:  #f8fafa;
+    --neutral-100: #f1f4f5;
+    --neutral-200: #e3e8ea;
+    --neutral-300: #cbd2d6;
+    --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c;
+    --neutral-600: #4d575e;
+    --neutral-700: #364048;
+    --neutral-800: #232a30;
+    --neutral-900: #161b20;
+    --neutral-950: #1f2933;
+
+    --warning-50:  #fff6ec; --warning-500: #f08000; --warning-700: #b85a00;
+    --error-50:    #fef3f2; --error-500:   #e8453b; --error-700:   #b42318;
+    --info-50:     #eff8ff; --info-500:    #2e90fa; --info-700:    #175cd3;
+    --success-50:  #ecfdf3; --success-500: #12b76a; --success-700: #027a48;
+
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Layout tokens */
+    --sidebar-w-expanded: 224px;
+    --sidebar-w-collapsed: 56px;
+    --topbar-h: 60px;
+    --page-pad-x: 32px;
+    --page-pad-y: 28px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--neutral-50);
+    color: var(--neutral-900);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ─── DOC LAYOUT ─────────────────────────────────────────── */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 0; border-right: 1px solid var(--neutral-200);
+    background: var(--neutral-0);
+  }
+  aside.doc-nav .doc-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    background-image: var(--polygon-bg);
+    background-size: cover; background-position: center;
+    color: white; position: relative;
+  }
+  aside.doc-nav .doc-brand::after {
+    content: "";
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%);
+  }
+  aside.doc-nav .doc-brand .mark {
+    width: 30px; height: 30px; border-radius: 6px;
+    background-image: url("brand-assets/eve-beeldmerk.png");
+    background-size: cover; background-position: center;
+    z-index: 1;
+  }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px;
+  }
+  aside.doc-nav a {
+    display: flex; justify-content: space-between; align-items: center;
+    text-decoration: none; color: var(--neutral-700);
+    padding: 7px 12px; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    transition: background 120ms, color 120ms;
+  }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 44px 48px 120px; max-width: 1500px; }
+
+  header.page { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--brand-500); margin-bottom: 12px;
+  }
+  header.page h1 { font-size: 38px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 700; }
+  header.page .lede { font-size: 16px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 64px; scroll-margin-top: 24px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); letter-spacing: 0.05em; }
+  section.tk > .head h2 { font-size: 24px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 24px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 24px 0 12px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     EVA PLATFORM SHELL — the actual reusable component styles
+     These would translate 1-1 to <Sidebar>, <TopBar>, <PageHeader>
+     ═══════════════════════════════════════════════════════════ */
+
+  .platform-frame {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--neutral-200);
+    background: var(--neutral-0);
+    height: 720px;
+    display: grid;
+    grid-template-columns: var(--sidebar-w-expanded) 1fr;
+    transition: grid-template-columns 240ms ease;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.06), 0 1px 2px rgba(16,24,40,0.04);
+  }
+  .platform-frame[data-collapsed="true"]   { grid-template-columns: var(--sidebar-w-collapsed) 1fr; }
+  .platform-frame[data-theme="dark"]        { background: var(--neutral-950); border-color: var(--neutral-800); }
+
+  /* ─── SIDEBAR ─── */
+  .eva-sidebar {
+    background: var(--neutral-0);
+    border-right: 1px solid var(--neutral-200);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  [data-theme="dark"] .eva-sidebar { background: var(--neutral-900); border-right-color: var(--neutral-800); }
+
+  .eva-sidebar .brand-block {
+    flex-shrink: 0;
+    height: var(--topbar-h);
+    padding: 0 16px;
+    display: flex; align-items: center;
+    background-image: var(--polygon-bg);
+    background-size: cover; background-position: center;
+    color: white;
+    position: relative;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .eva-sidebar .brand-block::after {
+    content: "";
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%);
+  }
+  .eva-sidebar .brand-block .everts-logo {
+    font-weight: 800; font-size: 18px; letter-spacing: 0.02em; z-index: 1;
+    display: flex; align-items: center; gap: 8px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.15);
+  }
+  .eva-sidebar .brand-block .everts-logo .ico {
+    width: 28px; height: 28px; border-radius: 5px;
+    background-image: url("brand-assets/eve-beeldmerk.png");
+    background-size: cover; background-position: center;
+    flex-shrink: 0;
+  }
+  .eva-sidebar .brand-block .full-name { z-index: 1; transition: opacity 180ms; }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .brand-block .full-name { opacity: 0; pointer-events: none; }
+
+  /* Collapse toggle */
+  .eva-sidebar .collapse-toggle {
+    position: absolute; right: -10px; top: calc(var(--topbar-h) + 14px);
+    width: 20px; height: 20px;
+    background: var(--neutral-0);
+    border: 1px solid var(--neutral-200);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    color: var(--neutral-500);
+    cursor: pointer; z-index: 5;
+    transition: color 120ms, background 120ms;
+  }
+  .eva-sidebar .collapse-toggle:hover { color: var(--brand-500); background: var(--neutral-50); }
+  [data-theme="dark"] .eva-sidebar .collapse-toggle { background: var(--neutral-900); border-color: var(--neutral-700); color: var(--neutral-400); }
+  [data-theme="dark"] .eva-sidebar .collapse-toggle:hover { color: var(--brand-300); }
+  .eva-sidebar .collapse-toggle svg { transition: transform 240ms; }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .collapse-toggle svg { transform: rotate(180deg); }
+
+  /* Search */
+  .eva-sidebar .sb-search {
+    padding: 10px 10px 6px;
+  }
+  .eva-sidebar .sb-search .input {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 9px;
+    background: var(--neutral-50);
+    border: 1px solid var(--neutral-200);
+    border-radius: 6px;
+    color: var(--neutral-500);
+    font-size: 11.5px;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-search .input {
+    background: var(--neutral-950); border-color: var(--neutral-800); color: var(--neutral-400);
+  }
+  .eva-sidebar .sb-search .input .placeholder { transition: opacity 180ms; }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-search .input .placeholder { opacity: 0; pointer-events: none; }
+  .eva-sidebar .sb-search .input .shortcut {
+    margin-left: auto;
+    font-family: var(--font-mono); font-size: 10px;
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    padding: 1px 5px; border-radius: 4px;
+    color: var(--neutral-500);
+    transition: opacity 180ms;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-search .input .shortcut { background: var(--neutral-800); border-color: var(--neutral-700); color: var(--neutral-300); }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-search .input .shortcut { opacity: 0; pointer-events: none; }
+
+  /* Nav lists */
+  .eva-sidebar .sb-scroll { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+  .eva-sidebar .sb-scroll::-webkit-scrollbar { width: 6px; }
+  .eva-sidebar .sb-scroll::-webkit-scrollbar-thumb { background: var(--neutral-200); border-radius: 4px; }
+  [data-theme="dark"] .eva-sidebar .sb-scroll::-webkit-scrollbar-thumb { background: var(--neutral-800); }
+
+  .eva-sidebar .sb-section { margin-top: 14px; }
+  .eva-sidebar .sb-section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 10px;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--neutral-400);
+    transition: opacity 180ms;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-section-head { color: var(--neutral-400); }
+  .eva-sidebar .sb-section-head .add {
+    width: 16px; height: 16px; border-radius: 4px;
+    display: grid; place-items: center;
+    color: var(--neutral-400); cursor: pointer;
+  }
+  .eva-sidebar .sb-section-head .add:hover { color: var(--brand-500); background: var(--brand-50); }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-section-head { opacity: 0; height: 4px; overflow: hidden; padding-top: 2px; padding-bottom: 2px; }
+
+  .eva-sidebar .sb-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 10px; margin-top: 1px;
+    border-radius: 6px;
+    color: var(--neutral-600);
+    text-decoration: none;
+    font-size: 12px; font-weight: 500;
+    transition: background 120ms, color 120ms;
+    cursor: pointer;
+    position: relative;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-item { color: var(--neutral-300); }
+  .eva-sidebar .sb-item:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  [data-theme="dark"] .eva-sidebar .sb-item:hover { background: var(--neutral-800); color: var(--neutral-100); }
+  .eva-sidebar .sb-item.active {
+    background: var(--brand-50);
+    color: var(--brand-700);
+  }
+  [data-theme="dark"] .eva-sidebar .sb-item.active { background: rgba(10,122,53,0.18); color: var(--brand-300); }
+  .eva-sidebar .sb-item .ico {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    color: currentColor;
+  }
+  .eva-sidebar .sb-item .ico svg { width: 18px; height: 18px; }
+  .eva-sidebar .sb-item .label { transition: opacity 180ms; white-space: nowrap; }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-item .label { opacity: 0; pointer-events: none; }
+  .eva-sidebar .sb-item .badge {
+    margin-left: auto;
+    background: var(--neutral-200); color: var(--neutral-700);
+    font-size: 10px; font-weight: 600;
+    padding: 1px 6px; border-radius: 999px;
+    transition: opacity 180ms;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-item .badge { background: var(--neutral-700); color: var(--neutral-300); }
+  .eva-sidebar .sb-item.active .badge { background: var(--brand-100); color: var(--brand-700); }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-item .badge { opacity: 0; pointer-events: none; }
+
+  .eva-sidebar .sb-item .indicator {
+    position: absolute; left: 0;
+    width: 2px; height: 20px; background: transparent; border-radius: 2px;
+  }
+  .eva-sidebar .sb-item.active .indicator { background: var(--brand-500); }
+  [data-theme="dark"] .eva-sidebar .sb-item.active .indicator { background: var(--brand-400); }
+
+  /* User card at bottom */
+  .eva-sidebar .sb-user {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    border-top: 1px solid var(--neutral-200);
+    display: flex; align-items: center; gap: 10px;
+  }
+  [data-theme="dark"] .eva-sidebar .sb-user { border-top-color: var(--neutral-800); }
+  .eva-sidebar .sb-user .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand-400), var(--brand-700));
+    color: white;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 12px; letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  .eva-sidebar .sb-user .info { transition: opacity 180ms; }
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-user .info,
+  .platform-frame[data-collapsed="true"] .eva-sidebar .sb-user .menu { opacity: 0; pointer-events: none; }
+  .eva-sidebar .sb-user .name { font-size: 12.5px; font-weight: 600; color: var(--neutral-900); line-height: 1.2; }
+  [data-theme="dark"] .eva-sidebar .sb-user .name { color: var(--neutral-100); }
+  .eva-sidebar .sb-user .team { font-size: 11px; color: var(--neutral-500); line-height: 1.2; margin-top: 1px; }
+  .eva-sidebar .sb-user .menu {
+    margin-left: auto; color: var(--neutral-400); cursor: pointer; transition: color 120ms, opacity 180ms;
+  }
+  .eva-sidebar .sb-user .menu:hover { color: var(--neutral-700); }
+
+  /* ─── TOPBAR ─── */
+  .eva-topbar {
+    height: var(--topbar-h);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--page-pad-x);
+    border-bottom: 1px solid var(--neutral-200);
+    background: var(--neutral-0);
+    position: relative;
+  }
+  [data-theme="dark"] .eva-topbar { background: var(--neutral-900); border-bottom-color: var(--neutral-800); }
+  .eva-topbar .left { display: flex; align-items: baseline; gap: 14px; min-width: 0;}
+  .eva-topbar .title { font-size: 18px; font-weight: 700; color: var(--neutral-900); letter-spacing: -0.015em; }
+  [data-theme="dark"] .eva-topbar .title { color: var(--neutral-100); }
+  .eva-topbar .right { display: flex; align-items: center; gap: 6px; }
+  .eva-topbar .tb-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 10px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--neutral-600);
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+  }
+  .eva-topbar .tb-btn:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  [data-theme="dark"] .eva-topbar .tb-btn { color: var(--neutral-400); }
+  [data-theme="dark"] .eva-topbar .tb-btn:hover { background: var(--neutral-800); color: var(--neutral-100); }
+  .eva-topbar .tb-btn.primary {
+    background: var(--brand-500); color: white; padding: 0 12px;
+    height: 32px; font-weight: 600;
+  }
+  .eva-topbar .tb-btn.primary:hover { background: var(--brand-600); color: white; }
+  [data-theme="dark"] .eva-topbar .tb-btn.primary { background: var(--brand-400); color: var(--neutral-950); }
+  [data-theme="dark"] .eva-topbar .tb-btn.primary:hover { background: var(--brand-300); }
+  .eva-topbar .tb-icon {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--neutral-500); cursor: pointer;
+    transition: background 120ms, color 120ms;
+    position: relative;
+  }
+  .eva-topbar .tb-icon:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  [data-theme="dark"] .eva-topbar .tb-icon { color: var(--neutral-400); }
+  [data-theme="dark"] .eva-topbar .tb-icon:hover { background: var(--neutral-800); color: var(--neutral-100); }
+  .eva-topbar .tb-icon .dot-notif {
+    position: absolute; top: 7px; right: 8px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--warning-500);
+    border: 1.5px solid var(--neutral-0);
+  }
+  [data-theme="dark"] .eva-topbar .tb-icon .dot-notif { border-color: var(--neutral-900); }
+
+  /* ─── PAGE AREA + PAGE HEADER ─── */
+  .eva-main { display: flex; flex-direction: column; min-width: 0; }
+  .eva-page {
+    flex: 1; overflow-y: auto;
+    padding: var(--page-pad-y) var(--page-pad-x) 32px;
+    background: var(--neutral-50);
+  }
+  [data-theme="dark"] .eva-page { background: var(--neutral-950); }
+
+  .page-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 24px; margin-bottom: 22px;
+  }
+  .page-header .ph-left { min-width: 0; }
+  .page-header .ph-eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--neutral-500);
+    margin-bottom: 4px;
+  }
+  [data-theme="dark"] .page-header .ph-eyebrow { color: var(--neutral-400); }
+  .page-header .ph-title {
+    font-size: 28px; line-height: 1.1; font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--neutral-900);
+    margin: 0;
+  }
+  [data-theme="dark"] .page-header .ph-title { color: var(--neutral-100); }
+  .page-header .ph-title .sep {
+    margin: 0 8px; color: var(--neutral-400); font-weight: 500;
+  }
+  .page-header .ph-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 10px;
+    padding: 3px 10px;
+    background: var(--brand-50); color: var(--brand-700);
+    font-size: 11.5px; font-weight: 600;
+    border-radius: 999px;
+  }
+  [data-theme="dark"] .page-header .ph-status { background: rgba(10,122,53,0.18); color: var(--brand-300); }
+  .page-header .ph-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .page-header .ph-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .ph-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 12px;
+    background: var(--neutral-0);
+    border: 1px solid var(--neutral-200);
+    border-radius: 6px;
+    color: var(--neutral-700);
+    font-size: 12.5px; font-weight: 600; font-family: var(--font-sans);
+    cursor: pointer;
+  }
+  [data-theme="dark"] .ph-btn { background: var(--neutral-900); border-color: var(--neutral-700); color: var(--neutral-200); }
+  .ph-btn:hover { background: var(--neutral-50); border-color: var(--neutral-300); }
+  [data-theme="dark"] .ph-btn:hover { background: var(--neutral-800); }
+  .ph-btn.primary {
+    background: var(--brand-500); border-color: var(--brand-500); color: white;
+  }
+  .ph-btn.primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
+  [data-theme="dark"] .ph-btn.primary { background: var(--brand-400); border-color: var(--brand-400); color: var(--neutral-950); }
+
+  /* ─── TABS ─── */
+  .eva-tabs {
+    display: flex; gap: 4px;
+    border-bottom: 1px solid var(--neutral-200);
+    margin-bottom: 22px;
+  }
+  [data-theme="dark"] .eva-tabs { border-bottom-color: var(--neutral-800); }
+  .eva-tabs .tab {
+    padding: 8px 14px; margin-bottom: -1px;
+    font-size: 13px; font-weight: 600;
+    color: var(--neutral-500);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 120ms, border-color 120ms;
+    font-family: var(--font-sans);
+  }
+  .eva-tabs .tab:hover { color: var(--neutral-800); }
+  [data-theme="dark"] .eva-tabs .tab { color: var(--neutral-400); }
+  [data-theme="dark"] .eva-tabs .tab:hover { color: var(--neutral-200); }
+  .eva-tabs .tab.active {
+    color: var(--brand-700); border-bottom-color: var(--brand-500);
+  }
+  [data-theme="dark"] .eva-tabs .tab.active { color: var(--brand-300); border-bottom-color: var(--brand-400); }
+  .eva-tabs .tab .count {
+    margin-left: 6px;
+    font-size: 11px; font-weight: 500;
+    padding: 1px 6px;
+    background: var(--neutral-100);
+    color: var(--neutral-600);
+    border-radius: 999px;
+  }
+  .eva-tabs .tab.active .count { background: var(--brand-50); color: var(--brand-700); }
+  [data-theme="dark"] .eva-tabs .tab .count { background: var(--neutral-800); color: var(--neutral-300); }
+  [data-theme="dark"] .eva-tabs .tab.active .count { background: rgba(10,122,53,0.2); color: var(--brand-300); }
+
+  /* ─── BREADCRUMB ─── */
+  .eva-crumb {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--neutral-500);
+  }
+  [data-theme="dark"] .eva-crumb { color: var(--neutral-400); }
+  .eva-crumb a {
+    color: var(--neutral-600); text-decoration: none;
+    padding: 2px 6px; border-radius: 4px;
+    transition: background 120ms, color 120ms;
+  }
+  [data-theme="dark"] .eva-crumb a { color: var(--neutral-400); }
+  .eva-crumb a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  [data-theme="dark"] .eva-crumb a:hover { background: var(--neutral-800); color: var(--neutral-100); }
+  .eva-crumb .sep { color: var(--neutral-400); font-weight: 500; }
+  .eva-crumb .current { color: var(--neutral-900); font-weight: 600; padding: 2px 6px; }
+  [data-theme="dark"] .eva-crumb .current { color: var(--neutral-100); }
+
+  /* ─── Section cards in demo content ─── */
+  .demo-section {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 10px; overflow: hidden; margin-bottom: 14px;
+  }
+  [data-theme="dark"] .demo-section { background: var(--neutral-900); border-color: var(--neutral-800); }
+  .demo-section > header {
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--neutral-200);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--neutral-700);
+  }
+  [data-theme="dark"] .demo-section > header { border-bottom-color: var(--neutral-800); color: var(--neutral-300); }
+  .demo-section > .body {
+    padding: 16px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px;
+    font-size: 13px;
+  }
+  .demo-section .field .lbl {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-weight: 600; color: var(--neutral-500); margin-bottom: 3px;
+  }
+  .demo-section .field .val { color: var(--neutral-900); font-size: 13px; }
+  [data-theme="dark"] .demo-section .field .val { color: var(--neutral-100); }
+  .demo-section .field .val.empty { color: var(--neutral-400); }
+  .demo-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+
+  /* ═══════════════════════════════════════════════════════════
+     DOCUMENTATION-LEVEL STYLES (anatomy, labels, tags)
+     ═══════════════════════════════════════════════════════════ */
+  .preview-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 18px;
+    background: var(--neutral-900); color: var(--neutral-100);
+    border-radius: 12px 12px 0 0;
+    font-size: 12px;
+    margin-bottom: -1px;
+  }
+  .preview-bar .left { display: flex; align-items: center; gap: 14px; }
+  .preview-bar .tag {
+    font-family: var(--font-mono); font-size: 10px;
+    background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+  .preview-bar .controls { display: flex; gap: 6px; }
+  .preview-bar .ctl {
+    background: var(--neutral-800); color: var(--neutral-200);
+    border: 1px solid var(--neutral-700);
+    font-size: 11px; font-weight: 600;
+    padding: 5px 10px; border-radius: 6px;
+    cursor: pointer; font-family: var(--font-sans);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .preview-bar .ctl:hover { background: var(--neutral-700); }
+  .preview-bar .ctl.active { background: var(--brand-500); border-color: var(--brand-500); color: white; }
+  .preview-wrapper {
+    border-radius: 0 0 12px 12px;
+    overflow: hidden;
+  }
+
+  /* Anatomy diagram */
+  .anatomy {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 12px; padding: 28px;
+    margin-bottom: 24px;
+    display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items: start;
+  }
+  .anatomy h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+  .anatomy-vis {
+    background: var(--neutral-50); border: 1px solid var(--neutral-200);
+    border-radius: 10px; padding: 18px; position: relative;
+    aspect-ratio: 16/9;
+  }
+  .anatomy-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .anatomy-labels li {
+    display: grid; grid-template-columns: 24px 1fr; gap: 12px;
+    align-items: start; font-size: 12.5px; color: var(--neutral-700); line-height: 1.5;
+  }
+  .anatomy-labels .ix {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--brand-50); color: var(--brand-700);
+    display: grid; place-items: center;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+    border: 1px solid var(--brand-200);
+  }
+  .anatomy-labels b { color: var(--neutral-900); font-weight: 600; display: block; }
+  .anatomy-labels code {
+    font-family: var(--font-mono); font-size: 10.5px;
+    background: var(--neutral-100); padding: 1px 5px; border-radius: 3px;
+    color: var(--neutral-800);
+  }
+
+  /* Component spec card */
+  .spec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .spec-card {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .spec-card .name { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--neutral-500); margin-bottom: 6px; }
+  .spec-card .val { font-family: var(--font-mono); font-size: 14px; color: var(--neutral-900); font-weight: 600; }
+  .spec-card .hint { font-size: 11px; color: var(--neutral-500); margin-top: 3px; }
+
+  /* Demo container for individual components */
+  .demo-box {
+    background: var(--neutral-50);
+    border: 1px solid var(--neutral-200);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .demo-box.contrast { background: var(--neutral-950); }
+  .demo-box .label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-weight: 700; color: var(--neutral-500); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .demo-box.contrast .label { color: var(--neutral-400); }
+
+  /* Tag annotations */
+  .tag-keep, .tag-prop, .tag-new {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    padding: 3px 7px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .tag-keep { background: var(--success-50); color: var(--success-700); border: 1px solid #c8eed8; }
+  .tag-prop { background: var(--brand-50);   color: var(--brand-700); border: 1px solid var(--brand-100); }
+  .tag-new  { background: var(--warning-50); color: var(--warning-700); border: 1px solid #ffe6cc; }
+
+  .meta-card {
+    margin-top: 16px; padding: 14px 18px;
+    border: 1px dashed var(--neutral-200); border-radius: 10px;
+    font-size: 12px; color: var(--neutral-600); line-height: 1.55;
+  }
+  .meta-card code {
+    font-family: var(--font-mono); background: var(--neutral-100);
+    padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px;
+  }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 28px; }
+    .anatomy { grid-template-columns: 1fr; }
+    .spec-grid { grid-template-columns: repeat(2, 1fr); }
+    .platform-frame { height: 600px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-shell">
+
+  <!-- ───────────────────────── DOC SIDEBAR ───────────────────────── -->
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position: relative; z-index: 1;">
+        <div class="name">EVERTS.</div>
+        <div class="sub">EVA · Design System</div>
+      </div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html" class="active"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">In dit document</div>
+      <ol>
+        <li><a href="#preview"><span>Live preview</span><span class="num">·</span></a></li>
+        <li><a href="#shell"><span>PlatformShell</span><span class="num">01</span></a></li>
+        <li><a href="#sidebar"><span>Sidebar</span><span class="num">02</span></a></li>
+        <li><a href="#topbar"><span>TopBar</span><span class="num">03</span></a></li>
+        <li><a href="#pageheader"><span>PageHeader</span><span class="num">04</span></a></li>
+        <li><a href="#breadcrumb"><span>Breadcrumb</span><span class="num">05</span></a></li>
+        <li><a href="#tabs"><span>Tabs</span><span class="num">06</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <!-- ───────────────────────── DOC MAIN ───────────────────────── -->
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 2 · Navigatie &amp; Layout</div>
+      <h1>De ruimte waarin alles leeft.</h1>
+      <p class="lede">
+        Sidebar, TopBar en PageHeader vormen samen <b>PlatformShell</b> — het
+        consistente frame waarbinnen alle 140+ EVA-pagina's bestaan. Hieronder eerst
+        een live preview met werkende collapse en theme-toggle, daarna per onderdeel
+        de anatomie, tokens en states.
+      </p>
+      <div class="meta">
+        <div><b>Componenten</b>&nbsp;&nbsp;6 (Shell · Sidebar · TopBar · PageHeader · Breadcrumb · Tabs)</div>
+        <div><b>Status</b>&nbsp;&nbsp;Afgeleid van huidige EVA, gestandaardiseerd</div>
+        <div><b>Radix-basis</b>&nbsp;&nbsp;Tabs · Tooltip · Collapsible</div>
+      </div>
+    </header>
+
+    <!-- ═════════ LIVE PREVIEW ═════════ -->
+    <section class="tk" id="preview">
+      <div class="head"><div class="ix">00</div><h2>Live preview</h2></div>
+      <p class="desc">
+        De volledige PlatformShell met werkende collapse-toggle, theme-switch en tabs.
+        Probeer het: klik op het pijltje rechts van de sidebar, op de zon/maan-icon
+        rechtsboven, of op de tabs in het hoofdvenster.
+      </p>
+
+      <div class="preview-bar">
+        <div class="left">
+          <span class="tag">PREVIEW</span>
+          <span>Volledige PlatformShell — interactief</span>
+        </div>
+        <div class="controls">
+          <button class="ctl" data-page="dossier" id="page-dossier">Dossier-detail</button>
+          <button class="ctl active" data-page="calculatie" id="page-calculatie">Calculatie</button>
+          <button class="ctl" data-page="planning" id="page-planning">Planning</button>
+        </div>
+      </div>
+
+      <div class="preview-wrapper">
+        <div class="platform-frame" id="frame" data-collapsed="false" data-theme="light">
+          <!-- ─── SIDEBAR ─── -->
+          <aside class="eva-sidebar">
+            <div class="brand-block">
+              <div class="everts-logo">
+                <div class="ico"></div>
+                <span class="full-name">EVERTS.</span>
+              </div>
+            </div>
+            <button class="collapse-toggle" id="collapseToggle" aria-label="Sidebar inklappen">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+
+            <div class="sb-search">
+              <div class="input">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="placeholder">Zoek in alles…</span>
+                <span class="shortcut">⌘K</span>
+              </div>
+            </div>
+
+            <div class="sb-scroll">
+              <div class="sb-section">
+                <div class="sb-section-head"><span>Opdrachten</span></div>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></span>
+                  <span class="label">Terug naar overzicht</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                  <span class="label">Offerte</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+                  <span class="label">Informatie</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                  <span class="label">Bestanden</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                  <span class="label">Werkbegroting</span>
+                </a>
+                <a class="sb-item active" id="navCalc">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                  <span class="label">Calculatie</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+                  <span class="label">Taken</span>
+                  <span class="badge">10</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                  <span class="label">VCA</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
+                  <span class="label">Inkoop</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>
+                  <span class="label">Verkoop</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                  <span class="label">Meerwerk</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                  <span class="label">Financieel</span>
+                </a>
+                <a class="sb-item">
+                  <span class="indicator"></span>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg></span>
+                  <span class="label">Formulieren</span>
+                </a>
+              </div>
+
+              <div class="sb-section">
+                <div class="sb-section-head">
+                  <span>Favorieten</span>
+                  <span class="add"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                </div>
+                <div style="padding: 6px 12px; font-size: 11.5px; color: var(--neutral-400); transition: opacity 180ms;" class="placeholder">Nog geen favorieten</div>
+              </div>
+            </div>
+
+            <div class="sb-user">
+              <div class="avatar">TK</div>
+              <div class="info">
+                <div class="name">Tom Kamminga</div>
+                <div class="team">Everts Team</div>
+              </div>
+              <span class="menu">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </span>
+            </div>
+          </aside>
+
+          <!-- ─── MAIN ─── -->
+          <div class="eva-main">
+            <div class="eva-topbar">
+              <div class="left">
+                <div class="title" id="topbarTitle">Aanvragen</div>
+              </div>
+              <div class="right">
+                <button class="tb-btn primary">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  Vraag EVA
+                </button>
+                <span class="tb-icon" title="Help">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </span>
+                <span class="tb-icon" id="themeToggle" title="Theme">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </span>
+                <span class="tb-icon" title="Notificaties">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  <span class="dot-notif"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="eva-page" id="pageArea">
+              <!-- Calculatie page (default) -->
+              <div class="page-content" data-page="calculatie">
+                <div class="page-header">
+                  <div class="ph-left">
+                    <div class="ph-eyebrow">Hoofdproces</div>
+                    <h1 class="ph-title">
+                      <span>Aanvragen</span><span class="sep">›</span>
+                      <span>Aanpassingen behandelkamer</span><span class="sep">›</span>
+                      <span style="color: var(--brand-700);">Calculatie</span>
+                    </h1>
+                    <div class="ph-status"><span class="dot"></span>In behandeling</div>
+                  </div>
+                  <div class="ph-actions">
+                    <button class="ph-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                      Ongedaan
+                    </button>
+                    <button class="ph-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                      Meetstaat
+                    </button>
+                    <button class="ph-btn">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                      Bibliotheek
+                    </button>
+                    <button class="ph-btn primary">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                      Opslaan
+                    </button>
+                  </div>
+                </div>
+
+                <div class="eva-tabs">
+                  <button class="tab active" data-tab="regels">Regels <span class="count">12</span></button>
+                  <button class="tab" data-tab="staffel">Staffel</button>
+                  <button class="tab" data-tab="opslagen">Opslagen</button>
+                  <button class="tab" data-tab="bijlagen">Bijlagen <span class="count">3</span></button>
+                  <button class="tab" data-tab="historie">Historie</button>
+                </div>
+
+                <div class="demo-section">
+                  <header>Calculatieregels · 1 · Behandelkamer 8</header>
+                  <div class="body" style="grid-template-columns: 1fr; padding: 0;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+                      <thead>
+                        <tr style="background: var(--neutral-50); border-bottom: 1px solid var(--neutral-200);">
+                          <th style="text-align: left; padding: 10px 18px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--neutral-500); font-weight: 600;">Omschrijving</th>
+                          <th style="text-align: right; padding: 10px 18px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #1f6feb; font-weight: 600; background: rgba(31,111,235,0.06);">Tarief&nbsp;AB</th>
+                          <th style="text-align: right; padding: 10px 18px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #d23b8a; font-weight: 600; background: rgba(210,59,138,0.06);">Bedrag&nbsp;MA</th>
+                          <th style="text-align: right; padding: 10px 18px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-700); font-weight: 600; background: rgba(10,122,53,0.07);">Tot.&nbsp;KP</th>
+                          <th style="text-align: right; padding: 10px 18px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #057a5c; font-weight: 600; background: rgba(5,122,92,0.07);">Tot.&nbsp;VP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style="border-bottom: 1px solid var(--neutral-100);">
+                          <td style="padding: 8px 18px;">Bandraster in bestaand systeemplafond monteren</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #1f6feb;">55,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #d23b8a;">50,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: var(--brand-700); font-weight: 600;">€&nbsp;160,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #057a5c; font-weight: 600;">€&nbsp;208,00</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--neutral-100);">
+                          <td style="padding: 8px 18px;">Vloerafwerking verwijderen t.p.v. de nieuwe wand</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #1f6feb;">55,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #d23b8a;">220,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: var(--brand-700); font-weight: 600;">€&nbsp;220,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #057a5c; font-weight: 600;">€&nbsp;286,00</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 18px;">MS wand plaatsen</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #1f6feb;">55,00</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #d23b8a;">497,60</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: var(--brand-700); font-weight: 600;">€&nbsp;2.257,60</td>
+                          <td style="text-align: right; padding: 8px 18px; font-family: var(--font-mono); color: #057a5c; font-weight: 600;">€&nbsp;2.934,88</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dossier page -->
+              <div class="page-content" data-page="dossier" style="display:none;">
+                <div class="page-header">
+                  <div class="ph-left">
+                    <div class="ph-eyebrow">Hoofdproces</div>
+                    <h1 class="ph-title">
+                      <span>Aanvragen</span><span class="sep">›</span>
+                      <span>Aanpassingen behandelkamer</span><span class="sep">›</span>
+                      <span style="color: var(--brand-700);">Informatie</span>
+                    </h1>
+                    <div class="ph-status"><span class="dot"></span>Nieuw</div>
+                  </div>
+                  <div class="ph-actions">
+                    <button class="ph-btn">Calculatie openen</button>
+                    <button class="ph-btn">Offerte aanmaken</button>
+                    <button class="ph-btn primary">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                      Bewerken
+                    </button>
+                  </div>
+                </div>
+
+                <div class="demo-grid">
+                  <div class="demo-section">
+                    <header>Informatie</header>
+                    <div class="body">
+                      <div class="field"><div class="lbl">Dossiernummer</div><div class="val empty">—</div></div>
+                      <div class="field"><div class="lbl">Aangemaakt op</div><div class="val">13 mei 2026</div></div>
+                      <div class="field"><div class="lbl">Categorie</div><div class="val empty">bijv. Schilderwerk</div></div>
+                      <div class="field"><div class="lbl">Referentie</div><div class="val empty">kenmerk van opdrachtgever</div></div>
+                      <div class="field"><div class="lbl">Calculator</div><div class="val">Henk de Boer</div></div>
+                      <div class="field"><div class="lbl">Uiterlijke datum</div><div class="val empty">—</div></div>
+                    </div>
+                  </div>
+                  <div class="demo-section">
+                    <header>Taken · 0 open</header>
+                    <div class="body" style="grid-template-columns: 1fr; min-height: 200px; display: grid; place-items: center; color: var(--neutral-400); font-size: 13px;">
+                      Geen openstaande taken
+                    </div>
+                  </div>
+                </div>
+
+                <div class="demo-section" style="margin-top: 16px;">
+                  <header>Opdrachtgever</header>
+                  <div class="body">
+                    <div class="field"><div class="lbl">Naam</div><div class="val">Vastgoed Centrum BV</div></div>
+                    <div class="field"><div class="lbl">KVK nummer</div><div class="val empty">—</div></div>
+                    <div class="field"><div class="lbl">Telefoon</div><div class="val empty">—</div></div>
+                    <div class="field"><div class="lbl">E-mail</div><div class="val empty">—</div></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Planning page -->
+              <div class="page-content" data-page="planning" style="display:none;">
+                <div class="page-header">
+                  <div class="ph-left">
+                    <div class="ph-eyebrow">Hoofdproces</div>
+                    <h1 class="ph-title">
+                      <span>Opdrachten</span><span class="sep">›</span>
+                      <span>Schilderwerk en gevelonderhoud</span><span class="sep">›</span>
+                      <span style="color: var(--brand-700);">Planning</span>
+                    </h1>
+                  </div>
+                  <div class="ph-actions">
+                    <button class="ph-btn">+ Fase</button>
+                    <button class="ph-btn primary">+ Nieuwe activiteit</button>
+                  </div>
+                </div>
+                <div class="eva-tabs">
+                  <button class="tab active">Activiteiten</button>
+                  <button class="tab">Medewerkers</button>
+                </div>
+                <div class="demo-section">
+                  <header>Week 22 · 25 mei – 31 mei 2026</header>
+                  <div style="padding: 18px; font-size: 13px; color: var(--neutral-600);">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <div style="background: #7c3aed; color: white; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 11.5px;">Schilderwerk en gevelonderhoud · Maria Bakker</div>
+                      <div style="background: #2dd4bf; color: #064e3b; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 11.5px; width: 60%;">Schilderwerk · Henk de Boer</div>
+                      <div style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 11.5px; width: 45%;">Schilderwerk · Jan de Vries</div>
+                      <div style="background: var(--warning-50); color: var(--warning-700); padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 11.5px; width: 22%;">Tweede Pinksterdag</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 01 · PLATFORMSHELL ANATOMY ═════════ -->
+    <section class="tk" id="shell">
+      <div class="head"><div class="ix">01</div><h2>PlatformShell · anatomie</h2></div>
+      <p class="desc">
+        De buitenste wrapper. Drie zones: <b>Sidebar</b> (vast, scrollable), <b>TopBar</b>
+        (60px, sticky), <b>Page-area</b> (alle content). PageHeader leeft binnen Page-area
+        — niet in TopBar — zodat hij meescrollt en sticky-on-scroll-effecten optioneel zijn.
+      </p>
+
+      <div class="anatomy">
+        <div class="anatomy-vis">
+          <!-- Mini anatomy svg-style diagram -->
+          <svg viewBox="0 0 800 450" style="width: 100%; height: 100%;">
+            <!-- Sidebar -->
+            <rect x="0" y="0" width="180" height="450" fill="#ffffff" stroke="#e3e8ea" stroke-width="1"/>
+            <!-- Sidebar brand block -->
+            <rect x="0" y="0" width="180" height="56" fill="url(#poly)" />
+            <defs>
+              <linearGradient id="poly" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#28a44a"/>
+                <stop offset="55%" stop-color="#009439"/>
+                <stop offset="100%" stop-color="#054f2e"/>
+              </linearGradient>
+            </defs>
+            <text x="22" y="35" font-family="Montserrat" font-size="14" fill="white" font-weight="800">EVERTS.</text>
+
+            <!-- Sidebar items -->
+            <rect x="12" y="80" width="156" height="22" rx="6" fill="#f1f4f5" opacity="0.6"/>
+            <rect x="12" y="110" width="120" height="6" rx="3" fill="#cbd2d6"/>
+            <rect x="12" y="125" width="100" height="6" rx="3" fill="#cbd2d6"/>
+            <rect x="12" y="146" width="156" height="22" rx="6" fill="#ecfaf0"/>
+            <text x="22" y="161" font-family="Montserrat" font-size="10" fill="#0a5e28" font-weight="600">Calculatie</text>
+            <rect x="12" y="178" width="100" height="6" rx="3" fill="#cbd2d6"/>
+            <rect x="12" y="193" width="110" height="6" rx="3" fill="#cbd2d6"/>
+            <rect x="12" y="208" width="80" height="6" rx="3" fill="#cbd2d6"/>
+
+            <!-- User card -->
+            <rect x="0" y="408" width="180" height="42" fill="#ffffff" stroke="#e3e8ea" stroke-width="1"/>
+            <circle cx="22" cy="429" r="9" fill="#009439"/>
+            <rect x="40" y="423" width="60" height="5" rx="2" fill="#364048"/>
+            <rect x="40" y="432" width="40" height="4" rx="2" fill="#9aa4ab"/>
+
+            <!-- Topbar -->
+            <rect x="180" y="0" width="620" height="56" fill="#ffffff" stroke="#e3e8ea" stroke-width="1"/>
+            <rect x="206" y="20" width="80" height="14" rx="3" fill="#364048"/>
+            <rect x="620" y="14" width="76" height="26" rx="6" fill="#009439"/>
+            <text x="635" y="32" font-family="Montserrat" font-size="10" fill="white" font-weight="600">Vraag EVA</text>
+            <circle cx="715" cy="27" r="12" fill="none" stroke="#9aa4ab" stroke-width="1.5"/>
+            <circle cx="745" cy="27" r="12" fill="none" stroke="#9aa4ab" stroke-width="1.5"/>
+            <circle cx="775" cy="27" r="12" fill="none" stroke="#9aa4ab" stroke-width="1.5"/>
+            <circle cx="780" cy="20" r="3" fill="#f08000"/>
+
+            <!-- Page area -->
+            <rect x="180" y="56" width="620" height="394" fill="#f8fafa"/>
+
+            <!-- PageHeader -->
+            <rect x="206" y="78" width="50" height="6" rx="2" fill="#9aa4ab"/>
+            <text x="206" y="108" font-family="Montserrat" font-size="14" fill="#161b20" font-weight="700">Aanvragen › Aanpassingen › Calculatie</text>
+            <rect x="206" y="118" width="84" height="16" rx="8" fill="#ecfaf0"/>
+            <circle cx="216" cy="126" r="3" fill="#0a5e28"/>
+            <text x="226" y="129" font-family="Montserrat" font-size="9" fill="#0a5e28" font-weight="600">In behandeling</text>
+
+            <rect x="610" y="100" width="56" height="20" rx="4" fill="#ffffff" stroke="#e3e8ea"/>
+            <rect x="670" y="100" width="56" height="20" rx="4" fill="#ffffff" stroke="#e3e8ea"/>
+            <rect x="730" y="100" width="56" height="20" rx="4" fill="#009439"/>
+
+            <!-- Tabs -->
+            <line x1="206" y1="172" x2="780" y2="172" stroke="#e3e8ea" stroke-width="1"/>
+            <line x1="206" y1="171" x2="246" y2="171" stroke="#009439" stroke-width="2"/>
+            <rect x="210" y="158" width="32" height="8" rx="2" fill="#0a5e28"/>
+            <rect x="260" y="158" width="40" height="8" rx="2" fill="#9aa4ab"/>
+            <rect x="318" y="158" width="50" height="8" rx="2" fill="#9aa4ab"/>
+
+            <!-- Content cards -->
+            <rect x="206" y="190" width="574" height="80" rx="8" fill="#ffffff" stroke="#e3e8ea"/>
+            <rect x="206" y="282" width="280" height="120" rx="8" fill="#ffffff" stroke="#e3e8ea"/>
+            <rect x="500" y="282" width="280" height="120" rx="8" fill="#ffffff" stroke="#e3e8ea"/>
+
+            <!-- Index markers -->
+            <g font-family="JetBrains Mono" font-size="10" font-weight="700">
+              <circle cx="14" cy="14" r="10" fill="#009439"/><text x="14" y="18" text-anchor="middle" fill="white">1</text>
+              <circle cx="194" cy="14" r="10" fill="#009439"/><text x="194" y="18" text-anchor="middle" fill="white">2</text>
+              <circle cx="194" cy="70" r="10" fill="#009439"/><text x="194" y="74" text-anchor="middle" fill="white">3</text>
+              <circle cx="14" cy="423" r="10" fill="#009439"/><text x="14" y="427" text-anchor="middle" fill="white">4</text>
+            </g>
+          </svg>
+        </div>
+
+        <div>
+          <h3>Zones</h3>
+          <ol class="anatomy-labels">
+            <li>
+              <span class="ix">1</span>
+              <span><b>Sidebar</b> · <code>224px</code> expanded / <code>56px</code> collapsed. Sticky, height = 100vh. Bevat brand-block, search, nav-sections, user-card.</span>
+            </li>
+            <li>
+              <span class="ix">2</span>
+              <span><b>TopBar</b> · <code>60px</code> hoog, sticky. Bevat page-title (link) + acties (rechts: Vraag EVA, help, theme, bell).</span>
+            </li>
+            <li>
+              <span class="ix">3</span>
+              <span><b>Page-area</b> · scrollable. <code>padding: 28px 32px</code>. Bevat PageHeader, optional Tabs en alle content.</span>
+            </li>
+            <li>
+              <span class="ix">4</span>
+              <span><b>User-card</b> · sticky onderaan sidebar. Avatar + naam + team + meer-menu.</span>
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="spec-grid">
+        <div class="spec-card">
+          <div class="name">Sidebar expanded</div>
+          <div class="val">224px</div>
+          <div class="hint">var(--sidebar-w-expanded)</div>
+        </div>
+        <div class="spec-card">
+          <div class="name">Sidebar collapsed</div>
+          <div class="val">56px</div>
+          <div class="hint">var(--sidebar-w-collapsed)</div>
+        </div>
+        <div class="spec-card">
+          <div class="name">TopBar height</div>
+          <div class="val">60px</div>
+          <div class="hint">var(--topbar-h)</div>
+        </div>
+        <div class="spec-card">
+          <div class="name">Page padding-x</div>
+          <div class="val">32px</div>
+          <div class="hint">var(--page-pad-x)</div>
+        </div>
+        <div class="spec-card">
+          <div class="name">Page padding-y</div>
+          <div class="val">28px</div>
+          <div class="hint">var(--page-pad-y)</div>
+        </div>
+        <div class="spec-card">
+          <div class="name">Transition</div>
+          <div class="val">240ms ease</div>
+          <div class="hint">sidebar collapse</div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Persistentie:</b> de collapsed-state van de sidebar moet per user opgeslagen worden
+        (localStorage of user-preferences). EVA-medewerkers in het veld werken vaak collapsed;
+        kantoor-medewerkers expanded.
+        <br><br>
+        <b>Mobile:</b> &lt; 768px wisselt PlatformShell naar bottom-tab nav + slide-over sidebar
+        (apart te ontwerpen — laat me weten of dat nodig is).
+      </div>
+    </section>
+
+    <!-- ═════════ 02 · SIDEBAR ═════════ -->
+    <section class="tk" id="sidebar">
+      <div class="head"><div class="ix">02</div><h2>Sidebar</h2></div>
+      <p class="desc">
+        Vier verticale zones: <b>brand-block</b> (polygon-textuur), <b>search</b> (⌘K),
+        <b>nav-secties</b> (scrollable), <b>user-card</b> (sticky). De collapse-toggle
+        is een 20×20px cirkel die half over de border heen prikt — visueel duidelijke
+        affordance zonder ruimte te kosten.
+      </p>
+
+      <h3 class="sub">States</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="demo-box">
+          <div class="label">Default · brand-700 op brand-50</div>
+          <div style="background: white; border: 1px solid var(--neutral-200); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <a class="sb-item-demo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-500);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-700);">Informatie</span>
+            </a>
+            <a class="sb-item-demo" style="background: var(--neutral-100); border-radius: 6px; padding: 7px 10px; display:flex; align-items:center; gap:10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-900);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-900);">Bestanden &nbsp;<span style="font-size:10px; color: var(--neutral-500);">hover</span></span>
+            </a>
+            <a class="sb-item-demo" style="background: var(--brand-50); border-radius: 6px; padding: 7px 10px; display:flex; align-items:center; gap:10px; position:relative;">
+              <span style="position: absolute; left: 0; width: 2px; height: 20px; background: var(--brand-500); border-radius: 2px;"></span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-700);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 600; color: var(--brand-700);">Calculatie &nbsp;<span style="font-size:10px; color: var(--brand-500);">active</span></span>
+            </a>
+            <a class="sb-item-demo" style="padding: 7px 10px; display:flex; align-items:center; gap:10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-500);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-700);">Taken</span>
+              <span style="margin-left: auto; background: var(--neutral-200); color: var(--neutral-700); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px;">10</span>
+            </a>
+          </div>
+          <div style="margin-top: 10px; font-size: 11px; color: var(--neutral-500);">
+            <span class="tag-keep">Behouden</span>&nbsp;&nbsp;Active state uit huidige EVA: brand-50 bg + brand-700 tekst.
+            <span class="tag-new" style="margin-left:6px;">Nieuw</span>&nbsp;&nbsp;Left-indicator strip voor scan-baarheid.
+          </div>
+        </div>
+
+        <div class="demo-box contrast">
+          <div class="label">Dark theme</div>
+          <div data-theme="dark" style="background: var(--neutral-900); border: 1px solid var(--neutral-800); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <a style="padding: 7px 10px; display:flex; align-items:center; gap:10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-400);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-300);">Informatie</span>
+            </a>
+            <a style="background: var(--neutral-800); border-radius: 6px; padding: 7px 10px; display:flex; align-items:center; gap:10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-100);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-100);">Bestanden &nbsp;<span style="font-size:10px; color: var(--neutral-400);">hover</span></span>
+            </a>
+            <a style="background: rgba(10,122,53,0.18); border-radius: 6px; padding: 7px 10px; display:flex; align-items:center; gap:10px; position:relative;">
+              <span style="position: absolute; left: 0; width: 2px; height: 20px; background: var(--brand-400); border-radius: 2px;"></span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-300);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 600; color: var(--brand-300);">Calculatie &nbsp;<span style="font-size:10px; color: var(--brand-400);">active</span></span>
+            </a>
+            <a style="padding: 7px 10px; display:flex; align-items:center; gap:10px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--neutral-400);"><circle cx="12" cy="12" r="10"/></svg>
+              <span style="font-size: 13px; font-weight: 500; color: var(--neutral-300);">Taken</span>
+              <span style="margin-left: auto; background: var(--neutral-700); color: var(--neutral-300); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px;">10</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Tokens</h3>
+      <div class="spec-grid">
+        <div class="spec-card"><div class="name">Item height</div><div class="val">32px</div><div class="hint">padding 7px 10px</div></div>
+        <div class="spec-card"><div class="name">Item radius</div><div class="val">6px</div><div class="hint">--radius-md</div></div>
+        <div class="spec-card"><div class="name">Item gap</div><div class="val">2px</div><div class="hint">dense vertical rhythm</div></div>
+        <div class="spec-card"><div class="name">Section gap</div><div class="val">14px</div><div class="hint">tussen secties</div></div>
+        <div class="spec-card"><div class="name">Icon size</div><div class="val">18px</div><div class="hint">1.5px stroke</div></div>
+        <div class="spec-card"><div class="name">Active indicator</div><div class="val">2×20px</div><div class="hint">brand-500, left-aligned</div></div>
+      </div>
+
+      <div class="meta-card">
+        <b>Voorgestelde nieuw:</b> de <b>2px brand-strip</b> links van het active item.
+        In de huidige EVA is alleen de pill-background actief; de extra strip helpt
+        bij snel scannen in dichte sidebars (~15 items).
+        <br><br>
+        <b>Collapsed-state tooltips:</b> elk item krijgt een Radix Tooltip met de
+        label-tekst die rechts uitfade'd in collapsed-modus. Niet zichtbaar in
+        deze preview — wordt onderdeel van het component.
+      </div>
+    </section>
+
+    <!-- ═════════ 03 · TOPBAR ═════════ -->
+    <section class="tk" id="topbar">
+      <div class="head"><div class="ix">03</div><h2>TopBar</h2></div>
+      <p class="desc">
+        Sticky 60px hoge balk, witte achtergrond, 1px bottom-border. Bevat aan de linkerkant
+        een korte context (page-title als plain string of ⌘K-prompt), en rechts altijd
+        dezelfde 4 elementen in vaste volgorde: <b>Vraag EVA · ? · theme · bell</b>.
+      </p>
+
+      <div class="demo-box" style="padding: 0;">
+        <div class="eva-topbar" style="border-radius: 12px 12px 0 0;">
+          <div class="left">
+            <div class="title">Overzicht</div>
+          </div>
+          <div class="right">
+            <button class="tb-btn primary">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Vraag EVA
+            </button>
+            <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+            <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+            <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dot-notif"></span></span>
+          </div>
+        </div>
+        <div style="padding: 18px 24px; font-size: 12px; color: var(--neutral-600); background: var(--neutral-0); border-radius: 0 0 12px 12px;">
+          <b style="color: var(--neutral-900); font-weight: 600;">Cluster-volgorde rechts (van links naar rechts):</b>
+          1. <code style="font-family:var(--font-mono); font-size:11px;">Vraag EVA</code> — primary action, altijd zichtbaar ·
+          2. <code style="font-family:var(--font-mono); font-size:11px;">?</code> — Help · 
+          3. <code style="font-family:var(--font-mono); font-size:11px;">☀/☾</code> — Theme · 
+          4. <code style="font-family:var(--font-mono); font-size:11px;">🔔</code> — Notifications (oranje dot bij ongelezen)
+        </div>
+      </div>
+
+      <h3 class="sub">Varianten</h3>
+      <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+        <div class="demo-box" style="padding: 0;">
+          <div class="eva-topbar" style="border-radius: 12px 12px 0 0;">
+            <div class="left">
+              <div class="title">Overzicht</div>
+            </div>
+            <div class="right">
+              <button class="tb-btn primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Vraag EVA</button>
+              <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+              <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+            </div>
+          </div>
+          <div style="padding: 10px 24px; font-size: 11px; color: var(--neutral-500); background: var(--neutral-50); border-radius: 0 0 12px 12px;">
+            <b>A · Standaard</b> — page-title links als plain context-label.
+          </div>
+        </div>
+
+        <div class="demo-box" data-theme="dark" style="background: var(--neutral-950); padding: 0;">
+          <div class="eva-topbar" style="border-radius: 12px 12px 0 0; background: var(--neutral-900); border-bottom-color: var(--neutral-800);">
+            <div class="left">
+              <div class="title" style="color: var(--neutral-100);">Wagenpark › Dashboard</div>
+            </div>
+            <div class="right">
+              <button class="tb-btn primary" style="background: var(--brand-400); color: var(--neutral-950);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Vraag EVA</button>
+              <span class="tb-icon" style="color: var(--neutral-400);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="tb-icon" style="color: var(--neutral-400);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+              <span class="tb-icon" style="color: var(--neutral-400);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dot-notif" style="border-color: var(--neutral-900);"></span></span>
+            </div>
+          </div>
+          <div style="padding: 10px 24px; font-size: 11px; color: var(--neutral-400); background: var(--neutral-950); border-radius: 0 0 12px 12px;">
+            <b style="color: var(--neutral-100);">B · Dark</b> — zelfde compositie, brand-400 op donker.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 04 · PAGEHEADER ═════════ -->
+    <section class="tk" id="pageheader">
+      <div class="head"><div class="ix">04</div><h2>PageHeader</h2></div>
+      <p class="desc">
+        Het sterkste herhalende patroon in EVA. Drie elementen:
+        <b>eyebrow</b> (uppercase context, bv. HOOFDPROCES),
+        <b>breadcrumb-title</b> (de titel ís het navigatiepad, met › als scheiders),
+        <b>status-pill</b> (optioneel, onder de titel) + <b>actie-cluster</b> (rechts).
+        Géén aparte breadcrumb-rij erboven — de breadcrumb staat in de titel.
+      </p>
+
+      <h3 class="sub">Variant A · Met status-pill (dossier-detail)</h3>
+      <div class="demo-box" style="padding: 28px;">
+        <div class="page-header">
+          <div class="ph-left">
+            <div class="ph-eyebrow">Hoofdproces</div>
+            <h1 class="ph-title">
+              <span>Aanvragen</span><span class="sep">›</span>
+              <span>Aanpassingen behandelkamer</span><span class="sep">›</span>
+              <span style="color: var(--brand-700);">Informatie</span>
+            </h1>
+            <div class="ph-status"><span class="dot"></span>Nieuw</div>
+          </div>
+          <div class="ph-actions">
+            <button class="ph-btn">Calculatie openen</button>
+            <button class="ph-btn">Offerte aanmaken</button>
+            <button class="ph-btn">Interne begroting</button>
+            <button class="ph-btn primary">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+              Bewerken
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Variant B · Zonder eyebrow (dashboard / top-level page)</h3>
+      <div class="demo-box" style="padding: 28px;">
+        <div class="page-header">
+          <div class="ph-left">
+            <h1 class="ph-title" style="font-size: 32px;">Medewerkerplanning</h1>
+            <div style="font-size: 13.5px; color: var(--neutral-500); margin-top: 4px; line-height: 1.5;">
+              Capaciteitsoverzicht — sleep entries om medewerkers te herplannen.
+            </div>
+          </div>
+          <div class="ph-actions">
+            <button class="ph-btn primary">+ Verlof</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Tokens</h3>
+      <div class="spec-grid">
+        <div class="spec-card"><div class="name">Eyebrow</div><div class="val">10.5/14 · 700</div><div class="hint">uppercase · 0.12em</div></div>
+        <div class="spec-card"><div class="name">Title (default)</div><div class="val">28/32 · 700</div><div class="hint">tracking −0.02em</div></div>
+        <div class="spec-card"><div class="name">Title (page-only)</div><div class="val">32/38 · 700</div><div class="hint">geen breadcrumb-pad</div></div>
+        <div class="spec-card"><div class="name">Title separator</div><div class="val">› 8px margin</div><div class="hint">neutral-400 · w-500</div></div>
+        <div class="spec-card"><div class="name">Status margin-top</div><div class="val">10px</div><div class="hint">onder de titel</div></div>
+        <div class="spec-card"><div class="name">Action gap</div><div class="val">6px</div><div class="hint">tussen ph-btn's</div></div>
+      </div>
+
+      <div class="meta-card">
+        <b>Component API (voorgesteld):</b>
+        <code>&lt;PageHeader eyebrow="Hoofdproces" path={['Aanvragen', 'Aanpassingen behandelkamer']} current="Informatie" status="Nieuw" /&gt;</code>
+        — actions als children. <code>path[]</code> ondersteunt links voor terug-navigatie.
+      </div>
+    </section>
+
+    <!-- ═════════ 05 · BREADCRUMB ═════════ -->
+    <section class="tk" id="breadcrumb">
+      <div class="head"><div class="ix">05</div><h2>Breadcrumb</h2></div>
+      <p class="desc">
+        Standalone breadcrumb-component voor pagina's waar de titel niet meeloopt
+        met het pad (bv. lijstpagina's). In de meeste detail-pagina's gebruiken we
+        de <b>PageHeader breadcrumb-title</b> (zie boven) — dat is een rijker patroon.
+      </p>
+
+      <h3 class="sub">Light + Dark</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div class="demo-box">
+          <div class="label">Light</div>
+          <div class="eva-crumb">
+            <a href="#">Dossiers</a><span class="sep">›</span>
+            <a href="#">2026</a><span class="sep">›</span>
+            <a href="#">Apeldoorn</a><span class="sep">›</span>
+            <span class="current">D-1402 · Schildersweg 8</span>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label">Dark</div>
+          <div class="eva-crumb" data-theme="dark" style="color: var(--neutral-400);">
+            <a href="#" style="color: var(--neutral-400);">Dossiers</a><span class="sep" style="color: var(--neutral-500);">›</span>
+            <a href="#" style="color: var(--neutral-400);">2026</a><span class="sep" style="color: var(--neutral-500);">›</span>
+            <a href="#" style="color: var(--neutral-400);">Apeldoorn</a><span class="sep" style="color: var(--neutral-500);">›</span>
+            <span class="current" style="color: var(--neutral-100);">D-1402 · Schildersweg 8</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Wanneer wel/niet?</b><br>
+        • <b>Wel</b> standalone: zoekresultaten, search-overlay, dossier-lijst-pagina's met cross-cutting filters.<br>
+        • <b>Niet</b> standalone: detail-pagina's — gebruik daar PageHeader breadcrumb-title.<br>
+        • <b>Truncatie:</b> tussenitems wisselen naar "…" bij &gt; 5 niveaus diep. Eerste en laatste blijven altijd zichtbaar.
+      </div>
+    </section>
+
+    <!-- ═════════ 06 · TABS ═════════ -->
+    <section class="tk" id="tabs">
+      <div class="head"><div class="ix">06</div><h2>Tabs</h2></div>
+      <p class="desc">
+        Horizontale tab-balk op Radix-basis. Onderlijn met 2px brand-500 indicator,
+        active label in brand-700. Bij &gt; 1 item kan een telpill (count) rechts van
+        het label — bv. <i>Bijlagen 3</i> of <i>Taken 10</i>.
+      </p>
+
+      <h3 class="sub">Default</h3>
+      <div class="demo-box" style="padding: 24px 28px;">
+        <div class="eva-tabs" id="demoTabs">
+          <button class="tab active" data-tab="regels">Regels <span class="count">12</span></button>
+          <button class="tab" data-tab="staffel">Staffel</button>
+          <button class="tab" data-tab="opslagen">Opslagen</button>
+          <button class="tab" data-tab="bijlagen">Bijlagen <span class="count">3</span></button>
+          <button class="tab" data-tab="historie">Historie</button>
+        </div>
+        <div style="padding: 18px 4px; font-size: 13px; color: var(--neutral-600);">
+          Klik op een tab. Inhoud wisselt op klant-niveau — hier alleen state-demo.
+        </div>
+      </div>
+
+      <h3 class="sub">Dark</h3>
+      <div class="demo-box contrast" style="padding: 24px 28px;">
+        <div class="eva-tabs" data-theme="dark" style="border-bottom-color: var(--neutral-800);">
+          <button class="tab active" style="color: var(--brand-300); border-bottom-color: var(--brand-400);">Activiteiten</button>
+          <button class="tab" style="color: var(--neutral-400);">Medewerkers</button>
+          <button class="tab" style="color: var(--neutral-400);">Uursoort</button>
+        </div>
+      </div>
+
+      <h3 class="sub">Segmented control · alternatief voor 2–3 opties</h3>
+      <div class="demo-box" style="padding: 24px 28px;">
+        <div style="display: inline-flex; background: var(--neutral-100); border-radius: 8px; padding: 3px; gap: 2px;">
+          <button style="background: white; color: var(--neutral-900); font-size: 12px; font-weight: 600; padding: 6px 14px; border: none; border-radius: 6px; box-shadow: 0 1px 2px rgba(16,24,40,0.05); font-family: var(--font-sans); cursor: pointer;">Week</button>
+          <button style="background: transparent; color: var(--neutral-600); font-size: 12px; font-weight: 500; padding: 6px 14px; border: none; border-radius: 6px; font-family: var(--font-sans); cursor: pointer;">2 weken</button>
+          <button style="background: transparent; color: var(--neutral-600); font-size: 12px; font-weight: 500; padding: 6px 14px; border: none; border-radius: 6px; font-family: var(--font-sans); cursor: pointer;">Maand</button>
+          <button style="background: transparent; color: var(--neutral-600); font-size: 12px; font-weight: 500; padding: 6px 14px; border: none; border-radius: 6px; font-family: var(--font-sans); cursor: pointer;">Kwartaal</button>
+          <button style="background: transparent; color: var(--neutral-600); font-size: 12px; font-weight: 500; padding: 6px 14px; border: none; border-radius: 6px; font-family: var(--font-sans); cursor: pointer;">Jaar</button>
+        </div>
+        <div style="margin-top: 12px; font-size: 12px; color: var(--neutral-500);">
+          Voor periode-switches en niveau-toggles (Medewerker / Uursoort) — visueel duidelijker als <i>kies één van n</i> dan tabs.
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Tab vs. SegmentedControl:</b><br>
+        • <b>Tab</b> als content-area onder de tabs wisselt (pagina-niveau, &gt; 3 opties).<br>
+        • <b>SegmentedControl</b> als alleen een filter/weergave wisselt binnen dezelfde content (2–5 opties).
+      </div>
+    </section>
+
+    <!-- ═════════ Footer ═════════ -->
+    <div class="meta-card" style="margin-top: 40px;">
+      <b>Volgende stap?</b>
+      Met PlatformShell + PageHeader + Tabs hebben we de chrome.
+      Hierna logisch: <i>Basiscomponenten</i> — Button, Input, Select, Checkbox,
+      Badge, Avatar, Tooltip. Dan kunnen we de section-cards binnen de page-area
+      écht invullen met live form-states. Geef seintje wanneer je door wil.
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // ─── Live preview interactivity ──────────────────────────────
+  const frame = document.getElementById('frame');
+  const collapseToggle = document.getElementById('collapseToggle');
+  const themeToggle = document.getElementById('themeToggle');
+
+  collapseToggle.addEventListener('click', () => {
+    const isCollapsed = frame.getAttribute('data-collapsed') === 'true';
+    frame.setAttribute('data-collapsed', isCollapsed ? 'false' : 'true');
+  });
+
+  themeToggle.addEventListener('click', () => {
+    const current = frame.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    frame.setAttribute('data-theme', next);
+    // swap moon/sun icon
+    themeToggle.innerHTML = next === 'light'
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+  });
+
+  // ─── Page switcher (preview-bar buttons) ─────────────────────
+  const pageButtons = document.querySelectorAll('.preview-bar [data-page]');
+  const pageContents = document.querySelectorAll('.page-content');
+  const topbarTitle = document.getElementById('topbarTitle');
+
+  const titleMap = {
+    'dossier':    'Aanvragen',
+    'calculatie': 'Aanvragen',
+    'planning':   'Opdrachten'
+  };
+
+  pageButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = btn.getAttribute('data-page');
+      pageButtons.forEach(b => b.classList.toggle('active', b === btn));
+      pageContents.forEach(c => {
+        c.style.display = c.getAttribute('data-page') === p ? '' : 'none';
+      });
+      topbarTitle.textContent = titleMap[p];
+    });
+  });
+
+  // ─── Tabs interactivity inside preview ───────────────────────
+  document.querySelectorAll('.eva-tabs').forEach(tabGroup => {
+    tabGroup.addEventListener('click', e => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      tabGroup.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

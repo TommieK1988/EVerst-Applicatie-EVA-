@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · Planning</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-50:  #ecfaf0; --brand-100: #d2f2dd; --brand-200: #a5e4ba;
+    --brand-300: #6dd190; --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28; --brand-800: #054f2e;
+    --brand-900: #013a20; --brand-lime: #61ac2b;
+    --neutral-0:#fff; --neutral-50:#f8fafa; --neutral-100:#f1f4f5; --neutral-200:#e3e8ea;
+    --neutral-300:#cbd2d6; --neutral-400:#9aa4ab; --neutral-500:#6b757c; --neutral-600:#4d575e;
+    --neutral-700:#364048; --neutral-800:#232a30; --neutral-900:#161b20; --neutral-950:#1f2933;
+    --success-50:#ecfdf3; --success-500:#12b76a; --success-700:#027a48;
+    --warning-50:#fff6ec; --warning-500:#f08000; --warning-700:#b85a00;
+    --error-50:#fef3f2; --error-500:#e8453b; --error-700:#b42318;
+    --info-50:#eff8ff; --info-500:#2e90fa; --info-700:#175cd3;
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+    --font-sans:"Montserrat",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    /* planning crew colors */
+    --crew-maria:#7c3aed; --crew-henk:#0f9b8e; --crew-jan:#2f9e44; --crew-erik:#1f8a5b;
+    --sidebar-w: 230px;
+    --topbar-h: 56px;
+    --plan-left-w: 360px;
+    --day-w: 30px;
+    --act-h: 56px;
+    --today-color: #009439;
+    --bar-radius: 6px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: var(--font-sans); background: var(--neutral-100); color: var(--neutral-900); -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+  .app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar { background: var(--neutral-0); border-right: 1px solid var(--neutral-200); display: flex; flex-direction: column; overflow: hidden; }
+  .sb-brand { height: var(--topbar-h); display: flex; align-items: center; gap: 10px; padding: 0 18px; background-image: var(--polygon-bg); background-size: cover; background-position: center; position: relative; color: white; flex-shrink: 0; }
+  .sb-brand::after { content:""; position:absolute; inset:0; background: linear-gradient(180deg,rgba(0,0,0,0.05),rgba(0,0,0,0.28)); }
+  .sb-brand .mark { width: 30px; height: 30px; border-radius: 6px; background-image: url("brand-assets/eve-beeldmerk.png"); background-size: cover; z-index: 1; }
+  .sb-brand .logo { font-weight: 800; font-size: 18px; letter-spacing: 0.02em; z-index: 1; text-shadow: 0 1px 1px rgba(0,0,0,0.15); }
+  .sb-search { padding: 10px 12px 6px; }
+  .sb-search .box { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; background: var(--neutral-50); border: 1px solid var(--neutral-200); border-radius: 6px; color: var(--neutral-500); font-size: 12px; }
+  .sb-scroll { flex: 1; overflow-y: auto; padding: 6px 10px 16px; }
+  .sb-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--neutral-400); margin: 12px 10px 6px; }
+  .sb-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; color: var(--neutral-600); text-decoration: none; font-size: 12.5px; font-weight: 500; cursor: pointer; position: relative; }
+  .sb-item:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  .sb-item.active { background: var(--brand-50); color: var(--brand-700); }
+  .sb-item.active::before { content:""; position:absolute; left:0; top:7px; bottom:7px; width:2px; background: var(--brand-500); border-radius: 2px; }
+  .sb-item .ico { width: 17px; height: 17px; flex-shrink: 0; }
+  .sb-item.back { color: var(--neutral-500); font-size: 12px; }
+  .sb-user { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--neutral-200); display: flex; align-items: center; gap: 10px; }
+  .sb-user .av { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,var(--brand-400),var(--brand-700)); color: white; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+  .sb-user .nm { font-size: 12.5px; font-weight: 600; }
+  .sb-user .tm { font-size: 11px; color: var(--neutral-500); }
+
+  /* ─── MAIN ─── */
+  .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .topbar { height: var(--topbar-h); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--neutral-0); border-bottom: 1px solid var(--neutral-200); }
+  .topbar .crumb { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .topbar .crumb .eyebrow-line { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--neutral-400); display: block; margin-bottom: 1px; }
+  .topbar .crumb .sep { color: var(--neutral-300); font-weight: 500; }
+  .topbar .crumb .muted { color: var(--neutral-500); font-weight: 600; }
+  .topbar .crumb .cur { color: var(--neutral-900); }
+  .topbar .tb-right { display: flex; align-items: center; gap: 6px; }
+  .tb-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
+  .tb-btn.primary { background: var(--brand-500); color: white; }
+  .tb-btn.primary:hover { background: var(--brand-600); }
+  .tb-icon { width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; color: var(--neutral-500); cursor: pointer; position: relative; }
+  .tb-icon:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  .tb-icon .dot { position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--warning-500); border: 1.5px solid white; }
+
+  /* ─── PLANNING CONTROLS ─── */
+  .plan-controls { flex-shrink: 0; padding: 14px 24px 12px; background: var(--neutral-0); border-bottom: 1px solid var(--neutral-200); }
+  .pc-row1 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .tabs { display: inline-flex; gap: 2px; }
+  .tab { padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: 0; background: transparent; color: var(--neutral-600); font-family: var(--font-sans); }
+  .tab.active { background: var(--brand-500); color: white; }
+  .tab:not(.active):hover { background: var(--neutral-100); color: var(--neutral-900); }
+
+  .pc-row2 { display: flex; align-items: center; gap: 12px; }
+  .date-nav { display: flex; align-items: center; gap: 4px; }
+  .date-nav .nav-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--neutral-200); background: white; display: grid; place-items: center; cursor: pointer; color: var(--neutral-600); }
+  .date-nav .nav-btn:hover { background: var(--neutral-50); }
+  .date-nav .month { font-size: 14px; font-weight: 700; min-width: 100px; text-align: center; letter-spacing: -0.01em; }
+  .today-btn { height: 30px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--neutral-200); background: white; font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--neutral-700); }
+  .today-btn:hover { background: var(--neutral-50); }
+
+  .zoom-seg { display: inline-flex; background: var(--neutral-100); border-radius: 7px; padding: 2px; gap: 1px; }
+  .zoom-seg button { padding: 5px 12px; border: 0; background: transparent; border-radius: 5px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--neutral-600); }
+  .zoom-seg button.active { background: var(--brand-500); color: white; }
+
+  .pc-spacer { flex: 1; }
+  .vis-seg { display: inline-flex; background: var(--neutral-900); border-radius: 7px; padding: 2px; gap: 1px; }
+  .vis-seg button { padding: 5px 12px; border: 0; background: transparent; border-radius: 5px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--neutral-400); }
+  .vis-seg button.active { background: var(--neutral-700); color: white; }
+
+  /* ─── MINI TIMELINE RULER ─── */
+  .mini-ruler { flex-shrink: 0; height: 38px; background: var(--neutral-50); border-bottom: 1px solid var(--neutral-200); position: relative; display: flex; padding-left: var(--plan-left-w); }
+  .mini-months { display: flex; flex: 1; position: relative; }
+  .mini-month { flex: 1; border-left: 1px solid var(--neutral-200); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--neutral-400); padding: 6px 0 0 6px; }
+  .mini-viewport { position: absolute; top: 7px; bottom: 7px; border: 1.5px solid var(--brand-500); background: rgba(0,148,57,0.08); border-radius: 4px; cursor: grab; }
+
+  /* ─── GANTT ─── */
+  .gantt { flex: 1; overflow: auto; position: relative; background: var(--neutral-0); }
+  .gantt-inner { min-width: max-content; }
+
+  /* header row (days) */
+  .gantt-head { display: flex; position: sticky; top: 0; z-index: 20; background: var(--neutral-0); }
+  .gh-left { width: var(--plan-left-w); flex-shrink: 0; position: sticky; left: 0; z-index: 21; background: var(--neutral-50); border-right: 1px solid var(--neutral-200); border-bottom: 1px solid var(--neutral-200); display: flex; }
+  .gh-left .gh-act { flex: 1; padding: 8px 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--neutral-500); display: flex; align-items: flex-end; }
+  .gh-left .gh-dur { width: 70px; padding: 8px 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--neutral-500); display: flex; align-items: flex-end; }
+  .gh-days { display: flex; border-bottom: 1px solid var(--neutral-200); background: var(--neutral-50); }
+  .gh-day { width: var(--day-w); flex-shrink: 0; border-left: 1px solid var(--neutral-100); text-align: center; padding: 4px 0 5px; position: relative; }
+  .gh-day .wk { font-size: 8px; font-weight: 700; color: var(--neutral-400); text-transform: uppercase; height: 10px; }
+  .gh-day .dnum { font-size: 11px; font-weight: 600; color: var(--neutral-600); font-family: var(--font-mono); }
+  .gh-day.weekend { background: var(--neutral-100); }
+  .gh-day.today { background: var(--brand-50); }
+  .gh-day.today .dnum { color: var(--brand-700); font-weight: 700; }
+
+  /* phase row */
+  .phase-row { display: flex; background: var(--neutral-100); border-bottom: 1px solid var(--neutral-200); align-items: center; height: 32px; }
+  .phase-left { width: var(--plan-left-w); flex-shrink: 0; position: sticky; left: 0; z-index: 11; background: var(--neutral-100); border-right: 1px solid var(--neutral-200); display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+  .phase-left .drag { color: var(--neutral-400); cursor: grab; display: grid; place-items: center; }
+  .phase-left .pname { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--neutral-700); flex: 1; }
+  .phase-left .pbtn { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; color: var(--neutral-400); cursor: pointer; }
+  .phase-left .pbtn:hover { background: var(--neutral-200); color: var(--neutral-700); }
+  .phase-track { flex: 1; position: relative; height: 100%; }
+  .phase-span { position: absolute; top: 9px; height: 14px; border: 1.5px dashed var(--neutral-300); border-radius: 4px; background: rgba(0,0,0,0.015); }
+
+  /* activity row */
+  .act-row { display: flex; border-bottom: 1px solid var(--neutral-100); height: var(--act-h); }
+  .act-row:hover .act-left { background: var(--neutral-50); }
+  .act-row:hover .act-track { background: var(--neutral-50); }
+  .act-left { width: var(--plan-left-w); flex-shrink: 0; position: sticky; left: 0; z-index: 11; background: var(--neutral-0); border-right: 1px solid var(--neutral-200); display: flex; align-items: center; }
+  .act-left .drag { width: 24px; display: grid; place-items: center; color: var(--neutral-300); cursor: grab; flex-shrink: 0; }
+  .act-left .rownum { width: 22px; font-family: var(--font-mono); font-size: 11px; color: var(--neutral-400); text-align: center; flex-shrink: 0; }
+  .act-left .expand { width: 20px; display: grid; place-items: center; color: var(--neutral-400); cursor: pointer; flex-shrink: 0; }
+  .act-left .act-info { flex: 1; min-width: 0; padding: 0 8px; }
+  .act-left .act-name { font-size: 13px; font-weight: 600; color: var(--neutral-900); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .act-left .act-sub { font-size: 11px; color: var(--neutral-500); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+  .act-left .act-sub .est { color: var(--warning-700); }
+  .act-left .act-dur { width: 52px; flex-shrink: 0; text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--neutral-500); padding-right: 4px; }
+  .act-left .act-acts { width: 60px; flex-shrink: 0; display: flex; gap: 2px; padding: 0 8px; opacity: 0; transition: opacity 100ms; }
+  .act-row:hover .act-acts { opacity: 1; }
+  .act-left .act-acts .ab { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; color: var(--neutral-400); cursor: pointer; }
+  .act-left .act-acts .ab:hover { background: var(--neutral-200); color: var(--neutral-700); }
+  .act-track { flex: 1; position: relative; height: 100%; }
+
+  /* ─── CREW SWIMLANES (medewerkers-view) ─── */
+  .crew-lane { display: flex; border-bottom: 1px solid var(--neutral-200); min-height: 72px; }
+  .crew-lane:hover .crew-left { background: var(--neutral-50); }
+  .crew-left { width: var(--plan-left-w); flex-shrink: 0; position: sticky; left: 0; z-index: 11; background: var(--neutral-0); border-right: 1px solid var(--neutral-200); display: flex; align-items: center; gap: 11px; padding: 0 14px; }
+  .crew-left .c-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: white; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .crew-left .c-info { flex: 1; min-width: 0; }
+  .crew-left .c-name { font-size: 13px; font-weight: 600; color: var(--neutral-900); }
+  .crew-left .c-role { font-size: 11px; color: var(--neutral-500); margin-top: 1px; }
+  .crew-left .c-cap { margin-top: 6px; }
+  .crew-left .c-cap-bar { height: 4px; background: var(--neutral-200); border-radius: 999px; overflow: hidden; }
+  .crew-left .c-cap-fill { height: 100%; border-radius: 999px; }
+  .crew-left .c-cap-fill.ok { background: var(--brand-500); }
+  .crew-left .c-cap-fill.full { background: var(--warning-500); }
+  .crew-left .c-cap-fill.over { background: var(--error-500); }
+  .crew-left .c-cap-label { font-size: 9.5px; font-family: var(--font-mono); color: var(--neutral-400); margin-top: 3px; display: flex; justify-content: space-between; }
+  .crew-track { flex: 1; position: relative; padding: 8px 0; }
+  .crew-subrow { position: relative; height: 26px; margin-bottom: 4px; }
+  .crew-subrow:last-child { margin-bottom: 0; }
+  .crew-bar { position: absolute; top: 0; height: 26px; border-radius: var(--bar-radius); cursor: grab; display: flex; align-items: center; padding: 0 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08); transition: box-shadow 120ms, transform 120ms; }
+  .crew-bar:hover { box-shadow: 0 4px 10px -2px rgba(0,0,0,0.18); transform: translateY(-1px); z-index: 5; }
+  .crew-bar::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: rgba(255,255,255,0.5); }
+  .crew-bar .cb-label { font-size: 11px; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px rgba(0,0,0,0.15); }
+  .crew-bar .bar-handle { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+  .crew-bar .bar-handle.left { left: 0; } .crew-bar .bar-handle.right { right: 0; }
+  .crew-bar.leave { background: repeating-linear-gradient(45deg, var(--neutral-300) 0 7px, var(--neutral-200) 7px 14px); }
+  .crew-bar.leave .cb-label { color: var(--neutral-600); text-shadow: none; }
+
+  /* day grid background lines */
+  .day-lines { position: absolute; inset: 0; display: flex; pointer-events: none; }
+  .day-line { width: var(--day-w); flex-shrink: 0; border-left: 1px solid var(--neutral-100); }
+  .day-line.weekend { background: rgba(0,0,0,0.018); }
+  .day-line.today { background: transparent; }
+  /* weekend toggle off */
+  [data-weekend="off"] .day-line.weekend,
+  [data-weekend="off"] .gh-day.weekend { background: transparent; }
+  /* today column tint — shown for vlag + kolom */
+  [data-today="vlag"] .day-line.today,
+  [data-today="kolom"] .day-line.today { background: color-mix(in srgb, var(--today-color) 7%, transparent); }
+  [data-today="vlag"] .gh-day.today,
+  [data-today="kolom"] .gh-day.today { background: color-mix(in srgb, var(--today-color) 9%, transparent); }
+  [data-today="lijn"] .gh-day.today { background: transparent; }
+  .gh-day.today .dnum { color: var(--today-color); font-weight: 700; }
+  [data-today="lijn"] .gh-day.today .dnum { color: var(--neutral-600); }
+
+  /* ─── activity bar ─── */
+  .act-bar { position: absolute; top: 14px; height: 28px; border-radius: var(--bar-radius); cursor: grab; display: flex; align-items: center; padding: 0 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08); transition: box-shadow 120ms, transform 120ms; }
+  .act-bar:hover { box-shadow: 0 4px 10px -2px rgba(0,0,0,0.18); transform: translateY(-1px); z-index: 5; }
+  .act-bar::before { content:""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: rgba(255,255,255,0.5); }
+  .act-bar .bar-label { font-size: 11px; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px rgba(0,0,0,0.15); }
+  .act-bar .bar-handle { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+  .act-bar .bar-handle.left { left: 0; }
+  .act-bar .bar-handle.right { right: 0; }
+  .act-bar.c-maria { background: var(--crew-maria); }
+  .act-bar.c-henk  { background: var(--crew-henk); }
+  .act-bar.c-jan   { background: var(--crew-jan); }
+  .act-bar.c-erik  { background: var(--crew-erik); }
+  .act-bar.unassigned { background: repeating-linear-gradient(45deg, var(--neutral-300) 0 8px, var(--neutral-200) 8px 16px); }
+  .act-bar.unassigned .bar-label { color: var(--neutral-600); text-shadow: none; }
+
+  /* ─── TODAY INDICATOR (tweakable) ─── */
+  .today-line { position: absolute; top: 0; bottom: 0; z-index: 8; pointer-events: none; }
+  /* Variant: lijn — subtle dashed */
+  [data-today="lijn"] .today-line { width: 0; border-left: 1.5px dashed color-mix(in srgb, var(--today-color) 55%, transparent); }
+  /* Variant: vlag — thin clean line, flag sits in header */
+  [data-today="vlag"] .today-line { width: 1.5px; background: color-mix(in srgb, var(--today-color) 38%, transparent); }
+  /* Variant: kolom — no line, only the column tint */
+  [data-today="kolom"] .today-line { display: none; }
+  /* old floating dot removed entirely */
+
+  /* Vandaag flag chip — lives in the day header, only for vlag variant */
+  .today-flag { display: none; }
+  [data-today="vlag"] .today-flag {
+    display: inline-flex; align-items: center; gap: 4px;
+    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+    background: var(--today-color); color: #fff;
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 0 0 5px 5px; white-space: nowrap; z-index: 22;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  }
+
+  /* legend footer */
+  .legend { flex-shrink: 0; padding: 10px 24px; background: var(--neutral-0); border-top: 1px solid var(--neutral-200); display: flex; align-items: center; gap: 18px; }
+  .legend .lg-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--neutral-600); }
+  .legend .lg-sw { width: 12px; height: 12px; border-radius: 3px; }
+  .legend .lg-spacer { flex: 1; }
+  .legend .lg-hint { font-size: 11px; color: var(--neutral-400); }
+
+  @media (max-width: 1000px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } }
+</style>
+</head>
+<body>
+<div class="app" id="appRoot" data-today="vlag" data-weekend="on">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="mark"></div>
+      <div class="logo">EVERTS.</div>
+    </div>
+    <div class="sb-search">
+      <div class="box">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>Zoek in alles…</span>
+        <span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;border:1px solid var(--neutral-200);border-radius:4px;padding:0 4px;">⌘K</span>
+      </div>
+    </div>
+    <div class="sb-scroll">
+      <div class="sb-label">Opdrachten</div>
+      <a class="sb-item back"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Terug naar overzicht</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Offerte</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Informatie</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Bestanden</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Werkbegroting</a>
+      <a class="sb-item active"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Planning</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Taken</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>VCA</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>Inkoop</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Verkoop</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Meerwerk</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>Financieel</a>
+      <a class="sb-item"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>Formulieren</a>
+      <div class="sb-label">Favorieten</div>
+      <div style="padding:6px 10px;font-size:11.5px;color:var(--neutral-400);">Nog geen favorieten</div>
+    </div>
+    <div class="sb-user">
+      <div class="av">TK</div>
+      <div><div class="nm">Tom Kamminga</div><div class="tm">Everts Team</div></div>
+      <svg style="margin-left:auto;color:var(--neutral-400);" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="crumb">
+        <div>
+          <span class="eyebrow-line">Hoofdproces</span>
+          <span><span class="muted">Opdrachten</span> <span class="sep">›</span> <span class="muted">Schilderwerk en gevelonderhoud</span> <span class="sep">›</span> <span class="cur">Planning</span></span>
+        </div>
+      </div>
+      <div class="tb-right">
+        <button class="tb-btn primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Vraag EVA</button>
+        <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+        <span class="tb-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dot"></span></span>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="plan-controls">
+      <div class="pc-row1">
+        <div class="tabs">
+          <button class="tab">Activiteiten</button>
+          <button class="tab active">Medewerkers</button>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <div class="vis-seg">
+            <button class="active">Medewerker</button>
+            <button>Uursoort</button>
+          </div>
+          <button class="tb-btn primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nieuwe activiteit</button>
+          <button class="today-btn" style="display:inline-flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Fase</button>
+        </div>
+      </div>
+      <div class="pc-row2">
+        <div class="date-nav">
+          <button class="nav-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <div class="month">mei 2026</div>
+          <button class="nav-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+        <button class="today-btn">Vandaag</button>
+        <div class="zoom-seg">
+          <button>Week</button>
+          <button>2 weken</button>
+          <button class="active">Maand</button>
+          <button>Kwartaal</button>
+          <button>Jaar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MINI RULER -->
+    <div class="mini-ruler">
+      <div class="mini-months" id="miniMonths"></div>
+      <div class="mini-viewport" id="miniViewport"></div>
+    </div>
+
+    <!-- GANTT -->
+    <div class="gantt" id="gantt">
+      <div class="gantt-inner">
+        <!-- header -->
+        <div class="gantt-head">
+          <div class="gh-left">
+            <div class="gh-act">Activiteit</div>
+            <div class="gh-dur">Duur</div>
+          </div>
+          <div class="gh-days" id="ghDays"></div>
+        </div>
+        <!-- body rendered by JS -->
+        <div id="ganttBody"></div>
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <div class="lg-item"><span class="lg-sw" style="background:var(--crew-maria);"></span>Maria Bakker</div>
+      <div class="lg-item"><span class="lg-sw" style="background:var(--crew-henk);"></span>Henk Boer</div>
+      <div class="lg-item"><span class="lg-sw" style="background:var(--crew-jan);"></span>Jan de Vries</div>
+      <div class="lg-item"><span class="lg-sw" style="background:var(--crew-erik);"></span>Erik den Berg</div>
+      <div class="lg-spacer"></div>
+      <div class="lg-hint">Sleep balken om te herplannen · sleep de randen om de duur aan te passen</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const DAYS_IN_MONTH = 31;
+  const TODAY = 28;
+  // weekday for May 2026: 1 May = Friday. Map day → weekday (0=Mon..6=Sun)
+  function weekday(d) { return (4 + (d - 1)) % 7; } // 1 May = Fri(4)
+  function isWeekend(d) { const w = weekday(d); return w === 5 || w === 6; }
+  const weekStarts = { 4: 'wo', 11: 'ma', 18: 'ma', 25: 'ma' }; // mondays-ish markers from screenshot
+
+  // ─── Day header ───
+  const ghDays = document.getElementById('ghDays');
+  let dh = '';
+  for (let d = 1; d <= DAYS_IN_MONTH; d++) {
+    const wd = weekday(d);
+    dh += `<div class="gh-day ${isWeekend(d)?'weekend':''} ${d===TODAY?'today':''}">
+      ${d===TODAY?'<div class="today-flag">Vandaag</div>':''}
+      <div class="wk">${wd===0?'ma '+d:''}</div>
+      <div class="dnum">${d}</div>
+    </div>`;
+  }
+  ghDays.innerHTML = dh;
+
+  // ─── Mini ruler months ───
+  const months = ['MEI','JUN','JUL','AUG','SEP','OKT','NOV','DEC','JAN','FEB','MRT','APR','MEI','JUN','JUL','AUG','SEP','OKT'];
+  document.getElementById('miniMonths').innerHTML = months.map(m => `<div class="mini-month">${m}</div>`).join('');
+  // viewport covers ~ "mei 2026" → roughly first 1/18 to start; place around month index 11-12 (apr-mei next yr per screenshot) — emulate screenshot position
+  const mv = document.getElementById('miniViewport');
+  mv.style.left = 'calc(' + (11/18*100) + '% )';
+  mv.style.width = 'calc(' + (1.2/18*100) + '%)';
+
+  // ─── Crew data (medewerkers-view) ───
+  const crews = [
+    { name:'Maria Bakker', role:'Schilder · senior', av:'MB', color:'maria', planned:130.5, capacity:160,
+      bars:[ { name:'dfgdfg', start:4, len:26, row:0 } ] },
+    { name:'Henk Boer', role:'Voorman', av:'HB', color:'henk', planned:148, capacity:160,
+      bars:[ { name:'Schilderwerk · voorgevel', start:4, len:14, row:0 },
+              { name:'Schilderwerk · 8u', start:19, len:11, row:0 },
+              { name:'Naden afwerken', start:6, len:8, row:1 } ] },
+    { name:'Jan de Vries', role:'Allround monteur', av:'JV', color:'jan', planned:72, capacity:160,
+      bars:[ { name:'test', start:12, len:15, row:0 },
+              { name:'Verlof', start:4, len:3, row:1, leave:true } ] },
+    { name:'Erik den Berg', role:'Schilder', av:'EB', color:'erik', planned:168, capacity:160,
+      bars:[ { name:'test', start:13, len:10, row:0 },
+              { name:'Gevelonderhoud', start:24, len:7, row:0 },
+              { name:'Steiger opbouwen', start:4, len:8, row:1 } ] },
+    { name:'Niet toegewezen', role:'2 activiteiten wachten', av:'?', color:'unassigned', planned:0, capacity:0,
+      bars:[ { name:'Dakrenovatie', start:8, len:6, row:0, leave:true },
+              { name:'Schilderwerk · achtergevel', start:20, len:9, row:0, leave:true } ] },
+  ];
+
+  const DAY_W = 30;
+  function px(n){ return n*DAY_W; }
+  function dayLines() {
+    let s = '';
+    for (let d=1; d<=DAYS_IN_MONTH; d++){
+      s += `<div class="day-line ${isWeekend(d)?'weekend':''} ${d===TODAY?'today':''}"></div>`;
+    }
+    return s;
+  }
+  const crewColorVar = { maria:'var(--crew-maria)', henk:'var(--crew-henk)', jan:'var(--crew-jan)', erik:'var(--crew-erik)', unassigned:'var(--neutral-300)' };
+
+  const body = document.getElementById('ganttBody');
+  let html = '';
+  crews.forEach(c => {
+    const pct = c.capacity ? Math.round(c.planned / c.capacity * 100) : 0;
+    const capClass = pct > 100 ? 'over' : (pct >= 95 ? 'full' : 'ok');
+    const nRows = Math.max(1, ...c.bars.map(b => b.row + 1));
+    let subrows = '';
+    for (let r = 0; r < nRows; r++) {
+      const barsInRow = c.bars.filter(b => b.row === r).map(b => `
+        <div class="crew-bar ${b.leave?'leave':''}" style="left:${px(b.start-1)}px; width:${px(b.len)}px; ${b.leave?'':'background:'+crewColorVar[c.color]+';'}">
+          <div class="bar-handle left"></div>
+          <span class="cb-label">${b.name}</span>
+          <div class="bar-handle right"></div>
+        </div>`).join('');
+      subrows += `<div class="crew-subrow">${barsInRow}</div>`;
+    }
+    const capBlock = c.capacity
+      ? `<div class="c-cap">
+           <div class="c-cap-bar"><div class="c-cap-fill ${capClass}" style="width:${Math.min(pct,100)}%;"></div></div>
+           <div class="c-cap-label"><span>${c.planned}u gepland</span><span>${pct}%</span></div>
+         </div>`
+      : `<div class="c-role" style="color:var(--neutral-400);margin-top:5px;">${c.role}</div>`;
+    html += `<div class="crew-lane">
+      <div class="crew-left">
+        <div class="c-av" style="background:${c.color==='unassigned'?'var(--neutral-200)':crewColorVar[c.color]};${c.color==='unassigned'?'color:var(--neutral-500);':''}">${c.av}</div>
+        <div class="c-info">
+          <div class="c-name">${c.name}</div>
+          ${c.capacity ? `<div class="c-role">${c.role}</div>` : ''}
+          ${capBlock}
+        </div>
+      </div>
+      <div class="crew-track">
+        <div class="day-lines">${dayLines()}</div>
+        <div class="today-line" style="left:${px(TODAY-0.5)}px;"></div>
+        ${subrows}
+      </div>
+    </div>`;
+  });
+  body.innerHTML = html;
+
+  // scroll so today is visible-ish
+  const gantt = document.getElementById('gantt');
+  setTimeout(()=>{ gantt.scrollLeft = 0; }, 50);
+</script>
+
+<!-- React + Babel for the Tweaks panel overlay -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<div id="tweaks-root"></div>
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "todayStyle": "vlag",
+    "todayColor": "#7c3aed",
+    "density": "ruim",
+    "barStyle": "vol",
+    "weekend": true
+  }/*EDITMODE-END*/;
+
+  const DENSITY_H = { compact: 44, regulier: 56, ruim: 68 };
+
+  function applyTweaks(t) {
+    const root = document.getElementById('appRoot');
+    root.setAttribute('data-today', t.todayStyle);
+    root.setAttribute('data-weekend', t.weekend ? 'on' : 'off');
+    document.documentElement.style.setProperty('--today-color', t.todayColor);
+    document.documentElement.style.setProperty('--act-h', DENSITY_H[t.density] + 'px');
+    document.documentElement.style.setProperty('--bar-radius', t.barStyle === 'pil' ? '14px' : (t.barStyle === 'recht' ? '2px' : '6px'));
+  }
+
+  function PlanningTweaks() {
+    const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+    React.useEffect(() => { applyTweaks(t); }, [t]);
+    return (
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Vandaag-indicator" />
+        <TweakRadio label="Stijl" value={t.todayStyle}
+          options={['vlag', 'kolom', 'lijn']}
+          onChange={(v) => setTweak('todayStyle', v)} />
+        <TweakColor label="Accentkleur" value={t.todayColor}
+          options={['#009439', '#2e90fa', '#f08000', '#7c3aed']}
+          onChange={(v) => setTweak('todayColor', v)} />
+        <TweakSection label="Weergave" />
+        <TweakRadio label="Rijhoogte" value={t.density}
+          options={['compact', 'regulier', 'ruim']}
+          onChange={(v) => setTweak('density', v)} />
+        <TweakRadio label="Balkvorm" value={t.barStyle}
+          options={['recht', 'vol', 'pil']}
+          onChange={(v) => setTweak('barStyle', v)} />
+        <TweakToggle label="Weekend arceren" value={t.weekend}
+          onChange={(v) => setTweak('weekend', v)} />
+      </TweaksPanel>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('tweaks-root')).render(<PlanningTweaks />);
+</script>
+</body>
+</html>

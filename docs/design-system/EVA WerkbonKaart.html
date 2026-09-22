@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · WerkbonKaart</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-50:  #ecfaf0; --brand-100: #d2f2dd; --brand-200: #a5e4ba;
+    --brand-300: #6dd190; --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28; --brand-800: #054f2e;
+    --brand-900: #013a20; --brand-lime: #61ac2b;
+    --neutral-0:   #ffffff; --neutral-50:  #f8fafa; --neutral-100: #f1f4f5;
+    --neutral-200: #e3e8ea; --neutral-300: #cbd2d6; --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c; --neutral-600: #4d575e; --neutral-700: #364048;
+    --neutral-800: #232a30; --neutral-900: #161b20; --neutral-950: #1f2933;
+    --success-50: #ecfdf3; --success-100: #d1fadf; --success-500: #12b76a; --success-700: #027a48;
+    --warning-50: #fff6ec; --warning-100: #ffe6cc; --warning-500: #f08000; --warning-700: #b85a00;
+    --error-50:  #fef3f2; --error-100: #fee4e2; --error-500:  #e8453b; --error-700: #b42318;
+    --info-50:   #eff8ff; --info-100: #d1e9ff; --info-500:   #2e90fa; --info-700: #175cd3;
+    --purple-50: #f5f3ff; --purple-500: #7c3aed; --purple-700: #5b21b6;
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--neutral-50); color: var(--neutral-900); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+  /* DOC SHELL */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--neutral-200); background: var(--neutral-0); }
+  aside.doc-nav .doc-brand { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background-image: var(--polygon-bg); background-size: cover; background-position: center; color: white; position: relative; }
+  aside.doc-nav .doc-brand::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%); }
+  aside.doc-nav .doc-brand .mark { width: 30px; height: 30px; border-radius: 6px; background-image: url("brand-assets/eve-beeldmerk.png"); background-size: cover; z-index: 1; }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px; }
+  aside.doc-nav a { display: flex; justify-content: space-between; align-items: center; text-decoration: none; color: var(--neutral-700); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; transition: background 120ms; }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 36px 44px 100px; max-width: 1500px; }
+  header.page { margin-bottom: 36px; padding-bottom: 26px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-500); margin-bottom: 11px; }
+  header.page h1 { font-size: 36px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 11px; font-weight: 700; }
+  header.page .lede { font-size: 15.5px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 20px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 56px; scroll-margin-top: 20px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); }
+  section.tk > .head h2 { font-size: 22px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 22px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 26px 0 14px; }
+
+  .meta-card { margin-top: 14px; padding: 14px 18px; border: 1px dashed var(--neutral-200); border-radius: 10px; font-size: 12px; color: var(--neutral-600); line-height: 1.6; }
+  .meta-card code { font-family: var(--font-mono); background: var(--neutral-100); padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px; }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  .ico { width: 14px; height: 14px; flex-shrink: 0; }
+  .ico-sm { width: 12px; height: 12px; flex-shrink: 0; }
+  .ico-lg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .demo-box { background: var(--neutral-0); border: 1px solid var(--neutral-200); border-radius: 12px; padding: 24px; }
+  .demo-box.muted { background: var(--neutral-100); }
+  .demo-box .label-row { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--neutral-500); margin-bottom: 14px; }
+
+  /* avatar */
+  .av {
+    border-radius: 50%; display: grid; place-items: center;
+    font-weight: 700; color: white; flex-shrink: 0; letter-spacing: 0.01em;
+  }
+  .av-xs { width: 22px; height: 22px; font-size: 9px; }
+  .av-sm { width: 26px; height: 26px; font-size: 10px; }
+  .av-md { width: 32px; height: 32px; font-size: 11px; }
+  .av-c1 { background: linear-gradient(135deg,#7c3aed,#4c1d95); }
+  .av-c2 { background: linear-gradient(135deg,#2dd4bf,#0f766e); }
+  .av-c3 { background: linear-gradient(135deg,#ef4444,#991b1b); }
+  .av-c4 { background: linear-gradient(135deg,#10b981,#065f46); }
+  .av-c5 { background: linear-gradient(135deg,#f59e0b,#92400e); }
+  .av-group { display: inline-flex; }
+  .av-group .av { box-shadow: 0 0 0 2px white; }
+  .av-group .av + .av { margin-left: -7px; }
+  .av-more {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--neutral-200); color: var(--neutral-600);
+    font-size: 10px; font-weight: 600; display: grid; place-items: center;
+    box-shadow: 0 0 0 2px white; margin-left: -7px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     WERKBONKAART — core component
+     ═══════════════════════════════════════════════════════════ */
+  .werkbon {
+    --wb-accent: var(--neutral-400);
+    --wb-accent-soft: var(--neutral-100);
+    background: var(--neutral-0);
+    border: 1px solid var(--neutral-200);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 140ms, transform 140ms, border-color 140ms;
+    display: flex; flex-direction: column;
+  }
+  .werkbon:hover { box-shadow: 0 6px 16px -4px rgba(16,24,40,0.10); transform: translateY(-1px); border-color: var(--neutral-300); }
+  /* Left status accent strip */
+  .werkbon::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--wb-accent);
+  }
+
+  /* status flavors */
+  .werkbon.st-gepland   { --wb-accent: var(--neutral-400); --wb-accent-soft: var(--neutral-100); }
+  .werkbon.st-onderweg  { --wb-accent: var(--purple-500); --wb-accent-soft: var(--purple-50); }
+  .werkbon.st-bezig     { --wb-accent: var(--brand-500);  --wb-accent-soft: var(--brand-50); }
+  .werkbon.st-afgerond  { --wb-accent: var(--success-500);--wb-accent-soft: var(--success-50); }
+  .werkbon.st-probleem  { --wb-accent: var(--error-500);  --wb-accent-soft: var(--error-50); }
+
+  .wb-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 10px; padding: 13px 15px 0 18px;
+  }
+  .wb-id-block { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .wb-id { font-family: var(--font-mono); font-size: 11px; color: var(--neutral-500); letter-spacing: 0.01em; }
+  .wb-dossier { font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400); }
+  .wb-dossier a { color: var(--brand-700); text-decoration: none; }
+
+  /* Status pill */
+  .wb-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px 3px 7px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+    background: var(--wb-accent-soft); color: var(--wb-accent);
+  }
+  .werkbon.st-gepland  .wb-status { color: var(--neutral-600); }
+  .werkbon.st-onderweg .wb-status { color: var(--purple-700); }
+  .werkbon.st-bezig    .wb-status { color: var(--brand-700); }
+  .werkbon.st-afgerond .wb-status { color: var(--success-700); }
+  .werkbon.st-probleem .wb-status { color: var(--error-700); }
+  .wb-status .st-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .wb-status .st-dot.pulse { position: relative; }
+  .wb-status .st-dot.pulse::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 50%;
+    background: currentColor; opacity: 0.3; animation: pulse 1.6s ease-out infinite;
+  }
+  @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.4; } 100% { transform: scale(2.2); opacity: 0; } }
+
+  .wb-title { font-size: 14px; font-weight: 600; color: var(--neutral-900); line-height: 1.3; padding: 10px 15px 0 18px; letter-spacing: -0.005em; }
+
+  .wb-cat { padding: 6px 15px 0 18px; }
+  .wb-cat-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; color: var(--neutral-600);
+    background: var(--neutral-100); padding: 2px 8px; border-radius: 5px;
+  }
+
+  /* Meta rows */
+  .wb-meta { padding: 12px 15px 0 18px; display: flex; flex-direction: column; gap: 7px; }
+  .wb-meta-row { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--neutral-700); }
+  .wb-meta-row .m-ico { color: var(--neutral-400); flex-shrink: 0; display: grid; place-items: center; }
+  .wb-meta-row .m-val { min-width: 0; }
+  .wb-meta-row .m-val b { font-weight: 600; color: var(--neutral-900); }
+  .wb-meta-row .m-strong { font-weight: 600; color: var(--neutral-900); }
+
+  /* Time chip */
+  .wb-time {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    color: var(--neutral-800);
+  }
+  .wb-time .dur { color: var(--neutral-400); font-size: 11px; }
+
+  /* Progress (hours) */
+  .wb-progress { padding: 12px 15px 0 18px; }
+  .wb-progress-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .wb-progress-head .pl { font-size: 11px; color: var(--neutral-500); font-weight: 500; }
+  .wb-progress-head .pv { font-family: var(--font-mono); font-size: 11px; color: var(--neutral-700); }
+  .wb-progress-track { height: 5px; background: var(--neutral-200); border-radius: 999px; overflow: hidden; }
+  .wb-progress-bar { height: 100%; border-radius: 999px; background: var(--wb-accent); }
+
+  /* Task checklist mini */
+  .wb-tasks { padding: 11px 15px 0 18px; }
+  .wb-task-summary {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--neutral-600);
+  }
+  .wb-task-bar { display: flex; gap: 2px; flex: 1; }
+  .wb-task-seg { height: 4px; flex: 1; border-radius: 2px; background: var(--neutral-200); }
+  .wb-task-seg.done { background: var(--success-500); }
+
+  /* Footer */
+  .wb-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 13px 15px 13px 18px; margin-top: 13px;
+    border-top: 1px solid var(--neutral-100);
+  }
+  .wb-crew { display: flex; align-items: center; gap: 8px; }
+  .wb-crew-label { font-size: 11px; color: var(--neutral-500); }
+  .wb-actions { display: flex; gap: 4px; }
+  .wb-act {
+    width: 30px; height: 30px; border-radius: 7px;
+    border: 1px solid var(--neutral-200); background: white;
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--neutral-600); transition: background 120ms, border-color 120ms, color 120ms;
+  }
+  .wb-act:hover { background: var(--neutral-50); border-color: var(--neutral-300); color: var(--neutral-900); }
+  .wb-act.primary { background: var(--brand-500); border-color: var(--brand-500); color: white; }
+  .wb-act.primary:hover { background: var(--brand-600); }
+
+  /* priority flag */
+  .wb-prio {
+    position: absolute; top: 13px; right: 15px;
+  }
+  .wb-prio-flag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--error-700); background: var(--error-50);
+    padding: 2px 7px; border-radius: 4px;
+  }
+
+  /* ─── COMPACT VARIANT (planning column) ─── */
+  .werkbon-compact {
+    --wb-accent: var(--neutral-400);
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 8px; padding: 9px 11px 9px 13px;
+    position: relative; overflow: hidden; cursor: grab;
+    transition: box-shadow 120ms, transform 120ms;
+  }
+  .werkbon-compact:hover { box-shadow: 0 4px 10px -3px rgba(16,24,40,0.12); transform: translateY(-1px); }
+  .werkbon-compact::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--wb-accent); }
+  .werkbon-compact.st-onderweg { --wb-accent: var(--purple-500); }
+  .werkbon-compact.st-bezig    { --wb-accent: var(--brand-500); }
+  .werkbon-compact.st-afgerond { --wb-accent: var(--success-500); }
+  .werkbon-compact.st-probleem { --wb-accent: var(--error-500); }
+  .wbc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .wbc-time { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--neutral-800); }
+  .wbc-id { font-family: var(--font-mono); font-size: 9.5px; color: var(--neutral-400); }
+  .wbc-title { font-size: 12px; font-weight: 600; color: var(--neutral-900); line-height: 1.3; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wbc-foot { display: flex; align-items: center; justify-content: space-between; }
+  .wbc-loc { font-size: 11px; color: var(--neutral-500); display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .wbc-loc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ═══════════════════════════════════════════════════════════
+     PLANNING DAY-VIEW (context)
+     ═══════════════════════════════════════════════════════════ */
+  .planning-shell {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 12px; overflow: hidden;
+  }
+  .planning-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--neutral-200);
+  }
+  .planning-head .ph-title { font-size: 15px; font-weight: 700; }
+  .planning-head .ph-date { font-size: 12.5px; color: var(--neutral-500); margin-left: 8px; font-weight: 500; }
+  .planning-board { display: grid; grid-template-columns: 64px repeat(3, 1fr); }
+  .planning-timecol { border-right: 1px solid var(--neutral-100); }
+  .planning-time-slot { height: 84px; padding: 4px 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-400); text-align: right; border-bottom: 1px solid var(--neutral-100); }
+  .planning-crew-col { border-right: 1px solid var(--neutral-100); position: relative; }
+  .planning-crew-head {
+    padding: 9px 12px; border-bottom: 1px solid var(--neutral-200);
+    display: flex; align-items: center; gap: 8px; position: sticky; top: 0; background: var(--neutral-50);
+    font-size: 12px; font-weight: 600; color: var(--neutral-800);
+  }
+  .planning-slots { position: relative; }
+  .planning-slot-bg { height: 84px; border-bottom: 1px solid var(--neutral-100); }
+  .planning-entry {
+    position: absolute; left: 5px; right: 5px;
+    border-radius: 7px; padding: 7px 9px 7px 11px;
+    overflow: hidden; cursor: grab; color: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .planning-entry::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: rgba(255,255,255,0.45); }
+  .planning-entry .pe-time { font-family: var(--font-mono); font-size: 10px; opacity: 0.9; font-weight: 500; }
+  .planning-entry .pe-title { font-size: 11.5px; font-weight: 600; line-height: 1.25; margin-top: 1px; overflow: hidden; }
+  .planning-entry .pe-loc { font-size: 10px; opacity: 0.85; margin-top: 2px; }
+  .pe-purple { background: #7c3aed; }
+  .pe-teal   { background: #0f766e; }
+  .pe-green  { background: var(--brand-600); }
+  .pe-amber  { background: #b45309; }
+  .pe-red    { background: #b42318; }
+
+  /* ═══════════════════════════════════════════════════════════
+     ANATOMY
+     ═══════════════════════════════════════════════════════════ */
+  .anatomy { display: grid; grid-template-columns: 320px 1fr; gap: 32px; align-items: start; }
+  .anatomy-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+  .anatomy-labels li { display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; font-size: 12.5px; color: var(--neutral-700); line-height: 1.5; }
+  .anatomy-labels .ix { width: 22px; height: 22px; border-radius: 50%; background: var(--brand-50); color: var(--brand-700); display: grid; place-items: center; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; border: 1px solid var(--brand-200); }
+  .anatomy-labels b { color: var(--neutral-900); font-weight: 600; }
+  .anatomy-labels code { font-family: var(--font-mono); font-size: 10.5px; background: var(--neutral-100); padding: 1px 5px; border-radius: 3px; color: var(--neutral-800); }
+  .anno { position: relative; }
+  .anno-num {
+    position: absolute; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--brand-700); color: white; font-family: var(--font-mono);
+    font-size: 10px; font-weight: 700; display: grid; place-items: center;
+    z-index: 5; box-shadow: 0 0 0 2px white, 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  /* grids */
+  .card-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+  .card-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+  .compact-stack { display: flex; flex-direction: column; gap: 8px; max-width: 280px; }
+
+  /* status legend */
+  .status-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sl-item { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--neutral-200); border-radius: 8px; background: white; font-size: 12px; }
+  .sl-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* spec table */
+  .spec-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec-tbl th { text-align: left; padding: 8px 12px; background: var(--neutral-50); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--neutral-500); border-bottom: 1px solid var(--neutral-200); }
+  .spec-tbl td { padding: 9px 12px; border-bottom: 1px solid var(--neutral-100); color: var(--neutral-700); }
+  .spec-tbl td:first-child { font-family: var(--font-mono); font-size: 11px; color: var(--neutral-900); font-weight: 600; }
+
+  /* mobile frame */
+  .mobile-frame {
+    width: 320px; border-radius: 28px; border: 8px solid var(--neutral-900);
+    background: var(--neutral-100); overflow: hidden; box-shadow: 0 16px 40px -8px rgba(16,24,40,0.25);
+  }
+  .mobile-statusbar { height: 28px; background: var(--neutral-900); display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
+  .mobile-statusbar .mt { color: white; font-size: 10px; font-weight: 600; font-family: var(--font-mono); }
+  .mobile-statusbar .mr { display: flex; gap: 4px; align-items: center; }
+  .mobile-statusbar .mr span { width: 14px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.6); }
+  .mobile-topbar { background-image: var(--polygon-bg); background-size: cover; background-position: center; padding: 12px 16px; position: relative; color: white; }
+  .mobile-topbar::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg,rgba(0,0,0,0.1),rgba(0,0,0,0.3)); }
+  .mobile-topbar .mtb-row { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+  .mobile-topbar .mtb-title { font-size: 14px; font-weight: 700; }
+  .mobile-topbar .mtb-sub { font-size: 10.5px; opacity: 0.85; }
+  .mobile-body { padding: 14px; max-height: 540px; overflow-y: auto; }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 24px; }
+    .card-grid-3, .card-grid-2 { grid-template-columns: 1fr; }
+    .anatomy { grid-template-columns: 1fr; }
+    .planning-board { grid-template-columns: 48px repeat(3, 1fr); font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div class="doc-shell">
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position:relative;z-index:1;"><div class="name">EVERTS.</div><div class="sub">EVA · Design System</div></div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html" class="active"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">Onderdelen</div>
+      <ol>
+        <li><a href="#anatomy"><span>Anatomie</span><span class="num">·</span></a></li>
+        <li><a href="#states"><span>Statussen</span><span class="num">·</span></a></li>
+        <li><a href="#compact"><span>Compact</span><span class="num">·</span></a></li>
+        <li><a href="#planning"><span>Planning-view</span><span class="num">·</span></a></li>
+        <li><a href="#mobile"><span>Mobiel (monteur)</span><span class="num">·</span></a></li>
+        <li><a href="#tokens"><span>Tokens</span><span class="num">·</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 8 · Module-specifiek</div>
+      <h1>WerkbonKaart</h1>
+      <p class="lede">
+        De werkbon is de brug tussen kantoor en buitendienst — één ingeplande taak met
+        toegewezen monteur(s), tijdvenster, locatie en voortgang. De kaart leeft op drie
+        plekken: het <b>planning-bord</b> (compact), de <b>werkbon-lijst</b> (volledig) en
+        op <b>mobiel</b> bij de monteur in het veld.
+      </p>
+      <div class="meta">
+        <div><b>Component</b>&nbsp;&nbsp;#50 WerkbonKaart</div>
+        <div><b>Module</b>&nbsp;&nbsp;Planning</div>
+        <div><b>Varianten</b>&nbsp;&nbsp;Volledig · Compact · Planning-entry · Mobiel</div>
+        <div><b>Statussen</b>&nbsp;&nbsp;5</div>
+      </div>
+    </header>
+
+    <!-- ═════════ ANATOMY ═════════ -->
+    <section class="tk" id="anatomy">
+      <div class="head"><div class="ix">·</div><h2>Anatomie · volledige kaart</h2></div>
+      <p class="desc">
+        De volledige WerkbonKaart, gebruikt in de werkbon-lijst en het detail-paneel.
+        Acht zones, opgebouwd van boven naar onder: identificatie, status, activiteit,
+        meta-gegevens, voortgang, taken en crew + acties.
+      </p>
+
+      <div class="anatomy">
+        <div class="anno" style="position:relative;">
+          <!-- annotation numbers -->
+          <div class="anno-num" style="top:14px; left:-10px;">1</div>
+          <div class="anno-num" style="top:14px; right:-10px;">2</div>
+          <div class="anno-num" style="top:62px; left:-10px;">3</div>
+          <div class="anno-num" style="top:142px; left:-10px;">4</div>
+          <div class="anno-num" style="top:226px; left:-10px;">5</div>
+          <div class="anno-num" style="top:286px; left:-10px;">6</div>
+          <div class="anno-num" style="bottom:18px; left:-10px;">7</div>
+
+          <div class="werkbon st-bezig" style="max-width:340px;">
+            <div class="wb-head">
+              <div class="wb-id-block">
+                <div class="wb-id">WB-2026-0142</div>
+                <div class="wb-dossier"><a href="#">D-1402</a> · Aanpassingen behandelkamer</div>
+              </div>
+              <div class="wb-status"><span class="st-dot pulse"></span>Bezig</div>
+            </div>
+            <div class="wb-title">MS-wand plaatsen &amp; naden afwerken</div>
+            <div class="wb-cat">
+              <span class="wb-cat-badge">
+                <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.5-6.3 4.5L8 13.8 2 9.2h7.6z"/></svg>
+                Renovatie
+              </span>
+            </div>
+            <div class="wb-meta">
+              <div class="wb-meta-row">
+                <span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                <span class="m-val wb-time">08:00 – 12:00 <span class="dur">· 4u gepland</span></span>
+              </div>
+              <div class="wb-meta-row">
+                <span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                <span class="m-val"><b>Schildersweg 8</b>, Apeldoorn</span>
+              </div>
+            </div>
+            <div class="wb-progress">
+              <div class="wb-progress-head">
+                <span class="pl">Uren besteed</span>
+                <span class="pv">2,5 / 4,0 u</span>
+              </div>
+              <div class="wb-progress-track"><div class="wb-progress-bar" style="width:62%;"></div></div>
+            </div>
+            <div class="wb-tasks">
+              <div class="wb-task-summary">
+                <div class="wb-task-bar">
+                  <div class="wb-task-seg done"></div>
+                  <div class="wb-task-seg done"></div>
+                  <div class="wb-task-seg done"></div>
+                  <div class="wb-task-seg"></div>
+                  <div class="wb-task-seg"></div>
+                </div>
+                <span>3/5 taken</span>
+              </div>
+            </div>
+            <div class="wb-footer">
+              <div class="wb-crew">
+                <div class="av-group">
+                  <div class="av av-sm av-c2">HB</div>
+                  <div class="av av-sm av-c4">EB</div>
+                </div>
+                <span class="wb-crew-label">Henk + Erik</span>
+              </div>
+              <div class="wb-actions">
+                <button class="wb-act" title="Navigeren"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+                <button class="wb-act" title="Bellen"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+                <button class="wb-act primary" title="Open werkbon"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="sub" style="margin-top:0;">Zones</h3>
+          <ol class="anatomy-labels">
+            <li><span class="ix">1</span><span><b>Identificatie</b> — werkbon-nr <code>WB-JJJJ-NNNN</code> + gekoppeld dossier (klikbaar).</span></li>
+            <li><span class="ix">2</span><span><b>Status-pill</b> — kleurt naar de 5-status flow. "Bezig" heeft een pulserende dot.</span></li>
+            <li><span class="ix">3</span><span><b>Activiteit + categorie</b> — titel van het werk + categorie-badge (Schilderwerk, Renovatie, Houtrot…).</span></li>
+            <li><span class="ix">4</span><span><b>Meta</b> — tijdvenster met duur, en werkadres met map-pin. Mono-font voor tijden.</span></li>
+            <li><span class="ix">5</span><span><b>Uren-voortgang</b> — besteed vs. gepland. Bar kleurt mee met status-accent.</span></li>
+            <li><span class="ix">6</span><span><b>Taken-balk</b> — segmenten tonen voltooide deeltaken in één oogopslag.</span></li>
+            <li><span class="ix">7</span><span><b>Crew + acties</b> — toegewezen monteurs (avatar-groep) + navigeren / bellen / openen.</span></li>
+          </ol>
+          <div class="meta-card" style="margin-top:18px;">
+            <b>Left-accent strip</b> (3px) is de snelste status-herkenning in een lange lijst —
+            ook als de pill buiten beeld scrollt. Kleur = <code>--wb-accent</code>, gezet door de status-class.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ STATES ═════════ -->
+    <section class="tk" id="states">
+      <div class="head"><div class="ix">·</div><h2>Statussen · de werkbon-flow</h2></div>
+      <p class="desc">
+        Een werkbon doorloopt vijf statussen. Elke status heeft een eigen accent-kleur die
+        terugkomt in de strip, de pill en de voortgangsbalk. <b>Probleem</b> is een
+        zij-status die vanuit elke fase getriggerd kan worden (monteur meldt blokkade).
+      </p>
+
+      <div class="status-legend" style="margin-bottom:22px;">
+        <div class="sl-item"><span class="sl-dot" style="background:var(--neutral-400);"></span>Gepland</div>
+        <div class="sl-item"><span class="sl-dot" style="background:var(--purple-500);"></span>Onderweg</div>
+        <div class="sl-item"><span class="sl-dot" style="background:var(--brand-500);"></span>Bezig</div>
+        <div class="sl-item"><span class="sl-dot" style="background:var(--success-500);"></span>Afgerond</div>
+        <div class="sl-item"><span class="sl-dot" style="background:var(--error-500);"></span>Probleem</div>
+      </div>
+
+      <div class="card-grid-3">
+        <!-- Gepland -->
+        <div class="werkbon st-gepland">
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0148</div>
+              <div class="wb-dossier"><a href="#">D-1405</a> · Gevelonderhoud</div>
+            </div>
+            <div class="wb-status"><span class="st-dot"></span>Gepland</div>
+          </div>
+          <div class="wb-title">Steiger opbouwen voorgevel</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Gevelonderhoud</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">07:30 – 09:30 <span class="dur">· 2u</span></span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Hoofdweg 7</b>, Hattem</span></div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><div class="av-group"><div class="av av-sm av-c4">EB</div></div><span class="wb-crew-label">Erik den Berg</span></div>
+            <div class="wb-actions">
+              <button class="wb-act" title="Navigeren"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+              <button class="wb-act primary" title="Open"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Onderweg -->
+        <div class="werkbon st-onderweg">
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0143</div>
+              <div class="wb-dossier"><a href="#">D-1403</a> · Renovatie badkamer</div>
+            </div>
+            <div class="wb-status"><span class="st-dot"></span>Onderweg</div>
+          </div>
+          <div class="wb-title">Sloopwerk badkamer 1e etage</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Renovatie</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">09:00 – 15:00 <span class="dur">· 6u</span></span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Keizerstraat 11</b>, Deventer</span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2M9 17v3m6-3v3"/></svg></span><span class="m-val" style="color:var(--purple-700);">ETA 8 min · 3,2 km</span></div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><div class="av-group"><div class="av av-sm av-c1">MB</div><div class="av av-sm av-c3">JV</div></div><span class="wb-crew-label">Maria + Jan</span></div>
+            <div class="wb-actions">
+              <button class="wb-act" title="Navigeren"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+              <button class="wb-act primary" title="Open"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bezig -->
+        <div class="werkbon st-bezig">
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0142</div>
+              <div class="wb-dossier"><a href="#">D-1402</a> · Behandelkamer</div>
+            </div>
+            <div class="wb-status"><span class="st-dot pulse"></span>Bezig</div>
+          </div>
+          <div class="wb-title">MS-wand plaatsen &amp; naden afwerken</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Renovatie</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">08:00 – 12:00 <span class="dur">· 4u</span></span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Schildersweg 8</b>, Apeldoorn</span></div>
+          </div>
+          <div class="wb-progress">
+            <div class="wb-progress-head"><span class="pl">Uren besteed</span><span class="pv">2,5 / 4,0 u</span></div>
+            <div class="wb-progress-track"><div class="wb-progress-bar" style="width:62%;"></div></div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><div class="av-group"><div class="av av-sm av-c2">HB</div><div class="av av-sm av-c4">EB</div></div><span class="wb-crew-label">Henk + Erik</span></div>
+            <div class="wb-actions">
+              <button class="wb-act" title="Bellen"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+              <button class="wb-act primary" title="Open"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Afgerond -->
+        <div class="werkbon st-afgerond">
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0139</div>
+              <div class="wb-dossier"><a href="#">D-1401</a> · Dakrenovatie</div>
+            </div>
+            <div class="wb-status"><span class="st-dot"></span>Afgerond</div>
+          </div>
+          <div class="wb-title">Dakpannen vervangen achterzijde</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Renovatie</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">07:00 – 16:00 <span class="dur">· 8,5u werkelijk</span></span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Van Leeuwenstr. 4</b>, Deventer</span></div>
+          </div>
+          <div class="wb-progress">
+            <div class="wb-progress-head"><span class="pl">Uren besteed</span><span class="pv" style="color:var(--success-700);">8,5 / 8,0 u · +0,5</span></div>
+            <div class="wb-progress-track"><div class="wb-progress-bar" style="width:100%;"></div></div>
+          </div>
+          <div class="wb-tasks">
+            <div class="wb-task-summary">
+              <div class="wb-task-bar">
+                <div class="wb-task-seg done"></div><div class="wb-task-seg done"></div><div class="wb-task-seg done"></div><div class="wb-task-seg done"></div>
+              </div>
+              <span style="color:var(--success-700);">4/4 ✓</span>
+            </div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><div class="av-group"><div class="av av-sm av-c5">PJ</div></div><span class="wb-crew-label">Piet Jansen</span></div>
+            <div class="wb-actions">
+              <button class="wb-act" title="Werkbon-PDF"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></button>
+              <button class="wb-act primary" title="Open"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Probleem -->
+        <div class="werkbon st-probleem">
+          <div class="wb-prio"><span class="wb-prio-flag"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>BLOKKADE</span></div>
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0141</div>
+              <div class="wb-dossier"><a href="#">D-1404</a> · Houtrotherstel</div>
+            </div>
+          </div>
+          <div class="wb-title" style="padding-top:6px;">Kozijn zijgevel vervangen</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Houtrot</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Beukenlaan 22</b>, Zwolle</span></div>
+            <div class="wb-meta-row" style="align-items:flex-start;">
+              <span class="m-ico" style="margin-top:1px;"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--error-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <span class="m-val" style="color:var(--error-700); line-height:1.4;">Materiaal niet geleverd — kozijn ontbreekt. Gemeld 09:14.</span>
+            </div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><div class="av-group"><div class="av av-sm av-c3">JV</div></div><span class="wb-crew-label">Jan de Vries</span></div>
+            <div class="wb-actions">
+              <button class="wb-act" title="Bellen monteur"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+              <button class="wb-act primary" style="background:var(--error-500);border-color:var(--error-500);" title="Oplossen"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Meerdaags / extra -->
+        <div class="werkbon st-gepland">
+          <div class="wb-prio"><span class="wb-prio-flag" style="color:var(--warning-700);background:var(--warning-50);"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 12 12 16 14"/><circle cx="12" cy="12" r="10"/></svg>SPOED</span></div>
+          <div class="wb-head">
+            <div class="wb-id-block">
+              <div class="wb-id">WB-2026-0150</div>
+              <div class="wb-dossier"><a href="#">D-1409</a> · Lekkage</div>
+            </div>
+          </div>
+          <div class="wb-title" style="padding-top:6px;">Spoedreparatie dakgoot — lekkage</div>
+          <div class="wb-cat"><span class="wb-cat-badge">Onderhoud</span></div>
+          <div class="wb-meta">
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">Z.s.m. <span class="dur">· ~2u</span></span></div>
+            <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Marktplein 3</b>, Vaassen</span></div>
+          </div>
+          <div class="wb-footer">
+            <div class="wb-crew"><span class="wb-crew-label" style="color:var(--neutral-400);">Nog niet toegewezen</span></div>
+            <div class="wb-actions">
+              <button class="wb-act primary" title="Toewijzen"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Status-transities:</b>
+        <code>Gepland</code> → monteur start route → <code>Onderweg</code> → aankomst + check-in → <code>Bezig</code> → afmelden → <code>Afgerond</code>.
+        <code>Probleem</code> kan vanuit Onderweg of Bezig — verbergt voortgang, toont de blokkade-melding + escalatie-actie.
+      </div>
+    </section>
+
+    <!-- ═════════ COMPACT ═════════ -->
+    <section class="tk" id="compact">
+      <div class="head"><div class="ix">·</div><h2>Compact · planning-kolom</h2></div>
+      <p class="desc">
+        Gecondenseerde variant voor de planning-lijst en dag-kolommen. Alleen het hoogst-nodige:
+        tijd, titel, locatie en status-strip. Sleepbaar (<code style="font-family:var(--font-mono);font-size:11px;">cursor: grab</code>) om te herplannen.
+      </p>
+      <div class="compact-stack">
+        <div class="werkbon-compact st-bezig">
+          <div class="wbc-top"><span class="wbc-time">08:00–12:00</span><span class="wbc-id">WB-0142</span></div>
+          <div class="wbc-title">MS-wand plaatsen &amp; naden afwerken</div>
+          <div class="wbc-foot">
+            <span class="wbc-loc"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Schildersweg 8</span></span>
+            <div class="av-group"><div class="av av-xs av-c2">HB</div><div class="av av-xs av-c4">EB</div></div>
+          </div>
+        </div>
+        <div class="werkbon-compact st-onderweg">
+          <div class="wbc-top"><span class="wbc-time">09:00–15:00</span><span class="wbc-id">WB-0143</span></div>
+          <div class="wbc-title">Sloopwerk badkamer 1e etage</div>
+          <div class="wbc-foot">
+            <span class="wbc-loc"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Keizerstraat 11</span></span>
+            <div class="av-group"><div class="av av-xs av-c1">MB</div><div class="av av-xs av-c3">JV</div></div>
+          </div>
+        </div>
+        <div class="werkbon-compact st-gepland">
+          <div class="wbc-top"><span class="wbc-time">07:30–09:30</span><span class="wbc-id">WB-0148</span></div>
+          <div class="wbc-title">Steiger opbouwen voorgevel</div>
+          <div class="wbc-foot">
+            <span class="wbc-loc"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Hoofdweg 7, Hattem</span></span>
+            <div class="av-group"><div class="av av-xs av-c4">EB</div></div>
+          </div>
+        </div>
+        <div class="werkbon-compact st-probleem">
+          <div class="wbc-top"><span class="wbc-time" style="color:var(--error-700);">Geblokkeerd</span><span class="wbc-id">WB-0141</span></div>
+          <div class="wbc-title">Kozijn zijgevel vervangen</div>
+          <div class="wbc-foot">
+            <span class="wbc-loc" style="color:var(--error-600,#b42318);"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Materiaal ontbreekt</span></span>
+            <div class="av-group"><div class="av av-xs av-c3">JV</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ PLANNING VIEW ═════════ -->
+    <section class="tk" id="planning">
+      <div class="head"><div class="ix">·</div><h2>Planning-view · dag per monteur</h2></div>
+      <p class="desc">
+        De werkbonnen als tijdblokken in een dag-overzicht, één kolom per monteur.
+        Hoogte = duur, kleur = monteur (deterministisch). Dit is de bekende EVA-planning
+        weergave — de WerkbonKaart wordt hier de tijd-entry.
+      </p>
+
+      <div class="planning-shell">
+        <div class="planning-head">
+          <div><span class="ph-title">Dagplanning</span><span class="ph-date">Donderdag 28 mei 2026</span></div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="wb-act" style="width:30px;height:30px;"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button class="wb-act" style="width:30px;height:30px;"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+        </div>
+        <div class="planning-board">
+          <!-- time column -->
+          <div class="planning-timecol">
+            <div class="planning-crew-head" style="justify-content:flex-end;color:var(--neutral-400);font-weight:500;font-size:10px;">tijd</div>
+            <div class="planning-time-slot">07:00</div>
+            <div class="planning-time-slot">09:00</div>
+            <div class="planning-time-slot">11:00</div>
+            <div class="planning-time-slot">13:00</div>
+            <div class="planning-time-slot">15:00</div>
+          </div>
+          <!-- Henk -->
+          <div class="planning-crew-col">
+            <div class="planning-crew-head"><div class="av av-xs av-c2">HB</div>Henk de Boer</div>
+            <div class="planning-slots">
+              <div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div>
+              <div class="planning-entry pe-green" style="top:42px; height:160px;">
+                <div class="pe-time">08:00–12:00</div>
+                <div class="pe-title">MS-wand plaatsen &amp; naden</div>
+                <div class="pe-loc">Schildersweg 8</div>
+              </div>
+              <div class="planning-entry pe-green" style="top:254px; height:74px; opacity:0.92;">
+                <div class="pe-time">13:00–14:30</div>
+                <div class="pe-title">Deurkozijn afmonteren</div>
+              </div>
+            </div>
+          </div>
+          <!-- Maria -->
+          <div class="planning-crew-col">
+            <div class="planning-crew-head"><div class="av av-xs av-c1">MB</div>Maria Bakker</div>
+            <div class="planning-slots">
+              <div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div>
+              <div class="planning-entry pe-purple" style="top:84px; height:252px;">
+                <div class="pe-time">09:00–15:00</div>
+                <div class="pe-title">Sloopwerk badkamer 1e etage</div>
+                <div class="pe-loc">Keizerstraat 11, Deventer</div>
+              </div>
+            </div>
+          </div>
+          <!-- Jan -->
+          <div class="planning-crew-col">
+            <div class="planning-crew-head"><div class="av av-xs av-c3">JV</div>Jan de Vries</div>
+            <div class="planning-slots">
+              <div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div><div class="planning-slot-bg"></div>
+              <div class="planning-entry pe-red" style="top:84px; height:116px;">
+                <div class="pe-time">09:00–11:00 · geblokkeerd</div>
+                <div class="pe-title">Kozijn zijgevel vervangen</div>
+                <div class="pe-loc">Materiaal ontbreekt</div>
+              </div>
+              <div class="planning-entry pe-amber" style="top:212px; height:74px;">
+                <div class="pe-time">11:30–13:00</div>
+                <div class="pe-title">Inspectie houtrot</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Interactie:</b> entries zijn sleepbaar tussen kolommen (= andere monteur) en verticaal (= ander tijdslot) via <code>@dnd-kit</code>.
+        Resize aan onder/boven-rand wijzigt de duur. Klik opent de volledige WerkbonKaart in een Drawer.
+      </div>
+    </section>
+
+    <!-- ═════════ MOBILE ═════════ -->
+    <section class="tk" id="mobile">
+      <div class="head"><div class="ix">·</div><h2>Mobiel · de monteur in het veld</h2></div>
+      <p class="desc">
+        De buitendienst werkt op telefoon. Hier is de werkbon full-width met grote hit-targets
+        (≥44px), prominente actie-knoppen en een check-in/uit flow. Eén werkbon = één scherm.
+      </p>
+
+      <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start;">
+        <div class="mobile-frame">
+          <div class="mobile-statusbar"><span class="mt">08:24</span><div class="mr"><span></span><span style="width:9px;"></span></div></div>
+          <div class="mobile-topbar">
+            <div class="mtb-row">
+              <div>
+                <div class="mtb-title">Mijn werkbonnen</div>
+                <div class="mtb-sub">Donderdag 28 mei · 3 vandaag</div>
+              </div>
+              <div class="av av-md av-c2" style="box-shadow:0 0 0 2px rgba(255,255,255,0.4);">HB</div>
+            </div>
+          </div>
+          <div class="mobile-body">
+            <!-- Active werkbon -->
+            <div class="werkbon st-bezig" style="margin-bottom:12px;">
+              <div class="wb-head">
+                <div class="wb-id-block"><div class="wb-id">WB-2026-0142</div></div>
+                <div class="wb-status"><span class="st-dot pulse"></span>Bezig</div>
+              </div>
+              <div class="wb-title">MS-wand plaatsen &amp; naden afwerken</div>
+              <div class="wb-meta">
+                <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="m-val wb-time">08:00 – 12:00</span></div>
+                <div class="wb-meta-row"><span class="m-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span class="m-val"><b>Schildersweg 8</b>, Apeldoorn</span></div>
+              </div>
+              <div class="wb-progress">
+                <div class="wb-progress-head"><span class="pl">Uren besteed</span><span class="pv">2,5 / 4,0 u</span></div>
+                <div class="wb-progress-track"><div class="wb-progress-bar" style="width:62%;"></div></div>
+              </div>
+              <div style="padding:14px 15px 14px 18px; display:flex; gap:8px;">
+                <button style="flex:1; height:44px; border-radius:8px; border:1px solid var(--neutral-200); background:white; font-family:var(--font-sans); font-size:13px; font-weight:600; color:var(--neutral-700); display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+                  <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Pauze
+                </button>
+                <button style="flex:2; height:44px; border-radius:8px; border:0; background:var(--brand-500); font-family:var(--font-sans); font-size:13px; font-weight:600; color:white; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+                  <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Werkbon afmelden
+                </button>
+              </div>
+            </div>
+            <!-- Next werkbon -->
+            <div class="werkbon-compact st-gepland" style="margin-bottom:8px;">
+              <div class="wbc-top"><span class="wbc-time">13:00–14:30</span><span class="wbc-id">WB-0145</span></div>
+              <div class="wbc-title">Deurkozijn afmonteren</div>
+              <div class="wbc-foot">
+                <span class="wbc-loc"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Schildersweg 8</span></span>
+                <span style="font-size:11px;color:var(--neutral-400);">straks</span>
+              </div>
+            </div>
+            <div class="werkbon-compact st-gepland">
+              <div class="wbc-top"><span class="wbc-time">15:00–16:30</span><span class="wbc-id">WB-0151</span></div>
+              <div class="wbc-title">Eindinspectie &amp; oplevering</div>
+              <div class="wbc-foot">
+                <span class="wbc-loc"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Schildersweg 8</span></span>
+                <span style="font-size:11px;color:var(--neutral-400);">straks</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1; min-width:280px;">
+          <div class="meta-card" style="margin-top:0;">
+            <b>Mobiele aanpassingen t.o.v. desktop:</b><br>
+            • Hit-targets minimaal <code>44px</code> hoog (Pauze / Afmelden knoppen).<br>
+            • Eén werkbon "actief" bovenaan, rest compact eronder.<br>
+            • Check-in via grote primaire knop → status <code>Bezig</code> + start uren-timer.<br>
+            • Afmelden opent foto-upload + handtekening klant (oplevering).<br>
+            • GPS-locatie triggert auto-suggestie "Ben je op locatie?" → <code>Onderweg</code> → <code>Bezig</code>.<br>
+            • Offline-first: werkbon-mutaties queuen lokaal, syncen bij verbinding.
+          </div>
+          <div class="meta-card">
+            <b>Polygon-header</b> hergebruikt het officiële brand-asset — net als de desktop-sidebar.
+            Onder de header begint direct de werkbon-stack; geen extra chrome op mobiel.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ TOKENS ═════════ -->
+    <section class="tk" id="tokens">
+      <div class="head"><div class="ix">·</div><h2>Tokens</h2></div>
+      <div class="demo-box" style="padding:0; overflow:hidden;">
+        <table class="spec-tbl">
+          <thead><tr><th>Token</th><th>Waarde</th><th>Toepassing</th></tr></thead>
+          <tbody>
+            <tr><td>--wb-accent (gepland)</td><td>neutral-400</td><td>Strip · pill · bar</td></tr>
+            <tr><td>--wb-accent (onderweg)</td><td>purple-500 #7c3aed</td><td>Strip · pill · ETA-tekst</td></tr>
+            <tr><td>--wb-accent (bezig)</td><td>brand-500 #009439</td><td>Strip · pill (pulse-dot) · bar</td></tr>
+            <tr><td>--wb-accent (afgerond)</td><td>success-500 #12b76a</td><td>Strip · pill · 100% bar</td></tr>
+            <tr><td>--wb-accent (probleem)</td><td>error-500 #e8453b</td><td>Strip · blokkade-melding · escalatie</td></tr>
+            <tr><td>card radius</td><td>10px (vol) · 8px (compact)</td><td>--radius-lg / --radius-md</td></tr>
+            <tr><td>accent-strip</td><td>3px links</td><td>Snelste status-herkenning</td></tr>
+            <tr><td>werkbon-id</td><td>WB-JJJJ-NNNN · mono 11px</td><td>Identificatie</td></tr>
+            <tr><td>titel</td><td>14px · 600 · neutral-900</td><td>Activiteit</td></tr>
+            <tr><td>meta-rij</td><td>12.5px · icon neutral-400</td><td>Tijd · locatie</td></tr>
+            <tr><td>hit-target (mobiel)</td><td>≥ 44px</td><td>Check-in / afmelden</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="meta-card">
+        <b>Implementatie:</b> <code>&lt;WerkbonKaart variant="full|compact|entry" status=… /&gt;</code>.
+        De status-class zet <code>--wb-accent</code> + <code>--wb-accent-soft</code> via CSS-variabelen —
+        één bron voor strip, pill en progressbar. Crew-avatars hergebruiken de Avatar-component (#9)
+        met de deterministische kleur-hash uit Basiscomponenten.
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

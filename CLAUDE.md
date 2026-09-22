@@ -107,6 +107,22 @@ Alle apps gebruiken de Next.js App Router. Server Components halen data direct v
 ### Styling
 Tailwind CSS met de gedeelde preset uit `@everts/config/tailwind.config.base.js`. Radix UI primitives + `class-variance-authority` + `clsx` + `tailwind-merge` voor component-styling.
 
+**Het design system staat in `docs/design-system/`** — twaalf HTML-specs plus een README met
+alle tokens (kleuren, typografie, 4px-spacing, radii, shadows). Dat is de bron voor elk scherm,
+niet je eigen inschatting. Lees in elk geval de README vóór UI-werk; hij is kort en bevat de
+maatvoering die je nodig hebt.
+
+Bouw met de componenten uit `apps/dashboard/src/components/ui/` (`Card`, `Button`, `Badge`,
+`FormField`/`FormSection`/`FormRow`, …). Die zijn 1-op-1 uit de specs gebouwd. Schrijf geen
+eigen `klein`/`kop`/`veldStijl`-constanten per bestand: dat is precies hoe schermen uit elkaar
+gaan lopen. Twee dingen die vaak misgaan: veldlabels zijn **UPPERCASE 10,5px** (`FormField upper`)
+en niet 12px gewone tekst, en spacing ligt op het **4px-raster** — geen 7, 10 of 14.
+
+`/auth/ui-preview` toont alle componenten; `/auth/mailintake-preview` toont één compleet scherm
+met verzonnen gegevens. Beide zijn bereikbaar zonder in te loggen, dus je kunt opmaak nakijken
+zonder een sessie — en dat hoort erbij, want geen enkele type-check of build vangt een afgekapt
+label of een kolom die buiten beeld valt.
+
 ### Forms & validation
 React Hook Form + Zod schemas. Zod schema's dienen ook als de TypeScript brontypes.
 

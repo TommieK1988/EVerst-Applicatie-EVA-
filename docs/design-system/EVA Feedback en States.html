@@ -1,0 +1,1364 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · Feedback &amp; States</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     EVA · Feedback & States
+     Toast · Alert · AlertDialog · Spinner · Skeleton · EmptyState · Progress
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --brand-50:  #ecfaf0; --brand-100: #d2f2dd; --brand-200: #a5e4ba;
+    --brand-300: #6dd190; --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28; --brand-800: #054f2e;
+    --brand-900: #013a20; --brand-950: #012215;
+    --brand-lime: #61ac2b; --brand-dark: #1f2933;
+
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+
+    --neutral-0:   #ffffff; --neutral-50:  #f8fafa; --neutral-100: #f1f4f5;
+    --neutral-200: #e3e8ea; --neutral-300: #cbd2d6; --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c; --neutral-600: #4d575e; --neutral-700: #364048;
+    --neutral-800: #232a30; --neutral-900: #161b20; --neutral-950: #1f2933;
+
+    --success-50:  #ecfdf3; --success-100: #d1fadf; --success-300: #6ce9a6;
+    --success-500: #12b76a; --success-700: #027a48; --success-900: #054f31;
+    --warning-50:  #fff6ec; --warning-100: #ffe6cc; --warning-300: #ffb866;
+    --warning-500: #f08000; --warning-700: #b85a00; --warning-900: #6b3400;
+    --error-50:   #fef3f2;  --error-100:  #fee4e2;  --error-300:  #fda29b;
+    --error-500:  #e8453b;  --error-700:  #b42318;  --error-900:  #7a271a;
+    --info-50:    #eff8ff;  --info-100:   #d1e9ff;  --info-300:   #84caff;
+    --info-500:   #2e90fa;  --info-700:   #175cd3;  --info-900:   #194185;
+
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--neutral-50);
+    color: var(--neutral-900);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+
+  /* ─── DOC SHELL ─── */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 0; border-right: 1px solid var(--neutral-200);
+    background: var(--neutral-0);
+  }
+  aside.doc-nav .doc-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    background-image: var(--polygon-bg); background-size: cover; background-position: center;
+    color: white; position: relative;
+  }
+  aside.doc-nav .doc-brand::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%);
+  }
+  aside.doc-nav .doc-brand .mark {
+    width: 30px; height: 30px; border-radius: 6px;
+    background-image: url("brand-assets/eve-beeldmerk.png");
+    background-size: cover; background-position: center;
+    z-index: 1;
+  }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px;
+  }
+  aside.doc-nav a {
+    display: flex; justify-content: space-between; align-items: center;
+    text-decoration: none; color: var(--neutral-700);
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 12.5px; font-weight: 500;
+    transition: background 120ms, color 120ms;
+  }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 44px 48px 120px; max-width: 1400px; }
+
+  header.page { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--brand-500); margin-bottom: 12px;
+  }
+  header.page h1 { font-size: 38px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 700; }
+  header.page .lede { font-size: 16px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 64px; scroll-margin-top: 24px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); letter-spacing: 0.05em; }
+  section.tk > .head h2 { font-size: 24px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 24px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 24px 0 12px; display: flex; align-items: center; gap: 10px; }
+  h3.sub .hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--neutral-500); font-size: 11px; }
+
+  .demo-box {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 12px; padding: 24px;
+    overflow: hidden;
+  }
+  .demo-box.contrast { background: var(--neutral-950); border-color: var(--neutral-800); }
+  .demo-box .label-row {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-weight: 700; color: var(--neutral-500); margin-bottom: 14px;
+  }
+  .demo-box.contrast .label-row { color: var(--neutral-400); }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .meta-card {
+    margin-top: 14px; padding: 14px 18px;
+    border: 1px dashed var(--neutral-200); border-radius: 10px;
+    font-size: 12px; color: var(--neutral-600); line-height: 1.55;
+  }
+  .meta-card code {
+    font-family: var(--font-mono); background: var(--neutral-100);
+    padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px;
+  }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  /* Reuse button style for examples */
+  .eva-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 6px; font-family: var(--font-sans); font-weight: 600;
+    line-height: 1; white-space: nowrap; cursor: pointer;
+    border: 1px solid transparent;
+    height: 32px; padding: 0 12px; font-size: 13px;
+    transition: background 120ms, border-color 120ms;
+  }
+  .eva-btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .eva-btn.primary    { background: var(--brand-500); color: white; border-color: var(--brand-500); }
+  .eva-btn.primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
+  .eva-btn.outline    { background: white; color: var(--neutral-800); border-color: var(--neutral-300); }
+  .eva-btn.outline:hover { background: var(--neutral-50); }
+  .eva-btn.destructive{ background: var(--error-500); color: white; border-color: var(--error-500); }
+  .eva-btn.destructive:hover { background: var(--error-700); border-color: var(--error-700); }
+  .eva-btn.ghost { background: transparent; color: var(--neutral-700); }
+  .eva-btn.ghost:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  .contrast .eva-btn.outline { background: transparent; color: var(--neutral-200); border-color: var(--neutral-700); }
+  .contrast .eva-btn.outline:hover { background: var(--neutral-800); }
+  .contrast .eva-btn.primary { background: var(--brand-400); color: var(--neutral-950); border-color: var(--brand-400); }
+  .contrast .eva-btn.ghost { color: var(--neutral-300); }
+  .contrast .eva-btn.ghost:hover { background: var(--neutral-800); color: var(--neutral-100); }
+
+  .ico { width: 16px; height: 16px; flex-shrink: 0; }
+  .ico-sm { width: 13px; height: 13px; flex-shrink: 0; }
+  .ico-lg { width: 20px; height: 20px; flex-shrink: 0; }
+  .ico-xl { width: 28px; height: 28px; flex-shrink: 0; }
+
+  /* Overview cards */
+  .overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 40px; }
+  .ov-card {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 10px;
+    padding: 18px 16px 14px; min-height: 130px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    cursor: pointer; text-decoration: none; color: inherit;
+    transition: border-color 120ms, transform 120ms;
+  }
+  .ov-card:hover { border-color: var(--brand-300); transform: translateY(-2px); }
+  .ov-card .ov-name { font-size: 13px; font-weight: 600; margin-top: 14px; color: var(--neutral-900); }
+  .ov-card .ov-ix { font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500); }
+
+  /* ════════════════════════════════════════════════════════════
+     COMPONENT STYLES
+     ════════════════════════════════════════════════════════════ */
+
+  /* ─────── TOAST ─────── */
+  .eva-toast {
+    display: grid; grid-template-columns: 20px 1fr auto; gap: 12px;
+    align-items: flex-start;
+    width: 360px;
+    background: white; color: var(--neutral-900);
+    padding: 14px 14px 14px 16px;
+    border-radius: 10px;
+    box-shadow: 0 12px 24px -6px rgba(16,24,40,0.14), 0 4px 8px -2px rgba(16,24,40,0.05);
+    position: relative; overflow: hidden;
+    border: 1px solid var(--neutral-100);
+  }
+  .eva-toast::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--brand-500);
+  }
+  .eva-toast.success::before { background: var(--success-500); }
+  .eva-toast.warning::before { background: var(--warning-500); }
+  .eva-toast.error::before   { background: var(--error-500); }
+  .eva-toast.info::before    { background: var(--info-500); }
+
+  .eva-toast .t-ico { display: grid; place-items: center; padding-top: 1px; }
+  .eva-toast.success .t-ico { color: var(--success-500); }
+  .eva-toast.warning .t-ico { color: var(--warning-500); }
+  .eva-toast.error   .t-ico { color: var(--error-500); }
+  .eva-toast.info    .t-ico { color: var(--info-500); }
+
+  .eva-toast .t-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .eva-toast .t-title { font-size: 13px; font-weight: 600; color: var(--neutral-900); line-height: 1.35; }
+  .eva-toast .t-desc { font-size: 12.5px; color: var(--neutral-600); line-height: 1.45; }
+  .eva-toast .t-actions { display: flex; gap: 12px; margin-top: 6px; }
+  .eva-toast .t-actions button {
+    background: transparent; border: 0; padding: 0;
+    font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
+    color: var(--brand-700); cursor: pointer;
+  }
+  .eva-toast .t-actions button:hover { text-decoration: underline; }
+  .eva-toast.success .t-actions button { color: var(--success-700); }
+  .eva-toast.warning .t-actions button { color: var(--warning-700); }
+  .eva-toast.error   .t-actions button { color: var(--error-700); }
+  .eva-toast.info    .t-actions button { color: var(--info-700); }
+  .eva-toast .t-close {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--neutral-400); padding: 2px; border-radius: 4px;
+    display: grid; place-items: center;
+  }
+  .eva-toast .t-close:hover { color: var(--neutral-700); background: var(--neutral-100); }
+
+  /* dark */
+  .contrast .eva-toast {
+    background: var(--neutral-900); color: var(--neutral-100);
+    border-color: var(--neutral-800);
+    box-shadow: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  .contrast .eva-toast .t-title { color: var(--neutral-100); }
+  .contrast .eva-toast .t-desc { color: var(--neutral-400); }
+  .contrast .eva-toast .t-close { color: var(--neutral-500); }
+  .contrast .eva-toast .t-close:hover { background: var(--neutral-800); color: var(--neutral-200); }
+  .contrast .eva-toast.success .t-actions button { color: var(--success-300); }
+  .contrast .eva-toast.warning .t-actions button { color: var(--warning-300); }
+  .contrast .eva-toast.error   .t-actions button { color: var(--error-300); }
+  .contrast .eva-toast.info    .t-actions button { color: var(--info-300); }
+
+  /* Toast stack */
+  .toast-stack { display: flex; flex-direction: column; gap: 8px; }
+
+  /* ─────── ALERT (inline) ─────── */
+  .eva-alert {
+    display: grid; grid-template-columns: 20px 1fr auto; gap: 14px;
+    align-items: flex-start;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid;
+  }
+  .eva-alert.success { background: var(--success-50); border-color: var(--success-100); color: var(--success-900); }
+  .eva-alert.warning { background: var(--warning-50); border-color: var(--warning-100); color: var(--warning-900); }
+  .eva-alert.error   { background: var(--error-50);   border-color: var(--error-100);   color: var(--error-900); }
+  .eva-alert.info    { background: var(--info-50);    border-color: var(--info-100);    color: var(--info-900); }
+  .eva-alert.neutral { background: var(--neutral-50); border-color: var(--neutral-200); color: var(--neutral-900); }
+
+  .eva-alert .a-ico { display: grid; place-items: center; padding-top: 1px; }
+  .eva-alert.success .a-ico { color: var(--success-700); }
+  .eva-alert.warning .a-ico { color: var(--warning-700); }
+  .eva-alert.error   .a-ico { color: var(--error-700); }
+  .eva-alert.info    .a-ico { color: var(--info-700); }
+  .eva-alert.neutral .a-ico { color: var(--neutral-700); }
+
+  .eva-alert .a-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .eva-alert .a-title {
+    font-size: 13.5px; font-weight: 600; line-height: 1.35;
+  }
+  .eva-alert .a-desc {
+    font-size: 13px; line-height: 1.5;
+    opacity: 0.92;
+  }
+  .eva-alert .a-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .eva-alert .a-actions button {
+    background: transparent; border: 0; padding: 4px 10px;
+    border-radius: 5px;
+    font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
+    color: currentColor; cursor: pointer;
+  }
+  .eva-alert .a-actions button:hover { background: rgba(0,0,0,0.06); }
+  .eva-alert .a-actions button.primary {
+    background: currentColor;
+  }
+  .eva-alert.success .a-actions button.primary { color: white; background: var(--success-500); }
+  .eva-alert.warning .a-actions button.primary { color: white; background: var(--warning-500); }
+  .eva-alert.error   .a-actions button.primary { color: white; background: var(--error-500); }
+  .eva-alert.info    .a-actions button.primary { color: white; background: var(--info-500); }
+  .eva-alert .a-close {
+    background: transparent; border: 0; cursor: pointer;
+    color: currentColor; opacity: 0.6;
+    padding: 2px; border-radius: 4px;
+    display: grid; place-items: center;
+  }
+  .eva-alert .a-close:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+
+  /* dark variants */
+  .contrast .eva-alert.success { background: rgba(18,183,106,0.1); border-color: rgba(18,183,106,0.25); color: var(--success-300); }
+  .contrast .eva-alert.warning { background: rgba(240,128,0,0.1); border-color: rgba(240,128,0,0.25); color: var(--warning-300); }
+  .contrast .eva-alert.error   { background: rgba(232,69,59,0.1); border-color: rgba(232,69,59,0.25); color: var(--error-300); }
+  .contrast .eva-alert.info    { background: rgba(46,144,250,0.1); border-color: rgba(46,144,250,0.25); color: var(--info-300); }
+  .contrast .eva-alert.neutral { background: var(--neutral-900); border-color: var(--neutral-800); color: var(--neutral-100); }
+  .contrast .eva-alert.success .a-ico { color: var(--success-300); }
+  .contrast .eva-alert.warning .a-ico { color: var(--warning-300); }
+  .contrast .eva-alert.error   .a-ico { color: var(--error-300); }
+  .contrast .eva-alert.info    .a-ico { color: var(--info-300); }
+
+  /* ─────── ALERTDIALOG ─────── */
+  .eva-dialog-overlay {
+    border-radius: 12px;
+    background: rgba(20, 32, 24, 0.55);
+    backdrop-filter: blur(4px);
+    padding: 40px;
+    display: grid; place-items: center;
+    position: relative;
+    min-height: 320px;
+  }
+  .eva-dialog {
+    background: white; border-radius: 12px;
+    box-shadow: 0 24px 48px -12px rgba(16,24,40,0.25);
+    padding: 24px;
+    width: 440px;
+    max-width: 100%;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .eva-dialog .d-header {
+    display: flex; gap: 14px;
+  }
+  .eva-dialog .d-icon-wrap {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .eva-dialog.destructive .d-icon-wrap { background: var(--error-50); color: var(--error-700); }
+  .eva-dialog.warning .d-icon-wrap { background: var(--warning-50); color: var(--warning-700); }
+  .eva-dialog.info .d-icon-wrap { background: var(--info-50); color: var(--info-700); }
+  .eva-dialog .d-title { font-size: 16px; font-weight: 700; color: var(--neutral-900); margin: 4px 0 4px; letter-spacing: -0.01em; }
+  .eva-dialog .d-desc { font-size: 13.5px; color: var(--neutral-600); line-height: 1.5; }
+  .eva-dialog .d-actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 4px; flex-wrap: wrap;
+  }
+  /* 3-actie split: gevaarlijk links, veilig rechts */
+  .eva-dialog .d-actions.d-split {
+    justify-content: space-between;
+    align-items: center;
+  }
+  .eva-dialog .d-actions.d-split .ghost-left {
+    flex-shrink: 0;
+  }
+
+  .contrast .eva-dialog {
+    background: var(--neutral-900);
+    box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .contrast .eva-dialog .d-title { color: var(--neutral-100); }
+  .contrast .eva-dialog .d-desc { color: var(--neutral-400); }
+  .contrast .eva-dialog.destructive .d-icon-wrap { background: rgba(232,69,59,0.18); color: var(--error-300); }
+  .contrast .eva-dialog.warning .d-icon-wrap { background: rgba(240,128,0,0.18); color: var(--warning-300); }
+
+  /* ─────── SPINNER ─────── */
+  .eva-spinner {
+    width: 18px; height: 18px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+    color: var(--brand-500);
+    display: inline-block;
+  }
+  .eva-spinner-sm { width: 14px; height: 14px; border-width: 1.5px; }
+  .eva-spinner-lg { width: 24px; height: 24px; border-width: 2.5px; }
+  .eva-spinner-xl { width: 40px; height: 40px; border-width: 3px; }
+  .contrast .eva-spinner { color: var(--brand-400); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .full-page-loader {
+    display: grid; place-items: center;
+    width: 100%; min-height: 280px;
+    background: var(--neutral-50); border-radius: 10px;
+  }
+  .full-page-loader .stack {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .full-page-loader .msg { font-size: 13px; color: var(--neutral-600); }
+  .contrast .full-page-loader { background: var(--neutral-950); }
+  .contrast .full-page-loader .msg { color: var(--neutral-400); }
+
+  /* ─────── SKELETON ─────── */
+  .skeleton {
+    background: linear-gradient(90deg, var(--neutral-100) 0%, var(--neutral-200) 50%, var(--neutral-100) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1400ms ease-in-out infinite;
+    border-radius: 4px;
+  }
+  .contrast .skeleton {
+    background: linear-gradient(90deg, var(--neutral-800) 0%, var(--neutral-700) 50%, var(--neutral-800) 100%);
+    background-size: 200% 100%;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .skeleton-text { height: 12px; }
+  .skeleton-title { height: 18px; }
+  .skeleton-large { height: 24px; }
+  .skeleton-avatar { border-radius: 50%; }
+  .skeleton-card { height: 120px; border-radius: 8px; }
+
+  /* ─────── EMPTY STATE ─────── */
+  .eva-empty {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 32px;
+    text-align: center;
+  }
+  .eva-empty .e-art {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: var(--brand-50); color: var(--brand-600);
+    display: grid; place-items: center;
+    margin-bottom: 18px;
+  }
+  .eva-empty .e-art.neutral { background: var(--neutral-100); color: var(--neutral-500); }
+  .eva-empty .e-title { font-size: 16px; font-weight: 700; color: var(--neutral-900); margin-bottom: 6px; letter-spacing: -0.01em; }
+  .eva-empty .e-desc { font-size: 13px; color: var(--neutral-600); max-width: 320px; line-height: 1.5; margin-bottom: 18px; }
+  .eva-empty .e-actions { display: flex; gap: 8px; }
+  .eva-empty.sm { padding: 28px 20px; }
+  .eva-empty.sm .e-art { width: 40px; height: 40px; border-radius: 10px; margin-bottom: 12px; }
+  .eva-empty.sm .e-title { font-size: 14px; }
+  .eva-empty.sm .e-desc { font-size: 12.5px; margin-bottom: 14px; }
+  .eva-empty.lg { padding: 80px 32px; }
+  .eva-empty.lg .e-art { width: 80px; height: 80px; border-radius: 18px; margin-bottom: 24px; }
+  .eva-empty.lg .e-title { font-size: 20px; margin-bottom: 8px; }
+  .eva-empty.lg .e-desc { font-size: 14px; max-width: 420px; }
+  .contrast .eva-empty .e-title { color: var(--neutral-100); }
+  .contrast .eva-empty .e-desc { color: var(--neutral-400); }
+  .contrast .eva-empty .e-art { background: rgba(10,122,53,0.18); color: var(--brand-300); }
+  .contrast .eva-empty .e-art.neutral { background: var(--neutral-800); color: var(--neutral-300); }
+
+  /* ─────── PROGRESS ─────── */
+  .eva-progress {
+    width: 100%;
+    height: 6px; border-radius: 999px;
+    background: var(--neutral-200);
+    overflow: hidden;
+    position: relative;
+  }
+  .eva-progress .indicator {
+    height: 100%; background: var(--brand-500);
+    border-radius: 999px;
+    transition: width 250ms ease;
+  }
+  .eva-progress-sm { height: 4px; }
+  .eva-progress-lg { height: 8px; }
+  .eva-progress.success .indicator { background: var(--success-500); }
+  .eva-progress.warning .indicator { background: var(--warning-500); }
+  .eva-progress.error   .indicator { background: var(--error-500); }
+  .contrast .eva-progress { background: var(--neutral-800); }
+  .contrast .eva-progress .indicator { background: var(--brand-400); }
+  .contrast .eva-progress.success .indicator { background: var(--success-500); }
+  .contrast .eva-progress.warning .indicator { background: var(--warning-500); }
+
+  /* Indeterminate */
+  .eva-progress.indet .indicator {
+    width: 35% !important;
+    animation: indet 1.6s ease-in-out infinite;
+  }
+  @keyframes indet {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(150%); }
+    100% { transform: translateX(300%); }
+  }
+
+  .progress-row { display: flex; flex-direction: column; gap: 6px; }
+  .progress-row .pr-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--neutral-700); }
+  .progress-row .pr-label b { font-weight: 600; color: var(--neutral-900); }
+  .progress-row .pr-label .pct { font-family: var(--font-mono); font-size: 11.5px; color: var(--neutral-500); }
+  .contrast .progress-row .pr-label { color: var(--neutral-300); }
+  .contrast .progress-row .pr-label b { color: var(--neutral-100); }
+  .contrast .progress-row .pr-label .pct { color: var(--neutral-400); }
+
+  /* Circular progress */
+  .eva-progress-circle {
+    width: 48px; height: 48px;
+    position: relative;
+  }
+  .eva-progress-circle svg { transform: rotate(-90deg); }
+  .eva-progress-circle circle.track  { stroke: var(--neutral-200); }
+  .eva-progress-circle circle.bar    { stroke: var(--brand-500); transition: stroke-dashoffset 250ms ease; }
+  .contrast .eva-progress-circle circle.track { stroke: var(--neutral-800); }
+  .contrast .eva-progress-circle circle.bar { stroke: var(--brand-400); }
+  .eva-progress-circle .pct {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    color: var(--neutral-900);
+  }
+  .contrast .eva-progress-circle .pct { color: var(--neutral-100); }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 28px; }
+    .duo { grid-template-columns: 1fr; }
+    .overview-grid { grid-template-columns: repeat(2, 1fr); }
+    .eva-toast { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-shell">
+
+  <!-- ───────────────────────── SIDEBAR ───────────────────────── -->
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position: relative; z-index: 1;">
+        <div class="name">EVERTS.</div>
+        <div class="sub">EVA · Design System</div>
+      </div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html" class="active"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">Componenten</div>
+      <ol>
+        <li><a href="#overview"><span>Overzicht</span><span class="num">·</span></a></li>
+        <li><a href="#toast"><span>Toast</span><span class="num">01</span></a></li>
+        <li><a href="#alert"><span>Alert</span><span class="num">02</span></a></li>
+        <li><a href="#alertdialog"><span>AlertDialog</span><span class="num">03</span></a></li>
+        <li><a href="#spinner"><span>Spinner</span><span class="num">04</span></a></li>
+        <li><a href="#skeleton"><span>Skeleton</span><span class="num">05</span></a></li>
+        <li><a href="#empty"><span>Empty State</span><span class="num">06</span></a></li>
+        <li><a href="#progress"><span>Progress</span><span class="num">07</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <!-- ───────────────────────── MAIN ───────────────────────── -->
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 4 · Feedback &amp; States</div>
+      <h1>Wat ziet de gebruiker terwijl er iets gebeurt?</h1>
+      <p class="lede">
+        Zeven componenten voor systeem-feedback: <b>Toast</b> (transient bevestiging),
+        <b>Alert</b> (persistent in-page), <b>AlertDialog</b> (verwijder-bevestiging),
+        <b>Spinner</b>, <b>Skeleton</b>, <b>Empty State</b>, <b>Progress</b>.
+        Samen vormen ze de feedback-loop tussen gebruiker en systeem.
+      </p>
+      <div class="meta">
+        <div><b>Componenten</b>&nbsp;&nbsp;7</div>
+        <div><b>Libraries</b>&nbsp;&nbsp;react-hot-toast · Radix AlertDialog</div>
+        <div><b>Animaties</b>&nbsp;&nbsp;CSS keyframes (geen JS)</div>
+      </div>
+    </header>
+
+    <!-- ═════════ OVERVIEW ═════════ -->
+    <section class="tk" id="overview">
+      <div class="head"><div class="ix">00</div><h2>Overzicht</h2></div>
+
+      <div class="overview-grid">
+        <a class="ov-card" href="#toast">
+          <div>
+            <div style="background: white; border: 1px solid var(--neutral-100); border-left: 3px solid var(--success-500); border-radius: 6px; padding: 10px; font-size: 11px; display: flex; gap: 8px; align-items: flex-start; box-shadow: 0 4px 8px -2px rgba(16,24,40,0.08);">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <div style="flex:1;"><div style="font-weight: 600; color: var(--neutral-900); font-size: 11px;">Opgeslagen</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">Toast</div>
+            <div class="ov-ix">01 · 4 colors · w/ action</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#alert">
+          <div>
+            <div style="background: var(--warning-50); border: 1px solid var(--warning-100); color: var(--warning-900); border-radius: 6px; padding: 8px 10px; font-size: 11px; display: flex; gap: 6px; align-items: center;">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="var(--warning-700)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              <span style="font-size: 10.5px;">Prijs check vereist</span>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">Alert</div>
+            <div class="ov-ix">02 · inline · 4 colors</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#alertdialog">
+          <div style="display: grid; place-items: center; padding: 4px 0;">
+            <div style="background: white; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 8px; width: 100%; box-shadow: 0 4px 8px -2px rgba(16,24,40,0.08);">
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <div style="width: 18px; height: 18px; border-radius: 50%; background: var(--error-50); display: grid; place-items: center;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--error-700)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+                <div style="font-size: 10.5px; font-weight: 600; color: var(--neutral-900);">Verwijder dossier?</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">AlertDialog</div>
+            <div class="ov-ix">03 · destructive confirm</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#spinner">
+          <div style="display: grid; place-items: center; padding: 8px;">
+            <span class="eva-spinner eva-spinner-lg"></span>
+          </div>
+          <div>
+            <div class="ov-name">Spinner</div>
+            <div class="ov-ix">04 · inline · full-page</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#skeleton">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div class="skeleton skeleton-title" style="width: 70%;"></div>
+            <div class="skeleton skeleton-text" style="width: 100%;"></div>
+            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+          </div>
+          <div>
+            <div class="ov-name">Skeleton</div>
+            <div class="ov-ix">05 · shimmer · 5 shapes</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#empty">
+          <div style="display: grid; place-items: center; padding: 4px 0;">
+            <div style="width: 28px; height: 28px; border-radius: 8px; background: var(--brand-50); color: var(--brand-600); display: grid; place-items: center;">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">Empty State</div>
+            <div class="ov-ix">06 · sm · md · lg</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#progress">
+          <div>
+            <div class="eva-progress" style="height: 6px;"><div class="indicator" style="width: 64%;"></div></div>
+            <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--neutral-500);">
+              <span>Bezig…</span><span style="font-family: var(--font-mono);">64%</span>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">Progress</div>
+            <div class="ov-ix">07 · linear · circular</div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ═════════ 01 · TOAST ═════════ -->
+    <section class="tk" id="toast">
+      <div class="head"><div class="ix">01</div><h2>Toast</h2></div>
+      <p class="desc">
+        Transient confirmaties, rechtsboven gestapeld. 360px breed, auto-dismiss na 5s
+        (10s voor errors, persistent voor met-actie). Linker 3px strip kleurt naar status.
+        Library: <b>react-hot-toast</b> met custom wrapper.
+      </p>
+
+      <h3 class="sub">Varianten <span class="hint">· 4 status-kleuren + neutraal</span></h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div class="toast-stack">
+            <div class="eva-toast success">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Calculatie opgeslagen</div>
+                <div class="t-desc">Versie 14 is bewaard.</div>
+              </div>
+              <button class="t-close" aria-label="Sluiten"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast warning">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">3 materialen niet up-to-date</div>
+                <div class="t-desc">Klik om prijzen te synchroniseren met leverancier.</div>
+                <div class="t-actions"><button>Synchroniseren</button><button>Negeer</button></div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast error">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Opslaan mislukt</div>
+                <div class="t-desc">Geen verbinding. Wijzigingen blijven lokaal bewaard.</div>
+                <div class="t-actions"><button>Opnieuw proberen</button></div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast info">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Houtrot-rapport gekoppeld</div>
+                <div class="t-desc">Automatisch toegevoegd aan D-1402.</div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div class="toast-stack">
+            <div class="eva-toast success">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Calculatie opgeslagen</div>
+                <div class="t-desc">Versie 14 is bewaard.</div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast warning">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">3 materialen niet up-to-date</div>
+                <div class="t-desc">Klik om prijzen te synchroniseren met leverancier.</div>
+                <div class="t-actions"><button>Synchroniseren</button><button>Negeer</button></div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast error">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Opslaan mislukt</div>
+                <div class="t-desc">Geen verbinding. Wijzigingen blijven lokaal bewaard.</div>
+                <div class="t-actions"><button>Opnieuw proberen</button></div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-toast info">
+              <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+              <div class="t-body">
+                <div class="t-title">Houtrot-rapport gekoppeld</div>
+                <div class="t-desc">Automatisch toegevoegd aan D-1402.</div>
+              </div>
+              <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Compact · alleen titel</h3>
+      <div class="demo-box">
+        <div class="toast-stack">
+          <div class="eva-toast success">
+            <span class="t-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <div class="t-body"><div class="t-title">Gekopieerd naar klembord</div></div>
+            <button class="t-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Timing-regels:</b><br>
+        • Success / Info: <b>3.5s</b> · korte bevestigingen<br>
+        • Warning: <b>5s</b> · genoeg tijd om te lezen<br>
+        • Error: <b>10s</b> of <b>persistent</b> als er een actie aan hangt<br>
+        • Met action-button: altijd persistent — sluit alleen op X of actie-click<br>
+        <b>Stack-grootte:</b> max 3 zichtbaar tegelijk · oudste schuift weg
+      </div>
+    </section>
+
+    <!-- ═════════ 02 · ALERT ═════════ -->
+    <section class="tk" id="alert">
+      <div class="head"><div class="ix">02</div><h2>Alert (inline)</h2></div>
+      <p class="desc">
+        In-page banner — persistent, geen auto-dismiss. Voor context die <i>op deze pagina</i>
+        relevant blijft. Toast is <b>over de hele app</b>; Alert is <b>op één plek</b>.
+      </p>
+
+      <h3 class="sub">Varianten</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="eva-alert success">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Goedgekeurd door werkvoorbereiding</div>
+                <div class="a-desc">De calculatie kan worden doorgestuurd naar de klant voor offerte-akkoord.</div>
+              </div>
+              <button class="a-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="eva-alert warning">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Prijzen verlopen ouder dan 30 dagen</div>
+                <div class="a-desc">Sommige materiaalprijzen zijn niet meer actueel. Synchroniseer met leverancier voordat je de offerte verstuurt.</div>
+                <div class="a-actions">
+                  <button class="primary">Nu synchroniseren</button>
+                  <button>Later</button>
+                </div>
+              </div>
+            </div>
+            <div class="eva-alert error">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Calculatie kon niet worden goedgekeurd</div>
+                <div class="a-desc">De marge is 8,2% — onder de minimumdrempel van 12%. Pas opslagen aan of vraag een uitzondering aan bij de controller.</div>
+              </div>
+            </div>
+            <div class="eva-alert info">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Concept-modus</div>
+                <div class="a-desc">Wijzigingen worden lokaal opgeslagen tot je op <b>Versturen</b> klikt.</div>
+              </div>
+              <button class="a-close"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="eva-alert success">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 4 12 14.01 9 11.01"/><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Goedgekeurd</div>
+                <div class="a-desc">Klaar om te versturen.</div>
+              </div>
+            </div>
+            <div class="eva-alert warning">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Prijzen verlopen</div>
+                <div class="a-desc">Synchroniseer met leverancier.</div>
+                <div class="a-actions">
+                  <button class="primary">Synchroniseren</button>
+                  <button>Later</button>
+                </div>
+              </div>
+            </div>
+            <div class="eva-alert info">
+              <span class="a-ico"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+              <div class="a-body">
+                <div class="a-title">Concept-modus</div>
+                <div class="a-desc">Wijzigingen lokaal opgeslagen.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Plaatsing:</b> bovenaan de page (onder PageHeader), of binnen een section-card.
+        Bij meer dan 2 inline alerts op één pagina: overweeg of het niet beter een
+        permanente UI-state is (badge in PageHeader, banner in topbar).
+      </div>
+    </section>
+
+    <!-- ═════════ 03 · ALERT DIALOG ═════════ -->
+    <section class="tk" id="alertdialog">
+      <div class="head"><div class="ix">03</div><h2>AlertDialog</h2></div>
+      <p class="desc">
+        Modaal venster voor <b>onomkeerbare beslissingen</b>. Backdrop met blur. 440px breed.
+        Default focus op de <i>Cancel</i>-knop (safety). Destructieve actie altijd rechts.
+        Bij standaard "Weet je het zeker?" altijd het object benoemen ("Verwijder dossier D-1402").
+      </p>
+
+      <h3 class="sub">Destructive · "Weet je het zeker?"</h3>
+      <div class="duo">
+        <div style="border-radius: 12px; background: var(--neutral-100); padding: 8px;">
+          <div class="eva-dialog-overlay">
+            <div class="eva-dialog destructive">
+              <div class="d-header">
+                <div class="d-icon-wrap">
+                  <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </div>
+                <div>
+                  <div class="d-title">Dossier D-1402 verwijderen?</div>
+                  <div class="d-desc">Het dossier, gekoppelde calculaties en bestanden worden permanent verwijderd. Deze actie kan niet ongedaan worden gemaakt.</div>
+                </div>
+              </div>
+              <div class="d-actions">
+                <button class="eva-btn outline">Annuleren</button>
+                <button class="eva-btn destructive">Verwijderen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="border-radius: 12px; background: var(--neutral-800); padding: 8px;">
+          <div class="contrast eva-dialog-overlay" style="background: rgba(0,0,0,0.55);">
+            <div class="eva-dialog destructive">
+              <div class="d-header">
+                <div class="d-icon-wrap">
+                  <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </div>
+                <div>
+                  <div class="d-title">Dossier D-1402 verwijderen?</div>
+                  <div class="d-desc">Permanent — kan niet ongedaan worden gemaakt.</div>
+                </div>
+              </div>
+              <div class="d-actions">
+                <button class="eva-btn outline">Annuleren</button>
+                <button class="eva-btn destructive">Verwijderen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Warning · niet-destructief, wel waarschuwen</h3>
+      <div style="border-radius: 12px; background: var(--neutral-100); padding: 8px;">
+        <div class="eva-dialog-overlay" style="min-height: 200px;">
+          <div class="eva-dialog warning">
+            <div class="d-header">
+              <div class="d-icon-wrap">
+                <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div>
+                <div class="d-title">Opgeslagen wijzigingen verlaten?</div>
+                <div class="d-desc">Er zijn 8 niet-opgeslagen wijzigingen in deze calculatie. Als je nu sluit gaan deze verloren.</div>
+              </div>
+            </div>
+            <div class="d-actions">
+              <button class="eva-btn ghost">Verlaten zonder opslaan</button>
+              <button class="eva-btn outline">Annuleren</button>
+              <button class="eva-btn primary">Opslaan &amp; sluiten</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Drie-actie patroon</b> (sluiten, annuleren, opslaan) is OK bij verlaat-flows.
+        Voor alle andere alert-dialogs: max twee acties — annuleren (links) + bevestigen (rechts).
+        Radix <code>&lt;AlertDialog&gt;</code> wikkelt automatisch focus-management en
+        ESC-handling.
+      </div>
+    </section>
+
+    <!-- ═════════ 04 · SPINNER ═════════ -->
+    <section class="tk" id="spinner">
+      <div class="head"><div class="ix">04</div><h2>Loading Spinner</h2></div>
+      <p class="desc">
+        Voor <b>onbekende-duur loading</b> (geen progress meetbaar). 4 sizes. Inline in
+        buttons en tabel-cellen, full-page voor pagina-routing en grote dataloads.
+        Voor bekende voortgang: gebruik <a href="#progress" style="color: var(--brand-700);">Progress</a>.
+      </p>
+
+      <h3 class="sub">Sizes</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="display: flex; gap: 32px; align-items: end;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-sm"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">sm · 14</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">md · 18</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-lg"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">lg · 24</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-xl"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">xl · 40</span></div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: flex; gap: 32px; align-items: end;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-sm"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400);">sm</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400);">md</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-lg"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400);">lg</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;"><span class="eva-spinner eva-spinner-xl"></span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-400);">xl</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">In context</h3>
+      <div class="demo-box">
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
+          <button class="eva-btn primary"><span class="eva-spinner eva-spinner-sm" style="color: white;"></span>Bezig met opslaan…</button>
+          <button class="eva-btn outline"><span class="eva-spinner eva-spinner-sm" style="color: var(--neutral-600);"></span>Laden</button>
+          <div style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--neutral-700);">
+            <span class="eva-spinner eva-spinner-sm" style="color: var(--neutral-500);"></span>
+            Verwerken…
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Full-page loader</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="full-page-loader">
+            <div class="stack">
+              <span class="eva-spinner eva-spinner-xl"></span>
+              <div class="msg">Dossier laden…</div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="full-page-loader">
+            <div class="stack">
+              <span class="eva-spinner eva-spinner-xl"></span>
+              <div class="msg">Dossier laden…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Gebruik niet:</b> als de data &lt; 200ms binnen is — een knipperende spinner is
+        erger dan kort lege ruimte. Toon spinner pas na 200ms wachttijd.
+      </div>
+    </section>
+
+    <!-- ═════════ 05 · SKELETON ═════════ -->
+    <section class="tk" id="skeleton">
+      <div class="head"><div class="ix">05</div><h2>Skeleton</h2></div>
+      <p class="desc">
+        Toont de <b>vorm van de content</b> tijdens laden — beter dan spinner bij
+        herkenbare layouts (cards, tabellen, lijsten). Shimmer-animatie 1.4s.
+        Gebruik <code style="font-family:var(--font-mono); font-size:11px;">neutral-100 → 200 → 100</code> als gradient.
+      </p>
+
+      <h3 class="sub">Bouwstenen</h3>
+      <div class="demo-box">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div>
+            <div class="label-row">Text-lines</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div class="skeleton skeleton-large" style="width: 60%;"></div>
+              <div class="skeleton skeleton-text" style="width: 100%;"></div>
+              <div class="skeleton skeleton-text" style="width: 90%;"></div>
+              <div class="skeleton skeleton-text" style="width: 80%;"></div>
+            </div>
+          </div>
+          <div>
+            <div class="label-row">Met avatar</div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <div class="skeleton skeleton-avatar" style="width: 40px; height: 40px;"></div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                <div class="skeleton skeleton-text" style="width: 50%; height: 12px;"></div>
+                <div class="skeleton skeleton-text" style="width: 30%; height: 10px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Card-skeleton</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="background: white; border: 1px solid var(--neutral-200); border-radius: 10px; overflow: hidden;">
+            <div style="padding: 10px 18px; border-bottom: 1px solid var(--neutral-100);">
+              <div class="skeleton skeleton-text" style="width: 35%; height: 10px;"></div>
+            </div>
+            <div style="padding: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px;">
+              <div><div class="skeleton skeleton-text" style="width: 60%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 80%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 50%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 70%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 65%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 90%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 55%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 75%; height: 14px;"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="background: var(--neutral-900); border: 1px solid var(--neutral-800); border-radius: 10px; overflow: hidden;">
+            <div style="padding: 10px 18px; border-bottom: 1px solid var(--neutral-800);">
+              <div class="skeleton skeleton-text" style="width: 35%; height: 10px;"></div>
+            </div>
+            <div style="padding: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px;">
+              <div><div class="skeleton skeleton-text" style="width: 60%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 80%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 50%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 70%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 65%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 90%; height: 14px;"></div></div>
+              <div><div class="skeleton skeleton-text" style="width: 55%; height: 9px; margin-bottom: 6px;"></div><div class="skeleton skeleton-text" style="width: 75%; height: 14px;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Table-skeleton</h3>
+      <div class="demo-box">
+        <div style="border: 1px solid var(--neutral-200); border-radius: 8px; overflow: hidden;">
+          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; padding: 10px 14px; background: var(--neutral-50); border-bottom: 1px solid var(--neutral-200); gap: 14px;">
+            <div class="skeleton skeleton-text" style="width: 80px; height: 10px;"></div>
+            <div class="skeleton skeleton-text" style="width: 100px; height: 10px;"></div>
+            <div class="skeleton skeleton-text" style="width: 60px; height: 10px;"></div>
+            <div class="skeleton skeleton-text" style="width: 70px; height: 10px; justify-self: end;"></div>
+          </div>
+          <!-- 5 rows -->
+          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; padding: 12px 14px; border-bottom: 1px solid var(--neutral-100); gap: 14px;">
+            <div class="skeleton skeleton-text" style="width: 60%;"></div>
+            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+            <div class="skeleton skeleton-text" style="width: 50%; border-radius: 999px; height: 14px;"></div>
+            <div class="skeleton skeleton-text" style="width: 60%; justify-self: end;"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; padding: 12px 14px; border-bottom: 1px solid var(--neutral-100); gap: 14px;">
+            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+            <div class="skeleton skeleton-text" style="width: 90%;"></div>
+            <div class="skeleton skeleton-text" style="width: 60%; border-radius: 999px; height: 14px;"></div>
+            <div class="skeleton skeleton-text" style="width: 55%; justify-self: end;"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; padding: 12px 14px; border-bottom: 1px solid var(--neutral-100); gap: 14px;">
+            <div class="skeleton skeleton-text" style="width: 70%;"></div>
+            <div class="skeleton skeleton-text" style="width: 70%;"></div>
+            <div class="skeleton skeleton-text" style="width: 55%; border-radius: 999px; height: 14px;"></div>
+            <div class="skeleton skeleton-text" style="width: 65%; justify-self: end;"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; padding: 12px 14px; gap: 14px;">
+            <div class="skeleton skeleton-text" style="width: 55%;"></div>
+            <div class="skeleton skeleton-text" style="width: 85%;"></div>
+            <div class="skeleton skeleton-text" style="width: 45%; border-radius: 999px; height: 14px;"></div>
+            <div class="skeleton skeleton-text" style="width: 60%; justify-self: end;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 06 · EMPTY STATE ═════════ -->
+    <section class="tk" id="empty">
+      <div class="head"><div class="ix">06</div><h2>Empty State</h2></div>
+      <p class="desc">
+        Voor lege tabellen, lijsten en search-resultaten. Niet alleen "geen data" — vertel
+        de gebruiker <b>waarom</b> en <b>wat ze kunnen doen</b>. Drie sizes voor cards,
+        sections en full-page.
+      </p>
+
+      <h3 class="sub">Sizes</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+        <div class="demo-box" style="padding: 0;">
+          <div class="label-row" style="padding: 14px 14px 0;">SM · in card</div>
+          <div class="eva-empty sm">
+            <div class="e-art">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div class="e-title">Geen openstaande taken</div>
+            <div class="e-desc">Goed bezig.</div>
+          </div>
+        </div>
+        <div class="demo-box" style="padding: 0;">
+          <div class="label-row" style="padding: 14px 14px 0;">MD · in section</div>
+          <div class="eva-empty">
+            <div class="e-art">
+              <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="e-title">Nog geen bestanden</div>
+            <div class="e-desc">Sleep foto's, rapporten of tekeningen hierheen om ze aan dit dossier te koppelen.</div>
+            <div class="e-actions"><button class="eva-btn outline sm">Bestand uploaden</button></div>
+          </div>
+        </div>
+        <div class="demo-box" style="padding: 0;">
+          <div class="label-row" style="padding: 14px 14px 0;">LG · full-page</div>
+          <div class="eva-empty lg" style="padding: 60px 32px;">
+            <div class="e-art neutral">
+              <svg class="ico-xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <div class="e-title">Geen resultaten voor "schilderwerk apel"</div>
+            <div class="e-desc">Probeer minder woorden of controleer de spelling.</div>
+            <div class="e-actions"><button class="eva-btn outline sm">Filter wissen</button></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Use-cases · EVA-specifiek</h3>
+      <div class="duo">
+        <div class="demo-box" style="padding: 0;">
+          <div class="label-row" style="padding: 14px 14px 0;">Lege calculatie</div>
+          <div class="eva-empty">
+            <div class="e-art">
+              <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div class="e-title">Nog geen calculatieregels</div>
+            <div class="e-desc">Voeg een regel toe of selecteer een sjabloon uit de bibliotheek.</div>
+            <div class="e-actions">
+              <button class="eva-btn outline sm">Bibliotheek</button>
+              <button class="eva-btn primary sm">+ Nieuwe regel</button>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box" style="padding: 0;">
+          <div class="label-row" style="padding: 14px 14px 0;">Lege planning</div>
+          <div class="eva-empty">
+            <div class="e-art">
+              <svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            </div>
+            <div class="e-title">Nog niets gepland deze week</div>
+            <div class="e-desc">Sleep een activiteit uit de "Opdrachten" lijst naar een medewerker en datum om in te plannen.</div>
+            <div class="e-actions"><button class="eva-btn primary sm">+ Nieuwe activiteit</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>3 regels voor goede empty states:</b><br>
+        1. Bevestig dat het bewust leeg is (niet "Error: 0 results")<br>
+        2. Leg uit waarom of wat ze kunnen doen<br>
+        3. Geef een directe CTA naar de hoofdactie<br>
+        <b>Tone:</b> bij lege "Goed bezig"-states (taken/herinneringen leeg) gebruik je
+        positieve copy. Bij lege features (nog niets aangemaakt) is het uitnodigend.
+      </div>
+    </section>
+
+    <!-- ═════════ 07 · PROGRESS ═════════ -->
+    <section class="tk" id="progress">
+      <div class="head"><div class="ix">07</div><h2>Progress</h2></div>
+      <p class="desc">
+        Voor <b>meetbare voortgang</b>. Lineair (default) of circulair (compact, bv. in
+        tabel-rij). Vier semantische kleuren — brand voor standaard, success/warning/error
+        voor status-driven progress.
+      </p>
+
+      <h3 class="sub">Linear · sizes</h3>
+      <div class="demo-box">
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          <div>
+            <div class="label-row" style="margin-bottom: 8px;">Small · 4px</div>
+            <div class="eva-progress eva-progress-sm"><div class="indicator" style="width: 42%;"></div></div>
+          </div>
+          <div>
+            <div class="label-row" style="margin-bottom: 8px;">Medium · 6px (default)</div>
+            <div class="eva-progress"><div class="indicator" style="width: 64%;"></div></div>
+          </div>
+          <div>
+            <div class="label-row" style="margin-bottom: 8px;">Large · 8px</div>
+            <div class="eva-progress eva-progress-lg"><div class="indicator" style="width: 86%;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Met label + percentage</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div class="progress-row">
+              <div class="pr-label"><b>Calculatie berekenen</b><span class="pct">64%</span></div>
+              <div class="eva-progress"><div class="indicator" style="width: 64%;"></div></div>
+            </div>
+            <div class="progress-row">
+              <div class="pr-label"><b>Bestanden uploaden</b><span class="pct">3 van 8</span></div>
+              <div class="eva-progress success"><div class="indicator" style="width: 38%;"></div></div>
+            </div>
+            <div class="progress-row">
+              <div class="pr-label"><b>Marge-check</b><span class="pct">9,2% · onder grens</span></div>
+              <div class="eva-progress warning"><div class="indicator" style="width: 23%;"></div></div>
+            </div>
+            <div class="progress-row">
+              <div class="pr-label"><b>Sync mislukt</b><span class="pct">retry 2/3</span></div>
+              <div class="eva-progress error"><div class="indicator" style="width: 66%;"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div class="progress-row">
+              <div class="pr-label"><b>Calculatie berekenen</b><span class="pct">64%</span></div>
+              <div class="eva-progress"><div class="indicator" style="width: 64%;"></div></div>
+            </div>
+            <div class="progress-row">
+              <div class="pr-label"><b>Bestanden uploaden</b><span class="pct">3 van 8</span></div>
+              <div class="eva-progress success"><div class="indicator" style="width: 38%;"></div></div>
+            </div>
+            <div class="progress-row">
+              <div class="pr-label"><b>Marge-check</b><span class="pct">9,2%</span></div>
+              <div class="eva-progress warning"><div class="indicator" style="width: 23%;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Indeterminate · onbekende duur</h3>
+      <div class="demo-box">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 12.5px; color: var(--neutral-600);">Verbinden met leverancier…</div>
+          <div class="eva-progress indet"><div class="indicator"></div></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Circular · compact in lijst</h3>
+      <div class="demo-box">
+        <div style="display: flex; gap: 32px; align-items: end; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <div class="eva-progress-circle">
+              <svg width="48" height="48">
+                <circle class="track" cx="24" cy="24" r="20" stroke-width="4" fill="none"/>
+                <circle class="bar" cx="24" cy="24" r="20" stroke-width="4" fill="none" stroke-dasharray="125.66" stroke-dashoffset="50.27" stroke-linecap="round"/>
+              </svg>
+              <div class="pct">60%</div>
+            </div>
+            <div style="font-size: 11px; color: var(--neutral-500);">Calculatie</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <div class="eva-progress-circle">
+              <svg width="48" height="48">
+                <circle class="track" cx="24" cy="24" r="20" stroke-width="4" fill="none"/>
+                <circle class="bar" cx="24" cy="24" r="20" stroke-width="4" fill="none" stroke-dasharray="125.66" stroke-dashoffset="12.57" stroke-linecap="round" stroke="var(--success-500)"/>
+              </svg>
+              <div class="pct">90%</div>
+            </div>
+            <div style="font-size: 11px; color: var(--neutral-500);">Uploaden</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <div class="eva-progress-circle">
+              <svg width="48" height="48">
+                <circle class="track" cx="24" cy="24" r="20" stroke-width="4" fill="none"/>
+                <circle class="bar" cx="24" cy="24" r="20" stroke-width="4" fill="none" stroke-dasharray="125.66" stroke-dashoffset="100.53" stroke-linecap="round" stroke="var(--warning-500)"/>
+              </svg>
+              <div class="pct">20%</div>
+            </div>
+            <div style="font-size: 11px; color: var(--neutral-500);">Marge</div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">In context · upload-stap</h3>
+      <div class="demo-box" style="padding: 0;">
+        <div style="background: white; border-radius: 12px; overflow: hidden;">
+          <div style="padding: 14px 18px; border-bottom: 1px solid var(--neutral-100); font-size: 13.5px; font-weight: 600; color: var(--neutral-900); display: flex; justify-content: space-between; align-items: center;">
+            <span>Bestanden uploaden</span>
+            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500);">3 van 8</span>
+          </div>
+          <div style="padding: 16px 18px;">
+            <div class="eva-progress" style="margin-bottom: 16px;"><div class="indicator success" style="width: 38%; background: var(--success-500);"></div></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px;">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span style="flex: 1; color: var(--neutral-700);">inspectie-1.jpg</span>
+                <span style="font-family: var(--font-mono); color: var(--neutral-500);">2.4&nbsp;MB</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px;">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span style="flex: 1; color: var(--neutral-700);">inspectie-2.jpg</span>
+                <span style="font-family: var(--font-mono); color: var(--neutral-500);">1.8&nbsp;MB</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px;">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--success-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span style="flex: 1; color: var(--neutral-700);">rapport.pdf</span>
+                <span style="font-family: var(--font-mono); color: var(--neutral-500);">412&nbsp;KB</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px;">
+                <span class="eva-spinner eva-spinner-sm" style="color: var(--brand-500);"></span>
+                <span style="flex: 1; color: var(--neutral-900);">tekening-gevel.dwg</span>
+                <span style="font-family: var(--font-mono); color: var(--neutral-500);">62%</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; opacity: 0.5;">
+                <div style="width: 14px; height: 14px; border: 2px solid var(--neutral-300); border-radius: 50%;"></div>
+                <span style="flex: 1; color: var(--neutral-700);">tekening-zijgevel.dwg</span>
+                <span style="font-family: var(--font-mono); color: var(--neutral-500);">wachten</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- footer -->
+    <div class="meta-card" style="margin-top: 48px;">
+      <b>Volgende stap?</b>
+      We hebben nu Foundations, Layout, Basiscomponenten en Feedback &amp; States.
+      Logische vervolgen: <i>Overlays &amp; Containers</i> (Modal, Popover, Drawer, Accordion, Card),
+      <i>Formulierpatronen</i> (Form layout, DatePicker, Combobox, FilesUpload),
+      of een <b>compositie-pagina</b> die alles samen in een realistische EVA-scherm laat zien.
+      Geef seintje welke richting.
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

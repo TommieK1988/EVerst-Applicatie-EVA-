@@ -1,0 +1,1684 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<title>EVA · Basiscomponenten</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     EVA · Basiscomponenten
+     Atomic components, gebruikt CSS-variabelen uit Foundations
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --brand-50:  #ecfaf0; --brand-100: #d2f2dd; --brand-200: #a5e4ba;
+    --brand-300: #6dd190; --brand-400: #28a44a; --brand-500: #009439;
+    --brand-600: #007530; --brand-700: #0a5e28; --brand-800: #054f2e;
+    --brand-900: #013a20; --brand-950: #012215;
+    --brand-lime: #61ac2b; --brand-dark: #1f2933;
+
+    --polygon-bg: url("../../apps/dashboard/public/polygon-bg.png");
+
+    --neutral-0:   #ffffff; --neutral-50:  #f8fafa; --neutral-100: #f1f4f5;
+    --neutral-200: #e3e8ea; --neutral-300: #cbd2d6; --neutral-400: #9aa4ab;
+    --neutral-500: #6b757c; --neutral-600: #4d575e; --neutral-700: #364048;
+    --neutral-800: #232a30; --neutral-900: #161b20; --neutral-950: #1f2933;
+
+    --success-50:  #ecfdf3; --success-100: #d1fadf; --success-300: #6ce9a6;
+    --success-500: #12b76a; --success-700: #027a48; --success-900: #054f31;
+    --warning-50:  #fff6ec; --warning-100: #ffe6cc; --warning-300: #ffb866;
+    --warning-500: #f08000; --warning-700: #b85a00; --warning-900: #6b3400;
+    --error-50:   #fef3f2;  --error-100:  #fee4e2;  --error-300:  #fda29b;
+    --error-500:  #e8453b;  --error-700:  #b42318;  --error-900:  #7a271a;
+    --info-50:    #eff8ff;  --info-100:   #d1e9ff;  --info-300:   #84caff;
+    --info-500:   #2e90fa;  --info-700:   #175cd3;  --info-900:   #194185;
+
+    --font-sans: "Montserrat", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--neutral-50);
+    color: var(--neutral-900);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+
+  /* ─── DOC SHELL (zelfde als andere docs) ─── */
+  .doc-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside.doc-nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 0; border-right: 1px solid var(--neutral-200);
+    background: var(--neutral-0);
+  }
+  aside.doc-nav .doc-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    background-image: var(--polygon-bg); background-size: cover; background-position: center;
+    color: white; position: relative;
+  }
+  aside.doc-nav .doc-brand::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%);
+  }
+  aside.doc-nav .doc-brand .mark {
+    width: 30px; height: 30px; border-radius: 6px;
+    background-image: url("brand-assets/eve-beeldmerk.png");
+    background-size: cover; background-position: center;
+    z-index: 1;
+  }
+  aside.doc-nav .doc-brand .name { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; z-index: 1; }
+  aside.doc-nav .doc-brand .sub  { font-size: 9.5px; opacity: 0.85; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; z-index: 1; }
+  aside.doc-nav .doc-body { padding: 18px 14px 24px; }
+  aside.doc-nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  aside.doc-nav .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--neutral-500); margin: 14px 12px 8px;
+  }
+  aside.doc-nav a {
+    display: flex; justify-content: space-between; align-items: center;
+    text-decoration: none; color: var(--neutral-700);
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 12.5px; font-weight: 500;
+    transition: background 120ms, color 120ms;
+  }
+  aside.doc-nav a:hover { background: var(--neutral-100); color: var(--neutral-900); }
+  aside.doc-nav a.active { background: var(--brand-50); color: var(--brand-700); }
+  aside.doc-nav a .num { font-family: var(--font-mono); font-size: 10.5px; color: var(--neutral-500); }
+
+  main { padding: 44px 48px 120px; max-width: 1400px; }
+
+  header.page { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--neutral-200); }
+  header.page .eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--brand-500); margin-bottom: 12px;
+  }
+  header.page h1 { font-size: 38px; line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 12px; font-weight: 700; }
+  header.page .lede { font-size: 16px; line-height: 1.55; color: var(--neutral-600); max-width: 760px; margin: 0; }
+  header.page .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; font-size: 12px; color: var(--neutral-500); }
+  header.page .meta b { color: var(--neutral-700); font-weight: 600; }
+
+  section.tk { margin-bottom: 64px; scroll-margin-top: 24px; }
+  section.tk > .head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  section.tk > .head .ix { font-family: var(--font-mono); font-size: 12px; color: var(--neutral-500); letter-spacing: 0.05em; }
+  section.tk > .head h2 { font-size: 24px; letter-spacing: -0.015em; margin: 0; font-weight: 700; }
+  section.tk > p.desc { color: var(--neutral-600); font-size: 13.5px; line-height: 1.6; margin: 0 0 24px; max-width: 760px; }
+  h3.sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--neutral-600); margin: 24px 0 12px; display: flex; align-items: center; gap: 10px; }
+  h3.sub .hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--neutral-500); font-size: 11px; }
+
+  .demo-box {
+    background: var(--neutral-0); border: 1px solid var(--neutral-200);
+    border-radius: 12px; padding: 24px;
+    overflow: hidden;
+  }
+  .demo-box.contrast { background: var(--neutral-950); border-color: var(--neutral-800); }
+  .demo-box .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .demo-box .row + .row { margin-top: 12px; }
+  .demo-box .label-row {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-weight: 700; color: var(--neutral-500); margin-bottom: 8px;
+  }
+  .demo-box.contrast .label-row { color: var(--neutral-400); }
+
+  /* duo */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .duo > .demo-box { padding: 22px; }
+
+  /* Token table */
+  .tok-table {
+    border: 1px solid var(--neutral-200); border-radius: 10px;
+    background: white; overflow: hidden; margin-top: 12px;
+  }
+  .tok-table .tok-row {
+    display: grid; grid-template-columns: 200px 1fr 1fr;
+    padding: 10px 18px; gap: 18px; font-size: 12px;
+    align-items: baseline;
+  }
+  .tok-table .tok-row + .tok-row { border-top: 1px solid var(--neutral-100); }
+  .tok-table .tok-row.head {
+    background: var(--neutral-50); text-transform: uppercase;
+    letter-spacing: 0.08em; font-size: 10px; font-weight: 700; color: var(--neutral-500);
+    padding: 9px 18px;
+  }
+  .tok-table .tok-row .name { font-family: var(--font-mono); font-weight: 600; color: var(--neutral-900); }
+  .tok-table .tok-row .val { font-family: var(--font-mono); color: var(--neutral-700); }
+  .tok-table .tok-row .hint { color: var(--neutral-500); }
+
+  .meta-card {
+    margin-top: 14px; padding: 14px 18px;
+    border: 1px dashed var(--neutral-200); border-radius: 10px;
+    font-size: 12px; color: var(--neutral-600); line-height: 1.55;
+  }
+  .meta-card code {
+    font-family: var(--font-mono); background: var(--neutral-100);
+    padding: 1px 6px; border-radius: 4px; color: var(--neutral-800); font-size: 11px;
+  }
+  .meta-card b { color: var(--neutral-900); font-weight: 600; }
+
+  /* Component overview cards */
+  .overview-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 40px;
+  }
+  .ov-card {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 10px;
+    padding: 18px 16px 14px; min-height: 110px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    cursor: pointer; text-decoration: none; color: inherit;
+    transition: border-color 120ms, transform 120ms;
+  }
+  .ov-card:hover { border-color: var(--brand-300); transform: translateY(-2px); }
+  .ov-card .ov-mini { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ov-card .ov-name { font-size: 13px; font-weight: 600; margin-top: 14px; color: var(--neutral-900); }
+  .ov-card .ov-ix { font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500); }
+
+  /* ═══════════════════════════════════════════════════════════
+     COMPONENT CSS — These map 1-1 to <Button>, <Input>, etc.
+     ═══════════════════════════════════════════════════════════ */
+
+  /* ─────── BUTTON ─────── */
+  .eva-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px;
+    border-radius: 6px;
+    font-family: var(--font-sans); font-weight: 600;
+    line-height: 1; white-space: nowrap;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms;
+    user-select: none;
+  }
+  .eva-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--brand-100);
+  }
+  /* sizes */
+  .eva-btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .eva-btn-md { height: 32px; padding: 0 12px; font-size: 13px; }
+  .eva-btn-lg { height: 40px; padding: 0 16px; font-size: 14px; }
+  .eva-btn-icon-sm { width: 28px; height: 28px; padding: 0; }
+  .eva-btn-icon-md { width: 32px; height: 32px; padding: 0; }
+  .eva-btn-icon-lg { width: 40px; height: 40px; padding: 0; }
+  /* variants */
+  .eva-btn-primary { background: var(--brand-500); color: white; border-color: var(--brand-500); }
+  .eva-btn-primary:hover    { background: var(--brand-600); border-color: var(--brand-600); }
+  .eva-btn-primary:active   { background: var(--brand-700); border-color: var(--brand-700); }
+  .eva-btn-primary[disabled] { background: var(--brand-200); border-color: var(--brand-200); cursor: not-allowed; }
+
+  .eva-btn-secondary { background: var(--neutral-100); color: var(--neutral-900); border-color: var(--neutral-100); }
+  .eva-btn-secondary:hover  { background: var(--neutral-200); border-color: var(--neutral-200); }
+  .eva-btn-secondary:active { background: var(--neutral-300); border-color: var(--neutral-300); }
+  .eva-btn-secondary[disabled] { background: var(--neutral-100); color: var(--neutral-400); cursor: not-allowed; }
+
+  .eva-btn-outline { background: white; color: var(--neutral-800); border-color: var(--neutral-300); }
+  .eva-btn-outline:hover    { background: var(--neutral-50); border-color: var(--neutral-400); }
+  .eva-btn-outline:active   { background: var(--neutral-100); }
+  .eva-btn-outline[disabled] { color: var(--neutral-400); border-color: var(--neutral-200); cursor: not-allowed; }
+
+  .eva-btn-ghost { background: transparent; color: var(--neutral-700); border-color: transparent; }
+  .eva-btn-ghost:hover  { background: var(--neutral-100); color: var(--neutral-900); }
+  .eva-btn-ghost:active { background: var(--neutral-200); }
+  .eva-btn-ghost[disabled] { color: var(--neutral-400); cursor: not-allowed; background: transparent; }
+
+  .eva-btn-destructive { background: var(--error-500); color: white; border-color: var(--error-500); }
+  .eva-btn-destructive:hover  { background: var(--error-700); border-color: var(--error-700); }
+  .eva-btn-destructive:active { background: var(--error-900); border-color: var(--error-900); }
+  .eva-btn-destructive[disabled] { background: var(--error-300); border-color: var(--error-300); cursor: not-allowed; }
+  .eva-btn-destructive:focus-visible { box-shadow: 0 0 0 3px var(--error-100); }
+
+  /* loading spinner */
+  .eva-btn .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* DARK variants */
+  .contrast .eva-btn-primary { background: var(--brand-400); color: var(--neutral-950); border-color: var(--brand-400); }
+  .contrast .eva-btn-primary:hover { background: var(--brand-300); border-color: var(--brand-300); }
+  .contrast .eva-btn-primary[disabled] { background: var(--brand-700); color: var(--neutral-500); border-color: var(--brand-700); }
+  .contrast .eva-btn-secondary { background: var(--neutral-800); color: var(--neutral-100); border-color: var(--neutral-800); }
+  .contrast .eva-btn-secondary:hover { background: var(--neutral-700); border-color: var(--neutral-700); }
+  .contrast .eva-btn-secondary[disabled] { background: var(--neutral-800); color: var(--neutral-500); }
+  .contrast .eva-btn-outline { background: transparent; color: var(--neutral-200); border-color: var(--neutral-700); }
+  .contrast .eva-btn-outline:hover { background: var(--neutral-800); border-color: var(--neutral-600); }
+  .contrast .eva-btn-outline[disabled] { color: var(--neutral-500); border-color: var(--neutral-800); }
+  .contrast .eva-btn-ghost { color: var(--neutral-300); }
+  .contrast .eva-btn-ghost:hover { background: var(--neutral-800); color: var(--neutral-100); }
+  .contrast .eva-btn-destructive { background: var(--error-500); color: white; border-color: var(--error-500); }
+  .contrast .eva-btn-destructive:hover { background: var(--error-700); border-color: var(--error-700); }
+
+  /* ─────── INPUT ─────── */
+  .eva-input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    background: white;
+    border: 1px solid var(--neutral-300);
+    border-radius: 6px;
+    color: var(--neutral-900);
+    font-family: var(--font-sans); font-size: 13px;
+    line-height: 1;
+    transition: border-color 120ms, box-shadow 120ms;
+    outline: none;
+  }
+  .eva-input:hover { border-color: var(--neutral-400); }
+  .eva-input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
+  .eva-input::placeholder { color: var(--neutral-400); }
+  .eva-input[disabled] { background: var(--neutral-50); color: var(--neutral-400); cursor: not-allowed; border-color: var(--neutral-200); }
+  .eva-input[aria-invalid="true"] { border-color: var(--error-500); }
+  .eva-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--error-100); }
+  .eva-input-sm { height: 28px; font-size: 12px; padding: 0 10px; }
+  .eva-input-lg { height: 40px; font-size: 14px; padding: 0 14px; }
+
+  .eva-input-wrap { position: relative; display: flex; align-items: center; }
+  .eva-input-wrap .prefix, .eva-input-wrap .suffix {
+    position: absolute; color: var(--neutral-500);
+    pointer-events: none; display: grid; place-items: center;
+    width: 32px; height: 100%; top: 0;
+  }
+  .eva-input-wrap .prefix { left: 0; }
+  .eva-input-wrap .suffix { right: 0; pointer-events: auto; }
+  .eva-input-wrap.has-prefix .eva-input { padding-left: 32px; }
+  .eva-input-wrap.has-suffix .eva-input { padding-right: 32px; }
+
+  .eva-textarea {
+    width: 100%; min-height: 80px; padding: 8px 12px;
+    background: white; border: 1px solid var(--neutral-300); border-radius: 6px;
+    color: var(--neutral-900); font-family: var(--font-sans); font-size: 13px;
+    line-height: 1.5; resize: vertical; outline: none;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+  .eva-textarea:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); }
+
+  /* dark */
+  .contrast .eva-input,
+  .contrast .eva-textarea {
+    background: var(--neutral-900); color: var(--neutral-100); border-color: var(--neutral-700);
+  }
+  .contrast .eva-input:hover, .contrast .eva-textarea:hover { border-color: var(--neutral-600); }
+  .contrast .eva-input:focus, .contrast .eva-textarea:focus {
+    border-color: var(--brand-400); box-shadow: 0 0 0 3px rgba(10,122,53,0.25);
+  }
+  .contrast .eva-input::placeholder { color: var(--neutral-500); }
+  .contrast .eva-input[disabled] { background: var(--neutral-900); color: var(--neutral-500); border-color: var(--neutral-800); }
+
+  /* ─────── LABEL ─────── */
+  .eva-label {
+    display: block;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--neutral-700);
+    margin-bottom: 6px;
+  }
+  .eva-label.upper {
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--neutral-500);
+  }
+  .eva-label .req { color: var(--error-500); margin-left: 3px; }
+  .contrast .eva-label { color: var(--neutral-300); }
+  .contrast .eva-label.upper { color: var(--neutral-400); }
+
+  .eva-helper { font-size: 11px; color: var(--neutral-500); margin-top: 6px; line-height: 1.4; }
+  .eva-helper.error { color: var(--error-700); }
+  .contrast .eva-helper { color: var(--neutral-400); }
+  .contrast .eva-helper.error { color: var(--error-300); }
+
+  /* ─────── SELECT (custom-styled, behavior via Radix) ─────── */
+  .eva-select {
+    display: inline-flex; align-items: center; justify-content: space-between;
+    gap: 8px; width: 100%;
+    height: 36px; padding: 0 10px 0 12px;
+    background: white; border: 1px solid var(--neutral-300); border-radius: 6px;
+    font-family: var(--font-sans); font-size: 13px;
+    color: var(--neutral-900); cursor: pointer;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+  .eva-select:hover { border-color: var(--neutral-400); }
+  .eva-select.open, .eva-select:focus-visible {
+    border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-100); outline: none;
+  }
+  .eva-select .placeholder { color: var(--neutral-400); }
+  .eva-select .chev { color: var(--neutral-500); flex-shrink: 0; }
+  .contrast .eva-select { background: var(--neutral-900); color: var(--neutral-100); border-color: var(--neutral-700); }
+
+  .eva-select-menu {
+    background: white; border: 1px solid var(--neutral-200); border-radius: 8px;
+    box-shadow: 0 12px 24px -6px rgba(16,24,40,0.12), 0 4px 6px -2px rgba(16,24,40,0.04);
+    padding: 4px; min-width: 240px;
+  }
+  .contrast .eva-select-menu {
+    background: var(--neutral-900); border-color: var(--neutral-700);
+    box-shadow: 0 12px 24px -6px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .eva-select-menu .opt {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 5px;
+    font-size: 13px; color: var(--neutral-800); cursor: pointer;
+  }
+  .eva-select-menu .opt:hover { background: var(--neutral-100); }
+  .eva-select-menu .opt.selected { background: var(--brand-50); color: var(--brand-700); font-weight: 500; }
+  .eva-select-menu .opt .check { margin-left: auto; color: var(--brand-500); }
+  .contrast .eva-select-menu .opt { color: var(--neutral-200); }
+  .contrast .eva-select-menu .opt:hover { background: var(--neutral-800); }
+  .contrast .eva-select-menu .opt.selected { background: rgba(10,122,53,0.18); color: var(--brand-300); }
+
+  /* Multi-select chips */
+  .multi-select {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    min-height: 36px; padding: 3px 6px;
+    background: white; border: 1px solid var(--neutral-300); border-radius: 6px;
+  }
+  .multi-select .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 4px 2px 8px; background: var(--brand-50);
+    color: var(--brand-700); border-radius: 4px;
+    font-size: 12px; font-weight: 500;
+  }
+  .multi-select .chip .x {
+    width: 16px; height: 16px; border-radius: 3px;
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--brand-600);
+  }
+  .multi-select .chip .x:hover { background: var(--brand-100); }
+  .multi-select .ms-input {
+    flex: 1; min-width: 80px; border: none; outline: none;
+    background: transparent; font-size: 13px; padding: 4px 6px;
+    font-family: var(--font-sans); color: var(--neutral-900);
+  }
+  .contrast .multi-select { background: var(--neutral-900); border-color: var(--neutral-700); }
+  .contrast .multi-select .chip { background: rgba(10,122,53,0.18); color: var(--brand-300); }
+  .contrast .multi-select .ms-input { color: var(--neutral-100); }
+
+  /* ─────── CHECKBOX ─────── */
+  .eva-check {
+    display: inline-flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+    font-size: 13px; color: var(--neutral-900);
+  }
+  .eva-check input { position: absolute; opacity: 0; pointer-events: none; }
+  .eva-check .box {
+    width: 16px; height: 16px; border-radius: 4px;
+    background: white; border: 1.5px solid var(--neutral-300);
+    display: grid; place-items: center;
+    flex-shrink: 0; transition: background 120ms, border-color 120ms, box-shadow 120ms;
+  }
+  .eva-check:hover .box { border-color: var(--brand-500); }
+  .eva-check input:focus-visible + .box { box-shadow: 0 0 0 3px var(--brand-100); }
+  .eva-check.checked .box, .eva-check.indeterminate .box {
+    background: var(--brand-500); border-color: var(--brand-500);
+  }
+  .eva-check.checked .box svg, .eva-check.indeterminate .box svg { display: block; }
+  .eva-check .box svg { display: none; color: white; }
+  .eva-check.disabled { cursor: not-allowed; color: var(--neutral-400); }
+  .eva-check.disabled .box { background: var(--neutral-100); border-color: var(--neutral-200); }
+  .eva-check.disabled.checked .box { background: var(--neutral-300); border-color: var(--neutral-300); }
+  .contrast .eva-check { color: var(--neutral-200); }
+  .contrast .eva-check .box { background: var(--neutral-900); border-color: var(--neutral-600); }
+  .contrast .eva-check.checked .box, .contrast .eva-check.indeterminate .box { background: var(--brand-400); border-color: var(--brand-400); }
+  .contrast .eva-check.checked .box svg { color: var(--neutral-950); }
+
+  /* ─────── RADIO ─────── */
+  .eva-radio {
+    display: inline-flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+    font-size: 13px; color: var(--neutral-900);
+  }
+  .eva-radio .circle {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: white; border: 1.5px solid var(--neutral-300);
+    display: grid; place-items: center;
+    flex-shrink: 0; transition: border-color 120ms, box-shadow 120ms;
+  }
+  .eva-radio:hover .circle { border-color: var(--brand-500); }
+  .eva-radio.checked .circle::after {
+    content: ""; width: 6px; height: 6px;
+    background: var(--brand-500); border-radius: 50%;
+  }
+  .eva-radio.checked .circle { border-color: var(--brand-500); }
+  .eva-radio.disabled { cursor: not-allowed; color: var(--neutral-400); }
+  .eva-radio.disabled .circle { background: var(--neutral-100); border-color: var(--neutral-200); }
+  .contrast .eva-radio { color: var(--neutral-200); }
+  .contrast .eva-radio .circle { background: var(--neutral-900); border-color: var(--neutral-600); }
+  .contrast .eva-radio.checked .circle { border-color: var(--brand-400); }
+  .contrast .eva-radio.checked .circle::after { background: var(--brand-400); }
+
+  /* ─────── SWITCH ─────── */
+  .eva-switch {
+    display: inline-flex; align-items: center; gap: 10px;
+    cursor: pointer; user-select: none;
+    font-size: 13px; color: var(--neutral-900);
+  }
+  .eva-switch .track {
+    width: 32px; height: 18px; border-radius: 999px;
+    background: var(--neutral-300);
+    position: relative;
+    transition: background 160ms;
+    flex-shrink: 0;
+  }
+  .eva-switch .track::after {
+    content: ""; position: absolute;
+    width: 14px; height: 14px; top: 2px; left: 2px;
+    background: white; border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    transition: transform 180ms cubic-bezier(.4,0,.2,1);
+  }
+  .eva-switch:hover .track { background: var(--neutral-400); }
+  .eva-switch.on .track { background: var(--brand-500); }
+  .eva-switch.on:hover .track { background: var(--brand-600); }
+  .eva-switch.on .track::after { transform: translateX(14px); }
+  .eva-switch.disabled { cursor: not-allowed; color: var(--neutral-400); }
+  .eva-switch.disabled .track { background: var(--neutral-200); }
+  .eva-switch.disabled.on .track { background: var(--brand-200); }
+  /* sm */
+  .eva-switch-sm .track { width: 26px; height: 14px; }
+  .eva-switch-sm .track::after { width: 10px; height: 10px; top: 2px; left: 2px; }
+  .eva-switch-sm.on .track::after { transform: translateX(12px); }
+
+  .contrast .eva-switch { color: var(--neutral-200); }
+  .contrast .eva-switch .track { background: var(--neutral-700); }
+  .contrast .eva-switch.on .track { background: var(--brand-400); }
+  .contrast .eva-switch .track::after { background: var(--neutral-100); }
+
+  /* ─────── BADGE ─────── */
+  .eva-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+    line-height: 1.3;
+    border: 1px solid transparent;
+  }
+  .eva-badge .b-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  }
+  /* solid variant */
+  .eva-badge-solid.neutral  { background: var(--neutral-100); color: var(--neutral-700); }
+  .eva-badge-solid.brand    { background: var(--brand-50); color: var(--brand-700); }
+  .eva-badge-solid.success  { background: var(--success-50); color: var(--success-700); }
+  .eva-badge-solid.warning  { background: var(--warning-50); color: var(--warning-700); }
+  .eva-badge-solid.error    { background: var(--error-50); color: var(--error-700); }
+  .eva-badge-solid.info     { background: var(--info-50); color: var(--info-700); }
+  /* outline variant */
+  .eva-badge-outline { background: transparent; }
+  .eva-badge-outline.neutral { color: var(--neutral-700); border-color: var(--neutral-300); }
+  .eva-badge-outline.brand   { color: var(--brand-700); border-color: var(--brand-300); }
+  .eva-badge-outline.success { color: var(--success-700); border-color: var(--success-300); }
+  .eva-badge-outline.warning { color: var(--warning-700); border-color: var(--warning-300); }
+  .eva-badge-outline.error   { color: var(--error-700); border-color: var(--error-300); }
+  .eva-badge-outline.info    { color: var(--info-700); border-color: var(--info-300); }
+  /* sizes */
+  .eva-badge-sm { padding: 1px 6px; font-size: 10px; }
+  .eva-badge-lg { padding: 4px 10px; font-size: 12px; }
+
+  .contrast .eva-badge-solid.neutral { background: var(--neutral-800); color: var(--neutral-200); }
+  .contrast .eva-badge-solid.brand   { background: rgba(10,122,53,0.2); color: var(--brand-300); }
+  .contrast .eva-badge-solid.success { background: rgba(18,183,106,0.16); color: var(--success-300); }
+  .contrast .eva-badge-solid.warning { background: rgba(240,128,0,0.18); color: var(--warning-300); }
+  .contrast .eva-badge-solid.error   { background: rgba(232,69,59,0.18); color: var(--error-300); }
+  .contrast .eva-badge-solid.info    { background: rgba(46,144,250,0.18); color: var(--info-300); }
+  .contrast .eva-badge-outline.neutral { color: var(--neutral-300); border-color: var(--neutral-700); }
+  .contrast .eva-badge-outline.brand   { color: var(--brand-300); border-color: rgba(10,122,53,0.4); }
+  .contrast .eva-badge-outline.success { color: var(--success-300); border-color: rgba(18,183,106,0.4); }
+  .contrast .eva-badge-outline.warning { color: var(--warning-300); border-color: rgba(240,128,0,0.4); }
+  .contrast .eva-badge-outline.error   { color: var(--error-300); border-color: rgba(232,69,59,0.4); }
+  .contrast .eva-badge-outline.info    { color: var(--info-300); border-color: rgba(46,144,250,0.4); }
+
+  /* ─────── AVATAR ─────── */
+  .eva-avatar {
+    display: inline-grid; place-items: center;
+    border-radius: 50%; overflow: hidden;
+    background: linear-gradient(135deg, var(--brand-400), var(--brand-700));
+    color: white; font-weight: 700; letter-spacing: 0.02em;
+    position: relative; flex-shrink: 0;
+  }
+  .eva-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .eva-av-xs { width: 20px; height: 20px; font-size: 9px; }
+  .eva-av-sm { width: 24px; height: 24px; font-size: 10px; }
+  .eva-av-md { width: 32px; height: 32px; font-size: 12px; }
+  .eva-av-lg { width: 40px; height: 40px; font-size: 14px; }
+  .eva-av-xl { width: 56px; height: 56px; font-size: 18px; }
+  .eva-av-2xl { width: 80px; height: 80px; font-size: 26px; }
+  /* status dot */
+  .eva-avatar .status {
+    position: absolute; bottom: 0; right: 0;
+    width: 30%; height: 30%;
+    border-radius: 50%;
+    background: var(--success-500);
+    border: 2px solid white;
+  }
+  .eva-avatar .status.away  { background: var(--warning-500); }
+  .eva-avatar .status.busy  { background: var(--error-500); }
+  .eva-avatar .status.offline { background: var(--neutral-400); }
+  .contrast .eva-avatar .status { border-color: var(--neutral-900); }
+
+  /* Color-coded gradients per name (deterministic) */
+  .av-c1 { background: linear-gradient(135deg, #7c3aed, #4c1d95); }
+  .av-c2 { background: linear-gradient(135deg, #2dd4bf, #0f766e); }
+  .av-c3 { background: linear-gradient(135deg, #ef4444, #991b1b); }
+  .av-c4 { background: linear-gradient(135deg, #10b981, #065f46); }
+  .av-c5 { background: linear-gradient(135deg, #f59e0b, #92400e); }
+  .av-c6 { background: linear-gradient(135deg, #3b82f6, #1e40af); }
+  .av-c7 { background: linear-gradient(135deg, #ec4899, #9d174d); }
+
+  /* Avatar group */
+  .eva-avatar-group { display: inline-flex; }
+  .eva-avatar-group .eva-avatar { box-shadow: 0 0 0 2px white; }
+  .eva-avatar-group .eva-avatar + .eva-avatar { margin-left: -8px; }
+  .eva-avatar-group .eva-av-sm + .eva-av-sm { margin-left: -6px; }
+  .eva-avatar-group .eva-av-lg + .eva-av-lg { margin-left: -10px; }
+  .contrast .eva-avatar-group .eva-avatar { box-shadow: 0 0 0 2px var(--neutral-950); }
+
+  /* ─────── SEPARATOR ─────── */
+  .eva-separator-h { height: 1px; background: var(--neutral-200); width: 100%; }
+  .contrast .eva-separator-h { background: var(--neutral-800); }
+  .eva-separator-v { width: 1px; background: var(--neutral-200); height: 24px; align-self: stretch; }
+  .contrast .eva-separator-v { background: var(--neutral-800); }
+  .eva-separator-labeled {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--neutral-500); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;
+  }
+  .eva-separator-labeled::before, .eva-separator-labeled::after {
+    content: ""; flex: 1; height: 1px; background: var(--neutral-200);
+  }
+  .contrast .eva-separator-labeled { color: var(--neutral-400); }
+  .contrast .eva-separator-labeled::before, .contrast .eva-separator-labeled::after { background: var(--neutral-800); }
+
+  /* ─────── TOOLTIP ─────── */
+  .tooltip-anchor {
+    display: inline-flex; position: relative;
+  }
+  .eva-tooltip {
+    background: var(--neutral-900); color: white;
+    font-size: 11.5px; font-weight: 500;
+    padding: 6px 9px; border-radius: 5px;
+    white-space: nowrap;
+    box-shadow: 0 4px 8px -2px rgba(16,24,40,0.18), 0 2px 4px -2px rgba(16,24,40,0.08);
+    display: inline-flex; align-items: center; gap: 8px;
+    position: relative;
+  }
+  .eva-tooltip .kbd {
+    font-family: var(--font-mono); font-size: 10px;
+    background: var(--neutral-700); padding: 1px 5px; border-radius: 3px;
+    color: var(--neutral-200);
+  }
+  .eva-tooltip::after {
+    content: ""; position: absolute;
+    width: 0; height: 0;
+  }
+  .eva-tooltip.top::after {
+    bottom: -4px; left: 50%; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 4px solid var(--neutral-900);
+  }
+  .eva-tooltip.right::after {
+    left: -4px; top: 50%; transform: translateY(-50%);
+    border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+    border-right: 4px solid var(--neutral-900);
+  }
+  .eva-tooltip.bottom::after {
+    top: -4px; left: 50%; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-bottom: 4px solid var(--neutral-900);
+  }
+  .eva-tooltip.left::after {
+    right: -4px; top: 50%; transform: translateY(-50%);
+    border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+    border-left: 4px solid var(--neutral-900);
+  }
+
+  /* small icons helper */
+  .ico { width: 14px; height: 14px; }
+  .ico-sm { width: 12px; height: 12px; }
+  .ico-lg { width: 16px; height: 16px; }
+
+  @media (max-width: 1100px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    aside.doc-nav { position: relative; height: auto; }
+    main { padding: 28px; }
+    .duo { grid-template-columns: 1fr; }
+    .overview-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-shell">
+
+  <!-- ───────────────────────── DOC SIDEBAR ───────────────────────── -->
+  <aside class="doc-nav">
+    <div class="doc-brand">
+      <div class="mark"></div>
+      <div style="position: relative; z-index: 1;">
+        <div class="name">EVERTS.</div>
+        <div class="sub">EVA · Design System</div>
+      </div>
+    </div>
+    <div class="doc-body">
+      <div class="section-label">Design System</div>
+      <ol>
+        <li><a href="EVA Foundations.html"><span>Foundations</span><span class="num">1</span></a></li>
+        <li><a href="EVA Navigatie en Layout.html"><span>Navigatie &amp; Layout</span><span class="num">2</span></a></li>
+        <li><a href="EVA Basiscomponenten.html" class="active"><span>Basiscomponenten</span><span class="num">3</span></a></li>
+        <li><a href="EVA Feedback en States.html"><span>Feedback &amp; States</span><span class="num">4</span></a></li>
+        <li><a href="EVA Overlays en Containers.html"><span>Overlays &amp; Containers</span><span class="num">5</span></a></li>
+        <li><a href="EVA Formulierpatronen.html"><span>Formulierpatronen</span><span class="num">6</span></a></li>
+        <li><a href="EVA Data Display.html"><span>Data Display</span><span class="num">7</span></a></li>
+        <li><a href="EVA CalculatieGrid.html"><span>CalculatieGrid</span><span class="num">8</span></a></li>
+        <li><a href="EVA WerkbonKaart.html"><span>WerkbonKaart</span><span class="num">9</span></a></li>
+        <li><a href="EVA Iconografie.html"><span>Iconografie</span><span class="num">10</span></a></li>
+      </ol>
+      <div class="section-label">Componenten</div>
+      <ol>
+        <li><a href="#overview"><span>Overzicht</span><span class="num">·</span></a></li>
+        <li><a href="#button"><span>Button</span><span class="num">01</span></a></li>
+        <li><a href="#input"><span>Input</span><span class="num">02</span></a></li>
+        <li><a href="#select"><span>Select</span><span class="num">03</span></a></li>
+        <li><a href="#checkbox"><span>Checkbox</span><span class="num">04</span></a></li>
+        <li><a href="#radio"><span>Radio</span><span class="num">05</span></a></li>
+        <li><a href="#switch"><span>Switch</span><span class="num">06</span></a></li>
+        <li><a href="#label"><span>Label</span><span class="num">07</span></a></li>
+        <li><a href="#badge"><span>Badge</span><span class="num">08</span></a></li>
+        <li><a href="#avatar"><span>Avatar</span><span class="num">09</span></a></li>
+        <li><a href="#separator"><span>Separator</span><span class="num">10</span></a></li>
+        <li><a href="#tooltip"><span>Tooltip</span><span class="num">11</span></a></li>
+      </ol>
+    </div>
+  </aside>
+
+  <!-- ───────────────────────── MAIN ───────────────────────── -->
+  <main>
+    <header class="page">
+      <div class="eyebrow">EVA · Design System · 3 · Basiscomponenten</div>
+      <h1>De atomen waar EVA mee bouwt.</h1>
+      <p class="lede">
+        Elf basiscomponenten — knoppen, formulier-elementen, badges, avatars — alle
+        gebaseerd op de Foundations-tokens en gemapt op Radix-primitives waar zinvol.
+        Per component zie je alle varianten, sizes en states in light én dark.
+      </p>
+      <div class="meta">
+        <div><b>Componenten</b>&nbsp;&nbsp;11</div>
+        <div><b>Radix</b>&nbsp;&nbsp;Select · Checkbox · Switch · Tooltip · Label</div>
+        <div><b>Tokens</b>&nbsp;&nbsp;Brand · Neutrals · Status · Spacing · Radius</div>
+      </div>
+    </header>
+
+    <!-- ═════════ OVERVIEW ═════════ -->
+    <section class="tk" id="overview">
+      <div class="head"><div class="ix">00</div><h2>Overzicht</h2></div>
+      <p class="desc">Snelle visuele index — klik om naar het component te springen.</p>
+
+      <div class="overview-grid">
+        <a class="ov-card" href="#button">
+          <div class="ov-mini">
+            <button class="eva-btn eva-btn-sm eva-btn-primary">Primary</button>
+            <button class="eva-btn eva-btn-sm eva-btn-outline">Outline</button>
+          </div>
+          <div>
+            <div class="ov-name">Button</div>
+            <div class="ov-ix">01 · 5 variants · 3 sizes</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#input">
+          <div class="ov-mini" style="width: 100%;">
+            <input class="eva-input eva-input-sm" placeholder="Veld" style="font-size: 11px; height: 26px;">
+          </div>
+          <div>
+            <div class="ov-name">Input</div>
+            <div class="ov-ix">02 · text/number/textarea</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#select">
+          <div class="ov-mini" style="width: 100%;">
+            <div class="eva-select" style="height: 26px; font-size: 11px;">
+              <span class="placeholder">Kies optie…</span>
+              <svg class="ico-sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div>
+            <div class="ov-name">Select / Dropdown</div>
+            <div class="ov-ix">03 · single + multi + combobox</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#checkbox">
+          <div class="ov-mini">
+            <label class="eva-check checked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Ja</label>
+            <label class="eva-check"><span class="box"></span>Nee</label>
+          </div>
+          <div>
+            <div class="ov-name">Checkbox</div>
+            <div class="ov-ix">04 · + indeterminate</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#radio">
+          <div class="ov-mini">
+            <label class="eva-radio checked"><span class="circle"></span>A</label>
+            <label class="eva-radio"><span class="circle"></span>B</label>
+          </div>
+          <div>
+            <div class="ov-name">Radio</div>
+            <div class="ov-ix">05 · group</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#switch">
+          <div class="ov-mini">
+            <label class="eva-switch on"><span class="track"></span></label>
+            <label class="eva-switch"><span class="track"></span></label>
+          </div>
+          <div>
+            <div class="ov-name">Switch</div>
+            <div class="ov-ix">06 · md + sm</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#label">
+          <div class="ov-mini">
+            <span class="eva-label" style="margin: 0;">Werkadres <span class="req">*</span></span>
+          </div>
+          <div>
+            <div class="ov-name">Label</div>
+            <div class="ov-ix">07 · required + helper</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#badge">
+          <div class="ov-mini">
+            <span class="eva-badge eva-badge-solid success"><span class="b-dot"></span>OK</span>
+            <span class="eva-badge eva-badge-solid warning"><span class="b-dot"></span>Wacht</span>
+          </div>
+          <div>
+            <div class="ov-name">Badge</div>
+            <div class="ov-ix">08 · solid + outline</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#avatar">
+          <div class="ov-mini">
+            <span class="eva-avatar eva-av-md av-c1">MB</span>
+            <span class="eva-avatar eva-av-md av-c2">HB</span>
+            <span class="eva-avatar eva-av-md av-c3">JV</span>
+          </div>
+          <div>
+            <div class="ov-name">Avatar</div>
+            <div class="ov-ix">09 · 6 sizes · group</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#separator">
+          <div class="ov-mini" style="flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px;">
+            <div class="eva-separator-h"></div>
+            <div class="eva-separator-h"></div>
+          </div>
+          <div>
+            <div class="ov-name">Separator</div>
+            <div class="ov-ix">10 · h + v + labeled</div>
+          </div>
+        </a>
+        <a class="ov-card" href="#tooltip">
+          <div class="ov-mini">
+            <span class="eva-tooltip top" style="position: static;">Opslaan <span class="kbd">⌘S</span></span>
+          </div>
+          <div>
+            <div class="ov-name">Tooltip</div>
+            <div class="ov-ix">11 · 4 sides · w/ shortcut</div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ═════════ 01 · BUTTON ═════════ -->
+    <section class="tk" id="button">
+      <div class="head"><div class="ix">01</div><h2>Button</h2></div>
+      <p class="desc">
+        Vijf varianten met heldere semantische rol:
+        <b>primary</b> (één per scherm, voor de hoofdactie),
+        <b>secondary</b> (subtiele filled, voor neutrale acties),
+        <b>outline</b> (toolbars, secundair),
+        <b>ghost</b> (icon-only of low-weight),
+        <b>destructive</b> (verwijderen).
+        Drie sizes (28/32/40px) en alle interactie-states.
+      </p>
+
+      <h3 class="sub">Varianten <span class="hint">· md size</span></h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div class="row">
+            <button class="eva-btn eva-btn-md eva-btn-primary">Primary</button>
+            <button class="eva-btn eva-btn-md eva-btn-secondary">Secondary</button>
+            <button class="eva-btn eva-btn-md eva-btn-outline">Outline</button>
+            <button class="eva-btn eva-btn-md eva-btn-ghost">Ghost</button>
+            <button class="eva-btn eva-btn-md eva-btn-destructive">Destructive</button>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div class="row">
+            <button class="eva-btn eva-btn-md eva-btn-primary">Primary</button>
+            <button class="eva-btn eva-btn-md eva-btn-secondary">Secondary</button>
+            <button class="eva-btn eva-btn-md eva-btn-outline">Outline</button>
+            <button class="eva-btn eva-btn-md eva-btn-ghost">Ghost</button>
+            <button class="eva-btn eva-btn-md eva-btn-destructive">Destructive</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Sizes</h3>
+      <div class="demo-box">
+        <div class="row">
+          <button class="eva-btn eva-btn-sm eva-btn-primary">Small · 28px</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary">Medium · 32px</button>
+          <button class="eva-btn eva-btn-lg eva-btn-primary">Large · 40px</button>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+          <button class="eva-btn eva-btn-sm eva-btn-outline">Small</button>
+          <button class="eva-btn eva-btn-md eva-btn-outline">Medium · default</button>
+          <button class="eva-btn eva-btn-lg eva-btn-outline">Large</button>
+        </div>
+      </div>
+
+      <h3 class="sub">States <span class="hint">· primary</span></h3>
+      <div class="demo-box">
+        <div class="row">
+          <button class="eva-btn eva-btn-md eva-btn-primary">Default</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary" style="background: var(--brand-600); border-color: var(--brand-600);">Hover</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary" style="background: var(--brand-700); border-color: var(--brand-700);">Pressed</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary" style="box-shadow: 0 0 0 3px var(--brand-100);">Focus</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary" disabled>Disabled</button>
+          <button class="eva-btn eva-btn-md eva-btn-primary"><span class="spinner"></span>Bezig…</button>
+        </div>
+      </div>
+
+      <h3 class="sub">Met icoon</h3>
+      <div class="demo-box">
+        <div class="row">
+          <button class="eva-btn eva-btn-md eva-btn-primary">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nieuw dossier
+          </button>
+          <button class="eva-btn eva-btn-md eva-btn-outline">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download PDF
+          </button>
+          <button class="eva-btn eva-btn-md eva-btn-secondary">
+            Sorteren
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button class="eva-btn eva-btn-md eva-btn-icon-md eva-btn-ghost" aria-label="Meer">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+          <button class="eva-btn eva-btn-md eva-btn-icon-md eva-btn-outline" aria-label="Bewerken">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <h3 class="sub">Tokens</h3>
+      <div class="tok-table">
+        <div class="tok-row head"><div>Token</div><div>Waarde</div><div>Toelichting</div></div>
+        <div class="tok-row"><div class="name">btn.height.sm</div><div class="val">28px</div><div class="hint">dense toolbars</div></div>
+        <div class="tok-row"><div class="name">btn.height.md</div><div class="val">32px</div><div class="hint">default · forms · headers</div></div>
+        <div class="tok-row"><div class="name">btn.height.lg</div><div class="val">40px</div><div class="hint">CTA · hero</div></div>
+        <div class="tok-row"><div class="name">btn.radius</div><div class="val">6px</div><div class="hint">--radius-md</div></div>
+        <div class="tok-row"><div class="name">btn.gap-icon</div><div class="val">6px</div><div class="hint">icon → label</div></div>
+        <div class="tok-row"><div class="name">btn.focus-ring</div><div class="val">3px brand-100</div><div class="hint">box-shadow op focus-visible</div></div>
+      </div>
+
+      <div class="meta-card">
+        <b>Regel:</b> één <b>primary</b> button per scherm of per dialog — de "save"-actie.
+        Alle overige acties zijn outline, secondary of ghost. Destructive alléén voor
+        échte verwijder-acties (irreversible).
+      </div>
+    </section>
+
+    <!-- ═════════ 02 · INPUT ═════════ -->
+    <section class="tk" id="input">
+      <div class="head"><div class="ix">02</div><h2>Input</h2></div>
+      <p class="desc">
+        Text, number, textarea. Hoogte 36px (default), 28/40 voor sm/lg.
+        Focus-state heeft een 3px <code style="font-family:var(--font-mono); font-size:11px;">brand-100</code>
+        ring + <code style="font-family:var(--font-mono); font-size:11px;">brand-500</code> border. Error vervangt brand-500 door
+        error-500 in beide.
+      </p>
+
+      <h3 class="sub">States</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div><label class="eva-label">Default</label><input class="eva-input" placeholder="Voer tekst in…"></div>
+            <div><label class="eva-label">Focus <span style="color: var(--neutral-400); font-weight: 500;">(klik in veld)</span></label><input class="eva-input" placeholder="Auto-focus" autofocus></div>
+            <div><label class="eva-label">Met waarde</label><input class="eva-input" value="Vastgoed Centrum BV"></div>
+            <div><label class="eva-label">Disabled</label><input class="eva-input" value="Niet bewerkbaar" disabled></div>
+            <div>
+              <label class="eva-label">Error</label>
+              <input class="eva-input" aria-invalid="true" value="ongeldige@@email">
+              <div class="eva-helper error">Geen geldig e-mailadres</div>
+            </div>
+            <div>
+              <label class="eva-label">Met helper</label>
+              <input class="eva-input" placeholder="0612345678">
+              <div class="eva-helper">10 cijfers, zonder spaties of streepjes</div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div><label class="eva-label">Default</label><input class="eva-input" placeholder="Voer tekst in…"></div>
+            <div><label class="eva-label">Met waarde</label><input class="eva-input" value="Vastgoed Centrum BV"></div>
+            <div><label class="eva-label">Disabled</label><input class="eva-input" value="Niet bewerkbaar" disabled></div>
+            <div>
+              <label class="eva-label">Error</label>
+              <input class="eva-input" aria-invalid="true" value="ongeldige@@email">
+              <div class="eva-helper error">Geen geldig e-mailadres</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Met prefix / suffix</h3>
+      <div class="demo-box">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+          <div>
+            <label class="eva-label">Aanneemsom</label>
+            <div class="eva-input-wrap has-prefix">
+              <span class="prefix">€</span>
+              <input class="eva-input" placeholder="0,00">
+            </div>
+          </div>
+          <div>
+            <label class="eva-label">Marge</label>
+            <div class="eva-input-wrap has-suffix">
+              <input class="eva-input" placeholder="0">
+              <span class="suffix">%</span>
+            </div>
+          </div>
+          <div>
+            <label class="eva-label">Zoeken</label>
+            <div class="eva-input-wrap has-prefix">
+              <span class="prefix"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input class="eva-input" placeholder="Zoek dossier…">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Sizes</h3>
+      <div class="demo-box">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: end;">
+          <div><label class="eva-label">Small · 28px</label><input class="eva-input eva-input-sm" placeholder="Compact"></div>
+          <div><label class="eva-label">Medium · 36px <span style="color:var(--neutral-400); font-weight: 500;">(default)</span></label><input class="eva-input" placeholder="Default"></div>
+          <div><label class="eva-label">Large · 40px</label><input class="eva-input eva-input-lg" placeholder="Hero forms"></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Textarea</h3>
+      <div class="demo-box">
+        <label class="eva-label">Opmerkingen</label>
+        <textarea class="eva-textarea" placeholder="Plaats hier eventuele opmerkingen voor de calculator…">Houtrotherstel kozijnen zijgevel — graag inplannen voor week 24.</textarea>
+        <div class="eva-helper">Markdown ondersteund · max 2.000 tekens</div>
+      </div>
+    </section>
+
+    <!-- ═════════ 03 · SELECT ═════════ -->
+    <section class="tk" id="select">
+      <div class="head"><div class="ix">03</div><h2>Select / Dropdown</h2></div>
+      <p class="desc">
+        Custom-styled select met Radix-behavior (toetsenbord-navigatie, search-as-you-type).
+        Drie varianten: <b>single</b>, <b>multi</b> (chips), <b>combobox</b> (zoekbaar) —
+        de laatste twee zijn EVA-specifiek (RelatieZoekveld, MateriaalZoekveld).
+      </p>
+
+      <h3 class="sub">Single select · gesloten + open</h3>
+      <div class="duo">
+        <div class="demo-box" style="overflow: visible;">
+          <div class="label-row">Gesloten</div>
+          <label class="eva-label">Calculator</label>
+          <div class="eva-select">
+            <span class="placeholder">Selecteer calculator…</span>
+            <svg class="ico chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+        <div class="demo-box" style="overflow: visible;">
+          <div class="label-row">Open · met selectie</div>
+          <label class="eva-label">Calculator</label>
+          <div class="eva-select open">
+            <span>Henk de Boer</span>
+            <svg class="ico chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg);"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="eva-select-menu" style="margin-top: 4px;">
+            <div class="opt">
+              <span class="eva-avatar eva-av-xs av-c1">MB</span>
+              Maria Bakker
+            </div>
+            <div class="opt selected">
+              <span class="eva-avatar eva-av-xs av-c2">HB</span>
+              Henk de Boer
+              <svg class="ico check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div class="opt">
+              <span class="eva-avatar eva-av-xs av-c3">JV</span>
+              Jan de Vries
+            </div>
+            <div class="opt">
+              <span class="eva-avatar eva-av-xs av-c4">EB</span>
+              Erik den Berg
+            </div>
+            <div class="opt">
+              <span class="eva-avatar eva-av-xs av-c5">PJ</span>
+              Piet Jansen
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Multi-select · met chips</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <label class="eva-label">Categorieën</label>
+          <div class="multi-select">
+            <span class="chip">Schilderwerk <span class="x"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
+            <span class="chip">Houtrot <span class="x"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
+            <span class="chip">Gevelonderhoud <span class="x"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
+            <input class="ms-input" placeholder="Voeg toe…">
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <label class="eva-label">Categorieën</label>
+          <div class="multi-select">
+            <span class="chip">Schilderwerk <span class="x"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
+            <span class="chip">Houtrot <span class="x"><svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
+            <input class="ms-input" placeholder="Voeg toe…">
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Combobox · RelatieZoekveld pattern</h3>
+      <div class="demo-box" style="overflow: visible;">
+        <label class="eva-label">Opdrachtgever</label>
+        <div class="eva-input-wrap has-prefix">
+          <span class="prefix"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <input class="eva-input" value="Vast" placeholder="Zoek relatie…">
+        </div>
+        <div class="eva-select-menu" style="margin-top: 4px; max-width: 380px;">
+          <div style="padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--neutral-500); font-weight: 700;">Opdrachtgevers · 3 resultaten</div>
+          <div class="opt">
+            <div style="flex: 1;">
+              <div style="font-size: 13px; font-weight: 500; color: var(--neutral-900);">Vastgoed Centrum BV</div>
+              <div style="font-size: 11px; color: var(--neutral-500);">KvK 12345678 · Apeldoorn</div>
+            </div>
+          </div>
+          <div class="opt">
+            <div style="flex: 1;">
+              <div style="font-size: 13px; font-weight: 500; color: var(--neutral-900);">Vastgoed Noord BV</div>
+              <div style="font-size: 11px; color: var(--neutral-500);">KvK 87654321 · Zwolle</div>
+            </div>
+          </div>
+          <div class="opt">
+            <div style="flex: 1;">
+              <div style="font-size: 13px; font-weight: 500; color: var(--neutral-900);">VastBouw Onderhoud</div>
+              <div style="font-size: 11px; color: var(--neutral-500);">KvK 11223344 · Deventer</div>
+            </div>
+          </div>
+          <div style="border-top: 1px solid var(--neutral-100); padding: 4px;">
+            <div class="opt" style="color: var(--brand-700); font-weight: 500;">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nieuwe relatie aanmaken: "Vast"
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Radix-mapping:</b> <code>&lt;Select.Root&gt;</code> voor single, <code>&lt;Combobox&gt;</code>
+        (Radix Themes) of <code>cmdk</code> voor search. Multi gebruikt
+        <code>&lt;Popover&gt;</code> + chips-rendering bovenop.
+      </div>
+    </section>
+
+    <!-- ═════════ 04 · CHECKBOX ═════════ -->
+    <section class="tk" id="checkbox">
+      <div class="head"><div class="ix">04</div><h2>Checkbox</h2></div>
+      <p class="desc">
+        16×16px box met 4px radius. Bij <b>indeterminate</b> krijgt de box dezelfde
+        brand-500 fill maar toont een minus-streep — perfect voor "parent" checkboxes
+        in een lijst.
+      </p>
+
+      <h3 class="sub">States</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label class="eva-check"><span class="box"></span>Unchecked</label>
+            <label class="eva-check checked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Checked</label>
+            <label class="eva-check indeterminate"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></span>Indeterminate</label>
+            <label class="eva-check disabled"><span class="box"></span>Disabled</label>
+            <label class="eva-check checked disabled"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Checked + disabled</label>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label class="eva-check"><span class="box"></span>Unchecked</label>
+            <label class="eva-check checked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>Checked</label>
+            <label class="eva-check indeterminate"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></span>Indeterminate</label>
+            <label class="eva-check disabled"><span class="box"></span>Disabled</label>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Use-case · selecteer-alle in tabel</h3>
+      <div class="demo-box">
+        <div style="border: 1px solid var(--neutral-200); border-radius: 8px; overflow: hidden;">
+          <div style="display: grid; grid-template-columns: 40px 1fr 120px 100px; padding: 10px 14px; background: var(--neutral-50); border-bottom: 1px solid var(--neutral-200); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--neutral-500);">
+            <div><label class="eva-check indeterminate" style="margin-right: 0;"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></span></label></div>
+            <div>Dossier</div><div>Status</div><div style="text-align: right;">Bedrag</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 1fr 120px 100px; padding: 10px 14px; border-bottom: 1px solid var(--neutral-100); font-size: 13px;">
+            <div><label class="eva-check checked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span></label></div>
+            <div>D-1402 · Schildersweg 8</div>
+            <div><span class="eva-badge eva-badge-solid success"><span class="b-dot"></span>OK</span></div>
+            <div style="text-align: right; font-family: var(--font-mono);">€&nbsp;14.820</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 1fr 120px 100px; padding: 10px 14px; border-bottom: 1px solid var(--neutral-100); font-size: 13px;">
+            <div><label class="eva-check checked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span></label></div>
+            <div>D-1403 · Keizerstraat 11</div>
+            <div><span class="eva-badge eva-badge-solid warning"><span class="b-dot"></span>Wacht</span></div>
+            <div style="text-align: right; font-family: var(--font-mono);">€&nbsp;8.940</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 40px 1fr 120px 100px; padding: 10px 14px; font-size: 13px;">
+            <div><label class="eva-check"><span class="box"></span></label></div>
+            <div>D-1404 · Beukenlaan 22</div>
+            <div><span class="eva-badge eva-badge-solid neutral"><span class="b-dot"></span>Concept</span></div>
+            <div style="text-align: right; font-family: var(--font-mono);">€&nbsp;2.140</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 05 · RADIO ═════════ -->
+    <section class="tk" id="radio">
+      <div class="head"><div class="ix">05</div><h2>Radio</h2></div>
+      <p class="desc">
+        Voor <b>exclusieve keuze</b>. Bij &gt; 4 opties beter Select gebruiken; bij 2 vaak
+        Switch (aan/uit). Bij ja/nee + onbekend kun je Radio gebruiken — daar is Switch te impliciet.
+      </p>
+
+      <h3 class="sub">Group · vertical</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <fieldset style="border: 0; padding: 0; margin: 0;">
+            <legend class="eva-label">Type aanvraag</legend>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <label class="eva-radio checked"><span class="circle"></span>Onderhoud</label>
+              <label class="eva-radio"><span class="circle"></span>Renovatie</label>
+              <label class="eva-radio"><span class="circle"></span>Houtrotherstel</label>
+              <label class="eva-radio"><span class="circle"></span>Schilderwerk</label>
+              <label class="eva-radio disabled"><span class="circle"></span>Nieuwbouw (niet beschikbaar)</label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <fieldset style="border: 0; padding: 0; margin: 0;">
+            <legend class="eva-label">Type aanvraag</legend>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <label class="eva-radio checked"><span class="circle"></span>Onderhoud</label>
+              <label class="eva-radio"><span class="circle"></span>Renovatie</label>
+              <label class="eva-radio"><span class="circle"></span>Houtrotherstel</label>
+              <label class="eva-radio"><span class="circle"></span>Schilderwerk</label>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+
+      <h3 class="sub">Card-radio · rijke opties</h3>
+      <div class="demo-box">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+          <label style="display: block; padding: 14px 16px; border: 1.5px solid var(--brand-500); background: var(--brand-50); border-radius: 8px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span class="eva-radio checked" style="gap: 0;"><span class="circle"></span></span>
+              <span style="font-size: 13px; font-weight: 600; color: var(--brand-700);">Klant betaalt</span>
+            </div>
+            <div style="font-size: 12px; color: var(--neutral-600); line-height: 1.5; margin-left: 24px;">
+              Standaard. Factuur bij oplevering, 30 dagen.
+            </div>
+          </label>
+          <label style="display: block; padding: 14px 16px; border: 1.5px solid var(--neutral-200); background: white; border-radius: 8px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span class="eva-radio" style="gap: 0;"><span class="circle"></span></span>
+              <span style="font-size: 13px; font-weight: 600;">VvE betaalt</span>
+            </div>
+            <div style="font-size: 12px; color: var(--neutral-600); line-height: 1.5; margin-left: 24px;">
+              VvE-factuur met servicekosten-koppeling.
+            </div>
+          </label>
+          <label style="display: block; padding: 14px 16px; border: 1.5px solid var(--neutral-200); background: white; border-radius: 8px; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span class="eva-radio" style="gap: 0;"><span class="circle"></span></span>
+              <span style="font-size: 13px; font-weight: 600;">Verzekering</span>
+            </div>
+            <div style="font-size: 12px; color: var(--neutral-600); line-height: 1.5; margin-left: 24px;">
+              Calamiteit. Verzekeringsmaatschappij dekt.
+            </div>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 06 · SWITCH ═════════ -->
+    <section class="tk" id="switch">
+      <div class="head"><div class="ix">06</div><h2>Switch</h2></div>
+      <p class="desc">
+        Voor <b>directe binaire actie</b> die meteen wordt opgeslagen (zonder bevestiging).
+        Bij keuzes die pas bij "Opslaan" worden geactiveerd: gebruik checkbox.
+      </p>
+
+      <h3 class="sub">States · md + sm</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light · md (32×18)</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label class="eva-switch"><span class="track"></span>Uit</label>
+            <label class="eva-switch on"><span class="track"></span>Aan</label>
+            <label class="eva-switch disabled"><span class="track"></span>Disabled</label>
+            <label class="eva-switch on disabled"><span class="track"></span>Aan + disabled</label>
+          </div>
+          <div style="margin-top: 18px;" class="label-row">Light · sm (26×14)</div>
+          <div style="display: flex; gap: 14px;">
+            <label class="eva-switch eva-switch-sm"><span class="track"></span>Uit</label>
+            <label class="eva-switch eva-switch-sm on"><span class="track"></span>Aan</label>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <label class="eva-switch"><span class="track"></span>Uit</label>
+            <label class="eva-switch on"><span class="track"></span>Aan</label>
+            <label class="eva-switch disabled"><span class="track"></span>Disabled</label>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">In context · settings-rij</h3>
+      <div class="demo-box">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 4px;">
+            <div>
+              <div style="font-size: 13.5px; font-weight: 600; color: var(--neutral-900); margin-bottom: 2px;">E-mail-notificaties</div>
+              <div style="font-size: 12px; color: var(--neutral-500); line-height: 1.4;">Ontvang bij elke statusverandering een mail.</div>
+            </div>
+            <label class="eva-switch on"><span class="track"></span></label>
+          </div>
+          <div class="eva-separator-h"></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 4px;">
+            <div>
+              <div style="font-size: 13.5px; font-weight: 600; color: var(--neutral-900); margin-bottom: 2px;">Push naar mobiel</div>
+              <div style="font-size: 12px; color: var(--neutral-500); line-height: 1.4;">Voor urgente taken (verlopen / morgen).</div>
+            </div>
+            <label class="eva-switch"><span class="track"></span></label>
+          </div>
+          <div class="eva-separator-h"></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 4px;">
+            <div>
+              <div style="font-size: 13.5px; font-weight: 600; color: var(--neutral-900); margin-bottom: 2px;">Dense modus</div>
+              <div style="font-size: 12px; color: var(--neutral-500); line-height: 1.4;">Verkleint rijhoogte in tabellen.</div>
+            </div>
+            <label class="eva-switch on"><span class="track"></span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 07 · LABEL ═════════ -->
+    <section class="tk" id="label">
+      <div class="head"><div class="ix">07</div><h2>Label</h2></div>
+      <p class="desc">
+        Twee varianten: <b>standaard</b> (sentence case, 12.5/16 · 600) voor formulieren,
+        en <b>uppercase</b> (10.5/14 · 600 · 0.08em tracking) voor section-card velden —
+        het EVA-handelsmerk in dossier-/aanvraag-detail.
+      </p>
+
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Standaard label</div>
+          <label class="eva-label">E-mailadres</label>
+          <input class="eva-input" placeholder="naam@bedrijf.nl">
+
+          <label class="eva-label" style="margin-top: 16px;">Telefoon <span class="req">*</span></label>
+          <input class="eva-input" placeholder="0612345678">
+          <div class="eva-helper">Verplicht voor offerte-verzending</div>
+
+          <label class="eva-label" style="margin-top: 16px;">Omschrijving <span style="color: var(--neutral-400); font-weight: 500; margin-left: 4px;">(optioneel)</span></label>
+          <textarea class="eva-textarea" placeholder="Aanvullende informatie…" rows="2"></textarea>
+        </div>
+
+        <div class="demo-box">
+          <div class="label-row">Uppercase label · section card</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px;">
+            <div>
+              <label class="eva-label upper">DOSSIERNUMMER</label>
+              <div style="color: var(--neutral-400); font-size: 13.5px;">—</div>
+            </div>
+            <div>
+              <label class="eva-label upper">AANGEMAAKT OP</label>
+              <div style="font-size: 13.5px;">13 mei 2026</div>
+            </div>
+            <div>
+              <label class="eva-label upper">CATEGORIE <span class="req">*</span></label>
+              <div style="font-size: 13.5px;">Schilderwerk</div>
+            </div>
+            <div>
+              <label class="eva-label upper">REFERENTIE</label>
+              <div style="color: var(--neutral-400); font-size: 13.5px;">kenmerk van opdrachtgever</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Wanneer welke variant?</b><br>
+        • <b>Standaard</b> — bij interactieve forms (modals, settings, sign-up).<br>
+        • <b>Uppercase</b> — bij read-mostly section cards op dossier-detail pagina's (dat is de bestaande EVA-conventie).
+      </div>
+    </section>
+
+    <!-- ═════════ 08 · BADGE ═════════ -->
+    <section class="tk" id="badge">
+      <div class="head"><div class="ix">08</div><h2>Badge</h2></div>
+      <p class="desc">
+        Twee varianten — <b>solid</b> (default, achtergrond-50 + tekst-700) en
+        <b>outline</b> (transparent + border-300 + tekst-700). Zes semantische kleuren
+        (neutral, brand, success, warning, error, info). Optionele dot, optioneel icoon.
+      </p>
+
+      <h3 class="sub">Solid</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div class="row">
+            <span class="eva-badge eva-badge-solid neutral"><span class="b-dot"></span>Concept</span>
+            <span class="eva-badge eva-badge-solid brand"><span class="b-dot"></span>Nieuw</span>
+            <span class="eva-badge eva-badge-solid success"><span class="b-dot"></span>Goedgekeurd</span>
+            <span class="eva-badge eva-badge-solid warning"><span class="b-dot"></span>Wacht klant</span>
+            <span class="eva-badge eva-badge-solid error"><span class="b-dot"></span>Afgewezen</span>
+            <span class="eva-badge eva-badge-solid info"><span class="b-dot"></span>Gepland</span>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div class="row">
+            <span class="eva-badge eva-badge-solid neutral"><span class="b-dot"></span>Concept</span>
+            <span class="eva-badge eva-badge-solid brand"><span class="b-dot"></span>Nieuw</span>
+            <span class="eva-badge eva-badge-solid success"><span class="b-dot"></span>Goedgekeurd</span>
+            <span class="eva-badge eva-badge-solid warning"><span class="b-dot"></span>Wacht klant</span>
+            <span class="eva-badge eva-badge-solid error"><span class="b-dot"></span>Afgewezen</span>
+            <span class="eva-badge eva-badge-solid info"><span class="b-dot"></span>Gepland</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Outline</h3>
+      <div class="duo">
+        <div class="demo-box">
+          <div class="label-row">Light</div>
+          <div class="row">
+            <span class="eva-badge eva-badge-outline neutral">v1.4.2</span>
+            <span class="eva-badge eva-badge-outline brand">EVA</span>
+            <span class="eva-badge eva-badge-outline success">CBOI ✓</span>
+            <span class="eva-badge eva-badge-outline warning">Prijs check</span>
+            <span class="eva-badge eva-badge-outline error">Geblokkeerd</span>
+            <span class="eva-badge eva-badge-outline info">Beta</span>
+          </div>
+        </div>
+        <div class="demo-box contrast">
+          <div class="label-row">Dark</div>
+          <div class="row">
+            <span class="eva-badge eva-badge-outline neutral">v1.4.2</span>
+            <span class="eva-badge eva-badge-outline brand">EVA</span>
+            <span class="eva-badge eva-badge-outline success">CBOI ✓</span>
+            <span class="eva-badge eva-badge-outline warning">Prijs check</span>
+            <span class="eva-badge eva-badge-outline error">Geblokkeerd</span>
+            <span class="eva-badge eva-badge-outline info">Beta</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Sizes</h3>
+      <div class="demo-box">
+        <div class="row">
+          <span class="eva-badge eva-badge-solid success eva-badge-sm"><span class="b-dot"></span>SM</span>
+          <span class="eva-badge eva-badge-solid success"><span class="b-dot"></span>Default · MD</span>
+          <span class="eva-badge eva-badge-solid success eva-badge-lg"><span class="b-dot"></span>Large</span>
+        </div>
+      </div>
+
+      <h3 class="sub">Met icoon</h3>
+      <div class="demo-box">
+        <div class="row">
+          <span class="eva-badge eva-badge-solid success">
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Inspectie OK
+          </span>
+          <span class="eva-badge eva-badge-solid info">
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Week 23
+          </span>
+          <span class="eva-badge eva-badge-solid warning">
+            <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Wacht 3 dagen
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 09 · AVATAR ═════════ -->
+    <section class="tk" id="avatar">
+      <div class="head"><div class="ix">09</div><h2>Avatar</h2></div>
+      <p class="desc">
+        Foto of initialen met deterministische gradient-fallback (hash op naam →
+        één van 7 vaste kleurparen). Zo krijgt dezelfde persoon overal dezelfde kleur.
+        Zes sizes (20 / 24 / 32 / 40 / 56 / 80). Status-dot voor presence.
+      </p>
+
+      <h3 class="sub">Sizes</h3>
+      <div class="demo-box">
+        <div class="row" style="align-items: end;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-xs av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">20</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-sm av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">24</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-md av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">32</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-lg av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">40</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-xl av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">56</span></div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span class="eva-avatar eva-av-2xl av-c2">HB</span><span style="font-family: var(--font-mono); font-size: 10px; color: var(--neutral-500);">80</span></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Deterministische kleur-set · 7 gradients</h3>
+      <div class="demo-box">
+        <div class="row">
+          <span class="eva-avatar eva-av-lg av-c1">MB</span>
+          <span class="eva-avatar eva-av-lg av-c2">HB</span>
+          <span class="eva-avatar eva-av-lg av-c3">JV</span>
+          <span class="eva-avatar eva-av-lg av-c4">EB</span>
+          <span class="eva-avatar eva-av-lg av-c5">PJ</span>
+          <span class="eva-avatar eva-av-lg av-c6">SW</span>
+          <span class="eva-avatar eva-av-lg av-c7">TK</span>
+        </div>
+        <div style="margin-top: 12px; font-size: 12px; color: var(--neutral-500);">
+          Hash op volledige naam → modulo 7 → kleurindex. Zo blijft Maria Bakker overal paars.
+        </div>
+      </div>
+
+      <h3 class="sub">Status-indicator</h3>
+      <div class="demo-box">
+        <div class="row">
+          <span class="eva-avatar eva-av-xl av-c1">MB<span class="status"></span></span>
+          <span class="eva-avatar eva-av-xl av-c2">HB<span class="status away"></span></span>
+          <span class="eva-avatar eva-av-xl av-c3">JV<span class="status busy"></span></span>
+          <span class="eva-avatar eva-av-xl av-c4">EB<span class="status offline"></span></span>
+        </div>
+        <div style="margin-top: 12px; font-size: 12px; color: var(--neutral-500);">
+          Groen = online · oranje = away · rood = bezet · grijs = offline
+        </div>
+      </div>
+
+      <h3 class="sub">Group · stacked</h3>
+      <div class="demo-box">
+        <div class="row">
+          <div class="eva-avatar-group">
+            <span class="eva-avatar eva-av-md av-c1">MB</span>
+            <span class="eva-avatar eva-av-md av-c2">HB</span>
+            <span class="eva-avatar eva-av-md av-c3">JV</span>
+            <span class="eva-avatar eva-av-md av-c4">EB</span>
+            <span class="eva-avatar eva-av-md" style="background: var(--neutral-200); color: var(--neutral-700); font-size: 11px;">+3</span>
+          </div>
+          <span style="font-size: 12px; color: var(--neutral-500); margin-left: 6px;">7 medewerkers toegewezen</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 10 · SEPARATOR ═════════ -->
+    <section class="tk" id="separator">
+      <div class="head"><div class="ix">10</div><h2>Separator</h2></div>
+      <p class="desc">
+        1px scheidingslijn, horizontaal of verticaal. Met optioneel label voor formulier-secties
+        ("Of", "Daarna…"). Gebruik <code style="font-family:var(--font-mono); font-size:11px;">neutral-200</code> light /
+        <code style="font-family:var(--font-mono); font-size:11px;">neutral-800</code> dark.
+      </p>
+
+      <h3 class="sub">Horizontaal</h3>
+      <div class="demo-box">
+        <div style="font-size: 13px; color: var(--neutral-700); padding: 6px 0;">Sectie A</div>
+        <div class="eva-separator-h"></div>
+        <div style="font-size: 13px; color: var(--neutral-700); padding: 6px 0;">Sectie B</div>
+      </div>
+
+      <h3 class="sub">Met label</h3>
+      <div class="demo-box">
+        <div style="display: flex; gap: 10px; align-items: center; padding: 8px 0;">
+          <button class="eva-btn eva-btn-md eva-btn-outline" style="flex: 1;">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Goedkeuren
+          </button>
+          <button class="eva-btn eva-btn-md eva-btn-outline" style="flex: 1;">
+            Verwijderen
+          </button>
+        </div>
+        <div class="eva-separator-labeled" style="margin: 14px 0;">Of</div>
+        <button class="eva-btn eva-btn-md eva-btn-primary" style="width: 100%;">
+          Naar volgende stap
+        </button>
+      </div>
+
+      <h3 class="sub">Verticaal · in toolbar</h3>
+      <div class="demo-box">
+        <div class="row" style="background: var(--neutral-50); padding: 6px; border-radius: 8px; gap: 6px;">
+          <button class="eva-btn eva-btn-sm eva-btn-ghost">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            Ongedaan
+          </button>
+          <button class="eva-btn eva-btn-sm eva-btn-ghost">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: scaleX(-1);"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            Opnieuw
+          </button>
+          <div class="eva-separator-v"></div>
+          <button class="eva-btn eva-btn-sm eva-btn-ghost">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Sjabloon
+          </button>
+          <button class="eva-btn eva-btn-sm eva-btn-ghost">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Bibliotheek
+          </button>
+          <div class="eva-separator-v"></div>
+          <button class="eva-btn eva-btn-sm eva-btn-primary">Opslaan</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════ 11 · TOOLTIP ═════════ -->
+    <section class="tk" id="tooltip">
+      <div class="head"><div class="ix">11</div><h2>Tooltip</h2></div>
+      <p class="desc">
+        Kort, declaratief, max ~6 woorden. Verschijnt na 400ms hover. Bij toetsenbord
+        ook bij focus. Heeft optioneel een sneltoets-pill rechts ("⌘S", "Ctrl+K").
+        Donker fixed (neutral-900 in beide thema's) voor maximale leesbaarheid.
+      </p>
+
+      <h3 class="sub">Posities · 4 zijden</h3>
+      <div class="demo-box" style="padding: 60px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 60px; place-items: center;">
+          <div></div>
+          <div style="text-align: center;">
+            <div class="eva-tooltip top" style="margin-bottom: 8px;">Top tooltip</div>
+            <button class="eva-btn eva-btn-md eva-btn-outline">Hover boven</button>
+          </div>
+          <div></div>
+
+          <div style="text-align: right;">
+            <button class="eva-btn eva-btn-md eva-btn-outline">Hover links</button>
+            <div class="eva-tooltip left" style="display: inline-flex; margin-left: 8px;">Right tooltip</div>
+          </div>
+          <div style="text-align: center; color: var(--neutral-400); font-size: 11px;">
+            anchor
+          </div>
+          <div style="text-align: left;">
+            <div class="eva-tooltip right" style="display: inline-flex; margin-right: 8px;">Left tooltip</div>
+            <button class="eva-btn eva-btn-md eva-btn-outline">Hover rechts</button>
+          </div>
+
+          <div></div>
+          <div style="text-align: center;">
+            <button class="eva-btn eva-btn-md eva-btn-outline">Hover onder</button>
+            <div class="eva-tooltip bottom" style="margin-top: 8px;">Bottom tooltip</div>
+          </div>
+          <div></div>
+        </div>
+      </div>
+
+      <h3 class="sub">Met sneltoets</h3>
+      <div class="demo-box" style="padding: 50px;">
+        <div class="row" style="justify-content: center; gap: 32px;">
+          <div style="text-align: center;">
+            <div class="eva-tooltip top" style="margin-bottom: 8px;">Opslaan <span class="kbd">⌘S</span></div>
+            <button class="eva-btn eva-btn-md eva-btn-primary">Opslaan</button>
+          </div>
+          <div style="text-align: center;">
+            <div class="eva-tooltip top" style="margin-bottom: 8px;">Nieuw dossier <span class="kbd">⌘N</span></div>
+            <button class="eva-btn eva-btn-md eva-btn-icon-md eva-btn-outline">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div style="text-align: center;">
+            <div class="eva-tooltip top" style="margin-bottom: 8px;">Zoek in alles <span class="kbd">⌘K</span></div>
+            <button class="eva-btn eva-btn-md eva-btn-icon-md eva-btn-outline">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="meta-card">
+        <b>Wanneer wel/niet?</b><br>
+        • <b>Wel</b> bij icon-only buttons (uitleg wat de actie doet), bij sneltoetsen, bij truncated text.<br>
+        • <b>Niet</b> als alternatief voor labels (label de input gewoon goed) of voor kritieke info (gebruik Helper-text of Alert).
+      </div>
+    </section>
+
+    <!-- footer -->
+    <div class="meta-card" style="margin-top: 48px;">
+      <b>Volgende stap?</b>
+      Met deze 11 atomen kunnen we Feedback &amp; States bouwen (Toast, Alert, AlertDialog,
+      Skeleton, EmptyState, Progress) of door naar overlays (Modal, Popover, Drawer).
+      Geef seintje welke richting.
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
