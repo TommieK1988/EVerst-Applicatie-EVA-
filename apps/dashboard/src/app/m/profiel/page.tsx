@@ -1,10 +1,10 @@
+import Link from 'next/link'
 import { createClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getEigenGegevens } from '@/lib/medewerker/eigen-gegevens'
 import { logout } from '@/app/(auth)/login/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
-import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
-import ToestemmingenBlok from '@/components/mobiel/ToestemmingenBlok'
-import PushMeldingen from '@/components/eva/PushMeldingen'
+import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
 
 export const metadata = { title: 'Profiel · EVA Mobiel' }
 
@@ -28,8 +28,14 @@ export default async function MobielProfielPage() {
     return (
       <>
         <AppHeader title="Mijn gegevens" backHref="/m" />
-        <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+        <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ textAlign: 'center', color: '#6b757c', padding: '32px 0 8px', fontSize: 14 }}>
+            Geen medewerker-koppeling gevonden voor dit account.
+          </div>
+          {/* Ook zonder koppeling moet je bij de instellingen en bij uitloggen kunnen:
+              dat zijn precies de twee dingen die je nodig hebt als er iets misgaat. */}
+          <InstellingenKnop />
+          <UitlogKnop />
         </div>
       </>
     )
@@ -37,6 +43,7 @@ export default async function MobielProfielPage() {
 
   const naam = volledigeNaam(medewerker)
   const functieAfdeling = [medewerker.functie, medewerker.afdeling].filter(Boolean).join(' · ')
+  const gegevens = await getEigenGegevens(medewerker.id)
 
   return (
     <>
@@ -76,29 +83,64 @@ export default async function MobielProfielPage() {
           </div>
         </div>
 
-        {/* Toestemmingen — één keer regelen i.p.v. steeds midden in een formulier.
-            Staat bewust bóven de toggle: zonder toestemming doet die niets. */}
-        <ToestemmingenBlok />
+        {gegevens && <MedewerkerGegevensBlok gegevens={gegevens} />}
 
-        {/* Instellingen */}
-        <PushMeldingen weergave="mobiel" />
-        <LocatieAutoToggle />
-
-        {/* Uitloggen */}
-        <form action={logout}>
-          <button
-            type="submit"
-            style={{
-              width: '100%', padding: '14px 16px', borderRadius: 12,
-              background: 'var(--bg-elev)', color: '#b42318',
-              border: '1px solid #f0c8c2', fontSize: 15, fontWeight: 600,
-              cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            Uitloggen
-          </button>
-        </form>
+        <InstellingenKnop />
+        <UitlogKnop />
       </div>
     </>
+  )
+}
+
+/**
+ * Naar de app-instellingen (toestemmingen, meldingen, locatie).
+ *
+ * Staat onderaan, ná de gegevens: dit scherm gaat over wie je bent, de
+ * instellingen regel je één keer en daarna niet meer.
+ */
+function InstellingenKnop() {
+  return (
+    <Link
+      href="/m/profiel/instellingen"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 16px', borderRadius: 14,
+        background: 'var(--bg-elev)', border: '1px solid var(--border)',
+        color: 'var(--fg)', textDecoration: 'none',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+      </svg>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Instellingen</div>
+        <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 2 }}>
+          Toestemmingen, meldingen en locatie
+        </div>
+      </div>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </Link>
+  )
+}
+
+function UitlogKnop() {
+  return (
+    <form action={logout}>
+      <button
+        type="submit"
+        style={{
+          width: '100%', padding: '14px 16px', borderRadius: 12,
+          background: 'var(--bg-elev)', color: '#b42318',
+          border: '1px solid #f0c8c2', fontSize: 15, fontWeight: 600,
+          cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        Uitloggen
+      </button>
+    </form>
   )
 }
