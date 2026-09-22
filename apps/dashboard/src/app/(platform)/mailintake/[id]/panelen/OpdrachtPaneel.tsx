@@ -26,14 +26,12 @@ import {
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { DUPLICAAT_HARD } from '@/lib/mailintake/types'
 import { adresOvereenkomst } from '@/lib/mailintake/regels'
+import { FormSection } from '@/components/ui/form-field'
+// De gedeelde opmaak en niet nog een kopie: dit bestand had zijn eigen `klein`,
+// `kop` en `veldStijl` met net andere maten, waardoor de opdrachtroute er anders
+// uitzag dan de aanvraagroute in dezelfde kolom.
+import { klein, veldStijl, Veld } from './velden'
 
-const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
-const kop = { fontSize: 13, fontWeight: 600, marginBottom: 6 } as const
-
-const veldStijl: React.CSSProperties = {
-  width: '100%', padding: '7px 9px', borderRadius: 6, fontSize: 13,
-  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
-}
 
 export interface OfferteKandidaat {
   dossierId: string
@@ -350,13 +348,16 @@ export default function OpdrachtPaneel({
   }
 
   return (
-    <Card style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Wat EVA uit de mail heeft gehaald. Dit hoort boven de keuze te staan: het is
-          de grond waarop je de offerte aanwijst, en zonder dit blok leek het alsof de
-          opdrachtgever en contactpersoon waren kwijtgeraakt. */}
-      <div style={{ padding: 10, borderRadius: 6, background: 'var(--surface-2, #f6f8fb)' }}>
-        <div style={kop}>Uit deze mail herkend</div>
-        <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Card style={{ padding: 16 }}>
+      {/* Dezelfde sectie-indeling als het aanvraagformulier hiernaast. Dit paneel
+          had eigen koppen en eigen veldopmaak, en dat is precies waardoor de
+          middenkolom per bericht een ander scherm leek.
+
+          Wat EVA uit de mail haalde staat bovenaan: het is de grond waarop je de
+          offerte aanwijst, en zonder dit blok leek het alsof de opdrachtgever en
+          contactpersoon waren kwijtgeraakt. */}
+      <FormSection title="Uit deze mail herkend">
+        <div style={{ fontSize: 13.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span>Opdrachtgever: <strong>{herkend.opdrachtgever ?? 'niet herkend'}</strong></span>
           <span>Contactpersoon: <strong>{herkend.contactpersoonNaam ?? 'niet herkend'}</strong></span>
           {werkadres.straat && (
@@ -387,10 +388,9 @@ export default function OpdrachtPaneel({
             </span>
           </label>
         )}
-      </div>
+      </FormSection>
 
-      <div>
-        <div style={kop}>Bij welke offerte hoort deze opdracht?</div>
+      <FormSection title="Bij welke offerte hoort deze opdracht?">
         {alleKandidaten.length === 0 && (
           <p style={klein}>
             Deze opdrachtgever heeft geen lopende offerte in EVA. Zoek het dossier hieronder op,
@@ -448,30 +448,31 @@ export default function OpdrachtPaneel({
         )}
 
         {waarschuwing && (
-          <p style={{ ...klein, color: 'var(--da-700, #b91c1c)', marginTop: 8 }}>{waarschuwing}</p>
+          <p style={{ ...klein, color: 'var(--da-700, #b42318)', marginTop: 8 }}>{waarschuwing}</p>
         )}
-      </div>
+      </FormSection>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={klein}>Opdrachtreferentie</span>
-          <input
-            style={veldStijl} value={referentie} disabled={!bewerkbaar}
-            onChange={e => setReferentie(e.target.value)}
-            placeholder="Bon- of ordernummer van de klant"
-          />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={klein}>Opdrachtdatum</span>
-          <input
-            type="date" style={veldStijl} value={datum} disabled={!bewerkbaar}
-            onChange={e => setDatum(e.target.value)}
-          />
-        </label>
-      </div>
+      {/* Zelfde kop als bij een aanvraag, zodat dezelfde gegevens op dezelfde
+          plek staan of het nu een aanvraag of een opdracht is. */}
+      <FormSection title="Kenmerken">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          <Veld label="Opdrachtreferentie">
+            <input
+              style={veldStijl} value={referentie} disabled={!bewerkbaar}
+              onChange={e => setReferentie(e.target.value)}
+              placeholder="Bon- of ordernummer van de klant"
+            />
+          </Veld>
+          <Veld label="Opdrachtdatum">
+            <input
+              type="date" style={veldStijl} value={datum} disabled={!bewerkbaar}
+              onChange={e => setDatum(e.target.value)}
+            />
+          </Veld>
+        </div>
+      </FormSection>
 
-      <div>
-        <div style={kop}>Factuuradres</div>
+      <FormSection title="Factuuradres">
         <p style={klein}>
           De opdrachtgever blijft dezelfde; dit gaat alleen over het adres waar de factuur heen gaat.
         </p>
@@ -537,15 +538,14 @@ export default function OpdrachtPaneel({
             ))}
           </div>
         )}
-      </div>
+      </FormSection>
 
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={klein}>Opmerking van de klant (komt als notitie op het dossier)</span>
+      <FormSection title="Opmerking van de klant" description="komt als notitie op het dossier">
         <textarea
           style={{ ...veldStijl, minHeight: 70 }} value={opmerking} disabled={!bewerkbaar}
           onChange={e => setOpmerking(e.target.value)}
         />
-      </label>
+      </FormSection>
 
       {bewerkbaar && (
         <div>
