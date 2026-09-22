@@ -298,26 +298,6 @@ export function servicedeskLadder(dossier: {
 }
 
 /**
- * Substatussen die de Bouw7-sync zelf zet/overschrijft (zie `mapBouw7NaarEvaStatus` +
- * `BOUW7_NAAR_SERVICEDESK_SUBSTATUS` in `lib/bouw7/sync.ts`). Voor dossiers die uit Bouw7
- * komen (`bouw7_id != null`) zijn deze in EVA **alleen-lezen** — je kunt een dossier wél naar
- * EVA-eigen substatussen verplaatsen, maar niet naar een Bouw7-eigen substatus (die wijzig je
- * in Bouw7).
- *
- * De aanvraag- én offerte-ladder zijn volledig EVA-stuurbaar: elke substatus wordt naar het
- * Bouw7-maatwerkveld "Offerte Sub-status" teruggeschreven (`lib/bouw7/substatus-attr.ts`). De drie
- * eindstatussen trekken daar ook de projectstatus mee — Gewonnen → `02. Nieuwe opdracht`,
- * Verloren/Vervallen → `08. Afgewezen` zodra álle offertes van het project afgeketst zijn.
- * Alleen opdracht en servicedesk houden nog Bouw7-eigen substatussen.
- */
-export const BOUW7_EIGEN_SUBSTATUSSEN: Record<DossierSectie, string[]> = {
-  aanvraag:    [],
-  offerte:     [],
-  opdracht:    ['nieuwe_opdracht', 'werkvoorbereiding', 'onderhanden', 'uitvoering_gereed', 'financieel_gereed', 'financieel_afgesloten'],
-  servicedesk: ['nieuw', 'offerte_uitgebracht', 'in_voorbereiding', 'loopt', 'uitgevoerd', 'financieel_gereed'],
-}
-
-/**
  * True als het zetten van deze substatus het dossier **definitief afsluit** — daarna is het overal
  * alleen-lezen (zie `isDossierAfgesloten` + `lib/dossiers/guards.ts`) en is het niet meer via de UI
  * terug te draaien. Deze substatussen worden bovendien naar Bouw7 teruggeschreven en kunnen daar de
@@ -327,9 +307,4 @@ export function isAfsluitendeSubstatus(sectie: DossierSectie, key: string): bool
   if (sectie === 'aanvraag') return key === 'afgewezen' || key === 'vervallen'
   if (sectie === 'offerte')  return key === 'verloren'  || key === 'vervallen'
   return false
-}
-
-/** True als `key` een door Bouw7 beheerde substatus is binnen de gegeven sectie. */
-export function isBouw7Substatus(sectie: DossierSectie, key: string): boolean {
-  return BOUW7_EIGEN_SUBSTATUSSEN[sectie]?.includes(key) ?? false
 }

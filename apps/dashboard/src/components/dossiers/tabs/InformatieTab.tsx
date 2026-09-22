@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
-  getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
+  getDossierSubstatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
   type DossierSectie, type DossierRij,
 } from '../types'
 import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden, stuurAanneemsomNaarBouw7 } from '@/lib/dossiers/actions'
@@ -1233,13 +1233,14 @@ export function InformatieTab({
     !werkStraat ||
     !werkStad ||
     /divers|nader te bepalen|n\.?t\.?b\.?|onbekend|n\.?v\.?t\.?/i.test(`${werkStraat} ${werkStad}`)
-  // Fase-gating. Opdracht-dossiers zijn two-way: hun Bouw7-eigen opdracht-statussen zijn selecteerbaar
-  // (worden teruggeschreven naar Bouw7), behalve financieel_afgesloten (definitieve afsluiting). Voor
-  // aanvraag/offerte blijven Bouw7-eigen substatussen alleen-lezen (zichtbaar als huidige waarde).
+  // Fase-gating. Elke fase is in EVA te sturen: aanvraag/offerte schrijven naar het maatwerkveld
+  // "Offerte Sub-status", opdracht naar de Bouw7-projectstatus, en servicedesk blijft in EVA staan
+  // tot Bouw7 de projectstatus écht wijzigt. Alleen `financieel_afgesloten` ontbreekt — dat is de
+  // definitieve afsluiting en loopt via de knop, niet via de keuzelijst.
   const kiesbareStatussen = beschikbareStatussen.filter(s => {
     if (s.key === substatus) return true
     if (sectie === 'opdracht') return s.key !== 'financieel_afgesloten'
-    return !bouw7Vergrendeld || !isBouw7Substatus(sectie, s.key)
+    return true
   })
 
   // Statuswijziging vanuit de detail-view: EVA bijwerken en — voor opdrachten — terugschrijven naar Bouw7.

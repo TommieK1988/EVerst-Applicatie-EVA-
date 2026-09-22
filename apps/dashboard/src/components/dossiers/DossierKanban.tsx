@@ -8,7 +8,7 @@ import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschap
 import toast from 'react-hot-toast'
 import { wijzigSubstatusMetConflict } from './substatus-wijzigen'
 import { useDialogen } from '@/components/ui/dialogen'
-import { getDossierSubstatus, isBouw7Substatus, isAfsluitendeSubstatus } from './types'
+import { getDossierSubstatus, isAfsluitendeSubstatus } from './types'
 import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
 import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
@@ -159,29 +159,31 @@ export function DossierKanban<K extends string>({
   async function handleDrop(targetStatus: K) {
     if (!draggingId) return
 
-    const gesleept = dossiers.find(d => d.id === draggingId)
-
-    // Opdracht-dossiers zijn two-way: slepen naar een Bouw7-eigen opdracht-substatus is toegestaan
-    // en wordt teruggeschreven naar Bouw7. Voor offerte/servicedesk blijven Bouw7-eigen substatussen
-    // alleen-lezen in EVA (geen 1:1 Bouw7-projectstatus) — daar weigeren we de drop nog steeds.
-    if (
-      sectie !== 'opdracht' &&
-      gesleept && (gesleept as any).bouw7_id != null && isBouw7Substatus(sectie, targetStatus)
-    ) {
-      setDraggingId(null)
-      setDragOverCol(null)
-      toast.error('Deze status komt uit Bouw7 en is alleen daar te wijzigen.')
-      return
-    }
-
     if (onStatusChange) {
-      // Servicedesk of andere custom update: optimistisch servicedesk_substatus bijwerken
+      // Servicedesk of andere custom update: optimistisch servicedesk_substatus bijwerken.
+      // Elke kolom is sleepbaar, óók de kolommen die de Bouw7-sync zelf vult (Nieuw, Loopt,
+      // Uitgevoerd, …). Wat hier wordt versleept, blijft staan tot Bouw7 de projectstatus écht
+      // wijzigt — `updateServicedeskSubstatus` markeert de kolom als handmatig en de sync haalt
+      // die markering pas weg bij een echte statuswissel aan de Bouw7-kant.
+      const id = draggingId
+      const vorige = dossiers.find(d => d.id === id)?.servicedesk_substatus ?? null
       setDossiers(prev =>
-        prev.map(d => d.id !== draggingId ? d : { ...d, servicedesk_substatus: targetStatus as any })
+        prev.map(d => d.id !== id ? d : { ...d, servicedesk_substatus: targetStatus as any })
       )
       setDraggingId(null)
       setDragOverCol(null)
-      await onStatusChange(draggingId, targetStatus)
+      // Een mislukte wijziging moet de kaart terugleggen: laat hij in de nieuwe kolom liggen,
+      // dan leest het bord iets anders voor dan er in de database staat.
+      const res = await onStatusChange(id, targetStatus).catch(
+        (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }),
+      )
+      if (!res.ok) {
+        setDossiers(prev =>
+          prev.map(d => d.id !== id ? d : { ...d, servicedesk_substatus: vorige as any })
+        )
+        toast.error(res.error ?? 'Status bijwerken mislukt')
+      }
+      router.refresh()
       return
     }
 

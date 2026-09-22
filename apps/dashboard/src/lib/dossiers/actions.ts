@@ -528,8 +528,13 @@ export async function updateServicedeskSubstatus(
     .eq('id', id)
     .single()
 
-  // De servicedesk-kolommen hebben geen Bouw7-tegenhanger; wat hier wordt versleept moet de
-  // lees-sync laten staan tot Bouw7 de projectstatus écht wijzigt (zie syncProjects).
+  // Elke servicedesk-kolom is in EVA te zetten, ook de kolommen die de sync uit de
+  // Bouw7-projectstatus afleidt (Nieuw, Loopt, Uitgevoerd, Financieel gereed). Er is geen
+  // terugschrijven naar Bouw7: de mapping is daar veel-op-één (02. en 03. worden allebei "Nieuw",
+  // LB. en 04. allebei "Loopt"), dus een omgekeerde write zou moeten raden welke projectstatus je
+  // bedoelt — en zou een LB.-bon uit de lopende-bonnenlijst kunnen trekken. In plaats daarvan
+  // geldt de EVA-keuze: de lees-sync laat de kolom staan tot Bouw7 de projectstatus écht wijzigt
+  // (zie syncProjects, dat de markering dan zelf opruimt).
   const handmatig = await markeerHandmatig(supabase, 'dossiers', id, ['servicedesk_substatus'])
   const { error } = await supabase
     .from('dossiers')
