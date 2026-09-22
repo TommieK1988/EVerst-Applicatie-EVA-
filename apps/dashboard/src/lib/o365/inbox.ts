@@ -178,6 +178,28 @@ export async function haalBijlageBytes(
   return Buffer.from(await res.arrayBuffer())
 }
 
+/**
+ * De mail zelf, als ruwe MIME (`.eml`).
+ *
+ * Dat is het bestand dat in Outlook opent zoals hij binnenkwam: afzender,
+ * ontvangers, datum, opmaak en bijlagen compleet. Een nagebouwde weergave mist
+ * altijd iets, en juist bij een opdracht wil je later kunnen laten zien wat er
+ * precies stond.
+ *
+ * `$value` levert de hele mail in één keer, inclusief de bijlagen. Voor een mail
+ * met een dik bestek is dat een flinke buffer -- één tegelijk aanroepen.
+ */
+export async function haalBerichtMime(
+  postbusAdres: string,
+  berichtId: string,
+): Promise<Buffer> {
+  const pad =
+    `/users/${encodeURIComponent(postbusAdres)}/messages/${encodeURIComponent(berichtId)}/$value`
+  const res = await intakeGraphFetch(pad)
+  if (!res.ok) throw new GraphError(res.status, `Mail ophalen mislukt (HTTP ${res.status})`)
+  return Buffer.from(await res.arrayBuffer())
+}
+
 // ─── Nabehandeling ────────────────────────────────────────────────────────────
 
 /**

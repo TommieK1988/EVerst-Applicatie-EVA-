@@ -67,7 +67,11 @@ export function bepaalNabehandeling(
       // Een mens heeft besloten dat hier niets mee hoeft. Mag weg.
       return { verplaatsen: true, categorieen: ['EVA: genegeerd'], gelezen: true }
     case 'geen_aanvraag':
-      // Oordeel van de AI. Blijft staan én ongelezen, zodat een mens het nog ziet.
+      // Blijft staan én ongelezen. Ook als een mens erop klikte: het oordeel is
+      // hetzelfde oordeel, en dit is nu juist het oordeel dat fout kán zijn.
+      // Verdwijnt zo'n mail naar een submap, dan is een gemiste aanvraag
+      // onzichtbaar -- er is geen tweede signaal dat hem terugbrengt. Wie écht
+      // wil dat hij weggaat, gebruikt Negeren; daar hoort een reden bij.
       return { verplaatsen: false, categorieen: ['EVA: geen aanvraag'], gelezen: false }
     default:
       // nieuw, bezig, wacht_op_mens, mislukt → Outlook onaangeroerd.

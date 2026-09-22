@@ -57,6 +57,7 @@ function MeldingKiezer({
   // Eigen stand, zodat het vinkje meteen meebeweegt en niet pas na de server-ronde.
   const [keuze, setKeuze] = useState<string[]>(gekozen)
   React.useEffect(() => { setKeuze(gekozen) }, [gekozen])
+  const [zoek, setZoek] = useState('')
 
   const wissel = (id: string) => {
     const nieuw = keuze.includes(id) ? keuze.filter(x => x !== id) : [...keuze, id]
@@ -64,24 +65,46 @@ function MeldingKiezer({
     onWijzig(nieuw)
   }
 
+  // Aangevinkte namen bovenaan, daarna de rest. Met zesenveertig medewerkers in een
+  // alfabetische lijst stond wie je had gekozen ergens in het midden buiten beeld,
+  // en leek een naam die je zocht er simpelweg niet te staan.
+  const zichtbaar = medewerkers
+    .filter(m => m.naam.toLowerCase().includes(zoek.trim().toLowerCase()))
+    .sort((a, b) => Number(keuze.includes(b.id)) - Number(keuze.includes(a.id)))
+
   return (
-    <div style={{
-      maxHeight: 132, overflowY: 'auto', padding: '6px 8px', borderRadius: 6,
-      border: '1px solid var(--border)', background: 'var(--surface)',
-      display: 'flex', flexDirection: 'column', gap: 2,
-    }}>
-      {medewerkers.map(m => (
-        <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-          <input type="checkbox" checked={keuze.includes(m.id)} onChange={() => wissel(m.id)} />
-          <span>{m.naam}</span>
-          {/* Zonder account komt een melding nergens aan; dat hoort hier te staan
-              en niet pas als iemand zich afvraagt waarom hij niets hoort. */}
-          {!m.heeftLogin && <span style={klein}>geen EVA-login</span>}
-        </label>
-      ))}
-      {keuze.length === 0 && (
-        <span style={{ ...klein, color: 'var(--wa-700, #b45309)', marginTop: 4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <input
+        style={{ ...veldStijl, padding: '4px 7px' }}
+        value={zoek}
+        onChange={e => setZoek(e.target.value)}
+        placeholder={`Zoek in ${medewerkers.length} medewerkers…`}
+      />
+      <div style={{
+        maxHeight: 200, overflowY: 'auto', padding: '6px 8px', borderRadius: 6,
+        border: '1px solid var(--border)', background: 'var(--surface)',
+        display: 'flex', flexDirection: 'column', gap: 2,
+      }}>
+        {zichtbaar.map(m => (
+          <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={keuze.includes(m.id)} onChange={() => wissel(m.id)} />
+            <span>{m.naam}</span>
+            {/* Zonder account komt een melding nergens aan; dat hoort hier te staan
+                en niet pas als iemand zich afvraagt waarom hij niets hoort. */}
+            {!m.heeftLogin && <span style={klein}>geen EVA-login</span>}
+          </label>
+        ))}
+        {zichtbaar.length === 0 && (
+          <span style={klein}>Geen medewerker met &ldquo;{zoek}&rdquo; in de naam.</span>
+        )}
+      </div>
+      {keuze.length === 0 ? (
+        <span style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
           Niemand aangevinkt — voorgelegde mail blijft dan onopgemerkt in het postvak staan.
+        </span>
+      ) : (
+        <span style={klein}>
+          {keuze.length === 1 ? 'één medewerker' : `${keuze.length} medewerkers`} krijgen melding
         </span>
       )}
     </div>

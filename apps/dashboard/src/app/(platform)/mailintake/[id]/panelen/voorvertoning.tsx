@@ -109,18 +109,17 @@ export function Voorvertoning({ proef }: { proef: ProefVoorScherm }) {
       )}
 
       <span style={KOP}>Bestanden</span>
-      {proef.bestanden.length ? (
-        <span style={{ display: 'block' }}>
-          {proef.bestanden.length === 1 ? 'Eén bestand gaat' : `${proef.bestanden.length} bestanden gaan`}
-          {' '}naar de dossiermap:
-          <span style={{ display: 'block', marginTop: 2 }}>
-            {proef.bestanden.map(f => (
-              <span key={f.bestandsnaam} style={{ display: 'block' }}>• {f.bestandsnaam}</span>
-            ))}
-          </span>
+      {/* De mail gaat altijd mee en staat daarom bovenaan, niet als voetnoot: op
+          een aanvraag zonder bijlagen stond hier "Er gaan geen bestanden mee",
+          terwijl de vraag zelf wél in de map belandt. */}
+      <span style={{ display: 'block' }}>• De mail zelf, als los bestand</span>
+      {proef.bestanden.map(f => (
+        <span key={f.bestandsnaam} style={{ display: 'block' }}>• {f.bestandsnaam}</span>
+      ))}
+      {!proef.bestanden.length && (
+        <span style={{ ...LABEL, display: 'block', marginTop: 3 }}>
+          Er zaten verder geen bijlagen bij.
         </span>
-      ) : (
-        <span style={{ display: 'block' }}>Er gaan geen bestanden mee.</span>
       )}
 
       {overgeslagen.map(g => (

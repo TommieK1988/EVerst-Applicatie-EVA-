@@ -171,6 +171,19 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       if (did) perBericht.set(b.bericht_id, did)
     }
 
+    // En de mails zelf. Die hangen niet aan een bijlagerij, dus zonder deze tweede
+    // vraag zou een dossier zonder bijlagen nooit opnieuw geprobeerd worden -- en
+    // dat is juist het geval waarin de mail het enige is dat er hoort te staan.
+    const { data: mailsOpen } = await supabase
+      .from('mailintake_berichten')
+      .select('id, dossier_id')
+      .not('dossier_id', 'is', null)
+      .is('mail_naar_sharepoint_op', null)
+      .limit(200)
+    for (const m of mailsOpen ?? []) {
+      if (m.dossier_id) perBericht.set(m.id, m.dossier_id)
+    }
+
     let bijlagenGeplaatst = 0
     for (const [berichtId, dossierId] of perBericht) {
       const res = await zetBijlagenInSharePoint(berichtId, dossierId)

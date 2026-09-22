@@ -26,6 +26,7 @@ import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 // Blijft vanaf hier herexporteerd: bestaande aanroepers halen hem van deze plek.
 export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
+import { haalMailBestand } from './mail-bestand'
 import type { ProefResultaat } from './proef'
 import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -89,7 +90,7 @@ export type AanmaakResultaat =
   | { ok: false; error: string }
 
 /**
- * Zet de bijlagen van een bericht in de SharePoint-dossiermap.
+ * Zet de mail en de bijlagen in de SharePoint-dossiermap.
  *
  * Loopt via `uploadBuffersNaarDossierMap` uit lib/o365/dossier-map: dat is
  * app-only Graph en vraagt dus géén ingelogde medewerker. Daardoor werkt dit
@@ -105,9 +106,18 @@ export type AanmaakResultaat =
  * - **In stukken van ~20 MB.** Alle bijlagen tegelijk in het geheugen laden gaat
  *   bij een paar grote PDF's mis op Vercel.
  *
- * Gooit nooit. Wat niet lukt houdt `naar_sharepoint_op` leeg en wordt door de
- * bewakingscron opnieuw geprobeerd — het dossier bestaat dan al, en dat mag hier
- * niet op sneuvelen.
+ * - **De mail zelf gaat mee, niet alleen zijn bijlagen.** De vraag stond tot nu
+ *   toe alleen in EVA en in de postbus; een calculator die het dossier maanden
+ *   later opent kon nergens meer teruglezen wát er gevraagd was. Zie
+ *   `mail-bestand.ts` voor het origineel-of-weergave-verhaal.
+ * - **De hele groep, niet alleen dit bericht.** Mails over dezelfde klus zijn één
+ *   intake; dan hoort ook één dossiermap met alles erin. Stond hier een filter op
+ *   `bericht_id`, dan bleven de stukken uit de tweede mail achter -- en dat ziet
+ *   niemand, want het dossier is er wel.
+ *
+ * Gooit nooit. Wat niet lukt houdt `naar_sharepoint_op` respectievelijk
+ * `mail_naar_sharepoint_op` leeg en wordt door de bewakingscron opnieuw geprobeerd
+ * — het dossier bestaat dan al, en dat mag hier niet op sneuvelen.
  */
 export async function zetBijlagenInSharePoint(
   berichtId: string,
@@ -115,14 +125,27 @@ export async function zetBijlagenInSharePoint(
 ): Promise<{ geuploaded: number; mislukt: number; fout: string | null }> {
   const supabase = createAdminClient()
 
-  const { data: bericht } = await supabase
-    .from('mailintake_berichten').select('ontvangen_op').eq('id', berichtId).maybeSingle()
-  const datum = (bericht?.ontvangen_op ?? new Date().toISOString()).slice(0, 10)
+  // Alle mails over deze klus. `groep_id` is bij een losse mail zijn eigen id, dus
+  // dit levert altijd minstens het bericht zelf op.
+  const { data: dit } = await supabase
+    .from('mailintake_berichten').select('groep_id').eq('id', berichtId).maybeSingle()
+  const { data: groep } = await supabase
+    .from('mailintake_berichten')
+    .select('id, ontvangen_op, mail_naar_sharepoint_op')
+    .eq('groep_id', dit?.groep_id ?? berichtId)
+    .order('ontvangen_op')
+    .limit(20)
+
+  const leden = groep?.length
+    ? groep
+    : [{ id: berichtId, ontvangen_op: new Date().toISOString(), mail_naar_sharepoint_op: null }]
+  const datumVan = new Map(leden.map(m => [m.id, (m.ontvangen_op ?? '').slice(0, 10)]))
+  const datum = datumVan.get(berichtId) || new Date().toISOString().slice(0, 10)
 
   const { data: rijen } = await supabase
     .from('mailintake_bijlagen')
-    .select('id, bestandsnaam, content_type, opslag_pad, grootte_bytes, is_inline')
-    .eq('bericht_id', berichtId)
+    .select('id, bericht_id, bestandsnaam, content_type, opslag_pad, grootte_bytes, is_inline')
+    .in('bericht_id', leden.map(m => m.id))
     .not('opslag_pad', 'is', null)
     .is('naar_sharepoint_op', null)
     .limit(50)
@@ -135,7 +158,8 @@ export async function zetBijlagenInSharePoint(
     grootteBytes: r.grootte_bytes, isInline: Boolean(r.is_inline),
   }).mee)
 
-  if (!bestanden.length) return { geuploaded: 0, mislukt: 0, fout: null }
+  const mailsTeDoen = leden.filter(m => !m.mail_naar_sharepoint_op)
+  if (!bestanden.length && !mailsTeDoen.length) return { geuploaded: 0, mislukt: 0, fout: null }
 
   const RUIMTE = 20 * 1024 * 1024
   let geuploaded = 0
@@ -184,7 +208,7 @@ export async function zetBijlagenInSharePoint(
 
       stapel.push({
         rij: r,
-        naam: `${datum} ${r.bestandsnaam}`,
+        naam: `${datumVan.get(r.bericht_id) || datum} ${r.bestandsnaam}`,
         contentType: r.content_type ?? 'application/octet-stream',
         bytes,
       })
@@ -196,10 +220,49 @@ export async function zetBijlagenInSharePoint(
   }
   await legStapelWeg()
 
+  // ── De mails zelf ──
+  // Ná de bijlagen en per stuk: een mail met een dik bestek erin is zo 20 MB, en
+  // die naast de bijlagen in dezelfde stapel proppen is precies waar het geheugen
+  // op Vercel op stukloopt.
+  let mailsGeplaatst = 0
+  let weergaven = 0
+  for (const m of mailsTeDoen) {
+    try {
+      const bestand = await haalMailBestand(m.id)
+      if (!bestand) { mislukt++; continue }
+      const res = await uploadBuffersNaarDossierMap(dossierId, [{
+        naam: bestand.naam, contentType: bestand.contentType, bytes: bestand.bytes,
+      }])
+      const geplaatst = (res.bestanden ?? []).find(x => x.naam === bestand.naam)
+      if (!geplaatst) {
+        mislukt++
+        if (res.fout) fouten.push(`${bestand.naam}: ${res.fout}`)
+        continue
+      }
+      await supabase.from('mailintake_berichten').update({
+        mail_naar_sharepoint_op: new Date().toISOString(),
+        mail_sharepoint_item_id: geplaatst.itemId,
+      }).eq('id', m.id)
+      geuploaded++
+      mailsGeplaatst++
+      if (!bestand.origineel) weergaven++
+    } catch (e) {
+      mislukt++
+      fouten.push(`mail: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
   if (geuploaded || mislukt) {
     await supabase.from('mailintake_besluiten').insert({
       bericht_id: berichtId, actor: 'systeem', actie: 'bijlagen_naar_sharepoint',
-      details: { dossier_id: dossierId, geuploaded, mislukt, fouten: fouten.slice(0, 5) },
+      details: {
+        dossier_id: dossierId, geuploaded, mislukt, fouten: fouten.slice(0, 5),
+        mails: mailsGeplaatst,
+        // Geen origineel maar een door EVA opgemaakte weergave. Waard om te weten:
+        // gebeurt dit vaak, dan verdwijnen de mails te snel uit de postbus.
+        mails_als_weergave: weergaven,
+        berichten_in_groep: leden.length,
+      },
     })
   }
 
