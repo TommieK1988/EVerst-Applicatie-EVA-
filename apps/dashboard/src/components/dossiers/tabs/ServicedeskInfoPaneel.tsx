@@ -3,12 +3,11 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Button, Input } from '@/components/ui'
+import { Card, CardHeader, CardBody, Input } from '@/components/ui'
 import {
   getServicedeskMandaat, getDoorlooptijdPerFase, updateServicedeskInstellingen,
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
-import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
 import { FACTURATIE_LABELS, SERVICEDESK_ALLE_STATUSSEN } from '../types'
 
 const fmt = (v: number) =>
@@ -28,18 +27,25 @@ type Props = {
   initieleFacturatiemethode: 'regie' | 'termijnen'
   /** Mutatiewerk gaat aangenomen; dan staat de methode standaard op Aangenomen (wel aanpasbaar). */
   isMutatie?: boolean
-  heeftCalculatie: boolean
+}
+
+function Regel({ label, bedrag }: { label: string; bedrag: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-neutral-600">{label}</span>
+      <span className="tabular-nums text-neutral-700">{fmt(bedrag)}</span>
+    </div>
+  )
 }
 
 export default function ServicedeskInfoPaneel({
-  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie, heeftCalculatie,
+  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie,
 }: Props) {
   const router = useRouter()
   const [mandaat, setMandaat]       = useState<string>(initieelMandaat != null ? String(initieelMandaat) : '')
   const [methode, setMethode]       = useState<'regie' | 'termijnen'>(initieleFacturatiemethode)
   const [status, setStatus]         = useState<MandaatStatus | null>(null)
   const [fases, setFases]           = useState<SubstatusFase[]>([])
-  const [bezigOfferte, setBezig]    = useState(false)
 
   useEffect(() => {
     getServicedeskMandaat(dossierId).then(setStatus).catch(() => setStatus(null))
@@ -72,28 +78,6 @@ export default function ServicedeskInfoPaneel({
     // De kostengroep is nieuw voor elk scherm dat codes toont (werkbegroting, planning, verkoop).
     if (m === 'regie') router.refresh()
   }
-
-  async function offerteMaken() {
-    setBezig(true)
-    const r = await maakOfferteVoorServicedesk(dossierId)
-    setBezig(false)
-    if (!r.ok) { toast.error(r.error); return }
-    // maakOfferteVoorServicedesk legt de koppeling al vast op het dossier
-    // (everts_calc_project_id); de calculatie-tab leest hem daar.
-    router.push(`/servicedesk/${dossierId}/calculatie`)
-    router.refresh()
-  }
-
-  async function offerteAkkoord() {
-    setBezig(true)
-    const r = await offerteAkkoordServicedesk(dossierId)
-    setBezig(false)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success('Offerte op akkoord — overgezet op aangenomen')
-    router.refresh()
-  }
-
-  const overschreden = status?.overschreden ?? false
 
   return (
     <Card className="col-span-2">
@@ -152,40 +136,26 @@ export default function ServicedeskInfoPaneel({
             </div>
           </div>
 
-          {/* Offerte-acties */}
-          <div className="flex items-end gap-2 self-stretch">
-            {!heeftCalculatie ? (
-              <Button variant="primary" onClick={offerteMaken} disabled={bezigOfferte}>
-                {bezigOfferte ? 'Bezig…' : 'Offerte maken'}
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={offerteAkkoord} disabled={bezigOfferte}>
-                {bezigOfferte ? 'Bezig…' : 'Offerte akkoord'}
-              </Button>
-            )}
-          </div>
         </div>
 
-        {/* Mandaat-indicator */}
-        {status?.mandaat != null && (
-          <div
-            className="mt-4 rounded-lg border px-3.5 py-3"
-            style={{
-              borderColor: overschreden ? 'color-mix(in srgb,#d9534f 35%,transparent)' : 'var(--neutral-200,#e3e8ea)',
-              background: overschreden ? 'color-mix(in srgb,#d9534f 8%,transparent)' : 'var(--neutral-50,#f8fafa)',
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold" style={{ color: overschreden ? '#d9534f' : 'var(--fg)' }}>
-                {overschreden ? '⚠ Mandaat overschreden' : 'Binnen mandaat'}
-              </span>
-              <span className="tabular-nums text-[13px] font-bold" style={{ color: overschreden ? '#d9534f' : 'var(--fg)' }}>
-                {fmt(status.totaal)} / {fmt(status.mandaat)}
-              </span>
+        {/* Waaruit het verbruikte mandaat is opgebouwd. De stánd (kleur, balk, hoeveel er nog
+            in past) staat in de balk boven de tabs; hier staat waar dat bedrag vandaan komt —
+            het antwoord op "waarom is mijn mandaat al bijna vol?". */}
+        {status?.mandaat != null && status.mandaat > 0 && (
+          <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+              Verbruikt mandaat
             </div>
-            <div className="mt-1.5 flex gap-4 text-[11px] text-neutral-500">
-              <span>Geboekte verkoopwaarde: <span className="tabular-nums font-semibold">{fmt(status.geboekteVerkoop)}</span></span>
-              <span>Uitgezette opdrachten +{25}%: <span className="tabular-nums font-semibold">{fmt(status.uitgezetteOpdrachten)}</span></span>
+            <div className="flex flex-col gap-1 text-[12px]">
+              <Regel label="Geboekte verkoopwaarde" bedrag={status.geboekteVerkoop} />
+              <Regel
+                label={`Uitgezette opdrachten (incl. ${status.opslagPct}% opslag)`}
+                bedrag={status.uitgezetteOpdrachten}
+              />
+              <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1 font-semibold">
+                <span className="text-neutral-700">Totaal</span>
+                <span className="tabular-nums">{fmt(status.totaal)}</span>
+              </div>
             </div>
           </div>
         )}

@@ -244,6 +244,9 @@ export type MandaatStatus = {
   mandaat: number | null
   geboekteVerkoop: number
   uitgezetteOpdrachten: number
+  /** De opslag die op de uitgezette opdrachten is gerekend, in procenten. Hoort erbij omdat het
+   *  scherm anders een percentage moet raden; dat stond er jarenlang als hardgecodeerde 25. */
+  opslagPct: number
   totaal: number
   overschreden: boolean
 }
@@ -269,7 +272,7 @@ export async function getServicedeskMandaat(dossierId: string): Promise<MandaatS
   const totaal = Math.round((geboekteVerkoop + uitgezetteOpdrachten) * 100) / 100
   const overschreden = mandaat != null && totaal > mandaat
 
-  return { mandaat, geboekteVerkoop, uitgezetteOpdrachten, totaal, overschreden }
+  return { mandaat, geboekteVerkoop, uitgezetteOpdrachten, opslagPct: opslag, totaal, overschreden }
 }
 
 /**

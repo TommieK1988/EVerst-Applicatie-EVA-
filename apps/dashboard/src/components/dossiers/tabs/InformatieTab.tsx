@@ -32,6 +32,7 @@ import {
 } from '@/lib/dossiers/opdracht-onderdelen'
 import type { OpdrachtOnderdeelGrondslag as StelpostGrondslag } from '@everts/database'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
+import BonActies from '../servicedesk/BonActies'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import { PortaalChatBlok } from './PortaalChatBlok'
@@ -1933,6 +1934,18 @@ export function InformatieTab({
         </div>
       )}
 
+      {/* Bovenaan de bon, vóór de kaarten: wat wil je doen? Een servicedeskbon draait om vier
+          handelingen, en die horen niet verspreid over de kaarten eronder te staan. */}
+      {sectie === 'servicedesk' && (
+        <BonActies
+          dossierId={dossier.id}
+          heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
+          mandaatBedrag={dossier.mandaat_bedrag ?? null}
+          verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
+          alleenLezen={readOnly}
+        />
+      )}
+
       {/* ── Kaarten grid ── */}
       {/* Elke rij is precies BLOK_HOOGTE hoog zolang alles ingeklapt is, en groeit alleen
           mee met de kaart die de gebruiker openzet — de buurcel blijft dan staan. Zonder
@@ -1952,7 +1965,6 @@ export function InformatieTab({
             initieelMandaat={dossier.mandaat_bedrag ?? null}
             initieleFacturatiemethode={(dossier.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'}
             isMutatie={isMutatieDossier(dossier)}
-            heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
           />
         )}
 

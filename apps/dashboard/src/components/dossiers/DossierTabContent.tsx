@@ -2,6 +2,7 @@ import { Suspense, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { SubTabs } from '@/components/ui'
 import { servicedeskGroep, servicedeskDeel } from './servicedesk-tabs'
+import { ServicedeskBalk } from './servicedesk/ServicedeskBalk'
 import { getDossierById, getMedewerkers, getFactuuradressen, getCategorieOpties, getDossierToggles, getDossierFinancieel, getWerkmaatschappijen } from '@/lib/dossiers/actions'
 import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import { getDossierDatums } from '@/lib/dossiers/datums'
@@ -85,6 +86,10 @@ export async function DossierTabContent({ id, tab, sectie, deel }: Props) {
   return (
     <DossierReadOnlyProvider value={readOnly}>
       {readOnly && <AfgeslotenBanner />}
+      {/* Op een servicedeskbon staat boven élke tab waar hij staat, hoe hij afrekent en hoeveel
+          van het mandaat op is. Die drie zijn overal even relevant — ook op Facturatie wil je
+          zien dat het mandaat bijna op is. */}
+      {sectie === 'servicedesk' && dossier && <ServicedeskBalk dossier={dossier} />}
       {await renderTabContent({ id, tab, sectie, deel }, dossier)}
     </DossierReadOnlyProvider>
   )
