@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-22','verbeterd','Planning','Dubbele planning uit een planitem knippen',
+   'In het venster Conflict oplossen kun je een planitem nu ook splitsen. Het stuk dat dubbel gepland staat wordt eruit geknipt en de rest blijft precies staan, dus er ontstaat geen nieuwe botsing verderop. De dubbele uren vervallen — de kaart laat zien om hoeveel uur het gaat. Ligt de botsing middenin, dan blijft het deel ervoor op het bestaande planitem staan en wordt het deel erna een eigen planitem. Met Samenvoegen draai je de knip in één keer terug.');
