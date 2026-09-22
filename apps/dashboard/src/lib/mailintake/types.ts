@@ -278,7 +278,7 @@ export type PostvakTab =
 export const POSTVAK_TABS: { key: PostvakTab; label: string }[] = [
   { key: 'te_behandelen', label: 'Te behandelen' },
   { key: 'verwerkt',      label: 'Verwerkt' },
-  { key: 'geen_aanvraag', label: 'Geen aanvraag' },
+  { key: 'geen_aanvraag', label: 'Archief' },
   { key: 'genegeerd',     label: 'Genegeerd' },
   { key: 'mislukt',       label: 'Mislukt' },
   { key: 'alles',         label: 'Alles' },

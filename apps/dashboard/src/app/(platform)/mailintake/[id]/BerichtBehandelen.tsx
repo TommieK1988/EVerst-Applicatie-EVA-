@@ -28,6 +28,7 @@ import {
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import { FASE_PLAATSINGEN } from '@/components/dossiers/fase-plaatsing'
 import MailPaneel from './panelen/MailPaneel'
+import AfgehandeldBalk from './panelen/AfgehandeldBalk'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
@@ -451,17 +452,13 @@ export default function BerichtBehandelen({
       )}
 
       {afgehandeld && (
-        <div style={{
-          padding: '10px 12px', borderRadius: 8, fontSize: 13,
-          background: 'var(--n-100, #f3f4f6)', border: '1px solid var(--border)',
-        }}>
-          Dit bericht is afgehandeld{b.dossier?.dossiernummer ? ` — dossier ${b.dossier.dossiernummer}` : ''}.
-          {b.status === 'genegeerd' && magSchrijven && (
-            <Button variant="ghost" onClick={heropen} disabled={inActie} style={{ marginLeft: 8 }}>
-              Terugzetten op de lijst
-            </Button>
-          )}
-        </div>
+        <AfgehandeldBalk
+          status={b.status}
+          dossiernummer={b.dossier?.dossiernummer ?? null}
+          magSchrijven={magSchrijven}
+          bezig={inActie}
+          onHeropen={heropen}
+        />
       )}
 
       {/* Drie kolommen, en alles wat bij een kolom hoort zit ook in die kolom. Stond

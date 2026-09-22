@@ -28,6 +28,8 @@ import {
 
 export function useWeglegActies(bericht: {
   id: string
+  /** Bepaalt de toast na heropenen: uit het archief wordt opnieuw gelezen. */
+  status?: string | null
   relatie?: { id?: string | null; naam?: string | null } | null
 }) {
   const router = useRouter()
@@ -95,8 +97,14 @@ export function useWeglegActies(bericht: {
     setBezig(true)
     try {
       const res = await heropenBericht(bericht.id)
-      if (!res.ok) toast.error(res.error ?? 'Heropenen mislukt')
-      else { toast.success('Terug op de lijst'); router.refresh() }
+      if (!res.ok) { toast.error(res.error ?? 'Heropenen mislukt'); return }
+      // Uit het archief betekent opnieuw lezen: EVA weet nu dat het wél werk is en
+      // gaat dieper zoeken. Dat duurt even, dus zeg dat erbij -- anders lijkt het
+      // alsof er niets gebeurt omdat het bericht nog niet op Te behandelen staat.
+      toast.success(bericht.status === 'geen_aanvraag'
+        ? 'EVA leest hem opnieuw en zoekt nu dieper'
+        : 'Terug op de lijst')
+      router.refresh()
     } finally {
       setBezig(false)
     }

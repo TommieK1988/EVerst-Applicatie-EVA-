@@ -309,6 +309,18 @@ export default function Postvak({
         </div>
       )}
 
+      {/* Het archief is het vangnet. Overige post komt hier terecht zonder dat
+          iemand ernaar kijkt; zat er tóch een aanvraag tussen, dan is dit de enige
+          plek waar je hem terugvindt. Vandaar dat hier staat wat je ermee kunt. */}
+      {actieveTab === 'geen_aanvraag' && (
+        <p style={{ ...klein, marginBottom: 10 }}>
+          Post die EVA niet als aanvraag of opdracht herkende: correspondentie, facturen
+          en reclame. Deze mail staat nog ongelezen in Postvak IN en wordt daar
+          afgehandeld. Zat er tóch werk bij, open het bericht en kies{' '}
+          <em>Toch behandelen</em> — EVA leest het dan opnieuw en zoekt dieper.
+        </p>
+      )}
+
       {/* De wachtrij. Zichtbaar zodra er iets in staat, want deze berichten vallen
           buiten elk tabblad behalve Alles -- en dan lijkt er niets te liggen. */}
       {!storing && wachtrij > 0 && (

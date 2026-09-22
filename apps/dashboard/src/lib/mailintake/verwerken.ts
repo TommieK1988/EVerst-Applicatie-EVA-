@@ -478,6 +478,26 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     const offerteMatchGevonden = offertes.length > 0
     const offerteMatchHard = harde.length === 1
 
+    // ── Scope-samenvatting ──────────────────────────────────
+    // Vóór de beslissing, niet erna. De scope hoort bij "volledig invullen": stond
+    // hij na de statuswissel, dan kreeg de behandelaar een bericht voorgelegd waar
+    // het belangrijkste veld nog leeg was en een seconde later alsnog invulde. Wie
+    // op dat moment keek, zag een halve aanvraag.
+    //
+    // Voor élke mail die over werk gaat, niet alleen een offerteaanvraag. Dit is de
+    // ronde die álle bijlagen ruim doorleest; hem overslaan betekende dat EVA bij een
+    // opdrachtbon alleen de krappe veldextractie zag en op die halve lezing ging
+    // routeren en uitsluiten. De bon blijkt in de praktijk ook zelden één regel:
+    // hij verwijst naar een bestek, noemt voorwaarden en stelt eisen aan de uitvoering.
+    //
+    // Faalt de samenvatting, dan gaat het bericht gewoon door — een scope is nooit
+    // belangrijk genoeg om een aanvraag op te laten sneuvelen.
+    if (gelezen.soort != null && WERK_SOORTEN.includes(gelezen.soort)) {
+      log.stap('werkzaamheden samenvatten')
+      const wz = await maakWerkzaamhedenSamenvatting(berichtId).catch(() => null)
+      if (wz) uit.kostenCent += wz.kostenCent
+    }
+
     // ── Beslissen ───────────────────────────────────────────────────────────
     const veldenCompleet = Boolean(
       afz.relatieId && velden.omschrijving && velden.werkmaatschappijId && velden.bouw7CategorieId &&
@@ -538,21 +558,6 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
         kosten_cent: ex.kostenCent,
       },
     })
-
-    // ── Scope-samenvatting ──────────────────────────────────────────────────
-    // Voor élke mail die over werk gaat, niet alleen een offerteaanvraag. Dit is de
-    // ronde die álle bijlagen ruim doorleest; hem overslaan betekende dat EVA bij een
-    // opdrachtbon alleen de krappe veldextractie zag en op die halve lezing ging
-    // routeren en uitsluiten. De bon blijkt in de praktijk ook zelden één regel:
-    // hij verwijst naar een bestek, noemt voorwaarden en stelt eisen aan de uitvoering.
-    //
-    // Faalt de samenvatting, dan gaat het bericht gewoon door — een scope is nooit
-    // belangrijk genoeg om een aanvraag op te laten sneuvelen.
-    if (gelezen.soort != null && WERK_SOORTEN.includes(gelezen.soort)) {
-      log.stap('werkzaamheden samenvatten')
-      const wz = await maakWerkzaamhedenSamenvatting(berichtId).catch(() => null)
-      if (wz) uit.kostenCent += wz.kostenCent
-    }
 
     // ── Uitvoeren ───────────────────────────────────────────────────────────
     if (besluit.automatisch && besluit.route === 'nieuw_dossier' && afz.relatieId) {

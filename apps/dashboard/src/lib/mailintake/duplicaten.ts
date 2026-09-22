@@ -205,9 +205,20 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
       score += 0.9
       redenen.push('Een identieke bijlage hangt al aan dit dossier')
     }
-    if (d.dossiernummer && tekst.includes(String(d.dossiernummer).toLowerCase())) {
-      score += 0.5
-      redenen.push(`Het dossiernummer ${d.dossiernummer} wordt in de mail genoemd`)
+    // Ons eigen nummer in hun mail is het sterkste signaal dat er is, op de
+    // conversatie na. Een dossiernummer als 20261.00293 komt nergens anders voor:
+    // wie het noemt, verwijst naar dít dossier. Stond op 0,5 -- net te weinig om
+    // op zichzelf een treffer te zijn, waardoor een opdracht die keurig ons
+    // offertenummer noemde alsnog werd voorgelegd met de vraag welk dossier het is.
+    const onsNummer = (invoer.onzeReferentie ?? '').trim().toLowerCase()
+    const nummerGenoemd =
+      (d.dossiernummer && tekst.includes(String(d.dossiernummer).toLowerCase()))
+      || (onsNummer.length >= 4 && (
+        String(d.dossiernummer ?? '').toLowerCase() === onsNummer
+        || String(d.referentie ?? '').trim().toLowerCase() === onsNummer))
+    if (nummerGenoemd) {
+      score += 0.9
+      redenen.push(`Ons eigen nummer ${d.dossiernummer ?? onsNummer} wordt in de mail genoemd`)
     }
     if (pc && d.werkadres_postcode === pc && hn && huisnummerKern(d.werkadres_huisnummer) === hn) {
       score += 0.45
