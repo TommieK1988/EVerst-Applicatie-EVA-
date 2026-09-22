@@ -138,6 +138,12 @@ export interface PromptContext {
     onderwerp: string | null
     bodyTekst: string | null
   }[]
+  /**
+   * EVA had dit bericht als ruis weggezet en een medewerker heeft dat
+   * teruggedraaid. Zonder die wetenschap komt het model tot precies hetzelfde
+   * oordeel en staat het bericht een minuut later weer in het archief.
+   */
+  mensZegtWerk?: boolean
 }
 
 /** Het tekstblok dat vóór de bijlagen komt. */
@@ -149,6 +155,20 @@ export function bouwTekstBlok(ctx: PromptContext): string {
     `${POSTBUS_TOELICHTING[ctx.postbusSoort]} Dat is een aanwijzing, geen garantie: er komt ook ` +
     `andere post binnen.\n</postbus>`,
   )
+
+  // Bovenaan, vóór de mail zelf: het is een correctie op een eerder oordeel en moet
+  // het lezen sturen, niet als voetnoot achteraan meekomen.
+  if (ctx.mensZegtWerk) {
+    delen.push(
+      '<correctie>\n' +
+      'Een medewerker heeft dit bericht eerder uit de bak "geen aanvraag" gehaald en ' +
+      'vastgesteld dat het wél om werk gaat. Ga er dus van uit dat dit een ' +
+      'offerteaanvraag, een opdracht, meerwerk of een servicedeskbon is. Zoek ' +
+      'grondiger dan je anders zou doen — ook in de bijlagen en in de eerdere mails — ' +
+      'en kies de soort die het beste past. Kies niet nogmaals voor overig of ruis.\n' +
+      '</correctie>',
+    )
+  }
 
   delen.push(
     `<email_metadata>\n` +

@@ -6626,6 +6626,7 @@ export type Database = {
           is_automatisch_antwoord: boolean
           laatste_fout: string | null
           mail_naar_sharepoint_op: string | null
+          mens_zegt_werk: boolean
           mail_sharepoint_item_id: string | null
           object_id: string | null
           object_score: number | null
@@ -6680,6 +6681,7 @@ export type Database = {
           is_automatisch_antwoord?: boolean
           laatste_fout?: string | null
           mail_naar_sharepoint_op?: string | null
+          mens_zegt_werk?: boolean
           mail_sharepoint_item_id?: string | null
           object_id?: string | null
           object_score?: number | null
@@ -6734,6 +6736,7 @@ export type Database = {
           is_automatisch_antwoord?: boolean
           laatste_fout?: string | null
           mail_naar_sharepoint_op?: string | null
+          mens_zegt_werk?: boolean
           mail_sharepoint_item_id?: string | null
           object_id?: string | null
           object_score?: number | null

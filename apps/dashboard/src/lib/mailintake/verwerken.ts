@@ -232,6 +232,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       ontvangenOp: geclaimd.ontvangen_op,
       bodyTekst: geclaimd.body_tekst ?? '',
       bekendeRelaties: hulplijst,
+      mensZegtWerk: Boolean(geclaimd.mens_zegt_werk),
     }
 
     log.stap('AI-extractie', { bijlagen: voorAI.length, eerdereMails: eerdere.length })
@@ -496,12 +497,13 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       offerteMatchGevonden,
       offerteMatchHard,
       regie: velden.regie,
-      isAntwoord: Boolean(geclaimd.is_antwoord),
       meerdereWerkadressen: velden.meerdereWerkadressen,
       ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.length > 0,
       dagbudgetOp: budgetOp,
       bouw7Gereed: bouw7.gereed,
       bouw7Ontbreekt: bouw7.ontbreekt,
+      // Uit het archief teruggehaald: de ruis-uitgang blijft dan dicht.
+      mensZegtWerk: Boolean(geclaimd.mens_zegt_werk),
     })
 
     uit.reden = samenvattendeReden(besluit)

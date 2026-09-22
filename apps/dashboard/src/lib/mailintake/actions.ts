@@ -478,14 +478,27 @@ export async function heropenBericht(berichtId: string): Promise<{ ok: boolean; 
   if (!b) return { ok: false, error: 'Bericht niet gevonden.' }
   if (b.dossier_id) return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
 
+  // Terug naar `nieuw` en niet rechtstreeks naar `wacht_op_mens`: jij zegt dat het
+  // werk is, dus EVA hoort het opnieuw te lezen en dít keer door te zoeken tot hij
+  // weet wát het is. Ging het naar Te behandelen zonder herlezing, dan kreeg je een
+  // leeg formulier voorgeschoteld -- precies het bericht dat hij eerder wegzette.
+  //
+  // `mens_zegt_werk` blijft daarna staan. Hij dwingt bij elke volgende ronde dat de
+  // ruis-uitgang dicht is; zonder die vlag komt het model tot hetzelfde oordeel en
+  // staat het bericht een minuut later weer in het archief.
+  const uitArchief = b.status === 'geen_aanvraag'
   await supabase.from('mailintake_berichten').update({
-    status: 'wacht_op_mens', besluit: null, behandeld_door: null, behandeld_op: null,
+    status: uitArchief ? 'nieuw' : 'wacht_op_mens',
+    besluit: null, behandeld_door: null, behandeld_op: null,
+    pogingen: 0, laatste_fout: null,
+    ...(uitArchief ? { mens_zegt_werk: true } : {}),
     updated_at: new Date().toISOString(),
   }).eq('id', berichtId)
 
   await supabase.from('mailintake_besluiten').insert({
     bericht_id: berichtId, actor: 'medewerker', medewerker_id: medewerker.id,
-    actie: 'heropend', details: { vorige_status: b.status },
+    actie: 'heropend',
+    details: { vorige_status: b.status, opnieuw_lezen: uitArchief },
   })
 
   revalidatePath('/mailintake')
