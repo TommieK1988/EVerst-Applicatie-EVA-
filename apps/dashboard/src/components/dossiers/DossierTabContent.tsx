@@ -89,7 +89,7 @@ export async function DossierTabContent({ id, tab, sectie, deel }: Props) {
       {/* Op een servicedeskbon staat boven élke tab waar hij staat, hoe hij afrekent en hoeveel
           van het mandaat op is. Die drie zijn overal even relevant — ook op Facturatie wil je
           zien dat het mandaat bijna op is. */}
-      {sectie === 'servicedesk' && dossier && <ServicedeskBalk dossier={dossier} />}
+      {sectie === 'servicedesk' && dossier && <ServicedeskBalk dossier={dossier} alleenLezen={readOnly} />}
       {await renderTabContent({ id, tab, sectie, deel }, dossier)}
     </DossierReadOnlyProvider>
   )
