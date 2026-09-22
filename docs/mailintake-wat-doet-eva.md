@@ -179,9 +179,32 @@ op, en dat is een fout die pas weken later opvalt.
 ### Het werkadres
 
 Het adres wordt voorgelegd aan de landelijke adresvoorziening (PDOK). Komt het daar niet als
-bestaand adres uit, dan geldt het als **niet bevestigd** en gaat het bericht naar een mens.
-Het huisnummer uit de mail wordt altijd aangehouden — PDOK levert het basisnummer, de mail
-heeft vaak de toevoeging ("12 A", "12-16").
+bestaand adres uit, dan geldt het als **niet bevestigd**. Dat is op zichzelf geen reden meer om
+het bericht naar een mens te sturen: een bon die "Steenlaan te Rijswijk" zonder postcode noemt
+levert geen PDOK-treffer op, terwijl straat en plaats gewoon kloppen. Wat wél tegenhoudt is dat
+er helemaal geen bruikbaar adres in de mail staat. Het huisnummer uit de mail wordt altijd
+aangehouden — PDOK levert het basisnummer, de mail heeft vaak de toevoeging ("12 A", "12-16").
+
+### De mensen om het werk heen
+
+Een opdrachtbon noemt zelden één persoon. EVA houdt er drie soorten uit elkaar:
+
+| Wie | Waar het landt |
+|---|---|
+| De contactpersoon van de opdrachtgever | Op het dossier, bij de klant |
+| Wie je **ter plaatse** belt — de bewoner, de huismeester | Het blok Werkadres: naam, telefoon, e-mail |
+| Alle **overigen** met een rol — technisch manager, opzichter, architect, melder | Het blok Betrokkenen op het Informatie-tabblad |
+
+Die laatste groep wordt alleen toegevoegd als de persoon **al contactpersoon is bij deze
+opdrachtgever**. EVA maakt niemand aan: een naam uit een PDF is niet te controleren, en een
+betrokkene is een verwijzing naar een bestaande contactpersoon en geen los tekstveld. Wordt
+iemand niet teruggevonden — een bewoner bijvoorbeeld — dan blijft hij in de mail staan en wordt
+dat gemeld. Onze eigen collega's komen er nooit in.
+
+Het contact ter plaatse komt vaak alleen in de bijlage voor en niet in de mailtekst. Dat mag:
+is er een bon meegelezen, dan wordt de naam overgenomen met een lagere zekerheid. Eerder werd
+juist dat weggegooid, waardoor het blok Werkadres leeg bleef terwijl de gegevens in de bon
+stonden.
 
 ### Het vastgoedobject
 

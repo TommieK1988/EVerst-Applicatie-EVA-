@@ -638,6 +638,10 @@ export async function keurEnKalibreer(
   // gemeld. De echte poort staat daar; dit is alleen het grofvuil eruit.
   const genoemdePersonen = (data.betrokkenen ?? [])
     .filter(p => (p.naam ?? '').trim().length >= 2)
+    // Een e-mailadres is geen naam. Het model leverde "n.vanvliet@jeugdformaat.nl"
+    // als betrokkene aan; daar is niemand mee geholpen, en matchen op achternaam
+    // doet zoiets ook niet.
+    .filter(p => !p.naam.includes('@'))
     .filter(p => uitBijlage || komtLetterlijkVoor(p.naam, brontekst))
     .slice(0, 10)
     .map(p => ({

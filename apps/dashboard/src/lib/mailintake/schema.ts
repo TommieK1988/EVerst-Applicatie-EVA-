@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-22.3'
+export const PROMPT_VERSIE = '2026-09-22.4'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -226,6 +226,27 @@ export const LEVER_EXTRACTIE_TOOL = {
         description: 'Telefoonnummer van die persoon ter plaatse. Bij meerdere nummers het mobiele.',
       },
       werkadres_contact_email: { type: 'string', description: 'E-mailadres van die persoon ter plaatse.' },
+      betrokkenen: {
+        type: 'array',
+        description:
+          'Alle overige mensen die in de mail of de bijlagen genoemd worden, met hun rol: de '
+          + 'technisch manager van de VvE, de opzichter namens de corporatie, de architect, de '
+          + 'melder van de storing. Neem ze over zoals ze er staan. Zet er niemand bij die je niet '
+          + 'ziet staan, en herhaal de afzender en het contact ter plaatse hier niet. '
+          + 'Laat onze eigen mensen weg: iedereen van Everts of met een @everts-adres hoort hier '
+          + 'niet in. Zet ook nooit een kaal e-mailadres als naam neer; zonder naam laat je de '
+          + 'persoon gewoon weg.',
+        items: {
+          type: 'object',
+          properties: {
+            naam: { type: 'string', description: 'Naam zoals die er staat.' },
+            rol: { type: 'string', description: 'Wat deze persoon met het werk te maken heeft.' },
+            email: { type: 'string', description: 'E-mailadres, als dat erbij staat.' },
+            telefoon: { type: 'string', description: 'Telefoonnummer, als dat erbij staat.' },
+          },
+          required: ['naam'],
+        },
+      },
       referentie: {
         type: 'string',
         description: 'Het kenmerk van de opdrachtgever zelf: inkoopnummer, ordernummer, bonnummer, meldingsnummer.',
