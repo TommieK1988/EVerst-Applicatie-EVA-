@@ -26,6 +26,7 @@ export type DossierRij = Dossier & {
   calculator_naam: string | null
   calculator_kleur: string | null
   uitvoerder_naam: string | null
+  uitvoerder_kleur: string | null
   controller_naam: string | null
   controller_kleur: string | null
   contactpersoon_naam:     string | null

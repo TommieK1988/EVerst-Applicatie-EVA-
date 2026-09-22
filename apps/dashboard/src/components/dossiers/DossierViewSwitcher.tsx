@@ -183,22 +183,27 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   }
 
   // Voor aanvraag/offerte: filter op calculator; voor opdracht/servicedesk: op projectleider
+  // én uitvoerder. Die twee delen bewust één chiprij: je zoekt "wie gaat hierover", niet
+  // "in welke rol staat hij". Een dossier hoort dus bij de chip zodra één van beide matcht.
   const isCalculatorSectie = sectie === 'aanvraag' || sectie === 'offerte'
-  function persoonsNaamVoorFilter(d: DossierRij): string | null {
-    return isCalculatorSectie
-      ? (d.calculator_naam ?? d.werkvoorbereider_naam ?? null)
-      : d.projectleider_naam
+  function persoonsNamenVoorFilter(d: DossierRij): string[] {
+    if (isCalculatorSectie) {
+      const naam = d.calculator_naam ?? d.werkvoorbereider_naam ?? null
+      return naam ? [naam] : []
+    }
+    return [d.projectleider_naam, d.uitvoerder_naam].filter((n): n is string => !!n)
   }
-  function persoonsKleurVoorFilter(d: DossierRij): string | null {
-    return isCalculatorSectie
-      ? (d.calculator_kleur ?? d.werkvoorbereider_kleur ?? null)
-      : d.projectleider_kleur
+  /** Kleur per naam uit hetzelfde dossier — zodat de chip de kleur van de juiste rol krijgt. */
+  function persoonsKleurenVoorFilter(d: DossierRij): Array<[string, string]> {
+    const paren: Array<[string | null, string | null]> = isCalculatorSectie
+      ? [[d.calculator_naam ?? d.werkvoorbereider_naam ?? null,
+          d.calculator_kleur ?? d.werkvoorbereider_kleur ?? null]]
+      : [[d.projectleider_naam, d.projectleider_kleur], [d.uitvoerder_naam, d.uitvoerder_kleur]]
+    return paren.filter((p): p is [string, string] => !!p[0] && !!p[1])
   }
 
   const uniekePLs = React.useMemo(() => {
-    const namen = dossiers
-      .map(d => persoonsNaamVoorFilter(d))
-      .filter((n): n is string => !!n)
+    const namen = dossiers.flatMap(d => persoonsNamenVoorFilter(d))
     // Neem een eventueel voorgeselecteerde naam altijd op, zodat de chip + "Wis filter"
     // zichtbaar zijn — ook als de gebruiker de enige persoon in de lijst is.
     if (mijnNaam) namen.push(mijnNaam)
@@ -209,9 +214,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   const kleurPerLeider = React.useMemo(() => {
     const map: Record<string, string> = {}
     for (const d of dossiers) {
-      const naam = persoonsNaamVoorFilter(d)
-      const kleur = persoonsKleurVoorFilter(d)
-      if (naam && kleur && !map[naam]) map[naam] = kleur
+      for (const [naam, kleur] of persoonsKleurenVoorFilter(d)) {
+        if (!map[naam]) map[naam] = kleur
+      }
     }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,7 +224,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
 
   // Zijn er überhaupt niet-toegewezen dossiers? (bepaalt of de knop getoond wordt)
   const heeftNietToegewezen = React.useMemo(
-    () => dossiers.some(d => !d.intern && persoonsNaamVoorFilter(d) == null),
+    () => dossiers.some(d => !d.intern && persoonsNamenVoorFilter(d).length === 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dossiers, sectie],
   )
@@ -267,10 +272,11 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         && !soorten.includes(isServicedeskDossier(d) ? 'servicedesk' : 'project')) {
         return false
       }
+      const persoonsNamen = persoonsNamenVoorFilter(d)
       if (alleenNietToegewezen) {
-        if (persoonsNaamVoorFilter(d) != null) return false
+        if (persoonsNamen.length > 0) return false
       } else if (geselecteerdeLeiders.length > 0
-        && !geselecteerdeLeiders.includes(persoonsNaamVoorFilter(d) ?? '')) {
+        && !persoonsNamen.some(n => geselecteerdeLeiders.includes(n))) {
         return false
       }
       if (geselecteerdeControllers.length > 0
