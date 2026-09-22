@@ -15,8 +15,91 @@ import { logFout, foutNaarInvoer } from '@/lib/fouten/log'
 import { assertDossierBewerkbaar } from './guards'
 import { plaatsDossierNotitie } from './notities-actions'
 import { updateServicedeskSubstatus } from './actions'
+import { standNaToewijzing, volgendeStap } from '@/components/dossiers/servicedesk/status-stappen'
+import { isMutatieDossier, type ServicedeskSubstatus } from '@/components/dossiers/types'
 
 const MANDAAT_VERHOGING = 'mandaat_verhoging'
+
+/**
+ * Zet de bon een stap verder, en alleen de stap die uit zijn huidige stand volgt.
+ *
+ * De overgang wordt hier opnieuw bepaald in plaats van overgenomen van de client. Een tabblad
+ * dat een half uur openstond kent de stand van toen; zou het de doelstatus meesturen, dan kon
+ * een klik op "Gereedmelden" een bon overschrijven die inmiddels al gefactureerd is. Dit is ook
+ * de enige plek in de servicedeskstroom waar een statusovergang wordt gecontroleerd in plaats
+ * van aangenomen — zie DEVELOPMENT_STANDARDS 6.1.
+ */
+export async function zetVolgendeStap(
+  dossierId: string,
+): Promise<{ ok: true; naar: string; label: string } | { ok: false; error: string }> {
+  await vereisRecht('servicedesk', 'schrijven')
+  await assertDossierBewerkbaar(dossierId)
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('dossiers')
+    .select('servicedesk_substatus')
+    .eq('id', dossierId)
+    .maybeSingle()
+  if (error) {
+    await logFout(foutNaarInvoer(error, { omgeving: 'server', bron: 'servicedesk/volgende-stap' }))
+    return { ok: false, error: 'Kon de bon niet lezen.' }
+  }
+
+  const stap = volgendeStap(data?.servicedesk_substatus as ServicedeskSubstatus | null)
+  if (!stap) {
+    return { ok: false, error: 'Vanuit deze stand is er geen vaste vervolgstap. Ververs de pagina.' }
+  }
+
+  const gezet = await updateServicedeskSubstatus(dossierId, stap.naar)
+  if (!gezet.ok) return { ok: false, error: gezet.error ?? 'Kon de status niet wijzigen.' }
+
+  revalidatePath(`/servicedesk/${dossierId}/bon`)
+  revalidatePath('/servicedesk')
+  return { ok: true, naar: stap.naar, label: stap.label }
+}
+
+/**
+ * Schuift een servicedeskbon door zodra het werk aan iemand is toegewezen.
+ *
+ * Aangeroepen vanuit het versturen van een bestelling en het aanmaken van een planitem — dus
+ * vanuit de dáád, niet vanuit een knop. Iemand die op "Onderaannemerscontract maken" klikt en
+ * halverwege stopt heeft niets uitgezet; de kolom hoort dan niet te verschuiven.
+ *
+ * **Fail-soft en zonder rechtencheck.** De aanroeper heeft zijn eigen poortwachter al gepasseerd
+ * (bestellen en plannen hebben hun eigen rechten) en heeft op dit punt al echt iets gedaan: de
+ * opdracht is gemaild, het planitem staat er. Een mislukte statuswissel mag dat niet alsnog als
+ * fout laten eindigen — de bon staat dan gewoon nog op zijn oude kolom en is met de hand te
+ * verslepen. Hij wordt wel gelogd, want stil verdwijnen is erger dan een verkeerde kolom.
+ */
+export async function meldWerkToegewezen(
+  dossierId: string,
+  soort: 'uitgezet' | 'ingepland',
+): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('dossiers')
+      .select('servicedesk_substatus, bouw7_categorie_naam, categorie')
+      .eq('id', dossierId)
+      .maybeSingle()
+
+    // Geen servicedeskbon: dan heeft deze kolom er niets te zoeken. Opdrachten hebben hun
+    // eigen statusladder en die wordt hier niet aangeraakt.
+    if (!data?.servicedesk_substatus) return
+
+    const naar = standNaToewijzing(soort, {
+      isMutatie: isMutatieDossier(data),
+      substatus: data.servicedesk_substatus as ServicedeskSubstatus,
+    })
+    if (!naar) return
+
+    await updateServicedeskSubstatus(dossierId, naar)
+    revalidatePath('/servicedesk')
+  } catch (e) {
+    await logFout(foutNaarInvoer(e, { omgeving: 'server', bron: 'servicedesk/werk-toegewezen' }))
+  }
+}
 
 /** Waar een bon op terugvalt als zijn vorige stand niet meer te achterhalen is. */
 const TERUGVAL_SUBSTATUS = 'nieuw'

@@ -20,6 +20,7 @@ import { revalidatePath, unstable_cache } from 'next/cache'
 import { after } from 'next/server'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
+import { isMutatieDossier } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, projectstatusCacheVelden, type Bouw7WriteResult } from './bouw7-status'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
@@ -714,10 +715,14 @@ export async function koppelDossierAanProject(
 export async function offerteAkkoordServicedesk(
   dossierId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisRecht('servicedesk', 'schrijven')
+  await assertDossierBewerkbaar(dossierId)
+
   const supabase = createAdminClient() as any
   const { data: dossier, error } = await supabase
     .from('dossiers')
-    .select('everts_calc_project_id, facturatiemethode_handmatig')
+    .select('everts_calc_project_id, facturatiemethode_handmatig, servicedesk_substatus, '
+      + 'bouw7_categorie_naam, categorie')
     .eq('id', dossierId)
     .single()
   if (error) return { ok: false, error: error.message }
@@ -726,9 +731,7 @@ export async function offerteAkkoordServicedesk(
   }
 
   // Aanneemsom + BTW-totaal uit de gegenereerde quote (kan null zijn als nog niet gegenereerd).
-  const patch: Record<string, unknown> = {
-    servicedesk_substatus: 'offerte_uitgebracht',
-  }
+  const patch: Record<string, unknown> = {}
   if (!dossier.facturatiemethode_handmatig) patch.facturatiemethode = 'termijnen'
 
   try {
@@ -744,7 +747,22 @@ export async function offerteAkkoordServicedesk(
   const { error: updFout } = await supabase.from('dossiers').update(patch).eq('id', dossierId)
   if (updFout) return { ok: false, error: updFout.message }
 
-  await logSubstatusHistorie(dossierId, 'offerte_uitgebracht', 'handmatig').catch(() => {})
+  /**
+   * De status ging hier op 'offerte_uitgebracht' — de kolom die "offerte verstuurd" betekent.
+   * Akkoord geven zette de bon dus terug naar de stand waar hij al voorbij was, en op een bon die
+   * al liep sprong hij op het bord naar links.
+   *
+   * Mutatiewerk gaat door naar de werkvoorbereiding; dat is de volgende stap in die ladder.
+   * Bij dagelijks onderhoud blijft de bon staan waar hij staat: akkoord op een offerte zegt
+   * nog niet wie het werk doet. Dat bepaalt de volgende handeling — een opdracht uitzetten of
+   * iemand inplannen — en díé zet de kolom.
+   */
+  if (isMutatieDossier(dossier) && dossier.servicedesk_substatus !== 'in_voorbereiding') {
+    // Via updateServicedeskSubstatus, want die markeert de kolom als handmatig gezet; een
+    // rechtstreekse update zou door de eerstvolgende Bouw7-sync worden overschreven.
+    await updateServicedeskSubstatus(dossierId, 'in_voorbereiding')
+  }
+
   await verwerkDossierTriggers(dossierId).catch(() => {})
   revalidatePath('/servicedesk')
   return { ok: true }

@@ -1,6 +1,8 @@
 import { Suspense } from 'react'
 import { FACTURATIE_LABELS, servicedeskLadder, type DossierRij } from '../types'
 import { MandaatBalk } from './MandaatBalk'
+import StatusStapKnop from './StatusStapKnop'
+import { volgendeStap } from './status-stappen'
 
 /**
  * De vaste strip boven elke tab van een servicedeskbon: waar staat hij, hoe rekent hij af, en
@@ -10,17 +12,19 @@ import { MandaatBalk } from './MandaatBalk'
  * relevant is. Wie op Facturatie kijkt moet net zo goed zien dat het mandaat bijna op is als wie
  * op de Bon staat.
  *
- * De knoppen staan hier bewust níét (op de mandaatknop na, die alleen verschijnt als er iets aan
- * de hand is). Die horen op de Bon-pagina, waar je ze verwacht en waar ruimte is om uit te leggen
- * waarom er eentje uit staat. Zie `BonActies`.
+ * Rechts staat hoogstens één knop: de stap die uit de huidige stand volgt ("Werk gestart",
+ * "Gereedmelden"). Dat is een vaststelling, geen keuze — en hij hoort overal te kunnen, niet
+ * alleen op de Bon. Alles waar wél een keuze in zit staat in het blok op de Bon-pagina, waar
+ * ruimte is om uit te leggen waarom een knop uit staat. Zie `BonActies`.
  */
-export function ServicedeskBalk({ dossier }: { dossier: DossierRij }) {
+export function ServicedeskBalk({ dossier, alleenLezen }: { dossier: DossierRij; alleenLezen: boolean }) {
   const substatus = dossier.servicedesk_substatus ?? null
   const status = substatus
     ? servicedeskLadder(dossier).find(s => s.key === substatus)
     : undefined
 
   const methode = dossier.facturatiemethode === 'termijnen' ? 'termijnen' : 'regie'
+  const stap = volgendeStap(substatus)
 
   return (
     <div style={{
@@ -49,10 +53,11 @@ export function ServicedeskBalk({ dossier }: { dossier: DossierRij }) {
 
       {/* Naar rechts, en pas zichtbaar als er een mandaat is ingevuld. Het ophalen kost een
           Bouw7-ronde, dus achter een Suspense: de balk en de tab eronder staan er meteen. */}
-      <div style={{ marginLeft: 'auto' }}>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 24 }}>
         <Suspense fallback={null}>
           <MandaatBalk dossierId={dossier.id} />
         </Suspense>
+        {stap && !alleenLezen && <StatusStapKnop dossierId={dossier.id} stap={stap} />}
       </div>
     </div>
   )

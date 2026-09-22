@@ -25,6 +25,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
   schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
@@ -1232,6 +1233,9 @@ export async function verstuurBestelling(
     }
     const afroep = await voerAfroepUit(db, bestellingId, soort, Number(rij.bouw7_contract_id), afzender)
     revalidatePath(`/dossiers/${dossierId}`)
+    // De mail ging de vorige keer al; alleen de afroep is nu gelukt. De kolom is toen dus niet
+    // verschoven, dus dat gebeurt hier alsnog.
+    await meldWerkToegewezen(dossierId, 'uitgezet')
     return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
   }
 
@@ -1348,6 +1352,11 @@ export async function verstuurBestelling(
     ['inkooporders', 'oa_contracten'],
     ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
   )
+  // Een servicedeskbon waar werk is uitgezet hoort op de kolom Uitgezet te staan. Hier en niet
+  // bij de knop: pas nu is de opdracht echt de deur uit. Doet niets op een opdracht of op een
+  // mutatiebon, die deze kolom niet kent — zie meldWerkToegewezen.
+  await meldWerkToegewezen(dossierId, 'uitgezet')
+
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
 }
