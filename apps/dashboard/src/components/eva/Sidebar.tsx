@@ -15,9 +15,7 @@ import {
 } from './Icons'
 import type { Tweaks } from './types'
 import type { RechtenModule, RechtenSet } from '@everts/database/platform-types'
-import {
-  SERVICEDESK_GROEPEN, zichtbareServicedeskGroepen, type ServicedeskGroepSlug,
-} from '@/components/dossiers/servicedesk-tabs'
+import { SERVICEDESK_GROEPEN, zichtbareServicedeskGroepen } from '@/components/dossiers/servicedesk-tabs'
 import { magOnderdeelZien, heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { FEATURES } from '@/lib/features'
 import { getDossierToggles, dossierHeeftCalculatie } from '@/lib/dossiers/actions'
@@ -272,18 +270,8 @@ const OPDRACHT_TABS: DossierTab[] = [
  * KAM/VGM staat er bewust niet meer bij: een servicedeskbon kent geen oplevering, en de
  * VCA-onderdelen hoorden bij het werk op een opdracht. Oude links blijven werken.
  */
-const SERVICEDESK_TAB_ICONEN: Record<ServicedeskGroepSlug, string> = {
-  bon:           'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  voorbereiding: OPNAME_ICOON,
-  uitvoering:    'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z',
-  inkoop:        'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z',
-  facturatie:    'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5',
-}
-
 const SERVICEDESK_TABS: DossierTab[] = SERVICEDESK_GROEPEN.map(g => ({
-  slug: g.slug,
-  label: g.label,
-  d: SERVICEDESK_TAB_ICONEN[g.slug],
+  slug: g.slug, label: g.label, d: g.icoon,
 }))
 
 const SECTIE_LABELS: Record<string, string> = {

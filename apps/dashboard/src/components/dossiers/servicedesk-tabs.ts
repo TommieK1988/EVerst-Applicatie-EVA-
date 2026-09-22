@@ -19,6 +19,10 @@
  * rendert nog steeds `InkoopTab`, `VerkoopTab` enzovoort — alleen de weg ernaartoe is korter.
  */
 
+/** Klembord met regels: de opnamelijst. Zelfde pad als in de aanvraag- en opdrachtlijst. */
+const OPNAME_ICOON =
+  'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2M8.5 11h7M8.5 14.5h7M8.5 18h4'
+
 /** De vijf tab-sleutels zoals ze in de URL staan: `/servicedesk/<id>/<slug>`. */
 export type ServicedeskGroepSlug = 'bon' | 'voorbereiding' | 'uitvoering' | 'inkoop' | 'facturatie'
 
@@ -33,6 +37,8 @@ export type ServicedeskDeel = {
 export type ServicedeskGroep = {
   slug: ServicedeskGroepSlug
   label: string
+  /** Het `d`-pad van het zijbalkicoon. Staat hier omdat alles over deze tabs hier staat. */
+  icoon: string
   /** Het eerste deel is waar je landt zonder `?deel=`. */
   delen: readonly ServicedeskDeel[]
   /**
@@ -56,6 +62,7 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
   {
     slug: 'bon',
     label: 'Bon',
+    icoon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     delen: [
       { deel: 'informatie', label: 'Informatie', tab: 'informatie' },
       { deel: 'bestanden',  label: 'Bestanden',  tab: 'bestanden'  },
@@ -70,6 +77,7 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
      */
     slug: 'voorbereiding',
     label: 'Opname & offerte',
+    icoon: OPNAME_ICOON,
     delen: [
       { deel: 'opname',     label: 'Opname',     tab: 'opname'     },
       { deel: 'calculatie', label: 'Calculatie', tab: 'calculatie' },
@@ -79,6 +87,7 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
   {
     slug: 'uitvoering',
     label: 'Uitvoering',
+    icoon: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z',
     delen: [
       { deel: 'planning', label: 'Planning', tab: 'planning' },
       { deel: 'uren',     label: 'Uren',     tab: 'uren'     },
@@ -93,6 +102,7 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
      */
     slug: 'inkoop',
     label: 'Inkoop',
+    icoon: 'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z',
     delen: [
       { deel: 'werkbegroting', label: 'Werkbegroting',   tab: 'werkbegroting' },
       { deel: 'uitvraag',      label: 'Uitvraag',        tab: 'uitvraag'      },
@@ -102,6 +112,7 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
   {
     slug: 'facturatie',
     label: 'Facturatie',
+    icoon: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5',
     delen: [
       { deel: 'verkoop',    label: 'Verkoop',    tab: 'verkoop'    },
       { deel: 'meerwerk',   label: 'Meerwerk',   tab: 'meerwerk'   },
