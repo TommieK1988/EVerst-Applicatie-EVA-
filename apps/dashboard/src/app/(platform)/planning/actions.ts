@@ -703,6 +703,95 @@ export async function verplaatsPlanningItem(
   return { ok: true }
 }
 
+/**
+ * Verlof, ziekte, ATV en feestdagen zijn geen werkzaamheden: die komen uit de
+ * verlofadministratie (medewerker_afwezigheid / Bouw7 day-offs) en horen daar ook
+ * gewijzigd te worden, niet met een knop op een planbalk. Geeft de naam van de
+ * afwezigheidssoort terug als dit planitem er een is, anders `null`.
+ */
+function afwezigheidssoort(
+  uursoort?: { naam?: string | null; uren_categorie?: string | null } | null,
+): string | null {
+  if (!uursoort) return null
+  if (!['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(uursoort.uren_categorie ?? '')) return null
+  return uursoort.naam ?? 'Verlof'
+}
+
+const splitsSchema = z.object({
+  deel1: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0) }),
+  deel2: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0) }),
+})
+
+/**
+ * Knip een planitem in tweeën — bedoeld om een dubbel gepland stuk eruit te halen zonder
+ * de hele klus te verschuiven. Het bestaande item houdt deel 1 (en daarmee zijn werkbonnen,
+ * geschreven uren en Bouw7-koppeling); deel 2 wordt een nieuw EVA-planitem op dezelfde
+ * activiteit en medewerker. Het gat ertussen — de dubbele planning — vervalt.
+ *
+ * Bewust géén budgetcontrole: de aanroeper verdeelt de uren van het origineel over de twee
+ * delen en laat de dubbele uren vervallen, dus het dossiertotaal kan alleen dalen.
+ */
+export async function splitsPlanningItem(
+  id: string,
+  input: z.infer<typeof splitsSchema>,
+): Promise<{ ok: true; nieuwId: string } | { ok: false; error: string }> {
+  await vereisRecht('planning', 'schrijven')
+  const parsed = splitsSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.message }
+  const { deel1, deel2 } = parsed.data
+
+  const supabase = db()
+  const { data: bron, error: bronErr } = await supabase
+    .from('planning_items')
+    .select('activiteit_id, medewerker_id, start_dt, eind_dt, uren, planning_activiteiten!activiteit_id ( dossier_id, planning_uursoorten!uursoort_id ( naam, uren_categorie ) )')
+    .eq('id', id)
+    .maybeSingle()
+  if (bronErr || !bron) return { ok: false, error: bronErr?.message ?? 'Planitem niet gevonden' }
+  await assertDossierBewerkbaar(bron.planning_activiteiten?.dossier_id ?? null)
+
+  const afwezig = afwezigheidssoort(bron.planning_activiteiten?.planning_uursoorten)
+  if (afwezig) {
+    return { ok: false, error: `“${afwezig}” is geen werkzaamheid en kan niet gesplitst worden.` }
+  }
+
+  // Eerst het origineel inkorten, dan pas het tweede deel erbij: staat de insert even in de
+  // weg (bijv. een controle verderop), dan heeft het dossier nooit méér uren gepland staan
+  // dan voor de splitsing.
+  const { error: updErr } = await supabase
+    .from('planning_items')
+    .update({ start_dt: deel1.start_dt, eind_dt: deel1.eind_dt, uren: deel1.uren })
+    .eq('id', id)
+  if (updErr) return { ok: false, error: updErr.message }
+
+  const { data: nieuw, error: insErr } = await supabase
+    .from('planning_items')
+    .insert({
+      activiteit_id: bron.activiteit_id,
+      medewerker_id: bron.medewerker_id,
+      start_dt:      deel2.start_dt,
+      eind_dt:       deel2.eind_dt,
+      uren:          deel2.uren,
+      bron:          'eva',
+    })
+    .select('id')
+    .single()
+
+  if (insErr || !nieuw) {
+    // Het tweede deel is niet weggeschreven; zet het origineel terug zoals het stond,
+    // anders zijn de uren van dat deel stilletjes uit de planning verdwenen.
+    await supabase
+      .from('planning_items')
+      .update({ start_dt: bron.start_dt, eind_dt: bron.eind_dt, uren: bron.uren })
+      .eq('id', id)
+    return { ok: false, error: insErr?.message ?? 'Het tweede deel kon niet aangemaakt worden.' }
+  }
+
+  await spiegelNaarBouw7(id)
+  await spiegelNaarBouw7(nieuw.id)
+  await naPlanningWijziging()
+  return { ok: true, nieuwId: nieuw.id }
+}
+
 export async function verwijderPlanningItem(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -715,13 +804,10 @@ export async function verwijderPlanningItem(
     .maybeSingle()
   if (bron?.planning_activiteiten?.dossier_id) await assertDossierBewerkbaar(bron.planning_activiteiten.dossier_id)
 
-  // Alleen werkzaamheden zijn vanuit de planning te verwijderen. Verlof, ziekte, ATV en
-  // feestdagen komen uit de verlofadministratie (medewerker_afwezigheid / Bouw7 day-offs);
-  // die daar weghalen hoort daar te gebeuren, niet met een prullenbak op een planbalk.
-  const categorie = bron?.planning_activiteiten?.planning_uursoorten?.uren_categorie
-  if (['afwezig', 'feestdag', 'tijd_voor_tijd'].includes(categorie ?? '')) {
-    const soort = bron?.planning_activiteiten?.planning_uursoorten?.naam ?? 'Verlof'
-    return { ok: false, error: `“${soort}” is geen werkzaamheid en kan niet uit de planning verwijderd worden.` }
+  // Alleen werkzaamheden zijn vanuit de planning te verwijderen — zie afwezigheidssoort().
+  const afwezig = afwezigheidssoort(bron?.planning_activiteiten?.planning_uursoorten)
+  if (afwezig) {
+    return { ok: false, error: `“${afwezig}” is geen werkzaamheid en kan niet uit de planning verwijderd worden.` }
   }
 
   // Uit Bouw7 geïmporteerd: eerst dáár de medewerker van het plan-item halen (of het item weg

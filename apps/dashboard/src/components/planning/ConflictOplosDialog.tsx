@@ -2,18 +2,19 @@
 
 import { addDays, eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { AlertTriangle, Check, GripVertical, RotateCcw, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Check, GripVertical, RotateCcw, Scissors, Trash2, X } from 'lucide-react'
 import { useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 
 import type { Medewerker, MedewerkerRooster } from '@everts/database/platform-types'
-import { verplaatsPlanningItem, verwijderPlanningItem } from '@/app/(platform)/planning/actions'
+import { splitsPlanningItem, verplaatsPlanningItem, verwijderPlanningItem } from '@/app/(platform)/planning/actions'
 import { crewKleur } from '@/lib/utils/crew'
 import {
   DAG_MS, berekenConflicten, buitenRooster, clusterVoorConflict,
-  type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
+  type BlokInterval, type ConflictDetail, type EntryMetDossier, type Interval, type WerkInterval,
 } from './conflict'
-import { verschuifTs } from './layout/index'
+import ConflictRegelKaart from './ConflictRegelKaart'
+import ConflictTijdlijn from './ConflictTijdlijn'
 
 const labelStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 700,
@@ -38,6 +39,42 @@ const ZOOM_PRESETS = [
 type Wijziging = { id: string; start_dt: string; eind_dt: string }
 
 type Venster = { vanMs: number; totMs: number; van: Date; tot: Date }
+
+/** Afwijking t.o.v. het opgeslagen planitem. `uren` wijzigt alleen bij een splitsing. */
+type Aanpassing = { start_dt: string; eind_dt: string; uren?: number }
+
+/**
+ * Een stuk dat bij het uitknippen van dubbele planning is overgebleven en bij "Toepassen"
+ * een eigen planitem wordt. `bronId` is het item waaruit het komt (een bestaand planitem,
+ * of — bij nogmaals knippen — een eerder overgebleven stuk). Eén knip kan meerdere stukken
+ * opleveren; die delen dezelfde `knipId`, zodat "Samenvoegen" ze in één keer terugdraait.
+ * `vorigeBron` bewaart hoe de bron erbij stond vóór de knip; `null` = op zijn opgeslagen tijd.
+ */
+type NieuwDeel = {
+  tempId:     string
+  bronId:     string
+  knipId:     string
+  start_dt:   string
+  eind_dt:    string
+  uren:       number
+  vorigeBron: Aanpassing | null
+}
+
+const isTempId = (id: string) => id.startsWith('nieuw:')
+
+/** Het bestaande planitem waar een (keten van) afgesplitste delen uit voortkomt. */
+function wortelVan(bronId: string, delen: NieuwDeel[]): string {
+  let id = bronId
+  for (let stap = 0; stap < 20 && isTempId(id); stap++) {
+    const ouder = delen.find(d => d.tempId === id)
+    if (!ouder) break
+    id = ouder.bronId
+  }
+  return id
+}
+
+/** Uren op twee decimalen; de som van beide delen blijft zo gelijk aan het origineel. */
+const rondUren = (u: number) => Math.round(u * 100) / 100
 
 type Props = {
   medewerker:     Medewerker
@@ -66,17 +103,36 @@ export default function ConflictOplosDialog({
 }: Props) {
   const [isPending, startTransition] = useTransition()
   // Draft: alleen afwijkingen t.o.v. het origineel; opslaan gebeurt pas bij "Toepassen".
-  const [draft, setDraft] = useState<Record<string, { start_dt: string; eind_dt: string }>>({})
+  const [draft, setDraft] = useState<Record<string, Aanpassing>>({})
   // Als verwijderd gemarkeerde planitems — pas bij "Toepassen" gaan ze echt weg.
   const [teVerwijderen, setTeVerwijderen] = useState<string[]>([])
+  // Delen die bij "Toepassen" als nieuw planitem worden weggeschreven (van een splitsing).
+  const [nieuweDelen, setNieuweDelen] = useState<NieuwDeel[]>([])
   const verwijderdSet = useMemo(() => new Set(teVerwijderen), [teVerwijderen])
 
-  const cluster    = useMemo(() => clusterVoorConflict(conflict, conflicten), [conflict, conflicten])
-  const clusterIds = useMemo(() => new Set(cluster.map(e => e.id)), [cluster])
+  const cluster = useMemo(() => clusterVoorConflict(conflict, conflicten), [conflict, conflicten])
+
+  // De nieuwe delen als volwaardige entries: zo tellen ze mee in de conflictberekening,
+  // krijgen ze een eigen baan op de tijdlijn en zijn ze net zo sleepbaar als de rest.
+  const deelEntries = useMemo<EntryMetDossier[]>(
+    () => nieuweDelen.flatMap(deel => {
+      const basis = entriesRij.find(e => e.id === wortelVan(deel.bronId, nieuweDelen))
+      if (!basis) return []
+      return [{ ...basis, id: deel.tempId, start_dt: deel.start_dt, eind_dt: deel.eind_dt, uren: deel.uren }]
+    }),
+    [nieuweDelen, entriesRij],
+  )
+
+  // Alle rijen in dit venster: de conflictcluster plus wat er is afgesplitst.
+  const rijen  = useMemo(() => [...cluster, ...deelEntries], [cluster, deelEntries])
+  const rijIds = useMemo(() => new Set(rijen.map(e => e.id)), [rijen])
 
   const draftEntries = useMemo(
-    () => entriesRij.map(e => (draft[e.id] ? { ...e, ...draft[e.id] } : e)),
-    [entriesRij, draft],
+    () => [
+      ...entriesRij.map(e => (draft[e.id] ? { ...e, ...draft[e.id] } : e)),
+      ...deelEntries,
+    ],
+    [entriesRij, draft, deelEntries],
   )
 
   // Wat er ná de draft overblijft: verwijderde items tellen niet meer mee in de
@@ -95,13 +151,16 @@ export default function ConflictOplosDialog({
   )
 
   const raaktCluster = (c: ConflictDetail) =>
-    clusterIds.has(c.a.id) || (c.soort === 'overlap' && clusterIds.has(c.b.id))
+    rijIds.has(c.a.id) || (c.soort === 'overlap' && rijIds.has(c.b.id))
 
   const resterend = draftConflicten.filter(raaktCluster)
   const opgelost  = resterend.length === 0
-  // Een verwijderd item telt als één wijziging; een verschuiving eronder vervalt dan.
+  // Een verwijderd item telt als één wijziging; een verschuiving eronder vervalt dan. Een
+  // splitsing telt ook als één: de verschuiving van het oorspronkelijke item hoort erbij.
+  const bronVanSplitsing = useMemo(() => new Set(nieuweDelen.map(d => d.bronId)), [nieuweDelen])
   const aantalWijzigingen =
-    Object.keys(draft).filter(id => !verwijderdSet.has(id)).length + teVerwijderen.length
+    Object.keys(draft).filter(id => !verwijderdSet.has(id) && !bronVanSplitsing.has(id)).length
+    + teVerwijderen.length + nieuweDelen.length
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -121,17 +180,155 @@ export default function ConflictOplosDialog({
 
   const draftVan = (id: string) => draftEntries.find(e => e.id === id)!
 
-  function zetDraft(id: string, start: Date, eind: Date) {
-    setDraft(prev => ({ ...prev, [id]: { start_dt: start.toISOString(), eind_dt: eind.toISOString() } }))
+  /** Nieuwe tijden voor een rij — een afgesplitst deel leeft in `nieuweDelen`, de rest in `draft`. */
+  function zetTijden(id: string, start: Date, eind: Date) {
+    const start_dt = start.toISOString()
+    const eind_dt  = eind.toISOString()
+    if (isTempId(id)) {
+      setNieuweDelen(prev => prev.map(d => (d.tempId === id ? { ...d, start_dt, eind_dt } : d)))
+      return
+    }
+    setDraft(prev => ({ ...prev, [id]: { ...prev[id], start_dt, eind_dt } }))
   }
 
-  /** Markeer voor verwijdering; een eventuele verschuiving eronder heeft dan geen zin meer. */
+  /**
+   * Markeer voor verwijdering; een eventuele verschuiving eronder heeft dan geen zin meer.
+   * Was er van dit item iets afgeknipt, dan vervalt dat ook: het hele item gaat weg, dus
+   * er is niets meer om los te plannen.
+   */
   function markeerVerwijderen(id: string) {
     setTeVerwijderen(prev => (prev.includes(id) ? prev : [...prev, id]))
     setDraft(prev => { const rest = { ...prev }; delete rest[id]; return rest })
+    setNieuweDelen(prev => prev.filter(deel => wortelVan(deel.bronId, prev) !== id))
   }
   function herstelVerwijderen(id: string) {
     setTeVerwijderen(prev => prev.filter(x => x !== id))
+  }
+
+  // ─── Splitsen ───────────────────────────────────────────────────────────────
+
+  /**
+   * Wat er van dit item overblijft als je alle dubbel geplande stukken eruit knipt: de
+   * botsingen (met ander werk én met verlof/feestdag) samengevoegd tot aaneengesloten
+   * blokken, en daartussen de stukken die wél vrij staan. Staat het hele item dubbel,
+   * dan blijven er nul stukken over.
+   */
+  function knipPlan(id: string): { stukken: Interval[]; dubbelMs: number } | null {
+    const d = draftVan(id)
+    if (!d) return null
+    const s = parseISO(d.start_dt).getTime()
+    const e = parseISO(d.eind_dt).getTime()
+    const botsingen = draftConflicten
+      .filter(c => c.a.id === id || (c.soort === 'overlap' && c.b.id === id))
+      .map(c => ({ s: Math.max(c.s, s), e: Math.min(c.e, e) }))
+      .filter(c => c.s < c.e)
+      .sort((x, y) => x.s - y.s)
+    if (botsingen.length === 0) return null
+
+    // Overlappende botsingen samenvoegen, anders knip je hetzelfde stuk twee keer weg.
+    const samen: Interval[] = []
+    for (const b of botsingen) {
+      const laatste = samen[samen.length - 1]
+      if (laatste && b.s <= laatste.e) laatste.e = Math.max(laatste.e, b.e)
+      else samen.push({ ...b })
+    }
+
+    const stukken: Interval[] = []
+    let cursor = s
+    for (const b of samen) {
+      if (b.s > cursor) stukken.push({ s: cursor, e: b.s })
+      cursor = Math.max(cursor, b.e)
+    }
+    if (cursor < e) stukken.push({ s: cursor, e })
+
+    const dubbelMs = samen.reduce((som, b) => som + (b.e - b.s), 0)
+    return { stukken, dubbelMs }
+  }
+
+  /**
+   * Knip het dubbel geplande stuk uit dit item. Wat vrij stond blijft exact staan — we
+   * schuiven bewust niets door, want dan botst het item even vrolijk met de planning
+   * erna. Ligt de botsing middenin, dan houdt het bestaande planitem het eerste stuk en
+   * wordt elk volgend stuk een eigen planitem.
+   *
+   * De uren gaan naar rato van de duur mee met de stukken; de dubbel geplande uren
+   * vervallen. Dat is de bedoeling: die uren kon de medewerker toch niet maken.
+   */
+  function splitsItem(id: string) {
+    const d    = draftVan(id)
+    const plan = knipPlan(id)
+    if (!d || !plan || plan.stukken.length === 0) {
+      toast.error('Dit item staat helemaal dubbel — verschuif of verwijder het.')
+      return
+    }
+    const s = parseISO(d.start_dt).getTime()
+    const e = parseISO(d.eind_dt).getTime()
+    const urenVan = (stuk: Interval) => rondUren((d.uren * (stuk.e - stuk.s)) / (e - s))
+
+    const [eerste, ...rest] = plan.stukken
+    const knipId     = crypto.randomUUID()
+    const vorigeBron = isTempId(id)
+      ? { start_dt: d.start_dt, eind_dt: d.eind_dt, uren: d.uren }
+      : draft[id] ?? null
+    const eersteStaat: Aanpassing = {
+      start_dt: new Date(eerste.s).toISOString(),
+      eind_dt:  new Date(eerste.e).toISOString(),
+      uren:     urenVan(eerste),
+    }
+
+    // Het bestaande planitem houdt het eerste stuk — en daarmee zijn werkbonnen,
+    // geschreven uren en Bouw7-koppeling.
+    if (isTempId(id)) {
+      setNieuweDelen(prev => prev.map(deel => (deel.tempId === id
+        ? { ...deel, ...eersteStaat, uren: eersteStaat.uren ?? deel.uren }
+        : deel)))
+    } else {
+      setDraft(prev => ({ ...prev, [id]: eersteStaat }))
+    }
+    if (rest.length > 0) {
+      setNieuweDelen(prev => [...prev, ...rest.map(stuk => ({
+        tempId:   `nieuw:${crypto.randomUUID()}`,
+        bronId:   id,
+        knipId,
+        start_dt: new Date(stuk.s).toISOString(),
+        eind_dt:  new Date(stuk.e).toISOString(),
+        uren:     urenVan(stuk),
+        vorigeBron,
+      }))])
+    }
+
+    const dubbeleUren = rondUren((d.uren * plan.dubbelMs) / (e - s))
+    toast.success(`${dubbeleUren.toLocaleString('nl-NL')} uur dubbele planning eruit geknipt`)
+  }
+
+  /**
+   * Knip terugdraaien: alle stukken van diezelfde knip vervallen en het item waar ze uit
+   * komen gaat terug naar hoe het ervoor stond — inclusief de uren die eruit waren geknipt.
+   */
+  function herstelSplitsing(tempId: string) {
+    const deel = nieuweDelen.find(d => d.tempId === tempId)
+    if (!deel) return
+    setNieuweDelen(prev => prev.filter(d => d.knipId !== deel.knipId))
+    if (isTempId(deel.bronId)) {
+      if (!deel.vorigeBron) return
+      const terug = deel.vorigeBron
+      setNieuweDelen(prev => prev.map(d => (d.tempId === deel.bronId
+        ? { ...d, start_dt: terug.start_dt, eind_dt: terug.eind_dt, uren: terug.uren ?? d.uren }
+        : d)))
+      return
+    }
+    setDraft(prev => {
+      const rest = { ...prev }
+      if (deel.vorigeBron) rest[deel.bronId] = deel.vorigeBron
+      else delete rest[deel.bronId]
+      return rest
+    })
+  }
+
+  /** Rij terug naar de opgeslagen stand; wat eruit geknipt was komt er dus weer bij. */
+  function herstelRij(id: string) {
+    setDraft(prev => { const rest = { ...prev }; delete rest[id]; return rest })
+    setNieuweDelen(prev => prev.filter(deel => wortelVan(deel.bronId, prev) !== id))
   }
 
   // ─── Sleepbare tijdlijn ─────────────────────────────────────────────────────
@@ -145,19 +342,19 @@ export default function ConflictOplosDialog({
   // (dat zou de balk onder de cursor laten wegdrijven).
   const [vastVenster, setVastVenster] = useState<Venster | null>(null)
 
-  // Bereik dat de cluster-items (origineel + draft) samen beslaan.
+  // Bereik dat de rijen (origineel + draft + afgesplitste delen) samen beslaan.
   const clusterRange = useMemo(() => {
     let lo = Infinity, hi = -Infinity
-    for (const e of cluster) {
-      const d = draftVan(e.id)
+    for (const e of rijen) {
+      const d = draftVan(e.id) ?? e
       lo = Math.min(lo, parseISO(e.start_dt).getTime(), parseISO(d.start_dt).getTime())
       hi = Math.max(hi, parseISO(e.eind_dt).getTime(), parseISO(d.eind_dt).getTime())
     }
     return { lo, hi }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cluster, draftEntries])
+  }, [rijen, draftEntries])
 
-  // Aantal hele dagen dat de cluster minimaal beslaat — ondergrens voor inzoomen
+  // Aantal hele dagen dat de rijen minimaal beslaan — ondergrens voor inzoomen
   // (je kunt niet krapper dan de betrokken planningen zelf).
   const fitDagen = Math.max(
     1,
@@ -232,7 +429,7 @@ export default function ConflictOplosDialog({
     // Binnen het (bevroren) venster houden zodat de balk zichtbaar blijft.
     const maxStart = Math.max(drag.venster.vanMs, drag.venster.totMs - drag.durMs)
     const newStart = Math.max(drag.venster.vanMs, Math.min(drag.origStartMs + snapped, maxStart))
-    zetDraft(drag.id, new Date(newStart), new Date(newStart + drag.durMs))
+    zetTijden(drag.id, new Date(newStart), new Date(newStart + drag.durMs))
   }
 
   function barPointerUp() {
@@ -242,10 +439,10 @@ export default function ConflictOplosDialog({
     setVastVenster(null)
   }
 
-  // Context: niet-cluster werk-taken die in het venster vallen (om per ongeluk
+  // Context: werk-taken buiten dit venster die in beeld vallen (om per ongeluk
   // erbovenop slepen zichtbaar te maken).
   const contextWerk = actieveEntries.filter(
-    e => !clusterIds.has(e.id)
+    e => !rijIds.has(e.id)
       && parseISO(e.eind_dt).getTime() > venster.vanMs
       && parseISO(e.start_dt).getTime() < venster.totMs,
   )
@@ -273,16 +470,41 @@ export default function ConflictOplosDialog({
         verwijderdOk.push(id)
       }
 
+      // Dan de splitsingen. Op volgorde van knippen, zodat een deel dat uit een eerder
+      // afgesplitst deel komt pas aan de beurt is als dat deel een echt id heeft.
+      const echtId = new Map<string, string>()
+      const gesplitst: string[] = []
+      for (const deel of nieuweDelen) {
+        const bronId = echtId.get(deel.bronId) ?? deel.bronId
+        const bron   = draftVan(deel.bronId)
+        if (isTempId(bronId) || !bron) continue // bron is niet weggeschreven; deel vervalt
+        const result = await splitsPlanningItem(bronId, {
+          deel1: { start_dt: bron.start_dt, eind_dt: bron.eind_dt, uren: bron.uren },
+          deel2: { start_dt: deel.start_dt, eind_dt: deel.eind_dt, uren: deel.uren },
+        })
+        if (!result.ok) {
+          toast.error(`${korteNaam(draftVan(deel.tempId) ?? bron)}: ${result.error}`)
+          onApplied([], verwijderdOk)
+          onClose()
+          return
+        }
+        echtId.set(deel.tempId, result.nieuwId)
+        gesplitst.push(bronId)
+      }
+
       const toegepast: Wijziging[] = []
       for (const [id, w] of Object.entries(draft)) {
         const e = entriesRij.find(x => x.id === id)
-        if (!e || verwijderdSet.has(id)) continue
+        // Een gesplitst item heeft zijn nieuwe tijden al van splitsPlanningItem gekregen.
+        if (!e || verwijderdSet.has(id) || gesplitst.includes(id)) continue
         const result = await verplaatsPlanningItem(id, {
           start_dt:    w.start_dt,
           eind_dt:     w.eind_dt,
           dossier_id:  e.dossier_id ?? '',
           uursoort_id: e.planning_activiteiten?.uursoort_id ?? null,
-          uren:        e.uren,
+          // Na een knip zonder reststuk staan de nieuwe uren in de draft; anders blijven
+          // de uren van het item zelf staan.
+          uren:        w.uren ?? e.uren,
         })
         if (!result.ok) {
           toast.error(`${korteNaam(e)}: ${result.error}`)
@@ -309,6 +531,10 @@ export default function ConflictOplosDialog({
       if (buitenBeeld.length > 0) {
         const e = entriesRij.find(x => x.id === buitenBeeld[0].id)
         toast.success(`${opgelost ? 'Conflict opgelost' : 'Planning aangepast'} — “${e ? korteNaam(e) : 'planitem'}” staat nu op ${fmtKort(parseISO(buitenBeeld[0].start_dt))} (buiten beeld)`)
+      } else if (echtId.size > 0) {
+        toast.success(opgelost
+          ? `Conflict opgelost — ${echtId.size === 1 ? 'het losse deel staat' : 'de losse delen staan'} apart ingepland`
+          : 'Planning aangepast')
       } else if (verwijderdOk.length > 0 && toegepast.length === 0) {
         toast.success(
           verwijderdOk.length === 1
@@ -404,171 +630,30 @@ export default function ConflictOplosDialog({
               </div>
             </div>
 
-            {/* Dag-as */}
-            <div style={{ display: 'flex', marginBottom: 2 }}>
-              <span style={{ width: LABEL_W, flexShrink: 0 }} />
-              <div style={{ position: 'relative', flex: 1, height: 14 }}>
-                {dagenVenster.map((d, i) => (
-                  i % labelElke === 0 ? (
-                    <span key={i} style={{
-                      position: 'absolute', left: `${pct(d.getTime())}%`,
-                      fontSize: 9, color: 'var(--fg-muted)', whiteSpace: 'nowrap', paddingLeft: 3,
-                    }}>
-                      {format(d, 'EEE d', { locale: nl })}
-                    </span>
-                  ) : null
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex' }}>
-              {/* Naamkolom */}
-              <div style={{ width: LABEL_W, flexShrink: 0 }}>
-                {cluster.map((e, i) => (
-                  <div key={e.id} title={titelVan(e)} style={{
-                    height: LANE_H, display: 'flex', alignItems: 'center', gap: 6,
-                    borderBottom: i < cluster.length - 1 ? '1px solid var(--border)' : 'none',
-                    paddingRight: 6,
-                  }}>
-                    <div style={{ width: 9, height: 9, borderRadius: 2, background: kleurVan(e), flexShrink: 0 }} />
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, color: 'var(--fg)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      textDecoration: verwijderdSet.has(e.id) ? 'line-through' : 'none',
-                      opacity: verwijderdSet.has(e.id) ? 0.55 : 1,
-                    }}>
-                      {korteNaam(e)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Tijdlijn met sleepbare balken */}
-              <div
-                ref={stripRef}
-                style={{
-                  position: 'relative', flex: 1, height: cluster.length * LANE_H,
-                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-                  overflow: 'hidden', touchAction: 'none',
-                }}
-              >
-                {/* Dag-achtergrond: buiten rooster grijs, dag-scheidingslijnen */}
-                {dagenVenster.map((d, i) => (
-                  <div key={`dag-${i}`} style={{
-                    position: 'absolute', top: 0, bottom: 0,
-                    left: `${pct(d.getTime())}%`, width: `${(DAG_MS / spanMs) * 100}%`,
-                    background: buitenRooster(d, roosters) ? 'rgba(0,0,0,0.06)' : 'transparent',
-                    borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
-                    zIndex: 0,
-                  }} />
-                ))}
-
-                {/* Uurlijnen (bij inzoomen) */}
-                {uurLijnen.map((t, i) => (
-                  <div key={`uur-${i}`} style={{
-                    position: 'absolute', top: 0, bottom: 0, left: `${pct(t)}%`, width: 0,
-                    borderLeft: '1px dashed var(--border)', opacity: 0.5, zIndex: 0,
-                  }} />
-                ))}
-
-                {/* Blok-periodes (verlof/feestdag/ATV) */}
-                {blokken.filter(b => b.s < venster.totMs && b.e > venster.vanMs).map((b, i) => (
-                  <div key={`blok-${i}`} title={b.label} style={{
-                    position: 'absolute', top: 0, bottom: 0,
-                    left: `${pct(Math.max(b.s, venster.vanMs))}%`,
-                    width: `${pct(Math.min(b.e, venster.totMs)) - pct(Math.max(b.s, venster.vanMs))}%`,
-                    background: 'rgba(248,113,113,0.18)', zIndex: 1,
-                  }} />
-                ))}
-
-                {/* Context: niet-cluster werk als lichte band, over de volle hoogte */}
-                {contextWerk.map(e => {
-                  const s = parseISO(e.start_dt).getTime()
-                  const en = parseISO(e.eind_dt).getTime()
-                  const l = pct(Math.max(s, venster.vanMs))
-                  const w = Math.max(0.5, pct(Math.min(en, venster.totMs)) - l)
-                  return (
-                    <div key={`ctx-${e.id}`} title={`${titelVan(e)} (andere planning)`} style={{
-                      position: 'absolute', top: 0, bottom: 0, left: `${l}%`, width: `${w}%`,
-                      background: 'rgba(100,116,139,0.16)',
-                      borderLeft: '1px dashed rgba(100,116,139,0.5)',
-                      borderRight: '1px dashed rgba(100,116,139,0.5)',
-                      zIndex: 1,
-                    }} />
-                  )
-                })}
-
-                {/* Baan-scheidingslijnen */}
-                {cluster.slice(1).map((_, i) => (
-                  <div key={`lane-${i}`} style={{
-                    position: 'absolute', left: 0, right: 0, top: (i + 1) * LANE_H,
-                    height: 1, background: 'var(--border)', zIndex: 2,
-                  }} />
-                ))}
-
-                {/* Resterende conflicten — rode band over de volle hoogte */}
-                {resterend.filter(c => c.s < venster.totMs && c.e > venster.vanMs).map((c, i) => (
-                  <div key={`seg-${i}`} title="Overlap" style={{
-                    position: 'absolute', top: 0, bottom: 0,
-                    left: `${pct(Math.max(c.s, venster.vanMs))}%`,
-                    width: `${Math.max(0.6, pct(Math.min(c.e, venster.totMs)) - pct(Math.max(c.s, venster.vanMs)))}%`,
-                    background: 'rgba(239,68,68,0.20)',
-                    borderLeft: '1px solid rgba(239,68,68,0.75)',
-                    borderRight: '1px solid rgba(239,68,68,0.75)',
-                    boxShadow: '0 0 7px 1px rgba(239,68,68,0.45)',
-                    pointerEvents: 'none', zIndex: 3,
-                  }} />
-                ))}
-
-                {/* Sleepbare cluster-balken, elk in eigen baan */}
-                {cluster.map((e, i) => {
-                  const d  = draftVan(e.id)
-                  const s  = parseISO(d.start_dt).getTime()
-                  const en = parseISO(d.eind_dt).getTime()
-                  const l  = pct(Math.max(s, venster.vanMs))
-                  const w  = Math.max(1.2, pct(Math.min(en, venster.totMs)) - l)
-                  const actief = sleeptId === e.id
-                  const weg    = verwijderdSet.has(e.id)
-                  return (
-                    <div
-                      key={`bar-${e.id}`}
-                      onPointerDown={weg ? undefined : ev => barPointerDown(ev, e)}
-                      onPointerMove={weg ? undefined : barPointerMove}
-                      onPointerUp={weg ? undefined : barPointerUp}
-                      title={weg
-                        ? `${titelVan(e)}\nWordt verwijderd bij Toepassen`
-                        : `${titelVan(e)} · ${fmt(s)} – ${fmt(en)}\nSleep om te verschuiven`}
-                      style={{
-                        position: 'absolute',
-                        top: i * LANE_H + 6, height: LANE_H - 12,
-                        left: `${l}%`, width: `${w}%`,
-                        borderRadius: 5, background: kleurVan(e),
-                        boxShadow: actief ? '0 4px 14px rgba(0,0,0,0.35)' : '0 1px 2px rgba(0,0,0,0.15)',
-                        cursor: weg ? 'default' : actief ? 'grabbing' : 'grab',
-                        display: 'flex', alignItems: 'center', gap: 2,
-                        paddingLeft: 4, paddingRight: 4, overflow: 'hidden',
-                        userSelect: 'none', touchAction: 'none',
-                        zIndex: actief ? 6 : 5,
-                        outline: actief ? '2px solid rgba(255,255,255,0.8)' : 'none',
-                        opacity: weg ? 0.35 : 1,
-                        filter: weg ? 'grayscale(1)' : 'none',
-                      }}
-                    >
-                      {weg
-                        ? <Trash2 size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />
-                        : <GripVertical size={12} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />}
-                      <span style={{
-                        fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600, color: 'white',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        textDecoration: weg ? 'line-through' : 'none',
-                      }}>
-                        {format(s, 'HH:mm', { locale: nl })}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <ConflictTijdlijn
+              rijen={rijen}
+              draftVan={draftVan}
+              verwijderdSet={verwijderdSet}
+              contextWerk={contextWerk}
+              blokken={blokken}
+              roosters={roosters}
+              resterend={resterend}
+              venster={venster}
+              dagenVenster={dagenVenster}
+              uurLijnen={uurLijnen}
+              spanMs={spanMs}
+              labelElke={labelElke}
+              pct={pct}
+              titelVan={titelVan}
+              korteNaam={korteNaam}
+              kleurVan={kleurVan}
+              fmt={fmt}
+              sleeptId={sleeptId}
+              stripRef={stripRef}
+              barPointerDown={barPointerDown}
+              barPointerMove={barPointerMove}
+              barPointerUp={barPointerUp}
+            />
 
             {/* Statusregel */}
             <div style={{
@@ -584,139 +669,47 @@ export default function ConflictOplosDialog({
 
           {/* Handmatig verschuiven of verwijderen per planitem — precieze tijden en grote sprongen */}
           <div>
-            <label style={labelStyle}>Verschuiven of verwijderen</label>
+            <label style={labelStyle}>Verschuiven, splitsen of verwijderen</label>
             {/* Verlof, ziekte, ATV en feestdagen staan hier bewust niet tussen: die komen uit de
                 verlofadministratie en zijn in dit venster alleen de rode banen op de tijdlijn. */}
             <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: -2, marginBottom: 6 }}>
-              Alleen werkzaamheden. Verlof en feestdagen horen bij de verlofadministratie en zijn hier niet te verwijderen.
+              Splitsen knipt het dubbel geplande stuk eruit en laat de rest staan; die uren vervallen.
+              Verlof en feestdagen horen bij de verlofadministratie en zijn hier niet te wijzigen.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {cluster.map(orig => {
-                const d       = draftVan(orig.id)
-                const startDt = parseISO(d.start_dt)
-                const eindDt  = parseISO(d.eind_dt)
-                const gewijzigd = !!draft[orig.id]
-                const weg       = verwijderdSet.has(orig.id)
-                const zetVelden = (patch: Partial<{ sd: string; st: string; ed: string; et: string }>) => {
-                  const sd = patch.sd ?? format(startDt, 'yyyy-MM-dd')
-                  const st = patch.st ?? format(startDt, 'HH:mm')
-                  const ed = patch.ed ?? format(eindDt,  'yyyy-MM-dd')
-                  const et = patch.et ?? format(eindDt,  'HH:mm')
-                  zetDraft(orig.id, new Date(`${sd}T${st}`), new Date(`${ed}T${et}`))
-                }
-                const verschuifDagen = (dagen: number) => {
-                  setDraft(prev => ({
-                    ...prev,
-                    [orig.id]: { start_dt: verschuifTs(d.start_dt, dagen), eind_dt: verschuifTs(d.eind_dt, dagen) },
-                  }))
-                }
+              {rijen.map(rij => {
+                const d         = draftVan(rij.id)
+                const isDeel    = isTempId(rij.id)
+                const weg       = verwijderdSet.has(rij.id)
+                const knip      = weg ? null : knipPlan(rij.id)
+                // Een deel waar zelf weer iets van is afgeknipt kan niet terug: dan zou het
+                // kind zonder bron achterblijven. Eerst dat kind ongedaan maken.
+                const heeftKind = nieuweDelen.some(deel => deel.bronId === rij.id)
+                // Wat er echt vervallen is: het origineel min wat dit item houdt en min de
+                // uren die naar de reststukken zijn gegaan. Anders tel je die dubbel als verlies.
+                const urenInStukken = nieuweDelen
+                  .filter(deel => deel.bronId === rij.id)
+                  .reduce((som, deel) => som + deel.uren, 0)
                 return (
-                  <div key={orig.id} style={{
-                    border: `1px solid ${weg ? 'rgba(239,68,68,0.5)' : 'var(--border)'}`,
-                    background: weg ? 'rgba(239,68,68,0.06)' : 'transparent',
-                    borderRadius: 8, padding: '10px 12px',
-                    display: 'flex', flexDirection: 'column', gap: 8,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{
-                        width: 10, height: 10, borderRadius: 3, background: kleurVan(orig), flexShrink: 0,
-                        opacity: weg ? 0.4 : 1,
-                      }} />
-                      <div style={{
-                        fontSize: 12, fontWeight: 600, color: 'var(--fg)', minWidth: 0, flex: 1,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        textDecoration: weg ? 'line-through' : 'none',
-                        opacity: weg ? 0.6 : 1,
-                      }}>
-                        {titelVan(orig)}
-                      </div>
-                      <span style={{ fontSize: 10, color: 'var(--fg-muted)', flexShrink: 0 }}>{orig.uren}u</span>
-                      {weg ? (
-                        <button
-                          type="button"
-                          onClick={() => herstelVerwijderen(orig.id)}
-                          className="eva-btn-ghost"
-                          style={{ padding: '2px 6px', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
-                        >
-                          <RotateCcw size={11} /> Herstel
-                        </button>
-                      ) : (
-                        <>
-                          {gewijzigd && (
-                            <button
-                              type="button"
-                              onClick={() => setDraft(prev => { const rest = { ...prev }; delete rest[orig.id]; return rest })}
-                              className="eva-btn-ghost"
-                              style={{ padding: '2px 6px', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
-                            >
-                              <RotateCcw size={11} /> Herstel
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => markeerVerwijderen(orig.id)}
-                            className="eva-btn-ghost"
-                            title="Dit planitem verwijderen in plaats van verschuiven"
-                            style={{
-                              padding: '2px 6px', fontSize: 10, color: '#b91c1c',
-                              display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
-                            }}
-                          >
-                            <Trash2 size={11} /> Verwijderen
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {weg ? (
-                      <div style={{
-                        border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)',
-                        borderRadius: 6, padding: '6px 10px', fontSize: 10, color: 'var(--fg)',
-                      }}>
-                        Wordt verwijderd zodra je op Toepassen klikt.
-                        {orig.bron === 'bouw7' && ' Het item wordt dan ook in Bouw7 weggehaald.'}
-                      </div>
-                    ) : (<>
-
-                    {orig.bron === 'bouw7' && (
-                      <div style={{
-                        border: '1px solid rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.08)',
-                        borderRadius: 6, padding: '6px 10px', fontSize: 10, color: 'var(--fg)',
-                      }}>
-                        Dit item komt uit Bouw7 — een volgende synchronisatie kan deze wijziging overschrijven.
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button type="button" className="eva-btn-ghost" onClick={() => verschuifDagen(-1)}
-                          style={{ padding: '4px 8px', fontSize: 11 }} title="Eén dag eerder">− 1 dag</button>
-                        <button type="button" className="eva-btn-ghost" onClick={() => verschuifDagen(1)}
-                          style={{ padding: '4px 8px', fontSize: 11 }} title="Eén dag later">+ 1 dag</button>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto auto', gap: 6, alignItems: 'end' }}>
-                        <div>
-                          <label style={{ ...labelStyle, marginBottom: 2 }}>Start</label>
-                          <input type="date" className="eva-input" style={{ fontSize: 11, padding: '4px 6px' }}
-                            value={format(startDt, 'yyyy-MM-dd')}
-                            onChange={e => e.target.value && zetVelden({ sd: e.target.value })} />
-                        </div>
-                        <input type="time" className="eva-input" style={{ fontSize: 11, padding: '4px 6px' }}
-                          value={format(startDt, 'HH:mm')}
-                          onChange={e => e.target.value && zetVelden({ st: e.target.value })} />
-                        <div>
-                          <label style={{ ...labelStyle, marginBottom: 2 }}>Eind</label>
-                          <input type="date" className="eva-input" style={{ fontSize: 11, padding: '4px 6px' }}
-                            value={format(eindDt, 'yyyy-MM-dd')}
-                            onChange={e => e.target.value && zetVelden({ ed: e.target.value })} />
-                        </div>
-                        <input type="time" className="eva-input" style={{ fontSize: 11, padding: '4px 6px' }}
-                          value={format(eindDt, 'HH:mm')}
-                          onChange={e => e.target.value && zetVelden({ et: e.target.value })} />
-                      </div>
-                    </div>
-                    </>)}
-                  </div>
+                  <ConflictRegelKaart
+                    key={rij.id}
+                    rij={rij}
+                    d={d}
+                    isDeel={isDeel}
+                    gewijzigd={!isDeel && !!draft[rij.id]}
+                    weg={weg}
+                    heeftKind={heeftKind}
+                    kanSplitsen={!!knip && knip.stukken.length > 0}
+                    geknipteUren={rondUren(rij.uren - d.uren - urenInStukken)}
+                    titel={titelVan(rij)}
+                    kleur={kleurVan(rij)}
+                    zetTijden={zetTijden}
+                    splits={splitsItem}
+                    herstelRij={herstelRij}
+                    herstelSplitsing={herstelSplitsing}
+                    markeerVerwijderen={markeerVerwijderen}
+                    herstelVerwijderen={herstelVerwijderen}
+                  />
                 )
               })}
             </div>
