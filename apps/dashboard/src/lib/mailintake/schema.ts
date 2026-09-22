@@ -19,7 +19,7 @@
 import { z } from 'zod'
 
 /** Bump deze bij elke inhoudelijke wijziging van prompt of schema; landt in `prompt_versie`. */
-export const PROMPT_VERSIE = '2026-09-21.2'
+export const PROMPT_VERSIE = '2026-09-22.1'
 
 const tekst = z.string().trim().min(1).max(2000).nullable().catch(null)
 const korteTekst = z.string().trim().min(1).max(200).nullable().catch(null)
@@ -47,6 +47,12 @@ export const extractieSchema = z.object({
   werkadres_huisnummer: korteTekst,
   werkadres_postcode: korteTekst,
   werkadres_stad: korteTekst,
+  // Wie je ter plaatse belt. Iets anders dan de contactpersoon van de
+  // opdrachtgever: dat is de beheerder op kantoor, dit is de bewoner of de
+  // huismeester die de deur opendoet. Het dossier heeft er een eigen blok voor.
+  werkadres_contact_naam: korteTekst,
+  werkadres_contact_telefoon: korteTekst,
+  werkadres_contact_email: korteTekst,
 
   // ── Kenmerken ──
   referentie: korteTekst,               // hún bestel-/ordernummer
@@ -99,6 +105,7 @@ export type Extractie = z.infer<typeof extractieSchema>
 export const VOORSTEL_VELDEN = [
   'omschrijving', 'klant_naam', 'contactpersoon_naam', 'contactpersoon_email',
   'werkadres_straat', 'werkadres_huisnummer', 'werkadres_postcode', 'werkadres_stad',
+  'werkadres_contact_naam', 'werkadres_contact_telefoon',
   'referentie', 'vve_code', 'categorie_voorstel', 'werkmaatschappij_voorstel',
   'aanvraagdatum', 'deadline', 'bedrag_excl_btw',
 ] as const
@@ -113,6 +120,9 @@ export const VELD_LABELS: Record<string, string> = {
   werkadres_huisnummer:      'Huisnummer',
   werkadres_postcode:        'Postcode',
   werkadres_stad:            'Plaats',
+  werkadres_contact_naam:     'Contact ter plaatse',
+  werkadres_contact_telefoon: 'Telefoon ter plaatse',
+  werkadres_contact_email:    'E-mail ter plaatse',
   referentie:                'Referentie opdrachtgever',
   onze_offerte_referentie:   'Ons offerte-/dossiernummer',
   opdracht_referentie:       'Opdrachtreferentie',
@@ -189,6 +199,18 @@ export const LEVER_EXTRACTIE_TOOL = {
       werkadres_huisnummer: { type: 'string', description: 'Huisnummer inclusief toevoeging.' },
       werkadres_postcode: { type: 'string', description: 'Postcode, formaat 1234 AB.' },
       werkadres_stad: { type: 'string', description: 'Plaatsnaam.' },
+      werkadres_contact_naam: {
+        type: 'string',
+        description:
+          'Naam van degene die ter plaatse te bereiken is: de bewoner, huurder of huismeester. ' +
+          'Staat vaak achter "u kunt ter plaatse contact opnemen met" of "af te stemmen met". ' +
+          'Niet de contactpersoon van de opdrachtgever zelf, en niet de afzender.',
+      },
+      werkadres_contact_telefoon: {
+        type: 'string',
+        description: 'Telefoonnummer van die persoon ter plaatse. Bij meerdere nummers het mobiele.',
+      },
+      werkadres_contact_email: { type: 'string', description: 'E-mailadres van die persoon ter plaatse.' },
       referentie: {
         type: 'string',
         description: 'Het kenmerk van de opdrachtgever zelf: inkoopnummer, ordernummer, bonnummer, meldingsnummer.',

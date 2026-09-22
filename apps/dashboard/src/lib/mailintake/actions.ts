@@ -173,6 +173,38 @@ export async function maakDossierVanBericht(
  * Dat is bewust: dit is de handeling waarvoor de knop bestaat. Wie de mailintake
  * mag behandelen, mag een binnengekomen opdracht verwerken.
  */
+/**
+ * Het werkadres uit de laatst gekeurde lezing van dit bericht.
+ *
+ * Los omdat de opdrachtroute geen adresformulier heeft: het adres komt van de
+ * offerte. Wat de mail erover zegt is aanvulling -- meestal wie je ter plaatse moet
+ * hebben, en dat is precies wat er in het dossier ontbrak.
+ */
+async function leesWerkadresUitLezing(berichtId: string) {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('mailintake_extracties')
+    .select('gekeurde_velden')
+    .eq('bericht_id', berichtId)
+    .eq('ronde', 'velden')
+    .not('gekeurde_velden', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const v = (data?.gekeurde_velden ?? null) as Record<string, string | null> | null
+  if (!v) return null
+  return {
+    straat: v.werkadresStraat ?? null,
+    huisnummer: v.werkadresHuisnummer ?? null,
+    postcode: v.werkadresPostcode ?? null,
+    stad: v.werkadresStad ?? null,
+    naam: v.werkadresNaam ?? null,
+    telefoon: v.werkadresTelefoon ?? null,
+    email: v.werkadresEmail ?? null,
+  }
+}
+
 export async function bevestigOpdrachtOpDossier(
   berichtId: string,
   dossierId: string,
@@ -220,6 +252,10 @@ export async function bevestigOpdrachtOpDossier(
     relatieId: bericht.relatie_id,
     contactpersoonId: bericht.contactpersoon_id,
     forceerBouw7: invoer?.forceerBouw7 === true,
+    // Uit de gekeurde lezing en niet uit het scherm: het opdrachtpaneel toont geen
+    // adresvelden -- het adres komt van de offerte. Wat de mail erover zegt vult
+    // alleen aan wat leeg was, meestal wie je ter plaatse moet hebben.
+    werkadres: await leesWerkadresUitLezing(berichtId),
   })
 
   revalidatePath('/mailintake')

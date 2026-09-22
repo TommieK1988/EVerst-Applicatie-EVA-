@@ -27,6 +27,7 @@ import { bouwOmschrijvingHtml, bouwTitel } from './omschrijving'
 export { bouwTitel }
 import { leesTerugNaAanmaken, type ControleResultaat } from './controle'
 import { haalMailBestand } from './mail-bestand'
+import { vulWerkadresAan } from './werkadres-aanvullen'
 import type { ProefResultaat } from './proef'
 import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -352,6 +353,15 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
         : { fase, fout: faseRes.fout },
     })
   }
+
+  // Het contact ter plaatse. `maakAanvraag` kent die velden niet -- het is het
+  // Werkadres-blok van het dossier, en dat is EVA-eigen. De adresvelden zijn hier
+  // net geschreven, dus er valt alleen nog aan te vullen wat leeg bleef.
+  await vulWerkadresAan(dossierId, {
+    straat: v.werkadresStraat, huisnummer: v.werkadresHuisnummer,
+    postcode: v.werkadresPostcode, stad: v.werkadresStad,
+    naam: v.werkadresNaam, telefoon: v.werkadresTelefoon, email: v.werkadresEmail,
+  }).catch(() => undefined)
 
   // De scope-samenvatting hoort bij het dossier, niet bij het bericht: dit is wat
   // een calculator als eerste leest. Valt terug op wat er bij de intake is

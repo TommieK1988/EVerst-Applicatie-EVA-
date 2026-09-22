@@ -78,6 +78,13 @@ export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
     werkadresStad: s.stad,
     adresBevestigd: s.adresBevestigd,
 
+    // Wie er ter plaatse te bereiken is. Komt uit de lezing en staat niet in dit
+    // formulier: het is het Werkadres-blok van het dossier, en daar hoort het
+    // bijgewerkt te worden als het niet klopt.
+    werkadresNaam: (v.werkadres_contact_naam as string | null) ?? null,
+    werkadresTelefoon: (v.werkadres_contact_telefoon as string | null) ?? null,
+    werkadresEmail: (v.werkadres_contact_email as string | null) ?? null,
+
     referentie: s.referentie.trim() || null,
     onzeReferentie: (v.onze_offerte_referentie as string | null) ?? null,
     vveCode: s.vveCode.trim() || null,

@@ -583,6 +583,12 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
             regie: velden.regie,
             relatieId: afz.relatieId,
             contactpersoonId: afz.contactpersoonId,
+            werkadres: {
+              straat: velden.werkadresStraat, huisnummer: velden.werkadresHuisnummer,
+              postcode: velden.werkadresPostcode, stad: velden.werkadresStad,
+              naam: velden.werkadresNaam, telefoon: velden.werkadresTelefoon,
+              email: velden.werkadresEmail,
+            },
           })
         : { ok: false, error: 'De offerte was bij het uitvoeren niet meer te vinden.' }
 

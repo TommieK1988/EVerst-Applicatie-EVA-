@@ -56,6 +56,19 @@ export interface OpdrachtInvoer {
   relatieId?: string | null
   contactpersoonId?: string | null
   /**
+   * Het werkadres zoals het in de mail stond, inclusief wie er ter plaatse te
+   * bereiken is. Vult op het bestaande dossier alleen de lege velden aan.
+   */
+  werkadres?: {
+    straat: string | null
+    huisnummer: string | null
+    postcode: string | null
+    stad: string | null
+    naam: string | null
+    telefoon: string | null
+    email: string | null
+  } | null
+  /**
    * Bouw7 heeft de substatus intussen zelf omgezet. Alleen true na een expliciete
    * tweede klik van een mens — nooit vanuit de automatische route.
    */
@@ -212,6 +225,24 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   if (Object.keys(velden).length) {
     const { updateDossierInfo } = await import('@/lib/dossiers/actions')
     await updateDossierInfo(inv.dossierId, velden).catch(() => undefined)
+  }
+
+  // ── 4b. Werkadres aanvullen ──────────────────────────────────
+  // Een opdrachtbon noemt bijna altijd wie je ter plaatse moet hebben, en dat stond
+  // nergens in het dossier. Vult alleen lege velden; een adres dat er al staat
+  // blijft staan, want een afwijkend adres in de mail is vaker een tweede locatie
+  // dan een correctie. Zie `werkadres-aanvullen.ts`.
+  const { vulWerkadresAan } = await import('./werkadres-aanvullen')
+  const adres = inv.werkadres
+    ? await vulWerkadresAan(inv.dossierId, inv.werkadres)
+        .catch(() => ({ gevuld: {}, overgeslagen: ['aanvullen mislukt'] }))
+    : { gevuld: {}, overgeslagen: [] }
+
+  if (Object.keys(adres.gevuld).length || adres.overgeslagen.length) {
+    await supabase.from('mailintake_besluiten').insert({
+      bericht_id: inv.berichtId, actor: 'systeem', actie: 'werkadres_aangevuld',
+      details: { dossier_id: inv.dossierId, ...adres } as unknown as Json,
+    })
   }
 
   // ── 5. Notitie met wat de klant erbij schreef ─────────────────────────────

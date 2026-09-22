@@ -295,6 +295,10 @@ export interface GekeurdeVelden {
   werkadresPostcode: string | null
   werkadresStad: string | null
   adresBevestigd: boolean
+  /** Wie er ter plaatse te bereiken is: de bewoner, huurder of huismeester. */
+  werkadresNaam: string | null
+  werkadresTelefoon: string | null
+  werkadresEmail: string | null
   referentie: string | null
   onzeReferentie: string | null
   vveCode: string | null
@@ -540,8 +544,32 @@ export async function keurEnKalibreer(
     : null
   zet('bedrag_excl_btw', bedrag, bedrag != null ? modelScore('bedrag_excl_btw') : 0)
 
+  const isEmail = (w: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(w)
   const email = (data.contactpersoon_email ?? '').trim().toLowerCase()
-  const emailGeldig = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const emailGeldig = isEmail(email)
+
+  // ── Contact ter plaatse ──
+  // Dit gaat naar een dossierveld dat iemand op locatie gaat bellen; een verzonnen
+  // naam of nummer kost een verloren rit. Vandaar dezelfde poort als bij de rest:
+  // het moet letterlijk in de mail of de bijlagen staan.
+  const wpNaam = komtLetterlijkVoor(data.werkadres_contact_naam, brontekst)
+    ? (data.werkadres_contact_naam ?? '').trim().slice(0, 120) || null
+    : null
+  // Alleen de cijfers vergelijken: de bon schrijft "06 - 126 876 43", het model
+  // levert "06-12687643", en dat is hetzelfde nummer.
+  const cijfers = (w: string | null) => (w ?? '').replace(/\D/g, '')
+  const wpTelefoonRuw = (data.werkadres_contact_telefoon ?? '').trim()
+  const wpTelefoon = cijfers(wpTelefoonRuw).length >= 9
+    && cijfers(brontekst).includes(cijfers(wpTelefoonRuw))
+    ? wpTelefoonRuw.slice(0, 40)
+    : null
+  const wpEmailRuw = (data.werkadres_contact_email ?? '').trim().toLowerCase()
+  const wpEmail = isEmail(wpEmailRuw) && brontekst.toLowerCase().includes(wpEmailRuw)
+    ? wpEmailRuw
+    : null
+
+  zet('werkadres_contact_naam', wpNaam, wpNaam ? Math.max(modelScore('werkadres_contact_naam'), 0.85) : 0)
+  zet('werkadres_contact_telefoon', wpTelefoon, wpTelefoon ? 1 : 0)
 
   return {
     omschrijving: data.omschrijving,
@@ -554,6 +582,9 @@ export async function keurEnKalibreer(
     werkadresPostcode: postcode,
     werkadresStad: stad,
     adresBevestigd,
+    werkadresNaam: wpNaam,
+    werkadresTelefoon: wpTelefoon,
+    werkadresEmail: wpEmail,
     referentie: data.referentie,
     onzeReferentie: data.onze_offerte_referentie,
     vveCode: data.vve_code,
