@@ -145,7 +145,7 @@ export default function MailPaneel({
   haalBijlageUrl: (id: string) => Promise<string | null>
 }) {
   return (
-    <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
         <div style={kop}>{bericht.onderwerp ?? '(geen onderwerp)'}</div>
         <div style={zacht}>{bericht.van_naam ?? ''} &lt;{bericht.van_adres ?? 'onbekend'}&gt;</div>

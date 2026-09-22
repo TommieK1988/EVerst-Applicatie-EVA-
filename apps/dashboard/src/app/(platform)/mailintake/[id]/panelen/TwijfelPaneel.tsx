@@ -136,7 +136,7 @@ function FaseKiezer({
 }
 
 export default function TwijfelPaneel({
-  zekerheid, soortLabel, soortVertrouwen, velden, redenVoorleggen, afhandeling,
+  zekerheid, soortLabel, soortVertrouwen, velden, redenen = [], afhandeling,
 }: {
   /** De zekerheid over het geheel, 0 tot 1. */
   zekerheid: number
@@ -144,7 +144,15 @@ export default function TwijfelPaneel({
   soortVertrouwen: number | null
   /** De velden die aandacht vragen, meest onzekere eerst. */
   velden: TwijfelVeld[]
-  redenVoorleggen?: string | null
+  /**
+   * Alles wat EVA ervan weerhield het zelf te doen, in gewone taal.
+   *
+   * Alle regels, niet alleen de eerste. Dit scherm toonde er één, en dat gaf een
+   * vertekend beeld: je loste die ene op, drukte op Aanmaken, en kreeg de
+   * volgende. Sinds `beslis.ts` alles nalóópt in plaats van te stoppen bij het
+   * eerste bezwaar is de hele lijst er -- en dan hoort hij er ook te staan.
+   */
+  redenen?: string[]
   /**
    * Wat je met dit bericht kunt doen. Staat hier en niet bij het formulier, omdat
    * dit de kolom is waar je langsloopt: eerst nakijken wat onzeker is, dan wie het
@@ -156,7 +164,7 @@ export default function TwijfelPaneel({
   const kleur = tint(zekerheid)
 
   return (
-    <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* ── De zekerheid, groot ── */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
         <span style={{
@@ -175,8 +183,22 @@ export default function TwijfelPaneel({
         </div>
       </div>
 
-      {redenVoorleggen && (
-        <p style={{ ...klein, margin: 0 }}>{redenVoorleggen}</p>
+      {/* ── Wat er nog aan mankeert ──
+          Bovenaan en altijd op dezelfde plek: dit is waarom het bericht bij jou
+          ligt, en het bepaalt wat je hieronder moet nalopen. */}
+      {redenen.length > 0 && (
+        <div style={{
+          padding: '8px 10px', borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
+          background: 'var(--wa-50, #fffbeb)', border: '1px solid var(--wa-200, #fde68a)',
+          color: 'var(--wa-900, #78350f)',
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: redenen.length > 1 ? 4 : 0 }}>
+            {redenen.length === 1 ? 'Voorgelegd omdat' : `Voorgelegd om ${redenen.length} redenen`}
+          </div>
+          {redenen.length === 1
+            ? redenen[0]
+            : redenen.map(r => <div key={r} style={{ marginTop: 2 }}>• {r}</div>)}
+        </div>
       )}
 
       {/* ── De velden die aandacht vragen ── */}

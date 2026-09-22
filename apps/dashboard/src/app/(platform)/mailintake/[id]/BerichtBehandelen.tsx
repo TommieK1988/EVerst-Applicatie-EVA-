@@ -39,6 +39,7 @@ import { useWerkmaatschappij } from './panelen/gebruik-werkmaatschappij'
 import { useWerkadres } from './panelen/gebruik-werkadres'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
+import { FormSection } from '@/components/ui/form-field'
 
 type Detail = {
   bericht: any
@@ -383,10 +384,11 @@ export default function BerichtBehandelen({
 
   // ── Weergave ───────────────────────────────────────────────────────────────
 
-  const redenVoorleggen = useMemo(() => {
+  // Alle bezwaren, niet alleen de eerste. Stond op `redenen[0]`, waardoor je er
+  // één oploste, op Aanmaken drukte en de volgende kreeg.
+  const redenen = useMemo<string[]>(() => {
     const laatste = detail.log.find((l: any) => l.actie === 'beoordeeld')
-    const redenen: string[] = laatste?.details?.redenen ?? []
-    return redenen[0] ?? null
+    return laatste?.details?.redenen ?? []
   }, [detail.log])
 
   /** Kortlopende link naar een bijlage, voor de voorbeelden in het mailpaneel. */
@@ -426,31 +428,6 @@ export default function BerichtBehandelen({
     // Zelfde container als de overige overzichtsschermen; zonder deze klasse plakt
     // de driekolomsindeling tegen de schermrand.
     <div className="eva-page-full" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Waarom ligt dit hier? */}
-      {redenVoorleggen && !afgehandeld && (
-        <div style={{
-          padding: '10px 12px', borderRadius: 8, fontSize: 13,
-          background: 'var(--wa-50, #fffbeb)', border: '1px solid var(--wa-200, #fde68a)',
-          color: 'var(--wa-900, #78350f)',
-        }}>
-          <strong>Voorgelegd omdat:</strong> {redenVoorleggen}
-        </div>
-      )}
-      {/* Wat Bouw7 nog mist. Dit is geen detail: zonder klant of vestiging wordt het
-          project daar wél aangemaakt, maar leeg — en dat valt pas weken later op. */}
-      {!afgehandeld && (b.bouw7_ontbreekt?.length ?? 0) > 0 && (
-        <div style={{
-          padding: '10px 12px', borderRadius: 8, fontSize: 13,
-          background: 'var(--da-50, #fef2f2)', border: '1px solid var(--da-200, #fecaca)',
-          color: 'var(--da-900, #7f1d1d)',
-        }}>
-          <strong>Bouw7 kan hier nog geen net project van maken:</strong>
-          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-            {(b.bouw7_ontbreekt as string[]).map((m, i) => <li key={i}>{m}</li>)}
-          </ul>
-        </div>
-      )}
-
       {afgehandeld && (
         <AfgehandeldBalk
           status={b.status}
@@ -478,7 +455,7 @@ export default function BerichtBehandelen({
           zekerheid={kernZekerheid}
           soortLabel={b.soort ? (MAIL_SOORT_LABELS[b.soort as MailSoort] ?? b.soort) : 'Nog niet beoordeeld'}
           soortVertrouwen={b.soort_vertrouwen != null ? Number(b.soort_vertrouwen) : null}
-          redenVoorleggen={redenVoorleggen}
+          redenen={redenen}
           velden={twijfelVelden}
           afhandeling={{
             bewerkbaar, bezig: inActie, compleet,
@@ -498,6 +475,14 @@ export default function BerichtBehandelen({
 
         {/* ── Midden: wat ermee gebeurt ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* ── Midden: het voorstel ──
+            Eén vaste kop op één vaste plek. Daaronder wisselt de inhoud met de
+            route -- een opdracht wint een bestaande offerte, een aanvraag vult een
+            formulier -- maar de kolom staat waar hij staat en heet hoe hij heet.
+            Eerst verdween de hele kaart bij een opdracht en stond er iets anders,
+            waardoor het scherm per bericht een ander scherm leek. */}
+        <div style={kop}>Voorstel</div>
+
         {route === 'offerte_winnen' && !forceerNieuw ? (
           <OpdrachtPaneel
             berichtId={b.id}
@@ -516,37 +501,14 @@ export default function BerichtBehandelen({
           />
         ) : null}
 
-        {route === 'offerte_winnen' && !forceerNieuw && bewerkbaar && (
-          <p style={klein}>
-            Hoort deze opdracht bij geen enkele offerte van ons?{' '}
-            <button
-              onClick={() => setForceerNieuw(true)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
-            >
-              Maak er een nieuw dossier van
-            </button>
-          </p>
-        )}
-
         {(route !== 'offerte_winnen' || forceerNieuw) ? (
-        <Card style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={kop}>Voorstel</div>
-
-          {forceerNieuw && (
-            <p style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
-              EVA stelde voor om een bestaande offerte te winnen. Je maakt hier in plaats
-              daarvan een nieuw dossier.{' '}
-              <button
-                onClick={() => setForceerNieuw(false)}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                         color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
-              >
-                Terug naar de offerte
-              </button>
-            </p>
-          )}
-
+        <Card style={{ padding: 16 }}>
+        {/* Vaste secties in een vaste volgorde. Het waren losse velden achter
+            elkaar; waar iets stond hing af van welke velden er toevallig waren,
+            en dat is precies wat het scherm per bericht anders liet ogen.
+            FormSection komt uit het design system, dus de koppen zien eruit als
+            elk ander formulier in EVA. */}
+        <FormSection title="Opdrachtgever">
           <Veld label="Opdrachtgever" score={zekerheid.klant_naam}>
             {klantId ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -606,6 +568,9 @@ export default function BerichtBehandelen({
             </Veld>
           )}
 
+        </FormSection>
+
+        <FormSection title="Het werk">
           <WerkzaamhedenBlok
             berichtId={b.id}
             opgeslagen={{
@@ -639,6 +604,9 @@ export default function BerichtBehandelen({
             </Veld>
           </div>
 
+        </FormSection>
+
+        <FormSection title="Werkadres">
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
             <Veld label="Straat" score={zekerheid.werkadres_straat}>
               <input style={veldStijl} value={straat} onChange={e => setStraat(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
@@ -657,6 +625,9 @@ export default function BerichtBehandelen({
           </div>
           {adresBevestigd && <span style={{ ...klein, color: 'var(--su-700, #15803d)' }}>Adres bevestigd door de adresservice.</span>}
 
+        </FormSection>
+
+        <FormSection title="Kenmerken">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <Veld label="Referentie klant" score={zekerheid.referentie}>
               <input style={veldStijl} value={referentie} onChange={e => setReferentie(e.target.value)} disabled={!bewerkbaar} />
@@ -723,9 +694,39 @@ export default function BerichtBehandelen({
               </span>
             </label>
           )}
-
+        </FormSection>
         </Card>
         ) : null}
+
+        {/* ── De andere weg ──
+            Altijd onderaan de kolom, welke route je ook hebt. Stond de ene link
+            boven het paneel en de andere binnenin de kaart, waardoor je hem per
+            bericht ergens anders moest zoeken. */}
+        {bewerkbaar && route === 'offerte_winnen' && !forceerNieuw && (
+          <p style={klein}>
+            Hoort deze opdracht bij geen enkele offerte van ons?{' '}
+            <button
+              onClick={() => setForceerNieuw(true)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
+            >
+              Maak er een nieuw dossier van
+            </button>
+          </p>
+        )}
+        {bewerkbaar && forceerNieuw && (
+          <p style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
+            EVA stelde voor om een bestaande offerte te winnen; je maakt hier een nieuw
+            dossier.{' '}
+            <button
+              onClick={() => setForceerNieuw(false)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
+            >
+              Terug naar de offerte
+            </button>
+          </p>
+        )}
 
         {kanTochOfferte && (
           <details
