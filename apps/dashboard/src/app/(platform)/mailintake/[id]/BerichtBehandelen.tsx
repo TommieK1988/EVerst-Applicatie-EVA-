@@ -29,6 +29,7 @@ import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import { FASE_PLAATSINGEN } from '@/components/dossiers/fase-plaatsing'
 import MailPaneel from './panelen/MailPaneel'
 import AfgehandeldBalk from './panelen/AfgehandeldBalk'
+import AndereWeg from './panelen/AndereWeg'
 import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
@@ -202,7 +203,7 @@ export default function BerichtBehandelen({
 
   // De werkmaatschappij volgt uit de categorie en beweegt mee als je die corrigeert.
   // Zie `gebruik-werkmaatschappij.ts`; alleen Bouwkundig Onderhoud blijft twijfel.
-  const { werkmaatschappijId, setWerkmaatschappijId } = useWerkmaatschappij({
+  const { werkmaatschappijId, setWerkmaatschappijId, via: wmVia } = useWerkmaatschappij({
     categorieNaam: gekozenCategorieNaam,
     aard: (velden.aard_van_het_werk as string | null) ?? null,
     werkmaatschappijen,
@@ -247,7 +248,14 @@ export default function BerichtBehandelen({
   const herkendVoorOpdracht = {
     opdrachtgever: klantNaam || null,
     contactpersoonId,
-    contactpersoonNaam: contactpersonen.find(c => c.id === contactpersoonId)?.naam ?? null,
+    // Terugval op de naam die al aan het bericht hangt. Stond alleen de gelezen
+    // lijst, en die komt van een aparte serveraanroep: laadt die traag of faalt
+    // hij, dan zegt het opdrachtpaneel "contactpersoon niet herkend" terwijl er
+    // gewoon een contactpersoon aan hangt.
+    contactpersoonNaam:
+      contactpersonen.find(c => c.id === contactpersoonId)?.naam
+      ?? (b.contactpersoon?.naam as string | undefined)
+      ?? null,
     factuuradres: factuuradresVoorstel,
   }
 
@@ -590,7 +598,14 @@ export default function BerichtBehandelen({
           </Veld>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <Veld label="Werkmaatschappij" score={zekerheid.werkmaatschappij_voorstel}>
+            {/* De zekerheid van het model telt hier niet. Volgt de werkmaatschappij
+                uit de categorie, dan is het een regel en geen gok -- en dan hoort er
+                geen 30% achter een veld dat gewoon klopt. Alleen bij "voorleggen"
+                (Bouwkundig Onderhoud zonder duidelijke aard) blijft het onzeker. */}
+            <Veld
+              label="Werkmaatschappij"
+              score={wmVia === 'categorie' || wmVia === 'aard' ? 1 : zekerheid.werkmaatschappij_voorstel}
+            >
               <select style={veldStijl} value={werkmaatschappijId} onChange={e => setWerkmaatschappijId(e.target.value)} disabled={!bewerkbaar}>
                 <option value="">— kies —</option>
                 {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
@@ -698,35 +713,12 @@ export default function BerichtBehandelen({
         </Card>
         ) : null}
 
-        {/* ── De andere weg ──
-            Altijd onderaan de kolom, welke route je ook hebt. Stond de ene link
-            boven het paneel en de andere binnenin de kaart, waardoor je hem per
-            bericht ergens anders moest zoeken. */}
-        {bewerkbaar && route === 'offerte_winnen' && !forceerNieuw && (
-          <p style={klein}>
-            Hoort deze opdracht bij geen enkele offerte van ons?{' '}
-            <button
-              onClick={() => setForceerNieuw(true)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
-            >
-              Maak er een nieuw dossier van
-            </button>
-          </p>
-        )}
-        {bewerkbaar && forceerNieuw && (
-          <p style={{ ...klein, color: 'var(--wa-700, #b45309)' }}>
-            EVA stelde voor om een bestaande offerte te winnen; je maakt hier een nieuw
-            dossier.{' '}
-            <button
-              onClick={() => setForceerNieuw(false)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                       color: 'hsl(var(--primary))', textDecoration: 'underline', font: 'inherit' }}
-            >
-              Terug naar de offerte
-            </button>
-          </p>
-        )}
+        <AndereWeg
+          bewerkbaar={bewerkbaar}
+          opdrachtroute={route === 'offerte_winnen'}
+          forceerNieuw={forceerNieuw}
+          setForceerNieuw={setForceerNieuw}
+        />
 
         {kanTochOfferte && (
           <details
