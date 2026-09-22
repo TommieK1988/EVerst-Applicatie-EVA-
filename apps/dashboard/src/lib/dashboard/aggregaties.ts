@@ -499,10 +499,12 @@ export type FunnelDimRij = {
 }
 
 export type FunnelData = {
-  // Huidige stand (current-state)
+  // Huidige stand (current-state): momentopname, niet op periode begrensd
   openAanvragen: FunnelTelling
   openOffertes: FunnelTelling
+  /** Uitkomsten van dit kalenderjaar (peilmoment = verzonden_op ?? created_at). */
   gewonnen: FunnelTelling
+  /** Idem: verloren + vervallen van dit kalenderjaar. */
   verloren: FunnelTelling
   winRateAantal: number | null
   winRateWaarde: number | null
@@ -541,6 +543,25 @@ function isVerloren(d: FunnelDossier): boolean {
 /** Heeft minimaal de offertefase bereikt (offerte uitgebracht of opdracht geworden). */
 function bereikteOfferte(d: FunnelDossier): boolean {
   return d.hoofdstatus === 'offerte' || d.hoofdstatus === 'opdracht' || d.verzonden_op != null
+}
+
+/**
+ * Peilmoment van een traject: de verzenddatum van de offerte, en anders het moment waarop
+ * het dossier in EVA kwam.
+ *
+ * Niet alléén `verzonden_op`: opdrachten die rechtstreeks uit Bouw7 binnenkomen hebben die
+ * datum vrijwel nooit (2 van de 130 in sept. 2026), dus daarop filteren zou de winkant
+ * leegmaken. Voor Bouw7-dossiers is `created_at` het moment dat EVA ze leerde kennen — niet
+ * de echte offertedatum, maar wel de enige bruikbare ondergrens.
+ */
+function peilmoment(d: FunnelDossier): string | null {
+  return d.verzonden_op ?? d.created_at
+}
+
+/** Valt het peilmoment op of na `vanafMs`? Dossiers zonder peilmoment tellen niet mee. */
+function beslistVanaf(d: FunnelDossier, vanafMs: number): boolean {
+  const p = peilmoment(d)
+  return p != null && new Date(p).getTime() >= vanafMs
 }
 
 function median(getallen: number[]): number | null {
@@ -592,18 +613,29 @@ export function berekenFunnel(
     return { aantal, waarde }
   }
 
+  // Open standen zijn een momentopname: alles wat nú openstaat telt mee, ongeacht hoe oud het is.
+  // Anders verdwijnt langlopende bewaking (zoals de Gilde-offertes uit 2024/2025) uit beeld.
   const openAanvragen = som(isOpenAanvraag)
   const openOffertes  = som(isOpenOfferte)
-  const gewonnen      = som(isGewonnen)
-  const verloren      = som(isVerloren)
+
+  // Uitkomsten zijn periodecijfers: alleen trajecten met een peilmoment in dit kalenderjaar.
+  // Zonder die grens bepaalt geïmporteerde historie de win-rate van vandaag.
+  const ditJaar = dossiers.filter(d => beslistVanaf(d, jaarStart))
+  const somDitJaar = (pred: (d: FunnelDossier) => boolean): FunnelTelling => {
+    let aantal = 0, waarde = 0
+    for (const d of ditJaar) if (pred(d)) { aantal++; waarde += d.bedrag_excl_btw ?? 0 }
+    return { aantal, waarde }
+  }
+  const gewonnen = somDitJaar(isGewonnen)
+  const verloren = somDitJaar(isVerloren)
 
   const winNoemer = gewonnen.aantal + verloren.aantal
   const winRateAantal = winNoemer > 0 ? (gewonnen.aantal / winNoemer) * 100 : null
   const winNoemerW = gewonnen.waarde + verloren.waarde
   const winRateWaarde = winNoemerW > 0 ? (gewonnen.waarde / winNoemerW) * 100 : null
 
-  // Gemiddelde offertewaarde: over dossiers die de offertefase bereikten en een bedrag hebben.
-  const offerteBedragen = dossiers.filter(d => bereikteOfferte(d) && (d.bedrag_excl_btw ?? 0) > 0).map(d => d.bedrag_excl_btw!)
+  // Gemiddelde offertewaarde: over dossiers van dit jaar die de offertefase bereikten.
+  const offerteBedragen = ditJaar.filter(d => bereikteOfferte(d) && (d.bedrag_excl_btw ?? 0) > 0).map(d => d.bedrag_excl_btw!)
   const gemOffertewaarde = offerteBedragen.length ? offerteBedragen.reduce((s, v) => s + v, 0) / offerteBedragen.length : null
 
   // Periode-cijfers (dit kalenderjaar)
@@ -628,11 +660,12 @@ export function berekenFunnel(
   const pipelinePerFase = [
     { fase: 'Open aanvragen', ...openAanvragen },
     { fase: 'Open offertes',  ...openOffertes },
-    { fase: 'Gewonnen (opdracht)', ...gewonnen },
+    { fase: `Gewonnen (${jaar})`, ...gewonnen },
   ].map(x => ({ fase: x.fase, aantal: x.aantal, waarde: x.waarde }))
 
-  const perFiliaal   = dimRijen(dossiers, d => d.bouw7_filiaal)
-  const perCategorie = dimRijen(dossiers, d => d.categorie)
+  // Breakdowns tonen win/verlies, dus dezelfde periodegrens als de uitkomsten hierboven.
+  const perFiliaal   = dimRijen(ditJaar, d => d.bouw7_filiaal)
+  const perCategorie = dimRijen(ditJaar, d => d.categorie)
 
   // Verliesredenen uit de historie (waar beschikbaar)
   const redenMap = new Map<string, number>()
@@ -695,10 +728,16 @@ export type CalculatorStat = {
   openPipelineWaarde: number  // som bedrag van open offertes
 }
 
+/**
+ * @param nuISO Referentiemoment; win/verlies telt alleen over dit kalenderjaar, net als in
+ *              `berekenFunnel`. De open pipeline blijft een momentopname.
+ */
 export function berekenCalculatorStats(
   dossiers: FunnelDossier[],
   namen: Map<string, { naam: string; kleur: string | null }>,
+  nuISO: string,
 ): CalculatorStat[] {
+  const jaarStart = new Date(new Date(nuISO).getFullYear(), 0, 1).getTime()
   type Acc = {
     offertes: number; gewonnen: number; verloren: number
     gewonnenWaarde: number; offerteBedragen: number[]; doorlooptijden: number[]
@@ -714,12 +753,14 @@ export function berekenCalculatorStats(
     if (!d.calculator_id) continue
     if (!map.has(d.calculator_id)) map.set(d.calculator_id, leeg())
     const a = map.get(d.calculator_id)!
-    if (bereikteOfferte(d)) {
+    // Prestatiecijfers over dit jaar; de open pipeline blijft de actuele stand.
+    const ditJaar = beslistVanaf(d, jaarStart)
+    if (ditJaar && bereikteOfferte(d)) {
       a.offertes++
       if ((d.bedrag_excl_btw ?? 0) > 0) a.offerteBedragen.push(d.bedrag_excl_btw!)
     }
-    if (isGewonnen(d)) { a.gewonnen++; a.gewonnenWaarde += d.bedrag_excl_btw ?? 0 }
-    if (isVerloren(d)) a.verloren++
+    if (ditJaar && isGewonnen(d)) { a.gewonnen++; a.gewonnenWaarde += d.bedrag_excl_btw ?? 0 }
+    if (ditJaar && isVerloren(d)) a.verloren++
     if (isOpenOfferte(d)) a.openPipelineWaarde += d.bedrag_excl_btw ?? 0
     if (d.created_at && d.verzonden_op) {
       const dagen = dagenTussen(d.created_at, d.verzonden_op)

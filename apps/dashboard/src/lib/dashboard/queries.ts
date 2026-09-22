@@ -262,7 +262,7 @@ export async function getFunnelData(nuISO?: string): Promise<FunnelData> {
 }
 
 /** Prestatie-cijfers per calculator (op basis van huidige dossierstand). */
-export async function getCalculatorStats(): Promise<CalculatorStat[]> {
+export async function getCalculatorStats(nuISO?: string): Promise<CalculatorStat[]> {
   const supabase = createAdminClient() as any
   const dossiers = await getFunnelDossiers()
 
@@ -279,7 +279,7 @@ export async function getCalculatorStats(): Promise<CalculatorStat[]> {
       namen.set(m.id, { naam: medNaam(m), kleur: m.kleur ?? null })
     }
   }
-  return berekenCalculatorStats(dossiers, namen)
+  return berekenCalculatorStats(dossiers, namen, nuISO ?? new Date().toISOString())
 }
 
 /* ── Vastgestelde maandsnapshots ──────────────────────────────────── */

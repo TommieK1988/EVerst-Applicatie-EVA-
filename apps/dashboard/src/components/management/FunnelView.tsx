@@ -50,12 +50,12 @@ export default function FunnelView({ funnel }: { funnel: FunnelData }) {
             trend={{ direction: 'flat', value: `${fEurK(f.openOffertes.waarde)} in de markt` }}
           />
           <StatCard
-            label="Gewonnen (opdracht)" tone="success" icon={<Trophy className="h-5 w-5" />}
+            label={`Gewonnen (${f.jaar})`} tone="success" icon={<Trophy className="h-5 w-5" />}
             value={fAantal(f.gewonnen.aantal)}
             trend={{ direction: 'up', value: fEurK(f.gewonnen.waarde) }}
           />
           <StatCard
-            label="Win-rate (indicatief)" tone={f.winRateAantal != null && f.winRateAantal >= 50 ? 'success' : 'warning'}
+            label={`Win-rate (${f.jaar})`} tone={f.winRateAantal != null && f.winRateAantal >= 50 ? 'success' : 'warning'}
             icon={<Percent className="h-5 w-5" />}
             value={f.winRateAantal != null ? `${f.winRateAantal.toFixed(0)}%` : '—'}
             trend={{ direction: 'flat',
@@ -64,9 +64,11 @@ export default function FunnelView({ funnel }: { funnel: FunnelData }) {
           />
         </div>
         <p className="mt-2 text-[11px] italic text-neutral-500">
-          Let op: lopende opdrachten omvatten ook werk van vóór de funnelregistratie in EVA, terwijl verloren offertes
-          pas recent worden bijgehouden. De win-rate is daardoor voorlopig indicatief en wordt betrouwbaarder naarmate
-          het volledige aanvraag→opdracht-traject in EVA wordt vastgelegd.
+          Open aanvragen en offertes zijn de stand van nu, ongeacht hoe oud ze zijn. Gewonnen, verloren en de win-rate
+          tellen alleen trajecten van {f.jaar}, zodat geïmporteerde historie (zoals de oude Gilde-offertes uit
+          2024&nbsp;en&nbsp;2025) de cijfers van dit jaar niet vertekent. Peilmoment is de verzenddatum van de offerte,
+          of anders het moment waarop het dossier in EVA kwam — voor opdrachten die rechtstreeks uit Bouw7 komen is dat
+          het laatste, dus de win-rate blijft indicatief.
         </p>
       </div>
 
