@@ -3358,6 +3358,9 @@ export type Database = {
           everts_calc_project_id: string | null
           facturatiemethode: string
           facturatiemethode_handmatig: boolean
+          regie_bewakingscode: string | null
+          regie_bouw7_chapter_id: number | null
+          regie_bouw7_security_code_id: number | null
           factuuradres_id: string | null
           financieel_gereed_op: string | null
           gearchiveerd: boolean
@@ -3460,6 +3463,9 @@ export type Database = {
           everts_calc_project_id?: string | null
           facturatiemethode?: string
           facturatiemethode_handmatig?: boolean
+          regie_bewakingscode?: string | null
+          regie_bouw7_chapter_id?: number | null
+          regie_bouw7_security_code_id?: number | null
           factuuradres_id?: string | null
           financieel_gereed_op?: string | null
           gearchiveerd?: boolean
@@ -3562,6 +3568,9 @@ export type Database = {
           everts_calc_project_id?: string | null
           facturatiemethode?: string
           facturatiemethode_handmatig?: boolean
+          regie_bewakingscode?: string | null
+          regie_bouw7_chapter_id?: number | null
+          regie_bouw7_security_code_id?: number | null
           factuuradres_id?: string | null
           financieel_gereed_op?: string | null
           gearchiveerd?: boolean

@@ -27,6 +27,9 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
+
+/** De service-role-client zoals `createAdminClient()` hem teruggeeft. */
+type AdminClient = ReturnType<typeof createAdminClient>
 import {
   isServicedeskDossier, REGIE_BEWAKINGSCODE, REGIE_BEWAKINGSCODE_NAAM,
 } from '@/components/dossiers/types'
@@ -76,8 +79,7 @@ export type RegieCodeResultaat =
  * stille mislukking.
  */
 export async function zorgVoorRegieBewakingscode(dossierId: string): Promise<RegieCodeResultaat> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { data } = await supabase.from('dossiers').select(DOSSIER_VELDEN).eq('id', dossierId).maybeSingle()
   const d = data as DossierRij | null
   if (!d) return { ok: false, error: 'Dossier niet gevonden.' }
@@ -86,7 +88,7 @@ export async function zorgVoorRegieBewakingscode(dossierId: string): Promise<Reg
 
 /** De kern, gedeeld door de losse aanroep en de bulkronde; verwacht een al gelezen dossierrij. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function zorgVoorCodeOpRij(supabase: any, d: DossierRij): Promise<RegieCodeResultaat> {
+async function zorgVoorCodeOpRij(supabase: AdminClient, d: DossierRij): Promise<RegieCodeResultaat> {
   // Strikt afbakenen op servicedesk. `facturatiemethode` staat bedrijfsbreed standaard op 'regie'
   // en wordt alleen op een servicedeskbon bewust gezet; op een opdracht is de waarde betekenisloos
   // en zou dit honderden opdrachten een code geven die daar niets betekent.
@@ -113,11 +115,14 @@ async function zorgVoorCodeOpRij(supabase: any, d: DossierRij): Promise<RegieCod
   const code = bestaand || REGIE_BEWAKINGSCODE
   const res = await maakRegieBewakingscodeBouw7(d.id, { code, naam: REGIE_BEWAKINGSCODE_NAAM })
 
-  const velden: Record<string, unknown> = { regie_bewakingscode: code }
+  const velden = {
+    regie_bewakingscode: code,
+    // Chapter- en psl-id alleen zetten als de Bouw7-write slaagde; anders blijven ze leeg en
+    // is aan het dossier te zien dat de code nog nergens staat.
+    ...(res.ok ? { regie_bouw7_chapter_id: res.chapterId, regie_bouw7_security_code_id: res.pslId } : {}),
+  }
   let waarschuwing: string | undefined
   if (res.ok) {
-    velden.regie_bouw7_chapter_id = res.chapterId
-    velden.regie_bouw7_security_code_id = res.pslId
     waarschuwing = res.waarschuwing
   } else {
     waarschuwing = `Kostengroep ${code} in Bouw7 aanmaken mislukt (${res.error}). `
@@ -165,8 +170,7 @@ export type RegieCodeSyncResultaat = {
 export async function zorgVoorRegieBewakingscodes(
   opties?: { dossierId?: string },
 ): Promise<RegieCodeSyncResultaat> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const uit: RegieCodeSyncResultaat = { nieuw: 0, fouten: 0, meerTeDoen: false }
   const meldingen: string[] = []
 
@@ -198,7 +202,7 @@ export async function zorgVoorRegieBewakingscodes(
   const { data, error } = await query
   if (error) return { ...uit, fouten: 1, foutMelding: `dossiers ophalen mislukt: ${error.message}` }
 
-  const rijen = (data ?? []) as DossierRij[]
+  const rijen = (data ?? []) as unknown as DossierRij[]
   uit.meerTeDoen = !opties?.dossierId && rijen.length > MAX_PER_RUN
   for (const d of rijen.slice(0, opties?.dossierId ? rijen.length : MAX_PER_RUN)) {
     try {
