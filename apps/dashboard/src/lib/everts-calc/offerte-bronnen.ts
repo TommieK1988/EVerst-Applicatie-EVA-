@@ -11,14 +11,14 @@
  *    localStorage leefde.
  *  - **Bedrijf/werkmaatschappij**: de werkmaatschappij hoort bij het dossier
  *    (`dossiers.bouw7_filiaal` == `bedrijfsgegevens.naam`); zonder match valt hij
- *    terug op de hoofdorganisatie, zodat `bedrijf.*` nooit leeg is.
+ *    terug op de hoofdorganisatie.
  *
- * Alles is best-effort: een mislukte lookup levert de organisatie-fallback +
- * leeg dossier op, nooit een render-fout.
+ * Alles is best-effort: een mislukte lookup levert een **leeg** bedrijf + leeg dossier op,
+ * nooit een render-fout en nooit verzonnen bedrijfsgegevens (zie `LEEG_BEDRIJF`).
  */
 
 import {
-  BEDRIJF_FALLBACK,
+  LEEG_BEDRIJF,
   LEEG_DOSSIER,
   type BedrijfContext,
   type DossierContext,
@@ -52,7 +52,7 @@ const DOSSIER_SELECT = `
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function bouwBedrijf(row: any): BedrijfContext {
-  if (!row) return { ...BEDRIJF_FALLBACK }
+  if (!row) return { ...LEEG_BEDRIJF }
   const postcode_plaats = [row.adres_postcode, row.adres_plaats].filter(Boolean).join(' ')
   return {
     naam: row.naam ?? '',
@@ -228,6 +228,6 @@ export async function laadBedrijfEnDossier(
 
     return { bedrijf: bouwBedrijf(bedrijfRow), dossier: bouwDossier(dossierRow), dossierRow, bedrijfRow }
   } catch {
-    return { bedrijf: { ...BEDRIJF_FALLBACK }, dossier: LEEG_DOSSIER, dossierRow: null, bedrijfRow: null }
+    return { bedrijf: { ...LEEG_BEDRIJF }, dossier: LEEG_DOSSIER, dossierRow: null, bedrijfRow: null }
   }
 }

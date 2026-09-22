@@ -1368,14 +1368,29 @@ export const STANDAARD_LAYOUT: LayoutContext = {
   papier_orientatie: 'portrait',
 }
 
-export const BEDRIJF_FALLBACK: BedrijfContext = {
-  naam: 'Everts Onderhoud & Renovatie',
-  adres: 'De Star 3',
-  postcode_plaats: '2266 NA Leidschendam',
-  telefoon: '070-3012580',
-  email: 'info@everts.chat',
-  website: 'www.wijzijneverts.nl',
+/**
+ * Lege bedrijfscontext — gebruikt wanneer `bedrijfsgegevens` (nog) niet is ingevuld.
+ *
+ * Bewust leeg en niet gevuld met de gegevens van dit bedrijf. Een terugval op een echte
+ * naam en adres is hier gevaarlijk: de offerte ziet er dan kloppend uit terwijl er het
+ * briefhoofd van een ander bedrijf op staat. Liever een lege briefkop die opvalt dan een
+ * verkeerde die dat niet doet. Zelfde keuze als `LEEG_DOSSIER` hierboven.
+ *
+ * Vul de organisatiegegevens in onder Instellingen → Organisatiegegevens.
+ */
+export const LEEG_BEDRIJF: BedrijfContext = {
+  naam: '',
+  code: '',
+  adres: '',
+  postcode_plaats: '',
+  land: '',
+  telefoon: '',
+  email: '',
+  website: '',
   kvk: '',
   btw: '',
   iban: '',
+  logo_url: '',
+  logo_wit_url: '',
+  is_werkmaatschappij: false,
 }

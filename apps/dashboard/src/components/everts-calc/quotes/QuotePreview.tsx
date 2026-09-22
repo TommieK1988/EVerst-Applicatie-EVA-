@@ -1,5 +1,5 @@
 import type { Quote, QuoteSection, QuoteLine } from '@/lib/everts-calc/types-quotes'
-import { groepeerBtwPerTarief } from '@/lib/everts-calc/quote-renderer'
+import { groepeerBtwPerTarief, LEEG_BEDRIJF } from '@/lib/everts-calc/quote-renderer'
 import { schoonOfferteHtml } from '@/lib/everts-calc/html-naar-ooxml'
 
 export interface BedrijfsInstellingen {
@@ -19,17 +19,6 @@ interface Props {
   quote: Quote
   bedrijf?: BedrijfsInstellingen | null
   briefpapier?: string | null
-}
-
-const BEDRIJF_FALLBACK: BedrijfsInstellingen = {
-  naam: 'Everts Onderhoud & Renovatie',
-  adres: 'De Star 3',
-  postcode_plaats: '2266 NA Leidschendam',
-  telefoon: '070-3012580',
-  email: 'info@everts.chat',
-  kvk: '',
-  btw: '',
-  iban: '',
 }
 
 function euro(n: number) {
@@ -215,7 +204,8 @@ function SectionRows({ section, isIntern }: { section: QuoteSection; isIntern: b
 }
 
 export default function QuotePreview({ quote, bedrijf, briefpapier }: Props) {
-  const b = bedrijf ?? BEDRIJF_FALLBACK
+  // Geen terugval op echte bedrijfsgegevens: zie `LEEG_BEDRIJF` in quote-renderer.
+  const b: BedrijfsInstellingen = bedrijf ?? LEEG_BEDRIJF
   const isIntern = quote.type === 'interne_calculatie'
   const sections = quote.sections ?? []
   const terms = quote.terms ?? []
