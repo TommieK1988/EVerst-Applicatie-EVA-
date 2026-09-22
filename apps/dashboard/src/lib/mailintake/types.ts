@@ -284,6 +284,19 @@ export const POSTVAK_TABS: { key: PostvakTab; label: string }[] = [
   { key: 'alles',         label: 'Alles' },
 ]
 
+/**
+ * Het getal achter een tabblad in het postvak.
+ *
+ * Staat hier en niet in `data.ts`: dat bestand is server-only en het postvak is een
+ * client-component.
+ */
+export interface PostvakTeller {
+  /** Het aantal regels dat je in het tabblad zult zien, dus ná het samenvouwen. */
+  aantal: number
+  /** Er zijn er meer dan er getoond kunnen worden; de teller is een ondergrens. */
+  meer: boolean
+}
+
 export interface PostvakRij {
   id: string
   onderwerp: string | null

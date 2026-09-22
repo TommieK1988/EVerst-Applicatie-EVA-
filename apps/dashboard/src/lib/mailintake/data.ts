@@ -12,9 +12,9 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
-import type { PostbusRij, BijlageRij, PostvakRij, PostvakTab } from './types'
+import type { PostbusRij, BijlageRij, PostvakRij, PostvakTab, PostvakTeller } from './types'
 
-export type { PostvakRij, PostvakTab }
+export type { PostvakRij, PostvakTab, PostvakTeller }
 
 const LIJST_SELECT = `
   id, groep_id, onderwerp, van_naam, van_adres, ontvangen_op, heeft_bijlagen,
@@ -32,25 +32,36 @@ function naam(m: { voornaam?: string | null; achternaam?: string | null } | null
   return n || null
 }
 
+const DAG = 24 * 3600 * 1000
+const gedeeld = (dagen: number) => new Date(Date.now() - dagen * DAG).toISOString()
+
+/**
+ * Welke berichten horen bij dit tabblad?
+ *
+ * Eén definitie, twee lezers: de lijst en de teller boven het tabblad. Dat moet zo
+ * blijven. Toen de teller zijn eigen filter had, stond er "Te behandelen 5" boven
+ * een lijst van drie -- de lijst vouwt mails over dezelfde klus samen tot één regel
+ * en de teller telde losse berichten. Een teller die iets anders belooft dan wat je
+ * ziet, laat je zoeken naar post die er niet is.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function tabFilter<T extends { eq: any; in: any; gte: any }>(q: T, tab: PostvakTab): T {
+  switch (tab) {
+    case 'te_behandelen': return q.eq('status', 'wacht_op_mens')
+    case 'verwerkt':      return q.eq('status', 'verwerkt').gte('behandeld_op', gedeeld(14))
+    case 'geen_aanvraag': return q.eq('status', 'geen_aanvraag').gte('ontvangen_op', gedeeld(30))
+    case 'genegeerd':     return q.eq('status', 'genegeerd')
+    case 'mislukt':       return q.in('status', ['mislukt', 'bezig'])
+    default:
+      // "Alles" is de laatste 30 dagen -- een echt onbegrensde lijst kapt stil af.
+      return q.gte('ontvangen_op', gedeeld(30))
+  }
+}
+
 /** Het postvak voor één tabblad. */
 export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promise<PostvakRij[]> {
   const supabase = createAdminClient()
-  let q = supabase.from('mailintake_berichten').select(LIJST_SELECT)
-
-  switch (tab) {
-    case 'te_behandelen': q = q.eq('status', 'wacht_op_mens'); break
-    case 'verwerkt':
-      q = q.eq('status', 'verwerkt')
-        .gte('behandeld_op', new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString())
-      break
-    case 'geen_aanvraag': q = q.eq('status', 'geen_aanvraag')
-      .gte('ontvangen_op', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()); break
-    case 'genegeerd': q = q.eq('status', 'genegeerd'); break
-    case 'mislukt':   q = q.in('status', ['mislukt', 'bezig']); break
-    default:
-      // "Alles" is de laatste 30 dagen — een echt onbegrensde lijst kapt stil af.
-      q = q.gte('ontvangen_op', new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
-  }
+  const q = tabFilter(supabase.from('mailintake_berichten').select(LIJST_SELECT), tab)
 
   const { data, error } = await q.order('ontvangen_op', { ascending: false }).limit(500)
   // Nooit stil leeg teruggeven. Een kapotte select (bijvoorbeeld een dubbelzinnige
@@ -120,20 +131,49 @@ export async function getPostvakRijen(tab: PostvakTab = 'te_behandelen'): Promis
   }))
 }
 
-/** Tellers voor de tabbladen. */
-export async function getPostvakTellers(): Promise<Record<string, number>> {
+/** Bovengrens per tabblad, gelijk aan die van de lijst. Daarboven staat er "500+". */
+const TELLER_GRENS = 500
+
+/**
+ * Tellers voor de tabbladen: het aantal **regels**, niet het aantal berichten.
+ *
+ * Telt daarom op groep, precies zoals de lijst samenvouwt. Alleen `id` en `groep_id`
+ * over de lijn -- genoeg om te tellen, en niets meer dan dat.
+ */
+export async function getPostvakTellers(): Promise<Record<string, PostvakTeller>> {
   const supabase = createAdminClient()
-  // 'nieuw' en 'bezig' horen erbij: een bericht in de wachtrij staat in geen enkel
-  // tabblad behalve Alles. Blijft de verwerking hangen, dan is dat onzichtbaar --
-  // en onzichtbare post is precies wat deze module hoort te voorkomen.
-  const statussen = ['wacht_op_mens', 'geen_aanvraag', 'genegeerd', 'mislukt', 'nieuw', 'bezig']
-  const uit: Record<string, number> = {}
-  for (const s of statussen) {
-    const { count } = await supabase
-      .from('mailintake_berichten').select('id', { count: 'exact', head: true }).eq('status', s)
-    uit[s] = count ?? 0
+
+  const tel = async (tab: PostvakTab): Promise<PostvakTeller> => {
+    // Eén meer dan de grens ophalen: dan weet je of er nog iets achter zit zonder
+    // een tweede telling.
+    const { data } = await tabFilter(
+      supabase.from('mailintake_berichten').select('id, groep_id'), tab,
+    ).limit(TELLER_GRENS + 1)
+    const rijen = data ?? []
+    const groepen = new Set(rijen.map(r => r.groep_id ?? r.id))
+    return { aantal: Math.min(groepen.size, TELLER_GRENS), meer: rijen.length > TELLER_GRENS }
   }
-  return uit
+
+  const [teBehandelen, geenAanvraag, genegeerd, mislukt] = await Promise.all([
+    tel('te_behandelen'), tel('geen_aanvraag'), tel('genegeerd'), tel('mislukt'),
+  ])
+
+  // De wachtrij hoort er los bij: een bericht op 'nieuw' of 'bezig' staat in geen
+  // enkel tabblad behalve Alles. Blijft de verwerking hangen, dan is dat onzichtbaar
+  // -- en onzichtbare post is precies wat deze module hoort te voorkomen. Hier telt
+  // het bericht zelf en niet de groep: het gaat om werk dat blijft liggen.
+  const { count: wachtrij } = await supabase
+    .from('mailintake_berichten')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['nieuw', 'bezig'])
+
+  return {
+    wacht_op_mens: teBehandelen,
+    geen_aanvraag: geenAanvraag,
+    genegeerd,
+    mislukt,
+    wachtrij: { aantal: wachtrij ?? 0, meer: false },
+  }
 }
 
 export interface DuplicaatWeergave {

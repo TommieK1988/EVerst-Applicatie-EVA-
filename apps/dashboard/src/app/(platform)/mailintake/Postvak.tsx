@@ -9,7 +9,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import { PageHeader, Button, Badge } from '@/components/ui'
 import {
   POSTVAK_TABS, MAIL_SOORT_LABELS, DUPLICAAT_HARD, DUPLICAAT_TWIJFEL, AFZENDER_ONBEKEND,
-  type PostvakRij, type PostvakTab,
+  type PostvakRij, type PostvakTab, type PostvakTeller,
 } from '@/lib/mailintake/types'
 import { haalNuOp } from '@/lib/mailintake/actions'
 
@@ -213,7 +213,7 @@ export default function Postvak({
   rijen, tellers, actieveTab, layouts, user_id, magSchrijven, magBeheren,
 }: {
   rijen: PostvakRij[]
-  tellers: Record<string, number>
+  tellers: Record<string, PostvakTeller>
   actieveTab: PostvakTab
   layouts: GebruikerLayout[]
   user_id: string | null
@@ -224,16 +224,19 @@ export default function Postvak({
   const pathname = usePathname()
   const [bezig, setBezig] = useState(false)
 
-  const wachtrij = (tellers.nieuw ?? 0) + (tellers.bezig ?? 0)
+  const wachtrij = tellers.wachtrij?.aantal ?? 0
 
-  const tellerVoor = (tab: PostvakTab): number | null => {
-    switch (tab) {
-      case 'te_behandelen': return tellers.wacht_op_mens ?? 0
-      case 'geen_aanvraag': return tellers.geen_aanvraag ?? 0
-      case 'genegeerd':     return tellers.genegeerd ?? 0
-      case 'mislukt':       return tellers.mislukt ?? 0
-      default: return null
-    }
+  // Het getal achter een tabblad is het aantal **regels** dat je er zult zien, niet
+  // het aantal berichten: mails over dezelfde klus staan als één regel in de lijst.
+  const tellerVoor = (tab: PostvakTab): string | null => {
+    const t =
+      tab === 'te_behandelen' ? tellers.wacht_op_mens
+      : tab === 'geen_aanvraag' ? tellers.geen_aanvraag
+      : tab === 'genegeerd' ? tellers.genegeerd
+      : tab === 'mislukt' ? tellers.mislukt
+      : null
+    if (!t?.aantal) return null
+    return t.meer ? `${t.aantal}+` : String(t.aantal)
   }
 
   async function nuOphalen() {
