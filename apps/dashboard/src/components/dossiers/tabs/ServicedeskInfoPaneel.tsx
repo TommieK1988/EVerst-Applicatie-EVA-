@@ -62,8 +62,15 @@ export default function ServicedeskInfoPaneel({
 
   async function kiesMethode(m: 'regie' | 'termijnen') {
     setMethode(m)
-    await updateServicedeskInstellingen(dossierId, { facturatiemethode: m })
-    toast.success(`Facturatie op ${FACTURATIE_LABELS[m].toLowerCase()}`)
+    const res = await updateServicedeskInstellingen(dossierId, { facturatiemethode: m })
+    if (!res.ok) { toast.error(res.error); setMethode(methode); return }
+    // Bij regie maakt de server meteen de kostengroep "Regiewerkzaamheden" aan; lukte dat niet, dan
+    // is de methode wél gewijzigd maar valt er nog niets op te boeken. Dat hoort de gebruiker te
+    // weten in plaats van het pas bij het factureren te ontdekken.
+    if (res.waarschuwing) toast.error(res.waarschuwing, { duration: 8000 })
+    else toast.success(`Facturatie op ${FACTURATIE_LABELS[m].toLowerCase()}`)
+    // De kostengroep is nieuw voor elk scherm dat codes toont (werkbegroting, planning, verkoop).
+    if (m === 'regie') router.refresh()
   }
 
   async function offerteMaken() {

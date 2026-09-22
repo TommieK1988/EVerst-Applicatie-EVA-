@@ -11,7 +11,9 @@
  *
  *   • een **meerwerkregel met afrekenwijze `regie`** — daar is expliciet vastgelegd dat er op
  *     werkelijke kosten wordt afgerekend;
- *   • een **stelpost** — die rekent per definitie op werkelijke kosten af.
+ *   • een **stelpost** — die rekent per definitie op werkelijke kosten af;
+ *   • de **regiecode van een servicedeskbon** — een bon op regie is in zijn geheel nacalculatie;
+ *     daar is geen aanneemsom waar iets al in zit. Zie `regie-bewakingscode.ts`.
  *
  * Bij een meerwerkregel geldt daarbovenop dat de klant akkoord moet zijn. Vóór dat akkoord bestaat
  * de bewakingscode nog niet in Bouw7 — die wordt pas bij `akkoord` aangemaakt (zie `meerwerk.ts`),
@@ -28,11 +30,12 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
+import { REGIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
 
 export type FactureerbareCode = {
   bewakingscode: string
-  bron: 'stelpost' | 'meerwerk'
-  /** Id van de stelpost of meerwerkregel waar deze code bij hoort. */
+  bron: 'stelpost' | 'meerwerk' | 'regie'
+  /** Id van de stelpost of meerwerkregel waar deze code bij hoort; bij 'regie' het dossier zelf. */
   bronId: string
   /** Naam zoals hij standaard op de factuur komt. */
   omschrijving: string
@@ -59,7 +62,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const [stelposten, meerwerk] = await Promise.all([
+  const [stelposten, meerwerk, dossier] = await Promise.all([
     supabase
       .from('opdracht_onderdelen')
       .select('id, omschrijving, bewakingscode, in_aanneemsom, in_opdracht, opslag_pct, grondslag, bouw7_chapter_id')
@@ -71,10 +74,33 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       .select('id, omschrijving, bewakingscode, afrekenwijze, is_stelpost, status, opdracht_onderdeel_id, bouw7_chapter_id')
       .eq('dossier_id', dossierId)
       .not('bewakingscode', 'is', null),
+    supabase
+      .from('dossiers')
+      .select('regie_bewakingscode, regie_bouw7_chapter_id')
+      .eq('id', dossierId)
+      .maybeSingle(),
   ])
 
   const uit: FactureerbareCode[] = []
   const gezien = new Set<string>()
+
+  // De regiecode staat vooraan: op een bon die op regie afrekent is dit de hoofdpost, en de rest
+  // (een los meerwerkje) hangt eronder.
+  const d = dossier.data as { regie_bewakingscode: string | null; regie_bouw7_chapter_id: number | null } | null
+  const regieCode = (d?.regie_bewakingscode ?? '').trim()
+  if (regieCode) {
+    gezien.add(regieCode)
+    uit.push({
+      bewakingscode: regieCode,
+      bron: 'regie',
+      bronId: dossierId,
+      omschrijving: REGIE_BEWAKINGSCODE_NAAM,
+      // Een regie-bon heeft geen aanneemsom; er is niets wat "alleen het verschil" kan zijn.
+      alleenVerschil: false,
+      opslagPct: null,
+      inBouw7: d?.regie_bouw7_chapter_id != null,
+    })
+  }
 
   for (const s of (stelposten.data ?? []) as any[]) {
     if (!s.in_opdracht) continue // uitgesloten uit de opdracht: niets te factureren
@@ -120,7 +146,11 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
     })
   }
 
-  return uit.sort((a, b) => a.bewakingscode.localeCompare(b.bewakingscode, 'nl'))
+  // De regiecode bovenaan, de rest op code. Op een regie-bon is dat de post waar alles op staat;
+  // op code sorteren zou hem achter een los meerwerkje zetten.
+  return uit.sort((a, b) =>
+    Number(b.bron === 'regie') - Number(a.bron === 'regie')
+    || a.bewakingscode.localeCompare(b.bewakingscode, 'nl'))
 }
 
 /**

@@ -945,11 +945,21 @@ export async function resolveBewakingscodes(
 // (code × kostensoort), dan voegen we 'm hier toe (begroot 0, read-modify-write) — en zo nodig
 // maken we de code zelf aan via POST /security-code. Daarna re-resolven we de nieuwe PSL-id.
 
-/** Kostensoort → veldnaam in de project-security-links structuur (begroot-bedrag). */
+/**
+ * Kostensoort → veldnaam in de project-security-links structuur (begroot-bedrag).
+ *
+ * De prognose-push raakt alleen 1/3/5 ({@link PROGNOSE_KOSTENSOORTEN}), maar een code kan onder
+ * élke kostensoort kosten ontvangen — een regiecode bij uitstek. Dezelfde volledige tabel staat in
+ * `lib/dossiers/bouw7-bewakingscode.ts`, waar het hercoderen van een geboekte kost hem al jaren
+ * over alle zes gebruikt.
+ */
 const CT_STRUCTUUR_VELD: Record<number, string> = {
   1: 'laborCosts',          // Arbeid
+  2: 'purchaseOrderCosts',  // Inkoop
   3: 'subcontractorCosts',  // Onderaanneming
+  4: 'equipmentCosts',      // Materieel
   5: 'materialCosts',       // Materiaal
+  6: 'wasteCosts',          // Afval
 }
 
 type SecBudgetData = {
@@ -1004,19 +1014,24 @@ async function zorgVoorOntbrekendePsls(
   bouw7Id: string,
   ontbrekend: { code: string; naam: string | null; ct: number }[],
   doelHoofdstukId: number | null,
-): Promise<{ aangemaakt: number; fouten: string[] }> {
-  if (ontbrekend.length === 0) return { aangemaakt: 0, fouten: [] }
+): Promise<{ aangemaakt: number; fouten: string[]; hoofdstukPerCode: Map<string, number | null> }> {
+  if (ontbrekend.length === 0) return { aangemaakt: 0, fouten: [], hoofdstukPerCode: new Map() }
 
   const struct = await client.get<SecObject[]>(`/project/${bouw7Id}/project-security-links`)
   let obj = struct[0]
   if (!obj) { obj = { securityObject: null, securityCodesPerChapters: [] }; struct.push(obj) }
 
-  // Index: code → budgetData-entry die al op het project staat.
+  // Index: code → budgetData-entry die al op het project staat, plus het hoofdstuk waar hij onder
+  // hangt. Dat hoofdstuk gaat mee terug naar de aanroeper: die legt ermee vast dát zijn code in
+  // Bouw7 staat, óók wanneer hij de hoofdstukkeuze hier heeft gelaten.
   const codeEntry = new Map<string, SecBudgetData>()
+  const hoofdstukPerCode = new Map<string, number | null>()
   for (const chap of obj.securityCodesPerChapters) {
     for (const bd of chap.budgetDataPerSecurityCodes ?? []) {
       const c = (bd.securityCode?.code ?? '').trim()
-      if (c) codeEntry.set(c, bd)
+      if (!c) continue
+      codeEntry.set(c, bd)
+      hoofdstukPerCode.set(c, chap.securityCodeChapter?.id ?? null)
     }
   }
 
@@ -1074,6 +1089,7 @@ async function zorgVoorOntbrekendePsls(
         chap.budgetDataPerSecurityCodes = chap.budgetDataPerSecurityCodes ?? []
         chap.budgetDataPerSecurityCodes.push(bd)
         codeEntry.set(code, bd)
+        hoofdstukPerCode.set(code, chap.securityCodeChapter.id)
       } catch (e) { fouten.push(`Code "${code}" aanmaken mislukt: ${e instanceof Error ? e.message : ''}`); continue }
     }
     // Begroot 0 op de ontbrekende kostensoort(en) → PSL ontstaat.
@@ -1081,10 +1097,16 @@ async function zorgVoorOntbrekendePsls(
       const veld = CT_STRUCTUUR_VELD[ct]
       if (!veld) continue
       if (bd[veld] == null) bd[veld] = '0'
-      // Arbeid: Bouw7 eist dat bij laborCosts óók laborHours én laborHourlyRate zijn gezet.
+      // Twee soorten rekenen met uren en eisen dat de uren en het uurtarief erbij staan; zonder
+      // die velden weigert Bouw7 de héle structuur met een 400. Arbeid was bekend, materieel bleek
+      // dezelfde regel te volgen zodra er een PSL op kostensoort 4 werd gevraagd.
       if (ct === 1) {
         if (bd.laborHours == null) bd.laborHours = '0'
         if (bd.laborHourlyRate == null) bd.laborHourlyRate = '0'
+      }
+      if (ct === 4) {
+        if (bd.equipmentHours == null) bd.equipmentHours = '0'
+        if (bd.equipmentHourlyRate == null) bd.equipmentHourlyRate = '0'
       }
       aangemaakt++
     }
@@ -1093,9 +1115,13 @@ async function zorgVoorOntbrekendePsls(
   try {
     await client.post(`/project/${bouw7Id}/project-security-links`, { securityCodeChaptersPerObjects: struct })
   } catch (e) {
-    return { aangemaakt: 0, fouten: [...fouten, `Structuur opslaan mislukt: ${e instanceof Error ? e.message : ''}`] }
+    // Niets bevestigd: de structuur is niet opgeslagen, dus ook de hoofdstukken niet.
+    return {
+      aangemaakt: 0, hoofdstukPerCode: new Map(),
+      fouten: [...fouten, `Structuur opslaan mislukt: ${e instanceof Error ? e.message : ''}`],
+    }
   }
-  return { aangemaakt, fouten }
+  return { aangemaakt, fouten, hoofdstukPerCode }
 }
 
 /** Eén bestaand hoofdstuk (securityCodeChapter) op een project. */
@@ -1151,7 +1177,23 @@ export type MeerwerkBewakingscodeResultaat =
  */
 export async function maakMeerwerkBewakingscodeBouw7(
   dossierId: string,
-  opts: { code: string; naam: string; bedrag?: number | null; kostensoort?: number; hoofdstukId?: number | null },
+  opts: {
+    code: string; naam: string; bedrag?: number | null; kostensoort?: number; hoofdstukId?: number | null
+    /**
+     * Alle kostensoorten waarop de code een PSL moet krijgen. Standaard alleen `kostensoort`.
+     * Meegeven is voor codes die niet op één soort werk slaan maar alles kunnen opvangen — een
+     * regiecode. In één read-modify-write, want drie losse rondjes over
+     * `project-security-links` overschrijven elkaars toevoegingen.
+     */
+    kostensoorten?: number[]
+    /**
+     * `false` slaat het zoeken naar een meerwerk-hoofdstuk over en laat het hoofdstuk aan
+     * `zorgVoorOntbrekendePsls`, die de projectstructuur tóch al ophaalt. Scheelt een call, en
+     * voorkomt dat een code die niets met meerwerk te maken heeft onder het meerwerk-hoofdstuk
+     * belandt — waar hij in de bewaking visueel als meerwerk meetelt.
+     */
+    zoekHoofdstuk?: boolean
+  },
 ): Promise<MeerwerkBewakingscodeResultaat> {
   const ctx = await bouw7Context(dossierId)
   if (!ctx.ok) return ctx
@@ -1159,12 +1201,14 @@ export async function maakMeerwerkBewakingscodeBouw7(
   const code = opts.code.trim()
   if (!code) return { ok: false, error: 'Lege bewakingscode.' }
   const ct = opts.kostensoort ?? 5 // Materiaal als neutrale default-kostensoort.
+  // De prognose (stap 4) hoort bij één soort; de PSL's mogen er meer zijn.
+  const cts = [...new Set([ct, ...(opts.kostensoorten ?? [])])]
 
   // 1. Doelhoofdstuk: expliciet meegegeven → anders een hoofdstuk dat op 'meerwerk'/'MW' lijkt →
   //    anders het eerste. Levert dat niets op (project zónder hoofdstukken), dan blijft het null
   //    en legt `zorgVoorOntbrekendePsls` zelf het hoofdstuk "Totaal" aan — niet afbreken dus.
   let chapterId = opts.hoofdstukId ?? null
-  if (chapterId == null) {
+  if (chapterId == null && opts.zoekHoofdstuk !== false) {
     const hk = await getProjectHoofdstukken(dossierId, { live: true })
     if (hk.ok) {
       const mw = hk.hoofdstukken.find(h => /meerwerk|^mw\b|^mw$/i.test(h.naam.trim()))
@@ -1173,15 +1217,19 @@ export async function maakMeerwerkBewakingscodeBouw7(
   }
 
   // 2. Code + PSL aanmaken (begroot 0) — read-modify-write op de structuur.
-  let maakRes: { aangemaakt: number; fouten: string[] }
+  let maakRes: { aangemaakt: number; fouten: string[]; hoofdstukPerCode: Map<string, number | null> }
   try {
-    maakRes = await zorgVoorOntbrekendePsls(client, bouw7Id, [{ code, naam: opts.naam, ct }], chapterId)
+    maakRes = await zorgVoorOntbrekendePsls(client, bouw7Id, cts.map(c => ({ code, naam: opts.naam, ct: c })), chapterId)
   } catch (e) {
     return { ok: false, error: `Bewakingscode aanmaken mislukt: ${e instanceof Error ? e.message : ''}` }
   }
   if (maakRes.aangemaakt === 0 && maakRes.fouten.length > 0) {
     return { ok: false, error: maakRes.fouten.join(' ') }
   }
+  // Onder welk hoofdstuk de code werkelijk staat. Dat weet `zorgVoorOntbrekendePsls` altijd beter
+  // dan wij: hij kiest het hoofdstuk als wij het openlieten, en vindt een al bestaande code terug
+  // onder het hoofdstuk waar hij toen onder is gezet.
+  chapterId = maakRes.hoofdstukPerCode.get(code) ?? chapterId
 
   // 3. PSL-id teruglezen voor de prognose-write — moet de zojuist aangemaakte PSL zien.
   const resolved = await resolveBewakingscodes(dossierId, { live: true })
@@ -1264,6 +1312,45 @@ export async function maakStelpostBewakingscodeBouw7(
     bedrag: opts.begroot ?? null,
     kostensoort: opts.kostensoort,
     hoofdstukId,
+  })
+}
+
+// ─── Regie: één opvangcode voor een bon die op nacalculatie afrekent ───────────
+
+/** De kostensoorten waarop een regiecode een PSL krijgt: alle zes, zie hieronder. */
+const REGIE_KOSTENSOORTEN = [1, 2, 3, 4, 5, 6]
+
+/**
+ * Maakt de bewakingscode aan waarop een regie-bon zijn werk verzamelt.
+ *
+ * Drie verschillen met een stelpost- of meerwerkcode, alle drie gevolgen van wat regie ís:
+ *
+ *   1. **Geen begroting.** Een regie-bon heeft per definitie geen begroot bedrag — wat het kost,
+ *      blijkt achteraf. Er gaat dus geen prognose mee; de code staat op nul en vult zich met
+ *      werkelijke kosten.
+ *   2. **PSL op álle kostensoorten.** Een stelpost is één soort werk, een regie-bon is dat niet:
+ *      er gaan uren op (1), losse inkoopfacturen (2), een onderaannemer (3), gehuurd materieel (4),
+ *      materiaal (5) en een container (6). Een code zónder PSL op de soort van de boeking is in
+ *      Bouw7 niet te kiezen, en dan belandt die kost alsnog ongecodeerd op het project.
+ *   3. **Geen voorkeurshoofdstuk.** Servicedeskprojecten hebben in de praktijk helemaal geen
+ *      hoofdstukken; zoeken naar "stelpost" of "meerwerk" levert daar niets op, en onder het
+ *      meerwerk-hoofdstuk hoort een regiecode al helemaal niet. De keuze gaat naar
+ *      `zorgVoorOntbrekendePsls`, die de projectstructuur toch al ophaalt en anders het hoofdstuk
+ *      "Totaal" aanlegt.
+ */
+export async function maakRegieBewakingscodeBouw7(
+  dossierId: string,
+  opts: { code: string; naam: string },
+): Promise<MeerwerkBewakingscodeResultaat> {
+  return maakMeerwerkBewakingscodeBouw7(dossierId, {
+    code: opts.code,
+    naam: opts.naam,
+    bedrag: null,
+    // Arbeid is de leidende soort: uren zijn op een regie-bon vrijwel altijd de grootste post,
+    // en het is de PSL die we teruglezen en op het dossier vastleggen.
+    kostensoort: 1,
+    kostensoorten: REGIE_KOSTENSOORTEN,
+    zoekHoofdstuk: false,
   })
 }
 

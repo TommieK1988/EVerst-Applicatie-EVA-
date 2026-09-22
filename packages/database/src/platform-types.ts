@@ -813,6 +813,14 @@ export type Dossier = {
   facturatiemethode: 'regie' | 'termijnen'
   /** true = facturatiemethode handmatig vastgezet; auto-logica overschrijft niet. */
   facturatiemethode_handmatig: boolean
+  /**
+   * Servicedesk op regie: de eigen kostengroep "Regiewerkzaamheden" waarop wordt ingekocht,
+   * uren worden geboekt en de verkoopfactuur van wordt gemaakt. Zie `lib/dossiers/regie-bewakingscode.ts`.
+   * Chapter-id leeg terwijl de code gevuld is = de Bouw7-write is mislukt; de sync probeert opnieuw.
+   */
+  regie_bewakingscode: string | null
+  regie_bouw7_chapter_id: number | null
+  regie_bouw7_security_code_id: number | null
   verzonden_op: string | null
   opmerkingen: string | null
   werkadres_straat: string | null

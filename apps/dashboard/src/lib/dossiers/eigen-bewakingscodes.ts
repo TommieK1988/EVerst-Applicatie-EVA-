@@ -2,7 +2,8 @@
  * dossiers/eigen-bewakingscodes.ts
  *
  * De bewakingscodes die EVA zelf heeft uitgedeeld op een dossier: die van de stelposten in de
- * opdracht en die van het goedgekeurde meerwerk.
+ * opdracht, die van het goedgekeurde meerwerk, en de opvangcode "Regiewerkzaamheden" van een
+ * servicedeskbon die op regie afrekent (zie `regie-bewakingscode.ts`).
  *
  * WAAROM EVA HIER DE BRON IS EN NIET DE BOUW7-SNAPSHOT
  * De werkbegroting leest zijn kostengroepen uit `athena_control`, en die momentopname wordt twee
@@ -21,12 +22,13 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
+import { REGIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
 
 /** Eén door EVA uitgedeelde bewakingscode, met waar hij vandaan komt. */
 export type EigenBewakingscode = {
   code: string
   naam: string
-  soort: 'stelpost' | 'meerwerk'
+  soort: 'stelpost' | 'meerwerk' | 'regie'
 }
 
 /** Statussen waarin meerwerk daadwerkelijk uitgevoerd wordt en dus begroot moet worden. */
@@ -35,7 +37,7 @@ const GOEDGEKEURD = ['akkoord', 'voltooid']
 export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenBewakingscode[]> {
   const supabase = createAdminClient()
 
-  const [stelpostRes, meerwerkRes] = await Promise.all([
+  const [stelpostRes, meerwerkRes, regieRes] = await Promise.all([
     supabase
       .from('opdracht_onderdelen')
       .select('bewakingscode, omschrijving, volgnummer')
@@ -53,6 +55,12 @@ export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenB
       .in('status', GOEDGEKEURD)
       .not('bewakingscode', 'is', null)
       .order('volgnummer', { ascending: true }),
+    // De regiecode staat op het dossier zelf: één opvangcode per bon, geen lijst.
+    supabase
+      .from('dossiers')
+      .select('regie_bewakingscode')
+      .eq('id', dossierId)
+      .maybeSingle(),
   ])
 
   const uit: EigenBewakingscode[] = []
@@ -65,6 +73,12 @@ export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenB
       uit.push({ code, naam: (r.omschrijving ?? '').trim() || code, soort })
     }
 
+  // De regiecode eerst: op een regie-bon is dát de kostengroep waar alles op hoort, en in de
+  // kiezer staat hij dan bovenaan in plaats van onder het meerwerk.
+  const regieCode = (regieRes.data as { regie_bewakingscode: string | null } | null)?.regie_bewakingscode
+  if (regieCode) {
+    voegToe('regie')({ bewakingscode: regieCode, omschrijving: REGIE_BEWAKINGSCODE_NAAM })
+  }
   ;((stelpostRes.data ?? []) as { bewakingscode: string | null; omschrijving: string | null }[])
     .forEach(voegToe('stelpost'))
   ;((meerwerkRes.data ?? []) as { bewakingscode: string | null; omschrijving: string | null }[])

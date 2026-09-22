@@ -8,6 +8,7 @@ import { syncInkoopfacturen } from '@/lib/bouw7/sync-inkoopfacturen'
 import { ververseSubstatussen, type SubstatusVerversResult } from '@/lib/bouw7/substatus-attr'
 import { vergeetBouw7Config } from '@/lib/bouw7/config'
 import { zorgVoorStelpostBewakingscodes } from '@/lib/dossiers/opdracht-onderdelen'
+import { zorgVoorRegieBewakingscodes, type RegieCodeSyncResultaat } from '@/lib/dossiers/regie-bewakingscode'
 import { herhaalUitgesteldeDossierWrites } from '@/lib/dossiers/bouw7-retry'
 import { herhaalUitgesteldePlanningWrites } from '@/lib/bouw7/plan-item-write'
 
@@ -102,7 +103,7 @@ export async function testBouw7Connection(): Promise<{ ok: true; message: string
 }
 
 export type RunSyncResult =
-  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; inkoopfacturen: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult; stelpostCodes: SyncResult }
+  | { ok: true; contacts: SyncContactsResult; employees: SyncResult; daysOff: SyncResult; projects: SyncResult; planning: SyncResult; debiteuren: SyncResult; inkoopfacturen: SyncResult; herinneringen: SyncResult; todos: SyncResult; notities: SyncResult; meerwerk: SyncResult; stelpostCodes: SyncResult; regieCodes: RegieCodeSyncResultaat }
   | { ok: false; error: string }
 
 export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSyncResult> {
@@ -140,6 +141,10 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
     // bepaalt welke dossiers opdracht zijn. Zonder code kan er in Bouw7 niets op een stelpost
     // geboekt worden en is hij achteraf niet af te rekenen.
     const stelpostCodes = await zorgVoorStelpostBewakingscodes()
+    // Idem voor de servicedeskbonnen die op regie afrekenen: zonder de kostengroep
+    // "Regiewerkzaamheden" is er niets om op in te kopen, uren op te boeken of van te factureren.
+    // Getemperd per ronde, dus een achterstand loopt over een paar syncs leeg.
+    const regieCodes = await zorgVoorRegieBewakingscodes()
 
     const totaalNieuw = contacts.organisaties.nieuw + contacts.contactpersonen.nieuw + employees.nieuw + daysOff.nieuw + projects.nieuw + planning.nieuw + debiteuren.nieuw + inkoopfacturen.nieuw + herinneringen.nieuw + offertes.nieuw + todos.nieuw + notities.nieuw + meerwerk.nieuw
     const totaalBijgewerkt = contacts.organisaties.bijgewerkt + contacts.contactpersonen.bijgewerkt + employees.bijgewerkt + daysOff.bijgewerkt + projects.bijgewerkt + planning.bijgewerkt + debiteuren.bijgewerkt + inkoopfacturen.bijgewerkt + herinneringen.bijgewerkt + offertes.bijgewerkt + todos.bijgewerkt + notities.bijgewerkt + meerwerk.bijgewerkt
@@ -154,7 +159,7 @@ export async function runFullSync(mode: SyncMode = 'incremental'): Promise<RunSy
       .eq('naam', 'bouw7')
 
     revalidatePath('/instellingen/integraties')
-    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, inkoopfacturen, herinneringen, todos, notities, meerwerk, stelpostCodes }
+    return { ok: true, contacts, employees, daysOff, projects, planning, debiteuren, inkoopfacturen, herinneringen, todos, notities, meerwerk, stelpostCodes, regieCodes }
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'Sync mislukt' }
   }
@@ -194,6 +199,7 @@ export async function syncEnkelDossier(dossierId: string): Promise<SyncEnkelDoss
     await syncDossierNotities({ onlyBouw7Ids: ids })
     await syncMeerwerk({ onlyBouw7Ids: ids })
     await zorgVoorStelpostBewakingscodes({ dossierId })
+    await zorgVoorRegieBewakingscodes({ dossierId })
 
     revalidatePath(`/dossiers/${dossierId}`)
     return { ok: true, projects, planning }

@@ -9,6 +9,7 @@ import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
+import { zorgVoorRegieBewakingscode } from './regie-bewakingscode'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
   bedragUitOpslag, bedragUitTarief, isLosseRegel, nieuweHandmatigeSleutel, nieuweLosseSleutel,
@@ -271,11 +272,21 @@ export async function getServicedeskMandaat(dossierId: string): Promise<MandaatS
   return { mandaat, geboekteVerkoop, uitgezetteOpdrachten, totaal, overschreden }
 }
 
-/** Werkt de servicedesk-instellingen (mandaat / facturatiemethode) bij. */
+/**
+ * Werkt de servicedesk-instellingen (mandaat / facturatiemethode) bij.
+ *
+ * Bij een keuze voor regie hoort er een kostengroep "Regiewerkzaamheden" op de bon te staan: zonder
+ * die code is er in Bouw7 niets om op in te kopen, uren op te schrijven of van te factureren. Hij
+ * wordt hier meteen aangemaakt, want dit ís het moment waarop de gebruiker die keuze maakt — de
+ * sync-inhaalslag (`zorgVoorRegieBewakingscodes`) is er voor de bonnen die al op regie stonden.
+ *
+ * De Bouw7-write mag het zetten van de schakelaar niet tegenhouden: mislukt hij, dan is de methode
+ * gewoon gewijzigd en komt de code als waarschuwing terug (de volgende sync probeert het opnieuw).
+ */
 export async function updateServicedeskInstellingen(
   dossierId: string,
   patch: { mandaat_bedrag?: number | null; facturatiemethode?: 'regie' | 'termijnen' },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
   const velden: Record<string, unknown> = {}
   if ('mandaat_bedrag' in patch) velden.mandaat_bedrag = patch.mandaat_bedrag
@@ -287,8 +298,19 @@ export async function updateServicedeskInstellingen(
   if (Object.keys(velden).length === 0) return { ok: true }
   const { error } = await supabase.from('dossiers').update(velden).eq('id', dossierId)
   if (error) return { ok: false, error: error.message }
+
+  let waarschuwing: string | undefined
+  if (patch.facturatiemethode === 'regie') {
+    const res = await zorgVoorRegieBewakingscode(dossierId).catch(e => ({
+      ok: false as const, error: e instanceof Error ? e.message : 'onbekende fout',
+    }))
+    waarschuwing = res.ok
+      ? ('waarschuwing' in res ? res.waarschuwing : undefined)
+      : `Kostengroep Regiewerkzaamheden aanmaken mislukt: ${res.error}`
+  }
+
   revalidatePath(`/servicedesk/${dossierId}/informatie`)
-  return { ok: true }
+  return { ok: true, waarschuwing }
 }
 
 /** Eén regel zoals de klant hem op de factuur ziet: een groep boekingen van één bewakingscode. */
@@ -386,7 +408,7 @@ export type GroepView = {
 /** Eén bewakingscode met alles wat het scherm nodig heeft om zijn factuurregels samen te stellen. */
 export type CodeRegelView = {
   bewakingscode: string
-  bron: 'stelpost' | 'meerwerk'
+  bron: 'stelpost' | 'meerwerk' | 'regie'
   /** De naam van de post; basis voor de tekst van elke factuurregel eronder. */
   omschrijving: string
   /** Kostprijs van wat er op deze code is geboekt. */
@@ -447,8 +469,13 @@ export type RegieVoorstel = {
    * Het Informatie-tab heeft die splitsing nodig: daar staat een stelpost buiten de aanneemsom al
    * als eigen regel met zijn begrote bedrag, en alleen het verschil met de nacalculatie hoort er
    * nog bij. Regie-meerwerk heeft daar geen eigen regel en telt volledig mee.
+   *
+   * `regie` is de derde herkomst: de kostengroep Regiewerkzaamheden van een servicedeskbon. Die
+   * staat bewust apart en niet onder `meerwerk`, want op zo'n bon is dit de waarde van het werk
+   * zélf en geen meerwerk boven op een aanneemsom — daar opgeteld zou het Informatie-tab een
+   * meerwerkbedrag tonen dat er nooit was.
    */
-  waardePerBron: { stelpost: number; meerwerk: number }
+  waardePerBron: { stelpost: number; meerwerk: number; regie: number }
   /** Codes die bewust buiten de factuur blijven, met de reden. Zichtbaar maken is het punt. */
   buitenBeschouwing: { bewakingscode: string; omschrijving: string; reden: string }[]
 }
@@ -482,7 +509,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   if (teFactureren.length === 0) {
     return {
       regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0,
-      waardePerBron: { stelpost: 0, meerwerk: 0 }, buitenBeschouwing,
+      waardePerBron: { stelpost: 0, meerwerk: 0, regie: 0 }, buitenBeschouwing,
     }
   }
 
@@ -665,7 +692,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   // Splitsing naar herkomst over precies dezelfde bedragen als `totaal` en `alGefactureerdBedrag`,
   // zodat de twee optellingen nooit uit elkaar kunnen lopen.
   const bronVanCode = new Map(views.map(v => [v.bewakingscode, v.bron]))
-  const waardePerBron = { stelpost: 0, meerwerk: 0 }
+  const waardePerBron = { stelpost: 0, meerwerk: 0, regie: 0 }
   for (const r of regels) waardePerBron[bronVanCode.get(r.bewakingscode) ?? 'meerwerk'] += r.bedrag
   for (const v of views) waardePerBron[v.bron] += v.alGefactureerdBedrag
 
@@ -675,7 +702,11 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     totaal: rond(regels.reduce((s, r) => s + r.bedrag, 0)),
     alGefactureerd,
     alGefactureerdBedrag: rond(views.reduce((s, v) => s + v.alGefactureerdBedrag, 0)),
-    waardePerBron: { stelpost: rond(waardePerBron.stelpost), meerwerk: rond(waardePerBron.meerwerk) },
+    waardePerBron: {
+      stelpost: rond(waardePerBron.stelpost),
+      meerwerk: rond(waardePerBron.meerwerk),
+      regie: rond(waardePerBron.regie),
+    },
     buitenBeschouwing,
   }
 }

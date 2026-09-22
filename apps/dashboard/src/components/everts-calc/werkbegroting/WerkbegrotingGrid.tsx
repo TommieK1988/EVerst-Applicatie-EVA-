@@ -185,13 +185,26 @@ interface SeparatorRij {
   label: string
   groepTotaal: number
   groepCalcTotaal: number
-  /** Deze kostengroep is een door EVA uitgedeelde code (stelpost of goedgekeurd meerwerk). */
+  /** Deze kostengroep is een door EVA uitgedeelde code (stelpost, goedgekeurd meerwerk, regie). */
   eigenSoort?: EigenBewakingscode['soort']
   /** Eigen groep zonder werkbegroting-regels — alleen de kop, nog niets begroot. */
   leeg?: boolean
 }
 
 type TabelRij = DisplayRij | SeparatorRij
+
+/** Wat het merkje achter een door EVA uitgedeelde kostengroep betekent. */
+const EIGEN_SOORT_UITLEG: Record<EigenBewakingscode['soort'], string> = {
+  stelpost: 'Bewakingscode van een stelpost uit de opdracht. Wat je hier begroot, bewaak je op die stelpost.',
+  meerwerk: 'Bewakingscode van goedgekeurd meerwerk. Wat je hier begroot, bewaak je op dat meerwerk.',
+  regie:    'Bewakingscode van deze servicedeskbon op regie. Hierop koop je in, schrijf je uren en factureer je na.',
+}
+
+const EIGEN_SOORT_REGEL_TITEL: Record<EigenBewakingscode['soort'], string> = {
+  stelpost: 'Voeg een werkbegroting-regel toe onder deze stelpost',
+  meerwerk: 'Voeg een werkbegroting-regel toe onder dit meerwerk',
+  regie:    'Voeg een werkbegroting-regel toe onder het regiewerk',
+}
 
 // ─── BedragInput ──────────────────────────────────────────────────────────────
 // Eigen interne state zodat toFixed(2) alleen op blur wordt toegepast,
@@ -1679,9 +1692,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                             {rij.eigenSoort && (
                               <span
                                 className="ml-1 rounded-full bg-amber-100 px-1.5 py-px text-[9px] font-semibold normal-case tracking-normal text-amber-700"
-                                title={rij.eigenSoort === 'meerwerk'
-                                  ? 'Bewakingscode van goedgekeurd meerwerk. Wat je hier begroot, bewaak je op dat meerwerk.'
-                                  : 'Bewakingscode van een stelpost uit de opdracht. Wat je hier begroot, bewaak je op die stelpost.'}
+                                title={EIGEN_SOORT_UITLEG[rij.eigenSoort]}
                               >
                                 {rij.eigenSoort}
                               </span>
@@ -1699,9 +1710,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                                 type="button"
                                 onClick={() => voegNieuweRegelToe(rij.label)}
                                 className="rounded px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-everts hover:bg-everts-50"
-                                title={rij.eigenSoort === 'meerwerk'
-                                  ? 'Voeg een werkbegroting-regel toe onder dit meerwerk'
-                                  : 'Voeg een werkbegroting-regel toe onder deze stelpost'}
+                                title={EIGEN_SOORT_REGEL_TITEL[rij.eigenSoort]}
                               >
                                 + regel
                               </button>

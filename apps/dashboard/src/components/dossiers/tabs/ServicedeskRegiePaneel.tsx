@@ -25,6 +25,13 @@ import FactuurRegelVenster from './FactuurRegelVenster'
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
 
+/** Waar een post vandaan komt, zoals hij onder de code staat. */
+const BRON_LABEL: Record<RegieVoorstel['codes'][number]['bron'], string> = {
+  regie:    'regiewerk',
+  stelpost: 'stelpost',
+  meerwerk: 'meerwerk (regie)',
+}
+
 export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, initieel, isHoofdroute }: {
   dossierId: string
   /** Op een opdracht-dossier is nacalculatie de uitzondering; toon het blok dan alleen als er iets is. */
@@ -111,7 +118,7 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
                           <div className="text-neutral-800">{c.omschrijving}</div>
                           <div className="text-[10px] uppercase tracking-wide text-neutral-400">
                             <span className="font-mono normal-case">{c.bewakingscode}</span>
-                            {' · '}{c.bron === 'stelpost' ? 'stelpost' : 'meerwerk (regie)'}
+                            {' · '}{BRON_LABEL[c.bron]}
                             {c.aantalBoekingen > 0 ? ` · ${c.aantalBoekingen} boeking${c.aantalBoekingen === 1 ? '' : 'en'}` : ''}
                             {c.vergrendeld ? ' · gefactureerd' : ''}
                             {!c.inBouw7 ? ' · nog niet in Bouw7' : ''}
@@ -186,7 +193,11 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
               {voorstel.codes.some(c => !c.inBouw7) && (
                 <p className="mt-2 text-[10.5px]" style={{ color: 'var(--warning-800, #9a3412)' }}>
                   Een code die nog niet in Bouw7 staat kan geen kosten verzamelen en blijft daarom op nul.
-                  Maak hem aan met &quot;Codes toewijzen&quot; bij de stelposten op de Informatie-tab.
+                  {voorstel.codes.some(c => !c.inBouw7 && c.bron === 'regie')
+                    // De regiecode wordt niet met een knop uitgedeeld maar door de sync; staat hij
+                    // er niet, dan is de Bouw7-write mislukt en helpt opnieuw verversen.
+                    ? ' Ververs het dossier vanuit Bouw7 om het opnieuw te proberen.'
+                    : ' Maak hem aan met "Codes toewijzen" bij de stelposten op de Informatie-tab.'}
                 </p>
               )}
 

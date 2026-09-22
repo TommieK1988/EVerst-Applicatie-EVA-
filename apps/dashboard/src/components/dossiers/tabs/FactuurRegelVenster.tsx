@@ -188,6 +188,13 @@ function tekstVan(b: BoekingView): { titel: string; onder: string } {
   return { titel, onder }
 }
 
+/** Waar deze post vandaan komt, in de regel boven het venster. */
+const HERKOMST_LABEL: Record<CodeRegelView['bron'], string> = {
+  regie:    'Regiewerk',
+  stelpost: 'Stelpost',
+  meerwerk: 'Meerwerk (regie)',
+}
+
 export default function FactuurRegelVenster({
   dossierId, code, tarieven, readOnly, onSluit, onBewaard, onGefactureerd,
 }: {
@@ -198,7 +205,7 @@ export default function FactuurRegelVenster({
   readOnly?: boolean
   onSluit: () => void
   onBewaard: () => void
-  /** Er staat een conceptfactuur in Bouw7: het paneel en de pagina eromheen moeten verversen. */
+  /** Er staat een conceptfactuur in Bouw7: het paneel én de pagina eromheen moeten verversen. */
   onGefactureerd: () => void
 }) {
   const veld = useId()
@@ -369,7 +376,7 @@ export default function FactuurRegelVenster({
    * Deze post als conceptfactuur klaarzetten in Bouw7.
    *
    * Alleen deze post: je stelt hier de regels samen, dus hier hoort ook de knop die ze afdrukt.
-   * De server bouwt het voorstel opnieuw op en factureert wat er dán staat; `teFactureren` is
+   * De server bouwt het voorstel opnieuw op en factureert wat er dan staat — `teFactureren` is
    * puur wat de knop laat zien, en komt uit dezelfde `telbareRegels` die de server gebruikt.
    */
   async function klaarzetten() {
@@ -428,7 +435,7 @@ export default function FactuurRegelVenster({
   ].filter(Boolean) as string[]
 
   const herkomst = [
-    code.bron === 'stelpost' ? 'Stelpost' : 'Meerwerk (regie)',
+    HERKOMST_LABEL[code.bron],
     code.aantalBoekingen > 0
       ? `${code.aantalBoekingen} boeking${code.aantalBoekingen === 1 ? '' : 'en'} te factureren`
       : 'geen openstaande boekingen',

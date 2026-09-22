@@ -199,6 +199,18 @@ export const FACTURATIE_LABELS: Record<'regie' | 'termijnen', string> = {
 }
 
 /**
+ * De bewakingscode die een servicedeskbon op regie krijgt om op in te kopen, uren op te boeken en
+ * van te factureren. Eén per bon; het aanmaken en de reden staan in `lib/dossiers/regie-bewakingscode.ts`.
+ *
+ * Hier en niet daar, omdat dit bestand aan beide kanten van de client/server-grens leesbaar is en
+ * de aanmaakmodule de hele Bouw7-write meesleept.
+ *
+ * `RW` volgt de stijl van `SP` (stelpost) en `MW` (meerwerk).
+ */
+export const REGIE_BEWAKINGSCODE = 'RW01'
+export const REGIE_BEWAKINGSCODE_NAAM = 'Regiewerkzaamheden'
+
+/**
  * Servicedesk kent twee trajecten die los van elkaar lopen, en dus twee kolomreeksen:
  *
  *  * **Dagelijks onderhoud** — bon binnen, mandaat toetsen, uitzetten bij eigen mensen of een

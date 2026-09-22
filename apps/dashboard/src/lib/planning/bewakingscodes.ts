@@ -20,6 +20,8 @@ export type PlanningCodeHerkomst =
   | 'stelpost'
   /** Door EVA uitgedeeld bij goedgekeurd meerwerk. */
   | 'meerwerk'
+  /** De opvangcode "Regiewerkzaamheden" van een servicedeskbon die op regie afrekent. */
+  | 'regie'
   /** Heeft in Bouw7 een begroting (bedrag of uren) staan. */
   | 'begroot'
   /** Heeft in Bouw7 geboekte kosten of uren. */
@@ -63,10 +65,11 @@ type SecChapter = {
 type SecObject = { securityCodesPerChapters?: SecChapter[] }
 
 /** Hoofdstuk-labels voor codes die (nog) niet in Bouw7 staan; anders vallen ze onder "Overig". */
-const HOOFDSTUK_EVA: Record<'werkbegroting' | 'stelpost' | 'meerwerk', string> = {
+const HOOFDSTUK_EVA: Record<'werkbegroting' | 'stelpost' | 'meerwerk' | 'regie', string> = {
   werkbegroting: 'Werkbegroting',
   stelpost:      'Stelposten',
   meerwerk:      'Meerwerk',
+  regie:         'Regie',
 }
 
 /** Sleutel waarop codes samenvallen: gelijk genummerde codes met een andere omschrijving
@@ -221,7 +224,8 @@ export async function getPlanningBewakingscodes(dossierId: string): Promise<Plan
     zet(code, naam, HOOFDSTUK_EVA.werkbegroting, null, 'werkbegroting')
   }
 
-  // 4. Codes die EVA zelf heeft uitgedeeld bij een stelpost of goedgekeurd meerwerk.
+  // 4. Codes die EVA zelf heeft uitgedeeld: een stelpost, goedgekeurd meerwerk, of de regiecode
+  //    van een servicedeskbon. Die laatste is op zo'n bon meestal de énige keuze die er is.
   for (const e of eigenCodes) {
     zet(e.code, e.naam, HOOFDSTUK_EVA[e.soort], null, e.soort)
   }
