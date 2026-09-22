@@ -21,7 +21,7 @@ import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext
 import { zetTermijnenKlaar } from '@/lib/dossiers/termijnen'
 import type { VerkoopTermijn, VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import TermijnschemaVenster from './TermijnschemaVenster'
-import { fmt, fmtPct, TH, TD } from './tab-ui'
+import { fmt, fmtPct, fmtDatum, TH, TD, LegeRij, type LegeCel } from './tab-ui'
 
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
   nog_te_factureren: { label: 'Nog te factureren', kleur: 'var(--amber-700, #b45309)' },
@@ -31,9 +31,11 @@ const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: strin
   gefactureerd: { label: 'Gefactureerd', kleur: 'var(--accent)' },
 }
 
-export default function TermijnenBlok({ dossierId, termijnen }: {
+export default function TermijnenBlok({ dossierId, termijnen, schemaMogelijk = true }: {
   dossierId: string
   termijnen: VerkoopTermijn[]
+  /** Kent Bouw7 dit project überhaupt een termijnstaat toe? Zo niet, dan is er niets aan te maken. */
+  schemaMogelijk?: boolean
 }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
@@ -44,7 +46,7 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
 
   // Aanmaken kan alleen op een leeg project; een bestaande termijnstaat is in Bouw7 gezet en blijft
   // daar het werk van de administratie.
-  const kanSchemaMaken = !readOnly && termijnen.length === 0
+  const kanSchemaMaken = !readOnly && schemaMogelijk && termijnen.length === 0
 
   const selecteerbaar = termijnen.filter(t => !t.gefactureerd)
   const kanKiezen = !readOnly && selecteerbaar.length > 0
@@ -82,28 +84,9 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const alleGekozen = selecteerbaar.length > 0 && selecteerbaar.every(t => gekozen.has(t.bouw7TermId))
 
-  if (termijnen.length === 0) {
-    return (
-      <div style={{ padding: '12px', fontSize: 13, color: 'var(--neutral-500)' }}>
-        <p style={{ margin: 0 }}>Geen termijnen ingesteld in Bouw7.</p>
-        {kanSchemaMaken && (
-          <div style={{ marginTop: 10 }}>
-            <Button variant="primary" onClick={() => setSchemaOpen(true)}>Termijnen aanmaken</Button>
-          </div>
-        )}
-        <TermijnschemaVenster
-          dossierId={dossierId}
-          open={schemaOpen}
-          onSluit={() => setSchemaOpen(false)}
-          onKlaar={() => router.refresh()}
-        />
-      </div>
-    )
-  }
-
   return (
     <>
-      <table style={{ ...tabel, minWidth: kanKiezen ? 750 : 710 }}>
+      <table style={{ ...tabel, minWidth: kanKiezen ? 900 : 860 }}>
         <thead>
           <tr>
             {kanKiezen && (
@@ -125,10 +108,19 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
             <TH right>BTW%</TH>
             <TH right>BTW</TH>
             <TH right>Incl. BTW</TH>
+            <TH>Factureerbaar</TH>
             <TH>Status</TH>
           </tr>
         </thead>
         <tbody>
+          {/* Nog geen termijnstaat: de kolommen blijven staan met een nulregel, zodat zichtbaar is
+              welke gegevens een termijn draagt. De knop om er een aan te maken staat eronder. */}
+          {termijnen.length === 0 && (
+            <LegeRij velden={[
+              ...(kanKiezen ? (['leeg'] as LegeCel[]) : []),
+              'tekst', 'tekst', 'pct', 'bedrag', 'pct', 'bedrag', 'bedrag', 'tekst', 'tekst',
+            ]} />
+          )}
           {termijnen.map((tm) => (
             <tr key={tm.bouw7TermId}>
               {kanKiezen && (
@@ -151,6 +143,7 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
               <TD right kleur="var(--neutral-500)">{fmtPct(tm.btwPercentage)}</TD>
               <TD right>{tm.btwBedrag > 0 ? fmt(tm.btwBedrag) : '—'}</TD>
               <TD right vet>{fmt(tm.bedragIncl)}</TD>
+              <TD>{fmtDatum(tm.invoiceableAt)}</TD>
               <TD kleur={TERMIJN_STATUS[tm.status].kleur}>{TERMIJN_STATUS[tm.status].label}</TD>
             </tr>
           ))}
@@ -159,19 +152,39 @@ export default function TermijnenBlok({ dossierId, termijnen }: {
           <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
             <td colSpan={kanKiezen ? 4 : 3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
             <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-              {fmt(termijnen.reduce((s, tm) => s + tm.bedrag, 0))}
+              {fmt(termijnen.reduce((s, tm) => s + tm.bedrag, 0), true)}
             </td>
             <td style={{ padding: '6px 12px' }} />
             <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-              {fmt(termijnen.reduce((s, tm) => s + tm.btwBedrag, 0))}
+              {fmt(termijnen.reduce((s, tm) => s + tm.btwBedrag, 0), true)}
             </td>
             <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-              {fmt(termijnen.reduce((s, tm) => s + tm.bedragIncl, 0))}
+              {fmt(termijnen.reduce((s, tm) => s + tm.bedragIncl, 0), true)}
             </td>
-            <td style={{ padding: '6px 12px' }} />
+            <td colSpan={2} style={{ padding: '6px 12px' }} />
           </tr>
         </tfoot>
       </table>
+
+      {termijnen.length === 0 && schemaMogelijk && (
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--neutral-100)' }}>
+          <span style={{ fontSize: 12.5, color: 'var(--neutral-500)' }}>Geen termijnen ingesteld in Bouw7.</span>
+          {kanSchemaMaken && (
+            <div style={{ marginTop: 10 }}>
+              <Button variant="primary" onClick={() => setSchemaOpen(true)}>Termijnen aanmaken</Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {kanSchemaMaken && (
+        <TermijnschemaVenster
+          dossierId={dossierId}
+          open={schemaOpen}
+          onSluit={() => setSchemaOpen(false)}
+          onKlaar={() => router.refresh()}
+        />
+      )}
 
       {kanKiezen && (
         <div style={{

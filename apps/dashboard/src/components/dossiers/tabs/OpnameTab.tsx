@@ -26,7 +26,6 @@ import { formatEuro } from '@/lib/everts-calc/calculations'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import { useDialogen } from '@/components/ui/dialogen'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import OpnameImportKaart from './OpnameImportKaart'
 
 const STATUS_KLEUR: Record<string, string> = {
@@ -176,15 +175,27 @@ export default function OpnameTab({
         )}
       </div>
 
-      {opnames.length === 0 ? (
-        <Card>
-          <EmptyState
-            title="Nog geen opname"
-            description="Start een opname vanaf hier, of laat de opnemer er een starten op zijn telefoon."
-          />
-        </Card>
-      ) : (
-        <div className="space-y-3">
+      <div className="space-y-3">
+          {/* Nog geen opname: dezelfde kaartvorm, leeg. Zo staat de lijst er al en zie je wat een
+              opname in de kop draagt — nummer, datum, adres en status. Bewust niet uitklapbaar:
+              er zijn geen regels om te tonen. */}
+          {opnames.length === 0 && (
+            <Card>
+              <CardHeader className="border-dashed">
+                <span className="flex items-center gap-3 text-neutral-400">
+                  <span>—</span>
+                  <span className="font-normal">— · —</span>
+                </span>
+                <span className="text-[11px] font-normal text-neutral-400">—</span>
+              </CardHeader>
+              <CardBody>
+                <p className="text-[13px] text-neutral-500">
+                  Nog geen opname. Start er een via &ldquo;Nieuwe opname&rdquo; hierboven, of laat de
+                  opnemer er een starten op zijn telefoon.
+                </p>
+              </CardBody>
+            </Card>
+          )}
           {opnames.map(opname => {
             const actief = open === opname.id
             const dit = actief ? detail : null
@@ -381,8 +392,7 @@ export default function OpnameTab({
               </Card>
             )
           })}
-        </div>
-      )}
+      </div>
     </div>
   )
 }

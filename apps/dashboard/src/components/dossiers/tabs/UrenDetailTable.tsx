@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import type { UrenRegel, BewakingscodeOptie } from '@/lib/dossiers/actions'
 import { updateUurlogBewakingscode, updateUurlogBewakingscodeBulk } from '@/lib/dossiers/actions'
-import { fmt, fmtUren, fmtTarief, fmtDatum, TH, TD } from './tab-ui'
+import { fmt, fmtUren, fmtTarief, fmtDatum, TH, TD, LegeRij, type LegeCel } from './tab-ui'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 
 /* ─── Week helpers ─────────────────────────────────────────────────────────── */
@@ -280,6 +280,9 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
           </tr>
         </thead>
         <tbody>
+          {regels.length === 0 && (
+            <LegeRij velden={['tekst', 'tekst', 'uren', 'bedrag', 'bedrag']} />
+          )}
           {regels.map((r, i) => (
             <tr key={i}>
               <TD>{r.code ?? '—'}</TD><TD>{r.codeNaam ?? '—'}</TD>
@@ -375,6 +378,13 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
             </tr>
           </thead>
           <tbody>
+            {/* Nog niets geboekt: de kolommen blijven staan met een nulregel. */}
+            {verwerkt.length === 0 && (
+              <LegeRij velden={[
+                ...(toonSelectie ? (['leeg'] as LegeCel[]) : []),
+                'tekst', 'tekst', 'tekst', 'tekst', 'tekst', 'uren', 'bedrag', 'bedrag',
+              ]} />
+            )}
             {verwerkt.map((rij, i) => {
               if (rij.type === 'subtotaal') {
                 return (

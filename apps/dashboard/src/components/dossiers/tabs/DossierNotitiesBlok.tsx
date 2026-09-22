@@ -58,13 +58,17 @@ export default function DossierNotitiesBlok({
       <CardBody className="flex min-h-0 flex-1 flex-col gap-0 p-0">
         {/* Lijst — nieuwste bovenaan, scrollt binnen de kaart */}
         <div className="min-h-0 flex-1 overflow-y-auto px-[18px] py-3">
-          {items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center">
-              <span className="text-[22px] opacity-35">🗒</span>
-              <span className="text-xs font-medium text-neutral-500">Nog geen notities</span>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3">
+              {/* Nog geen notities: dezelfde regelvorm — auteur, tijdstip en tekst, leeg. */}
+              {items.length === 0 && (
+                <div className="text-neutral-400">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold">—</span>
+                    <span className="text-[10.5px]">—</span>
+                  </div>
+                  <div className="text-[13px] leading-snug">Nog geen notities</div>
+                </div>
+              )}
               {items.map(n => (
                 <div key={n.id} className="group">
                   <div className="mb-0.5 flex items-center gap-2">
@@ -86,8 +90,7 @@ export default function DossierNotitiesBlok({
                   </div>
                 </div>
               ))}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Invoer — onderaan vastgezet; verborgen bij alleen-lezen dossier */}

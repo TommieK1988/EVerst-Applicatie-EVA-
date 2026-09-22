@@ -68,11 +68,6 @@ export default function AfrekenstandBlok({ overzicht, meerwerkExcl, readOnly, be
             <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">
               Stelposten in de opdracht
             </div>
-            {stelposten.length === 0 ? (
-              <p className="text-[12.5px] text-neutral-500">
-                Geen stelposten aangewezen. Dat doe je op het tab Informatie, in het blok met de financiële totalen.
-              </p>
-            ) : (
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b-2 border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">
@@ -85,6 +80,17 @@ export default function AfrekenstandBlok({ overzicht, meerwerkExcl, readOnly, be
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Geen stelposten: de kolommen blijven staan met een nulregel. */}
+                  {stelposten.length === 0 && (
+                    <tr className="border-b border-neutral-100 text-[12.5px] text-neutral-400">
+                      <td className="py-2 pr-2 font-mono text-[11px]">—</td>
+                      <td className="py-2 px-2">—</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{fmt(0)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{fmt(0)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{fmt(0)}</td>
+                      <td className="py-2 pl-2 text-right">—</td>
+                    </tr>
+                  )}
                   {stelposten.map(sp => (
                     <tr key={sp.id} className="border-b border-neutral-100 text-[12.5px] align-top">
                       <td className="py-2 pr-2 font-mono text-[11px] text-neutral-500">{sp.bewakingscode ?? '—'}</td>
@@ -135,6 +141,10 @@ export default function AfrekenstandBlok({ overzicht, meerwerkExcl, readOnly, be
                   ))}
                 </tbody>
               </table>
+            {stelposten.length === 0 && (
+              <p className="mt-3 text-[11px] text-neutral-500">
+                Geen stelposten aangewezen. Dat doe je op het tab Informatie, in het blok met de financiële totalen.
+              </p>
             )}
             {zonderAfrekening.length > 0 && (
               <p className="mt-3 text-[11px] text-neutral-500">

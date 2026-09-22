@@ -4,6 +4,7 @@ import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import ParkeerkostenBlok from './ParkeerkostenBlok'
+import { LegeNotitie } from './tab-ui'
 import type { DossierSectie } from '../types'
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -162,13 +163,42 @@ const CodeCel = ({ code, naam, vet, achtergrond }: { code: string | null; naam: 
   </td>
 )
 
-/** Twee smalle cellen (prognose | geboekt) voor één kostencomponent. */
+/**
+ * Twee smalle cellen (prognose | geboekt) voor één kostencomponent. In een subtotaal- of
+ * totaalregel (`vet`) staat er € 0 in plaats van een streepje — net als in de kolommen ernaast,
+ * die daar al `showZero` gebruiken.
+ */
 const ComponentCellen = ({ prognose, geboekt, vet }: { prognose: number; geboekt: number; vet?: boolean }) => (
   <>
-    <TD compact vet={vet} groepStart>{fmt(prognose)}</TD>
-    <TD compact vet={vet}>{fmt(geboekt)}</TD>
+    <TD compact vet={vet} groepStart>{fmt(prognose, vet)}</TD>
+    <TD compact vet={vet}>{fmt(geboekt, vet)}</TD>
   </>
 )
+
+/**
+ * Nulregel voor een bewakingstabel zonder codes. De kolommen blijven staan met € 0, zodat een
+ * dossier waar nog niets op geboekt is dezelfde opmaak houdt als een lopend project.
+ */
+const LegeBewakingRij = () => {
+  const grijs = 'var(--neutral-400)'
+  return (
+    <tr>
+      <CodeCel code={null} naam="—" />
+      <TD compact kleur={grijs}>{fmt(0, true)}</TD>
+      <TD compact kleur={grijs}>{fmt(0, true)}</TD>
+      <TD compact kleur={grijs}>{fmt(0, true)}</TD>
+      {COMPONENTEN.map((c) => (
+        <Fragment key={c.kop}>
+          <TD compact kleur={grijs} groepStart>{fmt(0, true)}</TD>
+          <TD compact kleur={grijs}>{fmt(0, true)}</TD>
+        </Fragment>
+      ))}
+      <TD compact kleur={grijs} groepStart>{fmt(0, true)}</TD>
+      <TD compact kleur={grijs}>{fmt(0, true)}</TD>
+      <TD compact kleur={grijs}>0 %</TD>
+    </tr>
+  )
+}
 
 const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
   r: BewakingRegel; dossierId: string; bouw7Id: string | null; bewerkbaar: boolean
@@ -196,28 +226,15 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
   // Standopname per bewakingscode is alleen bij Opdrachten bewerkbaar.
   const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id
 
-  if (!data.beschikbaar) {
-    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
-    return (
-      <Card style={{ marginBottom: 16 }}>
-        <CardHeader>Bewaking per bewakingscode</CardHeader>
-        <CardBody>
-          <Bouw7StandStrip
-            dossierId={dossierId}
-            tab="financieel"
-            opgehaaldOp={data.stand.opgehaaldOp}
-            ontbreekt={data.stand.ontbreekt}
-            fout={data.stand.fout}
-          />
-          <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '8px 0' }}>
-            {nooitOpgehaald
-              ? 'Deze cijfers zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
-              : 'Geen bewakingscodes gevonden voor dit project in Bouw7.'}
-          </div>
-        </CardBody>
-      </Card>
-    )
-  }
+  // Zonder cijfers blijft de tabel staan — koppen, een nulregel en een nultotaal — met de reden
+  // eronder. "Nog niet opgehaald" is iets anders dan "geen codes"; alleen bij het eerste helpt
+  // de knop Vernieuwen.
+  const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
+  const uitleg = !data.beschikbaar
+    ? nooitOpgehaald
+      ? 'Deze cijfers zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
+      : 'Geen bewakingscodes gevonden voor dit project in Bouw7.'
+    : null
 
   const t = data.totalen
   const sub = (regels: BewakingRegel[], sel: (r: BewakingRegel) => number) => regels.reduce((s, r) => s + sel(r), 0)
@@ -277,6 +294,7 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
             </tr>
           </thead>
           <tbody>
+            {data.hoofdstukken.length === 0 && <LegeBewakingRij />}
             {data.hoofdstukken.map((h) => (
               <Fragment key={`h-${h.id}-${h.naam}`}>
                 <tr>
@@ -320,12 +338,20 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
               {COMPONENTEN.map((c) => (
                 <ComponentCellen key={c.kop} vet prognose={c.prognose(t)} geboekt={c.geboekt(t)} />
               ))}
-              <TD compact vet accent={t.geboekteKosten > 0} groepStart>{fmt(t.geboekteKosten)}</TD>
-              <TD compact vet kleur={t.prognose - t.geboekteKosten < 0 ? ROOD : undefined}>{fmt(t.prognose - t.geboekteKosten)}</TD>
+              <TD compact vet accent={t.geboekteKosten > 0} groepStart>{fmt(t.geboekteKosten, true)}</TD>
+              <TD compact vet kleur={t.prognose - t.geboekteKosten < 0 ? ROOD : undefined}>{fmt(t.prognose - t.geboekteKosten, true)}</TD>
               <TD compact>—</TD>
             </tr>
           </tbody>
         </table>
+        {uitleg && (
+          <div style={{
+            padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
+            borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
+          }}>
+            {uitleg}
+          </div>
+        )}
         <div style={{
           padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
           borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
@@ -385,26 +411,11 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
 
   const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
 
-  if (!f) {
-    return (
-      <div style={{
-        padding: '32px 28px',
-        border: '1px dashed var(--neutral-200)',
-        borderRadius: 10,
-        background: 'var(--neutral-50)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        color: 'var(--neutral-500)',
-      }}>
-        <div style={{ fontSize: 24, opacity: 0.4 }}>◻</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neutral-800)' }}>Geen projecttotalen beschikbaar</div>
-        <div style={{ fontSize: 12, fontWeight: 500, textAlign: 'center', maxWidth: 320 }}>
-          Dit dossier heeft geen Bouw7-koppeling of financiële projectdata.
-        </div>
-      </div>
-    )
-  }
+  // Zonder Bouw7-cijfers blijven Kosten en Opbrengsten gewoon staan, met nulbedragen in plaats
+  // van streepjes: je ziet dan welke regels er komen te staan zodra het project gaat lopen.
+  const geenTotalen = f == null
 
-  const kostenTypes: { label: string; key: keyof NonNullable<typeof f.costs> }[] = [
+  const kostenTypes: { label: string; key: keyof NonNullable<NonNullable<typeof f>['costs']> }[] = [
     { label: 'Uren',          key: 'labor'          },
     { label: 'Materialen',    key: 'material'        },
     { label: 'Materieel',     key: 'equipment'       },
@@ -414,19 +425,19 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
   ]
 
   const kostenTotaal = {
-    b: kostenTypes.reduce((s, t) => s + toNum(f.costs?.[t.key]?.budgeted), 0),
-    p: kostenTypes.reduce((s, t) => s + toNum(f.costs?.[t.key]?.prognosis), 0),
-    r: kostenTypes.reduce((s, t) => s + toNum(f.costs?.[t.key]?.realised), 0),
+    b: kostenTypes.reduce((s, t) => s + toNum(f?.costs?.[t.key]?.budgeted), 0),
+    p: kostenTypes.reduce((s, t) => s + toNum(f?.costs?.[t.key]?.prognosis), 0),
+    r: kostenTypes.reduce((s, t) => s + toNum(f?.costs?.[t.key]?.realised), 0),
   }
 
   const omzet = {
-    b: toNum(f.revenue?.budgeted),
-    p: toNum(f.revenue?.prognosis),
-    r: toNum(f.revenue?.realised),
+    b: toNum(f?.revenue?.budgeted),
+    p: toNum(f?.revenue?.prognosis),
+    r: toNum(f?.revenue?.realised),
   }
   // Meerwerk-opbrengst: additionalWork is een object; het bedrag zit in de prognose
   // (== expected), niet in een losse waarde. omzet.b + meerwerk == revenue.prognosis.
-  const meerwerk   = toNum(f.additionalWork?.prognosis ?? f.additionalWork?.expected)
+  const meerwerk   = toNum(f?.additionalWork?.prognosis ?? f?.additionalWork?.expected)
   const opbrTotaal = { b: omzet.b + meerwerk, r: omzet.r }
   const teFactureren = Math.max(0, omzet.b - omzet.r)
 
@@ -456,22 +467,25 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
               {kostenTypes.map(({ label, key }) => (
                 <tr key={key}>
                   <TDLabel>{label}</TDLabel>
-                  <TD>{fmt(f.costs?.[key]?.budgeted)}</TD>
-                  <TD>{fmt(f.costs?.[key]?.prognosis)}</TD>
-                  <TD>{fmt(f.costs?.[key]?.realised)}</TD>
+                  <TD>{fmt(f?.costs?.[key]?.budgeted, geenTotalen)}</TD>
+                  <TD>{fmt(f?.costs?.[key]?.prognosis, geenTotalen)}</TD>
+                  <TD>{fmt(f?.costs?.[key]?.realised, geenTotalen)}</TD>
                 </tr>
               ))}
               <TotaalRij label="Totaal" b={kostenTotaal.b} p={kostenTotaal.p} r={kostenTotaal.r} />
-              {(toNum(f.generalCostsProfit?.budgeted) > 0 || toNum(f.generalCostsProfit?.prognosis) > 0) && (
+              {(toNum(f?.generalCostsProfit?.budgeted) > 0 || toNum(f?.generalCostsProfit?.prognosis) > 0) && (
                 <tr>
                   <TDLabel sub>AK + winst</TDLabel>
-                  <TD>{fmtOpslagPct(f.generalCostsProfit?.budgeted, kostenTotaal.b)}</TD>
-                  <TD>{fmtOpslagPct(f.generalCostsProfit?.prognosis, kostenTotaal.p)}</TD>
-                  <TD>{fmtOpslagPct(f.generalCostsProfit?.realised, kostenTotaal.r)}</TD>
+                  <TD>{fmtOpslagPct(f?.generalCostsProfit?.budgeted, kostenTotaal.b)}</TD>
+                  <TD>{fmtOpslagPct(f?.generalCostsProfit?.prognosis, kostenTotaal.p)}</TD>
+                  <TD>{fmtOpslagPct(f?.generalCostsProfit?.realised, kostenTotaal.r)}</TD>
                 </tr>
               )}
             </tbody>
           </table>
+          {geenTotalen && (
+            <LegeNotitie>Nog geen projectkosten: dit dossier heeft geen Bouw7-koppeling of financiële projectdata.</LegeNotitie>
+          )}
         </CardBody>
       </Card>
 
@@ -491,14 +505,14 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
             <tbody>
               <tr>
                 <TDLabel>Aangenomen</TDLabel>
-                <TD>{fmt(f.revenue?.budgeted)}</TD>
-                <TD accent={omzet.r > 0}>{fmt(f.revenue?.realised)}</TD>
-                <TD>{fmt(teFactureren)}</TD>
+                <TD>{fmt(f?.revenue?.budgeted, geenTotalen)}</TD>
+                <TD accent={omzet.r > 0}>{fmt(f?.revenue?.realised, geenTotalen)}</TD>
+                <TD>{fmt(teFactureren, geenTotalen)}</TD>
               </tr>
               <tr>
                 <TDLabel>Goedgekeurd meerwerk</TDLabel>
-                <TD accent={meerwerk > 0}>{fmt(meerwerk)}</TD>
-                <TD>{fmt(toNum(f.additionalWork?.realised))}</TD>
+                <TD accent={meerwerk > 0}>{fmt(meerwerk, geenTotalen)}</TD>
+                <TD>{fmt(toNum(f?.additionalWork?.realised), geenTotalen)}</TD>
                 <TD>—</TD>
               </tr>
               <tr style={{ background: 'var(--neutral-50)' }}>
@@ -509,6 +523,9 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
               </tr>
             </tbody>
           </table>
+          {geenTotalen && (
+            <LegeNotitie>Nog geen opbrengsten: dit dossier heeft geen Bouw7-koppeling of financiële projectdata.</LegeNotitie>
+          )}
         </CardBody>
       </Card>
 

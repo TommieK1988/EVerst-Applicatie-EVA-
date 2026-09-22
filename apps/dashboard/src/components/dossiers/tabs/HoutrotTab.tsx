@@ -16,7 +16,6 @@ import HoutrotRegistratieModal from './HoutrotRegistratieModal'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import HoutrotRapportageKnop from '@/components/documenten/HoutrotRapportageKnop'
 import { Card, CardHeader } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 
 const FOTO_LABEL = (t: string) => FOTO_LABELS[t as keyof typeof FOTO_LABELS] ?? t
 
@@ -127,18 +126,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
 
         {fout && <div className="p-5 text-sm text-red-600">{fout}</div>}
         {!fout && registraties === null && <div className="p-5 text-sm text-slate-400">Laden…</div>}
-        {!fout && registraties && zichtbaar.length === 0 && (
-          <EmptyState
-            title={archiefAantal > 0 ? 'Alleen gearchiveerde registraties' : 'Nog geen registraties'}
-            description={archiefAantal > 0
-              ? 'Zet «Archief tonen» aan om ze te bekijken of terug te zetten.'
-              : "Registreer in het veld op de telefoon (dossier → Houtrot) of via '+ Nieuwe registratie' hierboven."}
-            tone="neutral"
-            size="sm"
-          />
-        )}
-
-        {zichtbaar.length > 0 && (
+        {!fout && registraties && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -155,6 +143,21 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {/* Nog geen registraties: de kolommen blijven staan met een nulregel, zodat
+                    zichtbaar is wat een registratie vastlegt. */}
+                {zichtbaar.length === 0 && (
+                  <tr className="text-slate-400">
+                    <td className="px-4 py-3 text-sm">—</td>
+                    <td className="px-4 py-3 text-sm">—</td>
+                    <td className="px-4 py-3 text-sm hidden sm:table-cell">—</td>
+                    <td className="px-4 py-3 text-sm">—</td>
+                    <td className="px-4 py-3 text-sm text-right hidden lg:table-cell">0,00</td>
+                    <td className="px-4 py-3 text-sm text-right hidden lg:table-cell">{formatCurrency(0)}</td>
+                    <td className="px-4 py-3 text-sm text-right hidden lg:table-cell">{formatCurrency(0)}</td>
+                    <td className="px-4 py-3 text-sm text-right">{formatCurrency(0)}</td>
+                    <td className="px-4 py-3 text-sm">—</td>
+                  </tr>
+                )}
                 {zichtbaar.map(r => {
                   const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
                   const gearchiveerd = !!r.gearchiveerd_op
@@ -191,6 +194,13 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                 })}
               </tbody>
             </table>
+            {zichtbaar.length === 0 && (
+              <p className="px-4 pb-4 pt-1 text-xs text-slate-500">
+                {archiefAantal > 0
+                  ? 'Alleen gearchiveerde registraties — zet «Archief tonen» aan om ze te bekijken of terug te zetten.'
+                  : "Nog geen registraties. Registreer in het veld op de telefoon (dossier → Houtrot) of via '+ Nieuwe registratie' hierboven."}
+              </p>
+            )}
           </div>
         )}
       </Card>

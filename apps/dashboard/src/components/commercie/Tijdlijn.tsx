@@ -7,7 +7,6 @@
  */
 
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@everts/ui'
 import type { TijdlijnRegel } from '@/lib/commercie/actions'
 
@@ -36,13 +35,22 @@ export function Tijdlijn({ regels }: { regels: TijdlijnRegel[] }) {
         <h2 className="text-sm font-semibold">Tijdlijn</h2>
       </CardHeader>
       <CardBody>
-        {regels.length === 0 ? (
-          <EmptyState
-            title="Nog niets gebeurd"
-            description="Zodra je een uitkomst vastlegt of de fase wijzigt, verschijnt dat hier."
-          />
-        ) : (
-          <ol className="space-y-3">
+        <ol className="space-y-3">
+            {/* Nog niets gebeurd: dezelfde regelvorm, leeg — stip, kop en tijdstip. */}
+            {regels.length === 0 && (
+              <li className="flex gap-3 text-neutral-400">
+                <div className="flex flex-col items-center pt-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-200" aria-hidden />
+                  <span className="mt-1 w-px flex-1 bg-neutral-200" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1 pb-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-medium">—</span>
+                    <span className="text-xs">—</span>
+                  </div>
+                </div>
+              </li>
+            )}
             {regels.map(r => (
               <li key={r.id} className="flex gap-3">
                 <div className="flex flex-col items-center pt-1.5">
@@ -62,7 +70,11 @@ export function Tijdlijn({ regels }: { regels: TijdlijnRegel[] }) {
                 </div>
               </li>
             ))}
-          </ol>
+        </ol>
+        {regels.length === 0 && (
+          <p className="mt-2 text-[12px] text-neutral-500">
+            Nog niets gebeurd. Zodra je een uitkomst vastlegt of de fase wijzigt, verschijnt dat hier.
+          </p>
         )}
       </CardBody>
     </Card>

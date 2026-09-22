@@ -5,7 +5,7 @@ import {
   getBewakingscodesVoorUurlog,
 } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, fmtUren, fmtTarief, fmtPct, TH, TD, LegeStaat, ROOD, GROEN } from './tab-ui'
+import { fmt, fmtUren, fmtTarief, fmtPct, TH, TD, LegeRij, LegeNotitie, ROOD, GROEN } from './tab-ui'
 import UrenDetailTable from './UrenDetailTable'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
@@ -14,28 +14,14 @@ const KLEUR_SALDO = (v: number) => (v >= 0 ? GROEN : ROOD)
 async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
   const data = await getDossierUrenBewaking(dossierId)
 
-  if (!data.beschikbaar) {
-    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
-    return (
-      <div>
-        <Bouw7StandStrip
-          dossierId={dossierId}
-          tab="uren"
-          opgehaaldOp={data.stand.opgehaaldOp}
-          ontbreekt={data.stand.ontbreekt}
-          fout={data.stand.fout}
-        />
-        <LegeStaat
-          titel={nooitOpgehaald ? 'Nog niet opgehaald uit Bouw7' : 'Geen uren per bewakingscode'}
-          tekst={
-            nooitOpgehaald
-              ? 'Deze gegevens worden twee keer per dag opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
-              : 'Dit dossier heeft geen Bouw7-koppeling of er zijn nog geen arbeidsurenboekingen.'
-          }
-        />
-      </div>
-    )
-  }
+  // Zonder uren blijft de tabel staan: kolomkoppen en een nulregel, zodat je ziet welke cijfers
+  // hier komen. De reden waarom er niets staat komt eronder, bij de andere voetnoten.
+  const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
+  const uitleg = !data.beschikbaar
+    ? nooitOpgehaald
+      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Vernieuwen om ze nu binnen te halen.'
+      : 'Nog geen uren per bewakingscode: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen arbeidsurenboekingen.'
+    : null
 
   const { regels, totalen, heeftWerkbegroting } = data
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
@@ -70,6 +56,11 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
               </tr>
             </thead>
             <tbody>
+              {regels.length === 0 && (
+                <LegeRij velden={[
+                  'tekst', 'uren', 'bedrag', 'bedrag', 'uren', 'bedrag', 'pct', 'uren', 'bedrag', 'uren', 'bedrag',
+                ]} />
+              )}
               {regels.map((r, i) => (
                 <tr key={i}>
                   <TD>
@@ -125,6 +116,7 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
             </tbody>
           </table>
         </div>
+        {uitleg && <LegeNotitie>{uitleg}</LegeNotitie>}
         {!heeftWerkbegroting && (
           <div style={{ padding: '8px 12px', fontSize: 11.5, color: 'var(--neutral-500)', borderTop: '1px solid var(--neutral-100)' }}>
             Geen gesynchroniseerde werkbegroting gevonden — begrote uren en saldo worden niet getoond.
@@ -142,8 +134,6 @@ async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
     getBewakingscodesVoorUurlog(dossierId),
   ])
 
-  if (!data.beschikbaar) return null
-
   const perMedewerker = data.detailNiveau === 'medewerker'
 
   return (
@@ -158,9 +148,11 @@ async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
           perMedewerker={perMedewerker}
         />
         <div style={{ padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)', borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5 }}>
-          {perMedewerker
-            ? 'Live uit Bouw7 — geboekte uren per medewerker. Bewakingscode aanpassen werkt direct terug in Bouw7.'
-            : 'Per-medewerker detail niet beschikbaar; weergave per bewakingscode uit de projectbewaking.'}
+          {!data.beschikbaar
+            ? 'Nog geen uren geboekt op dit dossier — zodra er uren binnenkomen verschijnen ze hier per medewerker.'
+            : perMedewerker
+              ? 'Live uit Bouw7 — geboekte uren per medewerker. Bewakingscode aanpassen werkt direct terug in Bouw7.'
+              : 'Per-medewerker detail niet beschikbaar; weergave per bewakingscode uit de projectbewaking.'}
         </div>
       </CardBody>
     </Card>

@@ -321,13 +321,10 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
             </div>
           )}
 
-          {data.regels.length === 0 ? (
-            <p className="text-[13px] text-neutral-500">Nog geen meerwerkregels op dit dossier.</p>
-          ) : (
-            /* Scrollen in plaats van knijpen: de drie keuzelijsten houden hun breedte, dus zonder
-               minimumbreedte werd de actiekolom in een smal venster tot onleesbaar samengeperst en
-               viel "Uit offerte" buiten de kaart. */
-            <div className="overflow-x-auto">
+          {/* Scrollen in plaats van knijpen: de drie keuzelijsten houden hun breedte, dus zonder
+              minimumbreedte werd de actiekolom in een smal venster tot onleesbaar samengeperst en
+              viel "Uit offerte" buiten de kaart. */}
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[1040px] border-collapse">
               <thead>
                 <tr className="border-b-2 border-neutral-200 text-left text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">
@@ -343,6 +340,21 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                 </tr>
               </thead>
               <tbody>
+                {/* Nog geen regels: de kolommen blijven staan met een nulregel, zodat zichtbaar
+                    is wat een meerwerkregel vastlegt. */}
+                {data.regels.length === 0 && (
+                  <tr className="border-b border-neutral-100 text-[12.5px] text-neutral-400">
+                    <td className="py-2 pr-2">—</td>
+                    <td className="py-2 px-2">—</td>
+                    <td className="py-2 px-2">—</td>
+                    <td className="py-2 px-2">—</td>
+                    <td className="py-2 px-2">—</td>
+                    <td className="py-2 px-2">—</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{fmt(0)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{fmt(0)}</td>
+                    <td className="py-2 pl-2 text-right">—</td>
+                  </tr>
+                )}
                 {data.regels.map(r => {
                   const uitBouw7 = r.bron === 'bouw7_line'
                   const bewerkbaar = !readOnly && !uitBouw7
@@ -494,6 +506,8 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
               </tfoot>
             </table>
             </div>
+          {data.regels.length === 0 && (
+            <p className="mt-3 text-[12px] text-neutral-500">Nog geen meerwerkregels op dit dossier.</p>
           )}
           <p className="mt-4 text-[11px] text-neutral-500">
             Meerwerkregels uit Bouw7 worden automatisch geïmporteerd (herkenbaar aan “uit Bouw7”). Bij die regels is Bouw7 leidend

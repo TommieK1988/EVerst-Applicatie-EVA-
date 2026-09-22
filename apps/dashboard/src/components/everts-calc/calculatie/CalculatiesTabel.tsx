@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Copy, Calculator } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
-import { fmt, fmtDatum, TH, TD } from '@/components/dossiers/tabs/tab-ui'
+import { fmt, fmtDatum, TH, TD, LegeRij } from '@/components/dossiers/tabs/tab-ui'
 import { berekenCalcTotalen, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { versieRootVan } from '@/lib/everts-calc/versie'
@@ -126,6 +126,10 @@ export default function CalculatiesTabel({
               </tr>
             </thead>
             <tbody>
+              {/* Nog geen versie: de kolommen blijven staan met een nulregel. */}
+              {versies.length === 0 && (
+                <LegeRij velden={['tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'pct', 'tekst', 'leeg']} />
+              )}
               {versies.map(s => {
                 const t = totalenPerScenario.get(s.id)
                 const offerte = offerteVan(s.id)

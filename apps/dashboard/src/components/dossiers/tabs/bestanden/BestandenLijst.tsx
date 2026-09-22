@@ -285,16 +285,34 @@ export default function BestandenLijst({
                 <td className={`${CEL} text-neutral-500`}>{r.door ?? '—'}</td>
               </tr>
             ))}
-            {zichtbaar.length === 0 && (
+            {/* Nog geen bestanden: de kolommen blijven staan met een nulregel, zodat de lijst
+                dezelfde vorm houdt. Levert het zoekfilter niets op, dan is een melding over de
+                volle breedte juist duidelijker — dat is geen lege lijst maar een lege selectie. */}
+            {zichtbaar.length === 0 && (rijen.length === 0 ? (
+              <tr className="border-b border-neutral-100 text-neutral-400">
+                <td className={`${CEL} pl-3`}>—</td>
+                <td className={CEL}>—</td>
+                <td className={CEL}>—</td>
+                <td className={`${CEL} text-right`}>—</td>
+                <td className={CEL}>—</td>
+                <td className={CEL}>—</td>
+                {toonAppKolom && <td className={`${CEL} text-center`}>—</td>}
+                {toonPortaalKolom && <td className={`${CEL} text-center`}>—</td>}
+              </tr>
+            ) : (
               <tr>
                 <td colSpan={KOLOMMEN.length + (toonAppKolom ? 1 : 0) + (toonPortaalKolom ? 1 : 0)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
-                  {rijen.length === 0 ? (legeTekst ?? 'Geen bestanden.') : 'Geen bestanden gevonden.'}
+                  Geen bestanden gevonden.
                 </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
+
+      {rijen.length === 0 && (
+        <p className="px-3 py-2.5 text-[11.5px] text-neutral-500">{legeTekst ?? 'Nog geen bestanden bij dit dossier.'}</p>
+      )}
 
       {voettekst}
     </>

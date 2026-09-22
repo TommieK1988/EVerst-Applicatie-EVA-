@@ -360,16 +360,10 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           <CardBody style={{ padding: 0 }}>
             {laadt ? (
               <p className="px-4 py-4 text-[13px] text-neutral-500">Bestanden laden…</p>
-            ) : documenten.length === 0 && fotos.length === 0 ? (
-              <div className="space-y-3 px-4 py-4">
-                <p className="text-[13px] text-neutral-500">
-                  Nog geen bestanden bij dit dossier.
-                  {kanUploaden && ' Sleep bestanden hierheen om ze in de SharePoint-dossiermap te zetten.'}
-                </p>
-                {/* Zonder SharePoint valt er hier niets te kiezen — dan alleen de melding hierboven. */}
-                {sharepoint?.geconfigureerd && <SharePointKoppeling data={sharepoint} {...koppelActies} />}
-              </div>
             ) : (
+              /* Ook zonder bestanden de volledige lijst: kolomkoppen en een lege regel. Zo zie je
+                 wat er van een bestand wordt vastgelegd, en blijft de SharePoint-koppeling op
+                 dezelfde plek staan als bij een gevuld dossier. */
               <BestandenLijst
                 rijen={documenten}
                 inApp={inApp}
@@ -377,7 +371,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 inPortaal={inPortaal ?? undefined}
                 onTogglePortaal={inPortaal ? togglePortaal : undefined}
                 onOpenVenster={setVenster}
-                legeTekst="Alle bestanden bij dit dossier zijn afbeeldingen — die staan in de fotogalerij."
+                legeTekst={fotos.length > 0
+                  ? 'Alle bestanden bij dit dossier zijn afbeeldingen — die staan in de fotogalerij.'
+                  : 'Nog geen bestanden bij dit dossier.'}
                 voettekst={
                   <div className="border-t border-neutral-100 px-3 py-2.5">
                     <SharePointKoppeling

@@ -56,16 +56,32 @@ export default async function KwaliteitDeel({
             <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               VCA-acties ({ingevuld} van {acties.length} ingevuld{openstaand > 0 ? `, ${openstaand} open` : ''})
             </h3>
-            {acties.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Geen VCA-acties op deze opdracht. Koppel een actielijst waarin de taken een
-                KAM/VGM-formulier hebben; die verschijnen hier.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {acties.map(a => <ActieRegel key={a.id} actie={a} formatDatum={formatDatum} />)}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Geen VCA-acties: dezelfde regelvorm, leeg — status, titel en formulier. */}
+              {acties.length === 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', borderRadius: 8,
+                  border: '1px dashed var(--border)', background: 'var(--surface)',
+                  color: 'var(--text-muted)',
+                }}>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                    background: 'var(--bg)', flexShrink: 0,
+                  }}>
+                    —
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>Geen VCA-acties op deze opdracht</div>
+                    <div style={{ fontSize: 11 }}>
+                      Koppel een actielijst waarin de taken een KAM/VGM-formulier hebben; die verschijnen hier.
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 12, flexShrink: 0 }}>—</span>
+                </div>
+              )}
+              {acties.map(a => <ActieRegel key={a.id} actie={a} formatDatum={formatDatum} />)}
+            </div>
           </section>
 
           {/* ── VCA-diploma's van de mensen op deze opdracht ──────────── */}
@@ -74,12 +90,7 @@ export default async function KwaliteitDeel({
               VCA-diploma&apos;s op deze opdracht
               {bemensing.length > 0 && ` (${vcaOpOrde} van ${bemensing.length} geldig)`}
             </h3>
-            {bemensing.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Er staat nog niemand ingepland op deze opdracht en er zijn geen rollen toegekend.
-              </p>
-            ) : (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
@@ -91,6 +102,16 @@ export default async function KwaliteitDeel({
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Nog niemand ingepland: de kolommen blijven staan met een lege regel. */}
+                    {bemensing.length === 0 && (
+                      <tr style={{ color: 'var(--text-muted)' }}>
+                        <td style={{ padding: '10px 14px' }}>—</td>
+                        <td style={{ padding: '10px 14px' }}>—</td>
+                        <td style={{ padding: '10px 14px' }}>—</td>
+                        <td style={{ padding: '10px 14px' }}>—</td>
+                        <td style={{ padding: '10px 14px' }}>—</td>
+                      </tr>
+                    )}
                     {bemensing.map((b, i) => (
                       <tr key={b.medewerker_id} style={{ borderBottom: i < bemensing.length - 1 ? '1px solid var(--border)' : 'none' }}>
                         <td style={{ padding: '10px 14px', fontWeight: 500 }}>{b.naam}</td>
@@ -108,7 +129,11 @@ export default async function KwaliteitDeel({
                     ))}
                   </tbody>
                 </table>
-              </div>
+            </div>
+            {bemensing.length === 0 && (
+              <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+                Er staat nog niemand ingepland op deze opdracht en er zijn geen rollen toegekend.
+              </p>
             )}
           </section>
         </>

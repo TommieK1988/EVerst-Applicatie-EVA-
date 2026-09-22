@@ -28,15 +28,30 @@ export default async function ProjectbezoekDeel({ dossierId }: { dossierId: stri
         via het dossier of via een actie.
       </p>
 
-      {bezoeken.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Er is nog geen projectbezoek op deze opdracht.
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {bezoeken.map(b => <BezoekKaart key={b.id} bezoek={b} dossierId={dossierId} />)}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Nog geen bezoek: dezelfde kaartvorm, leeg — kenmerk, status, datum en uitvoerder. */}
+        {bezoeken.length === 0 && (
+          <div style={{
+            border: '1px dashed var(--border)', borderRadius: 10,
+            background: 'var(--surface)', padding: '14px 16px', color: 'var(--text-muted)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>—</span>
+              <span style={{
+                padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                background: 'var(--bg)',
+              }}>
+                —
+              </span>
+            </div>
+            <div style={{ fontSize: 12, marginTop: 3 }}>— · — · —</div>
+            <p style={{ fontSize: 12.5, margin: '10px 0 0' }}>
+              Er is nog geen projectbezoek op deze opdracht.
+            </p>
+          </div>
+        )}
+        {bezoeken.map(b => <BezoekKaart key={b.id} bezoek={b} dossierId={dossierId} />)}
+      </div>
     </div>
   )
 }

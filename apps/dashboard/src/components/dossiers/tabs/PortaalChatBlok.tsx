@@ -53,27 +53,6 @@ export function PortaalChatBlok({ dossierId }: { dossierId: string }) {
   // verdwijnt.
   if (berichten === null || berichten === undefined) return null
 
-  if (berichten.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <span>Klantchat</span>
-          <span className="text-[11px] font-normal opacity-80">zichtbaar voor de opdrachtgever</span>
-        </CardHeader>
-        <CardBody>
-          <p className="text-[13px] text-neutral-500">
-            Nog geen berichten. Wat je hier typt, leest de opdrachtgever in zijn projectomgeving —
-            zet het portaal wel eerst open op de tab Klantportaal.
-          </p>
-          <Invoer
-            tekst={tekst} setTekst={setTekst} intern={intern} setIntern={setIntern}
-            bezig={bezig} fout={fout} onVersturen={versturen}
-          />
-        </CardBody>
-      </Card>
-    )
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -82,6 +61,19 @@ export function PortaalChatBlok({ dossierId }: { dossierId: string }) {
       </CardHeader>
       <CardBody>
         <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+            {/* Nog geen berichten: één lege bubbel, zodat de chat zijn vorm houdt. */}
+            {berichten.length === 0 && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-lg border border-dashed border-neutral-200 px-3 py-2 text-neutral-400">
+                  <p className="text-[10.5px] font-bold">—</p>
+                  <p className="mt-0.5 text-[13px]">
+                    Nog geen berichten. Wat je hier typt, leest de opdrachtgever in zijn
+                    projectomgeving — zet het portaal wel eerst open op de tab Klantportaal.
+                  </p>
+                  <p className="mt-0.5 text-[10px]">—</p>
+                </div>
+              </div>
+            )}
             {berichten.map(b => (
               <div key={b.id} className={b.vanKlant ? 'flex justify-start' : 'flex justify-end'}>
                 <div

@@ -3,7 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getDossierVerkoop, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, fmtPct, fmtDatum, TH, TD, LegeStaat } from './tab-ui'
+import { fmt, fmtPct, fmtDatum, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
@@ -138,14 +138,10 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   const nacalculatieMeerwerk = goedgekeurdeRegels.length - termijnMeerwerk.length
   const heeftNacalculatie = nacalculatieCodes.length > 0
 
-  if (!data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie && !opRegie) {
-    return (
-      <LegeStaat
-        titel="Geen verkoopgegevens"
-        tekst="Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen termijnen, facturen, goedgekeurd meerwerk of betaalgegevens."
-      />
-    )
-  }
+  // Is er nog helemaal niets, dan blijft de opmaak wel staan — contractwaarde, BTW-specificatie
+  // en facturatiestand met nulbedragen. Zo zie je waar de cijfers komen te staan in plaats van
+  // een lege plek. Alleen de reden komt erboven.
+  const nogNiets = !data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie && !opRegie
 
   // EVA-native meerwerkregels zijn leidend voor het meerwerk in het contracttotaal; valt terug op het
   // Bouw7-aggregaat uit getDossierVerkoop wanneer er geen goedgekeurde EVA-regels zijn.
@@ -240,6 +236,12 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
         ontbreekt={data.stand.ontbreekt}
         fout={data.stand.fout}
       />
+      {nogNiets && (
+        <LegeNotitie losstaand>
+          Nog geen verkoopgegevens: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen
+          termijnen, facturen, goedgekeurd meerwerk of betaalgegevens.
+        </LegeNotitie>
+      )}
       {/* Contractwaarde en facturatiestand naast de facturen die er al liggen: die gaan over
           hetzelfde geld, en onder elkaar stonden ze een scherm uit elkaar. */}
       <Kolommen>
@@ -310,6 +312,11 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                   </tr>
 
                   <SectieRij titel="BTW-specificatie" />
+                  {/* Nog geen enkel tarief bekend: een nulregel in plaats van een kopje met niets
+                      eronder, zodat de specificatie dezelfde vorm houdt als straks. */}
+                  {btwGroepen.length === 0 && !btwOnvolledig && (
+                    <LegeRij velden={['tekst', 'bedrag', 'bedrag', 'bedrag']} label="Nog geen BTW-tarief bekend" />
+                  )}
                   {btwGroepen.map((g) => (
                     <tr key={g.pct ?? 'onbekend'}>
                       <TD wrap>{g.pct != null ? `BTW ${fmtPct(g.pct)}` : 'Tarief onbekend'}</TD>
@@ -368,9 +375,6 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
           <Card>
             <CardHeader>Verkoopfacturen</CardHeader>
             <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-              {data.facturen.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Nog geen verkoopfacturen.</div>
-              ) : (
                 <table style={{ ...tabel, minWidth: 640 }}>
                   <thead>
                     <tr>
@@ -384,6 +388,9 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                     </tr>
                   </thead>
                   <tbody>
+                    {data.facturen.length === 0 && (
+                      <LegeRij velden={['tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag', 'tekst']} />
+                    )}
                     {data.facturen.map((f, i) => (
                       <tr key={i}>
                         <TD wrap>{f.factuurnummer ?? '—'}{f.isCredit ? ' (credit)' : ''}</TD>
@@ -400,19 +407,21 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                     <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
                       <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
                       <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0))}
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0), true)}
                       </td>
                       <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0))}
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0), true)}
                       </td>
                       <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0))}
+                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0), true)}
                       </td>
                       <td style={{ padding: '6px 12px' }} />
                     </tr>
                   </tfoot>
                 </table>
-              )}
+                {data.facturen.length === 0 && (
+                  <LegeNotitie>Nog geen verkoopfacturen op dit dossier.</LegeNotitie>
+                )}
             </CardBody>
           </Card>
         </Kolom>
@@ -499,10 +508,15 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                 </div>
               )}
 
-              {!data.termijnenBeschikbaar ? (
-                <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Termijnen zijn niet beschikbaar voor dit project.</div>
-              ) : (
-                <TermijnenBlok dossierId={dossierId} termijnen={data.termijnen} />
+              {/* De termijnstaat houdt zijn opmaak ook als Bouw7 er (nog) geen kent: kolomkoppen
+                  en een nulregel. Waarom hij leeg is staat eronder. */}
+              <TermijnenBlok
+                dossierId={dossierId}
+                termijnen={data.termijnen}
+                schemaMogelijk={data.termijnenBeschikbaar}
+              />
+              {!data.termijnenBeschikbaar && (
+                <LegeNotitie>Termijnen zijn niet beschikbaar voor dit project.</LegeNotitie>
               )}
             </CardBody>
           </Card>

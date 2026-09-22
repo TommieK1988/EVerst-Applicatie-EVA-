@@ -10,6 +10,7 @@ import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossi
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
+import { TH, LegeRij } from '@/components/dossiers/tabs/tab-ui'
 import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
@@ -176,12 +177,28 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
             </div>
           </CardHeader>
           <CardBody style={{ padding: 0 }}>
-            <div className="px-4 py-8 text-center">
-              <div className="text-[14px] font-semibold text-neutral-800">Nog geen calculatie gekoppeld</div>
-              <div className="mx-auto mt-1.5 max-w-[380px] text-[12.5px] text-neutral-500">
-                Dit dossier heeft nog geen calculatieproject. Maak er één aan om calculaties,
-                offertes en meerwerk-calculaties aan dit dossier te koppelen.
-              </div>
+            {/* Zonder calculatieproject blijft de versietabel staan — kolomkoppen en een
+                nulregel — zodat je ziet wat er komt te staan zodra je er een aanmaakt. */}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <TH>Nummer</TH>
+                  <TH>Versie</TH>
+                  <TH>Offerte</TH>
+                  <TH right>Excl. BTW</TH>
+                  <TH right>Incl. BTW</TH>
+                  <TH right>Marge</TH>
+                  <TH>Verzonden</TH>
+                  <TH right>Acties</TH>
+                </tr>
+              </thead>
+              <tbody>
+                <LegeRij velden={['tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'pct', 'tekst', 'leeg']} />
+              </tbody>
+            </table>
+            <div className="px-4 py-3 text-[12px] text-neutral-500">
+              Nog geen calculatie gekoppeld. Dit dossier heeft nog geen calculatieproject; maak er
+              één aan om calculaties, offertes en meerwerk-calculaties aan dit dossier te koppelen.
             </div>
           </CardBody>
         </Card>

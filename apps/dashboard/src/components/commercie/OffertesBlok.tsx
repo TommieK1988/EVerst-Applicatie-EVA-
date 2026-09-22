@@ -16,8 +16,6 @@ const eur = (n: number | null) =>
   }).format(n)
 
 export function OffertesBlok({ offertes }: { offertes: OfferteRegel[] }) {
-  if (offertes.length === 0) return null
-
   return (
     <Card>
       <CardHeader>
@@ -39,6 +37,17 @@ export function OffertesBlok({ offertes }: { offertes: OfferteRegel[] }) {
             </tr>
           </thead>
           <tbody>
+            {/* Nog geen offerte in Bouw7: de kolommen blijven staan met een nulregel. */}
+            {offertes.length === 0 && (
+              <tr className="border-b border-neutral-100 text-neutral-400 last:border-0">
+                <td className="whitespace-nowrap px-4 py-2">—</td>
+                <td className="px-4 py-2">—</td>
+                <td className="whitespace-nowrap px-4 py-2">—</td>
+                <td className="whitespace-nowrap px-4 py-2">—</td>
+                <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{eur(0)}</td>
+                <td className="whitespace-nowrap px-4 py-2">—</td>
+              </tr>
+            )}
             {offertes.map(o => (
               <tr key={o.id} className="border-b border-neutral-100 last:border-0">
                 <td className="whitespace-nowrap px-4 py-2 font-medium">{o.nummer ?? '—'}</td>
@@ -55,6 +64,11 @@ export function OffertesBlok({ offertes }: { offertes: OfferteRegel[] }) {
             ))}
           </tbody>
         </table>
+        {offertes.length === 0 && (
+          <p className="px-4 py-2.5 text-[11.5px] text-neutral-500">
+            Nog geen offerte onder dit project in Bouw7.
+          </p>
+        )}
       </CardBody>
     </Card>
   )

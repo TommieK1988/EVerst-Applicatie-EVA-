@@ -668,15 +668,15 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
 
         <OndertekenBlok moment={moment} readOnly={readOnly} onChange={onChange} />
 
-        {moment.punten.length === 0 ? (
-          <p className="text-[13px] text-neutral-500">Nog geen opleverpunten.</p>
-        ) : (
-          <div className="space-y-2">
-            {moment.punten.map(p => (
-              <PuntRow key={p.id} punt={p} dossierId={dossierId} toewijsbaar={toewijsbaar}
-                readOnly={readOnly} onChange={onChange} />
-            ))}
-          </div>
+        <div className="space-y-2">
+          {moment.punten.length === 0 && <LegePuntRij />}
+          {moment.punten.map(p => (
+            <PuntRow key={p.id} punt={p} dossierId={dossierId} toewijsbaar={toewijsbaar}
+              readOnly={readOnly} onChange={onChange} />
+          ))}
+        </div>
+        {moment.punten.length === 0 && (
+          <p className="mt-2 text-[12px] text-neutral-500">Nog geen opleverpunten op dit moment.</p>
         )}
 
         {!readOnly && (
@@ -967,6 +967,24 @@ function FotoKolom({ kop, fotos, readOnly, onVerwijder }: {
 }
 
 /* ──────────────────────────────── Punt-rij ───────────────────────────────── */
+
+/**
+ * Plaatshouder met dezelfde vorm als een opleverpunt: nummer, status, omschrijving, toewijzing
+ * en deadline, allemaal leeg. Bewust zonder keuzelijst of knoppen — er valt nog niets te bedienen,
+ * en een statuskiezer boven een punt dat niet bestaat zou een besturing suggereren die er niet is.
+ */
+function LegePuntRij() {
+  return (
+    <div className="rounded-lg border border-dashed border-neutral-200 bg-white p-3 text-neutral-400">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold tabular-nums">OP—</span>
+        <Badge tone="neutral" size="sm">—</Badge>
+      </div>
+      <div className="mt-1 text-[13px]">—</div>
+      <div className="mt-0.5 text-[11px]">Ruimte — · toegewezen aan — · deadline —</div>
+    </div>
+  )
+}
 
 function PuntRow({ punt, dossierId, toewijsbaar, readOnly, onChange }: {
   punt: OpleverPuntView

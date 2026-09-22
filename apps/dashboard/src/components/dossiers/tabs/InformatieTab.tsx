@@ -723,10 +723,14 @@ function OpdrachtDetailDialog({
             </div>
           )}
           <div>
-          {stelposten.length === 0 ? (
-            <div className="text-[12px] italic text-neutral-400">Nog geen stelposten aangewezen.</div>
-          ) : (
-            <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-neutral-100">
+              {/* Nog geen stelposten: dezelfde regelvorm, met een nulbedrag. */}
+              {stelposten.length === 0 && (
+                <div className="flex items-baseline justify-between gap-2 py-[5px] first:pt-0 text-neutral-400">
+                  <span className="min-w-0 flex-1 truncate text-[12px]">Nog geen stelposten aangewezen</span>
+                  <span className="shrink-0 tabular-nums text-[12px] font-semibold">{fmtBedrag(0)}</span>
+                </div>
+              )}
               {stelposten.map(sp => (
                 <div key={sp.id} className="py-[5px] first:pt-0">
                   <div className="flex items-baseline justify-between gap-2">
@@ -818,8 +822,7 @@ function OpdrachtDetailDialog({
                   )}
                 </div>
               ))}
-            </div>
-          )}
+          </div>
           {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
             <button
               type="button"
@@ -845,10 +848,14 @@ function OpdrachtDetailDialog({
 
         {soort === 'meerwerk' && (
         <div>
-          {meerwerken.length === 0 ? (
-            <div className="text-[12px] italic text-neutral-400">Geen goedgekeurd meerwerk.</div>
-          ) : (
-            <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-neutral-100">
+              {/* Geen goedgekeurd meerwerk: dezelfde regelvorm, met een nulbedrag. */}
+              {meerwerken.length === 0 && (
+                <div className="flex items-baseline justify-between gap-2 py-[5px] first:pt-0 text-neutral-400">
+                  <span className="min-w-0 flex-1 truncate text-[12px]">Geen goedgekeurd meerwerk</span>
+                  <span className="shrink-0 tabular-nums text-[12px] font-semibold">{fmtBedrag(0)}</span>
+                </div>
+              )}
               {meerwerken.map(mw => (
                 <div key={mw.id} className="py-[5px] first:pt-0">
                   <div className="flex items-baseline justify-between gap-2">
@@ -865,13 +872,20 @@ function OpdrachtDetailDialog({
                   )}
                 </div>
               ))}
-            </div>
-          )}
+          </div>
         </div>
         )}
 
         {soort === 'opties' && (
           <div className="divide-y divide-neutral-100">
+            {/* Nog geen opties: dezelfde regelvorm, met een nulbedrag. */}
+            {opties.length === 0 && (
+              <div className="flex items-baseline justify-between gap-3 py-[5px] text-neutral-400">
+                <span className="min-w-0 flex-1 truncate text-[12px]">Nog geen opties vastgelegd</span>
+                <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-px text-[10px] font-semibold">—</span>
+                <span className="shrink-0 tabular-nums text-[12px] font-semibold">{fmtBedrag(0)}</span>
+              </div>
+            )}
             {opties.map(op => (
               <div key={op.id} className="flex items-baseline justify-between gap-3 py-[5px]">
                 <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{op.omschrijving}</span>
@@ -1047,16 +1061,19 @@ function TakenBlok({
           )}
         </CardHeader>
         <CardBody className="min-h-0 flex-1 overflow-y-auto py-3">
-          {openTaken.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-2 py-4 text-center">
-              <span className="text-[22px] opacity-35">☑</span>
-              <span className="text-xs font-medium text-neutral-500">Geen openstaande acties</span>
-              {sjablonen.length > 0 && (
-                <span className="text-[11px] text-neutral-400">Activeer een sjabloon om acties aan te maken</span>
+          <div className="flex flex-col">
+              {/* Geen openstaande acties: dezelfde regelvorm — vinkvakje, statusstip en titel. */}
+              {openTaken.length === 0 && (
+                <div className="flex w-full items-center gap-2.5 py-[7px] text-neutral-400">
+                  <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-dashed border-neutral-300" />
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-200" />
+                  <div className="min-w-0 flex-1 text-[13px] font-medium">Geen openstaande acties</div>
+                  <span className="shrink-0 text-[10px] font-semibold">—</span>
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="flex flex-col">
+              {openTaken.length === 0 && sjablonen.length > 0 && (
+                <span className="mt-1 text-[11px] text-neutral-400">Activeer een sjabloon om acties aan te maken</span>
+              )}
               {openTaken.map((t, i) => (
                 <div
                   key={t.id}
@@ -1108,8 +1125,7 @@ function TakenBlok({
               >
                 Alle acties →
               </Link>
-            </div>
-          )}
+          </div>
         </CardBody>
       </Card>
 

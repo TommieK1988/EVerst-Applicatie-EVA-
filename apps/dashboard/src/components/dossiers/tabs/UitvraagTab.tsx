@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Button, Badge, EmptyState, useDialogen } from '@/components/ui'
+import { Card, CardHeader, CardBody, Button, Badge, useDialogen } from '@/components/ui'
 import {
   uitvraagStatusLabels, uitvraagSoortLabels, UITVRAAG_TRANSITIES,
   type UitvraagStatus, type UitvraagSoort,
@@ -149,7 +149,7 @@ export default function UitvraagTab({ dossierId }: Props) {
                 </span>
               )}
             </div>
-            {!readOnly && rijen.length > 0 && (
+            {!readOnly && (
               <Button variant="primary" onClick={() => setFormOpen(o => !o)} disabled={bezig}>
                 {formOpen ? 'Annuleren' : 'Uitvraag toevoegen'}
               </Button>
@@ -158,14 +158,7 @@ export default function UitvraagTab({ dossierId }: Props) {
         </CardHeader>
 
         <CardBody>
-          {rijen.length === 0 && !formOpen ? (
-            <EmptyState
-              title="Nog niets uitgevraagd"
-              description="Leg hier vast bij welke onderaannemers en leveranciers je een prijs hebt opgevraagd, en houd bij wat er nog open staat."
-              actions={!readOnly ? <Button variant="primary" onClick={() => setFormOpen(true)}>Uitvraag toevoegen</Button> : undefined}
-            />
-          ) : (
-            <>
+          <>
               {formOpen && !readOnly && (
                 <div className="mb-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                   <div className="grid grid-cols-4 gap-3">
@@ -228,8 +221,9 @@ export default function UitvraagTab({ dossierId }: Props) {
                 </div>
               )}
 
-              {rijen.length > 0 && (
-                <div className="overflow-x-auto">
+              {/* De tabel blijft staan als er nog niets is uitgevraagd: kolomkoppen en een lege
+                  regel laten zien wat een uitvraag vastlegt. */}
+              <div className="overflow-x-auto">
                   <table className="w-full min-w-[980px] border-collapse text-[12.5px]">
                     <thead>
                       <tr className="border-b border-neutral-200 text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
@@ -244,6 +238,18 @@ export default function UitvraagTab({ dossierId }: Props) {
                       </tr>
                     </thead>
                     <tbody>
+                      {rijen.length === 0 && (
+                        <tr className="border-b border-neutral-100 text-neutral-400">
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-3">—</td>
+                          <td className="py-2 pr-1" />
+                        </tr>
+                      )}
                       {rijen.map(rij => {
                         const status = rij.status as UitvraagStatus
                         return (
@@ -386,9 +392,13 @@ export default function UitvraagTab({ dossierId }: Props) {
                     </tbody>
                   </table>
                 </div>
+              {rijen.length === 0 && (
+                <p className="mt-3 text-[12px] text-neutral-500">
+                  Nog niets uitgevraagd. Leg hier vast bij welke onderaannemers en leveranciers je een
+                  prijs hebt opgevraagd, en houd bij wat er nog open staat.
+                </p>
               )}
             </>
-          )}
         </CardBody>
       </Card>
 

@@ -93,3 +93,53 @@ export const LegeStaat = ({ titel, tekst }: { titel: string; tekst: string }) =>
     <div style={{ fontSize: 12, fontWeight: 500, textAlign: 'center', maxWidth: 320 }}>{tekst}</div>
   </div>
 )
+
+/**
+ * Placeholder-regel voor een tabel zonder gegevens.
+ *
+ * Een leeg tabblad houdt zo dezelfde opmaak als een gevuld tabblad: de kolommen blijven staan,
+ * tekstkolommen krijgen een streepje en bedrag-/urenkolommen een nul. Dat leest als "hier staat
+ * nog niets" in plaats van als "hier is iets stuk" — en je ziet meteen wát er komt te staan.
+ */
+export type LegeCel = 'tekst' | 'bedrag' | 'uren' | 'pct' | 'datum' | 'leeg'
+
+/**
+ * De inhoud van één placeholder-cel. Los exporteerbaar omdat niet elke tabel de `TD` hierboven
+ * gebruikt — de tabs met Tailwind-klassen schrijven hun eigen `<td>` en halen alleen de tekst
+ * hier op, zodat overal dezelfde nulwaarden staan.
+ */
+export const legeCel = (v: LegeCel): string =>
+  v === 'bedrag' ? fmt(0, true)
+    : v === 'uren' ? fmtUren(0, true)
+      : v === 'pct' ? '0 %'
+        : v === 'leeg' ? ''
+          : '—'
+
+/** Kleur van een placeholder-cel: lichter dan echte gegevens, zodat het als "nog niets" leest. */
+export const LEEG_GRIJS = 'var(--neutral-400)'
+
+export const LegeRij = ({ velden, label }: { velden: LegeCel[]; label?: string }) => (
+  <tr>
+    {velden.map((v, i) => (
+      <TD key={i} right={v === 'bedrag' || v === 'uren' || v === 'pct'} kleur={LEEG_GRIJS}>
+        {i === 0 && label != null ? label : legeCel(v)}
+      </TD>
+    ))}
+  </tr>
+)
+
+/**
+ * Zachte toelichting bij een (nog) leeg blok: waarom staat hier niets.
+ * `losstaand` haalt de scheidingslijn weg, voor gebruik boven de kaarten in plaats van
+ * als voettekst onder een tabel.
+ */
+export const LegeNotitie = ({ children, losstaand }: {
+  children: React.ReactNode; losstaand?: boolean
+}) => (
+  <div style={{
+    padding: losstaand ? '0 2px' : '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)',
+    borderTop: losstaand ? undefined : '1px solid var(--neutral-100)', lineHeight: 1.5,
+  }}>
+    {children}
+  </div>
+)

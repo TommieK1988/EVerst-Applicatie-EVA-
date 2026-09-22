@@ -143,13 +143,19 @@ export default function OpleveringMailBlok({
 
         {wachtrij == null ? (
           <p className="text-[12.5px] text-neutral-400">Wachtrij laden…</p>
-        ) : wachtrij.length === 0 ? (
-          <p className="text-[13px] text-neutral-500">
-            Geen berichten klaargezet. Herinneringen aan onderaannemers en feedback-uitnodigingen verschijnen hier
-            automatisch; ze gaan pas weg als je hierboven op versturen klikt.
-          </p>
         ) : (
           <div className="space-y-2">
+            {/* Lege wachtrij: dezelfde kaartvorm — soort, onderwerp en ontvangers. */}
+            {wachtrij.length === 0 && (
+              <div className="rounded-lg border border-dashed border-neutral-200 bg-white p-3 text-neutral-400">
+                <Badge tone="neutral" size="sm">—</Badge>
+                <div className="mt-1 text-[12.5px] font-medium">Geen berichten klaargezet</div>
+                <div className="text-[11px]">
+                  Herinneringen aan onderaannemers en feedback-uitnodigingen verschijnen hier automatisch;
+                  ze gaan pas weg als je hierboven op versturen klikt.
+                </div>
+              </div>
+            )}
             {wachtrij.map(m => (
               <div key={m.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3">
                 <div className="min-w-0 flex-1">

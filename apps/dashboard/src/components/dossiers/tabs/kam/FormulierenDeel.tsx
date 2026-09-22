@@ -52,12 +52,7 @@ export default async function FormulierenDeel({ dossierId }: { dossierId: string
         de mobiele app.
       </p>
 
-      {inzendingen.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Nog geen formulieren ingevuld voor dit dossier.
-        </p>
-      ) : (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
@@ -70,6 +65,16 @@ export default async function FormulierenDeel({ dossierId }: { dossierId: string
               </tr>
             </thead>
             <tbody>
+              {/* Nog niets ingevuld: de kolommen blijven staan met een lege regel. */}
+              {inzendingen.length === 0 && (
+                <tr style={{ color: 'var(--text-muted)' }}>
+                  <td style={{ padding: '10px 14px' }}>—</td>
+                  <td style={{ padding: '10px 14px' }}>—</td>
+                  <td style={{ padding: '10px 14px' }}>—</td>
+                  <td style={{ padding: '10px 14px' }}>—</td>
+                  <td style={{ padding: '10px 14px' }}>—</td>
+                </tr>
+              )}
               {inzendingen.map((inz, i) => {
                 const s = STATUS_BADGE[inz.status] ?? STATUS_BADGE.concept
                 return (
@@ -94,6 +99,10 @@ export default async function FormulierenDeel({ dossierId }: { dossierId: string
             </tbody>
           </table>
         </div>
+      {inzendingen.length === 0 && (
+        <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+          Nog geen formulieren ingevuld voor dit dossier.
+        </p>
       )}
     </div>
   )

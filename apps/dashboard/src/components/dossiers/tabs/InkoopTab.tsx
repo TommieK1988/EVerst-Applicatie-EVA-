@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { getDossierInkoop, type InkoopSignaal } from '@/lib/dossiers/actions'
 import { getOpleverBetaalsignaal } from '@/lib/dossiers/oplevering'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, TH, TD, LegeStaat, ROOD } from './tab-ui'
+import { fmt, TH, TD, LegeRij, LegeNotitie, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
@@ -115,29 +115,15 @@ async function BetaalSignaal({ dossierId }: { dossierId: string }) {
 async function InkoopInhoud({ dossierId }: { dossierId: string }) {
   const data = await getDossierInkoop(dossierId)
 
-  if (!data.beschikbaar) {
-    // "Nog niet opgehaald" is iets anders dan "niets besteld"; in het eerste geval helpt de knop.
-    const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
-    return (
-      <div>
-        <Bouw7StandStrip
-          dossierId={dossierId}
-          tab="inkoop"
-          opgehaaldOp={data.stand.opgehaaldOp}
-          ontbreekt={data.stand.ontbreekt}
-          fout={data.stand.fout}
-        />
-        <LegeStaat
-          titel={nooitOpgehaald ? 'Nog niet opgehaald uit Bouw7' : 'Geen inkoopgegevens'}
-          tekst={
-            nooitOpgehaald
-              ? 'Deze gegevens worden twee keer per dag opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
-              : 'Dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen inkooporders, onderaannemerscontracten of geboekte kosten.'
-          }
-        />
-      </div>
-    )
-  }
+  // Zonder gegevens blijft de opmaak staan — kaarten, kolomkoppen en nulbedragen. Alleen de
+  // reden waarom er niets staat komt erboven. "Nog niet opgehaald" is iets anders dan "niets
+  // besteld"; in het eerste geval helpt de knop Vernieuwen.
+  const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
+  const uitleg = !data.beschikbaar
+    ? nooitOpgehaald
+      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Vernieuwen om ze nu binnen te halen.'
+      : 'Nog geen inkoopgegevens: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen inkooporders, onderaannemerscontracten of geboekte kosten.'
+    : null
 
   const t = data.totalen
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
@@ -162,6 +148,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
         ontbreekt={data.stand.ontbreekt}
         fout={data.stand.fout}
       />
+      {uitleg && <LegeNotitie losstaand>{uitleg}</LegeNotitie>}
       <SignaalBlok signalen={data.signalen} />
       <BetaalSignaal dossierId={dossierId} />
 
@@ -169,9 +156,6 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
       <Card>
         <CardHeader>Inkooporders</CardHeader>
         <CardBody style={{ padding: 0 }}>
-          {data.inkooporders.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Geen inkooporders.</div>
-          ) : (
             <table style={tabel}>
               <thead>
                 <tr>
@@ -180,6 +164,9 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody>
+                {data.inkooporders.length === 0 && (
+                  <LegeRij velden={['tekst', 'tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag']} />
+                )}
                 {data.inkooporders.map((r, i) => (
                   <tr key={i}>
                     <TD>{r.nummer ?? '—'}{r.uitEva && <EvaMerk />}</TD>
@@ -199,7 +186,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                 </tr>
               </tbody>
             </table>
-          )}
+          {data.inkooporders.length === 0 && <LegeNotitie>Nog geen inkooporders op dit dossier.</LegeNotitie>}
         </CardBody>
       </Card>
 
@@ -207,9 +194,6 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
       <Card>
         <CardHeader>Onderaannemerscontracten</CardHeader>
         <CardBody style={{ padding: 0 }}>
-          {data.onderaannemers.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Geen onderaannemerscontracten.</div>
-          ) : (
             <table style={tabel}>
               <thead>
                 <tr>
@@ -218,6 +202,9 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                 </tr>
               </thead>
               <tbody>
+                {data.onderaannemers.length === 0 && (
+                  <LegeRij velden={['tekst', 'tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag']} />
+                )}
                 {data.onderaannemers.map((c, i) => (
                   <tr key={i}>
                     <TD>{c.nummer ?? '—'}{c.uitEva && <EvaMerk />}</TD>
@@ -237,24 +224,23 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
                 </tr>
               </tbody>
             </table>
-          )}
+          {data.onderaannemers.length === 0 && <LegeNotitie>Nog geen onderaannemerscontracten op dit dossier.</LegeNotitie>}
         </CardBody>
       </Card>
 
       {/* Geboekte kosten — compacte, sorteerbare tabel met zoekbalk + correctie-acties */}
       <Card>
         <CardHeader>Geboekte kosten</CardHeader>
-        <CardBody style={{ padding: data.geboekteKosten.length === 0 ? undefined : 0 }}>
-          {data.geboekteKosten.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--neutral-500)', padding: '12px' }}>Nog geen geboekte inkoopkosten (met inkoopfactuur).</div>
-          ) : (
-            <GeboekteKostenTabel
-              dossierId={dossierId}
-              data={data.geboekteKosten}
-              orders={orderOpties}
-              contracten={contractOpties}
-              projectcodes={data.projectcodes}
-            />
+        <CardBody style={{ padding: 0 }}>
+          <GeboekteKostenTabel
+            dossierId={dossierId}
+            data={data.geboekteKosten}
+            orders={orderOpties}
+            contracten={contractOpties}
+            projectcodes={data.projectcodes}
+          />
+          {data.geboekteKosten.length === 0 && (
+            <LegeNotitie>Nog geen geboekte inkoopkosten (met inkoopfactuur) op dit dossier.</LegeNotitie>
           )}
         </CardBody>
       </Card>
