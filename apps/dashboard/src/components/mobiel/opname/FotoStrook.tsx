@@ -64,6 +64,12 @@ export default function FotoStrook({
    */
   async function verwerk(bestanden: FileList | null) {
     if (!bestanden || bestanden.length === 0) return
+    // METEEN kopiëren, vóór de eerste `await`. `bestanden` is de LIVE FileList van de input, en de
+    // onChange-handler zet `e.target.value = ''` zodra deze functie voor het eerst aan een await
+    // hangt — dan is de lijst leeg en verdwijnt de foto zonder één melding. Precies dat gebeurde
+    // bij een nieuw punt, waar `voorbereiden()` vóór de lus wordt afgewacht; bij een bestaand punt
+    // (geen `voorbereiden`) ging het wél goed, en dat maakte het zo lastig te zien.
+    const teVerwerken = Array.from(bestanden)
     setBezig(true)
     setFout(null)
 
@@ -75,7 +81,7 @@ export default function FotoStrook({
     const nieuwe: StrookFoto[] = []
     let volgendeIsHoofd = fotos.length === 0
 
-    for (const bestand of Array.from(bestanden)) {
+    for (const bestand of teVerwerken) {
       const verkleind = await verkleinFoto(bestand)
       // Client-gegenereerd id: bepaalt zowel de rij als het opslagpad, en maakt opnieuw versturen
       // daarmee ongevaarlijk.
