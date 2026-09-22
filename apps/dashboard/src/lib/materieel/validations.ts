@@ -64,10 +64,34 @@ export const nieuwMaterieelSchema = materieelObjectSchema
   .extend({
     toegewezen_medewerker_id: optioneleTekst,
     toegewezen_team_id: optioneleTekst,
+    /**
+     * Aantal identieke exemplaren dat in één keer wordt ingeboekt. Elk exemplaar
+     * wordt een eigen object met een eigen paspoort, QR-code en keuringsregime —
+     * er bestaat bewust geen voorraadkolom "aantal" op een object.
+     *
+     * Het maximum is een rem tegen een typefout: 500 in plaats van 5 zou een
+     * halve database aan gereedschap opleveren die je met de hand mag opruimen.
+     */
+    aantal: z
+      .union([z.string(), z.number()])
+      .transform((v) => (v === '' || v === null || v === undefined ? 1 : Number(v)))
+      .refine((v) => Number.isInteger(v) && v >= 1 && v <= 50, 'Aantal moet een heel getal van 1 tot 50 zijn')
+      .default(1),
   })
   .refine(
     (v) => !(v.toegewezen_medewerker_id && v.toegewezen_team_id),
     'Kies een collega óf een team, niet allebei',
+  )
+  /**
+   * Stickercode en inventarisnummer zijn uniek in de database, en een
+   * serienummer hoort bij precies één apparaat. Bij meerdere exemplaren zou de
+   * tweede insert dus afketsen op een unieke sleutel — of, erger, zouden vijf
+   * helmen hetzelfde serienummer dragen. Die velden vul je per stuk in nadat ze
+   * zijn aangemaakt.
+   */
+  .refine(
+    (v) => v.aantal === 1 || !(v.qr_code || v.inventarisnummer || v.serienummer),
+    'Stickercode, inventarisnummer en serienummer horen bij één exemplaar — laat ze leeg als je er meerdere tegelijk aanmaakt',
   )
 
 export type NieuwMaterieelInput = z.infer<typeof nieuwMaterieelSchema>

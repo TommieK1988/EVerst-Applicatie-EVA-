@@ -24,6 +24,10 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)',
 }
 const foutStyle: React.CSSProperties = { fontSize: 11, color: 'var(--error-600, #dc2626)', marginTop: 3 }
+/** Veld dat niet van toepassing is bij meerdere exemplaren tegelijk. */
+const opSlotStyle: React.CSSProperties = {
+  ...inputStyle, background: 'var(--neutral-100)', color: 'var(--fg-muted)', cursor: 'not-allowed',
+}
 
 function Veld({ label, children, fout }: { label: string; children: React.ReactNode; fout?: string }) {
   return (
@@ -47,11 +51,12 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
   const bewerken = !!bestaand
 
   const {
-    register, handleSubmit, formState: { errors, isSubmitting },
+    register, handleSubmit, watch, formState: { errors, isSubmitting },
   } = useForm<NieuwMaterieelInput>({
     resolver: zodResolver(nieuwMaterieelSchema),
     defaultValues: {
       toegewezen_medewerker_id: '',
+      aantal: 1,
       omschrijving: bestaand?.omschrijving ?? '',
       categorie: bestaand?.categorie ?? 'gereedschap',
       status: bestaand?.status ?? 'beschikbaar',
@@ -72,17 +77,31 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
     },
   })
 
-  async function onSubmit(waarden: NieuwMaterieelInput) {
-    const res = bewerken
-      ? await updateMaterieelObject(bestaand!.id, waarden)
-      : await maakMaterieelObject(waarden)
+  // Meerdere exemplaren tegelijk inboeken. Stickercode, inventarisnummer en
+  // serienummer horen dan bij niemand in het bijzonder — die velden gaan op slot
+  // (en react-hook-form stuurt ze als `undefined` mee, dus ze blijven leeg).
+  const aantal = Number(watch('aantal') ?? 1)
+  const meerdere = !bewerken && aantal > 1
 
-    if (!res.ok) {
-      toast.error(res.error)
+  async function onSubmit(waarden: NieuwMaterieelInput) {
+    if (bewerken) {
+      const res = await updateMaterieelObject(bestaand!.id, waarden)
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Materieel bijgewerkt')
+      router.push(`/materieelbeheer/${res.data.id}`)
+      router.refresh()
       return
     }
-    toast.success(bewerken ? 'Materieel bijgewerkt' : 'Materieel toegevoegd')
-    router.push(`/materieelbeheer/${res.data.id}`)
+
+    const res = await maakMaterieelObject(waarden)
+    if (!res.ok) { toast.error(res.error); return }
+
+    // Bij één exemplaar het verse paspoort openen (daar hoort de sticker op).
+    // Bij meerdere heeft dat geen zin — dan is de lijst met alle nieuwe regels
+    // de plek waar je verder werkt.
+    const { id, aantal: gemaakt } = res.data
+    toast.success(gemaakt > 1 ? `${gemaakt} stuks toegevoegd` : 'Materieel toegevoegd')
+    router.push(gemaakt > 1 ? '/materieelbeheer' : `/materieelbeheer/${id}`)
     router.refresh()
   }
 
@@ -101,6 +120,17 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
               <input {...register('omschrijving')} style={inputStyle} placeholder="Bijv. Festool boormachine" />
             </Veld>
           </div>
+
+          {!bewerken && (
+            <Veld label="Aantal" fout={errors.aantal?.message}>
+              <input type="number" min="1" max="50" step="1" {...register('aantal')} style={{ ...inputStyle, maxWidth: 120 }} />
+              <p style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
+                {meerdere
+                  ? `Er komen ${aantal} losse objecten in de lijst, elk met een eigen paspoort en QR-code.`
+                  : 'Meer dan één van hetzelfde? Vul hier in hoeveel — je krijgt er evenveel losse objecten voor terug.'}
+              </p>
+            </Veld>
+          )}
 
           {!bewerken && (
             <div style={{ gridColumn: '1 / -1' }}>
@@ -135,16 +165,35 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
           </Veld>
 
           <Veld label="Inventarisnummer" fout={errors.inventarisnummer?.message}>
-            <input {...register('inventarisnummer')} style={inputStyle} placeholder="Optioneel" />
+            <input
+              {...register('inventarisnummer', { disabled: meerdere })}
+              style={meerdere ? opSlotStyle : inputStyle}
+              placeholder={meerdere ? 'Per stuk invullen' : 'Optioneel'}
+            />
           </Veld>
 
           <Veld label="Stickercode" fout={errors.qr_code?.message}>
-            <input {...register('qr_code')} style={inputStyle} placeholder="Code van de gekochte sticker" />
+            <input
+              {...register('qr_code', { disabled: meerdere })}
+              style={meerdere ? opSlotStyle : inputStyle}
+              placeholder={meerdere ? 'Per stuk invullen' : 'Code van de gekochte sticker'}
+            />
           </Veld>
 
           <Veld label="Serienummer" fout={errors.serienummer?.message}>
-            <input {...register('serienummer')} style={inputStyle} />
+            <input
+              {...register('serienummer', { disabled: meerdere })}
+              style={meerdere ? opSlotStyle : inputStyle}
+              placeholder={meerdere ? 'Per stuk invullen' : ''}
+            />
           </Veld>
+
+          {meerdere && (
+            <p style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--fg-muted)', marginTop: -8 }}>
+              Inventarisnummer, stickercode en serienummer horen bij één exemplaar. Die vul je per stuk in
+              op het paspoort, nadat ze zijn aangemaakt.
+            </p>
+          )}
 
           <Veld label="Merk" fout={errors.merk?.message}>
             <input {...register('merk')} style={inputStyle} />
@@ -190,7 +239,7 @@ export default function MaterieelForm({ bestaand, medewerkerOpties = [] }: Props
 
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <Button type="submit" variant="primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Bezig…' : bewerken ? 'Opslaan' : 'Materieel toevoegen'}
+            {isSubmitting ? 'Bezig…' : bewerken ? 'Opslaan' : meerdere ? `${aantal} stuks toevoegen` : 'Materieel toevoegen'}
           </Button>
           <Button type="button" variant="secondary" onClick={() => router.back()}>
             Annuleren

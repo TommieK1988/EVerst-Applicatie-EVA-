@@ -52,15 +52,28 @@ function leesbaarDbFout(error: { code?: string; message: string }): string {
 
 /* ── Object CRUD ──────────────────────────────────────────────────── */
 
-export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<{ id: string }>> {
+/**
+ * Registreert één stuk materieel, of meerdere identieke exemplaren in één keer.
+ *
+ * `aantal` maakt echte losse objecten — geen voorraadregel met een getal erop.
+ * Dat is een bewuste keuze: keuringen, toewijzingen en stickers hangen in deze
+ * module allemaal aan één object. Vijf helmen als één regel met "5" erin zou
+ * betekenen dat je niet kunt zien wie welke heeft of welke is afgekeurd.
+ *
+ * Geeft de id van het eerste exemplaar terug plus hoeveel er zijn aangemaakt,
+ * zodat de aanroeper weet of hij naar het paspoort of naar de lijst moet.
+ */
+export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<{ id: string; aantal: number }>> {
   const g = await gate(); if (!g.ok) return g
   const parsed = nieuwMaterieelSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldige invoer' }
 
   // De toewijzing is geen kolom-waarde maar een gebeurtenis: apart afhandelen.
+  // `aantal` is evenmin een kolom — het bepaalt hoeveel rijen we maken.
   const {
     toegewezen_medewerker_id: medewerkerId,
     toegewezen_team_id: teamId,
+    aantal,
     ...velden
   } = parsed.data
   const client = db()
@@ -69,33 +82,39 @@ export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<
   // persoon: gereedschap dat op de werkplaats of in een bus ligt, staat daarop.
   const niveau = medewerkerId ? 'persoonlijk' : teamId ? 'team' : 'algemeen'
 
+  const rij = {
+    ...velden,
+    created_by: g.medewerker.id,
+    toewijzing_niveau: niveau,
+    toegewezen_medewerker_id: medewerkerId ?? null,
+    toegewezen_team_id: teamId ?? null,
+    status: niveau === 'algemeen' ? velden.status : 'in_gebruik',
+  }
+
+  // Eén insert met meerdere rijen: alles lukt, of niets. Een halve partij
+  // gereedschap in de lijst is erger dan een foutmelding.
   const { data, error } = await client
     .from('materieel_objecten')
-    .insert({
-      ...velden,
-      created_by: g.medewerker.id,
-      toewijzing_niveau: niveau,
-      toegewezen_medewerker_id: medewerkerId ?? null,
-      toegewezen_team_id: teamId ?? null,
-      status: niveau === 'algemeen' ? velden.status : 'in_gebruik',
-    })
-    .select('id').single()
+    .insert(Array.from({ length: aantal }, () => ({ ...rij })))
+    .select('id')
 
   if (error) return { ok: false, error: leesbaarDbFout(error) }
-  const id = data.id as string
+  const ids = (data ?? []).map((r: { id: string }) => r.id)
 
   // Historie vastleggen zodat de uitgifte later herleidbaar is.
-  if (niveau !== 'algemeen') {
-    await client.from('materieel_toewijzingen').insert({
-      object_id: id, niveau,
-      medewerker_id: medewerkerId ?? null,
-      team_id: teamId ?? null,
-      door: g.medewerker.id, opmerking: 'Toegewezen bij registratie',
-    })
+  if (niveau !== 'algemeen' && ids.length > 0) {
+    await client.from('materieel_toewijzingen').insert(
+      ids.map((id: string) => ({
+        object_id: id, niveau,
+        medewerker_id: medewerkerId ?? null,
+        team_id: teamId ?? null,
+        door: g.medewerker.id, opmerking: 'Toegewezen bij registratie',
+      })),
+    )
   }
 
   herlaad()
-  return { ok: true, data: { id } }
+  return { ok: true, data: { id: ids[0], aantal: ids.length } }
 }
 
 export async function updateMaterieelObject(id: string, raw: unknown): Promise<ActieResultaat<{ id: string }>> {
