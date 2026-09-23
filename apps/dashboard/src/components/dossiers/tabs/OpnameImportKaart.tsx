@@ -38,8 +38,7 @@ import {
   laadCalculatieSnapshot,
   syncCalculatieNaarSupabase,
 } from '@/app/(platform)/everts-calc/actions/sync'
-import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
-import { koppelDossierAanProject } from '@/lib/dossiers/actions'
+import { zorgVoorCalculatieProject } from '@/lib/dossiers/actions'
 import { laadOpnameVoorImport, markeerOpnameOmgezet } from '@/lib/opname/import-actions'
 import { bouwImport, overbodigeRegelIds } from '@/lib/opname/naar-calculatie'
 import type { Opname } from '@everts/database/opname-types'
@@ -101,16 +100,14 @@ export default function OpnameImportKaart({
 
       // 2. Zorgen voor een gekoppeld calculatieproject. koppelDossierAanProject is idempotent en
       //    overschrijft nooit — een dossier dat al een calculatie heeft, krijgt er geen tweede.
-      let pid = projectId
-      if (!pid) {
-        const { id } = await maakProjectVanAanvraag(dossierNaam || opname.opnamenummer, '')
-        const koppel = await koppelDossierAanProject(dossierId, id)
-        if (!koppel.ok) throw new Error('Koppelen van de calculatie aan het dossier is mislukt.')
-        // koppelDossierAanProject overschrijft nooit: hangt er al een calculatie aan dit dossier,
-        // dan krijgen we díe terug en importeren we daarin.
-        pid = koppel.projectId ?? id
-        setProjectId(pid)
-      }
+      //    Hangt er al een calculatie aan dit dossier, dan krijgen we díe terug en importeren we
+      //    daarin; wijst de koppeling naar een verwijderd project, dan komt er een nieuw.
+      const koppel = await zorgVoorCalculatieProject(
+        dossierId, dossierNaam || opname.opnamenummer, projectId,
+      )
+      if (!koppel.ok) throw new Error(koppel.error)
+      const pid = koppel.projectId
+      setProjectId(pid)
 
       // 3. VERSE hydratie, direct vóór het schrijven. Zonder dit is het werkgeheugen leeg en zou de
       //    snapshot die we straks wegschrijven de hele bestaande calculatie wissen.

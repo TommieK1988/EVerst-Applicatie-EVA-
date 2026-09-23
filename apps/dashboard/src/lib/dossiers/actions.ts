@@ -579,6 +579,42 @@ export async function logSubstatusHistorie(
     .insert({ dossier_id: dossierId, substatus, bron })
 }
 
+/**
+ * Geeft een calculatieproject voor het dossier dat gegarandeerd in `projects` bestaat.
+ * Hergebruikt `kandidaat` (of de dossierkoppeling) als die bestaat; anders wordt een nieuw
+ * project aangemaakt en gekoppeld. Nodig vóór elke calculatie-write: een wees-koppeling
+ * (project verwijderd, dossier wijst er nog naar) laat de sync stuklopen op de foreign key.
+ */
+export async function zorgVoorCalculatieProject(
+  dossierId: string,
+  naam: string,
+  kandidaat?: string | null,
+): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
+  const supabase = createAdminClient() as any
+  const bestaat = async (id: string | null | undefined) => {
+    if (!id) return false
+    const { data } = await supabase.from('projects').select('id').eq('id', id).maybeSingle()
+    return !!data
+  }
+
+  if (await bestaat(kandidaat)) return { ok: true, projectId: kandidaat as string }
+
+  try {
+    const { maakProjectVanAanvraag } = await import('@/app/(platform)/everts-calc/actions/projecten')
+    const { id } = await maakProjectVanAanvraag(naam || 'Calculatie', '')
+    const r = await koppelDossierAanProject(dossierId, id)
+    if (!r.ok) return { ok: false, error: 'Koppelen van de calculatie aan het dossier is mislukt.' }
+    // Had het dossier al een geldige koppeling, dan komt díe terug en blijft het nieuwe project ongebruikt.
+    const projectId = r.projectId ?? id
+    if (projectId !== id) {
+      await supabase.from('projects').delete().eq('id', id)
+    }
+    return { ok: true, projectId }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij aanmaken calculatie.' }
+  }
+}
+
 /** True als er een everts-calc calculatie/offerte aan het dossier gekoppeld is. */
 export async function dossierHeeftCalculatie(dossierId: string): Promise<boolean> {
   const supabase = createAdminClient() as any
@@ -692,9 +728,16 @@ export async function koppelDossierAanProject(
       .select('everts_calc_project_id')
       .eq('id', dossierId)
       .single()
-    // Al gekoppeld? Niet overschrijven (idempotent).
+    // Al gekoppeld? Niet overschrijven (idempotent) — tenzij de koppeling naar een
+    // project wijst dat niet meer bestaat. Zo'n wees-koppeling laat elke calculatie-
+    // write stuklopen op de foreign key naar `projects`, dus die mag vervangen worden.
     if (dossier?.everts_calc_project_id) {
-      return { ok: true, projectId: dossier.everts_calc_project_id as string }
+      const { data: bestaand } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', dossier.everts_calc_project_id)
+        .maybeSingle()
+      if (bestaand) return { ok: true, projectId: dossier.everts_calc_project_id as string }
     }
     const { error } = await supabase
       .from('dossiers')

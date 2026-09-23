@@ -27,10 +27,10 @@ import {
   getWerkbegrotingVoorScenario, maakWerkbegrotingVanCalculatie, verwijderWerkbegroting,
 } from '@/lib/everts-calc/local-store'
 import { berekenScenarioKostprijs, formatEuro } from '@/lib/everts-calc/calculations'
-import { maakProjectVanAanvraag, setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
+import { setProjectStatus } from '@/app/(platform)/everts-calc/actions/projecten'
 import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
-import { koppelDossierAanProject } from '@/lib/dossiers/actions'
+import { zorgVoorCalculatieProject } from '@/lib/dossiers/actions'
 import type { DossierSectie } from '@/components/dossiers/types'
 
 interface Preview {
@@ -72,13 +72,10 @@ export default function C4yDropCard({ dossierId, sectie, naam, projectId: gekopp
       // 1. Zorg voor project + scenario. Het gekoppelde project komt uit de database
       //    (dossiers.everts_calc_project_id); een nieuw project wordt daar meteen aan
       //    het dossier gehangen, zodat de import ook op een ander apparaat te vinden is.
-      let projectId = gekoppeldProjectId ?? null
-      if (!projectId) {
-        const { id } = await maakProjectVanAanvraag(naam, '')
-        const r = await koppelDossierAanProject(dossierId, id)
-        if (!r.ok) throw new Error('Koppelen van de calculatie aan het dossier is mislukt.')
-        projectId = r.projectId ?? id
-      }
+      //    Wijst de koppeling naar een verwijderd project, dan komt er een nieuw project.
+      const r = await zorgVoorCalculatieProject(dossierId, naam, gekoppeldProjectId)
+      if (!r.ok) throw new Error(r.error)
+      const projectId = r.projectId
       // Opslag% staat niet in het .c4y-bestand (net als bij CUF is dat handmatige
       // invoer in Calc4You) → op 0 houden. Per regel komt de opslag uit het bestand;
       // een calculatiebrede opslag zet je zelf in de totalenbalk.
