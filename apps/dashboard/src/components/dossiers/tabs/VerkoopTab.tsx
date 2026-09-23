@@ -12,7 +12,7 @@ import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
 import { berekenContractwaarde } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
-import type { DossierSectie } from '../types'
+import { bonBewakingscode, type DossierSectie } from '../types'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -110,6 +110,31 @@ async function regieIsHoofdroute(dossierId: string, sectie?: DossierSectie): Pro
   return (data?.facturatiemethode ?? 'regie') === 'regie'
 }
 
+/**
+ * De vaste kostengroep van een servicedeskbon: `RW01` op regie, `AW01` op aangenomen werk.
+ *
+ * Staat op Facturatie in beeld omdat dít de post is waar alles op binnenkomt en waarvan wordt
+ * afgerekend. Zonder die regel moet je op een ander tabblad opzoeken waar het geld eigenlijk
+ * heen gaat. `inBouw7` is geen detail: een code die daar niet staat verzamelt niets en houdt de
+ * bon op nul terwijl er wél gewerkt wordt.
+ */
+async function bonKostengroep(dossierId: string, sectie?: DossierSectie) {
+  if (sectie !== 'servicedesk') return null
+  const db = createAdminClient()
+  const { data } = await db
+    .from('dossiers')
+    .select('regie_bewakingscode, regie_bouw7_chapter_id, facturatiemethode')
+    .eq('id', dossierId)
+    .maybeSingle()
+  const code = (data?.regie_bewakingscode ?? '').trim()
+  if (!code) return null
+  return {
+    code,
+    naam: bonBewakingscode(data?.facturatiemethode).naam,
+    inBouw7: data?.regie_bouw7_chapter_id != null,
+  }
+}
+
 async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
   // Alles wat bepaalt óf er iets te tonen valt, wordt vóór de lege staat opgehaald. Stond het
   // meerwerk daar eerst achter, dan bleef de tab leeg op een dossier met goedgekeurd meerwerk maar
@@ -132,9 +157,21 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
    * dezelfde projectbewaking als het Management Dashboard, zodat de marge hier en daar hetzelfde
    * getal is. Alleen op servicedesk: op een opdracht staat dit verhaal op de Financieel-tab, en
    * daar hoort het ook — die heeft de opbouw per bewakingscode die een bon niet nodig heeft. */
-  const bewaking = sectie === 'servicedesk'
-    ? await getDossierBewaking(dossierId).catch(() => null)
-    : null
+  const [bewaking, kostengroep] = sectie === 'servicedesk'
+    ? await Promise.all([
+        getDossierBewaking(dossierId).catch(() => null),
+        bonKostengroep(dossierId, sectie).catch(() => null),
+      ])
+    : [null, null]
+
+  // Wat er op de kostengroep van de bon geboekt staat. Uit dezelfde bewaking als de totalen, zodat
+  // het getal naast "geboekte kosten" niet uit een andere bron komt.
+  const groepGeboekt = kostengroep
+    ? (bewaking?.hoofdstukken ?? [])
+        .flatMap(h => h.regels)
+        .filter(r => r.code === kostengroep.code)
+        .reduce((som, r) => som + r.geboekteKosten, 0)
+    : 0
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
 
@@ -253,6 +290,8 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
           prognoseKosten={bewaking?.totalen.prognose ?? 0}
           opRegie={opRegie}
           contractwaarde={t.contractTotaal}
+          kostengroep={kostengroep}
+          kostengroepGeboekt={groepGeboekt}
         />
       )}
       {nogNiets && (

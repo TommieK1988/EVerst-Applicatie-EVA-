@@ -3,7 +3,7 @@
  *
  * De bewakingscodes die EVA zelf heeft uitgedeeld op een dossier: die van de stelposten in de
  * opdracht, die van het goedgekeurde meerwerk, en de opvangcode "Regiewerkzaamheden" van een
- * servicedeskbon die op regie afrekent (zie `regie-bewakingscode.ts`).
+ * servicedeskbon (zie `bon-bewakingscode.ts`).
  *
  * WAAROM EVA HIER DE BRON IS EN NIET DE BOUW7-SNAPSHOT
  * De werkbegroting leest zijn kostengroepen uit `athena_control`, en die momentopname wordt twee

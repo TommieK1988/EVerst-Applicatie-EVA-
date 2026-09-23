@@ -12,8 +12,13 @@
  *   • een **meerwerkregel met afrekenwijze `regie`** — daar is expliciet vastgelegd dat er op
  *     werkelijke kosten wordt afgerekend;
  *   • een **stelpost** — die rekent per definitie op werkelijke kosten af;
- *   • de **regiecode van een servicedeskbon** — een bon op regie is in zijn geheel nacalculatie;
- *     daar is geen aanneemsom waar iets al in zit. Zie `regie-bewakingscode.ts`.
+ *   • de **kostengroep van een servicedeskbon op regie** (`RW01`) — zo'n bon is in zijn geheel
+ *     nacalculatie; daar is geen aanneemsom waar iets al in zit. Zie `bon-bewakingscode.ts`.
+ *
+ * De tegenhanger `AW01` van een **aangenomen** bon hoort hier nadrukkelijk **niet** in. Die groep
+ * draagt de kosten, niet de opbrengst: de opbrengst ligt vast in de aanneemsom en gaat via de
+ * termijnstaat. Zou hij hier staan, dan bood het factuurvoorstel aan om hetzelfde werk bovenop de
+ * aanneemsom nóg eens in rekening te brengen.
  *
  * Bij een meerwerkregel geldt daarbovenop dat de klant akkoord moet zijn. Vóór dat akkoord bestaat
  * de bewakingscode nog niet in Bouw7 — die wordt pas bij `akkoord` aangemaakt (zie `meerwerk.ts`),
@@ -76,7 +81,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       .not('bewakingscode', 'is', null),
     supabase
       .from('dossiers')
-      .select('regie_bewakingscode, regie_bouw7_chapter_id')
+      .select('regie_bewakingscode, regie_bouw7_chapter_id, facturatiemethode')
       .eq('id', dossierId)
       .maybeSingle(),
   ])
@@ -86,8 +91,17 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
 
   // De regiecode staat vooraan: op een bon die op regie afrekent is dit de hoofdpost, en de rest
   // (een los meerwerkje) hangt eronder.
-  const d = dossier.data as { regie_bewakingscode: string | null; regie_bouw7_chapter_id: number | null } | null
-  const regieCode = (d?.regie_bewakingscode ?? '').trim()
+  //
+  // Alléén op regie. Sinds een aangenomen bon zijn eigen kostengroep AW01 heeft, staat er in
+  // dezelfde kolom ook een code die de kóstenkant draagt; die als factuurregel aanbieden zou het
+  // werk bovenop de al afgesproken aanneemsom een tweede keer in rekening brengen.
+  const d = dossier.data as {
+    regie_bewakingscode: string | null
+    regie_bouw7_chapter_id: number | null
+    facturatiemethode: string | null
+  } | null
+  const opRegie = (d?.facturatiemethode ?? 'regie') === 'regie'
+  const regieCode = opRegie ? (d?.regie_bewakingscode ?? '').trim() : ''
   if (regieCode) {
     gezien.add(regieCode)
     uit.push({

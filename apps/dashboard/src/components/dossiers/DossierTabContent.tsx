@@ -415,7 +415,7 @@ async function renderEnkeleTab(
       <>
         {titleInjector}
         <Suspense fallback={<DossierTabSkeleton />}>
-          <UrenTab dossierId={id} />
+          <UrenTab dossierId={id} toonBewaking={false} />
         </Suspense>
         <Suspense fallback={<DossierTabSkeleton />}>
           <InkoopTab dossierId={id} />
@@ -440,7 +440,7 @@ async function renderEnkeleTab(
       <>
         {titleInjector}
         <Suspense fallback={<DossierTabSkeleton />}>
-          <UrenTab dossierId={id} />
+          <UrenTab dossierId={id} toonBewaking={sectie !== 'servicedesk'} />
         </Suspense>
       </>
     )

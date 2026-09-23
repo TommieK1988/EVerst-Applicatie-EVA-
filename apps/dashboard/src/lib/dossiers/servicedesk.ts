@@ -9,7 +9,8 @@ import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
-import { zorgVoorRegieBewakingscode } from './regie-bewakingscode'
+import { zorgVoorBonBewakingscode } from './bon-bewakingscode'
+import { bonBewakingscode } from '@/components/dossiers/types'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
   bedragUitOpslag, bedragUitTarief, isLosseRegel, nieuweHandmatigeSleutel, nieuweLosseSleutel,
@@ -278,10 +279,11 @@ export async function getServicedeskMandaat(dossierId: string): Promise<MandaatS
 /**
  * Werkt de servicedesk-instellingen (mandaat / facturatiemethode) bij.
  *
- * Bij een keuze voor regie hoort er een kostengroep "Regiewerkzaamheden" op de bon te staan: zonder
- * die code is er in Bouw7 niets om op in te kopen, uren op te schrijven of van te factureren. Hij
- * wordt hier meteen aangemaakt, want dit ís het moment waarop de gebruiker die keuze maakt — de
- * sync-inhaalslag (`zorgVoorRegieBewakingscodes`) is er voor de bonnen die al op regie stonden.
+ * Bij elke afrekenwijze hoort een vaste kostengroep op de bon: "Regiewerkzaamheden" (RW01) op regie,
+ * "Aangenomen werk" (AW01) op aangenomen. Zonder die code is er in Bouw7 niets om op in te kopen,
+ * uren op te schrijven of van af te rekenen. Hij wordt hier meteen aangemaakt, want dit ís het
+ * moment waarop de gebruiker die keuze maakt — de sync-inhaalslag (`zorgVoorBonBewakingscodes`)
+ * is er voor de bonnen die er al stonden. Wisselt de methode, dan komt de andere groep erop.
  *
  * De Bouw7-write mag het zetten van de schakelaar niet tegenhouden: mislukt hij, dan is de methode
  * gewoon gewijzigd en komt de code als waarschuwing terug (de volgende sync probeert het opnieuw).
@@ -303,13 +305,14 @@ export async function updateServicedeskInstellingen(
   if (error) return { ok: false, error: error.message }
 
   let waarschuwing: string | undefined
-  if (patch.facturatiemethode === 'regie') {
-    const res = await zorgVoorRegieBewakingscode(dossierId).catch(e => ({
+  if (patch.facturatiemethode) {
+    const hoort = bonBewakingscode(patch.facturatiemethode)
+    const res = await zorgVoorBonBewakingscode(dossierId).catch(e => ({
       ok: false as const, error: e instanceof Error ? e.message : 'onbekende fout',
     }))
     waarschuwing = res.ok
       ? ('waarschuwing' in res ? res.waarschuwing : undefined)
-      : `Kostengroep Regiewerkzaamheden aanmaken mislukt: ${res.error}`
+      : `Kostengroep ${hoort.naam} aanmaken mislukt: ${res.error}`
   }
 
   revalidatePath(`/servicedesk/${dossierId}/informatie`)

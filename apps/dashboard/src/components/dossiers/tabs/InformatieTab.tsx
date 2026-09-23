@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
+  bonBewakingscode,
   getDossierSubstatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
   type DossierSectie, type DossierRij,
 } from '../types'
@@ -1942,7 +1943,10 @@ export function InformatieTab({
           heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
           mandaatBedrag={dossier.mandaat_bedrag ?? null}
           verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
-          regieCode={dossier.regie_bewakingscode ?? null}
+          kostengroep={dossier.regie_bewakingscode
+            ? { code: dossier.regie_bewakingscode, naam: bonBewakingscode(dossier.facturatiemethode).naam }
+            : null}
+          calcProjectId={dossier.everts_calc_project_id ?? projectId ?? null}
           alleenLezen={readOnly}
         />
       )}

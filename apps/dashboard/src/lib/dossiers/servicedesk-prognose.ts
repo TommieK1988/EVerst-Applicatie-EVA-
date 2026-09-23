@@ -23,8 +23,8 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { logFout, foutNaarInvoer } from '@/lib/fouten/log'
-import { isServicedeskDossier } from '@/components/dossiers/types'
-import { zorgVoorRegieBewakingscode } from './regie-bewakingscode'
+import { bonBewakingscode, isServicedeskDossier } from '@/components/dossiers/types'
+import { zorgVoorBonBewakingscode } from './bon-bewakingscode'
 
 export type PrognoseOvernameResultaat =
   /** De prognose staat in Bouw7. `bedrag` is wat erheen ging. */
@@ -55,11 +55,8 @@ type Rij = {
  * levert hetzelfde bedrag op. Verandert de calculatie, dan overschrijft een volgende ronde het
  * oude getal.
  *
- * **Alleen bonnen die op regie afrekenen.** Die hebben één opvangcode (`RW01`) waar alles op
- * binnenkomt, en dat is precies de plek voor één prognosebedrag. Een bon die aangenomen afrekent
- * heeft zonder werkbegroting helemaal geen bewakingscode; daar is geen plek om het bedrag neer te
- * zetten zonder eerst een codestructuur te verzinnen. Zo'n bon krijgt hier een reden terug in
- * plaats van een prognose.
+ * Het bedrag landt op de vaste kostengroep van de bon — `RW01` op regie, `AW01` op aangenomen
+ * werk. Eén groep waar alles op binnenkomt is precies de plek voor één prognosebedrag.
  */
 export async function neemPrognoseOverUitCalculatie(
   dossierId: string,
@@ -73,9 +70,6 @@ export async function neemPrognoseOverUitCalculatie(
 
   if (!isServicedeskDossier(d)) return { ok: true, gezet: false, reden: 'Geen servicedeskbon.' }
   if (!d.bouw7_id) return { ok: true, gezet: false, reden: 'Niet aan een Bouw7-project gekoppeld.' }
-  if (d.facturatiemethode !== 'regie') {
-    return { ok: true, gezet: false, reden: 'Deze bon rekent aangenomen af en heeft geen opvangcode.' }
-  }
   if (!d.everts_calc_project_id) {
     return { ok: true, gezet: false, reden: 'Er hangt geen calculatie aan deze bon.' }
   }
@@ -91,18 +85,17 @@ export async function neemPrognoseOverUitCalculatie(
   }
 
   // De code moet bestaan vóór er een prognose op kan. Staat hij er al, dan doet dit niets.
-  const codeRes = await zorgVoorRegieBewakingscode(dossierId)
+  const codeRes = await zorgVoorBonBewakingscode(dossierId)
   if (!codeRes.ok) return { ok: false, error: codeRes.error }
   // `== null` en niet `!code`: een lege string zou TypeScript niet naar de "geen code"-variant
   // laten narrowen, en dan is `reden` er niet.
   if (codeRes.code == null) return { ok: true, gezet: false, reden: codeRes.reden }
 
   const { maakRegieBewakingscodeBouw7 } = await import('@/app/(platform)/everts-calc/actions/werkbegroting')
-  const { REGIE_BEWAKINGSCODE_NAAM } = await import('@/components/dossiers/types')
 
   const res = await maakRegieBewakingscodeBouw7(dossierId, {
     code: codeRes.code,
-    naam: REGIE_BEWAKINGSCODE_NAAM,
+    naam: bonBewakingscode(d.facturatiemethode).naam,
     bedrag: kostprijs,
   })
   if (!res.ok) return { ok: false, error: res.error }

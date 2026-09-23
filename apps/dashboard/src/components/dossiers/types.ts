@@ -199,16 +199,34 @@ export const FACTURATIE_LABELS: Record<'regie' | 'termijnen', string> = {
 }
 
 /**
- * De bewakingscode die een servicedeskbon op regie krijgt om op in te kopen, uren op te boeken en
- * van te factureren. Eén per bon; het aanmaken en de reden staan in `lib/dossiers/regie-bewakingscode.ts`.
+ * De vaste kostengroep die een servicedeskbon krijgt om op in te kopen, uren op te boeken en van
+ * af te rekenen. Eén per bon; het aanmaken en de reden staan in `lib/dossiers/bon-bewakingscode.ts`.
  *
  * Hier en niet daar, omdat dit bestand aan beide kanten van de client/server-grens leesbaar is en
  * de aanmaakmodule de hele Bouw7-write meesleept.
  *
- * `RW` volgt de stijl van `SP` (stelpost) en `MW` (meerwerk).
+ * **Twee codes, want het zijn twee verschillende dingen.** Op regie is de groep de hele
+ * verkoopwaarde van de bon: wat erop staat gaat één op één naar de factuur. Op aangenomen werk is
+ * de groep juist de kostenkant — de opbrengst ligt vast in de aanneemsom en loopt via de
+ * termijnstaat. Zou één code beide dragen, dan is aan een bedrag niet meer te zien of het nog
+ * gefactureerd moet worden of allang betaald is, en dat is precies de vergissing die tot dubbel
+ * factureren leidt.
+ *
+ * `RW` en `AW` volgen de stijl van `SP` (stelpost) en `MW` (meerwerk).
  */
 export const REGIE_BEWAKINGSCODE = 'RW01'
 export const REGIE_BEWAKINGSCODE_NAAM = 'Regiewerkzaamheden'
+export const AANGENOMEN_BEWAKINGSCODE = 'AW01'
+export const AANGENOMEN_BEWAKINGSCODE_NAAM = 'Aangenomen werk'
+
+/** De vaste kostengroep die bij deze afrekenwijze hoort. */
+export function bonBewakingscode(
+  facturatiemethode: string | null | undefined,
+): { code: string; naam: string } {
+  return facturatiemethode === 'termijnen'
+    ? { code: AANGENOMEN_BEWAKINGSCODE, naam: AANGENOMEN_BEWAKINGSCODE_NAAM }
+    : { code: REGIE_BEWAKINGSCODE, naam: REGIE_BEWAKINGSCODE_NAAM }
+}
 
 /**
  * Servicedesk kent twee trajecten die los van elkaar lopen, en dus twee kolomreeksen:

@@ -159,12 +159,25 @@ async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
   )
 }
 
-export function UrenTab({ dossierId }: { dossierId: string }) {
+export function UrenTab({ dossierId, toonBewaking = true }: {
+  dossierId: string
+  /**
+   * De tabel "Uren per bewakingscode" — begroot, prognose en saldo per code.
+   *
+   * Staat uit op een servicedeskbon. Die heeft één vaste kostengroep, dus de tabel is er altijd
+   * één regel lang, en de kolommen die hem zinvol maken (begrote uren, saldo) komen uit een
+   * werkbegroting die een bon niet heeft. Wat overblijft is een rij nullen die de echte
+   * urenlijst eronder wegdrukt.
+   */
+  toonBewaking?: boolean
+}) {
   return (
     <div style={{ padding: 'var(--page-pad-y, 28px) var(--page-pad-x, 32px)', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Suspense fallback={<SkeletonCard />}>
-        <UrenBewakingInhoud dossierId={dossierId} />
-      </Suspense>
+      {toonBewaking && (
+        <Suspense fallback={<SkeletonCard />}>
+          <UrenBewakingInhoud dossierId={dossierId} />
+        </Suspense>
+      )}
       <Suspense fallback={<SkeletonCard />}>
         <UrenDetailInhoud dossierId={dossierId} />
       </Suspense>

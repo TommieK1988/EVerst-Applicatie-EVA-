@@ -32,6 +32,7 @@ const rond = (n: number) => Math.round(n * 100) / 100
 
 export default function ServicedeskMargeBlok({
   dossierId, initieel, geboekteKosten, prognoseKosten, opRegie, contractwaarde,
+  kostengroep, kostengroepGeboekt,
 }: {
   dossierId: string
   /** Het voorstel dat de server al heeft gelezen; scheelt een tweede lezing van dezelfde snapshots. */
@@ -48,6 +49,10 @@ export default function ServicedeskMargeBlok({
   opRegie: boolean
   /** De aanneemsom inclusief goedgekeurd meerwerk — de opbrengst van een aangenomen bon. */
   contractwaarde: number
+  /** De vaste kostengroep van de bon; null zolang hij er nog niet is. */
+  kostengroep: { code: string; naam: string; inBouw7: boolean } | null
+  /** Wat er op die groep geboekt staat. */
+  kostengroepGeboekt: number
 }) {
   const router = useRouter()
   const readOnly = useDossierReadOnly()
@@ -133,6 +138,30 @@ export default function ServicedeskMargeBlok({
                   </tr>
                 </tbody>
               </table>
+
+              {kostengroep && (
+                <div className="mt-3 border-t border-neutral-200 pt-3 dark:border-neutral-700">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+                    Kostengroep
+                  </div>
+                  <div className="text-[12.5px] text-neutral-700 dark:text-neutral-300">
+                    <span className="font-mono text-[11px] text-neutral-500">{kostengroep.code}</span>
+                    {' · '}{kostengroep.naam}
+                    {' — '}{fmt(kostengroepGeboekt)} geboekt
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-neutral-500">
+                    {opRegie
+                      ? 'Alles wat op deze groep binnenkomt wordt van hieraf gefactureerd.'
+                      : 'Hier komen de kosten op binnen; afrekenen gaat via de termijnstaat hieronder.'}
+                  </p>
+                  {!kostengroep.inBouw7 && (
+                    <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                      Deze groep staat nog niet in Bouw7 en verzamelt dus niets. Ververs het dossier
+                      vanuit Bouw7 om het opnieuw te proberen.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {opbrengst === 0 && geboekteKosten > 0 && (
                 <p className="mt-2 max-w-md text-[11.5px] text-amber-800 dark:text-amber-300">

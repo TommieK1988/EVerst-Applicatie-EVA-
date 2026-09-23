@@ -17,23 +17,27 @@ import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dos
 import { bonActies, type BonActieSleutel } from './bon-acties'
 import MandaatVerhogingModal from './MandaatVerhogingModal'
 import InplannenModal from './InplannenModal'
+import BestelVenster from './BestelVenster'
 
 export default function BonActies({
-  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, regieCode, alleenLezen,
+  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, kostengroep, calcProjectId, alleenLezen,
 }: {
   dossierId: string
   heeftCalculatie: boolean
   mandaatBedrag: number | null
   /** De bon staat op "Mandaat verhoging aangevraagd": dan is toekennen de vervolgstap. */
   verhogingLoopt: boolean
-  /** De opvangcode van de bon; het plan-venster zet hem alvast klaar als kostengroep. */
-  regieCode: string | null
+  /** De vaste kostengroep van de bon; alles wat hier wordt uitgezet of ingepland landt erop. */
+  kostengroep: { code: string; naam: string } | null
+  /** Gekoppelde calculatie; bepaalt in welke werkbegroting de bestelregels terechtkomen. */
+  calcProjectId: string | null
   alleenLezen: boolean
 }) {
   const router = useRouter()
   const [bezig, start] = useTransition()
   const [mandaatOpen, setMandaatOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
+  const [bestelOpen, setBestelOpen] = useState(false)
 
   const acties = bonActies({
     heeftCalculatie,
@@ -44,12 +48,11 @@ export default function BonActies({
 
   function doe(sleutel: BonActieSleutel) {
     switch (sleutel) {
-      // Bestellen loopt nu nog via de werkbegroting: daar stel je de regels samen waar de
-      // onderaannemersopdracht uit ontstaat. Die staat niet meer in de navigatie van een bon —
-      // begroten kost op een bon van een paar honderd euro meer tijd dan het werk zelf — maar
-      // het scherm blijft op zijn eigen adres bestaan zolang deze knop er nog heen wijst.
+      // Een eigen venster in plaats van een sprong naar de werkbegroting: dat grid is gebouwd
+      // voor een opdracht van drie ton, terwijl een bon meestal één regel heeft. Onder water
+      // loopt het langs dezelfde weg naar Bouw7 — zie BestelVenster.
       case 'onderaannemer':
-        router.push(`/servicedesk/${dossierId}/werkbegroting`)
+        setBestelOpen(true)
         return
       // Niet naar de planning springen maar hier inplannen. Daar moest je anders alsnog het
       // juiste bord, de juiste week en de juiste rij zoeken voordat je kon doen waarvoor je klikte.
@@ -108,10 +111,20 @@ export default function BonActies({
         </div>
       </div>
 
+      {bestelOpen && (
+        <BestelVenster
+          dossierId={dossierId}
+          calcProjectId={calcProjectId}
+          kostengroep={kostengroep}
+          onSluit={() => setBestelOpen(false)}
+          onKlaar={() => router.refresh()}
+        />
+      )}
+
       {planOpen && (
         <InplannenModal
           dossierId={dossierId}
-          regieCode={regieCode}
+          regieCode={kostengroep?.code ?? null}
           onSluit={() => setPlanOpen(false)}
           onKlaar={() => router.refresh()}
         />
