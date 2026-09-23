@@ -454,6 +454,11 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
       `and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.aanvraag),` +
       `and(offerte_substatus.eq.verzonden,verzonden_op.gte.${cutoff})`
     )
+    // Servicedesk hoort hier niet. Een bon van Dagelijks onderhoud of Mutatie staat in Bouw7 op
+    // '01. Offerte' zolang hij nog niet in uitvoering is, en stond daardoor tegelijk op het
+    // servicedeskbord én tussen de commerciële aanvragen. Zelfde uitsluiting als bij Opdrachten.
+    .or(NIET_SERVICEDESK[0])
+    .or(NIET_SERVICEDESK[1])
     .order('created_at', { ascending: false }))
 }
 
@@ -470,6 +475,10 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
       'bouw7_projectstatus_naam.ilike.09.%,' +
       'hoofdstatus.eq.offerte'
     )
+    // Ook hier geen servicedesk: een bon die geoffreerd wordt heeft daar zijn eigen kolom
+    // ("Offerte uitgebracht"), en hoort niet daarnaast in de commerciële trechter te staan.
+    .or(NIET_SERVICEDESK[0])
+    .or(NIET_SERVICEDESK[1])
     .order('created_at', { ascending: false }))
 }
 

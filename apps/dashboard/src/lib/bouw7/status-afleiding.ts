@@ -46,10 +46,20 @@ export function mapOffertestatusNaarSubstatus(naam: string | null | undefined): 
 /** De vier offertestatus-eindstatussen — deze overschrijven altijd de EVA-substatus. */
 export const OFFERTE_EINDSTATUSSEN = ['gewonnen', 'verloren', 'vervallen', 'mondelinge_toezegging']
 
-// Mapping van Bouw7-projectstatusnaam naar servicedesk kanban-kolom.
-// Altijd overschreven bij sync — handmatig slepen geldt tot de volgende sync.
+/**
+ * Mapping van Bouw7-projectstatusnaam naar servicedesk kanban-kolom.
+ * Altijd overschreven bij sync — handmatig slepen geldt tot de volgende sync.
+ *
+ * **`01. Offerte` is geen verstuurde offerte.** In Bouw7 is 01 de fase waarin een aanvraag
+ * binnenkomt en eventueel geprijsd wordt; pas `09.Verzonden offertes` betekent dat er iets de
+ * deur uit is. De afleiding voor aanvragen/offertes hieronder gaat daar ook van uit (01 → de
+ * Aanvragen-tab). Deze tabel zei het omgekeerde en zette elke verse bon meteen op "Offerte
+ * uitgebracht" — een kolom waar niemand op wacht en waar hij met de hand uit gesleept moest
+ * worden. Is er wél een offerte de deur uit, dan zegt de offertestatus dat; zie
+ * `servicedeskKolom`.
+ */
 export const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
-  '01. Offerte':           'offerte_uitgebracht',
+  '01. Offerte':           'nieuw',
   '02. Nieuwe opdracht':   'nieuw',
   '03. Werkvoorbereiding': 'nieuw',
   '04. Onderhanden':       'loopt',
@@ -71,6 +81,30 @@ export const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
 export const BOUW7_NAAR_MUTATIE_SUBSTATUS: Record<string, string> = {
   ...BOUW7_NAAR_SERVICEDESK_SUBSTATUS,
   '03. Werkvoorbereiding': 'in_voorbereiding',
+}
+
+/**
+ * De kolom waar een bon op landt, projectstatus én offertestatus meegewogen.
+ *
+ * De projectstatus is leidend, met één uitzondering: staat het project nog op `01. Offerte` maar
+ * zegt de offertestatus in Bouw7 dat er een offerte is verstuurd (of al gewonnen/verloren is),
+ * dan is er wél iets de deur uit en hoort de bon op "Offerte uitgebracht". Zonder die controle
+ * zou een bon die net geoffreerd is bij de eerstvolgende sync terugvallen naar Nieuw.
+ */
+export function servicedeskKolom(
+  bouw7StatusNaam: string | null | undefined,
+  categorieNaam: string | null | undefined,
+  offertestatusNaam: string | null | undefined = null,
+): string {
+  const naam = bouw7StatusNaam ?? ''
+  const ladder = (categorieNaam ?? '') === 'Mutatie'
+    ? BOUW7_NAAR_MUTATIE_SUBSTATUS
+    : BOUW7_NAAR_SERVICEDESK_SUBSTATUS
+  const kolom = ladder[naam] ?? 'nieuw'
+  if (kolom === 'nieuw' && naam.startsWith('01.') && mapOffertestatusNaarSubstatus(offertestatusNaam)) {
+    return 'offerte_uitgebracht'
+  }
+  return kolom
 }
 
 /** Hoort deze Bouw7-projectstatus bij de opdracht-fase (02.–07.)? */
@@ -125,13 +159,12 @@ export function mapBouw7NaarEvaStatus(
 
   // Servicedesk: LB of categorie Dagelijks onderhoud/Mutatie (categorie wint over projectstatus)
   if (isServicedeskCombinatie(naam, cat)) {
-    const ladder = cat === 'Mutatie' ? BOUW7_NAAR_MUTATIE_SUBSTATUS : BOUW7_NAAR_SERVICEDESK_SUBSTATUS
     return {
       hoofdstatus:           'aanvraag',
       aanvraag_substatus:    'nieuw',
       offerte_substatus:     null,
       opdracht_substatus:    null,
-      servicedesk_substatus: ladder[naam] ?? 'nieuw',
+      servicedesk_substatus: servicedeskKolom(naam, cat, offertestatusNaam),
     }
   }
 
