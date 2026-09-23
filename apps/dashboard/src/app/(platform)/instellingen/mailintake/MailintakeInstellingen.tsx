@@ -9,6 +9,7 @@ import {
   updatePostbus, zetNabehandelStand, controleerVerbinding,
   verwijderAlias, voegNegeerAdresToe,
 } from '@/lib/mailintake/actions'
+import { probeerNabehandelingOpnieuw } from '@/lib/mailintake/nabehandeling-actions'
 import { NABEHANDEL_LABELS } from '@/lib/mailintake/types'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
@@ -123,7 +124,7 @@ export default function MailintakeInstellingen({
   magBeheren: boolean
 }) {
   const router = useRouter()
-  const { bevestig } = useDialogen()
+  const { bevestig, meld } = useDialogen()
   const [bezig, setBezig] = useState<string | null>(null)
   const [nieuwNegeer, setNieuwNegeer] = useState('')
 
@@ -172,6 +173,40 @@ export default function MailintakeInstellingen({
       const res = await zetNabehandelStand(stand)
       if (!res.ok) toast.error(res.error ?? 'Opslaan mislukt')
       else { toast.success('Opgeslagen'); router.refresh() }
+    } finally {
+      setBezig(null)
+    }
+  }
+
+  /**
+   * De achterstand alsnog wegwerken. Ook de berichten die de cron had opgegeven:
+   * die worden nooit meer vanzelf geprobeerd, en dat is precies waarom deze knop
+   * er is.
+   */
+  async function herkansNabehandeling() {
+    const ok = await bevestig({
+      titel: 'Behandelde mail alsnog verplaatsen',
+      omschrijving:
+        `${nabehandelAchterstand.open} ${nabehandelAchterstand.open === 1 ? 'mail wordt' : 'mails worden'} in Outlook bijgewerkt: ` +
+        'afgehandelde en genegeerde post gaat naar "Verwerkt door EVA", en wat EVA zelf als ' +
+        '"geen aanvraag" beoordeelde krijgt alleen een categorie en blijft staan.\n\n' +
+        'Dit is zichtbaar voor iedereen die in deze mailboxen kijkt.',
+      bevestigLabel: 'Verplaatsen',
+    })
+    if (!ok) return
+
+    setBezig('herkansing')
+    try {
+      const res = await probeerNabehandelingOpnieuw()
+      if (!res.ok) { toast.error(res.error ?? 'Opnieuw proberen mislukt'); return }
+      if (res.gedaan > 0) toast.success(`${res.gedaan} ${res.gedaan === 1 ? 'mail' : 'mails'} bijgewerkt in Outlook`)
+      if (res.mislukt > 0) {
+        await meld({
+          titel: `${res.mislukt} ${res.mislukt === 1 ? 'mail bleef' : 'mails bleven'} staan`,
+          omschrijving: res.eersteFout ?? 'Geen reden vastgelegd.',
+        })
+      }
+      router.refresh()
     } finally {
       setBezig(null)
     }
@@ -380,6 +415,16 @@ export default function MailintakeInstellingen({
             )}
             {nabehandelAchterstand.laatsteFout && (
               <div style={{ ...zacht, marginTop: 4 }}>Laatste melding: {nabehandelAchterstand.laatsteFout}</div>
+            )}
+            {magBeheren && (
+              <Button
+                variant="outline"
+                style={{ marginTop: 8 }}
+                disabled={bezig === 'herkansing'}
+                onClick={herkansNabehandeling}
+              >
+                {bezig === 'herkansing' ? 'Bezig…' : 'Nu opnieuw proberen'}
+              </Button>
             )}
           </div>
         )}
