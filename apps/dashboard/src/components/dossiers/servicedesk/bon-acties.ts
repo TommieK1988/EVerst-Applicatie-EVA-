@@ -52,7 +52,7 @@ export function bonActies(ctx: BonContext): BonActie[] {
       label: 'Medewerker inplannen',
       uitleg: dicht
         ? 'Deze bon is afgesloten.'
-        : 'Zet eigen mensen op de bon in de projectplanning.',
+        : 'Zet er direct iemand op: wie, wanneer, hoe lang.',
       kan: !dicht,
     },
     {

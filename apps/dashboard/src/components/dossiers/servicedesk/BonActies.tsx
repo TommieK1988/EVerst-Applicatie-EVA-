@@ -16,20 +16,24 @@ import { Button } from '@/components/ui'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
 import { bonActies, type BonActieSleutel } from './bon-acties'
 import MandaatVerhogingModal from './MandaatVerhogingModal'
+import InplannenModal from './InplannenModal'
 
 export default function BonActies({
-  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, alleenLezen,
+  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, regieCode, alleenLezen,
 }: {
   dossierId: string
   heeftCalculatie: boolean
   mandaatBedrag: number | null
   /** De bon staat op "Mandaat verhoging aangevraagd": dan is toekennen de vervolgstap. */
   verhogingLoopt: boolean
+  /** De opvangcode van de bon; het plan-venster zet hem alvast klaar als kostengroep. */
+  regieCode: string | null
   alleenLezen: boolean
 }) {
   const router = useRouter()
   const [bezig, start] = useTransition()
   const [mandaatOpen, setMandaatOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
 
   const acties = bonActies({
     heeftCalculatie,
@@ -47,8 +51,10 @@ export default function BonActies({
       case 'onderaannemer':
         router.push(`/servicedesk/${dossierId}/werkbegroting`)
         return
+      // Niet naar de planning springen maar hier inplannen. Daar moest je anders alsnog het
+      // juiste bord, de juiste week en de juiste rij zoeken voordat je kon doen waarvoor je klikte.
       case 'inplannen':
-        router.push(`/servicedesk/${dossierId}/uitvoering?deel=planning`)
+        setPlanOpen(true)
         return
       case 'mandaatverhoging':
         setMandaatOpen(true)
@@ -101,6 +107,15 @@ export default function BonActies({
           ))}
         </div>
       </div>
+
+      {planOpen && (
+        <InplannenModal
+          dossierId={dossierId}
+          regieCode={regieCode}
+          onSluit={() => setPlanOpen(false)}
+          onKlaar={() => router.refresh()}
+        />
+      )}
 
       {mandaatOpen && (
         <MandaatVerhogingModal

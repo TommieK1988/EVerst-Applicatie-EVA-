@@ -1340,12 +1340,24 @@ const REGIE_KOSTENSOORTEN = [1, 2, 3, 4, 5, 6]
  */
 export async function maakRegieBewakingscodeBouw7(
   dossierId: string,
-  opts: { code: string; naam: string },
+  opts: {
+    code: string
+    naam: string
+    /**
+     * Prognose op de arbeidsregel, of `null` voor geen prognose.
+     *
+     * Normaal blijft dit leeg: wat een regie-bon kost blijkt achteraf. Is er wél een calculatie
+     * gemaakt, dan is de gecalculeerde kostprijs de beste voorspelling die er is en hoort die
+     * hier te staan — zie `neemPrognoseOverUitCalculatie`. Een bon eerst laten begroten om aan
+     * hetzelfde getal te komen kost meer tijd dan het werk zelf.
+     */
+    bedrag?: number | null
+  },
 ): Promise<MeerwerkBewakingscodeResultaat> {
   return maakMeerwerkBewakingscodeBouw7(dossierId, {
     code: opts.code,
     naam: opts.naam,
-    bedrag: null,
+    bedrag: opts.bedrag ?? null,
     // Arbeid is de leidende soort: uren zijn op een regie-bon vrijwel altijd de grootste post,
     // en het is de PSL die we teruglezen en op het dossier vastleggen.
     kostensoort: 1,

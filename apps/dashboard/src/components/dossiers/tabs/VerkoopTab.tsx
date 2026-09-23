@@ -1,11 +1,12 @@
 import { Suspense } from 'react'
 import { createAdminClient } from '@everts/database/server'
-import { getDossierVerkoop, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
+import { getDossierVerkoop, getDossierBewaking, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtPct, fmtDatum, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
+import ServicedeskMargeBlok from './ServicedeskMargeBlok'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
@@ -126,6 +127,14 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
     getRegieFactuurvoorstel(dossierId).catch(() => null),
     regieIsHoofdroute(dossierId, sectie).catch(() => false),
   ])
+
+  /* Op een bon staat bovenaan wat het gekost heeft naast wat eruit gaat. De kosten komen uit
+   * dezelfde projectbewaking als het Management Dashboard, zodat de marge hier en daar hetzelfde
+   * getal is. Alleen op servicedesk: op een opdracht staat dit verhaal op de Financieel-tab, en
+   * daar hoort het ook — die heeft de opbouw per bewakingscode die een bon niet nodig heeft. */
+  const bewaking = sectie === 'servicedesk'
+    ? await getDossierBewaking(dossierId).catch(() => null)
+    : null
   const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
 
@@ -236,6 +245,16 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
         ontbreekt={data.stand.ontbreekt}
         fout={data.stand.fout}
       />
+      {sectie === 'servicedesk' && (
+        <ServicedeskMargeBlok
+          dossierId={dossierId}
+          initieel={voorstel}
+          geboekteKosten={bewaking?.totalen.geboekteKosten ?? 0}
+          prognoseKosten={bewaking?.totalen.prognose ?? 0}
+          opRegie={opRegie}
+          contractwaarde={t.contractTotaal}
+        />
+      )}
       {nogNiets && (
         <LegeNotitie losstaand>
           Nog geen verkoopgegevens: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen

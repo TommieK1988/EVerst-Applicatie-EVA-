@@ -763,6 +763,15 @@ export async function offerteAkkoordServicedesk(
     await updateServicedeskSubstatus(dossierId, 'in_voorbereiding')
   }
 
+  /**
+   * De gecalculeerde kostprijs wordt nu de prognose van de bon. Een servicedeskbon krijgt geen
+   * werkbegroting — te veel werk voor wat er te verdienen valt — en stond daardoor in het
+   * Management Dashboard altijd op een prognose van nul. Er ís hier een calculatie, dus er is
+   * een voorspelling; die hoort erin te staan. Stil, want het akkoord is al vastgelegd.
+   */
+  const { neemPrognoseOverStil } = await import('./servicedesk-prognose')
+  await neemPrognoseOverStil(dossierId)
+
   await verwerkDossierTriggers(dossierId).catch(() => {})
   revalidatePath('/servicedesk')
   return { ok: true }

@@ -1942,6 +1942,7 @@ export function InformatieTab({
           heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
           mandaatBedrag={dossier.mandaat_bedrag ?? null}
           verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
+          regieCode={dossier.regie_bewakingscode ?? null}
           alleenLezen={readOnly}
         />
       )}
