@@ -511,6 +511,23 @@ is de enige stap in deze hele module die zichtbaar is voor mensen die niet in EV
 Mislukt het verplaatsen, dan wordt er **niets** teruggedraaid; de bewakingscron probeert het
 opnieuw.
 
+### Als het verplaatsen niet lukt
+
+Een mislukte verplaatsing draait nooit het dossier terug. Het dossier staat er, de mail blijft
+staan, en de bewakingscron probeert het de volgende ochtend opnieuw — drie keer, daarna meldt
+hij het één keer aan de beheerders.
+
+Bij Instellingen → Mailintake staat daarom voortaan een regel **"x behandelde mails staan nog in
+Postvak IN"**. Zonder die regel is dit de enige stap die stil kan mislukken: het dossier is er,
+EVA meldt niets, en alleen wie in de mailbox kijkt ziet dat er iets niet klopt. Zo bleven er acht
+berichten wekenlang hangen.
+
+De meest voorkomende oorzaak is niet een storing maar een eigenschap van Outlook: het interne
+nummer van een bericht verandert zodra iemand het naar een andere map sleept. EVA zoekt het
+bericht dan opnieuw op aan de hand van het bericht-id uit de mail zelf, want dat blijft wél
+gelijk. Verwijder of hernoem de map "Verwerkt door EVA" niet met de hand — dan klopt de
+opgeslagen verwijzing niet meer en kost het een ronde extra.
+
 ---
 
 ## 10. Wat EVA nooit doet

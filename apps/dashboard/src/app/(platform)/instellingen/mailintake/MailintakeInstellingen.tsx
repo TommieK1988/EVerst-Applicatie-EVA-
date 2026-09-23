@@ -112,11 +112,13 @@ function MeldingKiezer({
 }
 
 export default function MailintakeInstellingen({
-  postbussen, aliassen, nabehandelStand, medewerkers, magBeheren,
+  postbussen, aliassen, nabehandelStand, nabehandelAchterstand, medewerkers, magBeheren,
 }: {
   postbussen: Postbus[]
   aliassen: Alias[]
   nabehandelStand: string
+  /** Behandelde mail die nog in Postvak IN staat; nul betekent niets tonen. */
+  nabehandelAchterstand: { open: number; opgegeven: number; laatsteFout: string | null }
   medewerkers: { id: string; naam: string; heeftLogin: boolean }[]
   magBeheren: boolean
 }) {
@@ -355,6 +357,32 @@ export default function MailintakeInstellingen({
             </label>
           ))}
         </div>
+
+        {/* ── Wat er nog niet verplaatst is ──────────────────────── */}
+        {/*
+          De enige stap die kan mislukken zónder dat iemand het merkt: het dossier
+          staat er, EVA meldt niets, en de mail blijft gewoon in Postvak IN. Acht
+          berichten hingen zo wekenlang vast. Eén regel is genoeg om dat te zien.
+        */}
+        {nabehandelAchterstand.open > 0 && (
+          <div style={{
+            marginTop: 12, padding: '8px 10px', borderRadius: 8, fontSize: 12.5,
+            background: nabehandelAchterstand.opgegeven > 0 ? 'var(--wa-50, #fff6ec)' : 'var(--n-100, #f3f4f6)',
+            border: `1px solid ${nabehandelAchterstand.opgegeven > 0 ? 'var(--wa-200, #fde68a)' : 'var(--border)'}`,
+            color: 'var(--fg)',
+          }}>
+            <strong>
+              {nabehandelAchterstand.open} behandelde {nabehandelAchterstand.open === 1 ? 'mail staat' : 'mails staan'} nog in Postvak IN.
+            </strong>
+            {nabehandelAchterstand.opgegeven > 0 && (
+              <> Daarvan {nabehandelAchterstand.opgegeven === 1 ? 'is er één' : `zijn er ${nabehandelAchterstand.opgegeven}`} na drie
+              pogingen opgegeven; die worden niet meer vanzelf geprobeerd.</>
+            )}
+            {nabehandelAchterstand.laatsteFout && (
+              <div style={{ ...zacht, marginTop: 4 }}>Laatste melding: {nabehandelAchterstand.laatsteFout}</div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* ── Aliassen ── */}

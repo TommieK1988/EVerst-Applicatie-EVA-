@@ -12,6 +12,7 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
+import { MAX_OUTLOOK_POGINGEN } from './types'
 import type { PostbusRij, BijlageRij, PostvakRij, PostvakTab, PostvakTeller } from './types'
 
 export type { PostvakRij, PostvakTab, PostvakTeller }
@@ -356,4 +357,46 @@ export async function getAliassen(): Promise<AliasRij[]> {
     laatstGebruiktOp: a.laatst_gebruikt_op,
     createdAt: a.created_at,
   }))
+}
+
+export interface NabehandelAchterstand {
+  /** Behandelde berichten die nog niet in Outlook zijn bijgewerkt. */
+  open: number
+  /** Daarvan: het aantal dat na drie pogingen is opgegeven. */
+  opgegeven: number
+  /** De laatst vastgelegde reden, in gewone taal. Voor één regel op het scherm. */
+  laatsteFout: string | null
+}
+
+/**
+ * Hoeveel behandelde mail nog in Postvak IN staat.
+ *
+ * WAAROM DIT ER MOET ZIJN
+ * De nabehandeling is de enige stap die iets verandert in de mailbox van
+ * collega's, en de enige die kan mislukken zónder dat iemand het merkt: het
+ * dossier staat er, EVA meldt niets, en de mail blijft gewoon staan. Precies dat
+ * gebeurde: acht berichten hingen wekenlang op 'mislukt' en het kwam pas aan het
+ * licht toen er met de hand naar gevraagd werd.
+ *
+ * Eén regel op het beheerscherm is genoeg om dat voortaan te zien.
+ */
+export async function getNabehandelAchterstand(): Promise<NabehandelAchterstand> {
+  const supabase = createAdminClient()
+
+  // Begrensd op de berichten die überhaupt nabehandeld horen te worden; dat zijn
+  // er hooguit een paar honderd, dus ruim onder de PostgREST-grens.
+  const { data } = await supabase
+    .from('mailintake_berichten')
+    .select('outlook_pogingen, outlook_fout')
+    .in('status', ['verwerkt', 'genegeerd', 'geen_aanvraag'])
+    .in('outlook_nabehandeling', ['open', 'mislukt'])
+    .order('behandeld_op', { ascending: false })
+    .limit(500)
+
+  const rijen = data ?? []
+  return {
+    open: rijen.length,
+    opgegeven: rijen.filter(r => (r.outlook_pogingen ?? 0) >= MAX_OUTLOOK_POGINGEN).length,
+    laatsteFout: rijen.find(r => r.outlook_fout)?.outlook_fout ?? null,
+  }
 }
