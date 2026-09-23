@@ -11,14 +11,20 @@
 --    omdat `handmatige_velden` de sync tegenhield — een bescherming die hier een verkeerde
 --    waarde beschermde.
 --
+--    `aanvraag_substatus` moet mee: de CHECK `dossiers_status_consistent` eist een substatus bij
+--    hoofdstatus 'aanvraag', en op deze rijen stond hij leeg omdat het dossier in de offerte- of
+--    opdrachtfase zat.
+--
 -- 2. Een bon op Bouw7-status '01. Offerte' landde in de kolom "Offerte uitgebracht", terwijl 01
---    in Bouw7 juist de fase vóór de offerte is. Alleen bonnen waarvan niets erop wijst dat er
---    een offerte de deur uit is (geen verzenddatum, geen calculatie) en die niet met de hand op
---    hun plek zijn gezet, gaan terug naar Nieuw.
+--    in Bouw7 juist de fase vóór de offerte is. Dezelfde uitzondering als in `servicedeskKolom`:
+--    zegt de Bouw7-offertestatus dat er wél iets verstuurd (of al gewonnen/verloren/vervallen)
+--    is, dan blijft de bon staan waar hij staat. Alleen de rest gaat terug naar Nieuw, en een
+--    kolom die iemand met de hand heeft gezet blijft onaangeroerd.
 
 -- 1. Terug naar de aanvraag-fase, en de bescherming van die drie velden opheffen.
 update public.dossiers
 set hoofdstatus        = 'aanvraag',
+    aanvraag_substatus = coalesce(aanvraag_substatus, 'nieuw'),
     offerte_substatus  = null,
     opdracht_substatus = null,
     handmatige_velden  = coalesce(
@@ -29,15 +35,17 @@ set hoofdstatus        = 'aanvraag',
 where servicedesk_substatus is not null
   and (hoofdstatus <> 'aanvraag'
        or offerte_substatus is not null
-       or opdracht_substatus is not null);
+       or opdracht_substatus is not null
+       or aanvraag_substatus is null);
 
 -- 2. Verse bonnen terug naar de kolom Nieuw.
 update public.dossiers
 set servicedesk_substatus = 'nieuw'
 where servicedesk_substatus = 'offerte_uitgebracht'
   and bouw7_projectstatus_naam = '01. Offerte'
-  and verzonden_op is null
-  and everts_calc_project_id is null
+  -- Zelfde lezing als mapOffertestatusNaarSubstatus: alleen deze woorden betekenen dat er
+  -- werkelijk een offerte de deur uit is gegaan.
+  and coalesce(bouw7_quotation_status, '') !~* '(verstuurd|gewonnen|verloren|vervallen|mondelinge)'
   and not coalesce(handmatige_velden @> array['servicedesk_substatus'], false);
 
 -- De doorlooptijd leest `dossier_substatus_historie`; een reparatie hoort daar geen wissel in te
