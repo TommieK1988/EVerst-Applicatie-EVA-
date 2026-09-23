@@ -397,8 +397,8 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   },
   {
     groep: 'Bezoekrapport - kop en samenvatting',
-    uitleg: 'Een rapportage over wat er op locatie is vastgelegd: een projectbezoek, een '
-      + 'kwaliteitsronde of een oplevering. Voeg bij "Invoervelden" een veld toe van het type '
+    uitleg: 'Een rapportage over wat er op locatie is vastgelegd: een projectbezoek of een '
+      + 'kwaliteitsronde. Een oplevering hoort hier niet bij; die heeft haar eigen rapport. Voeg bij "Invoervelden" een veld toe van het type '
       + '"Bezoekrapport (bezoek kiezen)" met sleutel "bezoek"; daar kiest de opsteller welk '
       + 'bezoek het betreft. Hoofdstukken die de gekozen bron niet vult, verdwijnen vanzelf. '
       + 'VCA-formulieren en gewone formulieren horen hier NIET bij: die houden hun eigen '
@@ -470,7 +470,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   {
     groep: 'Bezoekrapport - per onderdeel (projectbezoek)',
     uitleg: 'Wat er per discipline is gezien, met de voortgang van dat vak. Alleen een '
-      + 'projectbezoek vult dit hoofdstuk; bij een kwaliteitsronde of een oplevering '
+      + 'projectbezoek vult dit hoofdstuk; bij een kwaliteitsronde '
       + 'blijft het leeg en verdwijnt het vanzelf. Let op de namen: de loop binnen een '
       + 'discipline heet {#disciplinepunten} en niet {#punten}, en de naam van de discipline '
       + 'is {discipline_naam} - anders pakt de sjabloonmotor het verkeerde blok.',
@@ -500,7 +500,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     groep: 'Bezoekrapport - overige hoofdstukken',
     uitleg: 'Metingen, beoordeelde punten, positieve waarnemingen, opvolging en ondertekening. '
       + 'Zet elk hoofdstuk tussen zijn {#bezoek.heeft_...}-conditie; dan verdwijnt het bij een bron '
-      + 'die het niet kent - een oplevering heeft geen metingen, een kwaliteitsronde geen handtekening.',
+      + 'die het niet kent - een projectbezoek heeft geen metingen, een kwaliteitsronde geen handtekening.',
     items: [
       { v: '{#bezoek.heeft_metingen}...{/bezoek.heeft_metingen}', label: 'Hoofdstuk Metingen. Staat NIET meer in het standaardsjabloon; zelf toe te voegen' },
       { v: '{#bezoek.metingen}...{/bezoek.metingen}',             label: 'Loop: {code} {onderdeel} {locatie} {meting} {eis} {meetmiddel} {resultaat}' },

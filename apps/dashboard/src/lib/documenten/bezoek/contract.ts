@@ -23,13 +23,18 @@ export interface Rij { [k: string]: unknown }
  * september 2026 uit gehaald: VCA houdt zijn eigen formulier en zijn eigen rapportage, en die
  * hoort nooit in het bezoekrapport terug te komen. `SOORTEN` in `bezoek-opties.ts` wordt uit
  * deze lijst afgeleid, dus een verwijderde soort wordt vanzelf geweigerd bij het inlezen.
+ *
+ * **Ook de oplevering is eruit (23 sep 2026).** Een oplevering en een bezoekrapport zijn twee
+ * verschillende dingen en mogen niet door elkaar lopen: de oplevering heeft haar eigen
+ * werklijst en haar eigen akkoordtraject op de Oplevering-tab. Aanleiding: bij 20261.00449
+ * pakte het bezoekrapport een concept-oplevering in plaats van het projectbezoek van diezelfde
+ * ochtend.
  */
-export type BezoekSoort = 'projectbezoek' | 'kwaliteit' | 'oplevering'
+export type BezoekSoort = 'projectbezoek' | 'kwaliteit'
 
 export const BEZOEK_SOORT_LABELS: Record<BezoekSoort, string> = {
   projectbezoek: 'Projectbezoek',
   kwaliteit:  'Kwaliteitsronde',
-  oplevering: 'Oplevering',
 }
 
 /**
@@ -200,10 +205,6 @@ export function bezoekDisclaimer(soort: BezoekSoort | ''): string {
         + 'productspecificaties, projectafspraken en vastgestelde kwaliteitscriteria. '
         + 'Niet tijdens deze inspectie beoordeelde werkzaamheden worden niet automatisch als '
         + 'goedgekeurd beschouwd.'
-    case 'oplevering':
-      return 'Dit rapport legt vast wat op de opleverdatum gezamenlijk is waargenomen aan de op dat '
-        + 'moment zichtbare en bereikbare onderdelen. Punten die later worden gemeld, worden behandeld '
-        + 'volgens de garantieregeling zoals opgenomen in de opdrachtbevestiging.'
     default:
       return ''
   }

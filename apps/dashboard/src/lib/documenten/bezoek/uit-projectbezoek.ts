@@ -169,7 +169,11 @@ export async function bouwBezoekUitProjectbezoek(
       return {
         nummer: `P-${String(p.volgnummer).padStart(2, '0')}`,
         tekst: String(p.tekst ?? ''),
-        tekst_kort: afkappen(String(p.tekst ?? ''), 220),
+        // Bewust níét afgekapt, ondanks de naam: "Per onderdeel" is een doorlopende tabel zonder
+        // vaste rijhoogte, dus een lang punt past gewoon. Afkappen op 220 tekens liet alleen de
+        // helft zien van wat de projectleider op locatie had ingetypt. De naam blijft omdat het
+        // live sjabloon {tekst_kort} gebruikt.
+        tekst_kort: String(p.tekst ?? ''),
         is_aandachtspunt: p.is_aandachtspunt === true,
         aandachtspunt_nummer: o ? `AP-${String(o.volgnummer).padStart(2, '0')}` : '',
         status_label: o

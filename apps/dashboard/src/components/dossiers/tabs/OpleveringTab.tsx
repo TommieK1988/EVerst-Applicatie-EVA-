@@ -21,7 +21,6 @@ import {
 } from '@/lib/dossiers/oplevering'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
-import BezoekRapportageKnop from '@/components/documenten/BezoekRapportageKnop'
 import OpleveringMailBlok from './OpleveringMailBlok'
 import { PUNT_STATUSSEN, REDEN_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
@@ -807,13 +806,6 @@ function DeelLinks({ moment, dossierId }: { moment: OpleverMomentView; dossierId
         className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:border-brand-400">
         📄 Werklijst (print/PDF)
       </a>
-      {/* Het klantdocument: op briefpapier, in dezelfde vorm als elk ander bezoekrapport. */}
-      <BezoekRapportageKnop
-        dossierId={dossierId}
-        bron={{ soort: 'oplevering', id: moment.id }}
-        compact
-        label="Bezoekrapport opstellen"
-      />
       {[...relaties.entries()].map(([id, naam]) => (
         <button key={id} disabled={bezig} onClick={() => afmeldLink(id, naam)}
           className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:border-brand-400">

@@ -23,7 +23,7 @@ import {
   type BezoekContext, type BezoekDiscipline, type BezoekPunt,
 } from '@/lib/bezoek/types'
 import {
-  GRIJS, RAND, TEKST, OPPERVLAK, GROEN, AMBER,
+  GRIJS, RAND, TEKST, OPPERVLAK, GROEN, AMBER, ROOD,
   veld, label, primaireKnop, kaart,
 } from '@/components/mobiel/kwaliteit/stijl'
 import DisciplineKiezer from './DisciplineKiezer'
@@ -181,17 +181,25 @@ export default function BezoekDoorloop({
 
         {!definitief && (
           <>
-            {bezoekOnvolledig(context).map(m => (
+            {disciplines.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: ROOD, marginTop: 8, fontWeight: 600 }}>
+                Kies bovenaan minstens één discipline; zonder discipline kun je het bezoek niet
+                afronden.
+              </div>
+            ) : bezoekOnvolledig(context).map(m => (
               <div key={m} style={{ fontSize: 12.5, color: AMBER, marginTop: 8 }}>• {m}</div>
             ))}
             <button
-              type="button" disabled={bezig}
+              type="button" disabled={bezig || disciplines.length === 0}
               onClick={async () => {
                 if (await doe(() => rondBezoekAf(bezoek.id))) {
                   toast.success('Bezoek afgerond')
                 }
               }}
-              style={{ ...primaireKnop, width: '100%', marginTop: 12 }}
+              style={{
+                ...primaireKnop, width: '100%', marginTop: 12,
+                ...(disciplines.length === 0 ? { opacity: 0.45, cursor: 'not-allowed' } : {}),
+              }}
             >
               Bezoek afronden
             </button>

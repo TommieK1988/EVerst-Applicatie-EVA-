@@ -4,8 +4,8 @@
  * Picker voor het invoerveld van type `bezoek_opties`: over wélk bezoek het rapport gaat en
  * wat er in mag.
  *
- * Eén lijst met alle bezoeken van het dossier door elkaar — kwaliteitsrondes,
- * opleveringen, veiligheidsrondes en ingediende formulieren, nieuwste eerst. De opsteller
+ * Eén lijst met alle bezoeken van het dossier door elkaar — projectbezoeken en
+ * kwaliteitsrondes, nieuwste eerst. Opleveringen staan er bewust níét in. De opsteller
  * kiest een *bezoek*; welke module dat heeft vastgelegd is voor hem niet interessant. Het
  * soort-etiket staat er alleen bij zodat hij ziet wat voor rapport eruit komt.
  *
@@ -69,8 +69,8 @@ export default function BezoekOptiesVeld({ dossierId, waarde, onChange }: {
         </select>
         {bezoeken !== null && bezoeken.length === 0 && (
           <p className="mt-1 text-[11.5px] text-amber-700">
-            Er is op dit dossier nog geen afgerond bezoek. Rond eerst een kwaliteitsronde,
-            oplevering of formulier af.
+            Er is op dit dossier nog geen afgerond projectbezoek. Rond eerst een bezoek af op
+            de mobiel.
           </p>
         )}
         {gekozen && (

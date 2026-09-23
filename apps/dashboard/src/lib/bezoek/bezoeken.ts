@@ -630,6 +630,18 @@ export async function rondBezoekAf(
   if ('error' in bezoek) return { ok: false, error: bezoek.error }
 
   const supabase = db()
+
+  // Zonder discipline is een bezoek geen bezoekrapport: de voortgangstabel en "Per onderdeel"
+  // blijven leeg en het rapport zegt alleen "het werk is beoordeeld". Server-side afgedwongen,
+  // niet alleen met een uitgeschakelde knop.
+  const { count } = await supabase
+    .from('projectbezoek_disciplines')
+    .select('discipline_code', { count: 'exact', head: true })
+    .eq('bezoek_id', bezoekId)
+  if (!count) {
+    return { ok: false, error: 'Kies minstens één discipline voordat je het bezoek afrondt.' }
+  }
+
   const { error } = await supabase
     .from('projectbezoeken')
     .update({ status: 'definitief', afgerond_op: new Date().toISOString(), updated_at: new Date().toISOString() })
