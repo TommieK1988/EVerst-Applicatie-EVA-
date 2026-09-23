@@ -194,6 +194,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
             dossierMap={dossierMap}
             uursoorten={uursoorten}
             alleenGeplandeMedewerkers
+            balkLabel="activiteit"
           />
         }
       />

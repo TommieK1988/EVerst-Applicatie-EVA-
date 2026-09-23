@@ -91,6 +91,13 @@ const dialogLabelStyle: React.CSSProperties = {
   display: 'block', marginBottom: 4,
 }
 
+/**
+ * Waar de tekst óp een planbalk vandaan komt. Bedrijfsbreed ('dossier') wil je weten
+ * op welk werk iemand staat; binnen de detailplanning van één dossier is dat overal
+ * hetzelfde woord en gaat het juist om de activiteit ('activiteit').
+ */
+type BalkLabel = 'dossier' | 'activiteit'
+
 type SortKey = 'voornaam' | 'afdeling' | 'functie' | 'ploeg'
 const SORT_OPTIES: { key: SortKey; label: string }[] = [
   { key: 'voornaam', label: 'Voornaam' },
@@ -126,11 +133,12 @@ function volledigeNaam(m: Pick<Medewerker, 'voornaam' | 'tussenvoegsel' | 'achte
 // ─── PlanningItemEditDialog ───────────────────────────────────────────────────
 
 function PlanningItemEditDialog({
-  entry, medewerkers, dossierMap, onClose, onSaved, onKopieer,
+  entry, medewerkers, dossierMap, balkLabel, onClose, onSaved, onKopieer,
 }: {
   entry:       PlanningItemVerrijkt & { dossier_id?: string }
   medewerkers: Medewerker[]
   dossierMap:  Record<string, string>
+  balkLabel:   BalkLabel
   onClose:     () => void
   onSaved:     () => void
   onKopieer:   () => void
@@ -178,6 +186,9 @@ function PlanningItemEditDialog({
 
   const dossierNaam = dossierMap[entry.dossier_id ?? ''] ?? '—'
   const taakNaam    = entry.planning_activiteiten?.titel ?? '—'
+  // Binnen één dossier is de dossiernaam bijzaak; dan staat de activiteit bovenaan.
+  const kopRegel    = balkLabel === 'activiteit' ? taakNaam : dossierNaam
+  const subRegel    = balkLabel === 'activiteit' ? dossierNaam : taakNaam
 
   return (
     <div
@@ -204,10 +215,10 @@ function PlanningItemEditDialog({
         }}>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
-              {dossierNaam}
+              {kopRegel}
             </div>
             <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>
-              {taakNaam}
+              {subRegel}
             </div>
           </div>
           <button type="button" onClick={onClose} className="eva-btn-ghost" style={{ padding: 4 }}>
@@ -684,15 +695,30 @@ function NieuwPlanItemDialog({
 
 // ─── TimelineEntry ────────────────────────────────────────────────────────────
 
+/** Breedte van één sleepgreep aan de rand van een balk. */
+const HDL_W = 8
+
 const hdlStyle: React.CSSProperties = {
-  position: 'absolute', top: 0, bottom: 0, width: 8,
+  position: 'absolute', top: 0, bottom: 0, width: HDL_W,
   cursor: 'ew-resize', zIndex: 5,
   background: 'rgba(255,255,255,0.20)', borderRadius: 2,
 }
 
+/**
+ * Vanaf welke balkbreedte de twee sleepgrepen getekend worden. Twee grepen van 8px
+ * vullen een balk van één dag in Maand-zoom (18px) volledig: élke klik landde dan op
+ * een greep, die de klik onderdrukt, en het planitem was niet te openen. Onder deze
+ * grens vervallen de grepen en is de hele balk klikbaar; slepen aan de randen doe je
+ * na inzoomen (Week/2 weken), datums staan bovendien in het bewerkvenster.
+ */
+const GREPEN_VANAF = HDL_W * 4
+
+/** Muisverplaatsing (px) waaronder een pointer-down op een greep gewoon een klik is. */
+const SLEEP_DREMPEL = 4
+
 function TimelineEntry({
   entry, left, width, top, dossier_id, dossier_titel, kleur: kleurOverride, ppd,
-  onEdit, onResized, onOpenDossier, onStartKopie,
+  balkLabel, onEdit, onResized, onOpenDossier, onStartKopie,
 }: {
   entry:         PlanningItemVerrijkt
   left:          number
@@ -702,6 +728,7 @@ function TimelineEntry({
   dossier_titel: string
   kleur?:        string
   ppd:           number
+  balkLabel:     BalkLabel
   onEdit:        () => void
   onResized:     (id: string, newStartDt: string, newEindDt: string) => void
   onOpenDossier: () => void
@@ -713,6 +740,15 @@ function TimelineEntry({
     data: { type: 'timeline-entry', entry, dossier_id },
   })
   const taakTitel = entry.planning_activiteiten?.titel ?? '—'
+  /** In een dossier-detailplanning is de dossiernaam op élke balk hetzelfde; daar zegt
+   *  de activiteit alles. Bedrijfsbreed is juist het dossier de eerste vraag. */
+  const label = balkLabel === 'activiteit'
+    ? taakTitel
+    : (width > 80 ? dossier_titel : taakTitel)
+  const kop   = balkLabel === 'activiteit'
+    ? `${taakTitel} — ${dossier_titel}`
+    : `${dossier_titel} — ${taakTitel}`
+  const toonGrepen = width >= GREPEN_VANAF
 
   const resizeRef        = useRef<{ type: 'left' | 'right'; startX: number } | null>(null)
   const suppressClickRef = useRef(false)
@@ -738,6 +774,9 @@ function TimelineEntry({
     const dx   = ev.clientX - resizeRef.current.startX
     const type = resizeRef.current.type
     resizeRef.current = null
+    // Niet gesleept maar geklikt: de greep geeft de klik terug aan de balk, anders
+    // opent een smal blok nooit — de greep beslaat er bijna de hele breedte van.
+    if (Math.abs(dx) < SLEEP_DREMPEL) { suppressClickRef.current = false; return }
     const days = Math.round(dx / ppd)
     if (days === 0) return
     let ns = entry.start_dt, ne = entry.eind_dt
@@ -779,7 +818,7 @@ function TimelineEntry({
         zIndex: 4,
         boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
       }}
-      title={`${dossier_titel} — ${taakTitel} (${entry.uren}u)\nKlik = bewerken · dubbelklik = dossier openen · rechtsklik = kopiëren · Ctrl+slepen = kopie`}
+      title={`${kop} (${entry.uren}u)\nKlik = bewerken · dubbelklik = dossier openen · rechtsklik = kopiëren · Ctrl+slepen = kopie${toonGrepen ? '' : '\nZoom in (Week) om de randen te kunnen slepen'}`}
     >
       {/* DS white left-highlight strip */}
       <div style={{
@@ -788,25 +827,29 @@ function TimelineEntry({
         borderRadius: '2px 0 0 2px',
         pointerEvents: 'none',
       }} />
-      <div style={{ ...hdlStyle, left: 0 }}
-        onPointerDown={ev => startResize(ev, 'left')}
-        onPointerMove={onResizeMove}
-        onPointerUp={onResizeUp}
-      />
+      {toonGrepen && (
+        <div style={{ ...hdlStyle, left: 0 }}
+          onPointerDown={ev => startResize(ev, 'left')}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+        />
+      )}
       {width > 40 && (
         <span style={{
           fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 600,
           color: 'white',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {width > 80 ? dossier_titel : taakTitel}
+          {label}
         </span>
       )}
-      <div style={{ ...hdlStyle, right: 0 }}
-        onPointerDown={ev => startResize(ev, 'right')}
-        onPointerMove={onResizeMove}
-        onPointerUp={onResizeUp}
-      />
+      {toonGrepen && (
+        <div style={{ ...hdlStyle, right: 0 }}
+          onPointerDown={ev => startResize(ev, 'right')}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+        />
+      )}
     </div>
   )
 }
@@ -933,7 +976,7 @@ function AgendaTimelineRij({
 
 function TimelineRij({
   medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
-  overCellId, dossierMap, projectleiders,
+  overCellId, dossierMap, projectleiders, balkLabel,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
   onOpenDossier, onStartKopie, onCelKlik, onConflictKlik, kopieerModus,
 }: {
@@ -948,6 +991,7 @@ function TimelineRij({
   overCellId:        string | null
   dossierMap:        Record<string, string>
   projectleiders:    Record<string, { kleur: string | null; naam: string | null }>
+  balkLabel:         BalkLabel
   feestdagenDagen:   Set<string>
   feestdagenNamen:   Record<string, string>
   atvDagen:          Set<string>
@@ -1054,6 +1098,7 @@ function TimelineRij({
             dossier_titel={titel}
             kleur={entryKleur}
             ppd={ppd}
+            balkLabel={balkLabel}
             onEdit={() => onEditEntry(entry)}
             onResized={onResizedEntry}
             onOpenDossier={() => onOpenDossier(entry)}
@@ -1114,6 +1159,11 @@ type Props = {
    * vrije capaciteit het onderwerp.
    */
   alleenGeplandeMedewerkers?: boolean
+  /**
+   * Wat er op de balk komt te staan. In de detailplanning van één dossier staat overal
+   * dezelfde dossiernaam; zet hem daar op 'activiteit' zodat je ziet wélk werk er staat.
+   */
+  balkLabel?: BalkLabel
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -1121,7 +1171,7 @@ type Props = {
 export default function MedewerkerTimeline({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
   projectleiders = {}, ploegNamen = {}, uursoorten = [], agendaItems = [], feestdagen = [],
-  alleenGeplandeMedewerkers = false,
+  alleenGeplandeMedewerkers = false, balkLabel = 'dossier',
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -1143,6 +1193,13 @@ export default function MedewerkerTimeline({
   const [oplosConflict, setOplosConflict] = useState<{ medewerkerId: string; conflict: ConflictDetail } | null>(null)
 
   const [sortBy, setSortBy] = useState<SortKey>('voornaam')
+
+  /** Aanduiding van één planitem in sleep-overlay en kopieerhint — volgt `balkLabel`. */
+  function itemLabel(e: { dossier_id?: string | null; planning_activiteiten?: PlanningItemVerrijkt['planning_activiteiten'] }): string {
+    const dossier = dossierMap[e.dossier_id ?? ''] ?? null
+    const taak    = e.planning_activiteiten?.titel ?? null
+    return (balkLabel === 'activiteit' ? (taak ?? dossier) : (dossier ?? taak)) ?? 'planitem'
+  }
 
   useEffect(() => { setEntries(initialEntries) }, [initialEntries])
 
@@ -1539,6 +1596,7 @@ export default function MedewerkerTimeline({
           overCellId={overCellId}
           dossierMap={dossierMap}
           projectleiders={projectleiders}
+          balkLabel={balkLabel}
           feestdagenDagen={feestdagenDagen}
           feestdagenNamen={feestdagenNamen}
           atvDagen={atvDagen}
@@ -1681,7 +1739,7 @@ export default function MedewerkerTimeline({
         }}>
           <Copy size={14} style={{ flexShrink: 0 }} />
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Kopieermodus — klik op een dag om &ldquo;{dossierMap[kopieerBron.dossier_id ?? ''] ?? 'planitem'}&rdquo; te plakken (meerdere keren kan) · Esc om te stoppen
+            Kopieermodus — klik op een dag om &ldquo;{itemLabel(kopieerBron)}&rdquo; te plakken (meerdere keren kan) · Esc om te stoppen
           </span>
           <button
             type="button"
@@ -1703,7 +1761,7 @@ export default function MedewerkerTimeline({
             boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           }}>
             <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'white' }}>
-              {dossierMap[activeItem.dossier_id] ?? '—'}
+              {itemLabel({ ...activeItem.entry, dossier_id: activeItem.dossier_id })}
             </span>
           </div>
         )}
@@ -1727,6 +1785,7 @@ export default function MedewerkerTimeline({
           entry={editingEntry}
           medewerkers={medewerkers}
           dossierMap={dossierMap}
+          balkLabel={balkLabel}
           onClose={() => setEditingEntry(null)}
           onSaved={() => {
             setEditingEntry(null)

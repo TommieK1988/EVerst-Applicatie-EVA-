@@ -31,8 +31,11 @@ export const VANDAAG_ANCHOR = 1 / 6
 export const WEEKEND_FACTOR = 0.5
 
 /** Minimale balkbreedte (px) zodat korte taken (bv. 4 uur) ook in Maand/Kwartaal
- *  zichtbaar en klikbaar blijven, ongeacht het zoomniveau. */
-export const MIN_BAR_W = 6
+ *  zichtbaar en klikbaar blijven, ongeacht het zoomniveau.
+ *  Stond op 6: dat is wel zíchtbaar maar niet aan te klikken — met de muis raak je
+ *  zo'n streepje simpelweg niet. 12px is nog steeds smal genoeg om niet te liegen
+ *  over de duur, maar wel een echt klikdoel. */
+export const MIN_BAR_W = 12
 
 export const KLEUR = {
   weekend:          'rgba(0,0,0,0.04)',
