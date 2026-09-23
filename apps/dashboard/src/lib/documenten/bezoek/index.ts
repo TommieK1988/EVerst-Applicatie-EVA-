@@ -1,19 +1,18 @@
 /**
- * bezoek/index.ts — kiest de bron en levert het `{bezoek.*}`-blok.
+ * bezoek/index.ts — zoekt het projectbezoek en levert het `{bezoek.*}`-blok.
  *
- * De opsteller kiest geen documentsoort maar een *bezoek*; welke module dat bezoek heeft
- * vastgelegd is voor hem een implementatiedetail. Deze module vertaalt die keuze naar de
- * juiste adapter, en zoekt zelf het meest recente bezoek op als er niets is gekozen.
+ * Een bezoekrapport gaat over precies één ding: een projectbezoek dat de projectleider op de
+ * mobiel heeft vastgelegd. Oplevering en kwaliteitsronde waren ooit ook bronnen; ze zijn er
+ * in september 2026 uit gehaald (zie de noot bij BezoekSoort in contract.ts).
  *
  * Alleen geladen wanneer het sjabloon om documentsoort `bezoekrapport` vraagt — zelfde
- * patroon als houtrot en kwaliteit, zodat een bewonersbrief geen inspectiegegevens ophaalt.
+ * patroon als houtrot en kwaliteit, zodat een bewonersbrief geen bezoekgegevens ophaalt.
  */
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { parseBezoekOpties, BEZOEK_OPTIES_SLEUTEL, type BezoekOpties } from '../bezoek-opties'
+import { parseBezoekOpties, BEZOEK_OPTIES_SLEUTEL } from '../bezoek-opties'
 import { LEEG_BEZOEK_BLOK, type BezoekBlok, type BezoekSoort, type Rij } from './contract'
-import { kwaliteitNaarBezoek } from './uit-kwaliteit'
 import { bouwBezoekUitProjectbezoek } from './uit-projectbezoek'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,92 +35,55 @@ export interface BezoekKeuze {
 }
 
 /**
- * Alle bezoeken van een dossier, nieuwste eerst. Voedt de picker in de genereermodal.
+ * De afgeronde projectbezoeken van een dossier, nieuwste eerst.
  *
- * Elke query is begrensd op één dossier en heeft een expliciete limiet: dit is een keuzelijst,
- * geen export.
+ * Begrensd op één dossier en met een expliciete limiet: dit is een keuzelijst, geen export.
  */
 export async function getBezoekenVoorDossier(dossierId: string): Promise<BezoekKeuze[]> {
-  const supabase = db()
-  // Geen oplevermomenten: een oplevering is geen bezoek en heeft haar eigen rapport (zie de
-  // noot bij BezoekSoort in contract.ts).
-  const [bezoeken, inspecties] = await Promise.all([
-    supabase.from('projectbezoeken')
-      .select('id, volgnummer, datum, locatie, afgerond_op, created_at, projectbezoek_disciplines(kwaliteit_disciplines(naam))')
-      .eq('dossier_id', dossierId).eq('status', 'definitief')
-      .order('datum', { ascending: false }).limit(50),
-    supabase.from('kwaliteit_inspecties')
-      .select('id, inspectienummer, datum, werkzaamheden_omschrijving, created_at')
-      .eq('dossier_id', dossierId).order('datum', { ascending: false }).limit(50),
-  ])
+  const { data } = await db()
+    .from('projectbezoeken')
+    .select('id, volgnummer, datum, locatie, afgerond_op, created_at, projectbezoek_disciplines(kwaliteit_disciplines(naam))')
+    .eq('dossier_id', dossierId).eq('status', 'definitief')
+    .order('datum', { ascending: false }).limit(50)
 
-  const uit: BezoekKeuze[] = []
-
-  // Een projectbezoek is de brede ingang: het kan meerdere onderdelen tegelijk bevatten en is
-  // daarom vrijwel altijd de bron die de opsteller bedoelt.
-  for (const r of (bezoeken.data ?? []) as Record<string, unknown>[]) {
+  const uit: BezoekKeuze[] = ((data ?? []) as Record<string, unknown>[]).map(r => {
     // De genestelde rijen zijn begrensd door de 50 bezoeken hierboven.
     const namen = ((r.projectbezoek_disciplines ?? []) as
       { kwaliteit_disciplines?: { naam?: string } | null }[])
       .map(d => d.kwaliteit_disciplines?.naam)
       .filter(Boolean) as string[]
-    uit.push({
-      soort: 'projectbezoek', id: String(r.id),
+    return {
+      soort: 'projectbezoek' as const, id: String(r.id),
       label: [`PB-${String(r.volgnummer).padStart(2, '0')}`, r.locatie, namen.join(', ')]
         .filter(Boolean).join(' · '),
       datum: (r.datum as string | null) ?? null,
       moment: String(r.afgerond_op ?? r.created_at ?? r.datum ?? ''),
-    })
-  }
+    }
+  })
 
-  for (const r of (inspecties.data ?? []) as Record<string, unknown>[]) {
-    uit.push({
-      soort: 'kwaliteit', id: String(r.id),
-      label: [r.inspectienummer, r.werkzaamheden_omschrijving].filter(Boolean).join(' · ') || 'Kwaliteitsronde',
-      datum: (r.datum as string | null) ?? null,
-      moment: String(r.created_at ?? r.datum ?? ''),
-    })
-  }
   const tijd = (k: BezoekKeuze) => Date.parse(k.moment) || 0
   return uit.sort((a, b) => tijd(b) - tijd(a))
 }
 
 /**
- * De bron wanneer de opsteller niets heeft gekozen: het meest recente **projectbezoek**, en
- * pas als dat er niet is een kwaliteitsronde. Die module is geparkeerd; een oude concept-
- * inspectie mag een vers projectbezoek niet verdringen.
- */
-function standaardBron(lijst: BezoekKeuze[]): BezoekKeuze | null {
-  return lijst.find(k => k.soort === 'projectbezoek') ?? lijst[0] ?? null
-}
-
-/**
- * Bouwt het `{bezoek.*}`-blok voor een dossier.
- *
- * `kwaliteitBlok` wordt door de contextbouwer meegegeven omdat die het toch al bouwt voor de
- * `{kwaliteit.*}`-tags; zo wordt een kwaliteitsronde niet twee keer geladen.
+ * Bouwt het `{bezoek.*}`-blok voor een dossier: het gekozen projectbezoek, of zonder keuze
+ * het meest recent afgeronde.
  */
 export async function bouwBezoekBlok(
   dossierId: string,
   invoer: Record<string, unknown>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  kwaliteitBlok: any,
   opties: { preview?: boolean } = {},
 ): Promise<BezoekBlok> {
   const keuze = parseBezoekOpties(invoer[BEZOEK_OPTIES_SLEUTEL])
 
-  let soort = keuze.bron_soort
-  let id = keuze.bron_id
-
-  // Niets gekozen → het meest recente projectbezoek van dit dossier (zie standaardBron).
-  if (!soort || !id) {
-    const bron = standaardBron(await getBezoekenVoorDossier(dossierId))
-    if (!bron) return { ...LEEG_BEZOEK_BLOK, per_pagina: keuze.per_pagina }
-    soort = bron.soort
-    id = bron.id
+  let id = keuze.bron_soort === 'projectbezoek' ? keuze.bron_id : null
+  if (!id) {
+    const [nieuwste] = await getBezoekenVoorDossier(dossierId)
+    if (!nieuwste) return { ...LEEG_BEZOEK_BLOK, per_pagina: keuze.per_pagina }
+    id = nieuwste.id
   }
 
-  return metSjabloonFotos(await bouwVoorBron(dossierId, soort, id, keuze, kwaliteitBlok, opties))
+  return metSjabloonFotos(await bouwBezoekUitProjectbezoek(id, keuze, opties))
 }
 
 /**
@@ -129,10 +91,10 @@ export async function bouwBezoekBlok(
  *
  * Het sjabloon vraagt `{%bevinding_foto}`, `{%bevinding_foto_na}` en `{%waarneming_foto}` —
  * eigen namen, zodat het fotokader van dit rapport niet dat van een ander document raakt (zie
- * `documentImageMax`). De adapters leveren de foto's echter als `foto`, `foto_na` en
+ * `documentImageMax`). De adapter levert de foto's echter als `foto`, `foto_na` en
  * `foto_klein`, en niemand legde die twee naast elkaar. Een ontbrekende image-tag geeft geen
  * fout maar een transparante pixel, dus élk bezoekrapport kwam stilletjes zonder bevindings-
- * en overzichtsfoto's uit. Eén vertaling hier dekt alle drie de bronnen.
+ * en overzichtsfoto's uit.
  */
 function metSjabloonFotos(blok: BezoekBlok): BezoekBlok {
   const bevinding = (b: Rij): Rij => ({
@@ -152,25 +114,5 @@ function metSjabloonFotos(blok: BezoekBlok): BezoekBlok {
       bevindingen: Array.isArray(p.bevindingen) ? (p.bevindingen as Rij[]).map(bevinding) : p.bevindingen,
     })),
     waarnemingen,
-  }
-}
-
-async function bouwVoorBron(
-  dossierId: string,
-  soort: BezoekSoort,
-  id: string,
-  keuze: BezoekOpties,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  kwaliteitBlok: any,
-  opties: { preview?: boolean },
-): Promise<BezoekBlok> {
-  switch (soort) {
-    case 'projectbezoek':
-      return bouwBezoekUitProjectbezoek(id, keuze, opties)
-    case 'kwaliteit':
-      // Het rekenwerk zit al in bouwKwaliteitBlok; dit is alleen de remap.
-      return kwaliteitNaarBezoek(kwaliteitBlok, keuze)
-    default:
-      return { ...LEEG_BEZOEK_BLOK, per_pagina: keuze.per_pagina }
   }
 }

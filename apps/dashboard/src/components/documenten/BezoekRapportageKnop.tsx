@@ -1,12 +1,11 @@
 'use client'
 
 /**
- * Knop "Rapport opstellen" bij elke controle op locatie: de Oplevering-tab, het
- * kwaliteitsblok op de VCA-tab, het inspectiedetail en een formulierinzending.
+ * Knop "Rapport opstellen" bij een projectbezoek op de KAM/VGM-tab. Oplevering en
+ * kwaliteitsronde hebben hun eigen rapport en gebruiken deze knop niet (meer).
  *
- * Overal dezelfde knop en hetzelfde sjabloon — dat is de hele bedoeling van het
- * bezoekrapport. `bron` vult het bezoek voor, zodat het rapport gaat over wat je op dat
- * moment op je scherm hebt in plaats van over het meest recente bezoek.
+ * `bron` vult het bezoek voor, zodat het rapport gaat over het bezoek op je scherm in
+ * plaats van over het meest recente bezoek.
  *
  * Patroon 1-op-1 van `KwaliteitRapportageKnop`, inclusief het gedrag "geen sjabloon
  * ingericht → geen knop": beter geen knop dan een knop die uitkomt op een lege lijst.

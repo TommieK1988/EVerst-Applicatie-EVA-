@@ -4,10 +4,8 @@
  * Picker voor het invoerveld van type `bezoek_opties`: over wélk bezoek het rapport gaat en
  * wat er in mag.
  *
- * Eén lijst met alle bezoeken van het dossier door elkaar — projectbezoeken en
- * kwaliteitsrondes, nieuwste eerst. Opleveringen staan er bewust níét in. De opsteller
- * kiest een *bezoek*; welke module dat heeft vastgelegd is voor hem niet interessant. Het
- * soort-etiket staat er alleen bij zodat hij ziet wat voor rapport eruit komt.
+ * De afgeronde projectbezoeken van het dossier, nieuwste eerst. Opleveringen en
+ * kwaliteitsrondes staan er bewust níét in: die hebben hun eigen rapport.
  *
  * De waarde is één JSON-tekst (zie `lib/documenten/bezoek-opties.ts`), zodat er geen kolommen
  * bij hoeven en "Opnieuw opstellen" de keuzes vanzelf herstelt. Zelfde opzet als

@@ -166,17 +166,14 @@ export async function buildDocumentContext(
     : LEEG_HOUTROT_BLOK
 
   // Kwaliteitscontrole-rapport — zelfde patroon: alleen laden als het sjabloon erom vraagt.
-  // Ook het bezoekrapport heeft dit blok nodig zodra de gekozen bron een kwaliteitsronde is;
-  // dat scheelt een tweede keer laden.
-  const isBezoek = isBezoekSoort(sjabloon.documentsoort)
-  const kwaliteit = sjabloon.documentsoort === 'kwaliteitsrapport' || isBezoek
+  const kwaliteit = sjabloon.documentsoort === 'kwaliteitsrapport'
     ? await bouwKwaliteitBlok(dossierId, genormaliseerd, { preview: opties.preview })
     : LEEG_KWALITEIT_BLOK
 
-  // Bezoekrapport — één rapportage voor elke controle op locatie. De gekozen bron bepaalt
-  // welke hoofdstukken gevuld worden; de rest klapt in het sjabloon vanzelf dicht.
-  const bezoek = isBezoek
-    ? await (await import('./bezoek')).bouwBezoekBlok(dossierId, genormaliseerd, kwaliteit, { preview: opties.preview })
+  // Bezoekrapport — het projectbezoek dat op de mobiel is vastgelegd. Een kwaliteitsronde
+  // hoort daar niet meer bij; die heeft haar eigen kwaliteitsrapport.
+  const bezoek = isBezoekSoort(sjabloon.documentsoort)
+    ? await (await import('./bezoek')).bouwBezoekBlok(dossierId, genormaliseerd, { preview: opties.preview })
     : LEEG_BEZOEK_BLOK
 
   // Feedback-ronde: de bewoners-feedbacklink wordt automatisch bepaald (opgehaald of

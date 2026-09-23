@@ -18,7 +18,7 @@ import { isBezoekSoort } from './types'
 import { knipInPaginas } from './rapport-paginas'
 import {
   LEEG_BEZOEK_BLOK, LEGE_BEVINDING, bezoekDisclaimer,
-  type BezoekBlok, type BezoekBevinding,
+  type BezoekBlok, type BezoekBevinding, type BezoekDisciplineRij,
 } from './bezoek/contract'
 import { isInkoopSoort } from './types'
 import type { DocumentSjabloon } from './types'
@@ -238,93 +238,79 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
 // ── Demo-bezoekrapport ────────────────────────────────────────────────────
 
 /**
- * Toont bewust een kwaliteitsronde: dat is de bron die de meeste hoofdstukken vult, dus de
- * beheerder ziet in één preview het hele sjabloon. Bij een oplevering vallen Metingen en
- * Opvolging weg en komt Ondertekening erbij.
+ * Een projectbezoek met twee disciplines, een paar punten en één aandachtspunt: genoeg om in
+ * één preview de voortgangstabel, de bevindingen, "Per onderdeel" en de overzichtsfoto's te
+ * zien. Metingen, opvolging en ondertekening blijven leeg — een projectbezoek kent die niet.
  */
 function demoBezoekBlok(keuze: BezoekOpties): BezoekBlok {
-  const bevinding = (n: number, o: Partial<BezoekBevinding>): BezoekBevinding => ({
+  const bevindingen: BezoekBevinding[] = [{
     ...LEGE_BEVINDING,
-    nummer: `KA-2026-${String(n).padStart(3, '0')}`,
-    volgnummer: n,
+    nummer: 'AP-01', volgnummer: 1,
+    titel: 'Schilderwerk', groep: 'Schilderwerk', locatie: 'Schilderwerk',
+    omschrijving: 'Kozijn 2.14 noordgevel: aflaag te dun, onderhout schijnt door.',
+    omschrijving_kort: 'Kozijn 2.14 noordgevel: aflaag te dun, onderhout schijnt door.',
     status: 'open', status_label: 'Open', is_open: true,
-    datum: '07-09-2026', hersteldatum: '21-09-2026',
-    ...o,
-  })
+    datum: '7 september 2026', hersteldatum: '21 september 2026',
+  }]
 
-  const bevindingen = [
-    bevinding(31, {
-      titel: 'SCH-03', groep: 'Schilderwerk', locatie: 'Noordgevel, kozijn 2.14',
-      omschrijving_kort: 'Op drie kozijnen is de aflaag te dun aangebracht; de laagdikte blijft onder de eis.',
-      ernst_label: 'Technisch', eis_kort: 'Droge laagdikte aflak ≥ 80 µm', meting: '62 µm',
-      actie_kort: 'Extra aflaag aanbrengen en opnieuw meten',
-    }),
-    bevinding(32, {
-      titel: 'KIT-01', groep: 'Kitwerk', locatie: 'Voorgevel, 2e verdieping',
-      omschrijving_kort: 'De kitvoeg tussen kozijn en metselwerk laat los over circa 40 cm.',
-      ernst_label: 'Kritiek', is_kritiek: true, status_label: 'In behandeling',
-      eis_kort: 'Aansluitend, geen open naden',
-      actie_kort: 'Voeg uitsnijden en opnieuw afkitten',
-    }),
-    bevinding(33, {
-      titel: 'HOU-02', groep: 'Houtrotherstel', locatie: 'Achtergevel, kozijn 0.04',
-      omschrijving_kort: 'Bij de onderdorpel is aangetast hout blijven zitten onder de plamuurlaag.',
-      ernst_label: 'Technisch', status_label: 'Opgelost', is_open: false, is_opgelost: true,
-      eis_kort: 'Aantasting verwijderd tot gezond hout',
-      actie_kort: 'Hersteld en opnieuw beoordeeld',
-    }),
+  const punt = (n: number, tekst: string, aandacht = false) => ({
+    nummer: `P-${String(n).padStart(2, '0')}`, tekst, tekst_kort: tekst,
+    is_aandachtspunt: aandacht, aandachtspunt_nummer: aandacht ? 'AP-01' : '',
+    status_label: aandacht ? 'Open' : '', disciplinefoto: '', heeft_foto: false,
+  })
+  const disciplines: BezoekDisciplineRij[] = [
+    {
+      code: 'SCH', naam: 'Schilderwerk', discipline_naam: 'Schilderwerk',
+      voortgang_pct: 60, voortgang_label: '60 %', heeft_voortgang: true,
+      disciplinepunten: [
+        punt(1, 'Noord- en oostgevel in de grondlaag, zuidgevel afgelakt.'),
+        punt(2, 'Kozijn 2.14 noordgevel: aflaag te dun, onderhout schijnt door.', true),
+      ],
+      heeft_disciplinepunten: true, aantal_punten: 2,
+    },
+    {
+      code: 'HHR', naam: 'Houtrotherstel', discipline_naam: 'Houtrotherstel',
+      voortgang_pct: 90, voortgang_label: '90 %', heeft_voortgang: true,
+      disciplinepunten: [], heeft_disciplinepunten: false, aantal_punten: 0,
+    },
   ]
 
   return {
     ...LEEG_BEZOEK_BLOK,
     aanwezig: true,
-    soort: 'kwaliteit',
-    soort_label: 'Kwaliteitsronde',
-    titel: 'Kwaliteitsronde KC-2026-014',
-    kenmerk: 'KC-2026-014',
+    soort: 'projectbezoek',
+    soort_label: 'Projectbezoek',
+    titel: 'Projectbezoek PB-03',
+    kenmerk: 'PB-03',
     datum: '7 september 2026', tijd: '09:30',
     uitvoerder: 'Jan de Vries', locatie: 'Blok A — noord- en oostgevel',
     omstandigheden: 'Droog, 18 °C', werkzaamheden: 'Buitenschilderwerk en houtrotherstel',
     inleiding: keuze.inleiding
-      || 'Tijdens deze periodieke ronde zijn de op dat moment zichtbare, bereikbare en '
-      + 'beoordeelbare werkzaamheden steekproefsgewijs gecontroleerd.',
-    samenvatting_regel: 'Van de 24 beoordeelde controlepunten voldoen er 21. Er zijn 3 punten vastgelegd.',
+      || 'Tijdens dit projectbezoek zijn de op dat moment zichtbare en bereikbare onderdelen van het '
+      + 'werk beoordeeld. Wat daarbij is vastgelegd, staat hieronder.',
+    samenvatting_regel: 'Tijdens dit bezoek is gekeken naar schilderwerk en houtrotherstel. '
+      + 'Er zijn 2 punten vastgelegd, waarvan 1 als aandachtspunt op het dossier. Daarvan staat er 1 nog open.',
     kengetallen: [
-      { label: 'Beoordeelde controlepunten', waarde: 24 },
-      { label: 'Voldoet aan de eis', waarde: 21 },
-      { label: 'Vastgelegde punten', waarde: 3, is_negatief: true },
+      { label: 'Bekeken disciplines', waarde: 2, is_negatief: false },
+      { label: 'Vastgelegde punten', waarde: 2, is_negatief: false },
+      { label: 'Als aandachtspunt', waarde: 1, is_negatief: true },
+      { label: 'Nog open', waarde: 1, is_negatief: true },
     ],
     heeft_kengetallen: true,
     alle_bevindingen: bevindingen,
     paginas: knipInPaginas(bevindingen, { perPagina: keuze.per_pagina, itemVeld: 'bevindingen' }),
     heeft_bevindingen: true,
-    aantal_bevindingen: bevindingen.length,
-    aantal_open: 2,
-    metingen: [
-      { code: 'SCH-03', onderdeel: 'Droge laagdikte aflak', locatie: 'Kozijn 2.14', meting: '62 µm',
-        eis: '≥ 80 µm', meetmiddel: 'Laagdiktemeter', resultaat: 'Voldoet niet' },
-      { code: 'HOU-01', onderdeel: 'Houtvochtgehalte', locatie: 'Kozijn 0.04', meting: '14 %',
-        eis: '≤ 18 %', meetmiddel: 'Vochtmeter', resultaat: 'Voldoet' },
-    ],
-    heeft_metingen: true,
-    punten: [
-      { code: 'SCH-01', groep: 'Schilderwerk', onderdeel: 'Hechting grondlaag', resultaat: 'Voldoet', opmerking: '' },
-      { code: 'SCH-03', groep: 'Schilderwerk', onderdeel: 'Droge laagdikte aflak', resultaat: 'Voldoet niet', opmerking: 'Zie KA-2026-031' },
-      { code: 'STE-01', groep: 'Bereikbaarheid', onderdeel: 'Steiger gekeurd', resultaat: 'Voldoet', opmerking: 'Keuring 01-09-2026' },
-    ],
-    heeft_punten: true,
+    aantal_bevindingen: 1,
+    aantal_open: 1,
+    disciplines,
+    heeft_disciplines: true,
+    disciplines_regel: 'Schilderwerk, Houtrotherstel',
     waarnemingen: keuze.toon_waarnemingen
-      ? [{ omschrijving: 'Strak afgewerkte kozijnaansluitingen', locatie: 'Zuidgevel', groep: 'Schilderwerk', foto: '', heeft_foto: false }]
+      ? [{ omschrijving: 'Overzicht', locatie: '', groep: 'Bezoek', foto: '', heeft_foto: false }]
       : [],
     heeft_waarnemingen: keuze.toon_waarnemingen,
-    opvolging: [
-      { nummer: 'KA-2026-021', omschrijving: 'Roestvorming op balkonhekwerk', locatie: 'Balkon 3.02',
-        status_label: 'Opgelost', hercontrole: 'Ja' },
-    ],
-    heeft_opvolging: true,
-    opvolging_regel: 'Van de vorige ronde stonden 3 punten open. Daarvan zijn er 2 afgehandeld.',
     opmerkingen: 'Het werk ligt op schema.',
-    disclaimer: bezoekDisclaimer('kwaliteit'),
+    disclaimer: bezoekDisclaimer('projectbezoek'),
     per_pagina: keuze.per_pagina,
   }
 }

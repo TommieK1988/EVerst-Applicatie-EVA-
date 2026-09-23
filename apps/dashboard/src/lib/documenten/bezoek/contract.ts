@@ -1,10 +1,10 @@
 /**
  * contract.ts — de gedeelde vorm van een bezoekrapport.
  *
- * Eén rapportage voor élke controle op locatie: een kwaliteitsronde, een oplevering, een
- * veiligheidsronde (VCA) en een ingevuld inspectieformulier vullen alle vier dit blok. Het
- * Word-sjabloon kent daardoor maar één set tags, en een hoofdstuk dat een bron niet vult
- * verdwijnt vanzelf doordat de bijbehorende `heeft_…`-vlag op false staat.
+ * Het rapport van een projectbezoek. Het blok is breder dan wat een projectbezoek vult
+ * (metingen, handtekeningen, opvolging): dat is erfenis uit de tijd dat ook opleveringen en
+ * kwaliteitsrondes dit blok vulden. Een hoofdstuk dat niet gevuld wordt verdwijnt vanzelf
+ * doordat de bijbehorende `heeft_…`-vlag op false staat.
  *
  * **Géén `'use server'` en géén `server-only`**: dit bestand exporteert constanten en types,
  * en wordt gebruikt door de optie-picker (client), de demo-context én de adapters (server).
@@ -29,12 +29,15 @@ export interface Rij { [k: string]: unknown }
  * werklijst en haar eigen akkoordtraject op de Oplevering-tab. Aanleiding: bij 20261.00449
  * pakte het bezoekrapport een concept-oplevering in plaats van het projectbezoek van diezelfde
  * ochtend.
+ *
+ * **En de kwaliteitsronde ook (23 sep 2026).** Er is één type werkbezoek: het projectbezoek.
+ * De kwaliteitsronde houdt haar eigen kwaliteitsrapport. Het type blijft een union van één,
+ * zodat de opgeslagen optie-JSON (`bron_soort`) leesbaar blijft.
  */
-export type BezoekSoort = 'projectbezoek' | 'kwaliteit'
+export type BezoekSoort = 'projectbezoek'
 
 export const BEZOEK_SOORT_LABELS: Record<BezoekSoort, string> = {
   projectbezoek: 'Projectbezoek',
-  kwaliteit:  'Kwaliteitsronde',
 }
 
 /**
@@ -198,13 +201,6 @@ export function bezoekDisclaimer(soort: BezoekSoort | ''): string {
       return 'Dit rapport betreft een bezoek aan het werk op de genoemde datum en beschrijft de op '
         + 'dat moment zichtbare, bereikbare en beoordeelbare onderdelen. Wat niet is beoordeeld, '
         + 'wordt daarmee niet als goedgekeurd beschouwd.'
-    case 'kwaliteit':
-      return 'Deze kwaliteitscontrole betreft een periodieke steekproef van de op het moment van '
-        + 'inspectie zichtbare, bereikbare en beoordeelbare werkzaamheden. De beoordeling vindt plaats '
-        + 'op basis van de voor het betreffende onderdeel toepasselijke technische normen, richtlijnen, '
-        + 'productspecificaties, projectafspraken en vastgestelde kwaliteitscriteria. '
-        + 'Niet tijdens deze inspectie beoordeelde werkzaamheden worden niet automatisch als '
-        + 'goedgekeurd beschouwd.'
     default:
       return ''
   }

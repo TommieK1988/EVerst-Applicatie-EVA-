@@ -397,10 +397,10 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   },
   {
     groep: 'Bezoekrapport - kop en samenvatting',
-    uitleg: 'Een rapportage over wat er op locatie is vastgelegd: een projectbezoek of een '
-      + 'kwaliteitsronde. Een oplevering hoort hier niet bij; die heeft haar eigen rapport. Voeg bij "Invoervelden" een veld toe van het type '
-      + '"Bezoekrapport (bezoek kiezen)" met sleutel "bezoek"; daar kiest de opsteller welk '
-      + 'bezoek het betreft. Hoofdstukken die de gekozen bron niet vult, verdwijnen vanzelf. '
+    uitleg: 'Het rapport van een projectbezoek zoals de projectleider het op de mobiel heeft '
+      + 'vastgelegd. Oplevering en kwaliteitsronde horen hier niet bij; die hebben elk hun eigen '
+      + 'rapport. Zonder invoerveld gaat het rapport over het meest recent afgeronde projectbezoek; '
+      + 'vanaf de KAM/VGM-tab is het bezoek al voorgekozen. '
       + 'VCA-formulieren en gewone formulieren horen hier NIET bij: die houden hun eigen '
       + 'formulier en hun eigen rapportage.',
     items: [
@@ -469,9 +469,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   },
   {
     groep: 'Bezoekrapport - per onderdeel (projectbezoek)',
-    uitleg: 'Wat er per discipline is gezien, met de voortgang van dat vak. Alleen een '
-      + 'projectbezoek vult dit hoofdstuk; bij een kwaliteitsronde '
-      + 'blijft het leeg en verdwijnt het vanzelf. Let op de namen: de loop binnen een '
+    uitleg: 'Wat er per discipline is gezien, met de voortgang van dat vak. Let op de namen: de loop binnen een '
       + 'discipline heet {#disciplinepunten} en niet {#punten}, en de naam van de discipline '
       + 'is {discipline_naam} - anders pakt de sjabloonmotor het verkeerde blok.',
     items: [
@@ -498,9 +496,10 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
   },
   {
     groep: 'Bezoekrapport - overige hoofdstukken',
-    uitleg: 'Metingen, beoordeelde punten, positieve waarnemingen, opvolging en ondertekening. '
-      + 'Zet elk hoofdstuk tussen zijn {#bezoek.heeft_...}-conditie; dan verdwijnt het bij een bron '
-      + 'die het niet kent - een projectbezoek heeft geen metingen, een kwaliteitsronde geen handtekening.',
+    uitleg: 'Overzichtsfoto\'s van het bezoek (de waarnemingen). Metingen, beoordeelde punten, '
+      + 'opvolging en ondertekening vult een projectbezoek niet; die tags bestaan nog uit de tijd '
+      + 'van de kwaliteitsronde en blijven leeg. Zet elk hoofdstuk tussen zijn '
+      + '{#bezoek.heeft_...}-conditie, dan verdwijnt het vanzelf.',
     items: [
       { v: '{#bezoek.heeft_metingen}...{/bezoek.heeft_metingen}', label: 'Hoofdstuk Metingen. Staat NIET meer in het standaardsjabloon; zelf toe te voegen' },
       { v: '{#bezoek.metingen}...{/bezoek.metingen}',             label: 'Loop: {code} {onderdeel} {locatie} {meting} {eis} {meetmiddel} {resultaat}' },
