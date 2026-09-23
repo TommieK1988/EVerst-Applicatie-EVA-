@@ -93,7 +93,10 @@ export async function startBezoekVoorTaak(
   const dossierId: string | null = taak.dossier_id ?? taak.task_lists?.dossier_id ?? null
   if (!dossierId) return { ok: false, error: 'Deze actie hangt niet aan een opdracht' }
 
-  return maakBezoek(dossierId, taskId, medewerker.id)
+  // Geen revalidatie: deze functie draait tijdens de render van /m/taken/[taakId]/bezoek, en
+  // revalidatePath tijdens een render gooit in Next 15 — de eerste tik op elk nieuw bezoek gaf
+  // een foutscherm (het concept stond er dan al wel, dus pas de tweede tik werkte).
+  return maakBezoek(dossierId, taskId, medewerker.id, { revalideer: false })
 }
 
 /** Start een bezoek zonder actie — de projectleider staat er gewoon. */
@@ -122,6 +125,7 @@ async function maakBezoek(
   dossierId: string,
   taskId: string | null,
   medewerkerId: string,
+  { revalideer = true }: { revalideer?: boolean } = {},
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(dossierId)
 
@@ -168,7 +172,7 @@ async function maakBezoek(
     if (rijen.length) await supabase.from('projectbezoek_disciplines').insert(rijen)
   }
 
-  revalidate(dossierId, data.id)
+  if (revalideer) revalidate(dossierId, data.id)
   return { ok: true, id: data.id }
 }
 
@@ -187,7 +191,7 @@ export async function getBezoek(bezoekId: string): Promise<BezoekContext | null>
   const [{ data: dossier }, { data: gekozen }, { data: punten }, { data: fotos }, { data: medewerker }] =
     await Promise.all([
       supabase.from('dossiers')
-        .select('id, dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_plaats')
+        .select('id, dossiernummer, titel, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad')
         .eq('id', bezoek.dossier_id).maybeSingle(),
       supabase.from('projectbezoek_disciplines')
         .select('discipline_code, voortgang_pct, volgorde')
@@ -245,7 +249,7 @@ export async function getBezoek(bezoekId: string): Promise<BezoekContext | null>
       titel: dossier?.titel ?? '',
       werkadres: [
         [dossier?.werkadres_straat, dossier?.werkadres_huisnummer].filter(Boolean).join(' '),
-        [dossier?.werkadres_postcode, dossier?.werkadres_plaats].filter(Boolean).join('  '),
+        [dossier?.werkadres_postcode, dossier?.werkadres_stad].filter(Boolean).join('  '),
       ].filter(Boolean).join(', '),
     },
     uitvoerderNaam: naam,
