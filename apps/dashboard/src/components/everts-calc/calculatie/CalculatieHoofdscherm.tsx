@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   GitBranch, Ruler, CloudUpload, Check, Undo2,
@@ -69,6 +69,17 @@ export default function CalculatieHoofdscherm({
   onScenariosGewijzigd, magReviseren = 'alles',
 }: Props) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // Terug naar precies deze weergave. Het pad alleen is niet genoeg: in een gebundelde tab
+  // (servicedesk "Opname & offerte") kiest `?deel=` het onderdeel, en zonder die parameter
+  // landt de nieuwe offerte op het eerste onderdeel — de opname. Een oude `offerte` gaat eruit;
+  // de modal zet de nieuwe erbij.
+  const terugNaarUrl = (() => {
+    const q = new URLSearchParams(searchParams?.toString() ?? '')
+    q.delete('offerte')
+    const s = q.toString()
+    return s ? `${pathname}?${s}` : pathname
+  })()
   const [scenario, setScenario]                       = useState<Scenario | null>(null)
   // Een verzonden (definitieve) calculatie is bevroren: read-only, ook als het
   // dossier zelf bewerkbaar is. Zo kan een verzonden versie nooit wijzigen.
@@ -718,7 +729,7 @@ export default function CalculatieHoofdscherm({
           projectNummer={projectNummer}
           type={offerteModalType}
           meerwerkRegelId={scenario.meerwerk_regel_id ?? null}
-          terugNaarUrl={pathname}
+          terugNaarUrl={terugNaarUrl}
         />
       )}
 
