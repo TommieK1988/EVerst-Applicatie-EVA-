@@ -648,6 +648,44 @@ async function schuifMutatieNaarOpgenomen(dossierId: string): Promise<void> {
   await updateServicedeskSubstatus(dossierId, 'opgenomen')
 }
 
+/**
+ * Verwijdert een opname die er niet had moeten zijn — dubbel gestart, op het verkeerde dossier.
+ *
+ * Regels en foto-rijen gaan mee via de cascade op `opname_id`; de bestanden in de bucket ruimen we
+ * hier zelf op. Kan in elke status, ook `omgezet`: de calculatieregels zijn dan al een zelfstandige
+ * kopie en blijven staan. Het scherm zegt dat vóór het bevestigen, zodat niemand denkt dat de
+ * calculatie mee opgeschoond wordt.
+ */
+export async function verwijderOpname(
+  opnameId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisSessie()
+  const toegang = await magOpnameOpenen(opnameId)
+  if (!toegang.ok) return { ok: false, error: 'Geen toegang tot deze opname' }
+  await assertDossierBewerkbaar(toegang.opname.dossier_id)
+  const supabase = db()
+
+  // Paden vóór het verwijderen ophalen: na de cascade zijn de foto-rijen weg. Begrensd door
+  // `opname_id`, dus geen paginering nodig.
+  const { data: fotos } = await supabase.from('opname_fotos').select('pad').eq('opname_id', opnameId)
+
+  const { error } = await supabase.from('opnames').delete().eq('id', opnameId)
+  if (error) return { ok: false, error: `Opname verwijderen mislukt: ${error.message}` }
+
+  // Zelfde afweging als bij één foto: de opname is weg, een wees in de bucket is hinderlijk, geen fout.
+  const paden = ((fotos ?? []) as { pad: string }[]).map(f => f.pad).filter(Boolean)
+  if (paden.length) {
+    try {
+      await supabase.storage.from(BUCKET).remove(paden)
+    } catch {
+      /* bewust genegeerd */
+    }
+  }
+
+  revalidate(toegang.opname.dossier_id, opnameId)
+  return { ok: true }
+}
+
 /** Terug naar concept, bijvoorbeeld omdat de opnemer iets vergat. */
 export async function heropenOpname(
   opnameId: string,

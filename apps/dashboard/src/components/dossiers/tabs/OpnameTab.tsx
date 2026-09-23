@@ -14,6 +14,7 @@ import {
   getOpnameMetRegels,
   heropenOpname,
   startOpname,
+  verwijderOpname,
   verwijderRegel,
 } from '@/lib/opname/opnames'
 import {
@@ -148,6 +149,29 @@ export default function OpnameTab({
     }
     await laden()
     await laadDetail(opnameId)
+  }
+
+  async function opnameWeg(opname: Opname) {
+    const ja = await bevestig({
+      titel: `${opname.opnamenummer} verwijderen?`,
+      omschrijving:
+        opname.status === 'omgezet'
+          ? 'De opname verdwijnt met al zijn regels en foto\'s. Wat al in de calculatie staat blijft ' +
+            'staan — haal die regels daar zelf weg als ze er niet in horen.'
+          : 'De opname verdwijnt met al zijn regels en foto\'s. Dit kun je niet terugdraaien.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })
+    if (!ja) return
+    const res = await verwijderOpname(opname.id)
+    if (!res.ok) {
+      toast.error(res.error)
+      return
+    }
+    toast.success(`${opname.opnamenummer} verwijderd`)
+    // Leeg zetten, zodat `laden` de nieuwste overgebleven opname openklapt.
+    setOpen(null)
+    await laden()
   }
 
   if (opnames === null) {
@@ -371,6 +395,15 @@ export default function OpnameTab({
                       >
                         Openen zoals op de telefoon
                       </a>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => opnameWeg(opname)}
+                          className="ml-auto rounded-md border border-red-200 px-3 py-1.5 text-[13px] font-medium text-red-700 hover:bg-red-50"
+                        >
+                          Opname verwijderen
+                        </button>
+                      )}
                     </div>
 
                     {!readOnly && dit && dit.regels.length > 0 && (
