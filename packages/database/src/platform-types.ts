@@ -1041,6 +1041,8 @@ export type Medewerker = {
   afdeling_id: string | null
   in_dienst_vanaf: string | null
   uit_dienst_per: string | null
+  /** Einde huidige arbeidscontract. Leeg = onbepaalde tijd. EVA-only, niet uit Bouw7. */
+  contract_einde: string | null
   extern: boolean
   actief: boolean
   uurtarief_verkoop: number | null

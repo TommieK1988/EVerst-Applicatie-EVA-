@@ -22,7 +22,7 @@ export default async function MedewerkersPage() {
     .select(
       'id, voornaam, tussenvoegsel, achternaam, email, telefoon, mobiel, foto_url, functie, afdeling, ' +
       'extern, actief, uurtarief_verkoop, uurtarief_kostprijs, cao_schaal, cao_document_id, cao_trede, ' +
-      'in_dienst_vanaf, uit_dienst_per, adres_straat, adres_postcode, adres_plaats, geboortedatum, ' +
+      'in_dienst_vanaf, uit_dienst_per, contract_einde, adres_straat, adres_postcode, adres_plaats, geboortedatum, ' +
       'werkmaatschappij_id, relatie_id, kleur, ploeg_id, standaard_uursoort_id, gebruiker_type, ' +
       'o365_email, handtekening_url, bouw7_id, bouw7_laatst_sync, bouw7_sync_status, created_at, updated_at'
     )

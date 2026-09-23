@@ -9015,6 +9015,7 @@ export type Database = {
           telefoon: string | null
           tussenvoegsel: string | null
           uit_dienst_per: string | null
+          contract_einde: string | null
           updated_at: string
           uren_goedkeurder_id: string | null
           uurtarief_kostprijs: number | null
@@ -9071,6 +9072,7 @@ export type Database = {
           telefoon?: string | null
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
+          contract_einde?: string | null
           updated_at?: string
           uren_goedkeurder_id?: string | null
           uurtarief_kostprijs?: number | null
@@ -9127,6 +9129,7 @@ export type Database = {
           telefoon?: string | null
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
+          contract_einde?: string | null
           updated_at?: string
           uren_goedkeurder_id?: string | null
           uurtarief_kostprijs?: number | null

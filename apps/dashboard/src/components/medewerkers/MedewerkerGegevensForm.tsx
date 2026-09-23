@@ -21,6 +21,7 @@ type FormState = {
   afdeling: string
   in_dienst_vanaf: string
   uit_dienst_per: string
+  contract_einde: string
   extern: boolean
   actief: boolean
   uurtarief_verkoop: string
@@ -53,6 +54,7 @@ function toForm(m: Medewerker): FormState {
     afdeling:            m.afdeling ?? '',
     in_dienst_vanaf:     m.in_dienst_vanaf ?? '',
     uit_dienst_per:      m.uit_dienst_per ?? '',
+    contract_einde:      m.contract_einde ?? '',
     extern:              m.extern,
     actief:              m.actief,
     uurtarief_verkoop:   m.uurtarief_verkoop?.toString() ?? '',
@@ -104,6 +106,23 @@ function Veld({ label, span, children }: { label: React.ReactNode; span?: boolea
 
 function Waarde({ value }: { value: string | null | undefined }) {
   return <span style={value ? valueStyle : mutedStyle}>{value || '—'}</span>
+}
+
+/**
+ * Kleine waarschuwing achter de contractdatum: binnen twee maanden is het tijd om over verlenging
+ * te beslissen, daarna is het contract verlopen. Rekent op de kalenderdag, niet op tijdstip.
+ */
+function ContractSignaal({ einde }: { einde: string | null }) {
+  if (!einde) return null
+  const vandaag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' })
+  const dagen = Math.round((Date.parse(einde) - Date.parse(vandaag)) / 86_400_000)
+  if (dagen > 60) return null
+  const verlopen = dagen < 0
+  return (
+    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: verlopen ? 'var(--error-700)' : 'var(--warning-700)' }}>
+      {verlopen ? 'verlopen' : dagen === 0 ? 'loopt vandaag af' : `nog ${dagen} ${dagen === 1 ? 'dag' : 'dagen'}`}
+    </span>
+  )
 }
 
 // ── BSN-veld ──────────────────────────────────────────────────────────────────
@@ -350,6 +369,7 @@ export default function MedewerkerGegevensForm({
         afdeling:            state.afdeling        || null,
         in_dienst_vanaf:     state.in_dienst_vanaf || null,
         uit_dienst_per:      state.uit_dienst_per  || null,
+        contract_einde:      state.contract_einde  || null,
         cao_schaal:          state.cao_schaal      || null,
         cao_document_id:     state.cao_document_id || null,
         cao_trede:           state.cao_trede       || null,
@@ -515,6 +535,18 @@ export default function MedewerkerGegevensForm({
             </Veld>
             <Veld label="In dienst vanaf">
               {editing ? <Input type="date" style={{ width: '100%' }} value={state.in_dienst_vanaf} onChange={e => set('in_dienst_vanaf', e.target.value)} /> : <Waarde value={m.in_dienst_vanaf} />}
+            </Veld>
+            {/* Staat bewust naast "in dienst vanaf": een aflopend contract kan nog verlengd
+                worden, "uit dienst per" is het definitieve einde (en komt uit Bouw7). */}
+            <Veld label="Einde huidig contract">
+              {editing ? (
+                <Input type="date" style={{ width: '100%' }} value={state.contract_einde} onChange={e => set('contract_einde', e.target.value)} title="Leeg = onbepaalde tijd" />
+              ) : (
+                <span style={m.contract_einde ? valueStyle : mutedStyle}>
+                  {m.contract_einde ?? '—'}
+                  <ContractSignaal einde={m.contract_einde} />
+                </span>
+              )}
             </Veld>
             <Veld label="Uit dienst per">
               {editing ? <Input type="date" style={{ width: '100%' }} value={state.uit_dienst_per} onChange={e => set('uit_dienst_per', e.target.value)} /> : <Waarde value={m.uit_dienst_per} />}

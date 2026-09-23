@@ -226,6 +226,7 @@ const gegevensSchema = z.object({
   afdeling:           z.string().nullable(),
   in_dienst_vanaf:    z.string().nullable(),
   uit_dienst_per:     z.string().nullable(),
+  contract_einde:     z.string().nullable(),
   extern:             z.boolean(),
   actief:             z.boolean(),
   uurtarief_verkoop:  z.coerce.number().nullable(),

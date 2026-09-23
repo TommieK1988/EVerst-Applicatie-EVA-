@@ -27,6 +27,7 @@ type Medewerker = {
   cao_trede: string | null
   in_dienst_vanaf: string | null
   uit_dienst_per: string | null
+  contract_einde: string | null
   adres_straat: string | null
   adres_postcode: string | null
   adres_plaats: string | null
@@ -316,6 +317,13 @@ function maakKolommen(lookups: Lookups, data: Medewerker[]): KolomDefinitie<Mede
       standaard_zichtbaar: false,
       sorteerWaarde: m => m.in_dienst_vanaf ?? '',
       render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.in_dienst_vanaf)}</span>,
+    },
+    {
+      key: 'contract_einde',
+      label: 'Einde contract',
+      standaard_zichtbaar: false,
+      sorteerWaarde: m => m.contract_einde ?? '',
+      render: m => <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{formatDatum(m.contract_einde)}</span>,
     },
     {
       key: 'uit_dienst_per',
