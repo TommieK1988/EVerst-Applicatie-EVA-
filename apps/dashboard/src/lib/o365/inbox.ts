@@ -253,6 +253,47 @@ export async function markeerBericht(
  * Verplaatst een bericht naar een andere map en geeft het NIEUWE Graph-id terug.
  * Dat id moet worden opgeslagen: het oude bestaat na de verplaatsing niet meer.
  */
+/**
+ * Zoekt het huidige Graph-id van een bericht op via zijn `internetMessageId`.
+ *
+ * WAAROM DIT NODIG IS
+ * Het Graph-id van een bericht is **niet stabiel**: het verandert zodra de mail
+ * naar een andere map gaat -- door onze eigen verplaatsing, maar net zo goed
+ * doordat een collega hem in Outlook versleept. Het opgeslagen id levert dan
+ * `HTTP 404 ErrorItemNotFound` op, en opnieuw proberen met datzelfde id blijft
+ * eeuwig mislukken.
+ *
+ * `internetMessageId` is wél stabiel: die reist met het bericht mee, waar het ook
+ * heen gaat. Vandaar dat die kolom de sleutel van de hele module is en het
+ * Graph-id alleen bijvangst.
+ *
+ * Zoekt bewust over de héle mailbox en niet in één map -- het bericht is juist
+ * verplaatst, dus in Postvak IN staat het niet meer.
+ *
+ * `null` betekent: gezocht, niet gevonden. Een fout onderweg -- geen token, Graph
+ * onbereikbaar, geen rechten op deze postbus -- wordt **niet** als `null`
+ * teruggegeven maar gegooid. Dat onderscheid is niet academisch: de eerste versie
+ * slikte elke fout, en toen de intake-credentials lokaal ontbraken schreef de
+ * nabehandeling "het bericht is niet meer in de postbus te vinden" weg. Dat klinkt
+ * definitief, stuurt iemand de verkeerde kant op, en was gewoon onwaar.
+ */
+export async function zoekBerichtOpInternetId(
+  postbusAdres: string,
+  internetMessageId: string,
+): Promise<string | null> {
+  // Enkele aanhalingstekens in een OData-filter worden verdubbeld; een
+  // internetMessageId is `<...@...>` en bevat die normaal niet, maar een kaal
+  // filter met een quote erin levert een onbegrijpelijke 400 op.
+  const waarde = internetMessageId.replace(/'/g, "''")
+  const pad =
+    `/users/${encodeURIComponent(postbusAdres)}/messages` +
+    `?$filter=${encodeURIComponent(`internetMessageId eq '${waarde}'`)}` +
+    '&$select=id&$top=1'
+
+  const data = await intakeGraphGet<{ value?: { id?: string }[] }>(pad)
+  return data.value?.[0]?.id ?? null
+}
+
 export async function verplaatsBericht(
   postbusAdres: string,
   berichtId: string,

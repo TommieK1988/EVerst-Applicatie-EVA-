@@ -22,7 +22,10 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
-import { markeerBericht, verplaatsBericht, zorgVoorVerwerktMap, zorgVoorCategorieen } from '@/lib/o365/inbox'
+import {
+  markeerBericht, verplaatsBericht, zorgVoorVerwerktMap, zorgVoorCategorieen,
+  zoekBerichtOpInternetId,
+} from '@/lib/o365/inbox'
 
 import { MAX_OUTLOOK_POGINGEN, type BerichtBesluit, type BerichtStatus, type NabehandelStand } from './types'
 
@@ -100,7 +103,7 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
 
   const { data: bericht } = await supabase
     .from('mailintake_berichten')
-    .select('id, graph_message_id, status, besluit, outlook_pogingen, dossier_id, postbus_id, dossier:dossiers!mailintake_berichten_dossier_id_fkey(dossiernummer)')
+    .select('id, graph_message_id, internet_message_id, status, besluit, outlook_pogingen, dossier_id, postbus_id, dossier:dossiers!mailintake_berichten_dossier_id_fkey(dossiernummer)')
     .eq('id', berichtId)
     .maybeSingle()
 
@@ -126,12 +129,6 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
     return { gedaan: false, overgeslagen: true, fout: null, nieuwGraphId: null }
   }
 
-  if (!bericht.graph_message_id) {
-    await supabase.from('mailintake_berichten')
-      .update({ outlook_nabehandeling: 'mislukt', outlook_fout: 'Geen Graph-id bekend.' }).eq('id', berichtId)
-    return { gedaan: false, overgeslagen: false, fout: 'Geen Graph-id bekend.', nieuwGraphId: null }
-  }
-
   const { data: postbus } = await supabase
     .from('mailintake_postbussen')
     .select('id, adres, map_verwerkt_id, map_verwerkt_naam')
@@ -142,16 +139,57 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
     return { gedaan: false, overgeslagen: false, fout: 'Postbus niet gevonden.', nieuwGraphId: null }
   }
 
+  // ── Welk Graph-id hoort er nú bij dit bericht? ───────────────────
+  // Het opgeslagen id verloopt zodra de mail van map wisselt -- door onze eigen
+  // verplaatsing of doordat een collega hem versleept. Dan geeft Graph 404
+  // ErrorItemNotFound, en opnieuw proberen met datzelfde id blijft eeuwig
+  // mislukken. Dat was ook precies wat er gebeurde: acht berichten stonden
+  // eindeloos op 'mislukt', zes met een 404 en twee zonder id.
+  //
+  // `internet_message_id` is wél stabiel, dus die is de uitweg. Eerst proberen we
+  // het opgeslagen id -- dat is één Graph-aanroep minder in het normale geval --
+  // en pas bij een fout zoeken we opnieuw.
+  let graphId = bericht.graph_message_id
+  if (!graphId) {
+    if (!bericht.internet_message_id) {
+      await supabase.from('mailintake_berichten')
+        .update({ outlook_nabehandeling: 'mislukt', outlook_fout: 'Geen Graph-id en geen internetMessageId bekend.' })
+        .eq('id', berichtId)
+      return { gedaan: false, overgeslagen: false, fout: 'Geen Graph-id bekend.', nieuwGraphId: null }
+    }
+    graphId = await zoekBerichtOpInternetId(postbus.adres, bericht.internet_message_id)
+    if (!graphId) {
+      await supabase.from('mailintake_berichten')
+        .update({ outlook_nabehandeling: 'mislukt', outlook_fout: 'Het bericht is niet meer in de postbus te vinden.' })
+        .eq('id', berichtId)
+      return { gedaan: false, overgeslagen: false, fout: 'Bericht niet meer gevonden in de postbus.', nieuwGraphId: null }
+    }
+  }
+
   const pogingen = (bericht.outlook_pogingen ?? 0) + 1
+
+  /** Markeren, met één herkansing op een vers opgezocht id. */
+  const markeerMetHerkansing = async (): Promise<string> => {
+    try {
+      await markeerBericht(postbus.adres, graphId as string, plan.categorieen, plan.gelezen)
+      return graphId as string
+    } catch (e) {
+      if (!bericht.internet_message_id) throw e
+      const vers = await zoekBerichtOpInternetId(postbus.adres, bericht.internet_message_id)
+      if (!vers || vers === graphId) throw e
+      await markeerBericht(postbus.adres, vers, plan.categorieen, plan.gelezen)
+      return vers
+    }
+  }
 
   try {
     // Best-effort: zonder kleurdefinitie werkt categoriseren ook, alleen zonder blokje.
     await zorgVoorCategorieen(postbus.adres).catch(() => {})
 
     // Eerst markeren, dán verplaatsen — andersom moet de PATCH op het nieuwe id.
-    await markeerBericht(postbus.adres, bericht.graph_message_id, plan.categorieen, plan.gelezen)
+    graphId = await markeerMetHerkansing()
 
-    let nieuwId = bericht.graph_message_id
+    let nieuwId = graphId
     if (plan.verplaatsen && stand === 'aan') {
       let mapId: string | null = postbus.map_verwerkt_id
       if (!mapId) {
@@ -159,12 +197,12 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
         await supabase.from('mailintake_postbussen').update({ map_verwerkt_id: mapId }).eq('id', postbus.id)
       }
       try {
-        nieuwId = await verplaatsBericht(postbus.adres, bericht.graph_message_id, mapId)
-      } catch (e) {
+        nieuwId = await verplaatsBericht(postbus.adres, graphId, mapId)
+      } catch {
         // De map kan hernoemd of verwijderd zijn; dan is de gecachete id waardeloos.
         const versId = await zorgVoorVerwerktMap(postbus.adres, postbus.map_verwerkt_naam)
         await supabase.from('mailintake_postbussen').update({ map_verwerkt_id: versId }).eq('id', postbus.id)
-        nieuwId = await verplaatsBericht(postbus.adres, bericht.graph_message_id, versId)
+        nieuwId = await verplaatsBericht(postbus.adres, graphId, versId)
       }
     }
 
