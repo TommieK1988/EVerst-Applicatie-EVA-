@@ -17,11 +17,12 @@
  * beslist zelf.
  */
 
-import React, { useEffect, useMemo, useState, useTransition } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui'
 import { maakSnelPlanningItem, haalPlanningBewakingscodes } from '@/app/(platform)/planning/actions'
 import { haalInplanGegevens, haalBezetStand, type BezetStand, type InplanGegevens } from '@/lib/planning/inplannen'
+import { parseGetal } from '@/lib/everts-calc/calculations'
 
 type Code = { code: string; naam: string | null; bouw7_security_code_id: number | null; in_gebruik: boolean }
 
@@ -81,11 +82,33 @@ export default function InplannenModal({
     return () => { actief = false; clearTimeout(t) }
   }, [form.medewerker_id, startDt, eindDt, dossierId])
 
-  const uren = useMemo(() => {
+  /**
+   * Te schrijven uren, los van de klok.
+   *
+   * Ze volgen wél de begin- en eindtijd, want dat is bijna altijd wat je bedoelt — maar niet
+   * dwingend: 07:00 tot 16:00 is negen uur op de klok en acht uur op de bon, want daar zit een
+   * pauze in. Die uren gaan naar de budgetbewaking, dus een uur te veel is een uur dat er in de
+   * bewaking af lijkt te zijn.
+   */
+  const klokUren = useMemo(() => {
     if (!startDt || !eindDt) return 0
     const u = (new Date(eindDt).getTime() - new Date(startDt).getTime()) / 3_600_000
     return Math.round(u * 100) / 100
   }, [startDt, eindDt])
+
+  const [urenInvoer, setUrenInvoer] = useState('8')
+  const urenAangeraakt = useRef(false)
+  // De eerste ronde overslaan: bij openen staat er acht uur, en dat is het antwoord voor de
+  // standaardtijden 07:00–16:00. Zou de klok het meteen overschrijven, dan begon elk venster op
+  // negen uur en moest je de pauze er elke keer weer afhalen.
+  const eersteRonde = useRef(true)
+  useEffect(() => {
+    if (eersteRonde.current) { eersteRonde.current = false; return }
+    if (urenAangeraakt.current || klokUren <= 0) return
+    setUrenInvoer(String(klokUren))
+  }, [klokUren])
+
+  const uren = parseGetal(urenInvoer)
 
   const gekozenCode = codes?.find(c => c.code === form.bewakingscode) ?? null
 
@@ -93,7 +116,8 @@ export default function InplannenModal({
     e.preventDefault()
     if (!form.medewerker_id) { toast.error('Kies wie je inplant.'); return }
     if (!form.bewakingscode) { toast.error('Kies een kostengroep — een planitem staat altijd op een kostengroep.'); return }
-    if (uren <= 0) { toast.error('De eindtijd ligt vóór de starttijd.'); return }
+    if (!startDt || !eindDt || klokUren <= 0) { toast.error('De eindtijd ligt vóór de starttijd.'); return }
+    if (uren <= 0) { toast.error('Vul in hoeveel uur er geschreven wordt.'); return }
 
     start(async () => {
       const r = await maakSnelPlanningItem({
@@ -214,9 +238,21 @@ export default function InplannenModal({
           </label>
         </div>
 
-        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-          {uren > 0 ? `${uren.toLocaleString('nl-NL')} uur` : 'De eindtijd ligt vóór de starttijd.'}
-        </p>
+        <label className="mb-3 block max-w-[160px]">
+          <span className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wider text-neutral-500">Uren</span>
+          <input
+            value={urenInvoer}
+            onChange={e => { urenAangeraakt.current = true; setUrenInvoer(e.target.value) }}
+            inputMode="decimal"
+            className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm
+                       dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          />
+          <span className="mt-1 block text-[11px] text-neutral-400">
+            {klokUren > 0
+              ? `Klok: ${klokUren.toLocaleString('nl-NL')} uur. Pauze er zelf afhalen.`
+              : 'De eindtijd ligt vóór de starttijd.'}
+          </span>
+        </label>
 
         {botsingen.length > 0 && (
           <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3

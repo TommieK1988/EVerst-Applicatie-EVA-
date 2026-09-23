@@ -17,6 +17,13 @@
  * gaat als tekst mee in de betaalafspraak — precies zoals een uitvoerder het in Bouw7 met de hand
  * invulde.
  *
+ * Een opdracht kan ook **in regie** gaan: dan staat de prijs niet vast en krijgt de partij een
+ * mandaat mee — tot dit bedrag mag hij doorwerken, daarboven eerst overleggen. Dat is op een
+ * servicedeskbon de gebruikelijke vorm. Bouw7-contracten zijn per definitie vaste prijs, dus het
+ * mandaat ís daar het contractbedrag; wat het betekent staat met zoveel woorden op de opdracht,
+ * samen met de datum waarop het klaar moet zijn. Zonder die zin leest een onderaannemer het
+ * bedrag als een aanneemsom en rekent hij het volledig af, ook als hij half zoveel uren maakte.
+ *
  * Er is bewust géén standaardschema. Wat je met een onderaannemer afspreekt verschilt per opdracht
  * (omvang, doorlooptijd, hoeveel er vooruit betaald wordt), en een voorgevulde staffel wordt
  * ongelezen meegestuurd. Je kiest er dus zelf een uit de gangbare afspraken, of stelt er een samen.
@@ -24,7 +31,7 @@
 
 import { useMemo, useState } from 'react'
 import { X, HardHat, Truck, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { formatEuro } from '@/lib/everts-calc/calculations'
+import { formatEuro, parseGetal } from '@/lib/everts-calc/calculations'
 
 export type Termijn = { omschrijving: string; pct: number }
 
@@ -97,6 +104,17 @@ interface Props {
   onBevestig: (gegevens: OpdrachtGegevens) => void
 }
 
+/** Witregel tussen de regieafspraak en wat er verder is afgesproken. */
+const SCHEIDING = '\n\n'
+
+/** Datum zoals hij op een opdracht hoort te staan: 4 oktober 2026. */
+function nlDatum(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 const veld = 'mt-1 w-full text-sm px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40 focus:ring-1 focus:ring-everts/20'
 const label = 'block text-xs font-semibold text-slate-600'
 
@@ -108,6 +126,9 @@ export default function OpdrachtVenster({
   const [termijnen, setTermijnen] = useState<Termijn[]>(begin.termijnschema ?? [])
   /** '' = nog geen schema gekozen, 'eigen' = handmatig samengesteld. */
   const [schemaKeuze, setSchemaKeuze] = useState<string>(begin.termijnschema?.length ? 'eigen' : '')
+  /** Gaat deze opdracht in regie, en zo ja tot welk bedrag? Alleen voor een onderaannemer. */
+  const [inRegie, setInRegie] = useState(false)
+  const [regieMandaat, setRegieMandaat] = useState<string>(totaal > 0 ? String(totaal) : '')
 
   const zet = <K extends keyof OpdrachtGegevens>(sleutel: K, waarde: OpdrachtGegevens[K]) =>
     setG(p => ({ ...p, [sleutel]: waarde }))
@@ -128,10 +149,38 @@ export default function OpdrachtVenster({
     else if (id !== 'eigen') setTermijnen(TERMIJNSCHEMAS.find(x => x.id === id)?.termijnen ?? [])
   }
 
+  /**
+   * De regiezin die op de opdracht komt.
+   *
+   * Vooraan in de afspraken en niet als los veld: de partij leest één blok met wat er is
+   * afgesproken, en dit is daarvan het belangrijkste. Je kunt hem daarna gewoon bijschaven —
+   * het is een voorzet, geen vaste tekst.
+   */
+  const regieZin = () => {
+    const bedrag = parseGetal(regieMandaat)
+    const deel = [
+      'Deze opdracht wordt in regie uitgevoerd.',
+      bedrag > 0
+        ? `Het mandaat bedraagt ${formatEuro(bedrag)} exclusief btw: tot dat bedrag kan worden doorgewerkt, daarboven eerst overleggen met de uitvoerder.`
+        : 'Er kan worden doorgewerkt tot het afgesproken mandaat; daarboven eerst overleggen met de uitvoerder.',
+      g.opleverDatum
+        ? `Het werk moet uiterlijk ${nlDatum(g.opleverDatum)} gereed zijn.`
+        : '',
+      'Factureer op basis van werkelijk bestede uren en gemaakte kosten, met urenverantwoording als bijlage.',
+    ]
+    return deel.filter(Boolean).join(' ')
+  }
+
   const bevestig = () => {
     if (!g.omschrijving.trim() || bezig) return
+    // De regiezin gaat pas bij bevestigen samen met de afspraken, zodat hij meeverandert met een
+    // datum of bedrag dat tot het laatste moment is aangepast.
+    const afspraken = inRegie
+      ? [regieZin(), g.afspraken.trim()].filter(Boolean).join(SCHEIDING)
+      : g.afspraken
     onBevestig({
       ...g,
+      afspraken,
       omschrijving: g.omschrijving.trim(),
       // Niets gekozen = geen termijnen op de opdracht. Er is geen stille terugval: een schema dat
       // niemand heeft aangewezen hoort niet op papier bij een onderaannemer te belanden.
@@ -170,7 +219,10 @@ export default function OpdrachtVenster({
               placeholder="bijv. Gevelonderhoud Dorpsweg 40 conform offerte 2026-0002" className={veld} />
           </label>
 
-          <div className="grid grid-cols-3 gap-3">
+          {/* Bij regie verhuist de opleverdatum naar het regieblok: daar is hij de deadline die
+              woordelijk op de opdracht komt, en twee velden voor dezelfde datum laten je raden
+              welke telt. */}
+          <div className={`grid gap-3 ${inRegie ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <label className={label}>
               {isOa ? 'Start werk' : 'Levering'}
               <input value={g.leveringDatum} onChange={e => zet('leveringDatum', e.target.value)} type="date" className={veld} />
@@ -180,10 +232,12 @@ export default function OpdrachtVenster({
               <input value={g.leveringTekst} onChange={e => zet('leveringTekst', e.target.value)}
                 placeholder="week 34" className={veld} />
             </label>
-            <label className={label}>
-              Verwachte oplevering
-              <input value={g.opleverDatum} onChange={e => zet('opleverDatum', e.target.value)} type="date" className={veld} />
-            </label>
+            {!inRegie && (
+              <label className={label}>
+                Verwachte oplevering
+                <input value={g.opleverDatum} onChange={e => zet('opleverDatum', e.target.value)} type="date" className={veld} />
+              </label>
+            )}
           </div>
 
           <label className={label}>
@@ -195,6 +249,39 @@ export default function OpdrachtVenster({
               Alleen invullen als deze {isOa ? 'opdracht' : 'bestelling'} op een ander adres slaat dan het dossier.
             </span>
           </label>
+
+          {isOa && (
+            <div className="rounded-lg border border-slate-200 p-3">
+              <label className="flex items-start gap-2 text-xs font-semibold text-slate-600">
+                <input type="checkbox" checked={inRegie} onChange={e => setInRegie(e.target.checked)}
+                  className="mt-0.5" />
+                <span>
+                  Opdracht in regie, met een mandaat
+                  <span className="mt-0.5 block font-normal text-[11px] text-slate-400">
+                    De prijs staat niet vast. De partij mag doorwerken tot het mandaat en moet daarboven
+                    eerst overleggen. De afspraak komt woordelijk op de opdracht te staan.
+                  </span>
+                </span>
+              </label>
+              {inRegie && (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className={label}>
+                    Mandaat (excl. btw)
+                    <input value={regieMandaat} onChange={e => setRegieMandaat(e.target.value)}
+                      inputMode="decimal" placeholder="bijv. 1500" className={veld} />
+                  </label>
+                  <label className={label}>
+                    Uiterlijk gereed
+                    <input value={g.opleverDatum} onChange={e => zet('opleverDatum', e.target.value)}
+                      type="date" className={veld} />
+                    <span className="mt-1 block text-[11px] font-normal text-slate-400">
+                      Komt woordelijk op de opdracht te staan.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
 
           {isOa && (
             <div className="rounded-lg border border-slate-200 p-3">
