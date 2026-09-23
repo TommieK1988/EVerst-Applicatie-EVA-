@@ -590,7 +590,7 @@ export async function zorgVoorCalculatieProject(
   naam: string,
   kandidaat?: string | null,
 ): Promise<{ ok: true; projectId: string } | { ok: false; error: string }> {
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const bestaat = async (id: string | null | undefined) => {
     if (!id) return false
     const { data } = await supabase.from('projects').select('id').eq('id', id).maybeSingle()
