@@ -220,7 +220,22 @@ const FUNNEL_DOSSIER_KOLOMMEN =
   'categorie, bouw7_filiaal, calculator_id, created_at, verzonden_op, gearchiveerd'
 
 /**
- * Lean dossier-projectie voor funnel/calculator-aggregatie (niet-gearchiveerd, niet-intern).
+ * Lean dossier-projectie voor funnel/calculator-aggregatie (niet-gearchiveerd, niet-intern,
+ * geen servicedesk).
+ *
+ * **Servicedeskbonnen horen niet in de verkooptrechter.** Een bon staat op hoofdstatus 'aanvraag'
+ * zolang hij loopt — dat is de plek waar de servicedeskladder woont — en `isOpenAanvraag` las dat
+ * als een openstaande commerciële aanvraag. Alle 357 bonnen telden daardoor mee als open
+ * aanvraag, samen goed voor ruim twee ton aan pijplijnwaarde die er nooit was: een bon van tachtig
+ * euro voor een lekkende kraan is geen offertekans. Dat maakte de conversie onleesbaar en de
+ * trechter onbruikbaar om op te sturen.
+ *
+ * `servicedesk_substatus` is de markering, net als in `bepaalFase`: elke bon heeft er een, ook de
+ * paar die onder een andere categorie op 'LB. Lopende bonnen' staan. Filteren gebeurt aan de
+ * databasekant, dus het scheelt meteen 357 rijen paginering.
+ *
+ * Vastgestelde maandsnapshots houden hun eigen (nog vervuilde) cijfers — die zijn bevroren op het
+ * moment van vaststellen en horen niet met terugwerkende kracht te veranderen.
  *
  * Gepagineerd, niet `.limit(20000)`. PostgREST kapt elke respons af op `max-rows` (1000) en doet
  * dat stil: `error` blijft null, je krijgt gewoon duizend rijen. Een hogere `.limit()` verandert
@@ -231,7 +246,9 @@ async function getFunnelDossiers(): Promise<FunnelDossier[]> {
   const supabase = createAdminClient() as any
   const [rijen, internSet] = await Promise.all([
     haalAlleRijen<FunnelDossier & { id: string; gearchiveerd: boolean | null }>((van, tot) =>
-      supabase.from('dossiers').select(FUNNEL_DOSSIER_KOLOMMEN).order('id').range(van, tot)),
+      supabase.from('dossiers').select(FUNNEL_DOSSIER_KOLOMMEN)
+        .is('servicedesk_substatus', null)
+        .order('id').range(van, tot)),
     getInterneDossierIds(),
   ])
   return rijen.filter(d => d.gearchiveerd !== true && !internSet.has(d.id))
