@@ -180,6 +180,13 @@ async function renderTabContent(props: Props, dossier: DossierRij | null): Promi
   if (!groep) return renderEnkeleTab(props, dossier)
 
   const gekozen = servicedeskDeel(groep, props.deel)
+
+  // Eén onderdeel: geen balk. Een enkele losse pil die nergens heen kan is geen navigatie maar
+  // ruis, en zonder balk mag de inhoud de volle hoogte houden.
+  if (groep.delen.length < 2) {
+    return renderEnkeleTab({ ...props, tab: gekozen.tab, deel: undefined }, dossier)
+  }
+
   return (
       /* `--deelbalk-hoogte` is er voor de delen die zelf schermvullend zijn (de werkbegroting
        * rekent met `100dvh`). Zonder dit valt hun onderkant onder de vouw zodra er een balk
@@ -389,6 +396,27 @@ async function renderEnkeleTab(
     return (
       <>
         {titleInjector}
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <InkoopTab dossierId={id} />
+        </Suspense>
+      </>
+    )
+  }
+
+  // De Inkoop-pagina van een servicedeskbon. Geen apart onderdeel per tabel: op een bon zijn de
+  // geboekte uren en de inkoop geen twee onderwerpen maar twee helften van hetzelfde antwoord —
+  // "wat heeft dit tot nu toe gekost". Ze samen kunnen lezen zonder te klikken is het punt, want
+  // samen bepalen ze wat er te factureren valt.
+  //
+  // Elke helft heeft een eigen <Suspense>: beide halen hun cijfers live uit Bouw7, en de onderste
+  // hoeft niet op de bovenste te wachten.
+  if (tab === 'sd-kosten') {
+    return (
+      <>
+        {titleInjector}
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <UrenTab dossierId={id} />
+        </Suspense>
         <Suspense fallback={<DossierTabSkeleton />}>
           <InkoopTab dossierId={id} />
         </Suspense>

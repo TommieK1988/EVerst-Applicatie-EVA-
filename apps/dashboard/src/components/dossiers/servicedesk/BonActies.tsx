@@ -40,10 +40,12 @@ export default function BonActies({
 
   function doe(sleutel: BonActieSleutel) {
     switch (sleutel) {
-      // Bestellen kan alleen via de werkbegroting: daar stel je de regels samen waar de
-      // onderaannemersopdracht uit ontstaat. Vandaar de sprong daarheen en niet naar Inkoop.
+      // Bestellen loopt nu nog via de werkbegroting: daar stel je de regels samen waar de
+      // onderaannemersopdracht uit ontstaat. Die staat niet meer in de navigatie van een bon —
+      // begroten kost op een bon van een paar honderd euro meer tijd dan het werk zelf — maar
+      // het scherm blijft op zijn eigen adres bestaan zolang deze knop er nog heen wijst.
       case 'onderaannemer':
-        router.push(`/servicedesk/${dossierId}/inkoop?deel=werkbegroting`)
+        router.push(`/servicedesk/${dossierId}/werkbegroting`)
         return
       case 'inplannen':
         router.push(`/servicedesk/${dossierId}/uitvoering?deel=planning`)

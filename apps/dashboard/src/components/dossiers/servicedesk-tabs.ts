@@ -66,7 +66,6 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
     delen: [
       { deel: 'informatie', label: 'Informatie', tab: 'informatie' },
       { deel: 'bestanden',  label: 'Bestanden',  tab: 'bestanden'  },
-      { deel: 'acties',     label: 'Acties',     tab: 'taken'      },
     ],
   },
   {
@@ -86,27 +85,27 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
   },
   {
     slug: 'uitvoering',
-    label: 'Uitvoering',
+    label: 'Planning',
     icoon: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z',
     delen: [
       { deel: 'planning', label: 'Planning', tab: 'planning' },
-      { deel: 'uren',     label: 'Uren',     tab: 'uren'     },
     ],
   },
   {
     /**
-     * Alles wat het geld uit gaat: samenstellen (werkbegroting), prijs opvragen bij een
-     * onderaannemer (uitvraag), en terugzien wat er binnenkwam (geboekte kosten). Die drie
-     * horen bij elkaar omdat bestellen alléén via de werkbegroting kan — het Inkoop-deel is
-     * de spiegel daarvan, geen aparte ingang.
+     * Wat de bon tot nu toe heeft gekost: geboekte uren bovenaan, daaronder de inkooporders,
+     * onderaannemerscontracten en geboekte kosten.
+     *
+     * De werkbegroting en de uitvraag stonden hier eerder ook. Die zijn eruit: een bon eerst
+     * laten begroten kost meer tijd dan het werk zelf. Beide schermen blijven bereikbaar op hun
+     * eigen adres, zodat bestaande links blijven werken — ze staan alleen niet meer in de
+     * navigatie van een bon.
      */
     slug: 'inkoop',
     label: 'Inkoop',
     icoon: 'M2 2h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12M7 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0ZM18 21a1 1 0 1 0 2 0a1 1 0 1 0-2 0Z',
     delen: [
-      { deel: 'werkbegroting', label: 'Werkbegroting',   tab: 'werkbegroting' },
-      { deel: 'uitvraag',      label: 'Uitvraag',        tab: 'uitvraag'      },
-      { deel: 'kosten',        label: 'Geboekte kosten', tab: 'inkoop'        },
+      { deel: 'kosten', label: 'Kosten', tab: 'sd-kosten' },
     ],
   },
   {
@@ -114,9 +113,8 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
     label: 'Facturatie',
     icoon: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5',
     delen: [
-      { deel: 'verkoop',    label: 'Verkoop',    tab: 'verkoop'    },
-      { deel: 'meerwerk',   label: 'Meerwerk',   tab: 'meerwerk'   },
-      { deel: 'financieel', label: 'Financieel', tab: 'financieel' },
+      { deel: 'verkoop',  label: 'Verkoop',  tab: 'verkoop'  },
+      { deel: 'meerwerk', label: 'Meerwerk', tab: 'meerwerk' },
     ],
   },
 ]
@@ -146,9 +144,16 @@ export function zichtbareServicedeskGroepen(ctx: ServicedeskTabContext): readonl
  * staat er bewust NIET in: die zou naar zichzelf verwijzen en een eindeloze omleiding geven.
  * Zo'n link landt gewoon op het eerste deel van zijn groep, wat dezelfde tab is.
  */
-export const SERVICEDESK_OUDE_TABS: Readonly<Record<string, string>> = Object.fromEntries(
-  SERVICEDESK_GROEPEN.flatMap(g =>
-    g.delen
-      .filter(d => d.tab !== g.slug)
-      .map(d => [d.tab, `${g.slug}?deel=${d.deel}`] as const)),
-)
+export const SERVICEDESK_OUDE_TABS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(
+    SERVICEDESK_GROEPEN.flatMap(g =>
+      g.delen
+        .filter(d => d.tab !== g.slug)
+        .map(d => [d.tab, `${g.slug}?deel=${d.deel}`] as const))),
+
+  // Tabs die helemaal uit de navigatie zijn verdwenen. Ze wijzen naar de plek waar hun inhoud
+  // nu staat, zodat een bladwijzer of een oude mail niet op een lege weergave uitkomt.
+  uren: 'inkoop',        // de urentabel staat nu bovenaan Inkoop
+  taken: 'bon',          // de acties staan op de Bon-pagina
+  financieel: 'inkoop',  // de bewaking per bewakingscode is van de bon af; kosten staan hier
+}

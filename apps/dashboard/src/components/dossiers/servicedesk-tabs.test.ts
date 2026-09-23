@@ -41,11 +41,19 @@ describe('servicedesk-tabs: omleiden van oude links', () => {
 
   it('laat elke oude tab op zijn eigen deel landen', () => {
     expect(SERVICEDESK_OUDE_TABS.informatie).toBe('bon?deel=informatie')
-    expect(SERVICEDESK_OUDE_TABS.taken).toBe('bon?deel=acties')
     expect(SERVICEDESK_OUDE_TABS.calculatie).toBe('voorbereiding?deel=calculatie')
-    expect(SERVICEDESK_OUDE_TABS.uren).toBe('uitvoering?deel=uren')
-    expect(SERVICEDESK_OUDE_TABS.werkbegroting).toBe('inkoop?deel=werkbegroting')
-    expect(SERVICEDESK_OUDE_TABS.financieel).toBe('facturatie?deel=financieel')
+    expect(SERVICEDESK_OUDE_TABS.verkoop).toBe('facturatie?deel=verkoop')
+  })
+
+  /**
+   * Deze drie tabs zijn helemaal uit de navigatie verdwenen. Een bladwijzer of een oude mail
+   * mag daardoor niet op een lege weergave uitkomen, dus ze wijzen naar de plek waar hun
+   * inhoud nu staat.
+   */
+  it('vangt ook de tabs op die geen eigen plek meer hebben', () => {
+    expect(SERVICEDESK_OUDE_TABS.uren).toBe('inkoop')
+    expect(SERVICEDESK_OUDE_TABS.taken).toBe('bon')
+    expect(SERVICEDESK_OUDE_TABS.financieel).toBe('inkoop')
   })
 
   it('laat `inkoop` bewust zonder omleiding, zodat hij op zijn eigen groep landt', () => {
@@ -56,23 +64,22 @@ describe('servicedesk-tabs: omleiden van oude links', () => {
 
 describe('servicedesk-tabs: sleutels die zowel groep als tab zijn', () => {
   /**
-   * `kosten` rendert de tab `inkoop`, en `inkoop` is óók een groep. Dat mág, maar het legt een
-   * eis op aan de router: die moet een groep naar het rénderen van één tab sturen en niet naar
-   * zichzelf. Gebeurt dat wel, dan tekent hij de deelbalk twee keer en valt de deelkeuze weg —
-   * precies wat er in de browser gebeurde vóór `renderTabContent` en `renderEnkeleTab` uit
-   * elkaar zijn gehaald.
+   * Een groep-sleutel die óók een tab-sleutel is, is de val waar dit tegen beschermt. De router
+   * zou dan vanuit de groep opnieuw in de groep-tak komen: deelbalk twee keer op het scherm en
+   * de deelkeuze weg. Precies wat er in de browser gebeurde toen het deel "Geboekte kosten" nog
+   * de tab `inkoop` rendeerde binnen de groep `inkoop`.
    *
-   * Deze test legt het bestaan van zo'n sleutel vast. Ziet iemand hem later per ongeluk
-   * verdwijnen of juist verschijnen, dan is dit de plek waar de reden staat.
+   * Die botsing is opgeheven — de Inkoop-pagina heeft nu een eigen sleutel (`sd-kosten`) — maar
+   * de test blijft staan, want de fout is met één regel zo weer terug.
    */
-  it('benoemt welke tab-sleutels tegelijk een groep zijn', () => {
+  it('gebruikt geen groep-sleutel als tab-sleutel', () => {
     const groepSlugs = new Set<string>(SERVICEDESK_GROEPEN.map(g => g.slug))
     const botsend = SERVICEDESK_GROEPEN
       .flatMap(g => g.delen)
       .filter(d => groepSlugs.has(d.tab))
       .map(d => d.tab)
 
-    expect(botsend).toEqual(['inkoop'])
+    expect(botsend).toEqual([])
   })
 })
 
@@ -98,18 +105,18 @@ describe('servicedesk-tabs: welke tabs een bon laat zien', () => {
 })
 
 describe('servicedesk-tabs: het gekozen deel', () => {
-  const inkoop = servicedeskGroep('inkoop')!
+  const facturatie = servicedeskGroep('facturatie')!
 
   it('valt terug op het eerste deel zonder keuze', () => {
-    expect(servicedeskDeel(inkoop, undefined).deel).toBe('werkbegroting')
+    expect(servicedeskDeel(facturatie, undefined).deel).toBe('verkoop')
   })
 
   it('valt terug op het eerste deel bij een onbekende keuze', () => {
-    expect(servicedeskDeel(inkoop, 'bestaat-niet').deel).toBe('werkbegroting')
+    expect(servicedeskDeel(facturatie, 'bestaat-niet').deel).toBe('verkoop')
   })
 
   it('geeft de tab terug die het deel moet renderen', () => {
-    expect(servicedeskDeel(inkoop, 'kosten').tab).toBe('inkoop')
+    expect(servicedeskDeel(facturatie, 'meerwerk').tab).toBe('meerwerk')
   })
 
   it('kent geen groep voor een tab die er geen is', () => {

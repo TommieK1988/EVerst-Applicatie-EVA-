@@ -1481,8 +1481,9 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 //   aanvragen & offertes → informatie · bestanden · calculatie · uitvraag · acties
 //   opdrachten           → + uitvraag · werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
 //   servicedesk          → vijf gebundelde tabs (bon · voorbereiding · uitvoering · inkoop ·
-//                          facturatie), elk met dezelfde onderdelen eronder achter `?deel=`;
-//                          zie components/dossiers/servicedesk-tabs.ts
+//                          facturatie). Een groep met meerdere onderdelen zet die achter
+//                          `?deel=`; Planning en Inkoop hebben er maar één en zijn dus één
+//                          pagina. Zie components/dossiers/servicedesk-tabs.ts
 // Tabs met eigen onderdelen (KAM/VGM, en elke servicedeskgroep) zetten die in `?deel=`. De
 // hulp wordt daarom opgezocht op het onderliggende onderdeel: één set teksten voor alle
 // secties, ongeacht hoe de tabs gebundeld zijn.
@@ -1638,6 +1639,18 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
         [
           { title: 'Geboekte kosten', body: 'De geboekte inkoopkosten staan als filterbare tabel. Ze komen uit Bouw7; EVA leest ze alleen en schrijft niets terug.' },
           { title: 'Correcties', body: 'Met de EVA-rekenlaag kun je een kostenregel hercoderen of toewijzen aan een order/contract voor een zuiverder financieel beeld. De correctie leeft in EVA en laat Bouw7 ongemoeid.' },
+        ])
+
+    // Eigen tekst in plaats van die van 'inkoop': op een bon staan de uren en de inkoop op één
+    // pagina, en dan hoort de hulp beide te benoemen.
+    case 'sd-kosten':
+      return T('Inkoop',
+        'Wat deze bon tot nu toe heeft gekost: bovenaan de geschreven uren, daaronder de inkooporders, onderaannemerscontracten en de geboekte kosten. Samen bepalen ze wat er te factureren valt.',
+        [
+          { title: 'Geboekte uren', body: 'De uren die eigen medewerkers en ingehuurde krachten op deze bon hebben geschreven, per dag en per uursoort. Ze komen uit Bouw7.' },
+          { title: 'Inkoop en onderaanneming', body: 'De inkooporders en onderaannemerscontracten die vanaf deze bon zijn uitgezet, met daaronder de kosten die erop geboekt zijn.' },
+          { title: 'Correcties', body: 'Een kostenregel kun je hercoderen of toewijzen aan een order of contract. Die correctie leeft in EVA en laat de Bouw7-bron ongemoeid.' },
+          { title: 'Geen werkbegroting', body: 'Een servicedeskbon hoeft niet begroot te worden. Is er wél een calculatie gemaakt, dan wordt de gecalculeerde kostprijs als prognose overgenomen.' },
         ])
 
     case 'verkoop':
