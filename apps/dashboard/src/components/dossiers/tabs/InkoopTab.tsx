@@ -6,6 +6,118 @@ import { fmt, TH, TD, LegeRij, LegeNotitie, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 
+/** Eén regel in de tabel Inkooporders en onderaanneming — order en contract zijn hier gelijk. */
+type UitgezetRegel = {
+  soort: 'order' | 'onderaanneming'
+  nummer: string | null
+  partij: string | null
+  omschrijving: string | null
+  status: string | null
+  bedrag: number
+  geboekt: number
+  nogVerwacht: number
+  uitEva: boolean
+}
+
+const SOORT_LABEL: Record<UitgezetRegel['soort'], string> = {
+  order: 'Order', onderaanneming: 'Onderaanneming',
+}
+
+/**
+ * Alles wat er bij een derde is uitgezet, in één tabel.
+ *
+ * Het waren er twee — Inkooporders en Onderaannemerscontracten — met precies dezelfde zeven
+ * kolommen onder andere namen: Orderbedrag naast Contractbedrag, Leverancier naast
+ * Onderaannemer, Naam naast Omschrijving. Voor de vraag die je hier stelt ("wat hebben we
+ * uitgezet en hoeveel is daarvan binnen?") is dat onderscheid bijzaak; het stond alleen maar
+ * twee keer hetzelfde te zeggen en dwong je te scrollen tussen twee totaalregels.
+ *
+ * Vijf kolommen in plaats van zeven: nummer en omschrijving staan als onderregel bij de partij.
+ * Daarmee past de tabel op een halve pagina en blijven de drie bedragen naast elkaar in beeld —
+ * op een breed scherm liepen zeven kolommen zo ver uit elkaar dat je bij het laatste bedrag niet
+ * meer wist van wie het was. De soort staat als tag bij de partij, zodat je nog steeds kunt zien
+ * of iets een order of een opdracht is.
+ */
+function UitgezetTabel({ regels, subtotalen }: {
+  regels: UitgezetRegel[]
+  subtotalen: { label: string; aantal: number; bedrag: number; geboekt: number; nogVerwacht: number }[]
+}) {
+  // Een subtotaal per soort heeft alleen zin als er van beide iets is; anders herhaalt het de
+  // totaalregel eronder woordelijk.
+  const gevuld = subtotalen.filter(s => s.aantal > 0)
+  const toonSubtotalen = gevuld.length > 1
+  const totaal = subtotalen.reduce(
+    (a, s) => ({
+      bedrag: a.bedrag + s.bedrag, geboekt: a.geboekt + s.geboekt,
+      nogVerwacht: a.nogVerwacht + s.nogVerwacht,
+    }),
+    { bedrag: 0, geboekt: 0, nogVerwacht: 0 },
+  )
+
+  return (
+    <Card style={{ maxWidth: 820 }}>
+      <CardHeader>Inkooporders en onderaanneming</CardHeader>
+      <CardBody style={{ padding: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <TH>Partij</TH><TH>Status</TH>
+              <TH right>Bedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
+            </tr>
+          </thead>
+          <tbody>
+            {regels.length === 0 && (
+              <LegeRij velden={['tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag']} />
+            )}
+            {regels.map((r, i) => (
+              <tr key={i}>
+                <TD wrap>
+                  <span style={{ color: 'var(--neutral-900)' }}>{r.partij ?? '—'}</span>
+                  <span style={{
+                    marginLeft: 6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em',
+                    color: 'var(--neutral-500)',
+                  }}>
+                    {SOORT_LABEL[r.soort]}
+                  </span>
+                  {r.uitEva && <EvaMerk />}
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--neutral-500)', marginTop: 1 }}>
+                    {[r.nummer, r.omschrijving].filter(Boolean).join(' · ') || '—'}
+                  </span>
+                </TD>
+                <TD>{r.status ?? '—'}</TD>
+                <TD right>{fmt(r.bedrag)}</TD>
+                <TD right>{fmt(r.geboekt)}</TD>
+                <TD right kleur={r.nogVerwacht < 0 ? ROOD : undefined}>{fmt(r.nogVerwacht)}</TD>
+              </tr>
+            ))}
+
+            {toonSubtotalen && gevuld.map(s => (
+              <tr key={s.label} style={{ background: 'var(--neutral-50)' }}>
+                <TD kleur="var(--neutral-500)">{s.label} ({s.aantal})</TD>
+                <TD>{''}</TD>
+                <TD right kleur="var(--neutral-500)">{fmt(s.bedrag, true)}</TD>
+                <TD right kleur="var(--neutral-500)">{fmt(s.geboekt, true)}</TD>
+                <TD right kleur={s.nogVerwacht < 0 ? ROOD : 'var(--neutral-500)'}>{fmt(s.nogVerwacht, true)}</TD>
+              </tr>
+            ))}
+
+            <tr style={{ background: 'var(--neutral-50)' }}>
+              <TD vet>Totaal uitgezet</TD>
+              <TD>{''}</TD>
+              <TD right vet>{fmt(totaal.bedrag, true)}</TD>
+              <TD right vet>{fmt(totaal.geboekt, true)}</TD>
+              <TD right vet kleur={totaal.nogVerwacht < 0 ? ROOD : undefined}>{fmt(totaal.nogVerwacht, true)}</TD>
+            </tr>
+          </tbody>
+        </table>
+        {regels.length === 0 && (
+          <LegeNotitie>Nog niets uitgezet bij een leverancier of onderaannemer.</LegeNotitie>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 /**
  * Afwijkingen die opvolging vragen: te veel gefactureerd (→ creditnota opvragen) en facturen die
  * aan geen enkele bestelling gekoppeld konden worden. Staat bovenaan omdat het de reden is om de
@@ -126,11 +238,28 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
     : null
 
   const t = data.totalen
-  const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const ordersGeboekt = data.inkooporders.reduce((s, r) => s + r.geboekt, 0)
   const ordersVerwacht = data.inkooporders.reduce((s, r) => s + r.nogVerwacht, 0)
   const oaGeboekt = data.onderaannemers.reduce((s, c) => s + c.geboekt, 0)
   const oaVerwacht = data.onderaannemers.reduce((s, c) => s + c.nogVerwacht, 0)
+
+  /**
+   * Eén lijst van alles wat er bij een derde is uitgezet. Inkooporders eerst, daarna de
+   * onderaanneming: dat is de volgorde waarin de twee tabellen stonden, en binnen een soort
+   * houden de regels de volgorde die Bouw7 teruggaf.
+   */
+  const uitgezet: UitgezetRegel[] = [
+    ...data.inkooporders.map((r): UitgezetRegel => ({
+      soort: 'order', nummer: r.nummer, partij: r.leverancier, omschrijving: r.omschrijving,
+      status: r.status, bedrag: r.contractbedrag, geboekt: r.geboekt,
+      nogVerwacht: r.nogVerwacht, uitEva: r.uitEva,
+    })),
+    ...data.onderaannemers.map((c): UitgezetRegel => ({
+      soort: 'onderaanneming', nummer: c.nummer, partij: c.onderaannemer, omschrijving: c.omschrijving,
+      status: c.status, bedrag: c.contractbedrag, geboekt: c.geboekt,
+      nogVerwacht: c.nogVerwacht, uitEva: c.uitEva,
+    })),
+  ]
 
   const orderOpties = data.inkooporders
     .filter((o) => o.orderId != null)
@@ -152,81 +281,16 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
       <SignaalBlok signalen={data.signalen} />
       <BetaalSignaal dossierId={dossierId} />
 
-      {/* Inkooporders */}
-      <Card>
-        <CardHeader>Inkooporders</CardHeader>
-        <CardBody style={{ padding: 0 }}>
-            <table style={tabel}>
-              <thead>
-                <tr>
-                  <TH>Nummer</TH><TH>Leverancier</TH><TH>Naam</TH><TH>Status</TH>
-                  <TH right>Orderbedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {data.inkooporders.length === 0 && (
-                  <LegeRij velden={['tekst', 'tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag']} />
-                )}
-                {data.inkooporders.map((r, i) => (
-                  <tr key={i}>
-                    <TD>{r.nummer ?? '—'}{r.uitEva && <EvaMerk />}</TD>
-                    <TD>{r.leverancier ?? '—'}</TD>
-                    <TD>{r.omschrijving ?? '—'}</TD>
-                    <TD>{r.status ?? '—'}</TD>
-                    <TD right>{fmt(r.contractbedrag)}</TD>
-                    <TD right>{fmt(r.geboekt)}</TD>
-                    <TD right kleur={r.nogVerwacht < 0 ? ROOD : undefined}>{fmt(r.nogVerwacht)}</TD>
-                  </tr>
-                ))}
-                <tr style={{ background: 'var(--neutral-50)' }}>
-                  <TD vet>Totaal besteld</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
-                  <TD right vet>{fmt(t.besteld, true)}</TD>
-                  <TD right vet>{fmt(ordersGeboekt, true)}</TD>
-                  <TD right vet kleur={ordersVerwacht < 0 ? ROOD : undefined}>{fmt(ordersVerwacht, true)}</TD>
-                </tr>
-              </tbody>
-            </table>
-          {data.inkooporders.length === 0 && <LegeNotitie>Nog geen inkooporders op dit dossier.</LegeNotitie>}
-        </CardBody>
-      </Card>
-
-      {/* Onderaannemerscontracten */}
-      <Card>
-        <CardHeader>Onderaannemerscontracten</CardHeader>
-        <CardBody style={{ padding: 0 }}>
-            <table style={tabel}>
-              <thead>
-                <tr>
-                  <TH>Nummer</TH><TH>Onderaannemer</TH><TH>Omschrijving</TH><TH>Status</TH>
-                  <TH right>Contractbedrag</TH><TH right>Geboekt</TH><TH right>Nog verwacht</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {data.onderaannemers.length === 0 && (
-                  <LegeRij velden={['tekst', 'tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag']} />
-                )}
-                {data.onderaannemers.map((c, i) => (
-                  <tr key={i}>
-                    <TD>{c.nummer ?? '—'}{c.uitEva && <EvaMerk />}</TD>
-                    <TD>{c.onderaannemer ?? '—'}</TD>
-                    <TD>{c.omschrijving ?? '—'}</TD>
-                    <TD>{c.status ?? '—'}</TD>
-                    <TD right>{fmt(c.contractbedrag)}</TD>
-                    <TD right>{fmt(c.geboekt)}</TD>
-                    <TD right kleur={c.nogVerwacht < 0 ? ROOD : undefined}>{fmt(c.nogVerwacht)}</TD>
-                  </tr>
-                ))}
-                <tr style={{ background: 'var(--neutral-50)' }}>
-                  <TD vet>Totaal onderaanneming</TD><TD>{''}</TD><TD>{''}</TD><TD>{''}</TD>
-                  <TD right vet>{fmt(t.onderaanneming, true)}</TD>
-                  <TD right vet>{fmt(oaGeboekt, true)}</TD>
-                  <TD right vet kleur={oaVerwacht < 0 ? ROOD : undefined}>{fmt(oaVerwacht, true)}</TD>
-                </tr>
-              </tbody>
-            </table>
-          {data.onderaannemers.length === 0 && <LegeNotitie>Nog geen onderaannemerscontracten op dit dossier.</LegeNotitie>}
-        </CardBody>
-      </Card>
+      {/* Inkooporders en onderaanneming — één tabel; zie UitgezetTabel. */}
+      <UitgezetTabel
+        regels={uitgezet}
+        subtotalen={[
+          { label: 'Inkooporders', aantal: data.inkooporders.length,
+            bedrag: t.besteld, geboekt: ordersGeboekt, nogVerwacht: ordersVerwacht },
+          { label: 'Onderaanneming', aantal: data.onderaannemers.length,
+            bedrag: t.onderaanneming, geboekt: oaGeboekt, nogVerwacht: oaVerwacht },
+        ]}
+      />
 
       {/* Geboekte kosten — compacte, sorteerbare tabel met zoekbalk + correctie-acties */}
       <Card>
