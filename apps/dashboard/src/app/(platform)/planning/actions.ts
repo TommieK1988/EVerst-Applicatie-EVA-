@@ -15,8 +15,27 @@ import { vereisRecht, vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
+import { dagenTussen, nlTijdstip, roostertijdenOp, verschuifNlDagen } from '@/lib/planning/nl-tijd'
 
 const db = () => createAdminClient() as any
+
+type RoosterTijden = { geldig_vanaf: string; geldig_tot: string | null; dagstart: string; dageind: string }
+
+/** Roosters per medewerker; begrensd door de medewerkers van één activiteit. */
+async function roostersVan(medewerkerIds: string[]): Promise<Map<string, RoosterTijden[]>> {
+  const perMed = new Map<string, RoosterTijden[]>()
+  if (medewerkerIds.length === 0) return perMed
+  const { data } = await db()
+    .from('medewerker_roosters')
+    .select('medewerker_id, geldig_vanaf, geldig_tot, dagstart, dageind')
+    .in('medewerker_id', medewerkerIds)
+  for (const r of (data ?? []) as (RoosterTijden & { medewerker_id: string })[]) {
+    const lijst = perMed.get(r.medewerker_id) ?? []
+    lijst.push(r)
+    perMed.set(r.medewerker_id, lijst)
+  }
+  return perMed
+}
 
 /**
  * Rond een planningswijziging af. De DB-trigger tg_planning_items_deadline_queue heeft het
@@ -287,10 +306,10 @@ export async function updatePlanningActiviteit(
 
   const { data: planItems } = await supabase
     .from('planning_items')
-    .select('id, start_dt, eind_dt')
+    .select('id, start_dt, eind_dt, medewerker_id')
     .eq('activiteit_id', id)
 
-  const items = planItems ?? []
+  const items = (planItems ?? []) as { id: string; start_dt: string; eind_dt: string; medewerker_id: string }[]
   let itemsVerschoven = 0
 
   const nieuweStart    = input.gewenste_start
@@ -299,54 +318,48 @@ export async function updatePlanningActiviteit(
   const startGewijzigd    = nieuweStart    !== undefined && nieuweStart    !== huidigeStart
   const deadlineGewijzigd = nieuweDeadline !== undefined && nieuweDeadline !== huidigeDeadline
 
+  // Datums en kloktijden hieronder zijn Nederlandse tijd (zie lib/planning/nl-tijd.ts): deze
+  // action draait in UTC, en `new Date('…T23:59:59')` gaf hier eindtijden van 00:59/01:59 NL.
   if (startGewijzigd && deadlineGewijzigd && huidigeStart && huidigeDeadline) {
-    // Move: beide datums gewijzigd — schuif items met dezelfde delta
-    const deltaMs = new Date(nieuweStart!).getTime() - new Date(huidigeStart).getTime()
-    if (deltaMs !== 0) {
+    // Move: beide datums gewijzigd — schuif items evenveel kalenderdagen op, kloktijd blijft.
+    const dagen = dagenTussen(huidigeStart, nieuweStart!)
+    if (dagen !== 0) {
       for (const item of items) {
-        const ns = new Date(new Date(item.start_dt).getTime() + deltaMs).toISOString()
-        const ne = new Date(new Date(item.eind_dt).getTime()  + deltaMs).toISOString()
+        const ns = verschuifNlDagen(item.start_dt, dagen)
+        const ne = verschuifNlDagen(item.eind_dt, dagen)
         await supabase.from('planning_items').update({ start_dt: ns, eind_dt: ne }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
         itemsVerschoven++
       }
     }
-  } else if (startGewijzigd && !deadlineGewijzigd && huidigeStart) {
-    // Left-resize: alleen start gewijzigd — crop items die vóór nieuwe start beginnen
-    const newStartMs = new Date(nieuweStart!).getTime()
-    if (new Date(nieuweStart!).getTime() > new Date(huidigeStart).getTime()) {
-      // Inkorten: start later → crop of verwijder items. Bouw7-items die er helemaal buiten
-      // vallen blijven staan (de rebuild zou ze anders terugzetten); de taakdatums volgen
-      // bij de volgende sync de items.
-      for (const item of items) {
-        const itemStartMs = new Date(item.start_dt).getTime()
-        const itemEindMs  = new Date(item.eind_dt).getTime()
-        if (itemEindMs <= newStartMs) {
-          if (isBouw7) continue
-          await supabase.from('planning_items').delete().eq('id', item.id)
-        } else if (itemStartMs < newStartMs) {
-          await supabase.from('planning_items').update({ start_dt: new Date(newStartMs).toISOString() }).eq('id', item.id)
-          await spiegelNaarBouw7(item.id)
-          itemsVerschoven++
-        }
-      }
-    }
-  } else if (deadlineGewijzigd && !startGewijzigd && huidigeDeadline) {
-    // Right-resize: alleen deadline gewijzigd — crop items die na nieuwe deadline eindigen
-    if (nieuweDeadline && nieuweDeadline < huidigeDeadline) {
-      // Inkorten: deadline eerder → crop of verwijder items (zie hierboven voor Bouw7-items).
-      const newDeadlineEodMs = new Date(nieuweDeadline + 'T23:59:59').getTime()
-      for (const item of items) {
-        const itemStartMs = new Date(item.start_dt).getTime()
-        const itemEindMs  = new Date(item.eind_dt).getTime()
-        if (itemStartMs > newDeadlineEodMs) {
-          if (isBouw7) continue
-          await supabase.from('planning_items').delete().eq('id', item.id)
-        } else if (itemEindMs > newDeadlineEodMs) {
-          await supabase.from('planning_items').update({ eind_dt: new Date(newDeadlineEodMs).toISOString() }).eq('id', item.id)
-          await spiegelNaarBouw7(item.id)
-          itemsVerschoven++
-        }
+  } else if (
+    (startGewijzigd && !deadlineGewijzigd && huidigeStart && nieuweStart && nieuweStart > huidigeStart)
+    || (deadlineGewijzigd && !startGewijzigd && huidigeDeadline && nieuweDeadline && nieuweDeadline < huidigeDeadline)
+  ) {
+    // Inkorten aan één kant: items croppen op de roostertijd van hun medewerker op de nieuwe
+    // grensdag (begin van de werkdag links, einde rechts), of verwijderen als ze er helemaal
+    // buiten vallen. Bouw7-items die er helemaal buiten vallen blijven staan (de rebuild zou
+    // ze anders terugzetten); de taakdatums volgen bij de volgende sync de items.
+    const links = startGewijzigd
+    const grensDag = (links ? nieuweStart : nieuweDeadline)!
+    const roosters = await roostersVan([...new Set(items.map(i => i.medewerker_id))])
+
+    for (const item of items) {
+      const tijden   = roostertijdenOp(roosters.get(item.medewerker_id) ?? [], grensDag)
+      const grensMs  = new Date(nlTijdstip(grensDag, links ? tijden.dagstart : tijden.dageind)).getTime()
+      const startMs  = new Date(item.start_dt).getTime()
+      const eindMs   = new Date(item.eind_dt).getTime()
+      const erBuiten = links ? eindMs <= grensMs : startMs >= grensMs
+      const teCroppen = links ? startMs < grensMs : eindMs > grensMs
+
+      if (erBuiten) {
+        if (isBouw7) continue
+        await supabase.from('planning_items').delete().eq('id', item.id)
+      } else if (teCroppen) {
+        const grens = new Date(grensMs).toISOString()
+        await supabase.from('planning_items').update(links ? { start_dt: grens } : { eind_dt: grens }).eq('id', item.id)
+        await spiegelNaarBouw7(item.id)
+        itemsVerschoven++
       }
     }
   }

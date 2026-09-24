@@ -5,8 +5,7 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  addDays, addMinutes, differenceInCalendarDays, differenceInMinutes,
-  eachDayOfInterval, format, isWeekend, parseISO, startOfDay,
+  addDays, differenceInCalendarDays, eachDayOfInterval, format, isWeekend, parseISO, startOfDay,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
@@ -1384,18 +1383,40 @@ export default function MedewerkerTimeline({
     ? laatsteRij.top + RIJ_VAST
     : (heeftAgendaRij ? RIJ_HOOGTE : 0)
 
-  /** Nieuwe start/eind voor een entry op een doel-dag: tijdstip + duur blijven gelijk. */
-  function verplaatsNaarDag(entry: PlanningItemVerrijkt, datum: string): { start: Date; eind: Date } {
-    const origStart = parseISO(entry.start_dt)
-    const origEind  = parseISO(entry.eind_dt)
-    const duur      = differenceInMinutes(origEind, origStart)
-    const start     = new Date(`${datum}T${format(origStart, 'HH:mm:ss')}`)
-    return { start, eind: addMinutes(start, duur) }
+  /**
+   * Nieuwe start/eind voor een entry op een doel-dag, op de roostertijden van de medewerker
+   * op wiens rij hij landt. Het aantal kalenderdagen blijft gelijk; de kloktijden niet.
+   *
+   * Hiervoor bleef het oorspronkelijke tijdstip staan. Dat ging mis bij items zonder echte
+   * kloktijd: Bouw7-dagitems (00:00–00:00) en items met een eind van 23:59:59 UTC (= 00:59
+   * of 01:59 NL) — die belandden na verslepen midden in de nacht.
+   */
+  function verplaatsNaarDag(entry: PlanningItemVerrijkt, datum: string, medewerker_id: string): { start: Date; eind: Date } {
+    const origStart   = parseISO(entry.start_dt)
+    const origEind    = parseISO(entry.eind_dt)
+    const eigen       = roosters.filter(r => r.medewerker_id === medewerker_id)
+    const venster     = (dag: Date) => werkvensterOpDag(dag, eigen)
+    // Een eind vóór de dagstart (00:00, 00:59) hoort bij de werkdag ervóór.
+    const eindMin     = origEind.getHours() * 60 + origEind.getMinutes()
+    const eindDag     = eindMin <= venster(origEind).van ? addDays(startOfDay(origEind), -1) : startOfDay(origEind)
+    const aantalDagen = Math.max(0, differenceInCalendarDays(eindDag, startOfDay(origStart)))
+
+    const startDag = parseISO(datum)
+    const laatste  = addDays(startDag, aantalDagen)
+    const opMinuut = (dag: Date, min: number) => {
+      const d = new Date(dag)
+      d.setHours(Math.floor(min / 60), min % 60, 0, 0)
+      return d
+    }
+    return {
+      start: opMinuut(startDag, venster(startDag).van),
+      eind:  opMinuut(laatste,  venster(laatste).tot),
+    }
   }
 
   /** Plak een kopie van `bron` op (medewerker, dag). Gebruikt door kopieermodus én Ctrl+slepen. */
   async function plakKopie(bron: EntryMetDossier, medewerker_id: string, datum: string) {
-    const { start, eind } = verplaatsNaarDag(bron, datum)
+    const { start, eind } = verplaatsNaarDag(bron, datum, medewerker_id)
     const result = await kopieerPlanningItem(bron.id, {
       medewerker_id,
       start_dt: start.toISOString(),
@@ -1442,11 +1463,7 @@ export default function MedewerkerTimeline({
       return
     }
 
-    const origStart  = parseISO(entry.start_dt)
-    const origEind   = parseISO(entry.eind_dt)
-    const duur       = differenceInMinutes(origEind, origStart)
-    const nieuwStart = new Date(`${cellData.datum}T${format(origStart, 'HH:mm:ss')}`)
-    const nieuwEind  = addMinutes(nieuwStart, duur)
+    const { start: nieuwStart, eind: nieuwEind } = verplaatsNaarDag(entry, cellData.datum, cellData.medewerker_id)
 
     const result = await verplaatsPlanningItem(entry.id, {
       start_dt:      nieuwStart.toISOString(),
