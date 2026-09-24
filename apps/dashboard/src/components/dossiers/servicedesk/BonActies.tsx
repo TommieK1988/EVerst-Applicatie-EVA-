@@ -26,6 +26,13 @@ import InplannenModal from './InplannenModal'
 import BestelVenster from './BestelVenster'
 import StatusStapKnop from './StatusStapKnop'
 
+/**
+ * Knoppen in deze kolom zijn even breed en mogen afbreken. Met de vaste hoogte en
+ * `whitespace-nowrap` van de standaardknop liep 'Onderaannemerscontract maken' buiten zijn
+ * eigen rand — de kaart kapt dat af, dus je las een halve knop.
+ */
+const KNOP = 'h-auto min-h-8 w-full justify-center whitespace-normal py-1.5 leading-tight'
+
 export default function BonActies({
   dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, kostengroep, calcProjectId,
   substatus, alleenLezen,
@@ -117,7 +124,7 @@ export default function BonActies({
               onClick={() => doe(a.sleutel)}
               disabled={!a.kan || bezig}
               loading={bezig && a.sleutel === 'offerte'}
-              className="w-full justify-center"
+              className={KNOP}
             >
               {a.label}
             </Button>

@@ -39,6 +39,15 @@ type Props = {
   acties?: React.ReactNode
 }
 
+/** Veldlabel boven een cijfer of keuze — DS: uppercase, 10px, letterspacing 0.08em. */
+function Kop({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-[5px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+      {children}
+    </div>
+  )
+}
+
 function Regel({ label, bedrag }: { label: string; bedrag: number }) {
   return (
     <div className="flex items-center justify-between">
@@ -93,15 +102,19 @@ export default function ServicedeskInfoPaneel({
     <Card className="col-span-2">
       <CardHeader>Servicedesk</CardHeader>
       <CardBody>
-        {/* Gegevens links, knoppen rechts. De knoppenkolom heeft een vaste breedte zodat de
-            gegevens ernaast niet meebewegen met de langste knoptekst. */}
-        <div className="flex flex-col gap-5 lg:flex-row lg:gap-6">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              {/* Doorlooptijd */}
+        {/* Vier kolommen naast elkaar in plaats van drie dingen uitgesmeerd over de volle breedte.
+            Die breedte is op een dossierpagina bijna twee meter beeldscherm; met `justify-between`
+            stond de doorlooptijd links en het mandaat rechts, en lag er tussen "Offerte
+            uitgebracht" en "5 dagen" zoveel wit dat je met een liniaal moest meelezen welk getal
+            bij welke fase hoorde. Elke kolom is nu zo breed als zijn inhoud vraagt en niet breder. */}
+        <div className="flex flex-col gap-6 xl:flex-row xl:gap-8">
+          <div className="grid min-w-0 flex-1 gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+
+            {/* Kolom 1 — de stand van de bon, van boven naar beneden. */}
+            <div className="flex flex-col gap-4">
               <div>
-                <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Doorlooptijd</div>
-                <div className="flex items-center gap-2">
+                <Kop>Doorlooptijd</Kop>
+                <div className="flex items-baseline gap-2">
                   <span className="tabular-nums text-[22px] font-bold" style={{ color: dagenKleur }}>
                     {dagenOpen != null ? `${dagenOpen}` : '—'}
                   </span>
@@ -109,9 +122,8 @@ export default function ServicedeskInfoPaneel({
                 </div>
               </div>
 
-              {/* Facturatiemethode */}
               <div>
-                <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Facturatie</div>
+                <Kop>Facturatie</Kop>
                 <div className="inline-flex overflow-hidden rounded-lg border border-neutral-200">
                   {(['regie', 'termijnen'] as const).map(m => (
                     <button
@@ -128,15 +140,14 @@ export default function ServicedeskInfoPaneel({
                   ))}
                 </div>
                 {isMutatie && (
-                  <div className="mt-1.5 max-w-[190px] text-[11px] leading-snug text-neutral-400">
+                  <div className="mt-1.5 max-w-[220px] text-[11px] leading-snug text-neutral-400">
                     Mutatiewerk staat standaard op Aangenomen.
                   </div>
                 )}
               </div>
 
-              {/* Mandaat */}
               <div>
-                <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Mandaat (excl. btw)</div>
+                <Kop>Mandaat (excl. btw)</Kop>
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] text-neutral-400">€</span>
                   <Input
@@ -149,14 +160,13 @@ export default function ServicedeskInfoPaneel({
                   />
                 </div>
               </div>
-
             </div>
 
-            {/* Hoe het mandaat ervoor staat én waar dat bedrag vandaan komt, in één blok. Dat waren
-                twee losse dingen op twee plekken: de meter in een balk boven de tabs, de opbouw hier.
-                Je las dan een percentage zonder te zien waardoor het vol liep. */}
+            {/* Kolom 2 — hoe het mandaat ervoor staat én waar dat bedrag vandaan komt. Dat waren
+                twee losse dingen op twee plekken: de meter in een balk boven de tabs, de opbouw
+                hier. Je las dan een percentage zonder te zien waardoor het vol liep. */}
             {status?.mandaat != null && status.mandaat > 0 && (
-              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
                 <MandaatMeter mandaat={status.mandaat} totaal={status.totaal} />
                 <div className="mb-2 mt-3 border-t border-neutral-200 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
                   Verbruikt mandaat
@@ -175,15 +185,18 @@ export default function ServicedeskInfoPaneel({
               </div>
             )}
 
-            {/* Doorlooptijd per fase */}
+            {/* Kolom 3 — waar de tijd is gebleven. In een eigen kader met dezelfde breedte als het
+                mandaatblok ernaast, zodat fase en aantal dagen bij elkaar blijven staan. */}
             {fases.length > 0 && (
-              <div className="mt-4">
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Tijd per fase</div>
                 <div className="flex flex-col gap-1">
                   {fases.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between text-[12px]">
-                      <span className="text-neutral-700">{faseLabel(f.substatus)}</span>
-                      <span className="tabular-nums text-neutral-500">{f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}</span>
+                    <div key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
+                      <span className="min-w-0 truncate text-neutral-700">{faseLabel(f.substatus)}</span>
+                      <span className="shrink-0 tabular-nums text-neutral-500">
+                        {f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -192,7 +205,7 @@ export default function ServicedeskInfoPaneel({
           </div>
 
           {acties && (
-            <div className="shrink-0 border-neutral-200 lg:w-[248px] lg:border-l lg:pl-6 dark:border-neutral-700">
+            <div className="w-full max-w-[320px] shrink-0 border-neutral-200 xl:w-[300px] xl:max-w-none xl:border-l xl:pl-7 dark:border-neutral-700">
               {acties}
             </div>
           )}

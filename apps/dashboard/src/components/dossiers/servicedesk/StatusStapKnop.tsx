@@ -31,7 +31,7 @@ export default function StatusStapKnop({ dossierId, stap, blok }: {
       variant="primary"
       disabled={bezig}
       loading={bezig}
-      className={blok ? 'w-full justify-center' : undefined}
+      className={blok ? 'h-auto min-h-8 w-full justify-center whitespace-normal py-1.5 leading-tight' : undefined}
       onClick={() => start(async () => {
         // De server bepaalt zelf welke stap volgt; dit scherm kan verouderd zijn.
         const res = await zetVolgendeStap(dossierId)
