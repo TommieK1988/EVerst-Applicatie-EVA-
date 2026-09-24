@@ -13,6 +13,10 @@ import type { EenheidConfig } from '@/lib/everts-calc/types'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
 import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
 import MateriaalgroepenBeheer from '@/components/everts-calc/bibliotheek/MateriaalgroepenBeheer'
+import { Card, CardHeader, CardBody, FormField, Input, Button } from '@/components/ui'
+import {
+  getOfferteGeldigheidDagen, setOfferteGeldigheidDagen,
+} from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 
 // ─── Constanten ───────────────────────────────────────────────────────────────
 
@@ -417,6 +421,8 @@ function OfferteTab() {
 
   return (
     <div className="space-y-4">
+      <GeldigheidKaart />
+
       <p className="text-sm text-slate-500">
         Offerte-instellingen worden centraal beheerd in de EVA-bedrijfsinstellingen.
       </p>
@@ -440,5 +446,68 @@ function OfferteTab() {
         ))}
       </div>
     </div>
+  )
+}
+
+// ─── Geldigheidstermijn offertes ──────────────────────────────────────────────
+
+/** Bedrijfsbreed: hoeveel dagen een nieuwe offerte geldig is. Per offerte blijft de datum aanpasbaar. */
+function GeldigheidKaart() {
+  const [dagen, setDagen] = useState('')
+  const [bezig, setBezig] = useState(false)
+
+  useEffect(() => {
+    getOfferteGeldigheidDagen()
+      .then(n => setDagen(String(n)))
+      .catch(() => toast.error('Geldigheidstermijn kon niet worden geladen'))
+  }, [])
+
+  const opslaan = async () => {
+    const n = Number(dagen)
+    if (!Number.isInteger(n) || n < 1 || n > 365) {
+      toast.error('Vul een aantal dagen tussen 1 en 365 in')
+      return
+    }
+    setBezig(true)
+    try {
+      const res = await setOfferteGeldigheidDagen(n)
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Geldigheidstermijn opgeslagen')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Opslaan mislukt')
+    } finally {
+      setBezig(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>Geldigheid offertes</CardHeader>
+      <CardBody>
+        <FormField
+          upper
+          label="Standaard geldigheid"
+          htmlFor="offerte-geldigheid-dagen"
+          helper="Een nieuwe offerte is dit aantal dagen geldig vanaf de offertedatum. Per offerte kun je de datum daarna nog aanpassen."
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              id="offerte-geldigheid-dagen"
+              type="number"
+              min={1}
+              max={365}
+              value={dagen}
+              onChange={e => setDagen(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void opslaan() }}
+              className="w-24"
+            />
+            <span className="text-[13px] text-neutral-500">dagen</span>
+            <Button onClick={() => { void opslaan() }} disabled={bezig || dagen === ''}>
+              {bezig ? 'Opslaan…' : 'Opslaan'}
+            </Button>
+          </div>
+        </FormField>
+      </CardBody>
+    </Card>
   )
 }

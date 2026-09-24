@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Building2, ChevronRight, Check, ArrowLeft } from 'lucide-react'
 import { maakQuote, maakClient } from '@/app/(platform)/everts-calc/actions/quotes'
+import { getOfferteGeldigheidDagen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody } from '@/components/ui/card'
@@ -26,6 +27,11 @@ export default function NieuweQuotePage() {
   const [referentie, setReferentie] = useState('')
   const [datum, setDatum] = useState(new Date().toISOString().split('T')[0])
   const [geldigheidDagen, setGeldigheidDagen] = useState(30)
+
+  // Bedrijfsbrede termijn uit de EvertsCalc-instellingen als startwaarde; hier per offerte aan te passen.
+  useEffect(() => {
+    getOfferteGeldigheidDagen().then(setGeldigheidDagen).catch(() => {})
+  }, [])
 
   const geldig_tot = (() => {
     const d = new Date(datum)

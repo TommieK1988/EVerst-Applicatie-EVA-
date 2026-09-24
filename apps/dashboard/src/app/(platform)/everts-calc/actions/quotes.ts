@@ -9,6 +9,7 @@ import { assertQuoteBewerkbaar } from '@/lib/everts-calc/quote-guards'
 import { omschrijvingMetBehandeling } from '@/lib/everts-calc/behandeling-label'
 import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
 import { schoonOfferteHtml } from '@/lib/everts-calc/html-naar-ooxml'
+import { getOfferteGeldigheidDagen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 
 const PAD = '/quotes'
 
@@ -165,7 +166,7 @@ export async function maakQuoteVanuitProject(
   // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen')
+    .select('id')
     .eq('is_standaard', true)
     .single()
 
@@ -190,7 +191,7 @@ export async function maakQuoteVanuitProject(
   }
 
   const datum = new Date().toISOString().split('T')[0]
-  const dagen = template?.geldigheid_dagen ?? 30
+  const dagen = await getOfferteGeldigheidDagen()
   const d = new Date(datum)
   d.setDate(d.getDate() + dagen)
   const geldig_tot = d.toISOString().split('T')[0]
@@ -287,7 +288,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen')
+    .select('id')
     .eq('is_standaard', true)
     .single()
 
@@ -312,7 +313,7 @@ export async function maakQuoteVanuitProjectMetImport(params: {
   }
 
   const datum = new Date().toISOString().split('T')[0]
-  const dagen = template?.geldigheid_dagen ?? 30
+  const dagen = await getOfferteGeldigheidDagen()
   const d = new Date(datum)
   d.setDate(d.getDate() + dagen)
   const geldig_tot = d.toISOString().split('T')[0]
@@ -451,15 +452,15 @@ export async function wijzigClient(id: string, data: {
 export async function maakQuote(data: NieuweQuoteData): Promise<never> {
   const supabase = await getDb()
 
-  // Haal standaard template op voor geldigheid_dagen
+  // Haal standaard template op
   const { data: template } = await supabase
     .from('quote_templates')
-    .select('id, geldigheid_dagen')
+    .select('id')
     .eq('is_standaard', true)
     .single()
 
-  const geldig_tot = data.geldig_tot ?? (() => {
-    const dagen = template?.geldigheid_dagen ?? 30
+  const geldig_tot = data.geldig_tot ?? await (async () => {
+    const dagen = await getOfferteGeldigheidDagen()
     const d = new Date(data.datum)
     d.setDate(d.getDate() + dagen)
     return d.toISOString().split('T')[0]

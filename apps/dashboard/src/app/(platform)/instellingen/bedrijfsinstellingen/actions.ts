@@ -84,6 +84,33 @@ export async function setRegieOpslagPct(
   return res
 }
 
+/**
+ * Bedrijfsbrede geldigheidstermijn (in dagen) van een nieuwe offerte: `geldig_tot` wordt
+ * offertedatum + dit aantal. Per offerte blijft de datum daarna vrij aan te passen.
+ * Stond eerder als `geldigheid_dagen` op het standaard offertesjabloon, zonder scherm.
+ */
+export async function getOfferteGeldigheidDagen(): Promise<number> {
+  const inst = await getBedrijfsinstellingen()
+  const v = overigeVan(inst).offerte_geldigheid_dagen
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(v, 10) : NaN
+  return Number.isInteger(n) && n > 0 ? n : 30
+}
+
+export async function setOfferteGeldigheidDagen(
+  dagen: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisRecht('everts_calc', 'beheren')
+  if (!Number.isInteger(dagen) || dagen < 1 || dagen > 365) {
+    return { ok: false, error: 'Vul een aantal dagen tussen 1 en 365 in.' }
+  }
+  const inst = await getBedrijfsinstellingen()
+  const res = await updateBedrijfsinstellingen({
+    overige: { ...overigeVan(inst), offerte_geldigheid_dagen: dagen },
+  })
+  if (res.ok) revalidatePath('/everts-calc/instellingen')
+  return res
+}
+
 export async function setGoedkeuringDrempelOfferte(
   bedrag: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
