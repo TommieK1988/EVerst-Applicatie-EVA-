@@ -26,7 +26,7 @@ import { zetOfferteGewonnenUitBericht } from './opdracht'
 import { zoekObjectBijAdres } from './objecten'
 import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
-import { domeinVan, afzenderUitDoorstuur } from './triage'
+import { domeinVan, afzenderUitDoorstuur, eigenDomeinen } from './triage'
 import { behandelaarVoorMail, voorleggen, meldVoorgelegd } from './melden'
 import { beoordeelBijlage } from './bijlagen-filter'
 import { storingTekst, type AiStoring } from './ai-storing'
@@ -61,19 +61,6 @@ export interface VerwerkResultaat {
 }
 
 // ─── Hulpjes ──────────────────────────────────────────────────────────────────
-
-/** Domeinen die van onszelf zijn; nodig om doorgestuurde mail te herkennen. */
-async function eigenDomeinen(): Promise<Set<string>> {
-  const supabase = createAdminClient()
-  const { data } = await supabase
-    .from('medewerkers').select('email').eq('actief', true).not('email', 'is', null).limit(500)
-  const uit = new Set<string>()
-  for (const m of data ?? []) {
-    const d = domeinVan(m.email)
-    if (d) uit.add(d)
-  }
-  return uit
-}
 
 async function witteLijsten(): Promise<WitteLijsten> {
   const supabase = createAdminClient()
@@ -343,6 +330,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       // Nodig om te kiezen bij een gedeeld postbusadres van een beheerkantoor.
       contactpersoonNaamUitMail: gelezen.contactpersoon_naam,
       doorgestuurd: bewijsIsTweedehands,
+      // Ons eigen domein bewijst nooit een klant; zie de ladder in afzender.ts.
+      eigenDomeinen: eigen,
     })
 
     // ── Keuren ──────────────────────────────────────────────────────────────

@@ -12,6 +12,9 @@
  * is duurder dan een overbodige AI-call.
  */
 
+import 'server-only'
+import { createAdminClient } from '@everts/database/server'
+
 import type { GraphBericht } from '@/lib/o365/inbox'
 
 /** Vrije-maildomeinen: daar zegt het domein niets over wélke klant het is. */
@@ -110,4 +113,36 @@ export function afzenderUitDoorstuur(bodyTekst: string, eigenDomeinen: Set<strin
     return adres
   }
   return null
+}
+
+/**
+ * Domeinen die van onszelf zijn; nodig om doorgestuurde mail te herkennen.
+ *
+ * WAAROM DE VRIJE MAILDOMEINEN ERUIT MOETEN
+ * De lijst komt uit het medewerkersbestand, en daar staan prívé-adressen tussen:
+ * gmail, hotmail, ziggo, icloud. Zonder filter gelden die als "ons domein", en dan
+ * gaat er twee keer iets mis.
+ *
+ * Eerst bij het doorsturen: `afzenderUitDoorstuur` slaat elke Van-regel over die
+ * op een eigen domein staat, dus een klant met een gmail-adres wordt overgeslagen
+ * en EVA houdt de collega érboven over als afzender. Daarna bij de herkenning:
+ * die zoekt dan op ons eigen domein verder.
+ *
+ * Dat gebeurde bij de offerteaanvraag voor Burgemeester Meineszlaan 62. De klant
+ * mailde vanaf gmail, een collega stuurde het door, en EVA schreef FASA voor als
+ * opdrachtgever -- puur omdat er één contactpersoon met een @everts.chat-adres aan
+ * die relatie hangt.
+ *
+ * Een medewerker met een gmail-adres maakt gmail niet van ons.
+ */
+export async function eigenDomeinen(): Promise<Set<string>> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('medewerkers').select('email').eq('actief', true).not('email', 'is', null).limit(500)
+  const uit = new Set<string>()
+  for (const m of data ?? []) {
+    const d = domeinVan(m.email)
+    if (d && !isVrijMaildomein(d)) uit.add(d)
+  }
+  return uit
 }

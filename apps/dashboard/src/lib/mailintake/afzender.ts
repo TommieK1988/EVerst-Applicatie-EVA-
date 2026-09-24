@@ -118,6 +118,11 @@ export async function herkenAfzender(opts: {
   contactpersoonNaamUitMail?: string | null
   /** true als de mail door een eigen medewerker is doorgestuurd. */
   doorgestuurd?: boolean
+  /**
+   * Onze eigen bedrijfsdomeinen. Worden op trede 3 overgeslagen: een adres op ons
+   * eigen domein zegt iets over ons, niet over de klant.
+   */
+  eigenDomeinen?: Set<string>
 }): Promise<AfzenderTreffer> {
   const supabase = createAdminClient()
   const adres = (opts.vanAdres ?? '').trim().toLowerCase()
@@ -268,7 +273,18 @@ export async function herkenAfzender(opts: {
   }
 
   // ── 3. Domein hoort bij precies één relatie ───────────────────────────────
-  if (domein && !isVrijMaildomein(domein)) {
+  //
+  // Ons éigen domein hoort hier net zo goed buiten als gmail.com. Er staat bij een
+  // klant soms een eigen medewerker als contactpersoon — Faried Madjoe met
+  // faried@everts.chat bij FASA — en dan levert deze trede die relatie op voor élke
+  // mail die van een collega lijkt te komen. Zo werd een particuliere dakaanvraag
+  // voor Burgemeester Meineszlaan 62 aan FASA toegeschreven.
+  //
+  // Dat die relatie een verdwaalde contactpersoon heeft is een datafout, maar de
+  // ladder hoort daar sowieso niet op te matchen: een adres op ons eigen domein
+  // zegt iets over ons, niet over de klant.
+  const eigenDomein = domein != null && (opts.eigenDomeinen?.has(domein) ?? false)
+  if (domein && !isVrijMaildomein(domein) && !eigenDomein) {
     const { data } = await supabase
       .from('contactpersonen')
       .select('id, contactpersoon_organisaties(is_primair, organisatie:relaties(id, naam, actief))')
