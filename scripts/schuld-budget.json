@@ -1,7 +1,7 @@
 {
   "budget": {
     "as_any": 757,
-    "ongegate_service_role_actions": 515,
+    "ongegate_service_role_actions": 523,
     "bestanden_boven_800_regels": 34
   },
   "per_bestand": {
@@ -343,8 +343,8 @@
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 10,
       "apps/dashboard/src/lib/dossiers/oplevering-mail.ts": 9,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 27,
-      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 5,
       "apps/dashboard/src/lib/dossiers/servicedesk-acties.ts": 1,
+      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 5,
       "apps/dashboard/src/lib/dossiers/termijnen.ts": 1,
       "apps/dashboard/src/lib/dossiers/uitvragen.ts": 2,
       "apps/dashboard/src/lib/dossiers/voortgang.ts": 3,
@@ -355,6 +355,7 @@
       "apps/dashboard/src/lib/kwaliteit/bibliotheek.ts": 4,
       "apps/dashboard/src/lib/objecten/data.ts": 6,
       "apps/dashboard/src/lib/opname/bibliotheek.ts": 2,
+      "apps/dashboard/src/lib/prikklok/actions.ts": 8,
       "apps/dashboard/src/lib/relaties/actions.ts": 19,
       "apps/dashboard/src/lib/relaties/contactpersonen-actions.ts": 10,
       "apps/dashboard/src/lib/relaties/particulieren-actions.ts": 5,
