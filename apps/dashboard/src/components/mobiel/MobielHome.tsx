@@ -1,5 +1,5 @@
 import React from 'react'
-import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench, BookOpen, Handshake } from 'lucide-react'
+import { ListChecks, FolderOpen, Clock, CalendarDays, User, Palmtree, Wrench, BookOpen, Handshake, Timer } from 'lucide-react'
 import AppHeader from './AppHeader'
 import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
@@ -26,7 +26,7 @@ import type { HomeSignalen as Signalen } from '@/lib/mobiel/home'
  */
 export default function MobielHome({
   naam, openTaken, ongelezenMeldingen = 0, magMaterieel = false, magHandboek = false,
-  magCommercieel = false, vandaag, signalen,
+  magCommercieel = false, magPrikklok = false, vandaag, signalen,
 }: {
   naam?: string | null
   openTaken?: number
@@ -45,6 +45,8 @@ export default function MobielHome({
    * lezen. Alleen de feature-flag bepaalt of de tegel er is.
    */
   magHandboek?: boolean
+  /** Prikklok in de testfase: alleen voor wie op de testerlijst staat. */
+  magPrikklok?: boolean
   /** Agenda-items van vandaag; `null` als er geen medewerker-koppeling is. */
   vandaag?: { dag: string; items: AgendaItem[] } | null
   signalen?: Signalen | null
@@ -77,6 +79,7 @@ export default function MobielHome({
       >
         <MobielTegel href="/m/taken" label="Acties" Icon={ListChecks} badge={openTaken} />
         <MobielTegel href="/m/dossiers" label="Dossiers" Icon={FolderOpen} />
+        {magPrikklok && <MobielTegel href="/m/prikklok" label="Prikklok" Icon={Timer} />}
         <MobielTegel href="/m/uren" label="Uren" Icon={Clock} />
         <MobielTegel href="/m/planning" label="Planning" Icon={CalendarDays} />
         <MobielTegel href="/m/verlof" label="Verlof" Icon={Palmtree} />

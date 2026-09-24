@@ -3,6 +3,7 @@ import { telMijnOpenTaken } from '@/lib/taken/services/taken'
 import { getCurrentMedewerker, getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { FEATURES } from '@/lib/features'
+import { magPrikklok as prikklokToegang } from '@/lib/prikklok/auth'
 import { haalVandaag, haalHomeSignalen } from '@/lib/mobiel/home'
 import MobielHome from '@/components/mobiel/MobielHome'
 
@@ -58,6 +59,10 @@ export default async function MobielHomePage() {
   // de module nog niet live is.
   const magHandboek = FEATURES.handboek && !!medewerker
 
+  // De prikklok staat in de testfase: alleen wie op de testerlijst staat ziet de tegel. Geen
+  // recht, want beheerders passeren elk recht — zie lib/prikklok/auth.ts.
+  const magPrikklok = await prikklokToegang(medewerker?.id)
+
   // Beide fail-soft: valt de agenda of de weekstaat-lees om, dan blijft de
   // launcher gewoon werken. De tegels zijn het minimum dat dit scherm moet doen.
   const [vandaag, signalen] = medewerker
@@ -75,6 +80,7 @@ export default async function MobielHomePage() {
       magMaterieel={magMaterieel}
       magHandboek={magHandboek}
       magCommercieel={magCommercieel}
+      magPrikklok={magPrikklok}
       vandaag={vandaag}
       signalen={signalen}
     />

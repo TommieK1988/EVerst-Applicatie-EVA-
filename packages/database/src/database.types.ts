@@ -12826,6 +12826,268 @@ export type Database = {
         }
         Relationships: []
       }
+      prikklok_instellingen: {
+        Row: {
+          afronding_min: number
+          fase: string
+          herinnering_na_min: number
+          id: boolean
+          max_nauwkeurigheid_m: number
+          pauze_min: number
+          pauze_vanaf_min: number
+          straal_m: number
+          tester_ids: string[]
+          updated_at: string
+        }
+        Insert: {
+          afronding_min?: number
+          fase?: string
+          herinnering_na_min?: number
+          id?: boolean
+          max_nauwkeurigheid_m?: number
+          pauze_min?: number
+          pauze_vanaf_min?: number
+          straal_m?: number
+          tester_ids?: string[]
+          updated_at?: string
+        }
+        Update: {
+          afronding_min?: number
+          fase?: string
+          herinnering_na_min?: number
+          id?: boolean
+          max_nauwkeurigheid_m?: number
+          pauze_min?: number
+          pauze_vanaf_min?: number
+          straal_m?: number
+          tester_ids?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      prikklok_pogingen: {
+        Row: {
+          actie: string
+          created_at: string
+          dichtstbij_afstand_m: number | null
+          dichtstbij_dossier_id: string | null
+          gesimuleerd: boolean
+          id: string
+          lat: number | null
+          lng: number | null
+          medewerker_id: string
+          nauwkeurigheid_m: number | null
+          reden: string
+        }
+        Insert: {
+          actie: string
+          created_at?: string
+          dichtstbij_afstand_m?: number | null
+          dichtstbij_dossier_id?: string | null
+          gesimuleerd?: boolean
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          medewerker_id: string
+          nauwkeurigheid_m?: number | null
+          reden: string
+        }
+        Update: {
+          actie?: string
+          created_at?: string
+          dichtstbij_afstand_m?: number | null
+          dichtstbij_dossier_id?: string | null
+          gesimuleerd?: boolean
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          medewerker_id?: string
+          nauwkeurigheid_m?: number | null
+          reden?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prikklok_pogingen_dichtstbij_dossier_id_fkey"
+            columns: ["dichtstbij_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "prikklok_pogingen_dichtstbij_dossier_id_fkey"
+            columns: ["dichtstbij_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_pogingen_dichtstbij_dossier_id_fkey"
+            columns: ["dichtstbij_dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_pogingen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_pogingen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "prikklok_pogingen_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+        ]
+      }
+      prikklok_sessies: {
+        Row: {
+          bewakingscode: string | null
+          bouw7_psl_id: number | null
+          created_at: string
+          datum: string
+          dossier_id: string
+          gesimuleerd: boolean
+          herinnerd_op: string | null
+          id: string
+          in_afstand_m: number
+          in_lat: number
+          in_lng: number
+          in_nauwkeurigheid_m: number | null
+          in_op: string
+          medewerker_id: string
+          opmerking: string | null
+          planning_item_id: string | null
+          uit_afstand_m: number | null
+          uit_lat: number | null
+          uit_lng: number | null
+          uit_nauwkeurigheid_m: number | null
+          uit_op: string | null
+          uit_wijze: string | null
+          updated_at: string
+          uursoort_id: string | null
+        }
+        Insert: {
+          bewakingscode?: string | null
+          bouw7_psl_id?: number | null
+          created_at?: string
+          datum: string
+          dossier_id: string
+          gesimuleerd?: boolean
+          herinnerd_op?: string | null
+          id?: string
+          in_afstand_m: number
+          in_lat: number
+          in_lng: number
+          in_nauwkeurigheid_m?: number | null
+          in_op?: string
+          medewerker_id: string
+          opmerking?: string | null
+          planning_item_id?: string | null
+          uit_afstand_m?: number | null
+          uit_lat?: number | null
+          uit_lng?: number | null
+          uit_nauwkeurigheid_m?: number | null
+          uit_op?: string | null
+          uit_wijze?: string | null
+          updated_at?: string
+          uursoort_id?: string | null
+        }
+        Update: {
+          bewakingscode?: string | null
+          bouw7_psl_id?: number | null
+          created_at?: string
+          datum?: string
+          dossier_id?: string
+          gesimuleerd?: boolean
+          herinnerd_op?: string | null
+          id?: string
+          in_afstand_m?: number
+          in_lat?: number
+          in_lng?: number
+          in_nauwkeurigheid_m?: number | null
+          in_op?: string
+          medewerker_id?: string
+          opmerking?: string | null
+          planning_item_id?: string | null
+          uit_afstand_m?: number | null
+          uit_lat?: number | null
+          uit_lng?: number | null
+          uit_nauwkeurigheid_m?: number | null
+          uit_op?: string | null
+          uit_wijze?: string | null
+          updated_at?: string
+          uursoort_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prikklok_sessies_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "uren_saldo_per_medewerker"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "v_bestuurders_overzicht"
+            referencedColumns: ["medewerker_id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_planning_item_id_fkey"
+            columns: ["planning_item_id"]
+            isOneToOne: false
+            referencedRelation: "planning_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prikklok_sessies_uursoort_id_fkey"
+            columns: ["uursoort_id"]
+            isOneToOne: false
+            referencedRelation: "planning_uursoorten"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projectbezoek_disciplines: {
         Row: {
           bezoek_id: string

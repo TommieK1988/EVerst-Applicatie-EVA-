@@ -73,6 +73,10 @@
       "schedule": "2,12,22,32,42,52 * * * *"
     },
     {
+      "path": "/api/cron/prikklok",
+      "schedule": "20 14-19 * * *"
+    },
+    {
       "path": "/api/cron/mailintake/bewaking",
       "schedule": "0 7 * * 1-5"
     }

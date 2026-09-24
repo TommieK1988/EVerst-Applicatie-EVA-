@@ -80,7 +80,7 @@ const GATES = [
   'vereisRecht', 'vereisSessie', 'vereisBeheerder', 'vereisModuleToegang',
   'vereisMaterieelToegang', 'vereisMaterieelMutatie', 'vereisMaterieelBeheer',
   'vereisHandboekLezer', 'vereisHandboekBeheerPagina', 'vereisHandboekMutatie',
-  'eigenWeek',
+  'eigenWeek', 'vereisPrikklokActie',
 ]
 
 const REGELLIMIET = 800
