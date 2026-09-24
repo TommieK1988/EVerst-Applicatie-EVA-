@@ -174,7 +174,6 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
             waarde={scenario.inleiding_tekst ?? ''}
             onChange={html => wijzig({ inleiding_tekst: html })}
             readOnly={!!scenario.bevroren_op}
-            placeholder="De tekst boven aan de offerte — opmaken met de knoppen hierboven."
           />
           <p className="text-xs text-slate-400 mt-2">
             Verschijnt in de offerte op de plek van
