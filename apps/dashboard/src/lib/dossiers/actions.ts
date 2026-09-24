@@ -34,7 +34,7 @@ import {
 import { schrijfBouw7Projectvelden, schrijfBouw7Aanneemsom, BOUW7_PROJECT_SCHRIJFVELDEN } from '@/lib/bouw7/project-velden'
 import { mapBouw7NaarEvaStatus } from '@/lib/bouw7/status-afleiding'
 import { assertDossierBewerkbaar } from './guards'
-import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { vereisRecht, vereisSessie, GeenToegangError } from '@/lib/auth/rechten'
 import { schrijfBouw7BonBewakingscode, zorgVoorArbeidPsl } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
 import {
@@ -4148,6 +4148,7 @@ export type UrenDoelcode = Omit<BewakingscodeOptie, 'pslId'> & {
 export type UrenDoel = { pslId: number } | { code: string; hoofdstukId: number | null }
 
 export async function getUrenDoelcodes(dossierId: string): Promise<UrenDoelcode[]> {
+  await vereisSessie()
   const bouw7Id = await dossierBouw7Id(dossierId)
   if (!bouw7Id) return []
   try {
