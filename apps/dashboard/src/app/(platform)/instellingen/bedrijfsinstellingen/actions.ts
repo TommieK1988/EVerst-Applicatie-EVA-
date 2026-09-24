@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisRecht, vereisSessie } from '@/lib/auth/rechten'
 import type { Bedrijfsinstellingen, Uurtarief } from '@everts/database/platform-types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,6 +90,7 @@ export async function setRegieOpslagPct(
  * Stond eerder als `geldigheid_dagen` op het standaard offertesjabloon, zonder scherm.
  */
 export async function getOfferteGeldigheidDagen(): Promise<number> {
+  await vereisSessie()
   const inst = await getBedrijfsinstellingen()
   const v = overigeVan(inst).offerte_geldigheid_dagen
   const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(v, 10) : NaN
