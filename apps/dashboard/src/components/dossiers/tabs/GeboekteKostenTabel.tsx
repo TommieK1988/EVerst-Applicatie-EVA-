@@ -200,6 +200,17 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
   const [sortKey, setSortKey] = useState<string>('datum')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
+  // Inline hercoderen in de kolom Bewakingscode, zoals bij Uren. Alleen waar het mag:
+  // contractgebonden kosten volgen hun contract, en zonder leverbon is er niets om te coderen.
+  const codeOpties = useMemo(() => kiesbareCodes(projectcodes), [projectcodes])
+  const magInlineHercoderen = (r: GeboekteKostenRegel) =>
+    !readOnly && !r.contractGebonden && r.bonId != null && codeOpties.length > 0
+  const huidigeCodeKey = (r: GeboekteKostenRegel): string => {
+    if (!r.code) return ''
+    const c = codeOpties.find((o) => o.code === r.code)
+    return c ? codeKey(c) : `|${r.code}`
+  }
+
   const kolommen: Kolom[] = useMemo(() => [
     {
       key: 'factuurnummer', label: 'Factuurnr.', waarde: (r) => r.factuurnummer ?? '',
@@ -234,7 +245,28 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
     { key: 'typeKosten', label: 'Type', waarde: (r) => r.typeKosten ?? '', render: (r) => r.typeKosten ?? '—' },
     {
       key: 'code', label: 'Bewakingscode', breedte: 180, waarde: (r) => r.code ?? '',
-      render: (r) => (
+      render: (r) => magInlineHercoderen(r) ? (
+        <select
+          disabled={pending}
+          value={huidigeCodeKey(r)}
+          onChange={(e) => {
+            if (!e.target.value || e.target.value === huidigeCodeKey(r)) return
+            const { hoofdstukId, code } = parseCodeKey(e.target.value)
+            doe(() => hercodeerGeboekteKost(dossierId, r.bronId, code, hoofdstukId), `Verplaatst naar ${code}`)
+          }}
+          title={r.codeNaam ?? undefined}
+          style={{
+            width: '100%', maxWidth: 180, fontSize: 12, border: '1px solid var(--neutral-200)', borderRadius: 4,
+            padding: '2px 4px', background: 'var(--neutral-50)', color: 'var(--fg)', cursor: 'pointer',
+          }}
+        >
+          {!r.code && <option value="">— niet gecodeerd</option>}
+          {r.code && !codeOpties.some((c) => c.code === r.code) && (
+            <option value={`|${r.code}`}>{r.code}{r.codeNaam ? ` · ${r.codeNaam}` : ''}</option>
+          )}
+          {codeOpties.map((c) => <option key={codeKey(c)} value={codeKey(c)}>{codeLabel(c)}</option>)}
+        </select>
+      ) : (
         <span
           style={{ display: 'flex', alignItems: 'center', gap: 4, maxWidth: 180, overflow: 'hidden' }}
           title={r.contractGebonden
@@ -258,7 +290,8 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
       key: 'bedrag', label: 'Bedrag excl.', right: true, waarde: (r) => r.bedrag,
       render: (r) => <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{euro(r.bedrag)}</span>,
     },
-  ], [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [pending, readOnly, projectcodes, dossierId])
 
   const rijen = useMemo(() => {
     const q = zoek.trim().toLowerCase()
