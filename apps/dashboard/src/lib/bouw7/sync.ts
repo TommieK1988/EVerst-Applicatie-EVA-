@@ -9,7 +9,7 @@ import { getBouw7RawConfig } from './config'
 import { fingerprint } from './fingerprint'
 import { bouw7RichTextNaarTekst } from './rich-text'
 import { deriveBtwTarieven } from './derive-stamdata'
-import { mapBouw7NaarEvaStatus } from './status-afleiding'
+import { mapBouw7NaarEvaStatus, isStatusConsistent, pakStatusVelden } from './status-afleiding'
 import type { OrganisatieType, BtwSplitsingItem, MeerwerkStatus } from '@everts/database'
 import type { KanaalRechten } from '@everts/database/platform-types'
 import { leesRechtenDocument, mergeKanaal, leegKanaal, niveauHaalt } from '@everts/database/rechten'
@@ -2066,7 +2066,14 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         }
         servicedeskOntmarkeren.push(existing.id)
       }
-      const beschermd = metBehoudVanHandmatigeVelden(rij, behoudBron, BOUW7_DOSSIER_VELDEN)
+      let beschermd = metBehoudVanHandmatigeVelden(rij, behoudBron, BOUW7_DOSSIER_VELDEN)
+      // Bescherming werkt per veld, maar hoofdstatus en de drie substatussen horen bij elkaar
+      // (CHECK dossiers_status_consistent). Een beschermde aanvraag_substatus naast een door Bouw7
+      // gewijzigde hoofdstatus levert bv. 'aanvraag' zonder aanvraag-substatus op. Dan wint Bouw7
+      // voor de statusvelden — anders weigert Postgres de rij.
+      if (!isStatusConsistent(beschermd)) {
+        beschermd = { ...beschermd, ...pakStatusVelden(rij) }
+      }
       rows.push(beschermd)
 
       // Servicedesk: log een substatuswijziging (basis voor doorlooptijd-per-fase) — op basis van
@@ -2080,12 +2087,25 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
     result.nieuw = rows.filter(r => !dossierMap.has(r.bouw7_id as string)).length
     result.bijgewerkt = rows.filter(r => dossierMap.has(r.bouw7_id as string)).length
 
-    // Batch upsert — dossiers heeft een volledige unique constraint op bouw7_id
+    // Batch upsert — dossiers heeft een volledige unique constraint op bouw7_id.
+    // Een batch is atomair: één ongeldige rij liet tot sep 2026 alle 500 mislukken, zodat
+    // honderden dossiers dagenlang niet bijwerkten en nieuwe bonnen niet in EVA verschenen.
+    // Faalt een batch, dan per rij opnieuw — zo blijft de schade bij dat ene dossier.
     for (let i = 0; i < rows.length; i += 500) {
+      const batch = rows.slice(i, i + 500)
       const { error } = await supabase
         .from('dossiers')
-        .upsert(rows.slice(i, i + 500), { onConflict: 'bouw7_id' })
-      if (error) { result.fouten++; result.foutMelding = error.message }
+        .upsert(batch, { onConflict: 'bouw7_id' })
+      if (!error) continue
+      for (const rij of batch) {
+        const { error: rijFout } = await supabase
+          .from('dossiers')
+          .upsert(rij, { onConflict: 'bouw7_id' })
+        if (rijFout) {
+          result.fouten++
+          result.foutMelding = `${rij.dossiernummer ?? rij.bouw7_id}: ${rijFout.message}`
+        }
+      }
     }
 
     // Servicedesk-markeringen die door een echte Bouw7-statuswissel zijn vervallen.

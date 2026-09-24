@@ -127,6 +127,33 @@ export function isServicedeskCombinatie(
 }
 
 /**
+ * Voldoet deze dossierrij aan CHECK `dossiers_status_consistent`? Precies één substatus gevuld,
+ * en wel die van de hoofdstatus. (De servicedesk-substatus valt erbuiten.)
+ */
+export function isStatusConsistent(rij: Record<string, unknown>): boolean {
+  const gevuld = (v: unknown) => v !== null && v !== undefined
+  const a = gevuld(rij.aanvraag_substatus)
+  const o = gevuld(rij.offerte_substatus)
+  const d = gevuld(rij.opdracht_substatus)
+  switch (rij.hoofdstatus) {
+    case 'aanvraag': return a && !o && !d
+    case 'offerte':  return !a && o && !d
+    case 'opdracht': return !a && !o && d
+    default:         return false
+  }
+}
+
+/** De vier statusvelden die de consistentie-check samen bewaakt. */
+export function pakStatusVelden(rij: Record<string, unknown>): Record<string, unknown> {
+  return {
+    hoofdstatus:        rij.hoofdstatus,
+    aanvraag_substatus: rij.aanvraag_substatus,
+    offerte_substatus:  rij.offerte_substatus,
+    opdracht_substatus: rij.opdracht_substatus,
+  }
+}
+
+/**
  * Leidt de EVA-statusvelden af uit de Bouw7 projectstatus, categorie, offertestatus en het
  * maatwerkveld "Offerte Sub-status".
  *
