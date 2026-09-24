@@ -103,6 +103,11 @@ export async function schrijfBouw7Termijnstaat(
      * termijnen er staan, en geeft de id's van de nieuw aangemaakte termijnen terug.
      */
     deelschrijving?: boolean
+    /**
+     * Termijnen die uit de staat moeten. De POST zet de hele collectie, dus weglaten = verwijderen.
+     * Een termijn met een factuur blijft altijd staan (regel 1); die komt terug in `overgeslagen`.
+     */
+    verwijderTermIds?: number[]
   },
 ): Promise<TermijnstaatResultaat> {
   if (invoer.termijnen.length === 0) return { ok: false, error: 'Geen termijnen om weg te schrijven.' }
@@ -154,8 +159,15 @@ export async function schrijfBouw7Termijnstaat(
   let aangemaakt = 0
   let bijgewerkt = 0
 
+  const teVerwijderen = new Set(opts?.verwijderTermIds ?? [])
+  let verwijderd = 0
+
   // 1. Bestaande termijnen, in hun eigen volgorde.
   for (const oud of bestaand.termijnen) {
+    if (teVerwijderen.has(oud.id)) {
+      if (!gefactureerd.has(oud.id)) { verwijderd++; continue }
+      overgeslagen.push(oud.description ?? String(oud.id))
+    }
     const nieuw = gewijzigd.get(oud.id)
     if (nieuw && !gefactureerd.has(oud.id)) {
       invoiceTerms.push(alsBody(nieuw, oud.id))

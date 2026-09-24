@@ -4,9 +4,10 @@
  * De termijnentabel op de Verkoop-tab, met aanvinken en klaarzetten.
  *
  * Aanvinken kan alleen bij een termijn die nog geen factuurregel heeft; zodra er in Bouw7 een
- * factuur aan hangt is de termijn uit handen. De knop maakt van de hele selectie één
- * conceptfactuur — dat is ook precies hoe Bouw7 het zelf doet als je daar meerdere termijnen
- * tegelijk factureert: één regel per termijn.
+ * factuur aan hangt is de termijn uit handen. Bij meer dan één termijn kies je of ze samen op één
+ * conceptfactuur komen (één regel per termijn, zoals Bouw7 het zelf doet) of elk op een eigen
+ * factuur. Dat laatste is gewoon de klaarzet-actie per termijn: elke termijn krijgt zo zijn eigen
+ * idempotentiesleutel, dus een tweede klik na een half gelukte reeks maakt geen dubbelen.
  *
  * Staat er nog geen enkele termijn, dan is er niets te factureren maar wél iets aan te maken: het
  * termijnschema. Dat gaat via `TermijnschemaVenster`, dat zelf uitzoekt of de calculatie een
@@ -16,7 +17,7 @@
 import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Button, useDialogen } from '@/components/ui'
+import { Button, RadioGroup, RadioGroupItem, useDialogen } from '@/components/ui'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import { zetTermijnenKlaar } from '@/lib/dossiers/termijnen'
 import type { VerkoopTermijn, VerkoopTermijnStatus } from '@/lib/dossiers/actions'
@@ -43,6 +44,7 @@ export default function TermijnenBlok({ dossierId, termijnen, schemaMogelijk = t
   const [gekozen, setGekozen] = useState<Set<number>>(new Set())
   const [bezig, start] = useTransition()
   const [schemaOpen, setSchemaOpen] = useState(false)
+  const [factuurWijze, setFactuurWijze] = useState<'samen' | 'apart'>('samen')
 
   // Aanmaken kan alleen op een leeg project; een bestaande termijnstaat is in Bouw7 gezet en blijft
   // daar het werk van de administratie.
@@ -62,21 +64,47 @@ export default function TermijnenBlok({ dossierId, termijnen, schemaMogelijk = t
     })
   }
 
+  const apart = factuurWijze === 'apart' && selectie.length > 1
+
   async function klaarzetten() {
     const ja = await bevestig({
-      titel: 'Conceptfactuur klaarzetten in Bouw7?',
-      omschrijving: `${selectie.length} termijn${selectie.length === 1 ? '' : 'en'} van samen ${fmt(totaalExcl)} `
-        + `excl. btw (${fmt(totaalIncl)} incl.) komt als één conceptfactuur in Bouw7 te staan. `
-        + 'De factuur krijgt nog geen factuurnummer; de administratie verstuurt hem daar.',
+      titel: apart ? `${selectie.length} conceptfacturen klaarzetten in Bouw7?` : 'Conceptfactuur klaarzetten in Bouw7?',
+      omschrijving: (apart
+        ? `${selectie.length} termijnen van samen ${fmt(totaalExcl)} excl. btw (${fmt(totaalIncl)} incl.) `
+          + 'komen elk op een eigen conceptfactuur in Bouw7 te staan. '
+        : `${selectie.length} termijn${selectie.length === 1 ? '' : 'en'} van samen ${fmt(totaalExcl)} `
+          + `excl. btw (${fmt(totaalIncl)} incl.) komt als één conceptfactuur in Bouw7 te staan. `)
+        + `De factu${apart ? 'ren krijgen' : 'ur krijgt'} nog geen factuurnummer; de administratie verstuurt ze daar.`,
       bevestigLabel: 'Klaarzetten',
     })
     if (!ja) return
 
     start(async () => {
-      const r = await zetTermijnenKlaar(dossierId, selectie.map(t => t.bouw7TermId))
-      if (!r.ok) { toast.error(r.error, { duration: 9000 }); router.refresh(); return }
-      toast.success(`Conceptfactuur klaargezet in Bouw7 — ${r.aantal} termijn${r.aantal === 1 ? '' : 'en'}, ${fmt(r.totaalExclBtw)} excl. btw.`)
-      setGekozen(new Set())
+      if (!apart) {
+        const r = await zetTermijnenKlaar(dossierId, selectie.map(t => t.bouw7TermId))
+        if (!r.ok) { toast.error(r.error, { duration: 9000 }); router.refresh(); return }
+        toast.success(`Conceptfactuur klaargezet in Bouw7 — ${r.aantal} termijn${r.aantal === 1 ? '' : 'en'}, ${fmt(r.totaalExclBtw)} excl. btw.`)
+        setGekozen(new Set())
+        router.refresh()
+        return
+      }
+
+      // Eén voor één: een fout bij termijn 3 mag 1 en 2 niet ongedaan maken, en moet wel gemeld
+      // worden. Wat gelukt is gaat uit de selectie, zodat een tweede klik alleen de rest doet.
+      const gelukt: number[] = []
+      const fouten: string[] = []
+      for (const t of selectie) {
+        const r = await zetTermijnenKlaar(dossierId, [t.bouw7TermId])
+        if (r.ok) gelukt.push(t.bouw7TermId)
+        else fouten.push(`${t.omschrijving ?? `Termijn ${t.nummer}`}: ${r.error}`)
+      }
+      setGekozen(prev => {
+        const next = new Set(prev)
+        for (const id of gelukt) next.delete(id)
+        return next
+      })
+      if (gelukt.length > 0) toast.success(`${gelukt.length} conceptfactu${gelukt.length === 1 ? 'ur' : 'ren'} klaargezet in Bouw7.`)
+      if (fouten.length > 0) toast.error(fouten.join(' · '), { duration: 12000 })
       router.refresh()
     })
   }
@@ -188,7 +216,7 @@ export default function TermijnenBlok({ dossierId, termijnen, schemaMogelijk = t
 
       {kanKiezen && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
           gap: 12, padding: '10px 12px', borderTop: '1px solid var(--neutral-100)',
         }}>
           <span style={{ fontSize: 12.5, color: 'var(--neutral-500)' }}>
@@ -196,9 +224,27 @@ export default function TermijnenBlok({ dossierId, termijnen, schemaMogelijk = t
               ? 'Vink de termijnen aan die gefactureerd mogen worden.'
               : `${selectie.length} geselecteerd — ${fmt(totaalExcl)} excl. btw, ${fmt(totaalIncl)} incl.`}
           </span>
-          <Button variant="primary" onClick={klaarzetten} disabled={bezig || selectie.length === 0}>
-            {bezig ? 'Bezig…' : `Klaarzetten in Bouw7 (${selectie.length})`}
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginLeft: 'auto' }}>
+            {selectie.length > 1 && (
+              <RadioGroup
+                value={factuurWijze}
+                onValueChange={v => setFactuurWijze(v as 'samen' | 'apart')}
+                disabled={bezig}
+                aria-label="Hoe de termijnen gefactureerd worden"
+                style={{ display: 'flex', gap: 16 }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--neutral-700)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                  <RadioGroupItem value="samen" /> Samen op 1 factuur
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--neutral-700)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                  <RadioGroupItem value="apart" /> Elke termijn een eigen factuur
+                </label>
+              </RadioGroup>
+            )}
+            <Button variant="primary" onClick={klaarzetten} disabled={bezig || selectie.length === 0}>
+              {bezig ? 'Bezig…' : apart ? `${selectie.length} facturen klaarzetten` : `Klaarzetten in Bouw7 (${selectie.length})`}
+            </Button>
+          </div>
         </div>
       )}
     </>

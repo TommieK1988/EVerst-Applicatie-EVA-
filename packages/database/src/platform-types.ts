@@ -543,7 +543,12 @@ export const meerwerkStatusLabels: Record<MeerwerkStatus, string> = {
 
 export type MeerwerkAfrekenwijze = 'regie' | 'aangenomen'
 export type MeerwerkStelpostGrondslag = 'geboekte_kosten' | 'eenheidsprijzen'
-export type MeerwerkTermijnWijze = 'eigen_termijnstaat' | 'een_regel'
+/**
+ * Hoe aangenomen meerwerk in de termijnstaat komt. `een_regel` = "Volg offerte termijnstaat"
+ * (betalingsschema van de meerwerkofferte), `een_termijn` = "1 termijn 100%".
+ * `eigen_termijnstaat` wordt niet meer aangeboden maar komt nog voor op oude regels.
+ */
+export type MeerwerkTermijnWijze = 'eigen_termijnstaat' | 'een_regel' | 'een_termijn'
 /** Herkomst van een meerwerkregel: handmatig in EVA of geïmporteerd uit Bouw7. */
 export type MeerwerkBron = 'eva' | 'bouw7_code' | 'bouw7_offerte' | 'bouw7_line'
 

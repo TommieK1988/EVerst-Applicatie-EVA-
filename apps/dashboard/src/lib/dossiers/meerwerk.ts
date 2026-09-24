@@ -118,6 +118,7 @@ function termijnVerwerkingVan(
 ): MeerwerkRegelView['termijnVerwerking'] {
   if (!opTermijn) return { soort: 'nacalculatie', aantal: 0, schema: [] }
   if (r.termijn_wijze === 'eigen_termijnstaat') return { soort: 'eigen_termijnstaat', aantal: 0, schema: [] }
+  if (r.termijn_wijze === 'een_termijn') return { soort: 'een_termijn', aantal: 1, schema: [] }
   const schema = (r.quote_id ? schemaPerOfferte.get(r.quote_id) : null) ?? []
   return schema.length > 1
     ? { soort: 'volgt_offerte', aantal: schema.length, schema }
@@ -337,7 +338,7 @@ export async function maakMeerwerkRegel(
 export async function updateMeerwerkRegel(
   id: string,
   patch: Partial<NieuweMeerwerkData> & { termijn_wijze?: MeerwerkTermijnWijze | null },
-): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; waarschuwing?: string; melding?: string } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
   // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
@@ -347,6 +348,7 @@ export async function updateMeerwerkRegel(
   await vereisSessie()
   const supabase = createAdminClient() as any
   const { data: bestaand } = await supabase.from('meerwerk_regels').select('*').eq('id', id).single()
+  if (!bestaand) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
   if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
   const velden: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of ['omschrijving', 'afrekenwijze', 'is_stelpost', 'stelpost_grondslag', 'bedrag_excl_btw',
@@ -375,13 +377,50 @@ export async function updateMeerwerkRegel(
   // Aangenomen meerwerk dat al als termijn in de Bouw7-termijnstaat staat: bedrag, btw of
   // omschrijving gewijzigd → termijn bijwerken, zodat de factuur straks het juiste bedrag heeft.
   const raaktTermijn = ['bedrag_excl_btw', 'omschrijving', 'btw_pct'].some(k => k in velden)
-  if (bestaand?.bouw7_term_id != null && raaktTermijn) {
+  let melding: string | undefined
+  let termijnGezet = false
+  if (bestaand.bouw7_term_id != null && raaktTermijn) {
     const t = await zetMeerwerkAlsTermijn(id)
+    termijnGezet = t.ok
     if (!t.ok) waarschuwing = [waarschuwing, `Termijn in Bouw7 niet bijgewerkt: ${t.error}`].filter(Boolean).join(' ')
   }
 
+  /*
+   * Termijnkeuze gewijzigd ("1 termijn 100%" of "Volg offerte termijnstaat"): de termijnen meteen
+   * in de Bouw7-termijnstaat zetten of herschikken, niet pas bij het volgende akkoord. Is de regel
+   * nog niet akkoord, dan zegt de melding wanneer ze er wél komen.
+   */
+  const nieuweWijze = velden.termijn_wijze as string | null | undefined
+  if ('termijn_wijze' in velden && nieuweWijze !== bestaand.termijn_wijze
+    && (nieuweWijze === 'een_termijn' || nieuweWijze === 'een_regel')) {
+    const na = { ...(bestaand as Regelvelden), ...(velden as Partial<Regelvelden>) } as Regelvelden
+    const geschikt = meerwerkTermijnGeschikt(na)
+    if (geschikt.ok) {
+      const t = await zetMeerwerkAlsTermijn(id)
+      termijnGezet = termijnGezet || t.ok
+      if (t.ok) {
+        melding = t.termIds.length > 1
+          ? `${t.termIds.length} termijnen in de termijnstaat gezet, volgens het betalingsschema van de offerte`
+          : '1 termijn (100%) in de termijnstaat gezet'
+      } else {
+        waarschuwing = [waarschuwing, `Termijnen nog niet in Bouw7: ${t.error}`].filter(Boolean).join(' ')
+        if (bestaand.bouw7_term_id == null) {
+          await supabase.from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', id)
+        }
+      }
+    } else if (geschikt.reden === 'nog niet akkoord') {
+      melding = 'Keuze opgeslagen; de termijnen komen in de termijnstaat zodra het meerwerk akkoord is'
+    } else {
+      waarschuwing = [waarschuwing, `Keuze opgeslagen, maar er komen geen termijnen: ${geschikt.reden}.`].filter(Boolean).join(' ')
+    }
+  }
+
+  if (termijnGezet && row.dossier_id) {
+    await ververSnapshotsNaSchrijven(row.dossier_id, ['termijnen', 'athena_control'], ['athena_financial', 'security_links'])
+  }
+
   revalidatePath(`/opdrachten/${row.dossier_id}/meerwerk`)
-  return { ok: true, waarschuwing }
+  return { ok: true, waarschuwing, melding }
 }
 
 export async function verwijderMeerwerkRegel(

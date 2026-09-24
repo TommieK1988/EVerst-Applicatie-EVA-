@@ -6,9 +6,14 @@
  * de Verkoop-tab daarna gewoon kan klaarzetten als conceptfactuur. Tot sep 2026 moest iemand die
  * termijn met de hand in Bouw7 toevoegen.
  *
- * Hangt er een eigen offerte aan het meerwerk, dan volgt de termijnstaat het betalingsschema van
- * díe offerte (bijv. 30/30/30/10) in plaats van één bedrag ineens — anders factureer je iets
- * anders dan de klant heeft getekend. Zonder betalingsconditie blijft het één termijn.
+ * Twee keuzes op de regel (`termijn_wijze`):
+ *  - `een_regel` ("Volg offerte termijnstaat", ook de standaard bij leeg): hangt er een eigen
+ *    offerte aan het meerwerk, dan volgt de termijnstaat het betalingsschema van díe offerte
+ *    (bijv. 30/30/30/10). Zonder betalingsconditie blijft het één termijn.
+ *  - `een_termijn` ("1 termijn 100%"): altijd één termijn voor het hele bedrag, ook als de
+ *    offerte een schema kent.
+ * Wisselen tussen de twee herschikt de termijnen van deze regel: overbodige termijnen gaan uit de
+ * staat (tenzij er al een factuur aan hangt), ontbrekende komen erbij.
  *
  * Idempotent op `meerwerk_regels.bouw7_term_ids`: een tweede akkoord of een gewijzigd bedrag werkt
  * dezelfde termijnen bij. De aanneemsom op de staat (`fixedPrice`) beweegt mee met het verschil,
@@ -108,7 +113,7 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
      * het hele bedrag -- precies het oude gedrag.
      */
     const offerte = r.quote_id ? await leesMeerwerkOfferte(r.quote_id).catch(() => null) : null
-    const schema: TermijnschemaRegel[] = offerte && offerte.termijnen.length > 0
+    const schema: TermijnschemaRegel[] = r.termijn_wijze !== 'een_termijn' && offerte && offerte.termijnen.length > 0
       ? offerte.termijnen
       : [{ omschrijving: '', percentage: 100 }]
 
@@ -121,6 +126,18 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
       ? r.bouw7_term_ids.map(Number)
       : (r.bouw7_term_id != null ? [r.bouw7_term_id] : [])
     const bestaandeTermijnen = eerdereIds.map(id => staat.termijnen.find(t => t.id === id) ?? null)
+
+    // Is het schema gekrompen (bv. van 30/30/30/10 naar 1 termijn), dan moeten de overtollige
+    // termijnen eruit. Hangt daar al een factuur aan, dan niet: dat is een fiscaal document.
+    const overtollig = bestaandeTermijnen.slice(schema.length).filter((t): t is NonNullable<typeof t> => t != null)
+    const alGefactureerd = overtollig.filter(t => t.invoiceLine != null)
+    if (alGefactureerd.length > 0) {
+      return {
+        ok: false,
+        error: `Er staat al een factuur op ${alGefactureerd.map(t => `"${t.description ?? t.id}"`).join(', ')}; `
+          + 'de termijnen van dit meerwerk zijn niet meer terug te brengen naar één.',
+      }
+    }
 
     // De aanneemsom op de staat beweegt mee met het verschil, zodat de staat blijft optellen.
     const oudBedrag = bestaandeTermijnen.reduce((som, t) => som + (t ? Number(t.subtotal ?? 0) : 0), 0)
@@ -142,7 +159,7 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
         bedragExclBtw: bedragen[i],
         vatTariffId: tarief.bouw7_id,
       })),
-    }, { deelschrijving: true })
+    }, { deelschrijving: true, verwijderTermIds: overtollig.map(t => t.id) })
     if (!res.ok) return res
 
     /*
