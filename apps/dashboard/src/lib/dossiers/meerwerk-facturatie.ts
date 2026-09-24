@@ -54,8 +54,7 @@ export async function zetMeerwerkKlaar(
   const b = await leesBouw7(dossierId)
   if ('fout' in b) return { ok: false, error: `${b.fout} Er is niets klaargezet.` }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const standen = new Map(bepaalStanden(regels, b).map(st => [st.regelId, st]))
   const bevestigd = new Set(opts.twijfelBevestigd ?? [])
   const fouten: string[] = []
