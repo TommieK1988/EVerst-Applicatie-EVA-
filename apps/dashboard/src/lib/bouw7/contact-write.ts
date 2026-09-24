@@ -17,6 +17,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client } from './sync'
 import type { Bouw7Contact, Bouw7ContactPerson, Bouw7ListResponse } from './client'
+import { soortOpdrachtgever } from './create-contact'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -36,16 +37,52 @@ const RELATIE_VELDEN: Record<string, { post: string; lees: keyof Bouw7Contact }>
   opmerkingen:    { post: 'information',  lees: 'information' },
   adres_postcode: { post: 'zipCode',      lees: 'zipCode' },
   adres_plaats:   { post: 'city',         lees: 'city' },
-  actief:         { post: 'isActive',     lees: 'isActive' },
+  adres_land:     { post: 'countryCode',  lees: 'countryCode' },
   iban:           { post: 'accountNumber', lees: 'iban' },
 }
 
+/**
+ * Kolommen die deze write naar Bouw7 kan brengen. Wat hier niet in staat blijft EVA-eigen.
+ *
+ * `actief` hoort daar bewust niet bij. Bouw7 accepteert `isActive` op `POST /contact` wel, maar
+ * geeft het veld op geen enkel leesendpoint terug (lijst noch detail, live gecontroleerd sep 2026).
+ * Een write was dus nooit te bevestigen: elke keer "niet overgenomen", en de cron probeerde het
+ * eindeloos opnieuw — voor de 117 op 21 sep opgeschoonde Klant-contacten elke run opnieuw
+ * `isActive: false`. Die contacten zijn in Bouw7 nog nodig als factuuradres; mocht Bouw7 het veld
+ * ooit gaan verwerken, dan zou EVA ze daar stil uitzetten. Inactief zetten is daarom alleen EVA.
+ */
+export const BOUW7_RELATIE_SCHRIJFVELDEN = [...Object.keys(RELATIE_VELDEN), 'adres_straat', 'betalingstermijn_dagen'] as const
+
 const norm = (v: unknown): string => (v == null ? '' : String(v)).trim()
+
+/**
+ * Btw-nummer zoals Bouw7 het accepteert. "NL8563.05.765.B.01" geeft een 400 ("This is not a
+ * valid VAT number"); zonder punten en spaties gaat hij erin. Daarom schrijven én vergelijken we
+ * de genormaliseerde vorm.
+ */
+const btwNorm = (v: unknown): string => norm(v).replace(/[\s.\-]/g, '').toUpperCase()
+
+/** Maatwerkveld "Soort opdrachtgever" — verplicht op elk Bouw7-contact (zie create-contact.ts). */
+const SOORT_OPDRACHTGEVER_ATTR_ID = 19272
+
+type Bouw7ContactDivisie = { id?: number; divisionId?: number; paymentConditionSales?: string | null; [k: string]: unknown }
+type Bouw7ContactDetailVoorWrite = {
+  customAttributeValues?: { customAttribute?: { id?: number }; value?: string | null }[]
+  contactDivisions?: Bouw7ContactDivisie[]
+}
 
 /**
  * Schrijf de opgegeven relatiekolommen naar het Bouw7-contact. `iban` komt uit
  * `relatie_bankgegevens`; `adres_straat` gaat als `streetName` (het huisnummer zit in EVA al in
  * de straat, zoals de sync hem samenvoegt). Niet-gekende kolommen worden genegeerd.
+ *
+ * Twee dingen die Bouw7 bij élke contact-write eist, ook als je ze niet wijzigt:
+ *  - het maatwerkveld "Soort opdrachtgever" moet gevuld zijn. Oudere contacten hebben het leeg,
+ *    en dan weigert Bouw7 de hele write ("A value is required for CustomAttribute 19272"). Is het
+ *    leeg, dan vullen we het aan met dezelfde afleiding als bij aanmaken.
+ *  - de betaaltermijn staat per administratie op `contactDivisions`, en Bouw7 wil daar het volledige
+ *    object terug (zonder `divisionId` een 400). Read-modify-write, alleen `paymentConditionSales`
+ *    verandert.
  */
 export async function schrijfBouw7Relatie(relatieId: string, velden: readonly string[]): Promise<ContactWriteResultaat> {
   const geschreven: string[] = []
@@ -53,14 +90,30 @@ export async function schrijfBouw7Relatie(relatieId: string, velden: readonly st
     const supabase = db()
     const { data: r } = await supabase
       .from('relaties')
-      .select('bouw7_id, naam, kvk_nummer, btw_nummer, email, telefoon, mobiel, opmerkingen, adres_straat, adres_postcode, adres_plaats, actief')
+      .select('bouw7_id, naam, types, kvk_nummer, btw_nummer, email, telefoon, mobiel, opmerkingen, adres_straat, adres_postcode, adres_plaats, adres_land, betalingstermijn_dagen')
       .eq('id', relatieId)
       .maybeSingle()
     if (!r?.bouw7_id) return { ok: false, error: 'Relatie staat nog niet in Bouw7.', geschreven }
 
+    const client = await getBouw7Client()
+    const detail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${Number(r.bouw7_id)}`)
+
     const body: Record<string, unknown> = { id: Number(r.bouw7_id) }
     const verwacht = new Map<string, { lees: keyof Bouw7Contact; waarde: string }>()
+    let verwachtTermijn: string | null = null
     for (const k of velden) {
+      if (k === 'betalingstermijn_dagen') {
+        const divisies = detail.contactDivisions ?? []
+        if (divisies.length === 0) continue // geen administratie om de termijn op te zetten
+        verwachtTermijn = r.betalingstermijn_dagen != null ? String(r.betalingstermijn_dagen) : ''
+        body.contactDivisions = divisies.map(d => ({ ...d, paymentConditionSales: verwachtTermijn || null }))
+        continue
+      }
+      if (k === 'btw_nummer') {
+        body.vatNumber = btwNorm(r.btw_nummer)
+        verwacht.set(k, { lees: 'vatNumber', waarde: btwNorm(r.btw_nummer) })
+        continue
+      }
       if (k === 'adres_straat') {
         body.streetName = norm(r.adres_straat)
         body.houseNumber = ''
@@ -75,13 +128,24 @@ export async function schrijfBouw7Relatie(relatieId: string, velden: readonly st
       }
       const def = RELATIE_VELDEN[k]
       if (!def) continue
-      const waarde = k === 'actief' ? r.actief !== false : (r[k] ?? '')
+      const waarde = r[k] ?? ''
       body[def.post] = waarde
-      verwacht.set(k, { lees: def.lees, waarde: k === 'actief' ? String(r.actief !== false) : norm(waarde) })
+      verwacht.set(k, { lees: def.lees, waarde: norm(waarde) })
     }
-    if (verwacht.size === 0) return { ok: true, geschreven, nietOvergenomen: [] }
+    if (verwacht.size === 0 && verwachtTermijn === null) return { ok: true, geschreven, nietOvergenomen: [] }
 
-    const client = await getBouw7Client()
+    // Verplicht maatwerkveld aanvullen als het op dit contact nog leeg is.
+    const waarden = detail.customAttributeValues ?? []
+    const soort = waarden.find(v => v.customAttribute?.id === SOORT_OPDRACHTGEVER_ATTR_ID)
+    if (!norm(soort?.value)) {
+      body.customAttributeValues = [
+        ...waarden
+          .filter(v => v.customAttribute?.id != null && v.customAttribute.id !== SOORT_OPDRACHTGEVER_ATTR_ID)
+          .map(v => ({ customAttribute: { id: v.customAttribute!.id }, value: v.value ?? '' })),
+        { customAttribute: { id: SOORT_OPDRACHTGEVER_ATTR_ID }, value: soortOpdrachtgever(r.naam ?? '', r.types ?? []) },
+      ]
+    }
+
     await client.post('/contact', body)
 
     // Terugleescontrole: welke velden nam Bouw7 echt over?
@@ -90,9 +154,18 @@ export async function schrijfBouw7Relatie(relatieId: string, velden: readonly st
     for (const [k, v] of verwacht) {
       const gelezen = na ? na[v.lees] : undefined
       // Straat komt terug als `streetName houseNumber`; vergelijk zonder het lege huisnummer.
-      const gelezenNorm = k === 'adres_straat' ? norm(`${na?.streetName ?? ''} ${na?.houseNumber ?? ''}`) : norm(gelezen)
+      const gelezenNorm = k === 'adres_straat' ? norm(`${na?.streetName ?? ''} ${na?.houseNumber ?? ''}`)
+        : k === 'btw_nummer' ? btwNorm(gelezen)
+        : norm(gelezen)
       if (na && gelezenNorm === v.waarde) geschreven.push(k)
       else nietOvergenomen.push(k)
+    }
+    if (verwachtTermijn !== null) {
+      // De termijn staat alleen op het detailrecord.
+      const naDetail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${Number(r.bouw7_id)}`)
+      const alle = (naDetail.contactDivisions ?? []).every(d => norm(d.paymentConditionSales) === verwachtTermijn)
+      if (alle) geschreven.push('betalingstermijn_dagen')
+      else nietOvergenomen.push('betalingstermijn_dagen')
     }
     return { ok: true, geschreven, nietOvergenomen }
   } catch (e) {

@@ -74,6 +74,15 @@ const isCalculatorAttr = (d: AttrDef): boolean =>
 const employeeNaam = (e?: { firstName?: string; lastName?: string } | null): string =>
   [e?.firstName, e?.lastName].filter(Boolean).join(' ').trim()
 
+/** Naam van een Bouw7-medewerker op id, voor het maatwerkveld als de aanroeper hem niet meegaf. */
+async function employeeNaamVanId(client: Awaited<ReturnType<typeof getBouw7Client>>, id: number): Promise<string> {
+  try {
+    return employeeNaam(await client.get<{ firstName?: string; lastName?: string }>(`/organization/employee/${id}`))
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Schrijf de rollen van een Bouw7-project terug. `rollen` bevat al opgeloste Bouw7-employee-id's
  * (en de namen voor de maatwerkvelden); het resolven EVA-uuid → Bouw7-id gebeurt in de aanroeper
@@ -137,11 +146,11 @@ export async function schrijfBouw7Rollen(
     // overige velden (VvE-code, …) behouden blijven. Attribuut-id's via GET /list/custom-attributes
     // (werkt ook als het veld op dit project nog leeg is), één call voor beide. Is een attribuut
     // onvindbaar, dan slaan we alléén dát veld over.
-    const teSchrijvenAttrs: { naam: string; match: (d: AttrDef) => boolean }[] = []
-    if (rollen.controllerNaam !== undefined) teSchrijvenAttrs.push({ naam: rollen.controllerNaam, match: isEindverantwoordelijke })
-    if (calculatorNaam !== undefined)        teSchrijvenAttrs.push({ naam: calculatorNaam,        match: isCalculatorAttr })
-
-    if (teSchrijvenAttrs.length) {
+    const zetMaatwerk = async (calcNaam: string | undefined) => {
+      const teSchrijvenAttrs: { naam: string; match: (d: AttrDef) => boolean }[] = []
+      if (rollen.controllerNaam !== undefined) teSchrijvenAttrs.push({ naam: rollen.controllerNaam, match: isEindverantwoordelijke })
+      if (calcNaam !== undefined)              teSchrijvenAttrs.push({ naam: calcNaam,              match: isCalculatorAttr })
+      if (!teSchrijvenAttrs.length) return
       const defs: Bouw7CustomAttrDef[] = await getCustomAttributeDefs(client)
       let waarden: Bouw7CustomAttrValue[] = Array.isArray(project.customAttributeValues) ? project.customAttributeValues : []
       let gewijzigd = false
@@ -153,11 +162,26 @@ export async function schrijfBouw7Rollen(
       }
       if (gewijzigd) body.customAttributeValues = waarden
     }
+    await zetMaatwerk(calculatorNaam)
 
     // Niets te schrijven behalve id/type → geen call nodig.
     if (Object.keys(body).length <= 2) return { ok: true }
 
-    await client.post('/project', body)
+    try {
+      await client.post('/project', body)
+    } catch (e) {
+      // Bouw7 accepteert in de rolvelden alleen medewerkers met een eigen Bouw7-account: "Employee
+      // with ID #… can not be assigned because the employee does not refer to a user". Is dat de
+      // calculator, dan wijkt hij uit naar het maatwerkveld "Calculator" — dezelfde route als bij
+      // een rolbotsing, en de sync leest hem daar weer terug. Voor projectleider en uitvoerder
+      // bestaat zo'n uitwijk niet; die fout gaat gewoon door.
+      const id = /Employee with ID #(\d+) can not be assigned because the employee does not refer to a user/i
+        .exec(e instanceof Error ? e.message : '')?.[1]
+      if (!id || workPlannerId == null || Number(id) !== Number(workPlannerId)) throw e
+      body.workPlanner = null
+      await zetMaatwerk(calculatorNaam ?? await employeeNaamVanId(client, Number(id)))
+      await client.post('/project', body)
+    }
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij terugschrijven van rollen naar Bouw7.' }

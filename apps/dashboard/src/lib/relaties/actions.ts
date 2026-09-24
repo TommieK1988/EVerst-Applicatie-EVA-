@@ -16,7 +16,7 @@ import type {
 } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, beschermdeVelden } from './sync-velden'
 import { markeerHandmatig, ontmarkeerHandmatig, BOUW7_BANK_VELDEN } from '@/lib/bouw7/handmatige-velden'
-import { schrijfBouw7Relatie } from '@/lib/bouw7/contact-write'
+import { schrijfBouw7Relatie, BOUW7_RELATIE_SCHRIJFVELDEN } from '@/lib/bouw7/contact-write'
 
 type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
@@ -29,8 +29,11 @@ export async function schrijfRelatieNaarBouw7(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   relatieId: string,
-  velden: string[],
+  alleVelden: string[],
 ): Promise<string | undefined> {
+  // Alleen wat Bouw7 kan ontvangen. `actief` en andere EVA-eigen velden blijven gemarkeerd (zodat
+  // de sync ze niet terugzet), maar gaan niet naar Bouw7 — zie BOUW7_RELATIE_SCHRIJFVELDEN.
+  const velden = alleVelden.filter(v => (BOUW7_RELATIE_SCHRIJFVELDEN as readonly string[]).includes(v))
   if (velden.length === 0) return undefined
   const { data } = await supabase.from('relaties').select('bouw7_id').eq('id', relatieId).maybeSingle()
   if (!data?.bouw7_id) return undefined
@@ -212,10 +215,11 @@ export async function toggleOrganisatieActief(
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
-  const waarschuwing = await schrijfRelatieNaarBouw7(supabase, id, ['actief'])
+  // Bewust geen write naar Bouw7: actief/inactief is EVA-eigen (zie BOUW7_RELATIE_SCHRIJFVELDEN).
+  // De markering hierboven houdt de sync ervan af.
   revalidatePath(`/relaties/${id}`)
   revalidatePath('/relaties')
-  return { ok: true, waarschuwing }
+  return { ok: true }
 }
 
 /* ─── Factuuradressen ─────────────────────────────────────────────── */

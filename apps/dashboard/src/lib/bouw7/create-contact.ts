@@ -19,7 +19,7 @@ import { resolveCustomAttributeId } from './custom-attributes'
  * best-effort is, kwam tot sep 2026 géén enkele in EVA aangemaakte relatie in Bouw7 aan.
  * De keuze wordt afgeleid uit het EVA-type en de naam; de administratie kan hem in Bouw7 bijstellen.
  */
-function soortOpdrachtgever(naam: string, types: OrganisatieType[]): string {
+export function soortOpdrachtgever(naam: string, types: OrganisatieType[]): string {
   if (types.includes('leverancier') && !types.includes('opdrachtgever')) return 'Leverancier'
   if (types.includes('onderaannemer') && !types.includes('opdrachtgever')) return 'Onderaannemer'
   const n = naam.toLowerCase()

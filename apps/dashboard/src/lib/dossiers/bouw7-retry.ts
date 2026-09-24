@@ -24,6 +24,7 @@ import {
   herhaalDossierRollenWriteBack, herhaalDossierStatusWriteBack, herhaalDossierVeldenWriteBack,
 } from './actions'
 import { schrijfRelatieNaarBouw7 } from '@/lib/relaties/actions'
+import { BOUW7_RELATIE_SCHRIJFVELDEN } from '@/lib/bouw7/contact-write'
 import { schrijfContactpersoonNaarBouw7 } from '@/lib/relaties/contactpersonen-actions'
 import { zetMeerwerkAlsTermijn } from './meerwerk-termijn'
 
@@ -54,6 +55,9 @@ export async function herhaalUitgesteldeDossierWrites(opts?: { dossierId?: strin
       .from('dossiers')
       .select('id, dossiernummer, handmatige_velden')
       .not('bouw7_id', 'is', null)
+      // Project bestaat niet meer in Bouw7 (404): opnieuw proberen heeft geen zin, en tot sep 2026
+      // stond zo'n dossier elke run als fout in de log. De markering blijft; EVA houdt zijn waarde.
+      .or('bouw7_sync_status.is.null,bouw7_sync_status.neq.inactief_in_bouw7')
       .overlaps('handmatige_velden', bereik)
       .limit(500) // meer dan een handvol openstaande writes betekent een storing, geen backlog
     if (opts?.dossierId) q = q.eq('id', opts.dossierId)
@@ -82,7 +86,9 @@ export async function herhaalUitgesteldeDossierWrites(opts?: { dossierId?: strin
         .from('relaties')
         .select('id, naam, handmatige_velden')
         .not('bouw7_id', 'is', null)
-        .neq('handmatige_velden', '{}')
+        // Alleen relaties met iets wat Bouw7 kán ontvangen. Een gemarkeerd `actief` is EVA-eigen
+        // (zie BOUW7_RELATIE_SCHRIJFVELDEN); die 119 relaties stonden tot sep 2026 elke run als fout.
+        .overlaps('handmatige_velden', [...BOUW7_RELATIE_SCHRIJFVELDEN])
         .limit(500)
       for (const r of (data ?? []) as { id: string; naam: string; handmatige_velden: string[] }[]) {
         const w = await schrijfRelatieNaarBouw7(supabase, r.id, r.handmatige_velden ?? [])
