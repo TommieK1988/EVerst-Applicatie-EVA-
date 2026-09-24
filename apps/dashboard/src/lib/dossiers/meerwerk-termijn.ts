@@ -192,3 +192,40 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij het zetten van de meerwerktermijn.' }
   }
 }
+
+/**
+ * Termijnkeuze op een regel gewijzigd ("1 termijn 100%" of "Volg offerte termijnstaat"): de
+ * termijnen meteen in de Bouw7-termijnstaat zetten of herschikken, niet pas bij het volgende
+ * akkoord. Is de regel nog niet akkoord, dan zegt de melding wanneer ze er wél komen.
+ *
+ * `bestaand` is de rij vóór de wijziging (de nieuwe waarde staat al in de database).
+ */
+export async function pasTermijnKeuzeToe(
+  bestaand: Regel,
+  nieuweWijze: string | null,
+): Promise<{ termijnGezet: boolean; melding?: string; waarschuwing?: string }> {
+  if (nieuweWijze === bestaand.termijn_wijze) return { termijnGezet: false }
+  if (nieuweWijze !== 'een_termijn' && nieuweWijze !== 'een_regel') return { termijnGezet: false }
+
+  const geschikt = meerwerkTermijnGeschikt({ ...bestaand, termijn_wijze: nieuweWijze })
+  if (!geschikt.ok) {
+    return geschikt.reden === 'nog niet akkoord'
+      ? { termijnGezet: false, melding: 'Keuze opgeslagen; de termijnen komen in de termijnstaat zodra het meerwerk akkoord is' }
+      : { termijnGezet: false, waarschuwing: `Keuze opgeslagen, maar er komen geen termijnen: ${geschikt.reden}.` }
+  }
+
+  const t = await zetMeerwerkAlsTermijn(bestaand.id)
+  if (t.ok) {
+    return {
+      termijnGezet: true,
+      melding: t.termIds.length > 1
+        ? `${t.termIds.length} termijnen in de termijnstaat gezet, volgens het betalingsschema van de offerte`
+        : '1 termijn (100%) in de termijnstaat gezet',
+    }
+  }
+  // Nog nooit een termijn gehad: de cron probeert het opnieuw, net als bij akkoord.
+  if (bestaand.bouw7_term_id == null) {
+    await db().from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', bestaand.id)
+  }
+  return { termijnGezet: false, waarschuwing: `Termijnen nog niet in Bouw7: ${t.error}` }
+}

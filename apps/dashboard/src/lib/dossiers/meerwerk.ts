@@ -17,7 +17,7 @@ import { vereisSessie, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth'
 import { headers } from 'next/headers'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
-import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt } from './meerwerk-termijn'
+import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt, pasTermijnKeuzeToe } from './meerwerk-termijn'
 import { leesMeerwerkOfferte, leesTermijnschemaPerOfferte } from './meerwerk-offerte'
 import { overnameBijAkkoord } from './meerwerk-werkbegroting'
 import type { TermijnschemaRegel } from './termijnen-schema'
@@ -377,44 +377,18 @@ export async function updateMeerwerkRegel(
   // Aangenomen meerwerk dat al als termijn in de Bouw7-termijnstaat staat: bedrag, btw of
   // omschrijving gewijzigd → termijn bijwerken, zodat de factuur straks het juiste bedrag heeft.
   const raaktTermijn = ['bedrag_excl_btw', 'omschrijving', 'btw_pct'].some(k => k in velden)
-  let melding: string | undefined
-  let termijnGezet = false
+  let melding: string | undefined, termijnGezet = false
   if (bestaand.bouw7_term_id != null && raaktTermijn) {
     const t = await zetMeerwerkAlsTermijn(id)
     termijnGezet = t.ok
     if (!t.ok) waarschuwing = [waarschuwing, `Termijn in Bouw7 niet bijgewerkt: ${t.error}`].filter(Boolean).join(' ')
   }
 
-  /*
-   * Termijnkeuze gewijzigd ("1 termijn 100%" of "Volg offerte termijnstaat"): de termijnen meteen
-   * in de Bouw7-termijnstaat zetten of herschikken, niet pas bij het volgende akkoord. Is de regel
-   * nog niet akkoord, dan zegt de melding wanneer ze er wél komen.
-   */
-  const nieuweWijze = velden.termijn_wijze as string | null | undefined
-  if ('termijn_wijze' in velden && nieuweWijze !== bestaand.termijn_wijze
-    && (nieuweWijze === 'een_termijn' || nieuweWijze === 'een_regel')) {
-    const na = { ...(bestaand as Regelvelden), ...(velden as Partial<Regelvelden>) } as Regelvelden
-    const geschikt = meerwerkTermijnGeschikt(na)
-    if (geschikt.ok) {
-      const t = await zetMeerwerkAlsTermijn(id)
-      termijnGezet = termijnGezet || t.ok
-      if (t.ok) {
-        melding = t.termIds.length > 1
-          ? `${t.termIds.length} termijnen in de termijnstaat gezet, volgens het betalingsschema van de offerte`
-          : '1 termijn (100%) in de termijnstaat gezet'
-      } else {
-        waarschuwing = [waarschuwing, `Termijnen nog niet in Bouw7: ${t.error}`].filter(Boolean).join(' ')
-        if (bestaand.bouw7_term_id == null) {
-          await supabase.from('meerwerk_regels').update({ bouw7_term_pending: true }).eq('id', id)
-        }
-      }
-    } else if (geschikt.reden === 'nog niet akkoord') {
-      melding = 'Keuze opgeslagen; de termijnen komen in de termijnstaat zodra het meerwerk akkoord is'
-    } else {
-      waarschuwing = [waarschuwing, `Keuze opgeslagen, maar er komen geen termijnen: ${geschikt.reden}.`].filter(Boolean).join(' ')
-    }
+  if ('termijn_wijze' in velden) {
+    const k = await pasTermijnKeuzeToe(bestaand, velden.termijn_wijze as string | null)
+    termijnGezet ||= k.termijnGezet; melding = k.melding
+    if (k.waarschuwing) waarschuwing = [waarschuwing, k.waarschuwing].filter(Boolean).join(' ')
   }
-
   if (termijnGezet && row.dossier_id) {
     await ververSnapshotsNaSchrijven(row.dossier_id, ['termijnen', 'athena_control'], ['athena_financial', 'security_links'])
   }
