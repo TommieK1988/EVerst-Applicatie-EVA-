@@ -6,6 +6,7 @@ import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtPct, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
 import VerkoopFacturenTabel from './VerkoopFacturenTabel'
+import MeerwerkKlaarzetBlok from './MeerwerkKlaarzetBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import ServicedeskMargeBlok from './ServicedeskMargeBlok'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
@@ -553,51 +554,32 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
         )}
       </Kolommen>
 
-      {/* Meerwerk in de termijnstaat (EVA-weergave; nog niet naar Bouw7 geschreven) */}
+      {/* Meerwerk in de termijnstaat: aanvinken en klaarzetten. Of iets al gefactureerd is
+          controleert het blok zelf live in Bouw7 (zie lib/dossiers/meerwerk-facturatie.ts). */}
       {termijnMeerwerk.length > 0 && (
         <Card>
           <CardHeader>Meerwerk in termijnstaat</CardHeader>
           <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-            <table style={{ ...tabel, minWidth: 620 }}>
-              <thead>
-                <tr>
-                  <TH>#</TH>
-                  <TH breedte="45%">Omschrijving</TH>
-                  <TH>Verwerking</TH>
-                  <TH right>Excl. BTW</TH>
-                  <TH right>Incl. BTW</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {termijnMeerwerk.map((r) => (
-                  <tr key={r.id}>
-                    <TD>MW{String(r.volgnummer).padStart(2, '0')}</TD>
-                    <TD wrap>{r.omschrijving}</TD>
-                    {/* Wat er werkelijk in de termijnstaat komt, niet wat er op de meerwerkregel
-                        is aangevinkt: het aantal termijnen volgt de betalingsconditie van de
-                        meerwerkofferte. Zie `termijnVerwerking` in lib/dossiers/meerwerk.ts. */}
-                    <TD kleur="var(--neutral-500)">
-                      {r.termijnVerwerking.soort === 'eigen_termijnstaat' ? 'Eigen termijnstaat'
-                        : r.termijnVerwerking.soort === 'volgt_offerte' ? (
-                          <>
-                            {r.termijnVerwerking.aantal} termijnen
-                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>
-                              volgens offerte · {r.termijnVerwerking.schema.map(s => `${s.percentage}%`).join('/')}
-                            </span>
-                          </>
-                        ) : '1 termijn'}
-                    </TD>
-                    <TD right vet>{fmt(r.effectiefExcl)}</TD>
-                    <TD right kleur="var(--neutral-500)">{fmt(r.effectiefIncl)}</TD>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px' }}>
-              EVA-weergave op basis van de meerwerkregels. Het daadwerkelijk wegschrijven van termijnen naar Bouw7 volgt in een latere fase.
-              {nacalculatieMeerwerk > 0 && ` ${nacalculatieMeerwerk} regel${nacalculatieMeerwerk === 1 ? '' : 's'} `
-                + `rekent op werkelijke kosten af en staat hierboven bij de nacalculatie.`}
-            </div>
+            <MeerwerkKlaarzetBlok
+              dossierId={dossierId}
+              regels={termijnMeerwerk.map(r => ({
+                id: r.id,
+                // Het nummer waaronder Bouw7 het meerwerk kent; bij import wijkt dat af van het volgnummer.
+                code: r.bouw7_nummer ?? r.bewakingscode ?? `MW${String(r.volgnummer).padStart(2, '0')}`,
+                omschrijving: r.omschrijving,
+                // Wat er werkelijk in de termijnstaat komt, niet wat er op de meerwerkregel is
+                // aangevinkt. Zie `termijnVerwerking` in lib/dossiers/meerwerk.ts.
+                verwerking: r.termijnVerwerking.soort === 'eigen_termijnstaat' ? 'Eigen termijnstaat'
+                  : r.termijnVerwerking.soort === 'volgt_offerte'
+                    ? `${r.termijnVerwerking.aantal} termijnen · ${r.termijnVerwerking.schema.map(s => `${s.percentage}%`).join('/')}`
+                    : '1 termijn',
+                excl: r.effectiefExcl,
+                incl: r.effectiefIncl,
+              }))}
+              voetnoot={nacalculatieMeerwerk > 0
+                ? `${nacalculatieMeerwerk} regel${nacalculatieMeerwerk === 1 ? '' : 's'} rekent op werkelijke kosten af en staat hierboven bij de nacalculatie.`
+                : undefined}
+            />
           </CardBody>
         </Card>
       )}
