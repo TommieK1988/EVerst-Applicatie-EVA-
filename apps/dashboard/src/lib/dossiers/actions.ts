@@ -35,7 +35,7 @@ import { schrijfBouw7Projectvelden, schrijfBouw7Aanneemsom, BOUW7_PROJECT_SCHRIJ
 import { mapBouw7NaarEvaStatus } from '@/lib/bouw7/status-afleiding'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { schrijfBouw7BonBewakingscode } from './bouw7-bewakingscode'
+import { schrijfBouw7BonBewakingscode, zorgVoorArbeidPsl } from './bouw7-bewakingscode'
 import { getVoortgang } from './voortgang'
 import {
   type Bouw7Client,
@@ -4129,15 +4129,86 @@ export async function getBewakingscodesVoorUurlog(
   }
 }
 
+/**
+ * Doel voor het verplaatsen van al geboekte uren: élke bewakingscode op het project, onder welke
+ * kostensoort hij ook begroot is. Een meerwerkcode staat vaak alleen onder Materiaal of
+ * Onderaanneming en heeft dan nog geen Arbeid-link; `pslId` is dan `null` en die link maakt
+ * `updateUurlogBewakingscode(Bulk)` bij het verplaatsen aan.
+ */
+export type UrenDoelcode = Omit<BewakingscodeOptie, 'pslId'> & {
+  /** `hoofdstukId|code` — codes zijn niet uniek per project, alleen per hoofdstuk. */
+  sleutel: string
+  hoofdstukId: number | null
+  hoofdstukNaam: string | null
+  /** Arbeid-PSL; `null` = code staat nog niet onder Arbeid. */
+  pslId: number | null
+}
+
+/** Verplaatsdoel zoals de client het doorgeeft: een bestaande Arbeid-PSL, of een code die er nog een nodig heeft. */
+export type UrenDoel = { pslId: number } | { code: string; hoofdstukId: number | null }
+
+export async function getUrenDoelcodes(dossierId: string): Promise<UrenDoelcode[]> {
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return []
+  try {
+    const payload = (await leesDossierBron<AthenaControlPayload>(dossierId, 'athena_control')).data
+    if (!payload) return []
+    const perSleutel = new Map<string, UrenDoelcode>()
+    // Arbeid eerst, zodat de uren-cijfers en de PSL uit kostensoort 1 komen; de overige
+    // kostensoorten vullen alleen codes aan die onder Arbeid ontbreken.
+    for (const ct of [1, 2, 3, 4, 5, 6] as const) {
+      for (const item of payload[ct]?.items ?? []) {
+        const ci = item.chapterInfo
+        if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
+        const hoofdstukId = ci?.id ?? null
+        for (const sc of item.securityCodes ?? []) {
+          const code = (sc.code ?? '').trim()
+          if (!code) continue
+          const sleutel = `${hoofdstukId ?? ''}|${code}`
+          if (perSleutel.has(sleutel)) continue
+          const arbeid = ct === 1
+          perSleutel.set(sleutel, {
+            sleutel,
+            code,
+            naam: sc.name ?? null,
+            hoofdstukId,
+            hoofdstukNaam: ci?.name ?? null,
+            pslId: arbeid ? (sc.pslIds?.[0] ?? null) : null,
+            prognoseUren: arbeid ? (sc.hourInfo?.prognosisHours ?? sc.hourInfo?.budgetHours ?? 0) : 0,
+            geboekteUren: arbeid ? (sc.hourInfo?.costHours ?? 0) : 0,
+          })
+        }
+      }
+    }
+    return [...perSleutel.values()].sort((a, b) => a.code.localeCompare(b.code) || (a.hoofdstukNaam ?? '').localeCompare(b.hoofdstukNaam ?? ''))
+  } catch {
+    return []
+  }
+}
+
+/** Zet een `UrenDoel` om naar een Arbeid-PSL; maakt die in Bouw7 aan als hij nog ontbreekt. */
+async function resolveUrenDoel(
+  ctx: { client: Bouw7Client; bouw7Id: string },
+  doel: UrenDoel | number,
+): Promise<{ ok: true; pslId: number; nieuw: boolean } | { ok: false; error: string }> {
+  if (typeof doel === 'number') return { ok: true, pslId: doel, nieuw: false }
+  if ('pslId' in doel) return { ok: true, pslId: doel.pslId, nieuw: false }
+  const res = await zorgVoorArbeidPsl(ctx.client, ctx.bouw7Id, doel)
+  return res.ok ? { ...res, nieuw: true } : res
+}
+
 export async function updateUurlogBewakingscode(
   dossierId: string,
   hourLog: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number },
-  nieuwePslId: number,
+  doel: UrenDoel | number,
 ): Promise<{ ok: boolean; error?: string }> {
   await assertDossierBewerkbaar(dossierId)
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
   const { client } = ctx
+  const psl = await resolveUrenDoel(ctx, doel)
+  if (!psl.ok) return { ok: false, error: psl.error }
+  const nieuwePslId = psl.pslId
   try {
     await client.post('/project/hour-log', {
       id: hourLog.id,
@@ -4165,13 +4236,17 @@ export async function updateUurlogBewakingscode(
 export async function updateUurlogBewakingscodeBulk(
   dossierId: string,
   hourLogs: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number }[],
-  nieuwePslId: number,
+  doel: UrenDoel | number,
 ): Promise<{ ok: boolean; error?: string; verplaatst?: number; mislukt?: number }> {
   await assertDossierBewerkbaar(dossierId)
   if (hourLogs.length === 0) return { ok: false, error: 'Geen regels geselecteerd.' }
   const ctx = await bouw7VoorDossier(dossierId)
   if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
   const { client } = ctx
+  // Eén keer resolven vóór de lus: anders zou elke regel de projectstructuur opnieuw posten.
+  const psl = await resolveUrenDoel(ctx, doel)
+  if (!psl.ok) return { ok: false, error: psl.error }
+  const nieuwePslId = psl.pslId
 
   let verplaatst = 0
   let mislukt = 0

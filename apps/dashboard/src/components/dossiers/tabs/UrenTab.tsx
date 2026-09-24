@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import {
   getDossierUrenBewaking,
   getDossierUren,
-  getBewakingscodesVoorUurlog,
+  getUrenDoelcodes,
 } from '@/lib/dossiers/actions'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, fmtUren, fmtTarief, fmtPct, TH, TD, LegeRij, LegeNotitie, ROOD, GROEN } from './tab-ui'
@@ -131,7 +131,7 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
 async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
   const [data, bewakingscodes] = await Promise.all([
     getDossierUren(dossierId),
-    getBewakingscodesVoorUurlog(dossierId),
+    getUrenDoelcodes(dossierId),
   ])
 
   const perMedewerker = data.detailNiveau === 'medewerker'

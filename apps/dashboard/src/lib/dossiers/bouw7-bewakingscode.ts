@@ -163,6 +163,19 @@ async function zorgVoorPsl(
 }
 
 /**
+ * PSL-id van een bewakingscode onder kostensoort Arbeid; bestaat die nog niet, dan maakt EVA hem
+ * aan (begroot 0). Zo kunnen uren naar élke code op het project, ook één die alleen onder
+ * bijvoorbeeld Materiaal begroot is (typisch een meerwerkcode).
+ */
+export async function zorgVoorArbeidPsl(
+  client: Bouw7Client,
+  bouw7Id: string | number,
+  doel: { code: string; hoofdstukId: number | null },
+): Promise<{ ok: true; pslId: number } | { ok: false; error: string }> {
+  return zorgVoorPsl(client, bouw7Id, { code: doel.code, naam: null, hoofdstukId: doel.hoofdstukId, pslPerKostensoort: {} }, 1)
+}
+
+/**
  * Contract-gebondenheid wordt niet hier bepaald maar in `getDossierInkoop`: Bouw7 nummert een
  * afroepbon als `<contractnummer>B<nr>`, en die bonnummer-match levert daar meteen het order-/
  * contract-id op. Bewust niet via `DeliveryTicket.contract` — dat veld is in de praktijk vaak

@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import type { UrenRegel, BewakingscodeOptie } from '@/lib/dossiers/actions'
+import type { UrenRegel, UrenDoelcode, UrenDoel } from '@/lib/dossiers/actions'
 import { updateUurlogBewakingscode, updateUurlogBewakingscodeBulk } from '@/lib/dossiers/actions'
 import { fmt, fmtUren, fmtTarief, fmtDatum, TH, TD, LegeRij, type LegeCel } from './tab-ui'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
@@ -125,13 +125,29 @@ function THSortLeft({
   )
 }
 
+/* ─── Bewakingscode-keuze ───────────────────────────────────────────────────── */
+
+/** Bestaande Arbeid-link meegeven; ontbreekt die, dan maakt de server hem aan. */
+const urenDoel = (o: UrenDoelcode): UrenDoel =>
+  o.pslId != null ? { pslId: o.pslId } : { code: o.code, hoofdstukId: o.hoofdstukId }
+
+/** Hoofdstuk alleen tonen als dezelfde code in meer hoofdstukken voorkomt. */
+const optieLabel = (o: UrenDoelcode, alle: UrenDoelcode[]): string => {
+  const dubbel = alle.some((a) => a !== o && a.code === o.code)
+  return `${o.code}${o.naam && o.naam !== o.code ? ` · ${o.naam}` : ''}${dubbel && o.hoofdstukNaam ? ` (${o.hoofdstukNaam})` : ''}`
+}
+
+/** Een uur-regel kent alleen zijn codetekst; kies de eerste optie met die code. */
+const huidigeSleutel = (r: UrenRegel, alle: UrenDoelcode[]): string =>
+  !r.code ? '' : (alle.find((o) => o.code === r.code)?.sleutel ?? `|${r.code}`)
+
 /* ─── Hoofd component ───────────────────────────────────────────────────────── */
 
 interface Props {
   dossierId: string
   regels: UrenRegel[]
   totalen: { uren: number; bedrag: number }
-  bewakingscodes: BewakingscodeOptie[]
+  bewakingscodes: UrenDoelcode[]
   perMedewerker: boolean
 }
 
@@ -158,8 +174,8 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
   }
 
   /** Verplaats de geselecteerde uren-regels naar één bewakingscode (bulk-upsert richting Bouw7). */
-  function verplaatsSelectie(nieuwCode: string) {
-    const optie = bewakingscodes.find((o) => o.code === nieuwCode)
+  function verplaatsSelectie(sleutel: string) {
+    const optie = bewakingscodes.find((o) => o.sleutel === sleutel)
     if (!optie) return
     const teVerplaatsen = regels
       .filter((r) => magVerplaatsen(r) && sel.has(r.bouw7Id!))
@@ -172,7 +188,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
       }))
     if (teVerplaatsen.length === 0) return
     start(async () => {
-      const res = await updateUurlogBewakingscodeBulk(dossierId, teVerplaatsen, optie.pslId)
+      const res = await updateUurlogBewakingscodeBulk(dossierId, teVerplaatsen, urenDoel(optie))
       if (res.ok) {
         toast.success(
           res.mislukt && res.mislukt > 0
@@ -187,15 +203,16 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
     })
   }
 
-  function wijzigCode(regel: UrenRegel, nieuwCode: string) {
+  function wijzigCode(regel: UrenRegel, sleutel: string) {
     if (!regel.bouw7Id || !regel.bouw7ProjectId || !regel.hourTypeId) return
-    const optie = bewakingscodes.find((o) => o.code === nieuwCode)
+    const optie = bewakingscodes.find((o) => o.sleutel === sleutel)
+    if (optie && optie.code === regel.code) return
     if (!optie) return
     start(async () => {
       const res = await updateUurlogBewakingscode(
         dossierId,
         { id: regel.bouw7Id!, bouw7ProjectId: regel.bouw7ProjectId!, logHours: String(regel.uren), logDate: regel.datum ?? '', hourTypeId: regel.hourTypeId! },
-        optie.pslId,
+        urenDoel(optie),
       )
       if (res.ok) { toast.success('Bewakingscode bijgewerkt in Bouw7'); router.refresh() }
       else toast.error(res.error ?? 'Bouw7-update mislukt')
@@ -333,7 +350,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
           >
             <option value="">Verplaats naar bewakingscode…</option>
             {bewakingscodes.map((o) => (
-              <option key={o.pslId} value={o.code}>{o.code}{o.naam ? ` · ${o.naam}` : ''}</option>
+              <option key={o.sleutel} value={o.sleutel}>{optieLabel(o, bewakingscodes)}</option>
             ))}
           </select>
           <button
@@ -429,7 +446,7 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
                     {!readOnly && r.bouw7Id != null && bewakingscodes.length > 0 ? (
                       <select
                         disabled={pending}
-                        value={r.code ?? ''}
+                        value={huidigeSleutel(r, bewakingscodes)}
                         onChange={(e) => wijzigCode(r, e.target.value)}
                         style={{
                           fontSize: 12, border: '1px solid var(--neutral-200)', borderRadius: 4,
@@ -437,10 +454,11 @@ export default function UrenDetailTable({ dossierId, regels, totalen, bewakingsc
                         }}
                       >
                         {!r.code && <option value="">— geen code —</option>}
+                        {r.code && !bewakingscodes.some((o) => o.code === r.code) && (
+                          <option value={`|${r.code}`}>{r.code}</option>
+                        )}
                         {bewakingscodes.map((o) => (
-                          <option key={o.pslId} value={o.code}>
-                            {o.code}{o.naam ? ` · ${o.naam}` : ''}
-                          </option>
+                          <option key={o.sleutel} value={o.sleutel}>{optieLabel(o, bewakingscodes)}</option>
                         ))}
                       </select>
                     ) : (
