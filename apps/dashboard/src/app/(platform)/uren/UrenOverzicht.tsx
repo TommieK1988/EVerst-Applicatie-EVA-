@@ -239,14 +239,21 @@ function maakKolommen(
   // Per medewerker-dag, dus op elke regel van die dag hetzelfde getal. Zo kun je erop sorteren en
   // filteren zonder eerst te groeperen; groepeer op "Medewerker + dag" voor één regel per dag.
   {
-    key: 'aanwezig', label: 'Aanwezig (netto)', breedte: 170,
+    // De tijden staan in de cel zelf, zoals in de werktijdenlijst van het wagenpark: zonder
+    // aankomst en vertrek is "7,3 u" niet na te rekenen. De pauze staat in de tooltip.
+    key: 'aanwezig', label: 'Aanwezig (netto)', breedte: 190,
     sorteerWaarde: (r) => dagVan(r)?.aanwezigMinuten ?? -1,
     render: (r) => {
       const d = dagVan(r)
       if (!d) return tekst(null, true)
       return (
-        <span title={dagVergelijkingUitleg(d)} style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums', cursor: 'help' }}>
+        <span title={dagVergelijkingUitleg(d)} style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums', cursor: 'help', whiteSpace: 'nowrap' }}>
           {d.aanwezigMinuten != null ? uur(d.aanwezigMinuten / 60) : '—'}
+          {d.aankomst && d.vertrek && (
+            <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--fg-muted)' }}>
+              {d.aankomst}–{d.vertrek}
+            </span>
+          )}
         </span>
       )
     },
