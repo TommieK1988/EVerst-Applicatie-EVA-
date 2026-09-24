@@ -991,6 +991,18 @@ export function groepeerBtwPerTarief(
       }
     }
   }
+  // Regels zonder gekoppeld tarief (van vóór de koppeling, of zonder scenario-standaard
+  // overgenomen) horen bij het niet-verlegde tarief met hetzelfde percentage — dezelfde
+  // terugval als vindTarief() in lib/stamdata/btw.ts. Zonder deze stap staat "21%" twee keer
+  // op de offerte: één keer voor "Hoog 21%" en één keer voor de losse 21%-regels.
+  for (const [sleutel, bucket] of perTarief) {
+    if (!sleutel.startsWith('pct:')) continue
+    const kandidaten = Array.from(perTarief.entries())
+      .filter(([k, b]) => k.startsWith('t:') && !b.verlegd && b.pct === bucket.pct)
+    if (kandidaten.length !== 1) continue
+    kandidaten[0][1].grondslag += bucket.grondslag
+    perTarief.delete(sleutel)
+  }
   return Array.from(perTarief.values())
     .sort((a, b) => b.nominaal - a.nominaal || Number(a.verlegd) - Number(b.verlegd))
     .map(({ pct, grondslag, label, verlegd, nominaal }) => {

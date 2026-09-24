@@ -62,10 +62,14 @@ export function berekenBtwBreakdown(
     const { vp_totaal } = berekenCalculatieregel(r, componenten, opslag)
     if (vp_totaal === 0) continue
     const pct = r.btw_pct ?? btwDefault
-    const sleutel = r.btw_tarief_id ?? `pct:${pct}`
+    // Regel zonder tarief → het niet-verlegde tarief met hetzelfde percentage (zoals
+    // vindTarief), anders staat "21%" twee keer in de uitsplitsing.
+    const tariefId = r.btw_tarief_id
+      ?? tarieven?.find(t => !t.verlegd && Number(t.percentage) === Number(pct))?.id
+    const sleutel = tariefId ?? `pct:${pct}`
     const bestaand = groepen.get(sleutel)
     if (bestaand) bestaand.basis += vp_totaal
-    else groepen.set(sleutel, { pct, basis: vp_totaal, tarief_id: r.btw_tarief_id })
+    else groepen.set(sleutel, { pct, basis: vp_totaal, tarief_id: tariefId })
   }
   return Array.from(groepen.values())
     .map(({ pct, basis, tarief_id }) => {

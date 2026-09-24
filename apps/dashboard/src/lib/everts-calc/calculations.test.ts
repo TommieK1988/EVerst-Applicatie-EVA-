@@ -192,6 +192,27 @@ describe('berekenBtwBreakdown', () => {
     expect(uit.find(g => g.verlegd)?.nominaal_pct).toBe(21)
   })
 
+  it('voegt een regel zonder tarief samen met het gewone tarief van hetzelfde percentage', () => {
+    // Zamenhofstraat 6 (sep 2026): de helft van de regels had "Hoog 21%", de rest alleen
+    // 21 — de offerte toonde twee regels 21%.
+    const regels = [
+      regel({ id: 'r1', hoeveelheid: 1, btw_pct: 21, btw_tarief_id: 'hoog' }),
+      regel({ id: 'r2', hoeveelheid: 1, btw_pct: 21 }),
+      regel({ id: 'r3', hoeveelheid: 1, btw_pct: 21, btw_tarief_id: 'verlegd-hoog' }),
+    ]
+    const componenten = [eenComp('r1', 100), eenComp('r2', 200), eenComp('r3', 400)]
+    const tarieven = [
+      { id: 'hoog', label: 'Hoog 21%', percentage: 21, verlegd: false },
+      { id: 'verlegd-hoog', label: 'Verlegd Hoog 21%', percentage: 21, verlegd: true },
+    ]
+
+    const uit = berekenBtwBreakdown(regels, componenten, 0, 21, tarieven)
+
+    expect(uit).toHaveLength(2)
+    expect(uit.find(g => g.label === 'Hoog 21%')?.basis).toBe(300)
+    expect(uit.find(g => g.verlegd)?.basis).toBe(400)
+  })
+
   it('slaat regels zonder bedrag over', () => {
     const regels = [
       regel({ id: 'r1', hoeveelheid: 1, btw_pct: 21 }),
