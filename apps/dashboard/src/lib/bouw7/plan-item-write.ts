@@ -58,6 +58,21 @@ function naarBouw7Datum(ts: string): string {
   return `${g('year')}-${g('month')}-${g('day')}T${uur}:${g('minute')}:${g('second')}${nlOffsetSuffix(d)}`
 }
 
+/**
+ * Timestamptz naar een Bouw7-dag ("2026-10-12T00:00:00+02:00") voor een hele-dag-plan-item.
+ *
+ * Heimdall weigert op een item met `isAllDay` elke datum met een kloktijd ("The start- and end
+ * date cannot have a time when isAllDay is true"); middernacht mét offset wordt wél geaccepteerd
+ * (geverifieerd op testproject 4202130, sep 2026). De einddag is in Bouw7 dag-inclusief en in EVA
+ * exclusief, dus voor het eind nemen we de kalenderdag van het laatste moment vóór `eind_dt` —
+ * zo wordt 16 okt 16:15 de 16e, en 17 okt 00:00 (de oude middernacht-vorm) ook de 16e.
+ */
+function naarBouw7Dag(ts: string, isEind: boolean): string {
+  const d = new Date(new Date(ts).getTime() - (isEind ? 1 : 0))
+  const datum = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(d)
+  return `${datum}T00:00:00${nlOffsetSuffix(new Date(`${datum}T00:00:00Z`))}`
+}
+
 /** Het EVA-planitem met alles wat de Bouw7-body nodig heeft. */
 type ItemContext = {
   itemId:         string
@@ -358,7 +373,7 @@ export async function schrijfPlanItemNaarBouw7(itemId: string): Promise<void> {
 }
 
 /** Het deel van `GET /plan-item/{id}` dat we hier nodig hebben. */
-type Bouw7PlanItemStand = { id: number; employees?: { id: number }[] | null }
+type Bouw7PlanItemStand = { id: number; isAllDay?: boolean | null; employees?: { id: number }[] | null }
 
 /**
  * Wijziging op een uit Bouw7 geïmporteerd planitem terugschrijven: datums, uren en — bij een
@@ -383,10 +398,15 @@ async function schrijfBouw7ItemWijziging(client: Bouw7Client, ctx: ItemContext):
   if (ctx.vorigeEmployeeId != null && ctx.vorigeEmployeeId !== ctx.employeeId) employees.delete(ctx.vorigeEmployeeId)
   employees.add(ctx.employeeId)
 
+  // Hele-dag-item in Bouw7: alleen dagen sturen. De lees-sync geeft zulke items in EVA
+  // roostertijden (07:30–16:15), en die tijden terugsturen liet Bouw7 de hele write weigeren.
+  // Dan bleef de rij op `bouw7_write_pending` staan en herbouwde de sync het dossier niet meer:
+  // nieuwe planitems uit Bouw7 kwamen dat dossier niet meer binnen.
+  const heleDag = stand?.isAllDay === true
   await client.post('/plan-item', {
     id:        ctx.bouw7Id,
-    startDate: ctx.startDate,
-    endDate:   ctx.endDate,
+    startDate: heleDag ? naarBouw7Dag(ctx.startDt, false) : ctx.startDate,
+    endDate:   heleDag ? naarBouw7Dag(ctx.eindDt, true) : ctx.endDate,
     hours:     ctx.hours,
     employees: [...employees].map(id => ({ id })),
   })
