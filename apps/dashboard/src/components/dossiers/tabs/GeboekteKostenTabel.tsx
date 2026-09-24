@@ -557,10 +557,10 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                       {!readOnly && (
                         <button
                           onClick={() => setActief(r)}
-                          title="Toewijzen / hercoderen"
+                          title="Koppelen aan een inkooporder of OA-contract"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', fontSize: 11.5, borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--fg)', cursor: 'pointer' }}
                         >
-                          <SlidersHorizontal size={12} /> Corrigeren
+                          <SlidersHorizontal size={12} /> Koppelen aan order/contract
                         </button>
                       )}
                     </td>
