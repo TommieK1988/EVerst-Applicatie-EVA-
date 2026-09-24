@@ -1,0 +1,4 @@
+-- Changelog: de Bon-pagina is opgeruimd tot één Servicedesk-blok.
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-24','verbeterd','Servicedesk','De bon is opgeruimd: alles in één blok',
+   'De balk met status en afrekenwijze boven de tabbladen is weg. Het Servicedesk-blok op de Bon-pagina heeft nu links de gegevens en rechts de knoppen onder elkaar: eerst de vervolgstap die uit de stand volgt, daaronder het onderaannemerscontract, inplannen, offerte en mandaatverhoging. De mandaatbalk staat nu bij de opbouw van het verbruikte mandaat, zodat je in één blok ziet hoe het ervoor staat én waardoor. Verder zijn Gevraagde werkzaamheden, Datums en Betrokkenen van de bon af: die stonden er dubbel of horen bij een traject van weken in plaats van een bon van een paar dagen.');
