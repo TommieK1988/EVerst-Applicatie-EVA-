@@ -27,15 +27,21 @@
  *      twee meerwerkjes van € 450 zijn geen uitzondering — maar samen met het woord is het
  *      specifiek genoeg, en de fout die het voorkomt (dubbel factureren) is erger dan de fout die
  *      het kan maken (een regel die je in Bouw7 even moet nakijken).
+ *   c. dezelfde omschrijving als de meerwerkregel én precies hetzelfde bedrag. Factureert de
+ *      administratie meerwerk rechtstreeks vanuit Bouw7, dan kopieert Bouw7 de omschrijving van de
+ *      meerwerkregel letterlijk naar de factuurregel ("KAJUIT: Wand sauzen"), zonder nummer, zonder
+ *      het woord "meerwerk" en zonder enige koppeling (`reference`, `linkedBookingItems` en
+ *      `projectInvoiceTermIds` zijn leeg). Vlietkinderen, sep 2026: dertien zulke facturen werden
+ *      als "buiten de termijnen om gefactureerd" gemeld, terwijl het precies MW003–MW020 was.
  * Termijnen die al aan een andere meerwerkregel hangen tellen daarbij niet mee.
  *
  * En dan het geval zonder enig herkenbaar spoor: de administratie factureerde al het meerwerk in
  * één keer, onder een eigen inkoopordernummer van de corporatie ("ION100714516_001 Termijn 001",
  * Complex 1162, sep 2026). Geen nummer, geen woord "meerwerk" — alleen een bedrag dat precies het
  * nettototaal van meerwerk en minderwerk is. Daarom (`bepaalStanden`):
- *   c. factuurregels die bij geen enkele termijn horen tellen op tot het "los gefactureerde" bedrag;
+ *   d. factuurregels die bij geen enkele termijn horen tellen op tot het "los gefactureerde" bedrag;
  *      is dat gelijk aan het totaal van het nog ongekoppelde meerwerk, dan is dat meerwerk af;
- *   d. is er wel los gefactureerd maar klopt het niet, dan wordt het meerwerk `twijfel`: je kunt
+ *   e. is er wel los gefactureerd maar klopt het niet, dan wordt het meerwerk `twijfel`: je kunt
  *      het kiezen, maar pas na een expliciete bevestiging.
  *
  * De stand wordt live uit Bouw7 gelezen, niet uit de snapshot: het hele punt is dat een regel die
@@ -93,10 +99,16 @@ function codesVan(r: MeerwerkRegelView): string[] {
 
 const zelfdeBedrag = (a: unknown, b: number) => Math.round(Number(a ?? 0) * 100) === Math.round(b * 100)
 const noemtMeerwerk = (tekst: string | null | undefined) => /meerwerk/i.test(tekst ?? '')
+/** Omschrijving zonder opmaak, hoofdletters of dubbele spaties: Bouw7 kan er HTML van maken. */
+const kaal = (tekst: string | null | undefined) =>
+  (tekst ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+const zelfdeOmschrijving = (tekst: string | null | undefined, r: MeerwerkRegelView) =>
+  kaal(tekst) !== '' && kaal(tekst) === kaal(r.omschrijving)
 
-/** Hoort deze omschrijving + dit bedrag bij de regel? Zie de kop van dit bestand (a/b). */
+/** Hoort deze omschrijving + dit bedrag bij de regel? Zie de kop van dit bestand (a/b/c). */
 function lijktOp(tekst: string | null | undefined, bedrag: unknown, r: MeerwerkRegelView, codes: string[]): boolean {
-  return noemtCode(tekst, codes) || (noemtMeerwerk(tekst) && zelfdeBedrag(bedrag, r.effectiefExcl))
+  return noemtCode(tekst, codes)
+    || ((noemtMeerwerk(tekst) || zelfdeOmschrijving(tekst, r)) && zelfdeBedrag(bedrag, r.effectiefExcl))
 }
 
 /** Noemt deze tekst een van de codes als los woord? "MW1" mag niet matchen in "MW12". */
@@ -263,7 +275,7 @@ export type RegelStand = MeerwerkFacturatieStand & { handmatigeTermIds: number[]
 /**
  * De stand van alle regels samen. Per regel `standVan`, daarna de controle die alleen over het
  * geheel kan: is er buiten de termijnen om gefactureerd, en dekt dat het ongekoppelde meerwerk?
- * Zie (c) en (d) in de kop van dit bestand.
+ * Zie (d) en (e) in de kop van dit bestand.
  */
 export function bepaalStanden(regels: MeerwerkRegelView[], b: Bouw7Lezing): RegelStand[] {
   const bezet = bezetteTermijnen(regels)
