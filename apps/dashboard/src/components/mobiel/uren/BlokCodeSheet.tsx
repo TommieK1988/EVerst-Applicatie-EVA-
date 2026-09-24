@@ -4,7 +4,7 @@ import React from 'react'
 import toast from 'react-hot-toast'
 import BottomSheet from '@/components/mobiel/BottomSheet'
 import { hercodeerBlokMobiel } from '@/app/m/uren/keuren/actions'
-import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
+import { getUrenDoelcodes, zorgUrenDoelPsl, type UrenDoelcode } from '@/lib/dossiers/actions'
 import type { KeurCodeBlok } from '@/lib/mobiel/keuren'
 
 const GROEN = '#009439'
@@ -33,7 +33,7 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
   /** De uren zijn verplaatst; het scherm haalt de lijst opnieuw op. */
   onKlaar: () => void
 }) {
-  const [codes, setCodes] = React.useState<BewakingscodeOptie[]>([])
+  const [codes, setCodes] = React.useState<UrenDoelcode[]>([])
   const [laden, setLaden] = React.useState(true)
   const [keuze, setKeuze] = React.useState<string | null>(blok.code)
   const [bezig, setBezig] = React.useState(false)
@@ -41,7 +41,7 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
   React.useEffect(() => {
     if (!blok.dossierId) { setLaden(false); return }
     let levend = true
-    getBewakingscodesVoorUurlog(blok.dossierId)
+    getUrenDoelcodes(blok.dossierId)
       .then(c => { if (levend) setCodes(c) })
       .catch(() => { /* geen codelijst: het venster toont dat, de week blijft werkbaar */ })
       .finally(() => { if (levend) setLaden(false) })
@@ -53,7 +53,16 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
     if (!gekozen) { toast.error('Kies eerst een bewakingscode.'); return }
 
     setBezig(true)
-    const r = await hercodeerBlokMobiel(blok.regelIds, gekozen.pslId).catch(() => null)
+    // Een code die nog niet onder Arbeid staat krijgt die link pas bij het opslaan.
+    let pslId = gekozen.pslId
+    if (pslId == null) {
+      const psl = blok.dossierId
+        ? await zorgUrenDoelPsl(blok.dossierId, { code: gekozen.code, hoofdstukId: gekozen.hoofdstukId }).catch(() => null)
+        : null
+      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? 'Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+      pslId = psl.pslId
+    }
+    const r = await hercodeerBlokMobiel(blok.regelIds, pslId).catch(() => null)
     setBezig(false)
 
     if (!r) { toast.error('Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
@@ -108,7 +117,7 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
             const aan = c.code === keuze
             return (
               <button
-                key={c.pslId}
+                key={c.sleutel}
                 type="button"
                 onClick={() => setKeuze(c.code)}
                 style={{

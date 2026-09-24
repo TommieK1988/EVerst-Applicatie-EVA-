@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { Minus, Plus } from 'lucide-react'
 import BottomSheet from '@/components/mobiel/BottomSheet'
 import { corrigeerUurregelMobiel } from '@/app/m/uren/keuren/actions'
-import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
+import { getUrenDoelcodes, zorgUrenDoelPsl, type UrenDoelcode } from '@/lib/dossiers/actions'
 import type { KeurRegel } from '@/lib/mobiel/keuren'
 
 const GROEN = '#009439'
@@ -54,7 +54,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
   const [uren, setUren] = React.useState(regel.uren)
   const [code, setCode] = React.useState(regel.bewakingscode ?? '')
   const [opmerking, setOpmerking] = React.useState(regel.opmerking ?? '')
-  const [codes, setCodes] = React.useState<BewakingscodeOptie[]>([])
+  const [codes, setCodes] = React.useState<UrenDoelcode[]>([])
   const [codesLaden, setCodesLaden] = React.useState(false)
   const [bezig, setBezig] = React.useState(false)
 
@@ -65,7 +65,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
     if (!regel.dossierId) return
     let levend = true
     setCodesLaden(true)
-    getBewakingscodesVoorUurlog(regel.dossierId)
+    getUrenDoelcodes(regel.dossierId)
       .then(c => { if (levend) setCodes(c) })
       .catch(() => { /* geen codelijst: het veld blijft leeg, de uren zijn nog wel te wijzigen */ })
       .finally(() => { if (levend) setCodesLaden(false) })
@@ -83,10 +83,18 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
       return
     }
     const gekozen = codes.find(c => c.code === code)
+    const codeGewijzigd = code !== (regel.bewakingscode ?? '')
     setBezig(true)
+    // Een code die nog niet onder Arbeid staat krijgt die link pas bij het opslaan.
+    let pslId: number | null = gekozen?.pslId ?? null
+    if (codeGewijzigd && gekozen && pslId == null && regel.dossierId) {
+      const psl = await zorgUrenDoelPsl(regel.dossierId, { code: gekozen.code, hoofdstukId: gekozen.hoofdstukId }).catch(() => null)
+      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? 'Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+      pslId = psl.pslId
+    }
     const r = await corrigeerUurregelMobiel(regel.id, {
       ...(uren !== regel.uren ? { uren } : {}),
-      ...(code !== (regel.bewakingscode ?? '') ? { bewakingscodePslId: gekozen?.pslId ?? null } : {}),
+      ...(codeGewijzigd ? { bewakingscodePslId: pslId } : {}),
       ...(opmerking !== (regel.opmerking ?? '') ? { opmerking } : {}),
     }).catch(() => null)
     setBezig(false)
@@ -160,7 +168,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
               <option value={code}>{code}</option>
             )}
             {codes.map(c => (
-              <option key={c.pslId} value={c.code}>
+              <option key={c.sleutel} value={c.code}>
                 {c.code}{c.naam ? ` · ${c.naam}` : ''}
               </option>
             ))}

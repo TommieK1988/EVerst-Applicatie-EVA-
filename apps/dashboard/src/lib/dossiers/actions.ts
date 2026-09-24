@@ -4198,6 +4198,25 @@ async function resolveUrenDoel(
   return res.ok ? { ...res, nieuw: true } : res
 }
 
+/**
+ * Arbeid-PSL voor een gekozen uren-doelcode; maakt die in Bouw7 aan als de code nog niet onder
+ * Arbeid staat. Voor schermen die zelf met een PSL-id opslaan (uren corrigeren, mobiel keuren).
+ */
+export async function zorgUrenDoelPsl(
+  dossierId: string,
+  doel: UrenDoel,
+): Promise<{ ok: true; pslId: number } | { ok: false; error: string }> {
+  await vereisSessie()
+  if ('pslId' in doel) return { ok: true, pslId: doel.pslId }
+  const ctx = await bouw7VoorDossier(dossierId)
+  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling voor dit dossier.' }
+  const res = await resolveUrenDoel(ctx, doel)
+  if (!res.ok) return res
+  // De nieuwe link moet bij de volgende keer openen in de lijst staan.
+  if (res.nieuw) await ververSnapshotsNaSchrijven(dossierId, [], ['athena_control'])
+  return { ok: true, pslId: res.pslId }
+}
+
 export async function updateUurlogBewakingscode(
   dossierId: string,
   hourLog: { id: number; bouw7ProjectId: number; logHours: string; logDate: string; hourTypeId: number },

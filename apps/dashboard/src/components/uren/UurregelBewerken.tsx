@@ -7,7 +7,7 @@ import {
   corrigeerUurregel, getUursoortenVoorCorrectie, zoekDossierVoorUren,
   type UursoortOptie, type DossierTreffer,
 } from '@/lib/uren/bouw7-goedkeuring'
-import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
+import { getUrenDoelcodes, zorgUrenDoelPsl, type UrenDoelcode } from '@/lib/dossiers/actions'
 
 /**
  * Een geboekte urenregel aanpassen vóór goedkeuring.
@@ -73,7 +73,7 @@ export default function UurregelBewerken({
   const [uursoorten, setUursoorten] = useState<UursoortOptie[]>([])
   const [code, setCode] = useState(regel.bewakingscode ?? '')
   const [opmerking, setOpmerking] = useState(regel.opmerking ?? '')
-  const [codes, setCodes] = useState<BewakingscodeOptie[]>([])
+  const [codes, setCodes] = useState<UrenDoelcode[]>([])
   const [codesLaden, setCodesLaden] = useState(false)
   const [bezig, setBezig] = useState(false)
 
@@ -95,7 +95,7 @@ export default function UurregelBewerken({
     if (!dossierId) { setCodes([]); return }
     let levend = true
     setCodesLaden(true)
-    getBewakingscodesVoorUurlog(dossierId)
+    getUrenDoelcodes(dossierId)
       .then(c => { if (levend) setCodes(c) })
       .finally(() => { if (levend) setCodesLaden(false) })
     return () => { levend = false }
@@ -141,13 +141,23 @@ export default function UurregelBewerken({
       return
     }
     const gekozen = codes.find(c => c.code === code)
+    const codeGewijzigdVooraf = verhuist || code !== (regel.bewakingscode ?? '')
+    // Een code die nog niet onder Arbeid staat krijgt die link pas bij het opslaan.
+    let pslId: number | null = gekozen?.pslId ?? null
+    if (codeGewijzigdVooraf && gekozen && pslId == null && dossierId) {
+      setBezig(true)
+      const psl = await zorgUrenDoelPsl(dossierId, { code: gekozen.code, hoofdstukId: gekozen.hoofdstukId }).catch(() => null)
+      setBezig(false)
+      if (!psl || !psl.ok) { toast.error(psl?.error ?? 'Bouw7 is niet bereikbaar.'); return }
+      pslId = psl.pslId
+    }
     // Bij een verhuizing gaat de code altijd mee, ook als hij toevallig dezelfde naam heeft:
     // het is een andere bewakingscode, van een ander project.
     const codeGewijzigd = verhuist || code !== (regel.bewakingscode ?? '')
     setBezig(true)
     const r = await corrigeerUurregel(regel.hourLogId, {
       ...(getal !== regel.uren ? { uren: getal } : {}),
-      ...(codeGewijzigd ? { bewakingscodePslId: gekozen?.pslId ?? null } : {}),
+      ...(codeGewijzigd ? { bewakingscodePslId: pslId } : {}),
       ...(opmerking !== (regel.opmerking ?? '') ? { opmerking } : {}),
       ...(uursoortId != null && uursoortId !== regel.hourTypeId ? { uursoortHourTypeId: uursoortId } : {}),
       ...(verhuist ? { naarDossierId: doel!.id } : {}),
@@ -308,7 +318,7 @@ export default function UurregelBewerken({
             <select value={code} onChange={e => setCode(e.target.value)} style={veld} disabled={codesLaden}>
               <option value="">{codesLaden ? 'Bezig met ophalen…' : '— geen code —'}</option>
               {codes.map(c => (
-                <option key={c.pslId} value={c.code}>
+                <option key={c.sleutel} value={c.code}>
                   {c.code}{c.naam ? ` · ${c.naam}` : ''}
                   {c.prognoseUren > 0 ? ` (${c.prognoseUren}u begroot)` : ''}
                 </option>
