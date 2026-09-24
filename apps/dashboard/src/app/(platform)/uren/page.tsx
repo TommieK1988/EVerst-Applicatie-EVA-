@@ -7,6 +7,7 @@ import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { SkeletonCard } from '@/components/ui'
 import { getAlleUren } from '@/lib/uren/actions'
 import { getOnkosten } from '@/lib/uren/onkosten-overzicht'
+import { haalDagVergelijking, type MedewerkerDag } from '@/lib/uren/aanwezigheid-bij-uren'
 import { alsPeriode, type UrenPeriode } from '@/lib/uren/types'
 import UrenOverzicht from './UrenOverzicht'
 
@@ -54,10 +55,21 @@ async function UrenInhoud({ periode, magAlles, medewerkerId }: {
     }
   })()
 
+  // Aanwezig tegenover geboekt, per medewerker-dag. Pas NA de afscherming hierboven: wie alleen
+  // zijn eigen te keuren uren ziet, krijgt ook alleen van díe dagen de werktijden mee.
+  // Voor een kwartaal of een heel jaar alleen de dagen met nog open uren -- daar dient het voor,
+  // en een jaar aan ritten van het hele wagenpark doorrekenen per paginabezoek is te zwaar.
+  const alleDagen = periode === 'deze_maand' || periode === 'vorige_maand'
+  const vergelijking = await haalDagVergelijking(
+    data.regels
+      .filter(r => r.bouw7MedewerkerId != null && r.datum != null && (alleDagen || !r.geaccordeerd))
+      .map((r): MedewerkerDag => ({ bouw7MedewerkerId: r.bouw7MedewerkerId!, datum: r.datum! })),
+  )
+
   return (
     <UrenOverzicht
       data={data} onkosten={onkosten} periode={periode} layouts={layouts} user_id={user_id}
-      magAlles={magAlles} medewerkerId={medewerkerId}
+      magAlles={magAlles} medewerkerId={medewerkerId} vergelijking={vergelijking}
     />
   )
 }

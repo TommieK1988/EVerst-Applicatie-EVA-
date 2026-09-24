@@ -56,7 +56,14 @@ export function ritTypeEffectiefSql(alias = 't'): string {
  *
  * Reads in dit domein gaan via de directe Postgres-pooler (RLS geldt daar niet),
  * dus deze check bepaalt het privacyfilter dat expliciet in de SQL wordt
- * toegevoegd. De functienaam blijft `magPriveRittenZien` omdat alle bestaande
+ * toegevoegd.
+ *
+ * Eén bewuste uitzondering: bij het keuren van uren ziet de beoordelaar (PL, TL,
+ * vaste goedkeurder) de netto aanwezigheid met aankomst en vertrek, zonder dit
+ * recht, maar alleen voor de medewerker-dagen die hij al te keuren krijgt. Zie
+ * `lib/uren/aanwezigheid-bij-uren.ts`.
+ *
+ * De functienaam blijft `magPriveRittenZien` omdat alle bestaande
  * call-sites hem zo aanroepen; de betekenis is verbreed naar "privacygevoelige
  * wagenpark-data".
  */

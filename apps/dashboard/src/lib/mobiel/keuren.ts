@@ -2,7 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import { haalOpenstaandeUren, verdeelNaarRol, type OpenUurRegel } from '@/lib/uren/openstaande-uren'
 import { isoWeek, weekStartVan } from '@/lib/uren/rooster'
-import { periodeBereik } from '@/lib/uren/types'
+import { dagVergelijkingSleutel, periodeBereik, type DagVergelijking } from '@/lib/uren/types'
+import { haalDagVergelijking, type LiveUurregel, type MedewerkerDag } from '@/lib/uren/aanwezigheid-bij-uren'
 import { signBonnen } from '@/lib/uren/bonnen'
 import type { OnkostenSoort, Vervoermiddel } from '@/lib/uren/onkosten'
 
@@ -156,6 +157,11 @@ export type KeurWeek = {
   toonCodePerRegel: boolean
   /** Gewerkte regels zonder code; zolang dit boven nul staat is de week niet af te vinken. */
   ontbrekendeCodes: number
+  /**
+   * Per datum (YYYY-MM-DD): hoe lang de auto op het werk stond tegenover alles wat die dag
+   * geboekt is. Ontbreekt een datum, dan is er niets over bekend. Zie `DagVergelijking`.
+   */
+  dagen: Record<string, DagVergelijking>
 }
 
 
@@ -242,6 +248,24 @@ export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
     perWeek.set(sleutel, rij)
   }
 
+  // Aanwezig tegenover geboekt, alleen voor de medewerker-dagen in de weken die ik beoordeel.
+  const dagenNodig: MedewerkerDag[] = []
+  const liveRegels: LiveUurregel[] = []
+  const bouw7IdPerWeek = new Map<string, number>()
+  for (const r of res.regels) {
+    if (!r.datum || r.bouw7MedewerkerId == null) continue
+    const sleutel = weekSleutel(r)
+    if (!mijnWeken.has(sleutel)) continue
+    bouw7IdPerWeek.set(sleutel, r.bouw7MedewerkerId)
+    dagenNodig.push({ bouw7MedewerkerId: r.bouw7MedewerkerId, datum: r.datum })
+    liveRegels.push({
+      id: r.id, bouw7MedewerkerId: r.bouw7MedewerkerId, datum: r.datum, uren: r.uren, nietGewerkt: r.nietGewerkt,
+    })
+  }
+  // De open regels hier zijn live uit Bouw7, het dagtotaal uit de bewaarde stand: geef ze mee
+  // zodat een regel van na de laatste verversing ook in "geboekt" meetelt.
+  const vergelijking = await haalDagVergelijking(dagenNodig, liveRegels)
+
   const weken: KeurWeek[] = []
   for (const [sleutel, regels] of perWeek) {
     // Op datum, dan op uursoort: zo lees je het als een weekstaat en niet als de willekeurige
@@ -273,6 +297,7 @@ export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
       // Alleen wat ík kan rechtzetten telt als blokkade. Een contextregel zonder code is het
       // probleem van een andere beoordelaar en mag mijn week niet tegenhouden.
       ontbrekendeCodes: mijnRegels.filter(r => r.codeOntbreekt).length,
+      dagen: dagenVanWeek(regels, bouw7IdPerWeek.get(sleutel) ?? null, vergelijking),
     })
   }
 
@@ -295,6 +320,21 @@ export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
     ),
     fout: null,
   }
+}
+
+/** De vergelijking per datum van één medewerker-week, uit de map over alle weken. */
+function dagenVanWeek(
+  regels: KeurRegel[],
+  bouw7MedewerkerId: number | null,
+  vergelijking: Record<string, DagVergelijking>,
+): Record<string, DagVergelijking> {
+  const uit: Record<string, DagVergelijking> = {}
+  if (bouw7MedewerkerId == null) return uit
+  for (const r of regels) {
+    const v = vergelijking[dagVergelijkingSleutel(bouw7MedewerkerId, r.datum)]
+    if (v) uit[r.datum] = v
+  }
+  return uit
 }
 
 /**

@@ -402,6 +402,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Subtotalen', body: 'Klik op een kolomkop om te sorteren. Sorteer je op Medewerker, Dossier, Week, Uursoort, Bewakingscode, Dienstverband, Projectleider of Geaccordeerd, dan verschijnt onder elke groep automatisch een subtotaal met uren en bedrag.' },
       { title: 'Geaccordeerd', body: 'Toont of de urenboeking in Bouw7 is geaccordeerd, door wie en wanneer. Accorderen zelf doe je in Bouw7 — EVA laat de status alleen zien. Bovenin zie je in één oogopslag hoeveel regels nog niet geaccordeerd zijn.' },
       { title: 'Intern en extern', body: 'De kolom Dienstverband onderscheidt eigen medewerkers van ingehuurde krachten (ZZP en uitzend). Sorteer erop voor een subtotaal per soort.' },
+      { title: 'Aanwezig tegenover geboekt', body: 'De kolom Aanwezig (netto) laat zien hoe lang de auto van de medewerker die dag op het werk stond: van aankomst tot vertrek, min de pauze uit het rooster. Geboekt die dag telt alle gewerkte uren van die dag op, ook die op dossiers van een collega. Verschil is aanwezig min geboekt en kleurt oranje vanaf een half uur. Groepeer op Medewerker + dag voor één regel per dag. Gemeten wordt de auto, niet de persoon: wie meerijdt of met de fiets komt krijgt een streepje met de reden erbij. Een verschil is dus een vraag, geen oordeel.' },
       { title: 'Uurtarief', body: 'Het getoonde uurtarief is de kostprijs per uur, niet het verkooptarief. Daarom staat dit scherm onder Financieel en is er het recht Financieel voor nodig.' },
     ],
   }],

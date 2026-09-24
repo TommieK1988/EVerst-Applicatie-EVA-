@@ -228,6 +228,7 @@ export async function getAlleUren(periode: UrenPeriode): Promise<UrenOverzichtDa
       geaccordeerdOp: h.approvedAt ? h.approvedAt.slice(0, 10) : null,
       extern: h.isExternal === true,
       opmerking: h.comment?.trim() ? h.comment.trim() : null,
+      bouw7MedewerkerId: h.employee?.id ?? null,
     }
   })
 

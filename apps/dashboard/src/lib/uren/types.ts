@@ -110,4 +110,62 @@ export type UrenExtraVelden = {
   /** Ingehuurde kracht (ZZP/uitzend) i.p.v. eigen dienst. */
   extern: boolean
   opmerking: string | null
+  /** Bouw7 `employee.id`; de sleutel naar de aanwezigheid van die dag (zie `DagVergelijking`). */
+  bouw7MedewerkerId: number | null
+}
+
+/* ─── Aanwezig tegenover geboekt ────────────────────────────────────────────── */
+
+/**
+ * Eén medewerker op één dag: hoe lang stond de auto op het werk, en hoeveel uur is er geboekt.
+ *
+ * Dit staat naast de te keuren uren zodat een PL in één oogopslag ziet of een dag klopt. De
+ * aanwezigheid komt uit de autoritten -- dezelfde meetlat als de werktijdenlijst van het
+ * wagenpark (`lib/wagenpark/werktijd-aanwezigheid.ts`). Gemeten wordt de auto, niet de mens:
+ * wie meerijdt of met de fiets komt krijgt een streepje met de reden, nooit "0 u aanwezig".
+ *
+ * Opgebouwd in `lib/uren/aanwezigheid-bij-uren.ts`. Staat hier omdat de client-tabellen het type
+ * nodig hebben en die module server-only is.
+ */
+export type DagVergelijking = {
+  /** Netto aanwezig in minuten (bruto min roosterpauze). Null = niet te bepalen, zie `geenVenster`. */
+  aanwezigMinuten: number | null
+  /** "07:32" */
+  aankomst: string | null
+  vertrek: string | null
+  /** Afgetrokken roosterpauze binnen het venster. */
+  pauzeMinuten: number
+  /** Onwaar = er staat geen pauze in het rooster; dan is er niets afgetrokken. */
+  pauzeInRooster: boolean
+  /** Waarom er geen aanwezigheid is, in gewone taal. Gevuld zodra `aanwezigMinuten` null is. */
+  geenVenster: string | null
+  /**
+   * ALLE gewerkte uren van die dag, ook op dossiers van een andere PL -- anders lijkt een dag met
+   * 4 u bij jou en 4 u bij een collega op een gat van vier uur. Verlof, ziek, feestdag en
+   * tijd-voor-tijd tellen niet mee: daarvoor was niemand op het werk. Null als de urenstand niet
+   * te lezen was.
+   */
+  geboektUren: number | null
+  /** Aanwezig min geboekt, in uren. Null als een van beide kanten ontbreekt. */
+  verschilUren: number | null
+}
+
+/** Sleutel in de vergelijkingsmap: `${bouw7MedewerkerId}|${YYYY-MM-DD}`. */
+export function dagVergelijkingSleutel(bouw7MedewerkerId: number | string, datum: string): string {
+  return `${bouw7MedewerkerId}|${datum}`
+}
+
+/**
+ * Vanaf hoeveel uur verschil een dag opvalt. Een half uur: kleiner is afronding en de marge van
+ * de ritketen (de auto staat om 07:32 stil, de man begint om 07:45).
+ */
+export const VERSCHIL_DREMPEL_UREN = 0.5
+
+/** De tooltip: waar het getal vandaan komt, of waarom het er niet is. */
+export function dagVergelijkingUitleg(d: DagVergelijking): string {
+  if (d.aanwezigMinuten == null) return d.geenVenster ?? 'Aanwezigheid niet te bepalen.'
+  const pauze = d.pauzeInRooster
+    ? `${d.pauzeMinuten} min pauze afgetrokken`
+    : 'geen pauze in het rooster, niets afgetrokken'
+  return `Auto op het werk ${d.aankomst ?? '?'}–${d.vertrek ?? '?'}, ${pauze}. Gemeten aan de autoritten, niet aan de persoon.`
 }

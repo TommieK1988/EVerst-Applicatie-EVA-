@@ -13,6 +13,7 @@ import KeurRegelSheet from './KeurRegelSheet'
 import BlokCodeSheet from './BlokCodeSheet'
 import type { KeurCodeBlok, KeurData, KeurOnkosten, KeurRegel, KeurWeek } from '@/lib/mobiel/keuren'
 import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
+import { VERSCHIL_DREMPEL_UREN, type DagVergelijking } from '@/lib/uren/types'
 
 const GROEN = '#009439'
 const GRIJS = '#6b757c'
@@ -326,15 +327,20 @@ function Week({ week, selectie, bezig, geblokkeerd, onWissel, onBewerk, onHercod
         </div>
       )}
 
-      {week.regels.map(regel => (
-        <DagRij
-          key={regel.id}
-          regel={regel}
-          aan={gekozen.has(regel.id)}
-          toonCode={week.toonCodePerRegel}
-          onWissel={onWissel}
-          onBewerk={onBewerk}
-        />
+      {week.regels.map((regel, i) => (
+        <React.Fragment key={regel.id}>
+          {/* Boven de eerste regel van elke dag: hoe lang stond de auto op het werk. */}
+          {week.regels[i - 1]?.datum !== regel.datum && week.dagen[regel.datum] && (
+            <DagAanwezig datum={regel.datum} d={week.dagen[regel.datum]} />
+          )}
+          <DagRij
+            regel={regel}
+            aan={gekozen.has(regel.id)}
+            toonCode={week.toonCodePerRegel}
+            onWissel={onWissel}
+            onBewerk={onBewerk}
+          />
+        </React.Fragment>
       ))}
 
       <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)' }}>
@@ -431,6 +437,56 @@ function CodeBlok({ blok, onHercodeer }: {
     >
       {inhoud}
     </button>
+  )
+}
+
+/**
+ * Aanwezig tegenover geboekt voor één dag, als dunne balk boven de dagrijen.
+ *
+ * Aanwezig komt uit de autoritten (aankomst op het werk tot vertrek, min de roosterpauze);
+ * geboekt is álles van die dag, ook wat bij een andere beoordelaar ligt. Een verschil boven het
+ * half uur kleurt oranje. Het is een vraag, geen oordeel: meerijden of een dag zonder auto geeft
+ * ook een verschil. Zonder bruikbare ritten staat er een streepje met de reden, nooit "0 u".
+ */
+function DagAanwezig({ datum, d }: { datum: string; d: DagVergelijking }) {
+  // Eén decimaal: de ritten meten op de minuut, maar 7,32 u suggereert een precisie die de
+  // meetlat (de auto, niet de persoon) niet heeft.
+  const u1 = (n: number) => n.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const opvallend = d.verschilUren != null && Math.abs(d.verschilUren) > VERSCHIL_DREMPEL_UREN
+  const verschil = d.verschilUren == null ? null
+    : `${d.verschilUren > 0 ? '+' : d.verschilUren < 0 ? '−' : ''}${u1(Math.abs(d.verschilUren))} u`
+  // Alleen de eerste zin: de volledige uitleg is voor de desktop-tooltip, hier moet het passen.
+  const reden = d.geenVenster?.split('. ')[0].replace(/\.$/, '')
+
+  return (
+    <div style={{
+      padding: '6px 12px', borderTop: '1px solid var(--border)',
+      background: opvallend ? GEEL_VLAK : 'rgba(0,0,0,.015)',
+      fontSize: 11.5, color: GRIJS, lineHeight: 1.45,
+    }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 8, alignItems: 'baseline' }}>
+        <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{dagKort(datum)}</span>
+        <span>
+          aanwezig{' '}
+          <b style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+            {d.aanwezigMinuten != null ? `${u1(d.aanwezigMinuten / 60)} u` : '—'}
+          </b>
+          {d.aankomst && d.vertrek && ` (${d.aankomst}–${d.vertrek})`}
+        </span>
+        <span>
+          geboekt{' '}
+          <b style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+            {d.geboektUren != null ? `${u1(d.geboektUren)} u` : '—'}
+          </b>
+        </span>
+        {verschil && (
+          <span style={{ marginLeft: 'auto', fontWeight: 700, color: opvallend ? ORANJE : GRIJS, fontVariantNumeric: 'tabular-nums' }}>
+            {verschil}
+          </span>
+        )}
+      </div>
+      {reden && <div style={{ fontSize: 11, color: ZACHT }}>{reden}</div>}
+    </div>
   )
 }
 

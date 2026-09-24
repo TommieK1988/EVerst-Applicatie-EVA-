@@ -44,6 +44,8 @@ export type OpenUurRegel = {
   medewerkerNaam: string
   /** Null als deze Bouw7-medewerker geen tegenhanger in EVA heeft. */
   medewerkerId: string | null
+  /** Bouw7 `employee.id`; de sleutel naar de aanwezigheid van die dag. */
+  bouw7MedewerkerId: number | null
 
   projectNummer: string | null
   projectNaam: string | null
@@ -254,6 +256,7 @@ export async function haalOpenstaandeUren(
       extern: l.isExternal === true,
       medewerkerNaam: [l.employee?.firstName, l.employee?.lastName].filter(Boolean).join(' ') || '—',
       medewerkerId,
+      bouw7MedewerkerId: l.employee?.id ?? null,
       projectNummer: l.project?.number ?? null,
       projectNaam: l.project?.name ?? null,
       bouw7ProjectId: l.project?.id ?? null,

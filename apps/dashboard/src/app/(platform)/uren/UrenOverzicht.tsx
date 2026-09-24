@@ -10,7 +10,10 @@ import type { OnkostenOverzicht, OnkostenRegel } from '@/lib/uren/onkosten-overz
 import { LegeStaat } from '@/components/dossiers/tabs/tab-ui'
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import type { UrenOverzichtData, UrenOverzichtRegel } from '@/lib/uren/actions'
-import { UREN_PERIODES, type UrenPeriode } from '@/lib/uren/types'
+import {
+  UREN_PERIODES, VERSCHIL_DREMPEL_UREN, dagVergelijkingSleutel, dagVergelijkingUitleg,
+  type DagVergelijking, type UrenPeriode,
+} from '@/lib/uren/types'
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
 import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
@@ -51,11 +54,14 @@ const ROL_LABEL: Record<'teamleider' | 'projectleider' | 'goedkeurder', string> 
   goedkeurder: 'eigen goedkeurder',
 }
 
-type GroepKey = 'geen' | 'medewerker' | 'dossier' | 'uursoort' | 'week' | 'dienstverband' | 'geaccordeerd' | 'projectleider' | 'wachtOp'
+type GroepKey = 'geen' | 'medewerker' | 'medewerkerDag' | 'dossier' | 'uursoort' | 'week' | 'dienstverband' | 'geaccordeerd' | 'projectleider' | 'wachtOp'
 
 const GROEPEN: { key: GroepKey; label: string; sleutel: (r: UrenOverzichtRegel) => string }[] = [
   { key: 'geen',          label: 'Niet groeperen',   sleutel: () => '' },
   { key: 'medewerker',    label: 'Medewerker',       sleutel: (r) => r.medewerker ?? '— onbekend —' },
+  // Per dag naast elkaar: wat er geboekt is en hoe lang de auto op het werk stond. De datum in
+  // ISO-vorm voorop in de sleutel zou sorteren, maar leest slecht; de groepen volgen de rijvolgorde.
+  { key: 'medewerkerDag', label: 'Medewerker + dag', sleutel: (r) => `${r.medewerker ?? '— onbekend —'} · ${datumMetDag(r.datum)}` },
   { key: 'dossier',       label: 'Dossier',          sleutel: (r) => dossierLabel(r) },
   { key: 'uursoort',      label: 'Uursoort',         sleutel: (r) => r.uursoort ?? '— geen —' },
   { key: 'week',          label: 'Week',             sleutel: (r) => isoWeek(r.datum) },
@@ -65,8 +71,59 @@ const GROEPEN: { key: GroepKey; label: string; sleutel: (r: UrenOverzichtRegel) 
   { key: 'wachtOp',       label: 'Wacht op',         sleutel: (r) => r.wachtOp?.naam ?? '— niemand —' },
 ]
 
+/** Aanwezig tegenover geboekt voor de dag van deze regel; null als er niets over bekend is. */
+function vergelijkingVan(r: UrenOverzichtRegel, vergelijking: Record<string, DagVergelijking>) {
+  if (r.bouw7MedewerkerId == null || !r.datum) return null
+  return vergelijking[dagVergelijkingSleutel(r.bouw7MedewerkerId, r.datum)] ?? null
+}
+
+/** "+0,5 u" / "−1,3 u"; positief = langer aanwezig dan geboekt. */
+const verschilTekst = (n: number) =>
+  `${n > 0 ? '+' : n < 0 ? '−' : ''}${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(Math.abs(n))} u`
+
+/**
+ * Een half uur verschil valt op, twee uur is echt mis. Beide kanten: meer geboekt dan aanwezig
+ * is de klassieke fout, maar veel langer aanwezig dan geboekt kan een vergeten regel zijn.
+ */
+function verschilKleur(n: number | null): string {
+  if (n == null || Math.abs(n) <= VERSCHIL_DREMPEL_UREN) return 'var(--fg-soft)'
+  return Math.abs(n) > 2 ? 'hsl(var(--destructive))' : '#b85a00'
+}
+
+/** Aanwezig · geboekt · verschil op één regel, voor de groepsbalk per medewerker-dag. */
+function DagVergelijkingKop({ d }: { d: DagVergelijking }) {
+  const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
+  return (
+    <span title={dagVergelijkingUitleg(d)} style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}>
+      <span style={klein}>
+        aanwezig{' '}
+        <b style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+          {d.aanwezigMinuten != null ? uur(d.aanwezigMinuten / 60) : '—'}
+        </b>
+        {d.aankomst && d.vertrek && ` (${d.aankomst}–${d.vertrek})`}
+      </span>
+      <span style={klein}>
+        geboekt{' '}
+        <b style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+          {d.geboektUren != null ? uur(d.geboektUren) : '—'}
+        </b>
+      </span>
+      {d.verschilUren != null && (
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: verschilKleur(d.verschilUren), fontVariantNumeric: 'tabular-nums' }}>
+          {verschilTekst(d.verschilUren)}
+        </span>
+      )}
+    </span>
+  )
+}
+
 /** Groepsbalk: naam van de groep met het subtotaal erachter. */
-function GroepKop({ rijen, sleutel }: { rijen: UrenOverzichtRegel[]; sleutel: string }) {
+function GroepKop({ rijen, sleutel, dag }: {
+  rijen: UrenOverzichtRegel[]
+  sleutel: string
+  /** Alleen bij groeperen op medewerker + dag: de vergelijking van die dag. */
+  dag?: DagVergelijking | null
+}) {
   const urenTotaal = rijen.reduce((s, r) => s + r.uren, 0)
   const bedragTotaal = rijen.reduce((s, r) => s + r.bedrag, 0)
   return (
@@ -79,6 +136,7 @@ function GroepKop({ rijen, sleutel }: { rijen: UrenOverzichtRegel[]; sleutel: st
       <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
         {euro(bedragTotaal)}
       </span>
+      {dag && <DagVergelijkingKop d={dag} />}
     </div>
   )
 }
@@ -97,7 +155,11 @@ const getal = (v: string, kleur?: string) => (
  * OverzichtTabel), dus `filterOpties` moet exact díé waarden bevatten. Voor Uursoort komen
  * ze daarom uit de opgehaalde regels en niet uit een vaste lijst.
  */
-function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtRegel>[] {
+function maakKolommen(
+  uursoortOpties: string[],
+  vergelijking: Record<string, DagVergelijking>,
+): KolomDefinitie<UrenOverzichtRegel>[] {
+  const dagVan = (r: UrenOverzichtRegel) => vergelijkingVan(r, vergelijking)
   return [
   {
     key: 'medewerker', label: 'Medewerker', vast: true, breedte: 170, filterType: 'tekst',
@@ -174,6 +236,45 @@ function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtReg
     sorteerWaarde: (r) => r.uren,
     render: (r) => getal(uur(r.uren)),
   },
+  // Per medewerker-dag, dus op elke regel van die dag hetzelfde getal. Zo kun je erop sorteren en
+  // filteren zonder eerst te groeperen; groepeer op "Medewerker + dag" voor één regel per dag.
+  {
+    key: 'aanwezig', label: 'Aanwezig (netto)', breedte: 170,
+    sorteerWaarde: (r) => dagVan(r)?.aanwezigMinuten ?? -1,
+    render: (r) => {
+      const d = dagVan(r)
+      if (!d) return tekst(null, true)
+      return (
+        <span title={dagVergelijkingUitleg(d)} style={{ fontSize: 13, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums', cursor: 'help' }}>
+          {d.aanwezigMinuten != null ? uur(d.aanwezigMinuten / 60) : '—'}
+        </span>
+      )
+    },
+  },
+  {
+    key: 'geboektDag', label: 'Geboekt die dag', breedte: 165,
+    sorteerWaarde: (r) => dagVan(r)?.geboektUren ?? -1,
+    render: (r) => {
+      const d = dagVan(r)
+      return tekst(d?.geboektUren != null ? uur(d.geboektUren) : null, true)
+    },
+  },
+  {
+    key: 'verschil', label: 'Verschil', breedte: 100,
+    sorteerWaarde: (r) => dagVan(r)?.verschilUren ?? 0,
+    render: (r) => {
+      const d = dagVan(r)
+      if (d?.verschilUren == null) return tekst(null, true)
+      return (
+        <span
+          title={`Aanwezig min geboekt. ${dagVergelijkingUitleg(d)}`}
+          style={{ fontSize: 13, fontWeight: 700, color: verschilKleur(d.verschilUren), fontVariantNumeric: 'tabular-nums', cursor: 'help' }}
+        >
+          {verschilTekst(d.verschilUren)}
+        </span>
+      )
+    },
+  },
   {
     key: 'uurtarief', label: 'Uurtarief', breedte: 100,
     sorteerWaarde: (r) => r.uurtarief ?? 0,
@@ -215,9 +316,14 @@ function maakKolommen(uursoortOpties: string[]): KolomDefinitie<UrenOverzichtReg
 /* ─── Scherm ────────────────────────────────────────────────────────────────── */
 
 export default function UrenOverzicht({
-  data, onkosten, periode, layouts, user_id, magAlles, medewerkerId,
+  data, onkosten, periode, layouts, user_id, magAlles, medewerkerId, vergelijking,
 }: {
   data: UrenOverzichtData
+  /**
+   * Aanwezig tegenover geboekt per medewerker-dag, sleutel `dagVergelijkingSleutel`. Alleen voor
+   * de dagen die deze gebruiker te zien krijgt; zie `lib/uren/aanwezigheid-bij-uren.ts`.
+   */
+  vergelijking: Record<string, DagVergelijking>
   /**
    * De ingediende parkeer- en reiskosten over dezelfde periode. Null zonder financieel-recht:
    * uitbetalen is werk van de administratie. Een projectleider ziet de kosten van zijn mensen
@@ -334,8 +440,9 @@ export default function UrenOverzicht({
     () => maakKolommen(
       [...new Set(data.regels.map((r) => r.uursoort).filter((u): u is string => !!u))]
         .sort((a, b) => a.localeCompare(b, 'nl')),
+      vergelijking,
     ),
-    [data.regels],
+    [data.regels, vergelijking],
   )
 
   const telling = useMemo(() => {
@@ -357,10 +464,15 @@ export default function UrenOverzicht({
     if (!gekozen || gekozen.key === 'geen') return undefined
     return {
       sleutel: gekozen.sleutel,
-      kop: (rijen: UrenOverzichtRegel[], sleutel: string) => <GroepKop rijen={rijen} sleutel={sleutel} />,
+      kop: (rijen: UrenOverzichtRegel[], sleutel: string) => (
+        <GroepKop
+          rijen={rijen} sleutel={sleutel}
+          dag={gekozen.key === 'medewerkerDag' && rijen[0] ? vergelijkingVan(rijen[0], vergelijking) : null}
+        />
+      ),
       standaardOpen: false,
     }
-  }, [groep])
+  }, [groep, vergelijking])
 
   function kiesPeriode(p: UrenPeriode) {
     start(() => router.push(`/uren?periode=${p}`))
