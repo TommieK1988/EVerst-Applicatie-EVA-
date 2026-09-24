@@ -9,6 +9,7 @@ import {
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
 import { FACTURATIE_LABELS, SERVICEDESK_ALLE_STATUSSEN } from '../types'
+import { MandaatMeter } from '../servicedesk/MandaatMeter'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -27,6 +28,15 @@ type Props = {
   initieleFacturatiemethode: 'regie' | 'termijnen'
   /** Mutatiewerk gaat aangenomen; dan staat de methode standaard op Aangenomen (wel aanpasbaar). */
   isMutatie?: boolean
+  /**
+   * De actieknoppen, rechts in ditzelfde blok.
+   *
+   * Als slot en niet als eigen kaart: "wat is de stand van deze bon" en "wat kan ik ermee" zijn
+   * één vraag, en ze stonden als twee losse blokken onder elkaar. De knoppen komen van buiten
+   * omdat ze hun eigen vensters en server-acties meebrengen; dit blok hoeft daar niets van te
+   * weten.
+   */
+  acties?: React.ReactNode
 }
 
 function Regel({ label, bedrag }: { label: string; bedrag: number }) {
@@ -39,7 +49,7 @@ function Regel({ label, bedrag }: { label: string; bedrag: number }) {
 }
 
 export default function ServicedeskInfoPaneel({
-  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie,
+  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie, acties,
 }: Props) {
   const router = useRouter()
   const [mandaat, setMandaat]       = useState<string>(initieelMandaat != null ? String(initieelMandaat) : '')
@@ -83,97 +93,110 @@ export default function ServicedeskInfoPaneel({
     <Card className="col-span-2">
       <CardHeader>Servicedesk</CardHeader>
       <CardBody>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          {/* Doorlooptijd */}
-          <div>
-            <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Doorlooptijd</div>
-            <div className="flex items-center gap-2">
-              <span className="tabular-nums text-[22px] font-bold" style={{ color: dagenKleur }}>
-                {dagenOpen != null ? `${dagenOpen}` : '—'}
-              </span>
-              <span className="text-[12px] text-neutral-500">dagen open</span>
-            </div>
-          </div>
+        {/* Gegevens links, knoppen rechts. De knoppenkolom heeft een vaste breedte zodat de
+            gegevens ernaast niet meebewegen met de langste knoptekst. */}
+        <div className="flex flex-col gap-5 lg:flex-row lg:gap-6">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              {/* Doorlooptijd */}
+              <div>
+                <div className="mb-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Doorlooptijd</div>
+                <div className="flex items-center gap-2">
+                  <span className="tabular-nums text-[22px] font-bold" style={{ color: dagenKleur }}>
+                    {dagenOpen != null ? `${dagenOpen}` : '—'}
+                  </span>
+                  <span className="text-[12px] text-neutral-500">dagen open</span>
+                </div>
+              </div>
 
-          {/* Facturatiemethode */}
-          <div>
-            <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Facturatie</div>
-            <div className="inline-flex overflow-hidden rounded-lg border border-neutral-200">
-              {(['regie', 'termijnen'] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => kiesMethode(m)}
-                  className="px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
-                  style={{
-                    background: methode === m ? 'var(--accent)' : 'transparent',
-                    color: methode === m ? '#fff' : 'var(--fg-muted)',
-                  }}
-                >
-                  {FACTURATIE_LABELS[m]}
-                </button>
-              ))}
+              {/* Facturatiemethode */}
+              <div>
+                <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Facturatie</div>
+                <div className="inline-flex overflow-hidden rounded-lg border border-neutral-200">
+                  {(['regie', 'termijnen'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => kiesMethode(m)}
+                      className="px-3.5 py-1.5 text-[12px] font-semibold transition-colors"
+                      style={{
+                        background: methode === m ? 'var(--accent)' : 'transparent',
+                        color: methode === m ? '#fff' : 'var(--fg-muted)',
+                      }}
+                    >
+                      {FACTURATIE_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+                {isMutatie && (
+                  <div className="mt-1.5 max-w-[190px] text-[11px] leading-snug text-neutral-400">
+                    Mutatiewerk staat standaard op Aangenomen.
+                  </div>
+                )}
+              </div>
+
+              {/* Mandaat */}
+              <div>
+                <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Mandaat (excl. btw)</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] text-neutral-400">€</span>
+                  <Input
+                    value={mandaat}
+                    onChange={e => setMandaat(e.target.value)}
+                    onBlur={bewaarMandaat}
+                    placeholder="0,00"
+                    className="w-28 tabular-nums"
+                    inputMode="decimal"
+                  />
+                </div>
+              </div>
+
             </div>
-            {isMutatie && (
-              <div className="mt-1.5 max-w-[190px] text-[11px] leading-snug text-neutral-400">
-                Mutatiewerk staat standaard op Aangenomen.
+
+            {/* Hoe het mandaat ervoor staat én waar dat bedrag vandaan komt, in één blok. Dat waren
+                twee losse dingen op twee plekken: de meter in een balk boven de tabs, de opbouw hier.
+                Je las dan een percentage zonder te zien waardoor het vol liep. */}
+            {status?.mandaat != null && status.mandaat > 0 && (
+              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+                <MandaatMeter mandaat={status.mandaat} totaal={status.totaal} />
+                <div className="mb-2 mt-3 border-t border-neutral-200 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+                  Verbruikt mandaat
+                </div>
+                <div className="flex flex-col gap-1 text-[12px]">
+                  <Regel label="Geboekte verkoopwaarde" bedrag={status.geboekteVerkoop} />
+                  <Regel
+                    label={`Uitgezette opdrachten (incl. ${status.opslagPct}% opslag)`}
+                    bedrag={status.uitgezetteOpdrachten}
+                  />
+                  <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1 font-semibold">
+                    <span className="text-neutral-700">Totaal</span>
+                    <span className="tabular-nums">{fmt(status.totaal)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Doorlooptijd per fase */}
+            {fases.length > 0 && (
+              <div className="mt-4">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Tijd per fase</div>
+                <div className="flex flex-col gap-1">
+                  {fases.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-[12px]">
+                      <span className="text-neutral-700">{faseLabel(f.substatus)}</span>
+                      <span className="tabular-nums text-neutral-500">{f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Mandaat */}
-          <div>
-            <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Mandaat (excl. btw)</div>
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] text-neutral-400">€</span>
-              <Input
-                value={mandaat}
-                onChange={e => setMandaat(e.target.value)}
-                onBlur={bewaarMandaat}
-                placeholder="0,00"
-                className="w-28 tabular-nums"
-                inputMode="decimal"
-              />
+          {acties && (
+            <div className="shrink-0 border-neutral-200 lg:w-[248px] lg:border-l lg:pl-6 dark:border-neutral-700">
+              {acties}
             </div>
-          </div>
-
+          )}
         </div>
-
-        {/* Waaruit het verbruikte mandaat is opgebouwd. De stánd (kleur, balk, hoeveel er nog
-            in past) staat in de balk boven de tabs; hier staat waar dat bedrag vandaan komt —
-            het antwoord op "waarom is mijn mandaat al bijna vol?". */}
-        {status?.mandaat != null && status.mandaat > 0 && (
-          <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
-              Verbruikt mandaat
-            </div>
-            <div className="flex flex-col gap-1 text-[12px]">
-              <Regel label="Geboekte verkoopwaarde" bedrag={status.geboekteVerkoop} />
-              <Regel
-                label={`Uitgezette opdrachten (incl. ${status.opslagPct}% opslag)`}
-                bedrag={status.uitgezetteOpdrachten}
-              />
-              <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1 font-semibold">
-                <span className="text-neutral-700">Totaal</span>
-                <span className="tabular-nums">{fmt(status.totaal)}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Doorlooptijd per fase */}
-        {fases.length > 0 && (
-          <div className="mt-4">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Tijd per fase</div>
-            <div className="flex flex-col gap-1">
-              {fases.map((f, i) => (
-                <div key={i} className="flex items-center justify-between text-[12px]">
-                  <span className="text-neutral-700">{faseLabel(f.substatus)}</span>
-                  <span className="tabular-nums text-neutral-500">{f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </CardBody>
     </Card>
   )

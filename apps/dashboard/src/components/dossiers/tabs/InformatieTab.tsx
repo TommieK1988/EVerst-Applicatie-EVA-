@@ -8,7 +8,7 @@ import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
   bonBewakingscode,
   getDossierSubstatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
-  type DossierSectie, type DossierRij,
+  type DossierSectie, type DossierRij, type ServicedeskSubstatus,
 } from '../types'
 import { updateServicedeskSubstatus, updateDossierRollen, updateDossierInfo, getContactpersonenVoorRelatie, herstelDossierBouw7Velden, stuurAanneemsomNaarBouw7 } from '@/lib/dossiers/actions'
 import { wijzigSubstatusMetConflict } from '../substatus-wijzigen'
@@ -1935,22 +1935,6 @@ export function InformatieTab({
         </div>
       )}
 
-      {/* Bovenaan de bon, vóór de kaarten: wat wil je doen? Een servicedeskbon draait om vier
-          handelingen, en die horen niet verspreid over de kaarten eronder te staan. */}
-      {sectie === 'servicedesk' && (
-        <BonActies
-          dossierId={dossier.id}
-          heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
-          mandaatBedrag={dossier.mandaat_bedrag ?? null}
-          verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
-          kostengroep={dossier.regie_bewakingscode
-            ? { code: dossier.regie_bewakingscode, naam: bonBewakingscode(dossier.facturatiemethode).naam }
-            : null}
-          calcProjectId={dossier.everts_calc_project_id ?? projectId ?? null}
-          alleenLezen={readOnly}
-        />
-      )}
-
       {/* ── Kaarten grid ── */}
       {/* Elke rij is precies BLOK_HOOGTE hoog zolang alles ingeklapt is, en groeit alleen
           mee met de kaart die de gebruiker openzet — de buurcel blijft dan staan. Zonder
@@ -1970,6 +1954,22 @@ export function InformatieTab({
             initieelMandaat={dossier.mandaat_bedrag ?? null}
             initieleFacturatiemethode={(dossier.facturatiemethode as 'regie' | 'termijnen') ?? 'regie'}
             isMutatie={isMutatieDossier(dossier)}
+            /* De knoppen staan rechts in ditzelfde blok: de stand van de bon en wat je ermee
+               kunt doen zijn één vraag, en stonden als twee kaarten onder elkaar. */
+            acties={
+              <BonActies
+                dossierId={dossier.id}
+                heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
+                mandaatBedrag={dossier.mandaat_bedrag ?? null}
+                verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
+                kostengroep={dossier.regie_bewakingscode
+                  ? { code: dossier.regie_bewakingscode, naam: bonBewakingscode(dossier.facturatiemethode).naam }
+                  : null}
+                calcProjectId={dossier.everts_calc_project_id ?? projectId ?? null}
+                substatus={(dossier.servicedesk_substatus as ServicedeskSubstatus | null) ?? null}
+                alleenLezen={readOnly}
+              />
+            }
           />
         )}
 
@@ -2372,8 +2372,11 @@ export function InformatieTab({
         {/* Gevraagde werkzaamheden — de scope-samenvatting uit de aanvraagmail en de
             bijlagen. Dit is wat een calculator als eerste wil lezen, dus staat het boven
             de datums en de rollen. Verbergt zichzelf als er niets is en er niets bewerkt
-            mag worden. */}
-        {(dossier.gevraagde_werkzaamheden || !readOnly) && (
+            mag worden.
+
+            Niet op een servicedeskbon: daar staat de omschrijving al bij de notities, en
+            tweemaal dezelfde tekst op één pagina levert twee versies op die uit elkaar lopen. */}
+        {sectie !== 'servicedesk' && (dossier.gevraagde_werkzaamheden || !readOnly) && (
           <GevraagdeWerkzaamhedenBlok
             dossierId={dossier.id}
             tekst={dossier.gevraagde_werkzaamheden ?? null}
@@ -2384,7 +2387,11 @@ export function InformatieTab({
         )}
 
         {/* Datums — eigen blok, direct onder Projectinformatie. Zat eerder als lijstje
-            onderin Projectinformatie, tussen velden waar het niets mee te maken heeft. */}
+            onderin Projectinformatie, tussen velden waar het niets mee te maken heeft.
+
+            Niet op een bon: aanvraagdatum, deadline en voorlopige planning horen bij een traject
+            van weken. Een bon loopt dagen en heeft zijn doorlooptijd al in het Servicedesk-blok. */}
+        {sectie !== 'servicedesk' && (
         <DatumsBlok
           regels={datumRegels}
           deadlineUrgent={deadlineUrgent}
@@ -2398,6 +2405,7 @@ export function InformatieTab({
           }}
           onBewaar={bewaarDatum}
         />
+        )}
 
         {/* Rollen — eigen blok. Bewerkbaar (ook voor Bouw7-dossiers): een rolwissel
             wordt meteen naar Bouw7 teruggeschreven. Calculator ≡ Bouw7 "Werkvoorbereider"
@@ -2436,8 +2444,13 @@ export function InformatieTab({
         {/* Betrokkenen — iedereen die bij deze opdracht hoort: de contactpersoon van de
             opdrachtgever, het VvE-bestuur of de assetmanager achter het factuuradres, en wie
             er verder bij hoort (architect, opzichter, beheerder). Naast Rollen, want dat is
-            hetzelfde in het klein maar dan intern. Het blok haalt zijn eigen data op. */}
-        <BetrokkenenBlok dossierId={dossier.id} readOnly={readOnly} />
+            hetzelfde in het klein maar dan intern. Het blok haalt zijn eigen data op.
+
+            Niet op een bon: daar is één contactpersoon bij de opdrachtgever het hele verhaal,
+            en die staat al bij Projectinformatie. */}
+        {sectie !== 'servicedesk' && (
+          <BetrokkenenBlok dossierId={dossier.id} readOnly={readOnly} />
+        )}
 
         {/* Dossier-toggles */}
         <DossierTogglesPaneel dossierId={dossier.id} />

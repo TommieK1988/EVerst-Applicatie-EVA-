@@ -1,12 +1,16 @@
 'use client'
 
 /**
- * "Wat wil je doen?" — de vier kernhandelingen van een servicedeskbon, bovenaan de Bon-pagina.
+ * "Wat wil je doen?" — de handelingen van een servicedeskbon, rechts in het Servicedesk-blok.
  *
- * Deze vier zijn het werk: uitbesteden, zelf inplannen, offreren, of meer mandaat vragen. Ze
- * staan er altijd en op dezelfde plek, zodat je ze niet per status hoeft te zoeken. Welke nu kan
- * en waarom staat in `bon-acties.ts`; dit bestand gaat alleen over hoe ze eruitzien en wat ze
- * aanroepen.
+ * Bovenaan de stap die uit de huidige stand volgt (Werk gestart, Gereedmelden, Kosten
+ * controleren…): dat is een vaststelling, geen keuze, en daarom de primaire knop. Daaronder de
+ * vier handelingen waar wél iets te kiezen valt: uitbesteden, zelf inplannen, offreren, of meer
+ * mandaat vragen.
+ *
+ * Ze staan onder elkaar en altijd op dezelfde plek, zodat je ze niet per status hoeft te zoeken.
+ * Welke nu kan en waarom staat in `bon-acties.ts`; dit bestand gaat alleen over hoe ze eruitzien
+ * en wat ze aanroepen.
  */
 
 import React, { useState, useTransition } from 'react'
@@ -15,12 +19,16 @@ import toast from 'react-hot-toast'
 import { Button } from '@/components/ui'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
 import { bonActies, type BonActieSleutel } from './bon-acties'
+import { volgendeStap } from './status-stappen'
+import type { ServicedeskSubstatus } from '../types'
 import MandaatVerhogingModal from './MandaatVerhogingModal'
 import InplannenModal from './InplannenModal'
 import BestelVenster from './BestelVenster'
+import StatusStapKnop from './StatusStapKnop'
 
 export default function BonActies({
-  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, kostengroep, calcProjectId, alleenLezen,
+  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, kostengroep, calcProjectId,
+  substatus, alleenLezen,
 }: {
   dossierId: string
   heeftCalculatie: boolean
@@ -31,6 +39,8 @@ export default function BonActies({
   kostengroep: { code: string; naam: string } | null
   /** Gekoppelde calculatie; bepaalt in welke werkbegroting de bestelregels terechtkomen. */
   calcProjectId: string | null
+  /** De kolom waar de bon nu op staat; bepaalt de vaste vervolgstap bovenaan. */
+  substatus: ServicedeskSubstatus | null
   alleenLezen: boolean
 }) {
   const router = useRouter()
@@ -38,6 +48,8 @@ export default function BonActies({
   const [mandaatOpen, setMandaatOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [bestelOpen, setBestelOpen] = useState(false)
+
+  const stap = alleenLezen ? null : volgendeStap(substatus)
 
   const acties = bonActies({
     heeftCalculatie,
@@ -81,34 +93,37 @@ export default function BonActies({
 
   return (
     <>
-      <div style={{
-        border: '1px solid var(--border)', borderRadius: 10,
-        background: 'var(--bg-elev, #fff)', padding: '14px 16px', marginBottom: 20,
-      }}>
-        <div style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
-          color: 'var(--fg-muted)', marginBottom: 12,
-        }}>
-          Wat wil je doen?
-        </div>
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+        Wat wil je doen?
+      </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {acties.map(a => (
-            <div key={a.sleutel} style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 240 }}>
-              <Button
-                variant={a.primair ? 'primary' : 'secondary'}
-                onClick={() => doe(a.sleutel)}
-                disabled={!a.kan || bezig}
-                loading={bezig && a.sleutel === 'offerte'}
-              >
-                {a.label}
-              </Button>
-              <span style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--fg-muted)' }}>
-                {a.uitleg}
-              </span>
-            </div>
-          ))}
-        </div>
+      <div className="flex flex-col gap-2.5">
+        {stap && (
+          <div className="flex flex-col gap-1">
+            <StatusStapKnop dossierId={dossierId} stap={stap} blok />
+            <span className="text-[11px] leading-snug text-neutral-500">
+              De vervolgstap die uit de huidige stand volgt.
+            </span>
+          </div>
+        )}
+
+        {acties.map(a => (
+          <div key={a.sleutel} className="flex flex-col gap-1">
+            <Button
+              // Eén primaire knop per blok. Is er een vervolgstap, dan is dát de primaire
+              // handeling en worden de keuzes eronder secundair — anders staan er twee knoppen
+              // die allebei "doe mij eerst" zeggen.
+              variant={a.primair && !stap ? 'primary' : 'secondary'}
+              onClick={() => doe(a.sleutel)}
+              disabled={!a.kan || bezig}
+              loading={bezig && a.sleutel === 'offerte'}
+              className="w-full justify-center"
+            >
+              {a.label}
+            </Button>
+            <span className="text-[11px] leading-snug text-neutral-500">{a.uitleg}</span>
+          </div>
+        ))}
       </div>
 
       {bestelOpen && (
