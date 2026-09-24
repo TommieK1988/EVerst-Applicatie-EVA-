@@ -46,7 +46,8 @@ export const BEZOEK_OPTIES_SLEUTEL = 'bezoek'
 export const STANDAARD_BEZOEK_OPTIES: BezoekOpties = {
   bron_soort: null,
   bron_id: null,
-  per_pagina: 3,
+  // Twee per pagina: elke bevinding krijgt een halve pagina met de foto groot ernaast.
+  per_pagina: 2,
   toon_fotos: true,
   toon_voor_na: true,
   toon_waarnemingen: true,
@@ -66,9 +67,24 @@ export const MAX_PER_PAGINA = 12
  * nooit en vervormt nooit, dus dit is tevens de gegarandeerde maximale fotohoogte — de
  * andere helft van "een bevinding valt nooit over twee pagina's".
  */
-export const BEZOEK_FOTO_MAX = { w: 180, h: 135 }
-/** Kleiner kader voor de strook positieve waarnemingen en voor handtekeningen. */
-export const BEZOEK_FOTO_KLEIN = { w: 120, h: 90 }
+export const BEZOEK_FOTO_MAX = { w: 380, h: 380 }
+/**
+ * Hetzelfde kader voor overzichtsfoto's en de foto's bij de punten per discipline.
+ *
+ * Was 120×90 px (ruim 3×2,5 cm): op papier onleesbaar klein. Een foto krijgt nu een halve
+ * pagina, rechts van de omschrijving: hooguit ±10 × 10 cm, zodat ook een staande
+ * telefoonfoto op een halve pagina past. De fotokolom in het sjabloon is 6000 twips
+ * (10,6 cm, min 2× 100 twips celmarge = 386 px) — het kader moet daarbinnen blijven, anders
+ * snijdt Word de foto af.
+ */
+export const BEZOEK_FOTO_KLEIN = BEZOEK_FOTO_MAX
+/** Handtekeningen blijven klein; een krabbel op een halve pagina is lachwekkend. */
+export const BEZOEK_HANDTEKENING_MAX = { w: 120, h: 90 }
+/**
+ * Bronresolutie van een bezoekfoto in px. `fitSize` vergroot nooit, dus de bron moet groter
+ * zijn dan het kader; 1000 px op ±10 cm is ±250 dpi — scherp op papier.
+ */
+export const BEZOEK_FOTO_PX = 1000
 
 /**
  * Afgeleid uit de labels en niet met de hand overgetypt.

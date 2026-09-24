@@ -25,7 +25,7 @@ import {
   FOTO_GRENZEN, mapMetLimiet, haalRapportFoto, pasFotoBudgetToe, veiligeFotoUrl,
 } from '../rapport-fotos'
 import type { BezoekOpties } from '../bezoek-opties'
-import { MAX_BEVINDINGEN } from '../bezoek-opties'
+import { MAX_BEVINDINGEN, BEZOEK_FOTO_PX } from '../bezoek-opties'
 import {
   LEEG_BEZOEK_BLOK, LEGE_BEVINDING, BEZOEK_SOORT_LABELS, bezoekDisclaimer,
   type BezoekBlok, type BezoekBevinding, type BezoekDisciplineRij, type Rij,
@@ -125,7 +125,9 @@ export async function bouwBezoekUitProjectbezoek(
         ...losseFotos.map(f => veiligeFotoUrl(String(f.url))),
       ]
     : []
-  const opgehaald = await mapMetLimiet(teHalen, FOTO_GRENZEN.PARALLEL, haalRapportFoto)
+  const opgehaald = await mapMetLimiet(
+    teHalen, FOTO_GRENZEN.PARALLEL, url => haalRapportFoto(url, BEZOEK_FOTO_PX),
+  )
   // 'laat_vallen': liever een rapport zonder de laatste foto's dan geen rapport.
   const dataUrls = pasFotoBudgetToe(opgehaald, 'laat_vallen')
   const aandachtFoto = (i: number) => dataUrls[i] ?? ''
@@ -207,7 +209,9 @@ export async function bouwBezoekUitProjectbezoek(
   const waarnemingen: Rij[] = keuze.toon_waarnemingen
     ? losseFotos
         .map((f, i) => ({
-          omschrijving: String(f.toelichting ?? '') || 'Overzicht',
+          // "Overzicht" bij elke foto zei niets; een nummer maakt een foto aanwijsbaar
+          // ("zie foto 7") als er geen toelichting bij is getypt.
+          omschrijving: String(f.toelichting ?? '') || `Foto ${i + 1}`,
           locatie: '', groep: 'Bezoek',
           foto: losseFoto(i), foto_klein: losseFoto(i), heeft_foto: !!losseFoto(i),
         }))

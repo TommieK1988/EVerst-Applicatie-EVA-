@@ -96,7 +96,11 @@ export function veiligeFotoUrl(url: string | null | undefined): string {
  * Een lege URL geeft een leeg resultaat in plaats van een fout; dat scheelt de aanroepers een
  * ternary bij elke opdracht.
  */
-export async function haalRapportFoto(url: string): Promise<FotoResultaat> {
+export async function haalRapportFoto(
+  url: string,
+  /** Breedte/hoogte in px; standaard FOTO_GRENZEN.PX. Het bezoekrapport toont groter. */
+  px: number = FOTO_GRENZEN.PX,
+): Promise<FotoResultaat> {
   if (!url) return GEEN_FOTO
   try {
     const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
@@ -107,7 +111,7 @@ export async function haalRapportFoto(url: string): Promise<FotoResultaat> {
     const sharp = (await import('sharp')).default
     const jpeg = await sharp(buf)
       .rotate()
-      .resize({ width: FOTO_GRENZEN.PX, height: FOTO_GRENZEN.PX, fit: 'inside', withoutEnlargement: true })
+      .resize({ width: px, height: px, fit: 'inside', withoutEnlargement: true })
       .flatten({ background: '#ffffff' })
       .jpeg({ quality: FOTO_GRENZEN.JPEG_KWALITEIT, mozjpeg: true })
       .toBuffer()
@@ -121,7 +125,9 @@ export async function haalRapportFoto(url: string): Promise<FotoResultaat> {
 
 /** Haalt een reeks foto's op met de standaard-parallelliteit. */
 export function haalRapportFotos(urls: string[]): Promise<FotoResultaat[]> {
-  return mapMetLimiet(urls, FOTO_GRENZEN.PARALLEL, haalRapportFoto)
+  // Niet `haalRapportFoto` kaal doorgeven: mapMetLimiet roept aan met (item, index), en de
+  // index zou dan als pixelmaat worden gelezen.
+  return mapMetLimiet(urls, FOTO_GRENZEN.PARALLEL, url => haalRapportFoto(url))
 }
 
 /**

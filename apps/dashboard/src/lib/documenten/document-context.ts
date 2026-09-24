@@ -29,7 +29,7 @@ import { bouwHoutrotBlok, LEEG_HOUTROT_BLOK } from './houtrot-rapport'
 import { RAPPORT_FOTO_MAX, parseRapportOpties, HOUTROT_OPTIES_SLEUTEL } from './houtrot-opties'
 import { bouwKwaliteitBlok, LEEG_KWALITEIT_BLOK } from './kwaliteit-rapport'
 import { KWALITEIT_FOTO_MAX, KWALITEIT_FOTO_KLEIN } from './kwaliteit-opties'
-import { BEZOEK_FOTO_MAX, BEZOEK_FOTO_KLEIN } from './bezoek-opties'
+import { BEZOEK_FOTO_MAX, BEZOEK_FOTO_KLEIN, BEZOEK_HANDTEKENING_MAX } from './bezoek-opties'
 import { LEEG_BEZOEK_BLOK } from './bezoek/contract'
 import { isBezoekSoort } from './types'
 
@@ -340,7 +340,7 @@ export function documentImageMax(documentsoort?: string): Record<string, { w: nu
   max['bevinding_foto'] = BEZOEK_FOTO_MAX
   max['bevinding_foto_na'] = BEZOEK_FOTO_MAX
   max['waarneming_foto'] = BEZOEK_FOTO_KLEIN
-  max['beeld'] = BEZOEK_FOTO_KLEIN
+  max['beeld'] = BEZOEK_HANDTEKENING_MAX
   // Het hoofdstuk "Per onderdeel" is een lijstje, geen bewijsfoto; zonder eigen kader valt
   // de tag terug op het algemene maximum en loopt een punt uit zijn tabelrij.
   max['disciplinefoto'] = BEZOEK_FOTO_KLEIN
