@@ -1,6 +1,6 @@
 import { createAdminClient } from '@everts/database/server'
 import type { Metadata } from 'next'
-import type { Medewerker, MedewerkerRooster, MedewerkerAfwezigheid, PlanningItemVerrijkt, PlanningUursoort } from '@everts/database/platform-types'
+import type { Medewerker, MedewerkerRooster, PlanningItemVerrijkt, PlanningUursoort } from '@everts/database/platform-types'
 import MedewerkerTimeline from '@/components/planning/MedewerkerTimeline'
 import { haalPlanningItemsMetExpansie } from '../bedrijfsagenda/actions'
 import { berekenFeestdagen } from '@/lib/agenda/feestdagen'
@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui'
 import VerlofGoedkeurenKnop from '@/components/planning/VerlofGoedkeurenKnop'
 import { getVerlofBeoordeelStand } from '@/lib/uren/verlof'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { haalAfwezigheidVoorPlanning } from '@/lib/planning/afwezigheid'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
 
@@ -29,7 +30,6 @@ const db = () => createAdminClient() as any
 
 export default async function MedewerkerplanningPage() {
   const supabase = db()
-  const vandaag  = new Date().toISOString().slice(0, 10)
   const jaar     = new Date().getFullYear()
 
   const feestdagen = berekenFeestdagen(jaar)
@@ -49,7 +49,8 @@ export default async function MedewerkerplanningPage() {
         .order('id')
         .range(van, tot)),
     supabase.from('medewerker_roosters').select('*'),
-    supabase.from('medewerker_afwezigheid').select('*').gte('eind_datum', vandaag),
+    // Ook verlof uit het verleden: je kunt in de tijdlijn terugbladeren (zie haalAfwezigheidVoorPlanning).
+    haalAfwezigheidVoorPlanning(supabase),
     // Ook gepagineerd: het dossierbestand groeit gestaag richting de 1000 en zou daarna
     // stilzwijgend afkappen — balken tonen dan een rauwe UUID in plaats van een titel.
     haalAlleRijen<DossierRegel>((van, tot) =>
@@ -73,7 +74,7 @@ export default async function MedewerkerplanningPage() {
   const medewerkers = ((medewerkerRes.data ?? []) as Medewerker[])
     .filter(m => m.afdeling === PLANBARE_AFDELING)
   const roosters    = (roostersRes.data ?? []) as MedewerkerRooster[]
-  const afwezigheid = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
+  const afwezigheid = afwezigheidRes
   const uursoorten  = (uursoortRes.data ?? []) as PlanningUursoort[]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

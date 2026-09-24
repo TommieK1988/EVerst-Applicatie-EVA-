@@ -1,6 +1,6 @@
 import { createAdminClient } from '@everts/database/server'
 import type {
-  Medewerker, MedewerkerRooster, MedewerkerAfwezigheid,
+  Medewerker, MedewerkerRooster,
   PlanningItemVerrijkt, PlanningActiviteit, PlanningUursoort,
   PlanningWerkbegrotingRegelMetUursoort, Relatie,
   PlanningFase, PlanningAfhankelijkheid, Uurtarief,
@@ -15,6 +15,7 @@ import PlanningTabSwitcher from './PlanningTabSwitcher'
 import { getBedrijfsinstellingen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
 import { berekenPlanUren } from '@/lib/planning/werkuren'
 import { getPlanningBewakingscodes } from '@/lib/planning/bewakingscodes'
+import { haalAfwezigheidVoorPlanning } from '@/lib/planning/afwezigheid'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -23,7 +24,6 @@ type BudgetRij = PlanningWerkbegrotingRegelMetUursoort & { geplande_uren: number
 
 export default async function DossierPlanningTab({ dossier_id }: { dossier_id: string }) {
   const supabase = db()
-  const vandaag  = new Date().toISOString().slice(0, 10)
 
   // Stap 1: data die niet van elkaar afhankelijk zijn
   const [
@@ -34,7 +34,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
     supabase.from('planning_activiteiten').select('*').eq('dossier_id', dossier_id).order('volgorde'),
     supabase.from('medewerker_roosters').select('*'),
-    supabase.from('medewerker_afwezigheid').select('*').gte('eind_datum', vandaag),
+    haalAfwezigheidVoorPlanning(supabase),
     supabase
       .from('planning_werkbegroting_regels')
       .select('*, planning_uursoorten ( naam, kleur, code )')
@@ -92,7 +92,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const medewerkers       = (medewerkerRes.data ?? []) as Medewerker[]
   const items             = (itemsRes.data ?? []) as PlanningItemVerrijkt[]
   const roosters          = (roostersRes.data ?? []) as MedewerkerRooster[]
-  const afwezigheid       = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
+  const afwezigheid       = afwezigheidRes
   const uursoorten        = (uursoortRes.data ?? []) as PlanningUursoort[]
   const partijen          = (partijenRes.data ?? []) as Pick<Relatie, 'id' | 'naam' | 'types'>[]
   const fasen             = (fasenRes.data ?? []) as PlanningFase[]
