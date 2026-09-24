@@ -44,6 +44,7 @@ export {
   SOORTEN_PER_TAB,
   WARM_SET,
   WARM_SET_AFGESLOTEN,
+  warmSetVoor,
 } from './snapshot-soorten'
 
 import type { DossierSoort, GlobaleSoort } from './snapshot-soorten'

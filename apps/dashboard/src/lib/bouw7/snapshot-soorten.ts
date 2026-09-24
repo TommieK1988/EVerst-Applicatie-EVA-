@@ -84,3 +84,50 @@ export const WARM_SET: Record<'opdracht' | 'offerte' | 'aanvraag', DossierSoort[
  * die het Verkoop-tab toont blijven interessant; de rest haalt de knop desgewenst op.
  */
 export const WARM_SET_AFGESLOTEN: DossierSoort[] = ['athena_financial', 'verkoopfacturen']
+
+/**
+ * Wat een afgesloten dossier éénmaal hoort te hebben, ook al ververst de cron het daarna niet
+ * meer. Zonder dit bleven de tabs Uren, Inkoop en Financieel van een afgesloten servicedeskbon
+ * voorgoed leeg: zo'n bon doorliep de hele servicedeskladder terwijl de cron hem als aanvraag
+ * zag, en werd dus nooit volledig opgehaald.
+ */
+export const EENMALIG_BIJ_AFGESLOTEN: DossierSoort[] = [
+  'athena_control',
+  'hour_logs',
+  'apollo_inkoopfacturen',
+  'heimdall_inkoopfacturen',
+  'inkooporders',
+  'oa_contracten',
+]
+
+/** De velden van een dossier waarop de warmset gekozen wordt. */
+export type WarmSetDossier = {
+  hoofdstatus: string | null
+  opdracht_substatus: string | null
+  servicedesk_substatus: string | null
+}
+
+/**
+ * Welke bronnen de cron (en de dossier-brede Vernieuwen-knop) bij dit dossier ophaalt.
+ *
+ * Een servicedeskbon staat in de database op hoofdstatus `aanvraag` — de servicedeskladder loopt
+ * via `servicedesk_substatus`. Kijk je alleen naar de hoofdstatus, dan krijgt een bon de set van
+ * een aanvraag en worden uren en inkoop nooit opgehaald, terwijl hij dezelfde tabs heeft als een
+ * opdracht. Dat was zo tot sept 2026: 363 van de 366 bonnen hadden geen enkele uurregel in EVA.
+ *
+ * `aanwezig` = de bronnen die al eens zijn opgehaald. Mee te geven waar dat bekend is; een
+ * afgesloten dossier krijgt dan de bronnen uit `EENMALIG_BIJ_AFGESLOTEN` die nog ontbreken.
+ */
+export function warmSetVoor(d: WarmSetDossier, aanwezig?: ReadonlySet<DossierSoort>): DossierSoort[] {
+  const afgesloten =
+    d.servicedesk_substatus != null
+      ? d.servicedesk_substatus === 'financieel_gereed'
+      : d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_afgesloten'
+
+  if (afgesloten) {
+    const ontbrekend = aanwezig ? EENMALIG_BIJ_AFGESLOTEN.filter((s) => !aanwezig.has(s)) : []
+    return [...WARM_SET_AFGESLOTEN, ...ontbrekend]
+  }
+  if (d.servicedesk_substatus != null) return ALLE_DOSSIER_SOORTEN
+  return WARM_SET[(d.hoofdstatus ?? 'aanvraag') as keyof typeof WARM_SET] ?? WARM_SET.aanvraag
+}

@@ -3127,6 +3127,8 @@ export type DossierUrenData = {
   detailNiveau: 'medewerker' | 'bewakingscode'
   regels: UrenRegel[]
   totalen: { uren: number; bedrag: number }
+  /** Hoe vers de uurregels zijn; `ontbreekt` bevat `hour_logs` als ze nog nooit zijn opgehaald. */
+  stand: Bouw7Stand
 }
 
 /**
@@ -3135,13 +3137,17 @@ export type DossierUrenData = {
  * als het detail-endpoint niet beschikbaar is.
  */
 export async function getDossierUren(dossierId: string): Promise<DossierUrenData> {
-  const leeg: DossierUrenData = { beschikbaar: false, detailNiveau: 'medewerker', regels: [], totalen: { uren: 0, bedrag: 0 } }
+  const leeg: DossierUrenData = {
+    beschikbaar: false, detailNiveau: 'medewerker', regels: [], totalen: { uren: 0, bedrag: 0 }, stand: LEGE_STAND,
+  }
   const bouw7Id = await dossierBouw7Id(dossierId)
   if (!bouw7Id) return leeg
 
+  const { standen, stand } = await leesDossierBronnen(dossierId, ['hour_logs'])
+
   // 1. Detail per medewerker, uit de snapshot.
   try {
-    const resp = (await leesDossierBron<HourLogsPayload>(dossierId, 'hour_logs')).data
+    const resp = standen.get('hour_logs')?.data as HourLogsPayload | null | undefined
     const items = resp?.items ?? []
     if (items.length > 0) {
       const regels: UrenRegel[] = items.map((h) => {
@@ -3173,6 +3179,7 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
           uren: resp?.totalHours != null ? toGetal(resp.totalHours) : regels.reduce((s, r) => s + r.uren, 0),
           bedrag: resp?.totalCost != null ? toGetal(resp.totalCost) : regels.reduce((s, r) => s + r.bedrag, 0),
         },
+        stand,
       }
     }
   } catch {
@@ -3181,7 +3188,7 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
 
   // 2. Fallback: geaggregeerde uren per bewakingscode uit de projectbewaking.
   const bewaking = await getDossierBewaking(dossierId)
-  if (!bewaking.beschikbaar) return leeg
+  if (!bewaking.beschikbaar) return { ...leeg, stand }
   const regels: UrenRegel[] = bewaking.hoofdstukken.flatMap((h) =>
     h.regels
       .filter((r) => r.geboekteUren > 0 || r.arbeidskosten > 0)
@@ -3207,6 +3214,7 @@ export async function getDossierUren(dossierId: string): Promise<DossierUrenData
       uren: bewaking.totalen.geboekteUren,
       bedrag: bewaking.totalen.arbeidskosten,
     },
+    stand,
   }
 }
 

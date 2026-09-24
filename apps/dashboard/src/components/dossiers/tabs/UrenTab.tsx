@@ -128,15 +128,16 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
   )
 }
 
-async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
+async function UrenDetailInhoud({ dossierId, metStand }: { dossierId: string; metStand: boolean }) {
   const [data, bewakingscodes] = await Promise.all([
     getDossierUren(dossierId),
     getUrenDoelcodes(dossierId),
   ])
 
   const perMedewerker = data.detailNiveau === 'medewerker'
+  const nooitOpgehaald = data.stand.ontbreekt.includes('hour_logs')
 
-  return (
+  const detail = (
     <Card>
       <CardHeader>Geboekte uren detail</CardHeader>
       <CardBody style={{ padding: 0 }}>
@@ -148,14 +149,31 @@ async function UrenDetailInhoud({ dossierId }: { dossierId: string }) {
           perMedewerker={perMedewerker}
         />
         <div style={{ padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)', borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5 }}>
-          {!data.beschikbaar
-            ? 'Nog geen uren geboekt op dit dossier — zodra er uren binnenkomen verschijnen ze hier per medewerker.'
-            : perMedewerker
-              ? 'Live uit Bouw7 — geboekte uren per medewerker. Bewakingscode aanpassen werkt direct terug in Bouw7.'
-              : 'Per-medewerker detail niet beschikbaar; weergave per bewakingscode uit de projectbewaking.'}
+          {nooitOpgehaald
+            ? 'De uren per medewerker zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen; hierboven staat zolang het totaal per bewakingscode.'
+            : !data.beschikbaar
+              ? 'Nog geen uren geboekt op dit dossier — zodra er uren binnenkomen verschijnen ze hier per medewerker.'
+              : perMedewerker
+                ? 'Uit Bouw7 — geboekte uren per medewerker. Bewakingscode aanpassen werkt direct terug in Bouw7.'
+                : 'Per-medewerker detail niet beschikbaar; weergave per bewakingscode uit de projectbewaking.'}
         </div>
       </CardBody>
     </Card>
+  )
+
+  // Zonder de bewakingstabel (servicedeskbon) staat hier de enige Vernieuwen-knop van dit tab.
+  if (!metStand) return detail
+  return (
+    <div>
+      <Bouw7StandStrip
+        dossierId={dossierId}
+        tab="uren"
+        opgehaaldOp={data.stand.opgehaaldOp}
+        ontbreekt={data.stand.ontbreekt}
+        fout={data.stand.fout}
+      />
+      {detail}
+    </div>
   )
 }
 
@@ -179,7 +197,7 @@ export function UrenTab({ dossierId, toonBewaking = true }: {
         </Suspense>
       )}
       <Suspense fallback={<SkeletonCard />}>
-        <UrenDetailInhoud dossierId={dossierId} />
+        <UrenDetailInhoud dossierId={dossierId} metStand={!toonBewaking} />
       </Suspense>
     </div>
   )

@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { ververseDossierBronnen } from './snapshot'
-import { WARM_SET, WARM_SET_AFGESLOTEN, type DossierSoort } from './snapshot-bronnen'
+import { warmSetVoor, type DossierSoort } from './snapshot-bronnen'
 
 export type VernieuwResultaat = {
   ok: boolean
@@ -38,19 +38,16 @@ export async function vernieuwDossierSnapshots(
 
   const { data } = await db()
     .from('dossiers')
-    .select('hoofdstatus, opdracht_substatus')
+    .select('hoofdstatus, opdracht_substatus, servicedesk_substatus')
     .eq('id', dossierId)
     .maybeSingle()
 
-  const rij = data as { hoofdstatus: string | null; opdracht_substatus: string | null } | null
+  const rij = data as Parameters<typeof warmSetVoor>[0] | null
   if (!rij) return { ok: false, opgehaaldOp: null, fouten: ['Dossier niet gevonden'] }
 
-  const teDoen =
-    soorten && soorten.length > 0
-      ? soorten
-      : rij.hoofdstatus === 'opdracht' && rij.opdracht_substatus === 'financieel_afgesloten'
-        ? WARM_SET_AFGESLOTEN
-        : (WARM_SET[(rij.hoofdstatus ?? 'aanvraag') as keyof typeof WARM_SET] ?? WARM_SET.aanvraag)
+  // De knop haalt bij een afgesloten dossier alles op wat er ooit hoort te staan; wie er bewust
+  // op klikt wil een compleet beeld, niet alleen wat de cron nog bijhoudt.
+  const teDoen = soorten && soorten.length > 0 ? soorten : warmSetVoor(rij, new Set())
 
   const r = await ververseDossierBronnen(dossierId, teDoen)
 

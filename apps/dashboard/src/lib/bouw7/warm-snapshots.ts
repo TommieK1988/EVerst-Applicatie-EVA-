@@ -19,8 +19,7 @@ import { logSync } from './sync'
 import { ververseDossierBronnen, ververseGlobaleBron } from './snapshot'
 import {
   GLOBALE_BRONNEN,
-  WARM_SET,
-  WARM_SET_AFGESLOTEN,
+  warmSetVoor,
   type DossierSoort,
   type GlobaleSoort,
 } from './snapshot-bronnen'
@@ -55,60 +54,68 @@ type DossierRij = {
   bouw7_id: string | null
   hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht' | null
   opdracht_substatus: string | null
-}
-
-/** Welke bronnen dit dossier hoort te hebben. */
-function warmSetVoor(d: DossierRij): DossierSoort[] {
-  if (d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_afgesloten') {
-    return WARM_SET_AFGESLOTEN
-  }
-  return WARM_SET[d.hoofdstatus ?? 'aanvraag'] ?? WARM_SET.aanvraag
+  servicedesk_substatus: string | null
+  /** Bronnen die ooit zijn opgehaald; ingevuld door `dossiersOpVolgorde`. */
+  aanwezig: Set<DossierSoort>
 }
 
 /**
- * Dossiers op volgorde van behoefte: eerst wie nog helemaal geen snapshot heeft, daarna wie het
- * langst geleden is bijgewerkt.
+ * Dossiers op volgorde van behoefte: eerst wie een bron uit zijn warmset nog nooit heeft gehad,
+ * daarna wie het langst geleden is bijgewerkt. Het eerste criterium maakt dat een uitbreiding van
+ * de warmset (zoals de servicedeskbonnen in sept 2026) zichzelf bijvult, ook als dat niet in één
+ * ronde past.
  *
  * Beide queries gaan door `haalAlleRijen`: 676 dossiers passen nog net onder de PostgREST-grens
  * van 1000, maar hun snapshots (tot ~12 per opdracht) lopen daar ver overheen. Een stille
  * afkapping zou betekenen dat een deel van de dossiers nooit meer aan de beurt komt.
  */
 async function dossiersOpVolgorde(): Promise<DossierRij[]> {
-  const dossiers = await haalAlleRijen<DossierRij>((van, tot) =>
+  const dossiers = await haalAlleRijen<Omit<DossierRij, 'aanwezig'>>((van, tot) =>
     db()
       .from('dossiers')
-      .select('id, bouw7_id, hoofdstatus, opdracht_substatus')
+      .select('id, bouw7_id, hoofdstatus, opdracht_substatus, servicedesk_substatus')
       .not('bouw7_id', 'is', null)
       .order('id')
       .range(van, tot),
   )
 
-  const snapshots = await haalAlleRijen<{ dossier_id: string | null; opgehaald_op: string | null }>(
+  const snapshots = await haalAlleRijen<{
+    dossier_id: string | null
+    soort: DossierSoort
+    opgehaald_op: string | null
+  }>(
     (van, tot) =>
       db()
         .from('bouw7_snapshots')
-        .select('dossier_id, opgehaald_op')
+        .select('dossier_id, soort, opgehaald_op')
         .not('dossier_id', 'is', null)
         .order('sleutel')
         .range(van, tot),
   )
 
-  // Oudste geslaagde ophaal per dossier; nooit-opgehaalde bronnen tellen niet mee, want het
-  // ontbreken zelf zetten we hieronder al vooraan.
+  // Per dossier: welke bronnen ooit geslaagd zijn opgehaald, en de oudste daarvan. Een bron die
+  // alleen een fout heeft opgeleverd telt als ontbrekend, zodat hij de volgende ronde weer vooraan
+  // staat.
   const oudste = new Map<string, string>()
-  const gezien = new Set<string>()
+  const aanwezig = new Map<string, Set<DossierSoort>>()
   for (const s of snapshots) {
-    if (!s.dossier_id) continue
-    gezien.add(s.dossier_id)
-    if (!s.opgehaald_op) continue
+    if (!s.dossier_id || !s.opgehaald_op) continue
+    let set = aanwezig.get(s.dossier_id)
+    if (!set) aanwezig.set(s.dossier_id, (set = new Set()))
+    set.add(s.soort)
     const huidig = oudste.get(s.dossier_id)
     if (!huidig || s.opgehaald_op < huidig) oudste.set(s.dossier_id, s.opgehaald_op)
   }
 
-  return dossiers.sort((a, b) => {
-    const aNieuw = !gezien.has(a.id)
-    const bNieuw = !gezien.has(b.id)
-    if (aNieuw !== bNieuw) return aNieuw ? -1 : 1
+  const rijen: DossierRij[] = dossiers.map((d) => ({ ...d, aanwezig: aanwezig.get(d.id) ?? new Set() }))
+  const mist = new Set(
+    rijen.filter((d) => warmSetVoor(d, d.aanwezig).some((s) => !d.aanwezig.has(s))).map((d) => d.id),
+  )
+
+  return rijen.sort((a, b) => {
+    const aMist = mist.has(a.id)
+    const bMist = mist.has(b.id)
+    if (aMist !== bMist) return aMist ? -1 : 1
     const aOud = oudste.get(a.id) ?? ''
     const bOud = oudste.get(b.id) ?? ''
     return aOud.localeCompare(bOud)
@@ -165,7 +172,7 @@ export async function warmSnapshots(modus: WarmModus = 'alles'): Promise<WarmRes
         if (i >= dossiers.length) return
 
         const d = dossiers[i]
-        const soorten = warmSetVoor(d)
+        const soorten = warmSetVoor(d, d.aanwezig)
         const r = await ververseDossierBronnen(d.id, soorten, {
           client,
           bouw7Id: d.bouw7_id ?? undefined,
