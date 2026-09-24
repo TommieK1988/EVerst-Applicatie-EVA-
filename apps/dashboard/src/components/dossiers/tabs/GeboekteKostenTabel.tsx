@@ -384,12 +384,8 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
       : actief.toegewezenContractId != null ? `contract:${actief.toegewezenContractId}` : ''
     : ''
 
-  // Codes waar déze kost naartoe kan, plus de huidige waarde in dezelfde vorm als de opties.
+  // Codes op het project; nodig om een oude EVA-only codecorrectie alsnog naar Bouw7 te zetten.
   const actiefCodes = useMemo(() => (actief ? kiesbareCodes(projectcodes) : []), [actief, projectcodes])
-  const huidigeCodeWaarde = useMemo(() => {
-    if (!actief?.code) return ''
-    return codeKey(actiefCodes.find((c) => c.code === actief.code) ?? projectcodes.find((c) => c.code === actief.code) ?? { code: actief.code, hoofdstukId: null } as ProjectBewakingscode)
-  }, [actief, actiefCodes, projectcodes])
 
   const thStyle = (right?: boolean): React.CSSProperties => ({
     padding: '6px 10px', textAlign: right ? 'right' : 'left', fontSize: 11, fontWeight: 700,
@@ -601,7 +597,7 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
       <Dialog open={!!actief} onOpenChange={(o) => { if (!o) setActief(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Geboekte kost corrigeren</DialogTitle>
+            <DialogTitle>Koppelen aan order/contract</DialogTitle>
           </DialogHeader>
           {actief && (
             <DialogBody style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -614,46 +610,43 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                     : actief.linkBron === 'eva'
                     ? 'Handmatig toegewezen in EVA. '
                     : 'Niet gekoppeld aan een order of contract. '}
-                  De toewijzing aan een order/contract is alleen een EVA-berekening; een gewijzigde
-                  bewakingscode gaat wél naar Bouw7.
+                  De koppeling is alleen een EVA-berekening en gaat niet naar Bouw7. De bewakingscode
+                  kies je in de kolom Bewakingscode van de tabel.
                 </div>
               </div>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)' }}>Toewijzen aan inkooporder / OA-contract</span>
-                <select
-                  style={selectStyle}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <KoppelOptie
+                  label="Niet gekoppeld"
+                  actief={huidigeDoelwaarde === ''}
                   disabled={pending}
-                  value={huidigeDoelwaarde}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    const doel = v.startsWith('order:') ? { orderId: Number(v.slice(6)) }
-                      : v.startsWith('contract:') ? { contractId: Number(v.slice(9)) }
-                      : {}
-                    doe(() => verplaatsGeboekteKost(dossierId, actief.bronId, doel), 'Toewijzing bijgewerkt')
-                  }}
-                >
-                  <option value="">— Niet toegewezen —</option>
-                  {orders.length > 0 && (
-                    <optgroup label="Inkooporders">
-                      {orders.map((o) => (
-                        <option key={`o${o.orderId}`} value={`order:${o.orderId}`}>
-                          {[o.nummer, o.omschrijving, o.leverancier].filter(Boolean).join(' · ') || `Order ${o.orderId}`}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {contracten.length > 0 && (
-                    <optgroup label="Onderaannemerscontracten">
-                      {contracten.map((c) => (
-                        <option key={`c${c.contractId}`} value={`contract:${c.contractId}`}>
-                          {[c.onderaannemer, c.omschrijving].filter(Boolean).join(' · ') || `Contract ${c.contractId}`}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </label>
+                  onKies={() => doe(() => verplaatsGeboekteKost(dossierId, actief.bronId, {}), 'Koppeling verwijderd')}
+                />
+                <KoppelGroep titel="Inkooporders" leeg="Geen inkooporders op dit dossier.">
+                  {orders.map((o) => (
+                    <KoppelOptie
+                      key={`o${o.orderId}`}
+                      label={o.nummer ?? `Order ${o.orderId}`}
+                      sub={[o.leverancier, o.omschrijving].filter(Boolean).join(' · ')}
+                      actief={huidigeDoelwaarde === `order:${o.orderId}`}
+                      disabled={pending}
+                      onKies={() => doe(() => verplaatsGeboekteKost(dossierId, actief.bronId, { orderId: o.orderId }), 'Gekoppeld aan inkooporder')}
+                    />
+                  ))}
+                </KoppelGroep>
+                <KoppelGroep titel="Onderaannemerscontracten" leeg="Geen onderaannemerscontracten op dit dossier.">
+                  {contracten.map((c) => (
+                    <KoppelOptie
+                      key={`c${c.contractId}`}
+                      label={c.onderaannemer ?? `Contract ${c.contractId}`}
+                      sub={c.omschrijving ?? ''}
+                      actief={huidigeDoelwaarde === `contract:${c.contractId}`}
+                      disabled={pending}
+                      onKies={() => doe(() => verplaatsGeboekteKost(dossierId, actief.bronId, { contractId: c.contractId }), 'Gekoppeld aan contract')}
+                    />
+                  ))}
+                </KoppelGroep>
+              </div>
 
               {/* Oude EVA-only correctie: de code stond wel in EVA maar niet in Bouw7, waardoor het
                   Financieel-tab afweek. Eén klik zet hem alsnog door. */}
@@ -677,34 +670,6 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
                 </div>
               )}
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)' }}>Bewakingscode</span>
-                <select
-                  style={selectStyle}
-                  disabled={pending || actief.contractGebonden || actiefCodes.length === 0}
-                  value={actief.contractGebonden ? '' : huidigeCodeWaarde}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (!v) return
-                    const { code, hoofdstukId } = parseCodeKey(v)
-                    doe(() => hercodeerGeboekteKost(dossierId, actief.bronId, code, hoofdstukId), `Verplaatst naar ${code}`)
-                  }}
-                >
-                  <option value="">— Kies een bewakingscode —</option>
-                  {actiefCodes.map((p) => (
-                    <option key={codeKey(p)} value={codeKey(p)}>{codeLabel(p)}</option>
-                  ))}
-                </select>
-                <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                  {actief.contractGebonden
-                    ? 'Deze kost hangt aan een inkooporder of onderaannemerscontract — daar bepaalt het contract de bewakingscode. Pas die in Bouw7 aan.'
-                    : actief.bonId == null
-                    ? 'Deze factuur heeft geen leverbon in Bouw7; er is niets om te verplaatsen.'
-                    : actiefCodes.length === 0
-                    ? 'Dit project heeft in Bouw7 nog geen bewakingscodes.'
-                    : 'De kost wordt ook in Bouw7 op deze code gezet, zodat het Financieel-tab meebeweegt. Staat de code daar nog niet onder deze kostensoort, dan voegt EVA hem toe met begroting 0.'}
-                </span>
-              </label>
             </DialogBody>
           )}
           <DialogFooter>
@@ -722,5 +687,51 @@ export default function GeboekteKostenTabel({ dossierId, data, orders, contracte
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/** Groepskop met de opties eronder, of een regel dat er niets is. */
+function KoppelGroep({ titel, leeg, children }: { titel: string; leeg: string; children: React.ReactNode[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--neutral-500)' }}>
+        {titel}
+      </span>
+      {children.length > 0
+        ? children
+        : <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{leeg}</span>}
+    </div>
+  )
+}
+
+/** Eén aanklikbare order/contract; de huidige koppeling is gemarkeerd. */
+function KoppelOptie({ label, sub, actief, disabled, onKies }: {
+  label: string
+  sub?: string
+  actief: boolean
+  disabled: boolean
+  onKies: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || actief}
+      onClick={onKies}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+        padding: '8px 12px', borderRadius: 8, fontFamily: 'inherit',
+        border: `1px solid ${actief ? 'var(--brand-500, #009439)' : 'var(--border)'}`,
+        background: actief ? 'var(--brand-50, #eff6ff)' : 'white',
+        cursor: disabled || actief ? 'default' : 'pointer',
+      }}
+    >
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg)' }}>{label}</span>
+        {sub && (
+          <span style={{ fontSize: 11.5, color: 'var(--fg-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>
+        )}
+      </span>
+      {actief && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-600, #007a2f)' }}>Gekoppeld</span>}
+    </button>
   )
 }
