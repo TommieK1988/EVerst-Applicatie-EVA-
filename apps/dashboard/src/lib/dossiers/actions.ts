@@ -14,6 +14,7 @@ import type {
   ContractOrderLinesPayload,
   HourLogsPayload,
   TermijnenPayload,
+  VerkoopfactuurSnap,
 } from '@/lib/bouw7/snapshot-bronnen'
 import { SOORTEN_PER_TAB, BEWAKING_KOSTENSOORTEN } from '@/lib/bouw7/snapshot-bronnen'
 import { revalidatePath, unstable_cache } from 'next/cache'
@@ -3237,7 +3238,23 @@ export type VerkoopTermijn = {
   /** Bouw7-id van de statement waar deze termijn onder hangt. */
   statementId: number | null
 }
+/** Eén post op een verkoopfactuur: een termijn, een regiepost of een losse regel. */
+export type VerkoopFactuurRegel = {
+  omschrijving: string
+  /** Excl. BTW; `null` als alleen de omschrijving bekend is (termijn zonder documentregels). */
+  bedragExcl: number | null
+  btwPct: number | null
+}
 export type VerkoopFactuur = {
+  /** Bouw7-id; sleutel voor de uitklaprij. */
+  id: number | null
+  /**
+   * Wat er op de factuur staat, in één regel. Eén post → die omschrijving; meer dan één → de
+   * posten staan in `regels` en de omschrijving is "Samengevoegd".
+   */
+  omschrijving: string | null
+  /** Alleen gevuld bij meer dan één post. */
+  regels: VerkoopFactuurRegel[]
   factuurnummer: string | null
   datum: string | null
   vervaldatum: string | null
@@ -3316,19 +3333,41 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
 
   // Facturen eerst: de termijnstatus leunt op isMailed/datePaid van de gekoppelde factuur.
   try {
-    const invResp = standen.get('verkoopfacturen')?.data as Bouw7ListResponse<Bouw7SalesInvoice> | null
+    const invResp = standen.get('verkoopfacturen')?.data as Bouw7ListResponse<VerkoopfactuurSnap> | null
     if (invResp == null) throw new Error('verkoopfacturen nog niet opgehaald')
     for (const inv of invResp.items ?? []) if (inv.id != null) factuurPerId.set(inv.id, inv)
-    facturen = (invResp.items ?? []).map((inv) => ({
-      factuurnummer: inv.invoiceNumber ?? null,
+
+    // Terugval voor een snapshot van vóór de documentregels: welke termijnen op welke factuur
+    // staan weet de termijnstaat ook, alleen zonder BTW-tarief per regel.
+    const termijnenOpFactuur = new Map<number, VerkoopFactuurRegel[]>()
+    const tp = standen.get('termijnen')?.data as TermijnenPayload | null
+    for (const t of tp?.termijnen ?? []) {
+      const fid = t.invoiceLine?.invoiceId
+      if (fid == null) continue
+      const lijst = termijnenOpFactuur.get(fid) ?? []
+      lijst.push({ omschrijving: (t.description ?? '').trim() || 'Termijn', bedragExcl: toGetal(t.subtotal), btwPct: null })
+      termijnenOpFactuur.set(fid, lijst)
+    }
+
+    facturen = (invResp.items ?? []).map((inv) => {
+      const posten: VerkoopFactuurRegel[] = inv.evaRegels != null
+        ? inv.evaRegels.map((r) => ({ omschrijving: r.omschrijving || '—', bedragExcl: r.subTotal, btwPct: r.btwPct }))
+        : termijnenOpFactuur.get(inv.id) ?? []
+      const samengevoegd = posten.length > 1
+      return {
+        id: inv.id ?? null,
+        omschrijving: samengevoegd ? 'Samengevoegd' : (posten[0]?.omschrijving ?? inv.evaOmschrijving ?? null),
+        regels: samengevoegd ? posten : [],
+        factuurnummer: inv.invoiceNumber ?? null,
       datum: inv.date ? inv.date.slice(0, 10) : null,
       vervaldatum: inv.dueDate ? inv.dueDate.slice(0, 10) : null,
       bedragExcl: toGetal(inv.subTotal),
       btwBedrag: toGetal(inv.vatTotal),
       bedrag: toGetal(inv.total),
-      betaald: inv.datePaid != null,
-      isCredit: !!inv.isCredit,
-    }))
+        betaald: inv.datePaid != null,
+        isCredit: !!inv.isCredit,
+      }
+    })
   } catch {
     facturen = []
     bron = 'fout'

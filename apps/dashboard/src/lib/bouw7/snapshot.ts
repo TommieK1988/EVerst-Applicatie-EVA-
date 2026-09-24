@@ -246,7 +246,9 @@ export async function ververseDossierBronnen(
       const sleutel = dossierSleutel(dossierId, soort)
       const start = Date.now()
       try {
-        const payload = await DOSSIER_BRONNEN[soort](client, bouw7Id)
+        const payload = await DOSSIER_BRONNEN[soort](
+          client, bouw7Id, async () => (await leesSnapshot<unknown>(sleutel)).data,
+        )
         await bewaarSnapshot(sleutel, { dossierId, soort, payload, duurMs: Date.now() - start })
         uit.gelukt.push(soort)
       } catch (e) {

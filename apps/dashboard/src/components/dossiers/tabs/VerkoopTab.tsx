@@ -3,8 +3,9 @@ import { createAdminClient } from '@everts/database/server'
 import { getDossierVerkoop, getDossierBewaking, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, fmtPct, fmtDatum, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
+import { fmt, fmtPct, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
+import VerkoopFacturenTabel from './VerkoopFacturenTabel'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import ServicedeskMargeBlok from './ServicedeskMargeBlok'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
@@ -433,50 +434,7 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
           <Card>
             <CardHeader>Verkoopfacturen</CardHeader>
             <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-                <table style={{ ...tabel, minWidth: 640 }}>
-                  <thead>
-                    <tr>
-                      <TH>Factuurnr.</TH>
-                      <TH>Datum</TH>
-                      <TH>Vervaldatum</TH>
-                      <TH right>Excl. BTW</TH>
-                      <TH right>BTW</TH>
-                      <TH right>Incl. BTW</TH>
-                      <TH>Status</TH>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.facturen.length === 0 && (
-                      <LegeRij velden={['tekst', 'tekst', 'tekst', 'bedrag', 'bedrag', 'bedrag', 'tekst']} />
-                    )}
-                    {data.facturen.map((f, i) => (
-                      <tr key={i}>
-                        <TD wrap>{f.factuurnummer ?? '—'}{f.isCredit ? ' (credit)' : ''}</TD>
-                        <TD>{fmtDatum(f.datum)}</TD>
-                        <TD>{fmtDatum(f.vervaldatum)}</TD>
-                        <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined}>{fmt(f.bedragExcl)}</TD>
-                        <TD right kleur="var(--neutral-500)">{f.btwBedrag > 0 ? fmt(f.btwBedrag) : '—'}</TD>
-                        <TD right kleur={f.isCredit ? 'var(--neutral-500)' : undefined} vet>{fmt(f.bedrag)}</TD>
-                        <TD kleur={f.betaald ? 'var(--accent)' : undefined}>{f.betaald ? 'Betaald' : 'Open'}</TD>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
-                      <td colSpan={3} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
-                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedragExcl : f.bedragExcl), 0), true)}
-                      </td>
-                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.btwBedrag : f.btwBedrag), 0), true)}
-                      </td>
-                      <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>
-                        {fmt(data.facturen.reduce((s, f) => s + (f.isCredit ? -f.bedrag : f.bedrag), 0), true)}
-                      </td>
-                      <td style={{ padding: '6px 12px' }} />
-                    </tr>
-                  </tfoot>
-                </table>
+                <VerkoopFacturenTabel facturen={data.facturen} />
                 {data.facturen.length === 0 && (
                   <LegeNotitie>Nog geen verkoopfacturen op dit dossier.</LegeNotitie>
                 )}

@@ -75,7 +75,70 @@ const getal = (v: unknown): number => {
 
 /* ── Loaders per dossierbron ──────────────────────────────────────── */
 
-export type DossierLoader = (client: Bouw7Client, bouw7Id: string) => Promise<unknown>
+/**
+ * `vorige` leest de payload die er nu staat (of `null`). Alleen een bron die daar iets aan heeft
+ * roept hem aan — voor de rest kost hij niets.
+ */
+export type DossierLoader = (
+  client: Bouw7Client,
+  bouw7Id: string,
+  vorige: () => Promise<unknown>,
+) => Promise<unknown>
+
+/**
+ * Eén regel van een verkoopfactuur, zoals EVA hem bewaart. De lijst (`/list/invoices`) kent geen
+ * regels en geen omschrijving; die staan alleen in het document (`/invoice/{id}`).
+ */
+export type VerkoopfactuurRegelSnap = {
+  omschrijving: string
+  subTotal: number
+  btwPct: number | null
+  termIds: number[]
+}
+/** Een lijstitem met de regels uit het document erbij. `evaRegels: null` = document niet gelezen. */
+export type VerkoopfactuurSnap = Bouw7SalesInvoice & {
+  evaOmschrijving?: string | null
+  evaRegels?: VerkoopfactuurRegelSnap[] | null
+}
+
+/** Bouw7 levert omschrijvingen soms als rich text; op het scherm hoort platte tekst. */
+const plat = (s: unknown): string =>
+  typeof s === 'string'
+    ? s.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
+    : ''
+
+type FactuurDocument = {
+  description?: string | null
+  chapters?: {
+    lines?: {
+      description?: string | null
+      subTotal?: string | number
+      vatTariffPercentage?: string | number | null
+      projectInvoiceTermIds?: number[] | null
+    }[]
+  }[]
+}
+
+async function leesFactuurRegels(
+  client: Bouw7Client,
+  id: number,
+): Promise<{ omschrijving: string | null; regels: VerkoopfactuurRegelSnap[] } | null> {
+  try {
+    const doc = await client.get<FactuurDocument>(`/invoice/${id}`)
+    const regels = (doc.chapters ?? []).flatMap((c) => c.lines ?? []).map((l) => ({
+      omschrijving: plat(l.description),
+      subTotal: getal(l.subTotal),
+      btwPct: l.vatTariffPercentage != null && l.vatTariffPercentage !== '' ? getal(l.vatTariffPercentage) : null,
+      termIds: l.projectInvoiceTermIds ?? [],
+    }))
+    return { omschrijving: plat(doc.description) || null, regels }
+  } catch {
+    // Eén onleesbaar document mag de factuurlijst niet laten mislukken; de regel toont dan
+    // gewoon geen omschrijving.
+    return null
+  }
+}
 
 export const DOSSIER_BRONNEN: Record<DossierSoort, DossierLoader> = {
   athena_financial: (client, id) =>
@@ -149,10 +212,39 @@ export const DOSSIER_BRONNEN: Record<DossierSoort, DossierLoader> = {
     }
   },
 
-  verkoopfacturen: (client, id) =>
-    client.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
+  // De lijst plus per factuur de regels uit het document. Een factuur waarvan `updatedAt` niet
+  // veranderd is neemt zijn regels over uit de vorige stand: een verzonden factuur verandert niet,
+  // dus zonder die hergebruik zou elke cronronde elk document opnieuw ophalen.
+  verkoopfacturen: async (client, id, vorige) => {
+    const lijst = await client.get<Bouw7ListResponse<Bouw7SalesInvoice>>('/list/invoices', {
       q: `project.id = ${id} SORT(date, DESC) LIMIT 500`,
-    }),
+    })
+    const oud = new Map<number, VerkoopfactuurSnap>()
+    try {
+      const v = (await vorige()) as Bouw7ListResponse<VerkoopfactuurSnap> | null
+      for (const f of v?.items ?? []) if (f.id != null) oud.set(f.id, f)
+    } catch { /* geen vorige stand — alles vers ophalen */ }
+
+    const items = lijst.items ?? []
+    const verrijkt: VerkoopfactuurSnap[] = new Array(items.length)
+    let volgende = 0
+    const werker = async () => {
+      for (;;) {
+        const i = volgende++
+        if (i >= items.length) return
+        const f = items[i]
+        const o = oud.get(f.id)
+        if (o && o.evaRegels != null && (o as { updatedAt?: unknown }).updatedAt === (f as { updatedAt?: unknown }).updatedAt) {
+          verrijkt[i] = { ...f, evaOmschrijving: o.evaOmschrijving ?? null, evaRegels: o.evaRegels }
+          continue
+        }
+        const doc = await leesFactuurRegels(client, f.id)
+        verrijkt[i] = { ...f, evaOmschrijving: doc?.omschrijving ?? null, evaRegels: doc?.regels ?? null }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, items.length) }, werker))
+    return { ...lijst, items: verrijkt }
+  },
 
   // Twee trappen: `statement.project.id` is niet HQL-mapped (400), dus eerst de termijnstaten
   // van het project, dan de losse termijnen per statement.
