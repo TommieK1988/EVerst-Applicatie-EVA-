@@ -1264,7 +1264,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
     <>
       {isDropIndicatorAbove && <div style={{ height: 2, background: 'var(--accent)', marginLeft: LEFT_W }} />}
       <div style={{ display: 'flex', width: LEFT_W + totalW, borderBottom: '1px solid var(--border)', background: 'var(--bg-active)', minHeight: FASE_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
-      <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg-active)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 10px 0 0', gap: 6 }}>
+      <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4, background: 'var(--bg-active)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 10px 0 0', gap: 6 }}>
         <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', color: 'var(--fg-muted)', fontSize: 14, userSelect: 'none', touchAction: 'none', opacity: 0.45 }}
           onPointerDown={dragHandleDown} onPointerMove={dragHandleMove} onPointerUp={dragHandleUp}
           title="Sleep om te herordenen">⠿</div>
@@ -1284,7 +1284,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
         <button title="Fase kopiëren (met activiteiten en planning)" onClick={onKopieer} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>⧉</button>
         <button title="Fase verwijderen" onClick={onVerwijder} style={{ ...S.iconBtn, width: 20, height: 20, fontSize: 11 }}>🗑</button>
       </div>
-      <div style={{ position: 'relative', flex: 1, minWidth: totalW, height: FASE_HOOGTE, opacity: 0.85, background: 'repeating-linear-gradient(90deg, transparent 0px, transparent calc(100% - 1px), var(--border) 100%)' }}>
+      <div style={{ position: 'relative', zIndex: 0, flex: 1, minWidth: totalW, height: FASE_HOOGTE, opacity: 0.85, background: 'repeating-linear-gradient(90deg, transparent 0px, transparent calc(100% - 1px), var(--border) 100%)' }}>
         {heeftBereik && (
           <div data-bar="fase"
             title={`${fase.naam} — sleep om hele fase te verschuiven`}
@@ -1325,13 +1325,13 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
 
   return (
     <div style={{ display: 'flex', width: LEFT_W + totW, borderBottom: '1px solid var(--border-soft)', background: 'var(--bg)', minHeight: PLANITEM_RIJ_HOOGTE }}>
-      <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 70px', gap: 8 }}>
+      <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4, background: 'var(--bg)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 70px', gap: 8 }}>
         <div style={{ width: 8, height: 8, borderRadius: 2, background: swatchKleur, flexShrink: 0 }} />
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--fg-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{naam}</span>
         {heeftDubbel && <span title="Dubbel ingepland" style={{ fontSize: 12, color: '#e67e22', flexShrink: 0 }}>⚠</span>}
       </div>
 
-      <div style={{ position: 'relative', flex: 1, minWidth: totW, height: PLANITEM_RIJ_HOOGTE }}>
+      <div style={{ position: 'relative', zIndex: 0, flex: 1, minWidth: totW, height: PLANITEM_RIJ_HOOGTE }}>
         {gridUnits.map(u => (
           <div key={u.key} style={{
             position: 'absolute', top: 0, bottom: 0, left: u.left, width: u.width,
@@ -1427,7 +1427,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
       <div style={{ display: 'flex', width: LEFT_W + totalDays * ppd, borderBottom: '1px solid var(--border)', background: 'var(--bg-elev)', minHeight: RIJ_HOOGTE, opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.1s' }}>
 
         {/* Sticky linker cel */}
-        <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: 'var(--bg-elev)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 0' }}>
+        <div style={{ width: LEFT_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4, background: 'var(--bg-elev)', borderRight: '2px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 8px 0 0' }}>
           <div style={{ width: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', color: 'var(--fg-muted)', fontSize: 14, userSelect: 'none', touchAction: 'none', opacity: 0.45 }}
             onPointerDown={dragHandleDown} onPointerMove={dragHandleMove} onPointerUp={dragHandleUp}
             title="Sleep om te herordenen">⠿</div>
@@ -1465,7 +1465,7 @@ function ActiviteitGanttRij({ nr, activiteit, items, uitgeklapt, onToggleUitklap
         </div>
 
         {/* Gantt-balk area */}
-        <div style={{ position: 'relative', flex: 1, minWidth: totW, height: RIJ_HOOGTE, cursor: heeftDatums ? 'crosshair' : 'cell', touchAction: 'none' }}
+        <div style={{ position: 'relative', zIndex: 0, flex: 1, minWidth: totW, height: RIJ_HOOGTE, cursor: heeftDatums ? 'crosshair' : 'cell', touchAction: 'none' }}
           onClick={handleTimelineClick}
           onPointerDown={handlePaintDown}
           onPointerMove={handlePaintMove}
