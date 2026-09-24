@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Search, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Card, CardHeader, CardBody, Button, Input, Badge, useDialogen } from '@/components/ui'
@@ -64,6 +65,26 @@ const LEGE_NIEUW: NieuweMeerwerkData = {
 type RuweBedragen = { btw_pct: string; eenheidsprijs: string; bedrag_excl_btw: string }
 const LEGE_RUW: RuweBedragen = { btw_pct: '', eenheidsprijs: '', bedrag_excl_btw: '' }
 
+/** Kleine letters, zonder accenten: "geïsoleerd" vindt je ook met "geisoleerd". */
+const normaliseer = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+
+/**
+ * Alles waarop je een meerwerkregel terugvindt, als één zoekbare tekst. Het bedrag staat er
+ * zowel geformatteerd ("1.250,00") als kaal ("1250") in, zodat beide schrijfwijzen werken.
+ */
+function zoektekst(r: MeerwerkRegelView): string {
+  return normaliseer([
+    `MW${String(r.volgnummer).padStart(2, '0')}`,
+    r.bouw7_nummer, r.omschrijving, r.factuurreferentie, r.bewakingscode,
+    meerwerkStatusLabels[r.status],
+    r.afrekenwijze === 'regie' ? 'regie' : 'aangenomen',
+    r.is_stelpost ? 'stelpost' : null,
+    r.bron === 'bouw7_line' ? 'uit bouw7' : null,
+    r.besluit_door_naam, r.besluit_opmerking,
+    fmt(r.effectiefExcl), String(r.effectiefExcl),
+  ].filter(Boolean).join(' '))
+}
+
 type MeerwerkTabProps = {
   dossierId: string
   naam?: string
@@ -86,6 +107,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
   /** Opdracht-samenstelling (aanneemsom + stelposten) voor de afrekenstand; null = niet beschikbaar. */
   const [overzicht, setOverzicht] = useState<OpdrachtOverzicht | null>(null)
+  const [zoek, setZoek] = useState('')
+
+  /** Elk los woord moet ergens in de regel voorkomen ("dak mw03" → regel MW03 over het dak). */
+  const zichtbareRegels = useMemo(() => {
+    const regels = data?.regels ?? []
+    const woorden = normaliseer(zoek).split(/\s+/).filter(Boolean)
+    if (woorden.length === 0) return regels
+    return regels.filter(r => { const t = zoektekst(r); return woorden.every(w => t.includes(w)) })
+  }, [data, zoek])
+  const gefilterd = zoek.trim() !== ''
 
   function herlaad() {
     getDossierMeerwerk(dossierId).then(setData).catch(() => setData({ regels: [], totalen: { aantal: 0, goedgekeurdAantal: 0, goedgekeurdExcl: 0, goedgekeurdIncl: 0, goedgekeurdAangenomenExcl: 0, goedgekeurdRegieExcl: 0, goedgekeurdNacalculatieExcl: 0 } }))
@@ -322,6 +353,28 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
             </div>
           )}
 
+          {data.regels.length > 0 && (
+            <div className="mb-3 flex items-center gap-3">
+              <div className="w-full max-w-[320px]">
+                <Input inputSize="sm" value={zoek} onChange={e => setZoek(e.target.value)}
+                  placeholder="Zoek op nummer, omschrijving, referentie, status…"
+                  aria-label="Zoeken in meerwerkregels"
+                  onKeyDown={e => { if (e.key === 'Escape') setZoek('') }}
+                  prefix={<Search size={14} />}
+                  suffix={gefilterd ? (
+                    <button type="button" className="text-neutral-400 hover:text-neutral-700" onClick={() => setZoek('')} aria-label="Zoekopdracht wissen">
+                      <X size={14} />
+                    </button>
+                  ) : undefined} />
+              </div>
+              {gefilterd && (
+                <span className="text-[12px] text-neutral-500">
+                  {zichtbareRegels.length} van {data.regels.length} regels
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Scrollen in plaats van knijpen: de drie keuzelijsten houden hun breedte, dus zonder
               minimumbreedte werd de actiekolom in een smal venster tot onleesbaar samengeperst en
               viel "Uit offerte" buiten de kaart. */}
@@ -356,7 +409,12 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                     <td className="py-2 pl-2 text-right">—</td>
                   </tr>
                 )}
-                {data.regels.map(r => {
+                {gefilterd && zichtbareRegels.length === 0 && (
+                  <tr className="border-b border-neutral-100 text-[12.5px] text-neutral-500">
+                    <td className="py-3 text-center" colSpan={9}>Geen meerwerkregels gevonden voor “{zoek.trim()}”.</td>
+                  </tr>
+                )}
+                {zichtbareRegels.map(r => {
                   const uitBouw7 = r.bron === 'bouw7_line'
                   const bewerkbaar = !readOnly && !uitBouw7
                   const bedragBewerkbaar = bewerkbaar && r.afrekenwijze === 'aangenomen' && !r.is_stelpost
@@ -502,6 +560,17 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                 })}
               </tbody>
               <tfoot>
+                {/* Het goedgekeurde totaal blijft over het héle dossier gaan; bij een zoekopdracht
+                    staat de som van de gevonden regels er apart boven, zodat niemand een deeltotaal
+                    voor het dossiertotaal aanziet. */}
+                {gefilterd && zichtbareRegels.length > 0 && (
+                  <tr className="text-[12.5px] text-neutral-600">
+                    <td className="pt-2.5" colSpan={6}>Gevonden regels ({zichtbareRegels.length}), alle statussen</td>
+                    <td className="pt-2.5 px-2 text-right tabular-nums">{fmt(zichtbareRegels.reduce((s, r) => s + r.effectiefExcl, 0))}</td>
+                    <td className="pt-2.5 px-2 text-right tabular-nums text-neutral-500">{fmt(zichtbareRegels.reduce((s, r) => s + r.effectiefIncl, 0))}</td>
+                    <td />
+                  </tr>
+                )}
                 <tr className="text-[12.5px] font-bold text-neutral-900">
                   <td className="pt-2.5" colSpan={6}>Goedgekeurd meerwerk (akkoord + voltooid)</td>
                   <td className="pt-2.5 px-2 text-right tabular-nums">{fmt(data.totalen.goedgekeurdExcl)}</td>
