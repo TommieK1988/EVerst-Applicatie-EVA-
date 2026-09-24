@@ -49,7 +49,7 @@ export default function RegelSheet({
   const [opmerking, setOpmerking] = useState(regel?.opmerking ?? '')
   const [bezig, setBezig] = useState(false)
 
-  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean; indirect: boolean }>>([])
+  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean; indirect: boolean; servicedesk: boolean }>>([])
   const [codes, setCodes] = useState<BewakingscodeOptie[]>([])
   const [codesLaden, setCodesLaden] = useState(false)
 
@@ -58,6 +58,7 @@ export default function RegelSheet({
   // Overheadwerk op een indirecte-urendossier: daar staat geen begroting tegenover, dus is er
   // geen bewakingscode te kiezen en vraagt het scherm er ook niet om.
   const isIndirect = dossiers.some(d => d.id === dossierId && d.indirect)
+  const isBon = dossiers.some(d => d.id === dossierId && d.servicedesk)
 
   // De opdrachten waaraan deze medewerker gekoppeld is staan bovenaan; de rest blijft kiesbaar.
   useEffect(() => {
@@ -150,10 +151,17 @@ export default function RegelSheet({
                     </optgroup>
                   )}
                   <optgroup label="Overige opdrachten">
-                    {dossiers.filter(d => !d.gekoppeld && !d.indirect).map(d => (
+                    {dossiers.filter(d => !d.gekoppeld && !d.indirect && !d.servicedesk).map(d => (
                       <option key={d.id} value={d.id}>{d.label}</option>
                     ))}
                   </optgroup>
+                  {dossiers.some(d => !d.gekoppeld && !d.indirect && d.servicedesk) && (
+                    <optgroup label="Servicedeskbonnen">
+                      {dossiers.filter(d => !d.gekoppeld && !d.indirect && d.servicedesk).map(d => (
+                        <option key={d.id} value={d.id}>{d.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
                   {dossiers.some(d => d.indirect) && (
                     <optgroup label="Indirecte uren">
                       {dossiers.filter(d => d.indirect).map(d => (
@@ -176,21 +184,26 @@ export default function RegelSheet({
                     <option value="">
                       {!dossierId ? '— kies eerst een project —'
                         : codesLaden ? 'Bezig met ophalen…'
-                        : codes.length === 0 ? '— geen codes met begrote uren —'
+                        : codes.length === 0 ? (isBon ? '— nog geen code op deze bon —' : '— geen codes met begrote uren —')
                         : '— kies een code —'}
                     </option>
                     {codes.map(c => (
                       <option key={c.pslId} value={c.code}>
-                        {c.code}{c.naam ? ` · ${c.naam}` : ''} ({c.prognoseUren}u begroot)
+                        {c.code}{c.naam ? ` · ${c.naam}` : ''}{c.prognoseUren > 0 ? ` (${c.prognoseUren}u begroot)` : ''}
                       </option>
                     ))}
                   </select>
-                  {dossierId && !codesLaden && codes.length === 0 && (
+                  {dossierId && !codesLaden && codes.length === 0 && (isBon ? (
+                    <p style={{ fontSize: 12, color: '#6b757c', margin: '6px 0 0' }}>
+                      Deze bon heeft nog geen bewakingscode. Je uren kunnen zonder code worden
+                      opgeslagen; je goedkeurder zet ze later op de juiste code.
+                    </p>
+                  ) : (
                     <p style={{ fontSize: 12, color: '#a15c00', margin: '6px 0 0' }}>
                       Op dit project staan geen begrote uren. Vraag je werkvoorbereider om een
                       bewakingscode met uren, of kies een ander project.
                     </p>
-                  )}
+                  ))}
                 </div>
               )}
             </>

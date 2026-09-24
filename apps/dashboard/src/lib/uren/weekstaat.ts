@@ -21,6 +21,8 @@ import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
 import type { OnkostenSoort, Vervoermiddel } from './onkosten'
 import { signBonnen } from './bonnen'
+import { BOEKBAAR_FILTER } from './boekbaar'
+import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -313,12 +315,6 @@ const ROL_KOLOMMEN = [
   'calculator_id', 'uitvoerder_id', 'controller_id',
 ] as const
 
-/**
- * De opdracht-substatussen waarop uren geschreven mogen worden: een opdracht die loopt.
- * Alles ervoor (nieuwe opdracht) en erna (financieel gereed/afgesloten) valt af -- daar horen
- * geen nieuwe uren meer op te landen, en ze vullen de keuzelijst alleen maar.
- */
-const LOPENDE_OPDRACHT_STATUSSEN = ['werkvoorbereiding', 'onderhanden', 'uitvoering_gereed'] as const
 
 /**
  * Hoe ver de planning en de eerdere uren meetellen als koppeling: een halfjaar terug en een
@@ -342,7 +338,7 @@ const KOPPELING_DAGEN = 180
  * geen voorwaarde meer.
  */
 export async function getDossierOpties(datum: string): Promise<Array<{
-  id: string; label: string; gekoppeld: boolean; indirect: boolean
+  id: string; label: string; gekoppeld: boolean; indirect: boolean; servicedesk: boolean
 }>> {
   const medewerker = await vereisSessie()
   const supabase = db()
@@ -403,13 +399,13 @@ export async function getDossierOpties(datum: string): Promise<Array<{
   }
 
   // Koppeling bepaalt de volgorde, niet of een dossier mag. Beide groepen worden op dezelfde
-  // manier ingeperkt tot lopende opdrachten: gekoppeld zijn aan een afgerond of nog niet
-  // voorbereid project maakt het geen plek om uren op te schrijven.
+  // manier ingeperkt tot waar uren op horen: lopende opdrachten en open servicedeskbonnen (zie
+  // ./boekbaar). Gekoppeld zijn aan een afgerond of nog niet voorbereid project maakt het geen
+  // plek om uren op te schrijven.
   const lopendeOpdrachten = () => supabase
     .from('dossiers')
-    .select('id, dossiernummer, titel')
-    .eq('hoofdstatus', 'opdracht')
-    .in('opdracht_substatus', LOPENDE_OPDRACHT_STATUSSEN)
+    .select('id, dossiernummer, titel, servicedesk_substatus')
+    .or(BOEKBAAR_FILTER)
     .eq('gearchiveerd', false)
     .not('bouw7_id', 'is', null)
     .order('dossiernummer', { ascending: false })
@@ -434,24 +430,24 @@ export async function getDossierOpties(datum: string): Promise<Array<{
         .order('dossiernummer')
     : { data: [] }
 
-  type Rij = { id: string; dossiernummer: string; titel: string }
+  type Rij = { id: string; dossiernummer: string; titel: string; servicedesk_substatus?: string | null }
   const label = (d: Rij) => `${d.dossiernummer} · ${d.titel}`
 
   const indirectSet = new Set(((indirecte ?? []) as Rij[]).map(d => d.id))
 
   const eigen = ((mijne ?? []) as Rij[])
     .filter(d => !indirectSet.has(d.id))
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: true, indirect: false }))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: true, indirect: false, servicedesk: !!d.servicedesk_substatus }))
     // Waar hij deze dag staat ingepland bovenaan; de rest op dossiernummer aflopend.
     .sort((a, b) => Number(vandaagGepland.has(b.id)) - Number(vandaagGepland.has(a.id)))
 
   const eigenIds = new Set(eigen.map(d => d.id))
   const rest = ((opdrachten ?? []) as Rij[])
     .filter(d => !eigenIds.has(d.id) && !indirectSet.has(d.id))
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: false }))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: false, servicedesk: !!d.servicedesk_substatus }))
 
   const overhead = ((indirecte ?? []) as Rij[])
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: true }))
+    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: true, servicedesk: false }))
 
   return [...eigen, ...rest, ...overhead]
 }
@@ -473,6 +469,18 @@ export type RegelInvoer = {
  * mag worden. Werk-uren eisen een dossier én een bewakingscode; alle andere categorieën landen op
  * het indirecte-uren-dossier, want Bouw7 wil op élke urenregel een project.
  */
+/**
+ * Een servicedeskbon waar (nog) geen enkele bewakingscode op staat. Elke bon krijgt de eigen code
+ * RW01, maar de sync maakt die met 25 tegelijk aan; tot dan is er niets te kiezen. Dan mogen de
+ * uren zonder code door -- de goedkeurder hercodeert ze op RW01 zodra die er is. Liever dat dan
+ * een monteur die zijn werk van vandaag niet kwijt kan.
+ */
+async function isBonZonderCodes(dossierId: string): Promise<boolean> {
+  const { data } = await db().from('dossiers').select('servicedesk_substatus').eq('id', dossierId).maybeSingle()
+  if (!data?.servicedesk_substatus) return false
+  return (await getBewakingscodesVoorUurlog(dossierId)).length === 0
+}
+
 async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
   const supabase = db()
   if (!(invoer.uren > 0) || invoer.uren > 24) throw new Error('Vul een aantal uren tussen 0 en 24 in.')
@@ -493,7 +501,9 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
     // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
     // is de code niet verplicht. Zie `getIndirecteDossierIds`.
     const indirect = (await getIndirecteDossierIds()).has(invoer.dossier_id)
-    if (!indirect && !invoer.bewakingscode) throw new Error('Kies een bewakingscode voor deze uren.')
+    if (!indirect && !invoer.bewakingscode && !(await isBonZonderCodes(invoer.dossier_id))) {
+      throw new Error('Kies een bewakingscode voor deze uren.')
+    }
     return {
       medewerker_id: medewerkerId,
       datum: invoer.datum,
@@ -633,11 +643,17 @@ export async function dienWeekIn(
   }
 
   // Werk-uren zonder bewakingscode zouden in Bouw7 op de ongecodeerde hoop belanden. Behalve op
-  // een indirecte-urendossier: daar is er niets te bewaken en dus geen code te kiezen.
-  const ongecodeerd = rij.filter(
+  // een indirecte-urendossier (daar is niets te bewaken) en op een servicedeskbon die nog geen
+  // enkele code heeft (zie `isBonZonderCodes`).
+  const zonderCode = rij.filter(
     r => r.planning_uursoorten?.uren_categorie === 'werk'
       && (!r.dossier_id || (!r.bewakingscode && !indirecteDossiers.has(r.dossier_id))),
-  ).length
+  )
+  const bonnenZonderCodes = new Set<string>()
+  for (const id of new Set(zonderCode.map(r => r.dossier_id).filter(Boolean) as string[])) {
+    if (await isBonZonderCodes(id)) bonnenZonderCodes.add(id)
+  }
+  const ongecodeerd = zonderCode.filter(r => !r.dossier_id || !bonnenZonderCodes.has(r.dossier_id)).length
   if (ongecodeerd > 0) {
     return {
       ok: false,

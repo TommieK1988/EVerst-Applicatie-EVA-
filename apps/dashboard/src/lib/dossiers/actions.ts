@@ -4065,6 +4065,10 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
  * Zonder de optie komt de volledige lijst terug. Dat blijft de stand voor het **corrigeren** van
  * al geboekte uren (`UrenDetailTable`): een uur dat op de verkeerde code staat moet naar elke
  * code te verplaatsen zijn, ook naar één zonder prognose.
+ *
+ * Een servicedeskbon valt buiten die beperking: daar staat geen begroting, alleen de eigen code
+ * RW01 (zie regie-bewakingscode.ts) zonder urenbudget. Met het filter zou de monteur op een bon
+ * nooit een code kunnen kiezen.
  */
 export async function getBewakingscodesVoorUurlog(
   dossierId: string,
@@ -4076,7 +4080,20 @@ export async function getBewakingscodesVoorUurlog(
     // Kostensoort 1 (arbeid) uit de bewakings-snapshot; deze lijst voedt de dropdown bij het
     // boeken van uren en werd voorheen bij elke dossierkeuze live opgehaald.
     const controlPayload = (await leesDossierBron<AthenaControlPayload>(dossierId, 'athena_control')).data
-    const resp = controlPayload?.[1]
+    let resp = controlPayload?.[1] ?? null
+    // Geen snapshot: servicedeskbonnen worden niet voorverwarmd (4 van de 115 open bonnen hadden er
+    // een, gemeten sep 2026), dus hun code RW01 kwam nooit in de lijst. Dan alleen kostensoort
+    // Arbeid live lezen — dezelfde call waar de snapshot uit bestaat, en alleen-lezen.
+    if (!resp) {
+      const client = await getBouw7ClientOfNull()
+      resp = client
+        ? await client
+            .getAthena<NonNullable<AthenaControlPayload[1]>>(
+              `/project-control/${bouw7Id}/cost-type/1/chapters?include_subprojects=false`,
+            )
+            .catch(() => null)
+        : null
+    }
     if (!resp) return []
     const gevonden: BewakingscodeOptie[] = []
     for (const item of resp.items ?? []) {
@@ -4099,9 +4116,13 @@ export async function getBewakingscodesVoorUurlog(
         })
       }
     }
-    const lijst = opties?.alleenMetPrognose
-      ? gevonden.filter(o => o.prognoseUren > 0)
-      : gevonden
+    let filteren = !!opties?.alleenMetPrognose
+    if (filteren) {
+      const { data: d } = await createAdminClient()
+        .from('dossiers').select('servicedesk_substatus').eq('id', dossierId).maybeSingle()
+      if (d?.servicedesk_substatus) filteren = false
+    }
+    const lijst = filteren ? gevonden.filter(o => o.prognoseUren > 0) : gevonden
     return lijst.sort((a, b) => a.code.localeCompare(b.code))
   } catch {
     return []

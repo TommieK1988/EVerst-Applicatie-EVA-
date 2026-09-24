@@ -17,6 +17,7 @@ import { revalidatePath } from 'next/cache'
 import { afstandMeter } from '@/lib/geo/afstand'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 import { isoWeek, weekDagen, weekStartVan } from '@/lib/uren/rooster'
+import { BOEKBAAR_FILTER, isBoekbaarDossier } from '@/lib/uren/boekbaar'
 import { vereisPrikklokActie } from './auth'
 import { amsterdamDatum, amsterdamMoment, amsterdamTijd } from './tijd'
 import { berekenDagen, type PrikklokDag } from './bereken'
@@ -26,18 +27,12 @@ import type {
 
 const db = () => createAdminClient()
 
-/**
- * Waarop uren geschreven mogen worden: dezelfde regel als de weekstaat (`getDossierOpties` in
- * lib/uren/weekstaat.ts). Hier herhaald omdat een 'use server'-module geen constanten exporteert.
- * Wie hier inklokt, moet straks ook een geldige weekstaatregel opleveren.
- */
-const LOPENDE_OPDRACHT_STATUSSEN = ['werkvoorbereiding', 'onderhanden', 'uitvoering_gereed'] as const
 
 /** Zoekvak rond de positie: ~5,5 km. Houdt de select begrensd (zie de 1000-rijenregel). */
 const ZOEK_GRAAD = 0.05
 
 const DOSSIER_SELECT = `
-  id, dossiernummer, titel, hoofdstatus, opdracht_substatus, gearchiveerd, bouw7_id,
+  id, dossiernummer, titel, hoofdstatus, opdracht_substatus, servicedesk_substatus, gearchiveerd, bouw7_id,
   werkadres_straat, werkadres_huisnummer, werkadres_stad, adres_lat, adres_lng,
   relaties!klant_id ( naam )
 `
@@ -48,6 +43,7 @@ type DossierRij = {
   titel: string | null
   hoofdstatus: string | null
   opdracht_substatus: string | null
+  servicedesk_substatus: string | null
   gearchiveerd: boolean | null
   bouw7_id: string | number | null
   werkadres_straat: string | null
@@ -69,11 +65,12 @@ const adresVan = (d: DossierRij) => {
   return [straat, d.werkadres_stad].filter(Boolean).join(', ') || null
 }
 
-const isLopend = (d: DossierRij) =>
-  d.hoofdstatus === 'opdracht'
-  && (LOPENDE_OPDRACHT_STATUSSEN as readonly string[]).includes(d.opdracht_substatus ?? '')
-  && !d.gearchiveerd
-  && d.bouw7_id != null
+/**
+ * Waarop uren geschreven mogen worden: lopende opdrachten én open servicedeskbonnen. Dezelfde
+ * regel als de weekstaat (lib/uren/boekbaar.ts) — wie hier inklokt, moet straks ook een geldige
+ * weekstaatregel opleveren.
+ */
+const isLopend = (d: DossierRij) => isBoekbaarDossier(d)
 
 const meter = (m: number) =>
   m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} km`
@@ -243,8 +240,9 @@ function vernieuw() {
 /* ── Zoeken ───────────────────────────────────────────────────────── */
 
 /**
- * Welke werkadressen liggen binnen de straal? Kandidaten zijn álle lopende opdrachten, niet alleen
- * die waarop iemand een rol heeft: uitvoerend personeel staat zelden als rolhouder op een dossier.
+ * Welke werkadressen liggen binnen de straal? Kandidaten zijn álle lopende opdrachten en open
+ * servicedeskbonnen, niet alleen die waarop iemand een rol heeft: uitvoerend personeel staat
+ * zelden als rolhouder op een dossier.
  * Wat vandaag voor jou is ingepland komt bovenaan.
  */
 export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResultaat> {
@@ -326,7 +324,7 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
     return {
       ok: false,
       reden: 'te_ver',
-      melding: `Hier ligt ${dossierLabel(nietLopend.d)}, maar die opdracht staat niet open voor uren. Inklokken kan alleen op een lopende opdracht.`,
+      melding: `Hier ligt ${dossierLabel(nietLopend.d)}, maar dat dossier staat niet open voor uren. Inklokken kan alleen op een lopende opdracht of een open servicedeskbon.`,
     }
   }
 
@@ -405,8 +403,16 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
     standaardUursoort(medewerker.id),
   ])
   const plan = ingepland.get(d.id) ?? null
-  const bewakingscode = plan?.bewakingscode ?? null
-  const psl = await pslVoorCode(d.id, bewakingscode)
+  let bewakingscode = plan?.bewakingscode ?? null
+  let psl = await pslVoorCode(d.id, bewakingscode)
+  // Een servicedeskbon heeft in de regel precies één code (RW01). Die hoeft niemand te kiezen.
+  if (!bewakingscode && d.servicedesk_substatus) {
+    const codes = await getBewakingscodesVoorUurlog(d.id).catch(() => [])
+    if (codes.length === 1) {
+      bewakingscode = codes[0].code
+      psl = codes[0].pslId
+    }
+  }
 
   const { error } = await db().from('prikklok_sessies').insert({
     medewerker_id: medewerker.id,
@@ -683,13 +689,12 @@ export async function getPrikklokStatus(): Promise<PrikklokStatus> {
   }
 }
 
-/** Lopende opdrachten mét locatie, om in de schaduwfase als testlocatie te kiezen. */
+/** Boekbare dossiers mét locatie, om in de schaduwfase als testlocatie te kiezen. */
 async function haalTestDossiers(): Promise<Array<{ id: string; label: string }>> {
   const { data } = await db()
     .from('dossiers')
     .select('id, dossiernummer, titel')
-    .eq('hoofdstatus', 'opdracht')
-    .in('opdracht_substatus', LOPENDE_OPDRACHT_STATUSSEN)
+    .or(BOEKBAAR_FILTER)
     .eq('gearchiveerd', false)
     .not('bouw7_id', 'is', null)
     .not('adres_lat', 'is', null)
