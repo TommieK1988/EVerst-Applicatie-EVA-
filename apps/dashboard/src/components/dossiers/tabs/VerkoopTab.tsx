@@ -197,7 +197,6 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   // De voorwaarde kijkt naar het AANTAL regels, niet naar het bedrag. Bij per saldo minderwerk is de
   // som negatief, en dan zou "bedrag > 0" het Bouw7-getal laten staan terwijl EVA de waarheid heeft.
   const evaLeidend = goedgekeurdeRegels.length > 0
-  const meerwerkAangenomen = meerwerk?.totalen.goedgekeurdAangenomenExcl ?? 0
 
   // Zelfde berekening als het Informatie-tab; de opbouw staat in berekenContractwaarde.
   const waarde = berekenContractwaarde({
@@ -225,8 +224,16 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
    * Niet het contracttotaal: regie- en stelpostmeerwerk wordt op nacalculatie gefactureerd en komt
    * nooit in de termijnstaat. Telde je dat mee, dan meldde de dekkingcontrole een gat dat niemand
    * kan dichten — de banner bleef oranje zolang er regiewerk op het dossier stond.
-   * Zonder EVA-regels is het Bouw7-aggregaat het enige getal dat er is en valt er niets te splitsen. */
-  const termijnGrondslag = evaBron ? rond(t.aanneemsom + meerwerkAangenomen) : t.contractTotaal
+   * Zonder EVA-regels is het Bouw7-aggregaat het enige getal dat er is en valt er niets te splitsen.
+   *
+   * En ook niet al het aangenomen meerwerk: alleen wat al een termijn heeft. De rest krijgt die pas
+   * bij het klaarzetten in het meerwerkblok, of is door de administratie los gefactureerd. Telde het
+   * mee, dan meldde de banner een gat dat er niet is (Vlietkinderen, sep 2026: € 15.244,88 "niet
+   * in termijnen", terwijl de termijnen de aanneemsom op de cent dekten). */
+  const heeftTermijn = (r: (typeof goedgekeurdeRegels)[number]) =>
+    r.opTermijn && (r.in_termijnstaat || r.bouw7_term_id != null || (r.bouw7_term_ids?.length ?? 0) > 0)
+  const meerwerkInStaat = rond(goedgekeurdeRegels.filter(heeftTermijn).reduce((s, r) => s + r.effectiefExcl, 0))
+  const termijnGrondslag = evaBron ? rond(t.aanneemsom + meerwerkInStaat) : t.contractTotaal
   const regieBuitenTermijnen = evaBron && Math.abs(meerwerkRegie) > 0.005
   if (dk) {
     dk = {
@@ -240,14 +247,11 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
    * De termijnstaat is de enige bron met een BTW-tarief per bedrag. Meerwerk telt alleen mee zolang
    * het nog niet in de termijnstaat zit (anders zou het dubbel geteld worden); dat leiden we af uit
    * de som van de termijnen ten opzichte van het contracttotaal. */
-  const termijnSom = rond(data.termijnen.reduce((s, tm) => s + tm.bedrag, 0))
-  // Meten tegen de termijngrondslag, niet tegen het contracttotaal: regiemeerwerk hoort daar niet
-  // in en zou de staat anders altijd als "meerwerk zit er nog niet in" laten gelden.
-  const meerwerkInTermijnstaat = meerwerkAangenomen > 0 && termijnSom >= termijnGrondslag - 1
   const btwRijen = data.termijnen.map((tm) => ({ pct: tm.btwPercentage, excl: tm.bedrag, btw: tm.btwBedrag }))
-  // Zit het aangenomen meerwerk al in de termijnen, dan is alleen het regiedeel nog niet geteld.
+  // Meerwerk met een termijn zit al in de termijnen hierboven; per regel, niet meer afgeleid uit de
+  // som van de staat.
   for (const r of goedgekeurdeRegels) {
-    if (meerwerkInTermijnstaat && r.opTermijn) continue
+    if (heeftTermijn(r)) continue
     // Wat in het nacalculatie-blok staat telt hier niet mee: het contracttotaal rekent dat werk uit
     // dat blok, dat zijn btw per factuurregel kent en niet per meerwerkregel. Zou het hier met het
     // kale regelbedrag staan, dan liep de btw-grondslag uit de pas met het totaal.
@@ -423,7 +427,7 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                   ? 'Er staan nog geen bedragen met een BTW-tarief in de termijnstaat, dus de BTW en het totaal incl. BTW zijn nog niet te bepalen.'
                   : btwOnvolledig
                     ? `De BTW-tarieven komen uit de termijnstaat. Over ${fmt(zonderTarief)} van het contract is nog geen tarief bekend, dus het totaal incl. BTW is een ondergrens.`
-                    : `De BTW-tarieven komen uit de termijnstaat${meerwerkInTermijnstaat || goedgekeurdeRegels.length === 0 ? '' : ', aangevuld met het goedgekeurde meerwerk uit EVA'}.`}
+                    : `De BTW-tarieven komen uit de termijnstaat${goedgekeurdeRegels.every(heeftTermijn) ? '' : ', aangevuld met het goedgekeurde meerwerk uit EVA'}.`}
               </div>
             </CardBody>
           </Card>
@@ -494,10 +498,14 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                   ) : (
                     <>
                       <span>⚠</span>
+                      {/* Het percentage uit de bedragen, niet uit de termijnpercentages: die tellen
+                          tegen de oorspronkelijke staat op en gaven "nog € 15.244,88 (0 %)". */}
                       <span>
-                        Termijnen dekken {fmt(dk.somBedrag)} van {fmt(termijnGrondslag)} aanneemsom
-                        {' '}— nog {fmt(dk.ontbreektBedrag)}
-                        {dk.ontbreektPct != null ? ` (${fmtPct(dk.ontbreektPct)})` : ''} niet in termijnen opgenomen
+                        {dk.somBedrag > termijnGrondslag
+                          ? <>Termijnen dekken {fmt(dk.somBedrag)}, {fmt(rond(dk.somBedrag - termijnGrondslag))} méér dan de aanneemsom van {fmt(termijnGrondslag)}. Staat er meerwerk als losse termijn in Bouw7 die niet aan een meerwerkregel hangt, dan verklaart dat het verschil</>
+                          : <>Termijnen dekken {fmt(dk.somBedrag)} van {fmt(termijnGrondslag)} aanneemsom
+                            {' '}— nog {fmt(dk.ontbreektBedrag)}
+                            {termijnGrondslag > 0 ? ` (${fmtPct(dk.ontbreektBedrag / termijnGrondslag * 100)})` : ''} niet in termijnen opgenomen</>}
                         {regieBuitenTermijnen ? `. ${fmt(meerwerkRegie)} regie en stelposten telt niet mee: dat gaat via de nacalculatie` : ''}
                       </span>
                     </>

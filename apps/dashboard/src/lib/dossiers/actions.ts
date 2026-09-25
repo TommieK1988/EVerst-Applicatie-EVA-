@@ -3415,7 +3415,12 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
     termijnenBeschikbaar = false
   }
 
-  const aanneemsom = toGetal(bouw7Financial?.fixedPrice) || toGetal(bouw7Financial?.revenue?.budgeted)
+  // `fixedPrice` is een object zoals de rest van Athena, geen getal. Een kale `toGetal` erop gaf 0,
+  // en dan viel dit terug op `revenue.budgeted` — de aanneemsom plús het begrote meerwerk. Dat
+  // meerwerk telt hieronder nog eens mee, dus stond het dubbel in het contracttotaal (Vlietkinderen:
+  // MW001, € 19.914,88; 6 van de 708 dossiers, sep 2026).
+  const aanneemsom = toGetal(bouw7Financial?.fixedPrice?.budgeted)
+    || Math.round((toGetal(bouw7Financial?.revenue?.budgeted) - toGetal(bouw7Financial?.additionalWork?.budgeted)) * 100) / 100
   // Goedgekeurd meerwerk: additionalWork is een object; bedrag zit in prognosis (= expected)
   const meerwerk = toGetal(bouw7Financial?.additionalWork?.prognosis ?? bouw7Financial?.additionalWork?.expected)
   const contractTotaal = aanneemsom + meerwerk
