@@ -255,7 +255,13 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
     // Wat in het nacalculatie-blok staat telt hier niet mee: het contracttotaal rekent dat werk uit
     // dat blok, dat zijn btw per factuurregel kent en niet per meerwerkregel. Zou het hier met het
     // kale regelbedrag staan, dan liep de btw-grondslag uit de pas met het totaal.
-    if (r.opNacalculatie) continue
+    if (r.opNacalculatie) {
+      // Behalve wat een mandaat bóven het geboekte legt: dat staat niet in het blok maar wel in
+      // het contracttotaal, dus hoort het in de grondslag.
+      const aanvulling = rond(r.effectiefExcl - r.werkelijkExcl)
+      if (aanvulling > 0) btwRijen.push({ pct: r.btwEffectief, excl: aanvulling, btw: rond(aanvulling * r.btwEffectief / 100) })
+      continue
+    }
     btwRijen.push({ pct: r.btwEffectief, excl: r.effectiefExcl, btw: rond(r.effectiefIncl - r.effectiefExcl) })
   }
   const btwGroepen = groepeerBtw(btwRijen)

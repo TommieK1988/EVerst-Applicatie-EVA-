@@ -14,6 +14,8 @@ import {
 import { getOpdrachtOverzicht, verrekenStelpost } from '@/lib/dossiers/opdracht-onderdelen'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import AfrekenstandBlok from './AfrekenstandBlok'
+import MandaatIndicator from './MandaatIndicator'
+import { heeftVariabelBedrag } from '@/lib/dossiers/meerwerk-bedrag'
 import MeerwerkCalculatie from '@/components/everts-calc/calculatie/MeerwerkCalculatie'
 import { parseGetal } from '@/lib/everts-calc/calculations'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
@@ -52,7 +54,7 @@ const STANDAARD_KOPTEKST =
 
 const LEGE_NIEUW: NieuweMeerwerkData = {
   omschrijving: '', afrekenwijze: 'aangenomen', is_stelpost: false, stelpost_grondslag: null,
-  bedrag_excl_btw: null, eenheid: null, eenheidsprijs: null, hoeveelheid_werkelijk: null,
+  bedrag_excl_btw: null, mandaat_excl_btw: null, eenheid: null, eenheidsprijs: null, hoeveelheid_werkelijk: null,
   btw_pct: null, factuurreferentie: null,
 }
 
@@ -62,8 +64,8 @@ const LEGE_NIEUW: NieuweMeerwerkData = {
  * dan verdwijnt de komma zodra je hem typt ("12," → 12) en kun je nooit een
  * decimaal invoeren. Pas bij Toevoegen worden deze velden omgezet naar getallen.
  */
-type RuweBedragen = { btw_pct: string; eenheidsprijs: string; bedrag_excl_btw: string }
-const LEGE_RUW: RuweBedragen = { btw_pct: '', eenheidsprijs: '', bedrag_excl_btw: '' }
+type RuweBedragen = { btw_pct: string; eenheidsprijs: string; bedrag_excl_btw: string; mandaat_excl_btw: string }
+const LEGE_RUW: RuweBedragen = { btw_pct: '', eenheidsprijs: '', bedrag_excl_btw: '', mandaat_excl_btw: '' }
 
 /** Kleine letters, zonder accenten: "geïsoleerd" vindt je ook met "geisoleerd". */
 const normaliseer = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
@@ -134,6 +136,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
       btw_pct: naarGetal(ruw.btw_pct),
       eenheidsprijs: naarGetal(ruw.eenheidsprijs),
       bedrag_excl_btw: naarGetal(ruw.bedrag_excl_btw),
+      mandaat_excl_btw: heeftVariabelBedrag(nieuw) ? naarGetal(ruw.mandaat_excl_btw) : null,
     })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
@@ -342,6 +345,16 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                 ) : (
                   <div className="text-[11px] text-neutral-500 self-end pb-2">Bedrag wordt live berekend uit geboekte uren/kosten op de bewakingscode.</div>
                 )}
+                {heeftVariabelBedrag(nieuw) && (
+                  <label className="col-span-2 text-[12px] font-medium text-neutral-700">
+                    Verkoopbedrag / mandaat (excl. btw)
+                    <Input inputMode="decimal" value={ruw.mandaat_excl_btw} placeholder="Optioneel"
+                      onChange={e => setRuw({ ...ruw, mandaat_excl_btw: e.target.value })} />
+                    <span className="mt-1 block text-[11px] font-normal text-neutral-500">
+                      Telt mee in het contracttotaal. Wordt er meer geboekt, dan telt het werkelijke bedrag.
+                    </span>
+                  </label>
+                )}
                 <label className="col-span-2 text-[12px] font-medium text-neutral-700">
                   Factuurreferentie (optioneel)
                   <Input value={nieuw.factuurreferentie ?? ''} onChange={e => setNieuw({ ...nieuw, factuurreferentie: e.target.value || null })} />
@@ -419,6 +432,9 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                   const bewerkbaar = !readOnly && !uitBouw7
                   const bedragBewerkbaar = bewerkbaar && r.afrekenwijze === 'aangenomen' && !r.is_stelpost
                   const oudBedrag = r.bedrag_excl_btw != null ? Number(r.bedrag_excl_btw) : null
+                  // Mandaat is een EVA-veld; ook bij regels uit Bouw7 in te vullen, de sync raakt het niet.
+                  const variabel = heeftVariabelBedrag(r)
+                  const oudMandaat = r.mandaat_excl_btw != null ? Number(r.mandaat_excl_btw) : null
                   return (
                   <tr key={r.id} className="border-b border-neutral-100 text-[12.5px] align-top">
                     <td className="py-2 pr-2 tabular-nums text-neutral-500">
@@ -523,6 +539,22 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                           onBlur={e => { const v = naarGetal(e.target.value); if (v !== oudBedrag) wijzigVeld(r.id, { bedrag_excl_btw: v }) }} />
                       ) : (
                         fmt(r.effectiefExcl)
+                      )}
+                      {variabel && (
+                        <div className="mt-1 space-y-0.5 text-[10.5px] font-normal text-neutral-500">
+                          {!readOnly ? (
+                            <label className="block">
+                              <span className="uppercase tracking-wide">Mandaat</span>
+                              <input className={`${inlineInputCls} mt-0.5 text-right text-[11.5px]`} inputMode="decimal"
+                                defaultValue={oudMandaat ?? ''} placeholder="—" disabled={bezig}
+                                aria-label="Verkoopbedrag / mandaat excl. btw"
+                                onBlur={e => { const v = naarGetal(e.target.value); if (v !== oudMandaat) wijzigVeld(r.id, { mandaat_excl_btw: v }) }} />
+                            </label>
+                          ) : null}
+                          {oudMandaat != null && (
+                            <div><MandaatIndicator mandaat={oudMandaat} geboekt={r.werkelijkExcl} toonMandaat={readOnly} /></div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-2 px-2 text-right tabular-nums text-neutral-500">{fmt(r.effectiefIncl)}</td>

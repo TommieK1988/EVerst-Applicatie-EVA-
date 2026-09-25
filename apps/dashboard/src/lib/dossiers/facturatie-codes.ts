@@ -57,6 +57,11 @@ export type FactureerbareCode = {
    * is uitgegeven.
    */
   inBouw7: boolean
+  /**
+   * Verkoopbedrag / mandaat van de meerwerkregel achter deze code, excl. btw. Alleen gevuld bij
+   * bron 'meerwerk' als er een mandaat is ingevuld; het scherm meldt het als er meer geboekt is.
+   */
+  mandaat: number | null
 }
 
 /**
@@ -76,7 +81,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       .not('bewakingscode', 'is', null),
     supabase
       .from('meerwerk_regels')
-      .select('id, omschrijving, bewakingscode, afrekenwijze, is_stelpost, status, opdracht_onderdeel_id, bouw7_chapter_id')
+      .select('id, omschrijving, bewakingscode, afrekenwijze, is_stelpost, status, opdracht_onderdeel_id, bouw7_chapter_id, mandaat_excl_btw')
       .eq('dossier_id', dossierId)
       .not('bewakingscode', 'is', null),
     supabase
@@ -113,6 +118,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       alleenVerschil: false,
       opslagPct: null,
       inBouw7: d?.regie_bouw7_chapter_id != null,
+      mandaat: null,
     })
   }
 
@@ -131,6 +137,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       alleenVerschil: s.in_aanneemsom !== false,
       opslagPct: s.opslag_pct != null ? Number(s.opslag_pct) : null,
       inBouw7: s.bouw7_chapter_id != null,
+      mandaat: null,
     })
   }
 
@@ -157,6 +164,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       alleenVerschil: false,
       opslagPct: null,
       inBouw7: m.bouw7_chapter_id != null,
+      mandaat: m.mandaat_excl_btw != null ? Number(m.mandaat_excl_btw) : null,
     })
   }
 

@@ -453,6 +453,8 @@ export type CodeRegelView = {
   alGefactureerdBedrag: number
   /** Bestaat de code ook in Bouw7? Zo niet, dan kan er niets op geboekt worden. */
   inBouw7: boolean
+  /** Mandaat van de meerwerkregel achter deze code (excl. btw); null als er geen is. */
+  mandaat: number | null
   /**
    * Alles op deze code is al gefactureerd en er is niets bijgekomen. Dan mag er niets meer aan
    * veranderen: wat op een verstuurde factuur staat ligt vast, en een aangepast bedrag zou
@@ -675,6 +677,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         + groepenView.filter(g => g.los && g.gefactureerd).reduce((som, g) => som + g.bedrag, 0),
       ),
       inBouw7: c.inBouw7,
+      mandaat: c.mandaat,
       vergrendeld,
     }
     views.push(view)

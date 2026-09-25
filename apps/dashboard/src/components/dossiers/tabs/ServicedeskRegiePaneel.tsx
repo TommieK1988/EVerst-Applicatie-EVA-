@@ -21,6 +21,7 @@ import { getRegieFactuurvoorstel, type RegieVoorstel } from '@/lib/dossiers/serv
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 import FactuurRegelVenster from './FactuurRegelVenster'
+import MandaatIndicator from './MandaatIndicator'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -124,6 +125,13 @@ export default function ServicedeskRegiePaneel({ dossierId, verbergAlsLeeg, init
                             {!c.inBouw7 ? ' · nog niet in Bouw7' : ''}
                             {!c.meefactureren && !c.vergrendeld ? ' · niet meenemen' : ''}
                           </div>
+                          {c.mandaat != null && (
+                            // Al gefactureerd telt mee: het gaat om wat er in totaal op deze post
+                            // geboekt is, zoals het contracttotaal het ook telt.
+                            <div className="mt-1">
+                              <MandaatIndicator mandaat={c.mandaat} geboekt={c.berekend + c.alGefactureerdBedrag} />
+                            </div>
+                          )}
                         </td>
                         <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(c.inkoop)}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(c.berekend)}</td>

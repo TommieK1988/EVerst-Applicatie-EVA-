@@ -562,6 +562,12 @@ export type MeerwerkRegel = {
   is_stelpost: boolean
   stelpost_grondslag: MeerwerkStelpostGrondslag | null
   bedrag_excl_btw: number | null
+  /**
+   * Verkoopbedrag / mandaat (excl. btw) bij regie en stelposten: wat de klant vooraf heeft
+   * toegezegd. Zolang er minder geboekt is telt dit bedrag in het contracttotaal; daarboven het
+   * werkelijke bedrag. EVA-veld: de Bouw7-sync raakt het niet aan.
+   */
+  mandaat_excl_btw: number | null
   eenheid: string | null
   eenheidsprijs: number | null
   hoeveelheid_werkelijk: number | null

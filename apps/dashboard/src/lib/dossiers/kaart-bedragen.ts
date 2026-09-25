@@ -68,21 +68,26 @@ async function inChunks<T>(
  * lib/dossiers/meerwerk.ts. Regie en stelposten-op-geboekte-kosten hangen op live Bouw7-data
  * (geboekte uren/kosten per bewakingscode) en tellen hier bewust als 0: dat per dossier ophalen
  * zou het bord tientallen Bouw7-calls kosten. Het Informatie-tab blijft daarvoor de bron.
+ * Een ingevuld mandaat telt wél: dat staat in de DB, en is vóór het boeken de enige waarde die er is.
  */
 function meerwerkEffectief(r: {
   is_stelpost: boolean | null
   stelpost_grondslag: string | null
   afrekenwijze: string | null
   bedrag_excl_btw: unknown
+  mandaat_excl_btw: unknown
   eenheidsprijs: unknown
   hoeveelheid_werkelijk: unknown
 }): number {
+  const variabel = r.afrekenwijze === 'regie' || !!r.is_stelpost
+  const mandaat = variabel && r.mandaat_excl_btw != null ? num(r.mandaat_excl_btw) : null
+  const metMandaat = (werkelijk: number) => rond(mandaat != null ? Math.max(mandaat, werkelijk) : werkelijk)
   if (r.is_stelpost && r.stelpost_grondslag === 'eenheidsprijzen') {
-    return rond(num(r.eenheidsprijs) * num(r.hoeveelheid_werkelijk))
+    return metMandaat(num(r.eenheidsprijs) * num(r.hoeveelheid_werkelijk))
   }
   const opGeboekteKosten = r.afrekenwijze === 'regie'
     || (r.is_stelpost && r.stelpost_grondslag === 'geboekte_kosten')
-  if (opGeboekteKosten) return 0
+  if (opGeboekteKosten) return metMandaat(0)
   return rond(num(r.bedrag_excl_btw))
 }
 
@@ -108,7 +113,7 @@ export async function laadKaartBedragen(rijen: Invoer[]): Promise<Map<string, Ka
 
   const [meerwerkRijen, onderdeelRijen, quotes] = await Promise.all([
     inChunks<any>(ids, blok => supabase.from('meerwerk_regels')
-      .select('dossier_id, status, afrekenwijze, is_stelpost, stelpost_grondslag, bedrag_excl_btw, eenheidsprijs, hoeveelheid_werkelijk')
+      .select('dossier_id, status, afrekenwijze, is_stelpost, stelpost_grondslag, bedrag_excl_btw, mandaat_excl_btw, eenheidsprijs, hoeveelheid_werkelijk')
       .in('dossier_id', blok)
       .in('status', GOEDGEKEURD)),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

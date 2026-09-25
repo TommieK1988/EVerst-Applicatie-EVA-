@@ -13,6 +13,7 @@ import { Card, CardHeader, CardBody } from '@/components/ui'
 import { fmt, fmtPct, TH, TD } from '@/components/dossiers/tabs/tab-ui'
 import TermijnenBlok from '@/components/dossiers/tabs/TermijnenBlok'
 import FactuurRegelVenster from '@/components/dossiers/tabs/FactuurRegelVenster'
+import MandaatIndicator from '@/components/dossiers/tabs/MandaatIndicator'
 import type { VerkoopTermijn } from '@/lib/dossiers/actions'
 import type { CodeRegelView } from '@/lib/dossiers/servicedesk'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
@@ -60,7 +61,8 @@ const codes: CodeRegelView[] = [
     btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
     urenBedrag: 3800, kostenBedrag: 2223.44, urenAantal: 76.5,
     aantalBoekingen: 12, aantalGefactureerd: 0, alGefactureerdBedrag: 0,
-    inBouw7: true, vergrendeld: false,
+    // Meer geboekt dan het mandaat: toont de indicator.
+    inBouw7: true, vergrendeld: false, mandaat: 5000,
   },
   {
     bewakingscode: '4310', bron: 'stelpost', omschrijving: 'Stelpost schilderwerk buitenzijde',
@@ -68,7 +70,7 @@ const codes: CodeRegelView[] = [
     btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
     urenBedrag: 9000, kostenBedrag: 5050, urenAantal: 180,
     aantalBoekingen: 4, aantalGefactureerd: 9, alGefactureerdBedrag: 8224.65,
-    inBouw7: true, vergrendeld: false,
+    inBouw7: true, vergrendeld: false, mandaat: null,
   },
   {
     bewakingscode: '4320', bron: 'meerwerk', omschrijving: 'Voorrijkosten en opstart',
@@ -76,7 +78,8 @@ const codes: CodeRegelView[] = [
     btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
     urenBedrag: 0, kostenBedrag: 950, urenAantal: 0,
     aantalBoekingen: 0, aantalGefactureerd: 2, alGefactureerdBedrag: 950,
-    inBouw7: true, vergrendeld: true,
+    // Binnen het mandaat: alleen het mandaat ter informatie.
+    inBouw7: true, vergrendeld: true, mandaat: 2500,
   },
 ]
 const alGefactureerdTotaal = codes.reduce((s, c) => s + c.alGefactureerdBedrag, 0)
@@ -273,6 +276,11 @@ export default function VerkoopProef() {
                               {c.aantalBoekingen > 0 ? ' · ' + c.aantalBoekingen + ' boekingen' : ''}
                               {c.vergrendeld ? ' · gefactureerd' : ''}
                             </div>
+                            {c.mandaat != null && (
+                              <div className="mt-1">
+                                <MandaatIndicator mandaat={c.mandaat} geboekt={c.berekend + c.alGefactureerdBedrag} />
+                              </div>
+                            )}
                           </td>
                           <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(c.inkoop)}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums text-neutral-500">{fmt(c.berekend)}</td>

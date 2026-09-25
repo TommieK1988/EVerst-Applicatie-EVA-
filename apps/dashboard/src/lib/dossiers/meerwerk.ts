@@ -21,6 +21,7 @@ import { zetMeerwerkAlsTermijn, meerwerkTermijnGeschikt, pasTermijnKeuzeToe } fr
 import { leesMeerwerkOfferte, leesTermijnschemaPerOfferte } from './meerwerk-offerte'
 import { overnameBijAkkoord } from './meerwerk-werkbegroting'
 import type { TermijnschemaRegel } from './termijnen-schema'
+import { heeftVariabelBedrag, metMandaat, werkelijkExcl } from './meerwerk-bedrag'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -78,21 +79,6 @@ function rekentOpNacalculatie(r: MeerwerkRegel): boolean {
   return r.afrekenwijze === 'regie' || r.is_stelpost === true
 }
 
-/** Effectief bedrag (excl. btw) per regel, afhankelijk van afrekenwijze/stelpost. */
-function effectiefExcl(regel: MeerwerkRegel, regiePerCode: Map<string, number>): number {
-  if (regel.is_stelpost && regel.stelpost_grondslag === 'eenheidsprijzen') {
-    return rond((Number(regel.eenheidsprijs) || 0) * (Number(regel.hoeveelheid_werkelijk) || 0))
-  }
-  const opGeboekteKosten = regel.afrekenwijze === 'regie'
-    || (regel.is_stelpost && regel.stelpost_grondslag === 'geboekte_kosten')
-  if (opGeboekteKosten) {
-    if (!regel.bewakingscode) return 0
-    return rond(regiePerCode.get(regel.bewakingscode) ?? 0)
-  }
-  // aangenomen / handmatig
-  return rond(Number(regel.bedrag_excl_btw) || 0)
-}
-
 /**
  * Rekent deze regel op een vaste prijs af, en hoort het bedrag dus in de termijnstaat?
  *
@@ -126,7 +112,10 @@ function termijnVerwerkingVan(
 }
 
 export type MeerwerkRegelView = MeerwerkRegel & {
+  /** Bedrag voor het contracttotaal: bij regie/stelpost met mandaat max(mandaat, werkelijk). */
   effectiefExcl: number
+  /** Geboekt of op eenheidsprijzen berekend, zonder mandaat. Bij aangenomen gelijk aan effectief. */
+  werkelijkExcl: number
   effectiefIncl: number
   btwEffectief: number
   /**
@@ -229,7 +218,8 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
   let goedgekeurdRegieExcl = 0
   let goedgekeurdNacalculatieExcl = 0
   const views: MeerwerkRegelView[] = regels.map(r => {
-    const excl = effectiefExcl(r, regiePerCode)
+    const werkelijk = werkelijkExcl(r, regiePerCode)
+    const excl = metMandaat(r, werkelijk)
     const btwPct = r.btw_pct != null ? Number(r.btw_pct) : 21
     const incl = rond(excl * (1 + btwPct / 100))
     const opTermijn = rekentOpTermijn(r)
@@ -237,10 +227,12 @@ export async function getDossierMeerwerk(dossierId: string): Promise<DossierMeer
       goedgekeurdExcl += excl; goedgekeurdIncl += incl; goedgekeurdAantal++
       if (opTermijn) goedgekeurdAangenomenExcl += excl
       else goedgekeurdRegieExcl += excl
-      if (rekentOpNacalculatie(r)) goedgekeurdNacalculatieExcl += excl
+      // Alleen het werkelijke deel: dat staat ook in het nacalculatie-blok en wordt daardoor
+      // vervangen. Wat het mandaat erboven legt, blijft zo als eigen bedrag in het contracttotaal.
+      if (rekentOpNacalculatie(r)) goedgekeurdNacalculatieExcl += werkelijk
     }
     return {
-      ...r, effectiefExcl: excl, effectiefIncl: incl, btwEffectief: btwPct,
+      ...r, effectiefExcl: excl, werkelijkExcl: werkelijk, effectiefIncl: incl, btwEffectief: btwPct,
       opNacalculatie: rekentOpNacalculatie(r),
       opTermijn,
       termijnVerwerking: termijnVerwerkingVan(r, opTermijn, schemaPerOfferte),
@@ -281,6 +273,7 @@ export type NieuweMeerwerkData = {
   is_stelpost?: boolean
   stelpost_grondslag?: MeerwerkStelpostGrondslag | null
   bedrag_excl_btw?: number | null
+  mandaat_excl_btw?: number | null
   eenheid?: string | null
   eenheidsprijs?: number | null
   hoeveelheid_werkelijk?: number | null
@@ -300,6 +293,7 @@ export async function maakMeerwerkRegel(
   // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
   await vereisSessie()
   await assertDossierBewerkbaar(dossierId)
+  if ((data.mandaat_excl_btw ?? 0) < 0) return { ok: false, error: 'Het mandaat kan niet negatief zijn.' }
   const supabase = createAdminClient() as any
   const { data: maxRow } = await supabase
     .from('meerwerk_regels')
@@ -322,6 +316,7 @@ export async function maakMeerwerkRegel(
       is_stelpost: data.is_stelpost ?? false,
       stelpost_grondslag: data.is_stelpost ? (data.stelpost_grondslag ?? null) : null,
       bedrag_excl_btw: data.bedrag_excl_btw ?? null,
+      mandaat_excl_btw: heeftVariabelBedrag(data) ? (data.mandaat_excl_btw ?? null) : null,
       eenheid: data.eenheid ?? null,
       eenheidsprijs: data.eenheidsprijs ?? null,
       hoeveelheid_werkelijk: data.hoeveelheid_werkelijk ?? null,
@@ -352,11 +347,12 @@ export async function updateMeerwerkRegel(
   if (bestaand?.dossier_id) await assertDossierBewerkbaar(bestaand.dossier_id)
   const velden: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of ['omschrijving', 'afrekenwijze', 'is_stelpost', 'stelpost_grondslag', 'bedrag_excl_btw',
-    'eenheid', 'eenheidsprijs', 'hoeveelheid_werkelijk', 'btw_pct', 'factuurreferentie', 'termijn_wijze'] as const) {
+    'mandaat_excl_btw', 'eenheid', 'eenheidsprijs', 'hoeveelheid_werkelijk', 'btw_pct', 'factuurreferentie', 'termijn_wijze'] as const) {
     if (k in patch) velden[k] = (patch as any)[k]
   }
   // Stelpost-grondslag alleen relevant bij stelpost.
   if (velden.is_stelpost === false) velden.stelpost_grondslag = null
+  if (Number(velden.mandaat_excl_btw ?? 0) < 0) return { ok: false, error: 'Het mandaat kan niet negatief zijn.' }
 
   const { data: row, error } = await supabase
     .from('meerwerk_regels')

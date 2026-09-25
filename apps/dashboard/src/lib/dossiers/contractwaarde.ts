@@ -31,7 +31,8 @@ export type Contractwaarde = {
   aangenomen: number
   /**
    * Meerwerk buiten de termijnstaat dat zijn eigen bedrag draagt en in geen enkel blok staat —
-   * in de praktijk een eenheidsprijs-stelpost zonder bewakingscode.
+   * een eenheidsprijs-stelpost zonder bewakingscode, of het deel van een regie-/stelpostmandaat
+   * dat nog niet geboekt is.
    */
   eigenBedrag: number
   /** Uit het nacalculatie-blok, inclusief wat daarvan al gefactureerd is. */
@@ -90,10 +91,11 @@ export type MeerwerkSplitsing = {
  *
  * Aangenomen: per regel. Regie is net als daar tweeledig: de regieregels die zelf hun bedrag
  * dragen (niet in het nacalculatie-blok) per regel, en het nacalculatie-blok als één bedrag. Dat
- * blok is een optelling van geboekte kosten en valt niet zinnig per regel op te splitsen.
+ * blok is een optelling van geboekte kosten en valt niet zinnig per regel op te splitsen. Wat een
+ * mandaat bóven het geboekte legt, staat niet in dat blok en telt hier per regel mee.
  */
 export function splitsMeerwerk(
-  regels: { effectiefExcl: number; opTermijn: boolean; opNacalculatie: boolean }[],
+  regels: { effectiefExcl: number; werkelijkExcl?: number; opTermijn: boolean; opNacalculatie: boolean }[],
   waarde: Pick<Contractwaarde, 'nacalculatie'>,
 ): MeerwerkSplitsing {
   const s = { minderwerkAangenomen: 0, meerwerkAangenomen: 0, minderwerkRegie: 0, meerwerkRegie: 0 }
@@ -104,6 +106,9 @@ export function splitsMeerwerk(
     } else if (!r.opNacalculatie) {
       if (r.effectiefExcl < 0) s.minderwerkRegie += r.effectiefExcl
       else s.meerwerkRegie += r.effectiefExcl
+    } else {
+      // Mandaat boven het geboekte: `berekenContractwaarde` telt dit via `eigenBedrag`.
+      s.meerwerkRegie += Math.max(0, r.effectiefExcl - (r.werkelijkExcl ?? r.effectiefExcl))
     }
   }
   if (waarde.nacalculatie < 0) s.minderwerkRegie += waarde.nacalculatie
