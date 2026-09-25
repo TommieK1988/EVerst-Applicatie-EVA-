@@ -10,7 +10,7 @@ import {
   getCalculatieregelsVoorScenario, getComponentregelsVoorScenario,
 } from '@/lib/everts-calc/local-store'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
-import { getBouw7BewakingscodesImport } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { getBouw7BewakingscodesImport, type VergrendeldeBestelregel } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { laadUursoorten } from '@/app/(platform)/instellingen/planning/actions'
 import type { PlanningUursoort } from '@everts/database/platform-types'
 import { formatEuro } from '@/lib/everts-calc/calculations'
@@ -44,10 +44,10 @@ interface Props {
   /** Dossier-id van het gekoppelde Bouw7-project — nodig om codes/bestelregels te importeren. */
   dossierId?: string
   /**
-   * Kale bewakingscodes waarop al inkoop verbruikt is (inkooporder/OA-contract/geboekte factuur).
-   * Regels op zo'n code worden read-only: ze zijn besteld in Bouw7 en mogen niet meer wijzigen.
+   * Bouw7-bestelregels die aan een inkooporder/OA-contract hangen, met de reden. Een regel met
+   * zo'n component wordt read-only; de rest onder dezelfde bewakingscode blijft bewerkbaar.
    */
-  vergrendeldeCodes?: string[] | null
+  vergrendeldeRegels?: VergrendeldeBestelregel[] | null
 }
 
 /** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
@@ -533,7 +533,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeCodes }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeRegels }: Props) {
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
@@ -854,30 +854,38 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   }
 
   // ─── Vergrendeling (bestelde regels in Bouw7) ───────────────────────────────
-  // Regels waarvan de kostengroep (kale bewakingscode) al besteld is, zijn read-only:
-  // ze mogen in EVA niet meer wijzigen zodat de sync ze in Bouw7 nooit hoeft aan te raken.
-  const vergrendeldSet = useMemo(
-    () => new Set((vergrendeldeCodes ?? []).map(c => c.trim()).filter(Boolean)),
-    [vergrendeldeCodes],
-  )
+  // Een regel is read-only zodra één van zijn componenten als bestelregel onder een inkooporder
+  // of OA-contract hangt: de hoeveelheid van de regel stuurt alle componenten, dus de hele regel
+  // gaat op slot. Andere regels onder dezelfde bewakingscode blijven gewoon bewerkbaar.
+  const vergrendeldPerRegel = useMemo(() => {
+    const perLine = new Map((vergrendeldeRegels ?? []).map(v => [v.lineId, v.reden]))
+    const m = new Map<string, string>()
+    if (perLine.size === 0) return m
+    for (const c of componenten) {
+      const reden = c.bouw7_line_id != null ? perLine.get(c.bouw7_line_id) : undefined
+      if (reden && !m.has(c.werkbegroting_regel_id)) m.set(c.werkbegroting_regel_id, reden)
+    }
+    return m
+  }, [vergrendeldeRegels, componenten])
+  /** Reden waarom de regel op slot zit, of undefined als hij bewerkbaar is. */
   const regelVergrendeld = useCallback(
-    (kostengroep?: string | null) => vergrendeldSet.size > 0 && vergrendeldSet.has(bareCode(kostengroep)),
-    [vergrendeldSet],
+    (regelId?: string | null) => (regelId ? vergrendeldPerRegel.get(regelId) : undefined),
+    [vergrendeldPerRegel],
   )
   const lockToastTs = useRef(0)
-  const meldVergrendeld = useCallback(() => {
+  const meldVergrendeld = useCallback((reden: string) => {
     const nu = Date.now()
     if (nu - lockToastTs.current > 1500) {
       lockToastTs.current = nu
-      toast('Deze regel is besteld in Bouw7 en daarom vergrendeld.', { icon: '🔒' })
+      toast(`Deze regel is besteld (${reden}) en daarom vergrendeld.`, { icon: '🔒' })
     }
   }, [])
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const onComponentWijzig = useCallback((compId: string, patch: Partial<WerkbegrotingComponent>) => {
     const comp = componenten.find(c => c.id === compId); if (!comp) return
-    const regel0 = regels.find(r => r.id === comp.werkbegroting_regel_id)
-    if (regelVergrendeld(regel0?.kostengroep)) { meldVergrendeld(); return }
+    const slot = regelVergrendeld(comp.werkbegroting_regel_id)
+    if (slot) { meldVergrendeld(slot); return }
     for (const [veld, nw] of Object.entries(patch)) {
       const ow = (comp as unknown as Record<string, unknown>)[veld]; if (ow === nw) continue
       voegWijzigingToe({ id: nieuweId(), werkbegroting_id: werkbegrotingId,
@@ -890,11 +898,12 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     slaWerkbegrotingComponentOp(bij)
     setComponenten(prev => prev.map(c => c.id === compId ? bij : c))
     onWijziging()
-  }, [componenten, regels, werkbegrotingId, onWijziging, regelVergrendeld, meldVergrendeld])
+  }, [componenten, werkbegrotingId, onWijziging, regelVergrendeld, meldVergrendeld])
 
   const onRegelWijzig = useCallback((regelId: string, patch: Partial<WerkbegrotingRegel>) => {
     const regel = regels.find(r => r.id === regelId); if (!regel) return
-    if (regelVergrendeld(regel.kostengroep)) { meldVergrendeld(); return }
+    const slot = regelVergrendeld(regel.id)
+    if (slot) { meldVergrendeld(slot); return }
     const bij = { ...regel, ...patch }
     slaWerkbegrotingRegelOp(bij)
     setRegels(prev => prev.map(r => r.id === regelId ? bij : r))
@@ -908,7 +917,6 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const verplaatsNaarKostengroep = useCallback((label: string) => {
     if (!dragCompId) return
     const doel = label === 'Geen kostengroep' ? undefined : label
-    if (doel && regelVergrendeld(doel)) { meldVergrendeld(); setDragCompId(null); setDragOverSep(null); return }
 
     const compIds  = selectie.has(dragCompId) ? [...selectie] : [dragCompId]
     const regelIds = new Set<string>()
@@ -923,7 +931,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     }
 
     setDragCompId(null); setDragOverSep(null)
-  }, [dragCompId, selectie, componenten, regels, regelVergrendeld, meldVergrendeld, onRegelWijzig])
+  }, [dragCompId, selectie, componenten, regels, onRegelWijzig])
 
   // Type wijzigen → eenheid auto-instellen bij arbeid
   const onTypeWijzig = useCallback((compId: string, type: WerkbegrotingComponent['type']) => {
@@ -1263,21 +1271,23 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         )
 
       case 'kostengroep': {
-        const kgVergrendeld = regelVergrendeld(regel.kostengroep)
+        const slot = regelVergrendeld(regel.id)
         return (
           <td key={id} className={`px-1 py-1 ${base}`}>
             <div className="flex items-center gap-1">
-              {kgVergrendeld && (
-                <Lock className="w-3 h-3 shrink-0 text-slate-400" aria-label="Besteld in Bouw7 — vergrendeld" />
+              {slot && (
+                <span title={`Besteld: ${slot} — vergrendeld`} className="shrink-0">
+                  <Lock className="w-3 h-3 text-slate-400" aria-label={`Besteld: ${slot} — vergrendeld`} />
+                </span>
               )}
               <KostengroepKiezer
                 waarde={regel.kostengroep}
                 opties={alleKostengroepen}
                 vrijeTekst={!heeftBewakingscodes}
-                vergrendeld={kgVergrendeld}
+                vergrendeld={!!slot}
                 onKies={v => onRegelWijzig(regel.id, { kostengroep: v })}
-                title={kgVergrendeld
-                  ? 'Besteld in Bouw7 — vergrendeld'
+                title={slot
+                  ? `Besteld: ${slot} — vergrendeld`
                   : (regel.kostengroep ?? (heeftBewakingscodes ? 'Kies een bewakingscode' : 'Kies een kostengroep'))}
               />
             </div>

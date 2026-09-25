@@ -1726,16 +1726,17 @@ export async function getBouw7BewakingscodesImport(dossierId: string): Promise<I
 //   null  → aanmaken   (POST zonder id) → id opslaan
 //   gevuld→ bijwerken  (POST mét id)     → geen duplicaat
 //   soft-deleted + id → neutraliseren   (POST mét id, quantity "0")
-// Bestelde regels (code met inkooporder/OA/geboekte factuur) worden overgeslagen en
-// nooit aangeraakt (fiscale bescherming; zie getVergrendeldeBewakingscodes).
+// Bestelde regels (gekoppeld aan een inkooporder- of OA-contracttermijn) worden overgeslagen
+// en nooit aangeraakt (zie getVergrendeldeBestelregels).
 //
 // De update-semantiek is geverifieerd op testproject 3869371 (juli 2026): een POST mét `id`
 // geeft 200 met hetzelfde id terug en werkt de bestaande regel bij — geen duplicaat.
 
 /**
  * Bewakingscodes waarop al inkoop "verbruikt" is: er staat een inkooporder, een
- * onderaannemerscontract of een geboekte inkoopfactuur op. Regels op zo'n code worden
- * in EVA vergrendeld en bij de sync overgeslagen. Bron: dezelfde reads als getDossierInkoop.
+ * onderaannemerscontract of een geboekte inkoopfactuur op. Alleen nog de rem op
+ * `resetBouw7Bestelregels` (project-brede delete). Het vergrendelen van losse regels gaat per
+ * bestelregel — zie `getVergrendeldeBestelregels`.
  */
 export async function getVergrendeldeBewakingscodes(
   dossierId: string,
@@ -1775,6 +1776,60 @@ export async function getVergrendeldeBewakingscodes(
   return { ok: true, codes: [...codes] }
 }
 
+/** Een bestelregel die aan een inkooporder of OA-contract hangt, met de reden in gewone taal. */
+export type VergrendeldeBestelregel = { lineId: number; reden: string }
+
+/** Leesbare reden bij een contract-gekoppelde bestelregel, of null als hij nergens aan hangt. */
+function contractReden(ol: Bouw7ContractOrderLine): string | null {
+  const oa = ol.subcontractorContract
+  const po = ol.purchaseOrderContract
+  const contract = oa ?? po
+  if (!contract) return null
+  const soort = oa ? 'OA-contract' : 'Inkooporder'
+  const nummer = contract.number?.trim()
+  const wie = ol.contact?.name?.trim()
+  return [nummer ? `${soort} ${nummer}` : soort, wie].filter(Boolean).join(' · ')
+}
+
+/**
+ * Bestelregels die in Bouw7 écht besteld zijn: ze hangen onder een termijn van een inkooporder
+ * of OA-contract (`purchaseOrderContract`/`subcontractorContract` op de regel). Alleen díe
+ * werkbegroting-regels worden in EVA vergrendeld en bij de sync overgeslagen.
+ *
+ * Bewust per regel en niet per bewakingscode: een inkoopfactuur boekt Bouw7 op de code, niet op
+ * een bestelregel. Vergrendelen op code-niveau zette daardoor élke regel onder die code op slot
+ * zodra er één factuur binnenkwam — ook regels die nooit besteld waren (sept 2026, 20261.00293).
+ * Een verwachte-kostenregel bijwerken raakt een geboekte factuur niet.
+ */
+export async function getVergrendeldeBestelregels(
+  dossierId: string,
+  /** `live: true` vlak vóór een schrijfactie — zie getVergrendeldeBewakingscodes. */
+  opties?: { live?: boolean },
+): Promise<{ ok: true; regels: VergrendeldeBestelregel[] } | { ok: false; error: string }> {
+  const live = opties?.live === true
+  const bouw7Id = await dossierBouw7Id(dossierId)
+  if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
+  try {
+    let lines: Bouw7ContractOrderLine[]
+    if (live) {
+      const client = await getBouw7ClientOfNull()
+      if (!client) return { ok: false, error: 'Bouw7 is niet geconfigureerd.' }
+      // Geen .catch → []: bij een schrijfactie is "niets vergrendeld" de onveilige kant.
+      lines = (await client.get<{ items?: Bouw7ContractOrderLine[] }>('/list/contract-order-lines', { q: `project.id = ${bouw7Id} LIMIT 1000` })).items ?? []
+    } else {
+      lines = (await leesDossierBron<ContractOrderLinesPayload>(dossierId, 'contract_order_lines')).data?.items ?? []
+    }
+    const regels: VergrendeldeBestelregel[] = []
+    for (const ol of lines) {
+      const reden = contractReden(ol)
+      if (reden) regels.push({ lineId: ol.id, reden })
+    }
+    return { ok: true, regels }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Ophalen bestelde regels mislukt.' }
+  }
+}
+
 export type BestelregelActie = 'aanmaken' | 'bijwerken' | 'neutraliseren' | 'skip'
 
 /** Eén geplande bestelregel-actie voor een werkbegroting-component. */
@@ -1800,16 +1855,18 @@ export type BestelregelPlanRegel = {
   reden?: string
 }
 export type BestelregelPreviewResultaat =
-  | { ok: true; bouw7Id: string; regels: BestelregelPlanRegel[]; vergrendeldeCodes: string[] }
+  | { ok: true; bouw7Id: string; regels: BestelregelPlanRegel[]; vergrendeldeRegels: VergrendeldeBestelregel[] }
   | { ok: false; error: string }
 
 /** Gedeelde planner: bepaal per component welke actie naar Bouw7 nodig is. */
 async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayload, live = false): Promise<BestelregelPreviewResultaat> {
   const resolved = await resolveBewakingscodes(dossierId, { live })
   if (!resolved.ok) return resolved
-  const verg = await getVergrendeldeBewakingscodes(dossierId, { live })
-  const vergrendeldeCodes = verg.ok ? verg.codes : []
-  const vergSet = new Set(vergrendeldeCodes)
+  const verg = await getVergrendeldeBestelregels(dossierId, { live })
+  // Bij het schrijven nooit doorgaan zonder te weten wat besteld is.
+  if (live && !verg.ok) return verg
+  const vergrendeldeRegels = verg.ok ? verg.regels : []
+  const vergPerLine = new Map(vergrendeldeRegels.map(v => [v.lineId, v.reden]))
 
   const refsByCode = new Map<string, BewakingscodeRef[]>()
   for (const c of resolved.codes) { const a = refsByCode.get(c.code) ?? []; a.push(c); refsByCode.set(c.code, a) }
@@ -1835,12 +1892,13 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
     const prijs = rond(comp.tarief)
     const bedrag = rond(aantal * prijs)
     const bouw7LineId = comp.bouw7_line_id ?? null
-    const vergrendeld = !!code && vergSet.has(code)
+    const vergReden = bouw7LineId != null ? vergPerLine.get(bouw7LineId) : undefined
+    const vergrendeld = vergReden != null
 
     let actie: BestelregelActie = 'aanmaken'
     let reden: string | undefined
-    if (!code) { actie = 'skip'; reden = 'Regel zonder bewakingscode (kostengroep leeg).' }
-    else if (vergrendeld) { actie = 'skip'; reden = 'Besteld in Bouw7 — vergrendeld.' }
+    if (vergrendeld) { actie = 'skip'; reden = `Besteld: ${vergReden}` }
+    else if (!code) { actie = 'skip'; reden = 'Regel zonder bewakingscode (kostengroep leeg).' }
     else if (verwijderd) {
       if (bouw7LineId != null) actie = 'neutraliseren'
       else { actie = 'skip'; reden = 'Verwijderd, nooit verzonden.' }
@@ -1893,6 +1951,8 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
         if (r.actie !== 'aanmaken') continue
         const match = bestaande.find(ol =>
           !geclaimd.has(ol.id) &&
+          // Een bestelde regel nooit adopteren: de upsert zou hem dan alsnog overschrijven.
+          !contractReden(ol) &&
           (r.pslId != null
             ? ol.projectSecurityLink?.id === r.pslId
             : (ol.projectSecurityLink?.code ?? '').trim() === r.code && ol.costType === r.lineCt) &&
@@ -1909,7 +1969,7 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
     }
   } catch { /* adoptie is best effort */ }
 
-  return { ok: true, bouw7Id: resolved.bouw7Id, regels, vergrendeldeCodes }
+  return { ok: true, bouw7Id: resolved.bouw7Id, regels, vergrendeldeRegels }
 }
 
 /** Preview (read-only): bereken per component welke actie naar Bouw7 nodig is. Schrijft niets. */

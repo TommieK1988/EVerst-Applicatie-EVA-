@@ -11,7 +11,7 @@ import {
   slaWerkbegrotingOp, slaWerkbegrotingComponentOp, getScenarios,
 } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
-import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBewakingscodes, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBestelregels, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat, type VergrendeldeBestelregel } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import { getEigenBewakingscodes, type EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
@@ -69,8 +69,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
   /** Door EVA uitgedeelde codes (stelposten + goedgekeurd meerwerk); zie `getEigenBewakingscodes`. */
   const [eigenCodes, setEigenCodes] = useState<EigenBewakingscode[]>([])
-  /** Kale bewakingscodes waarop al inkoop verbruikt is → regels in de grid worden read-only. */
-  const [vergrendeldeCodes, setVergrendeldeCodes] = useState<string[]>([])
+  /** Bestelregels die aan een inkooporder/OA-contract hangen → die regels worden read-only. */
+  const [vergrendeldeRegels, setVergrendeldeRegels] = useState<VergrendeldeBestelregel[]>([])
   const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
 
   /** Directe (niet-gedebouncede) sync van een vers/lokaal aangemaakte WB → meteen gedeeld. */
@@ -167,13 +167,13 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     return () => { actief = false }
   }, [dossierId])
 
-  // Vergrendelde (bestelde) bewakingscodes ophalen → grid maakt die regels read-only.
+  // Bestelde regels ophalen → grid maakt die regels read-only.
   useEffect(() => {
-    if (!dossierId) { setVergrendeldeCodes([]); return }
+    if (!dossierId) { setVergrendeldeRegels([]); return }
     let actief = true
-    getVergrendeldeBewakingscodes(dossierId)
-      .then(res => { if (actief) setVergrendeldeCodes(res.ok ? res.codes : []) })
-      .catch(() => { if (actief) setVergrendeldeCodes([]) })
+    getVergrendeldeBestelregels(dossierId)
+      .then(res => { if (actief) setVergrendeldeRegels(res.ok ? res.regels : []) })
+      .catch(() => { if (actief) setVergrendeldeRegels([]) })
     return () => { actief = false }
   }, [dossierId])
 
@@ -341,8 +341,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
       if (res.ok) {
         toast.success(`Naar Bouw7: ${res.melding}`)
         if (res.fouten.length) toast(`Let op: ${res.fouten[0]}${res.fouten.length > 1 ? ` (+${res.fouten.length - 1} meer)` : ''}`, { icon: '⚠️' })
-        // Vergrendelde codes kunnen veranderd zijn (nieuwe inkoop) — verversen.
-        getVergrendeldeBewakingscodes(dossierId).then(r => { if (r.ok) setVergrendeldeCodes(r.codes) }).catch(() => {})
+        // Bestelde regels kunnen veranderd zijn (nieuwe inkoop) — verversen.
+        getVergrendeldeBestelregels(dossierId).then(r => { if (r.ok) setVergrendeldeRegels(r.regels) }).catch(() => {})
         setBouw7Open(false)
       } else {
         toast.error(`Naar Bouw7 mislukt: ${res.fouten.join(' · ') || res.melding}`)
@@ -508,7 +508,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           bewakingscodes={bewakingscodes}
           eigenCodes={eigenCodes}
           dossierId={dossierId}
-          vergrendeldeCodes={vergrendeldeCodes}
+          vergrendeldeRegels={vergrendeldeRegels}
         />
       </div>
 
@@ -617,7 +617,6 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                             <td colSpan={5} className="py-1 px-2 text-xs font-semibold text-gray-600">
                               {code ? code : 'Zonder bewakingscode'}
                               {rs[0]?.codeNaam && <span className="ml-1 font-normal text-gray-400">— {rs[0].codeNaam}</span>}
-                              {rs[0]?.vergrendeld && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">🔒 besteld</span>}
                             </td>
                           </tr>
                           {rs.map((r) => (
@@ -625,7 +624,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                               <td className="py-1.5 pl-2">
                                 <span className="text-gray-700">{r.omschrijving || r.label}</span>
                                 <span className="ml-1 text-[11px] text-gray-400">({r.label})</span>
-                                {r.actie === 'skip' && r.reden && <span className="ml-1 text-[11px] text-gray-400">— {r.reden}</span>}
+                                {r.actie === 'skip' && r.reden && <span className="ml-1 text-[11px] text-gray-400">— {r.vergrendeld ? '🔒 ' : ''}{r.reden}</span>}
                               </td>
                               <td className="py-1.5 text-right tabular-nums">{r.aantal}</td>
                               <td className="py-1.5 text-right tabular-nums">{euro(r.prijs)}</td>

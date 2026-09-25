@@ -1188,8 +1188,12 @@ export type Bouw7ContractOrderLine = {
     costType?: number
     status?: number
   } | null
-  purchaseOrderContract?: unknown | null
-  subcontractorContract?: unknown | null
+  /**
+   * Het contract waar deze regel onder hangt (gezet zodra een contracttermijn hem via
+   * `contractOrderLines` koppelt). Zo'n regel is besteld en mag niet meer overschreven worden.
+   */
+  purchaseOrderContract?: { id?: number; number?: string | null } | null
+  subcontractorContract?: { id?: number; number?: string | null } | null
 }
 
 /**
