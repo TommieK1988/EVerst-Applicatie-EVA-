@@ -6,6 +6,7 @@ import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client } from '@/lib/bouw7/client'
 import type { Bouw7ControlResponse, Bouw7ContractOrderLine, Bouw7CostTypeId } from '@/lib/bouw7/client'
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
+import { vereisSessie } from '@/lib/auth/rechten'
 import { dossierBouw7Id, leesDossierBron, ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type { AthenaControlPayload, ContractOrderLinesPayload } from '@/lib/bouw7/snapshot-bronnen'
 import { haalGoedgekeurdMeerwerkNaarWerkbegroting } from '@/lib/dossiers/meerwerk-werkbegroting'
@@ -1806,6 +1807,7 @@ export async function getVergrendeldeBestelregels(
   /** `live: true` vlak vóór een schrijfactie — zie getVergrendeldeBewakingscodes. */
   opties?: { live?: boolean },
 ): Promise<{ ok: true; regels: VergrendeldeBestelregel[] } | { ok: false; error: string }> {
+  await vereisSessie()
   const live = opties?.live === true
   const bouw7Id = await dossierBouw7Id(dossierId)
   if (!bouw7Id) return { ok: false, error: 'Dit dossier is niet aan een Bouw7-project gekoppeld (geen bouw7_id).' }
