@@ -224,10 +224,8 @@ export function standVan(
   }
 
   // 3. Nog niets: de termijnen die `zetMeerwerkAlsTermijn` zou maken, op basis van de termijnkeuze.
-  if (!(r.effectiefExcl > 0)) {
-    return { ...basis, stand: 'geblokkeerd', termijnen: [],
-      reden: r.effectiefExcl < 0 ? 'Minderwerk gaat niet via een termijn' : 'Geen bedrag' }
-  }
+  // Minderwerk hoort erbij: dat wordt een termijn met een negatief bedrag, een min-regel op de factuur.
+  if (!r.effectiefExcl) return { ...basis, stand: 'geblokkeerd', termijnen: [], reden: 'Geen bedrag' }
   if (!b.heeftTermijnstaat) {
     return { ...basis, stand: 'geblokkeerd', termijnen: [],
       reden: 'Dit project heeft nog geen termijnstaat in Bouw7. Zet eerst het termijnschema op.' }
@@ -296,11 +294,10 @@ export function bepaalStanden(regels: MeerwerkRegelView[], b: Bouw7Lezing): Rege
   if (los.length === 0 || losTotaal === 0) return standen
 
   // Het meerwerk zonder enig spoor in Bouw7: geen termijn, geen factuurregel. Minderwerk telt mee
-  // in het saldo (de administratie factureert het saldo), ook al krijgt het zelf geen termijn.
+  // in het saldo (de administratie factureert het saldo).
   const perId = new Map(regels.map(r => [r.id, r]))
   const zonderSpoor = standen.filter(st =>
-    st.termijnen.every(t => t.bouw7TermId == null)
-    && (st.stand === 'open' || st.reden === 'Minderwerk gaat niet via een termijn'))
+    st.termijnen.every(t => t.bouw7TermId == null) && st.stand === 'open')
   const saldo = rond(zonderSpoor.reduce((s, st) => s + (perId.get(st.regelId)?.effectiefExcl ?? 0), 0))
   const facturen = [...new Set(los.map(l => l.factuur))].join(', ')
 

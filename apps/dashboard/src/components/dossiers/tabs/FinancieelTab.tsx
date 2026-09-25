@@ -411,7 +411,7 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
 
   const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
 
-  // Zonder Bouw7-cijfers blijven Kosten en Opbrengsten gewoon staan, met nulbedragen in plaats
+  // Zonder Bouw7-cijfers blijven de Kosten gewoon staan, met nulbedragen in plaats
   // van streepjes: je ziet dan welke regels er komen te staan zodra het project gaat lopen.
   const geenTotalen = f == null
 
@@ -430,16 +430,9 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
     r: kostenTypes.reduce((s, t) => s + toNum(f?.costs?.[t.key]?.realised), 0),
   }
 
-  const omzet = {
-    b: toNum(f?.revenue?.budgeted),
-    p: toNum(f?.revenue?.prognosis),
-    r: toNum(f?.revenue?.realised),
-  }
-  // Meerwerk-opbrengst: additionalWork is een object; het bedrag zit in de prognose
-  // (== expected), niet in een losse waarde. omzet.b + meerwerk == revenue.prognosis.
-  const meerwerk   = toNum(f?.additionalWork?.prognosis ?? f?.additionalWork?.expected)
-  const opbrTotaal = { b: omzet.b + meerwerk, r: omzet.r }
-  const teFactureren = Math.max(0, omzet.b - omzet.r)
+  // Geen opbrengstenblok meer: contractwaarde, facturen, betaald en nog te ontvangen staan op de
+  // Verkoop-tab, uit EVA's eigen meerwerkregels. Hier stonden de Bouw7-aggregaten daarnaast, met
+  // andere getallen voor hetzelfde geld.
 
   return (
     <>
@@ -485,46 +478,6 @@ async function Projecttotalen({ dossierId }: { dossierId: string }) {
           </table>
           {geenTotalen && (
             <LegeNotitie>Nog geen projectkosten: dit dossier heeft geen Bouw7-koppeling of financiële projectdata.</LegeNotitie>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Opbrengsten */}
-      <Card style={{ marginBottom: 16 }}>
-        <CardHeader>Opbrengsten</CardHeader>
-        <CardBody style={{ padding: 0 }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <TH>Type</TH>
-                <TH right>Aangenomen</TH>
-                <TH right>Gefactureerd</TH>
-                <TH right>Te factureren</TH>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <TDLabel>Aangenomen</TDLabel>
-                <TD>{fmt(f?.revenue?.budgeted, geenTotalen)}</TD>
-                <TD accent={omzet.r > 0}>{fmt(f?.revenue?.realised, geenTotalen)}</TD>
-                <TD>{fmt(teFactureren, geenTotalen)}</TD>
-              </tr>
-              <tr>
-                <TDLabel>Goedgekeurd meerwerk</TDLabel>
-                <TD accent={meerwerk > 0}>{fmt(meerwerk, geenTotalen)}</TD>
-                <TD>{fmt(toNum(f?.additionalWork?.realised), geenTotalen)}</TD>
-                <TD>—</TD>
-              </tr>
-              <tr style={{ background: 'var(--neutral-50)' }}>
-                <TDLabel vet>Totaal incl. meerwerk</TDLabel>
-                <TD vet>{fmt(opbrTotaal.b, true)}</TD>
-                <TD vet accent={opbrTotaal.r > 0}>{fmt(opbrTotaal.r, true)}</TD>
-                <TD vet>{fmt(teFactureren, true)}</TD>
-              </tr>
-            </tbody>
-          </table>
-          {geenTotalen && (
-            <LegeNotitie>Nog geen opbrengsten: dit dossier heeft geen Bouw7-koppeling of financiële projectdata.</LegeNotitie>
           )}
         </CardBody>
       </Card>

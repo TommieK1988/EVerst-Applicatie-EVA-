@@ -75,3 +75,43 @@ export function berekenContractwaarde({ aanneemsom, meerwerk, nacalculatie }: {
     contractTotaal: rond(aanneemsom + meerwerkTotaal),
   }
 }
+
+/** De vier regels onder "Contractwaarde" op de Verkoop-tab. Samen precies `aangenomen + regie`. */
+export type MeerwerkSplitsing = {
+  minderwerkAangenomen: number
+  meerwerkAangenomen: number
+  minderwerkRegie: number
+  meerwerkRegie: number
+}
+
+/**
+ * Splitst het goedgekeurde meerwerk in meer- en minderwerk, per afrekenwijze. Het totaal ligt al
+ * vast in `berekenContractwaarde`; dit verdeelt het alleen, op het teken van elk bedrag.
+ *
+ * Aangenomen: per regel. Regie is net als daar tweeledig: de regieregels die zelf hun bedrag
+ * dragen (niet in het nacalculatie-blok) per regel, en het nacalculatie-blok als één bedrag. Dat
+ * blok is een optelling van geboekte kosten en valt niet zinnig per regel op te splitsen.
+ */
+export function splitsMeerwerk(
+  regels: { effectiefExcl: number; opTermijn: boolean; opNacalculatie: boolean }[],
+  waarde: Pick<Contractwaarde, 'nacalculatie'>,
+): MeerwerkSplitsing {
+  const s = { minderwerkAangenomen: 0, meerwerkAangenomen: 0, minderwerkRegie: 0, meerwerkRegie: 0 }
+  for (const r of regels) {
+    if (r.opTermijn) {
+      if (r.effectiefExcl < 0) s.minderwerkAangenomen += r.effectiefExcl
+      else s.meerwerkAangenomen += r.effectiefExcl
+    } else if (!r.opNacalculatie) {
+      if (r.effectiefExcl < 0) s.minderwerkRegie += r.effectiefExcl
+      else s.meerwerkRegie += r.effectiefExcl
+    }
+  }
+  if (waarde.nacalculatie < 0) s.minderwerkRegie += waarde.nacalculatie
+  else s.meerwerkRegie += waarde.nacalculatie
+  return {
+    minderwerkAangenomen: rond(s.minderwerkAangenomen),
+    meerwerkAangenomen: rond(s.meerwerkAangenomen),
+    minderwerkRegie: rond(s.minderwerkRegie),
+    meerwerkRegie: rond(s.meerwerkRegie),
+  }
+}

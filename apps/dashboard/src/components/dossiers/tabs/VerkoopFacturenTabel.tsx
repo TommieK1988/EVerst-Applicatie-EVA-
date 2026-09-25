@@ -21,8 +21,17 @@ export default function VerkoopFacturenTabel({ facturen }: { facturen: VerkoopFa
     return n
   })
 
-  const som = (kies: (f: VerkoopFactuur) => number) =>
-    facturen.reduce((s, f) => s + (f.isCredit ? -kies(f) : kies(f)), 0)
+  const som = (kies: (f: VerkoopFactuur) => number, lijst = facturen) =>
+    lijst.reduce((s, f) => s + (f.isCredit ? -kies(f) : kies(f)), 0)
+  const betaald = facturen.filter(f => f.betaald)
+  const openstaand = facturen.filter(f => !f.betaald)
+  // Totaal = betaald + nog te ontvangen. Een factuur is betaald of open; iets daartussen kent Bouw7 niet.
+  const voetRegels: { label: string; lijst: VerkoopFactuur[]; nadruk?: boolean }[] = [
+    { label: 'Totaal', lijst: facturen },
+    { label: 'Totaal betaald', lijst: betaald },
+    { label: 'Nog te ontvangen', lijst: openstaand, nadruk: true },
+  ]
+  const cel: React.CSSProperties = { padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
@@ -95,13 +104,21 @@ export default function VerkoopFacturenTabel({ facturen }: { facturen: VerkoopFa
         })}
       </tbody>
       <tfoot>
-        <tr style={{ background: 'var(--neutral-50)', fontWeight: 600, fontSize: 12.5 }}>
-          <td colSpan={4} style={{ padding: '6px 12px', color: 'var(--neutral-600)' }}>Totaal</td>
-          <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>{fmt(som(f => f.bedragExcl), true)}</td>
-          <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>{fmt(som(f => f.btwBedrag), true)}</td>
-          <td style={{ padding: '6px 12px', textAlign: 'right', color: 'var(--neutral-800)' }}>{fmt(som(f => f.bedrag), true)}</td>
-          <td style={{ padding: '6px 12px' }} />
-        </tr>
+        {voetRegels.map(({ label, lijst, nadruk }) => (
+          <tr
+            key={label}
+            style={{
+              background: 'var(--neutral-50)', fontSize: 12.5, fontWeight: nadruk ? 700 : 600,
+              borderTop: nadruk ? '1px solid var(--neutral-200)' : undefined,
+            }}
+          >
+            <td colSpan={4} style={{ padding: '6px 12px', color: nadruk ? 'var(--neutral-800)' : 'var(--neutral-600)' }}>{label}</td>
+            <td style={cel}>{fmt(som(f => f.bedragExcl, lijst), true)}</td>
+            <td style={cel}>{fmt(som(f => f.btwBedrag, lijst), true)}</td>
+            <td style={cel}>{fmt(som(f => f.bedrag, lijst), true)}</td>
+            <td style={{ padding: '6px 12px' }} />
+          </tr>
+        ))}
       </tfoot>
     </table>
   )

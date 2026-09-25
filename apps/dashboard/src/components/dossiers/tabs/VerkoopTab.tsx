@@ -12,7 +12,7 @@ import ServicedeskMargeBlok from './ServicedeskMargeBlok'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
-import { berekenContractwaarde } from '@/lib/dossiers/contractwaarde'
+import { berekenContractwaarde, splitsMeerwerk } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import { bonBewakingscode, type DossierSectie } from '../types'
 
@@ -208,6 +208,7 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   const nacalculatie = waarde.nacalculatie
   const meerwerkRegie = waarde.regie
   const meerwerkEva = waarde.meerwerk
+  const splitsing = splitsMeerwerk(goedgekeurdeRegels, waarde)
   /* Leidt EVA het meerwerk in dit overzicht? Ja zodra er goedgekeurde regels zijn, en ook zodra er
    * nacalculatie op het dossier staat: die komt deels uit stelposten die helemaal geen meerwerkregel
    * zijn, en dan is er niets waar het Bouw7-aggregaat op terug kan vallen. */
@@ -329,36 +330,33 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
                   </tr>
                   {/* Meerwerk gesplitst zodra EVA de regels kent: aangenomen werk gaat via de
                       termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
-                      het bedrag terechtkomt, dus het hoort zichtbaar te zijn. Zonder EVA-regels is er
-                      alleen het Bouw7-aggregaat en blijft het bij één regel. */}
-                  {evaBron ? (
-                    <>
-                      {Math.abs(meerwerkAangenomen) > 0.005 && (
-                        <tr>
-                          <TD wrap>
-                            Goedgekeurd {meerwerkAangenomen < 0 ? 'minderwerk' : 'meerwerk'} — aangenomen
-                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via termijnen</span>
-                          </TD>
-                          <TD right accent>{fmt(meerwerkAangenomen, true)}</TD>
-                          <TD right kleur="var(--neutral-400)">—</TD>
-                          <TD right kleur="var(--neutral-400)">—</TD>
-                        </tr>
-                      )}
-                      {regieBuitenTermijnen && (
-                        <tr>
-                          <TD wrap>
-                            Goedgekeurd meerwerk — regie en stelposten
-                            <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>via nacalculatie</span>
-                          </TD>
-                          <TD right accent>{fmt(meerwerkRegie, true)}</TD>
-                          <TD right kleur="var(--neutral-400)">—</TD>
-                          <TD right kleur="var(--neutral-400)">—</TD>
-                        </tr>
-                      )}
-                    </>
-                  ) : t.meerwerk > 0 && (
+                      het bedrag terechtkomt, dus het hoort zichtbaar te zijn; en meer- en minderwerk
+                      apart, omdat een saldo verbergt hoeveel er de ene en de andere kant op ging. */}
+                  {/* Altijd alle vier, ook op nul: dan zie je in één oogopslag dat er géén
+                      minderwerk is, in plaats van te moeten raden of een regel ontbreekt. */}
+                  {([
+                    ['Goedgekeurd minderwerk — aangenomen', 'via termijnen', splitsing.minderwerkAangenomen],
+                    ['Goedgekeurd meerwerk — aangenomen', 'via termijnen', splitsing.meerwerkAangenomen],
+                    ['Goedgekeurd minderwerk — regie en stelposten', 'via nacalculatie', splitsing.minderwerkRegie],
+                    ['Goedgekeurd meerwerk — regie en stelposten', 'via nacalculatie', splitsing.meerwerkRegie],
+                  ] as const).map(([label, route, bedrag]) => (
+                    <tr key={label}>
+                      <TD wrap>
+                        {label}
+                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>{route}</span>
+                      </TD>
+                      <TD right accent={Math.abs(bedrag) > 0.005} kleur={Math.abs(bedrag) > 0.005 ? undefined : 'var(--neutral-400)'}>{fmt(bedrag, true)}</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                      <TD right kleur="var(--neutral-400)">—</TD>
+                    </tr>
+                  ))}
+                  {/* Zonder EVA-regels is er alleen het Bouw7-aggregaat: dat valt niet te splitsen. */}
+                  {!evaBron && Math.abs(t.meerwerk) > 0.005 && (
                     <tr>
-                      <TD wrap>Goedgekeurd meerwerk</TD>
+                      <TD wrap>
+                        Goedgekeurd meer-/minderwerk
+                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>uit Bouw7, niet uitgesplitst</span>
+                      </TD>
                       <TD right accent>{fmt(t.meerwerk, true)}</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>
                       <TD right kleur="var(--neutral-400)">—</TD>

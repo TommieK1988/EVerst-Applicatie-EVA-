@@ -15,6 +15,10 @@
  * Wisselen tussen de twee herschikt de termijnen van deze regel: overbodige termijnen gaan uit de
  * staat (tenzij er al een factuur aan hangt), ontbrekende komen erbij.
  *
+ * Minderwerk gaat dezelfde weg, als termijn met een negatief bedrag. Bouw7 kent geen apart
+ * minderwerk-mechanisme, en de administratie factureerde het al als min-regel op een gewone factuur
+ * (Vlietkinderen, jun 2026).
+ *
  * Idempotent op `meerwerk_regels.bouw7_term_ids`: een tweede akkoord of een gewijzigd bedrag werkt
  * dezelfde termijnen bij. De aanneemsom op de staat (`fixedPrice`) beweegt mee met het verschil,
  * zodat de staat blijft optellen. Een termijn die al gefactureerd is laat
@@ -56,7 +60,8 @@ type Regel = {
 export function meerwerkTermijnGeschikt(r: Regel): { ok: true } | { ok: false; reden: string } {
   if (r.afrekenwijze !== 'aangenomen') return { ok: false, reden: 'regiewerk gaat via de nacalculatie' }
   if (r.is_stelpost) return { ok: false, reden: 'stelposten gaan via de nacalculatie' }
-  if (!(Number(r.bedrag_excl_btw) > 0)) return { ok: false, reden: 'geen bedrag' }
+  // Minderwerk (negatief bedrag) krijgt net zo goed een termijn: op de factuur is het een min-regel.
+  if (!Number(r.bedrag_excl_btw)) return { ok: false, reden: 'geen bedrag' }
   if (r.termijn_wijze === 'eigen_termijnstaat') return { ok: false, reden: 'eigen termijnstaat gekozen' }
   if (r.status !== 'akkoord' && r.status !== 'voltooid') return { ok: false, reden: 'nog niet akkoord' }
   // Bij een termijnstaat op het contracttotaal zit dit meerwerk al in de bestaande termijnen.
@@ -103,7 +108,7 @@ export async function zetMeerwerkAlsTermijn(regelId: string): Promise<{ ok: true
 
     const bedrag = Math.round(Number(r.bedrag_excl_btw) * 100) / 100
     const nummer = r.bouw7_nummer ?? r.bewakingscode ?? (r.volgnummer != null ? `#${r.volgnummer}` : '')
-    const kop = `Meerwerk ${nummer}`.trim()
+    const kop = `${bedrag < 0 ? 'Minderwerk' : 'Meerwerk'} ${nummer}`.trim()
 
     /*
      * Het betalingsschema van de eigen offerte volgen. Meerwerk van twintigduizend euro met een
