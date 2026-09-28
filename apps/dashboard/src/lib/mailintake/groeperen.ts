@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
 import { adresOvereenkomst, kaalOnderwerp } from './regels'
+import { isOnderscheidendeBijlage } from './bijlagen-filter'
 
 /**
  * mailintake/groeperen.ts
@@ -81,12 +82,19 @@ export async function zoekGroepVooraf(berichtId: string): Promise<GroepTreffer |
   // 2. Een identieke bijlage. Dezelfde bon die twee keer wordt doorgestuurd is één klus.
   const { data: eigenBijlagen } = await supabase
     .from('mailintake_bijlagen')
-    .select('sha256')
+    .select('sha256, bestandsnaam, content_type, grootte_bytes, is_inline')
     .eq('bericht_id', berichtId)
     .not('sha256', 'is', null)
     .eq('is_inline', false)
     .limit(20)
-  const hashes = (eigenBijlagen ?? []).map(r => r.sha256).filter((h): h is string => Boolean(h))
+  // Logo's en handtekeningplaatjes zitten identiek in elke mail van een afzender;
+  // die zouden alles van dat bedrijf tot één groep smeden.
+  const hashes = (eigenBijlagen ?? [])
+    .filter(r => isOnderscheidendeBijlage({
+      bestandsnaam: r.bestandsnaam, contentType: r.content_type,
+      grootteBytes: r.grootte_bytes, isInline: Boolean(r.is_inline),
+    }))
+    .map(r => r.sha256).filter((h): h is string => Boolean(h))
   if (hashes.length) {
     const { data: elders } = await supabase
       .from('mailintake_bijlagen')

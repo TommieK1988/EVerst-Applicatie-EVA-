@@ -28,7 +28,7 @@ import { controleerBouw7Gereed } from './bouw7-gereed'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
 import { domeinVan, afzenderUitDoorstuur, eigenDomeinen } from './triage'
 import { behandelaarVoorMail, voorleggen, meldVoorgelegd } from './melden'
-import { beoordeelBijlage } from './bijlagen-filter'
+import { beoordeelBijlage, isOnderscheidendeBijlage } from './bijlagen-filter'
 import { storingTekst, type AiStoring } from './ai-storing'
 import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
@@ -446,8 +446,14 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
 
     // ── Duplicaten ──────────────────────────────────────────────────────────
     log.stap('duplicaten zoeken')
-    const { data: hashes } = await supabase
-      .from('mailintake_bijlagen').select('sha256').eq('bericht_id', berichtId).not('sha256', 'is', null).limit(20)
+    const { data: hashBijlagen } = await supabase
+      .from('mailintake_bijlagen')
+      .select('sha256, bestandsnaam, content_type, grootte_bytes, is_inline')
+      .eq('bericht_id', berichtId).not('sha256', 'is', null).limit(20)
+    const hashes = (hashBijlagen ?? []).filter((b: any) => isOnderscheidendeBijlage({
+      bestandsnaam: b.bestandsnaam, contentType: b.content_type,
+      grootteBytes: b.grootte_bytes, isInline: Boolean(b.is_inline),
+    }))
 
     const kandidaten = await zoekDuplicaten({
       berichtId,
@@ -462,7 +468,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       bedrag: velden.bedragExclBtw,
       bodyTekst: geclaimd.body_tekst,
       conversationId: geclaimd.conversation_id,
-      bijlageHashes: (hashes ?? []).map((h: any) => h.sha256),
+      bijlageHashes: hashes.map((h: any) => h.sha256),
     })
 
     if (kandidaten.length) {

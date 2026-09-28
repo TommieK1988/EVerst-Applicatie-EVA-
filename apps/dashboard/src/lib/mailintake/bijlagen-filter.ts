@@ -111,6 +111,20 @@ export function beoordeelBijlage(b: BijlageKeuze): BijlageOordeel {
   return { ...WEL }
 }
 
+/**
+ * Mag deze bijlage dienen als bewijs dat twee mails over dezelfde klus gaan?
+ *
+ * Alleen echte projectstukken. Een handtekeningbanner of bedrijfslogo zit
+ * byte-voor-byte identiek in élke mail van die afzender, dus een hash-match
+ * daarop koppelt willekeurige dossiers aan elkaar. Dat gebeurde: een inline
+ * `image001.jpg` van 590 kB (groot genoeg om als foto door te gaan) en een
+ * `LogoSchepklein` zonder extensie stelden dossiers voor die er niets mee te
+ * maken hadden. Een geplakte foto valt hier ook af; dat is een acceptabel verlies.
+ */
+export function isOnderscheidendeBijlage(b: BijlageKeuze): boolean {
+  return beoordeelBijlage(b).mee
+}
+
 /** Splitst een lijst bijlagen in wat meegaat en wat bewust wordt overgeslagen. */
 export function splitsBijlagen<T extends BijlageKeuze>(bijlagen: T[]): {
   /** Gaat naar de dossiermap. */

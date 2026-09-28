@@ -54,7 +54,7 @@ export interface DuplicaatResultaat {
 
 const DOSSIER_SELECT =
   'id, dossiernummer, titel, klant_id, referentie, hoofdstatus, aanvraag_substatus, ' +
-  'offerte_substatus, opdracht_substatus, werkadres_postcode, werkadres_huisnummer, ' +
+  'offerte_substatus, opdracht_substatus, werkadres_straat, werkadres_postcode, werkadres_huisnummer, ' +
   'bedrag_excl_btw, created_at, klant:relaties!dossiers_klant_id_fkey(naam)'
 
 /** 18 maanden terug; ouder werk is geen lopende aanvraag meer. */
@@ -174,9 +174,19 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
       .in('sha256', invoer.bijlageHashes.slice(0, 20))
       .not('bericht.dossier_id', 'is', null)
       .limit(50)
+    // Een bestand dat al aan meerdere dossiers hangt is geen projectstuk maar
+    // huisstijl (een banner of logo dat de bijlagenzeef ontglipte). Het zegt dan
+    // niets meer over wélk dossier dit is, dus telt het niet mee.
+    const dossiersPerHash = new Map<string, Set<string>>()
     for (const r of data ?? []) {
       const did = (r as any).bericht?.dossier_id
-      if (did) hashDossiers.add(did)
+      if (!did || !r.sha256) continue
+      const set = dossiersPerHash.get(r.sha256) ?? new Set<string>()
+      set.add(did)
+      dossiersPerHash.set(r.sha256, set)
+    }
+    for (const set of dossiersPerHash.values()) {
+      if (set.size === 1) hashDossiers.add([...set][0])
     }
     if (hashDossiers.size) {
       const { data: d } = await supabase
