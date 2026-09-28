@@ -71,9 +71,11 @@ export type OpdrachtStelpostView = {
   id: string
   omschrijving: string
   bedrag_excl_btw: number | null
+  /** BTW-tarief van deze stelpost; gaat mee naar de verrekenregel. Null = niet vastgelegd. */
+  btw_pct: number | null
   in_opdracht: boolean
   bewakingscode: string | null
-  /** 'offerte' = geseed uit de calculatie (niet handmatig te bewerken) · 'handmatig' = zelf aangewezen. */
+  /** 'offerte' = geseed uit de calculatie (omschrijving vergrendeld) · 'handmatig' = zelf aangewezen. */
   bron: 'offerte' | 'handmatig'
   /** True = carve-out uit de aanneemsom · false = staat erbuiten, apart factureren. */
   in_aanneemsom: boolean
@@ -361,6 +363,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
       return {
         id: r.id, omschrijving: r.omschrijving,
         bedrag_excl_btw: bedrag,
+        btw_pct: numOfNull(r.btw_pct),
         in_opdracht: r.in_opdracht, bewakingscode: r.bewakingscode,
         bron: r.bron ?? 'offerte',
         in_aanneemsom: r.in_aanneemsom ?? true,
@@ -470,6 +473,8 @@ export async function zetOptieInOpdracht(
 export type StelpostInvoer = {
   omschrijving: string
   bedrag_excl_btw: number
+  /** BTW-tarief in procenten (21, 9, 0); null = niet vastgelegd. */
+  btw_pct?: number | null
   /** True = deel van de aanneemsom (carve-out) · false = valt erbuiten, apart factureren. */
   in_aanneemsom: boolean
   /** Kostprijs-budget voor de bewakingscode. Nooit gelijkstellen aan bedrag_excl_btw. */
@@ -539,6 +544,8 @@ export async function maakStelpost(
   if (!omschrijving) return { ok: false, error: 'Geef de stelpost een omschrijving.' }
   const bedrag = rond(num(invoer.bedrag_excl_btw))
   if (!(bedrag > 0)) return { ok: false, error: 'Vul een bedrag groter dan nul in.' }
+  const btwFout = controleerBtwPct(invoer.btw_pct)
+  if (btwFout) return { ok: false, error: btwFout }
 
   // Aanneemsom is altijd nodig: een carve-out moet erin passen, en ook een aparte stelpost hoort
   // bij een opdracht die een som heeft.
@@ -569,6 +576,7 @@ export async function maakStelpost(
       volgnummer: num(maxRow?.volgnummer) + 1,
       in_opdracht: true,
       bedrag_excl_btw: bedrag,
+      btw_pct: invoer.btw_pct != null ? num(invoer.btw_pct) : null,
       in_aanneemsom: invoer.in_aanneemsom,
       aanneemsom_snapshot: rond(aanneemsom),
       begroot_excl_btw: invoer.begroot_excl_btw != null ? rond(num(invoer.begroot_excl_btw)) : null,
@@ -586,7 +594,17 @@ export async function maakStelpost(
   return { ok: true, id: ins.id }
 }
 
-/** Werkt een handmatige stelpost bij. Offerte-geseede stelposten zijn hier niet te wijzigen. */
+/** Null of een percentage tussen 0 en 100; anders een foutmelding. */
+function controleerBtwPct(v: number | null | undefined): string | null {
+  if (v == null) return null
+  const n = num(v)
+  return (Number.isFinite(n) && n >= 0 && n <= 100) ? null : 'Vul een BTW-percentage tussen 0 en 100 in.'
+}
+
+/**
+ * Werkt een stelpost bij. Bij een stelpost uit de offerte liggen omschrijving en aanneemsom-keuze
+ * vast; bedrag en BTW% mogen wel worden bijgesteld.
+ */
 export async function updateStelpost(
   onderdeelId: string,
   patch: Partial<StelpostInvoer>,
@@ -601,16 +619,28 @@ export async function updateStelpost(
   if (rij.soort !== 'stelpost') return { ok: false, error: 'Dit onderdeel is geen stelpost.' }
   await assertDossierBewerkbaar(rij.dossier_id)
 
-  // Wat er in de offerte is afgesproken hoort in de calculatie thuis, niet hier: omschrijving,
-  // bedrag en de vraag of de stelpost in de aanneemsom zit zijn bij een geseede stelpost
-  // vergrendeld. Hóe hij afrekent is daarentegen een uitvoeringsbeslissing die pas tijdens het werk
-  // valt — de grondslag en zijn parameters mogen daarom op élke stelpost gezet worden. Zonder dat
-  // onderscheid zou een stelpost uit de offerte nooit op eenheidsprijzen kunnen afrekenen.
+  // Omschrijving en de vraag of de stelpost in de aanneemsom zit zijn bij een geseede stelpost
+  // vergrendeld: dat is de offerte-afspraak zelf. Bedrag en BTW% mogen wel bijgesteld worden (een
+  // stelpost is per definitie een voorlopig bedrag), net als hóe hij afrekent — een
+  // uitvoeringsbeslissing die pas tijdens het werk valt.
   if (rij.bron !== 'handmatig') {
-    const uitOfferte: (keyof StelpostInvoer)[] = ['omschrijving', 'bedrag_excl_btw', 'in_aanneemsom']
+    const uitOfferte: (keyof StelpostInvoer)[] = ['omschrijving', 'in_aanneemsom']
     const geblokkeerd = uitOfferte.filter(v => patch[v] !== undefined)
     if (geblokkeerd.length > 0) {
-      return { ok: false, error: 'Omschrijving, bedrag en aanneemsom-keuze van deze stelpost komen uit de offerte; wijzig ze in de calculatie.' }
+      return { ok: false, error: 'Omschrijving en aanneemsom-keuze van deze stelpost komen uit de offerte; wijzig ze in de calculatie.' }
+    }
+  }
+
+  // Na verrekening ligt het verschil vast in een meerwerkregel. Het bedrag of tarief nu nog wijzigen
+  // laat die regel op een oud getal rusten.
+  if (patch.bedrag_excl_btw !== undefined || patch.btw_pct !== undefined) {
+    const { data: verrekening } = await supabase
+      .from('meerwerk_regels')
+      .select('id')
+      .eq('opdracht_onderdeel_id', onderdeelId)
+      .maybeSingle()
+    if (verrekening) {
+      return { ok: false, error: 'Deze stelpost is al verrekend; bedrag en BTW liggen daarmee vast.' }
     }
   }
 
@@ -633,6 +663,11 @@ export async function updateStelpost(
   }
   if (patch.opslag_pct !== undefined) {
     velden.opslag_pct = patch.opslag_pct != null ? num(patch.opslag_pct) : null
+  }
+  if (patch.btw_pct !== undefined) {
+    const btwFout = controleerBtwPct(patch.btw_pct)
+    if (btwFout) return { ok: false, error: btwFout }
+    velden.btw_pct = patch.btw_pct != null ? num(patch.btw_pct) : null
   }
 
   // Bedrag en carve-out-vlag samen valideren: beide bepalen of de som nog binnen de aanneemsom past.

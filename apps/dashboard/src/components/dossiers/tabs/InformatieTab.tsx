@@ -206,6 +206,30 @@ function GetalVeld({ waarde, breedte, plaatshouder, label, pending, onCommit }: 
   )
 }
 
+/** Gangbare tarieven; een afwijkend tarief uit de offerte blijft als eigen optie zichtbaar. */
+const BTW_TARIEVEN = [21, 9, 0]
+
+function BtwKeuze({ waarde, pending, onKies, className }: {
+  waarde: number | null
+  pending: boolean
+  onKies: (v: number | null) => void
+  className?: string
+}) {
+  const tarieven = waarde != null && !BTW_TARIEVEN.includes(waarde) ? [...BTW_TARIEVEN, waarde] : BTW_TARIEVEN
+  return (
+    <select
+      value={waarde != null ? String(waarde) : ''}
+      disabled={pending}
+      onChange={e => onKies(e.target.value === '' ? null : Number(e.target.value))}
+      aria-label="BTW-tarief van deze stelpost"
+      className={className ?? 'rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50'}
+    >
+      <option value="">btw —</option>
+      {tarieven.map(t => <option key={t} value={String(t)}>btw {String(t).replace('.', ',')}%</option>)}
+    </select>
+  )
+}
+
 function StelpostAfrekening({ stelpost, pending, onZet }: {
   stelpost: {
     grondslag: StelpostGrondslag | null
@@ -440,13 +464,14 @@ function RolVeld({
    het contracttotaal níet omhoog. "Apart factureren" is extra omzet. */
 function NieuweStelpostRegel({ onOpslaan, pending }: {
   onOpslaan: (invoer: {
-    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    omschrijving: string; bedrag_excl_btw: number; btw_pct: number | null; in_aanneemsom: boolean
     begroot_excl_btw: number | null; grondslag: StelpostGrondslag
     eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) => void
   pending: boolean
 }) {
   const [open, setOpen]         = React.useState(false)
+  const [btw, setBtw]           = React.useState<number | null>(21)
   const [oms, setOms]           = React.useState('')
   const [bedrag, setBedrag]     = React.useState('')
   const [inSom, setInSom]       = React.useState(true)
@@ -485,6 +510,10 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
         <label className="block">
           <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Bedrag excl. BTW</span>
           <input className={inputCls} value={bedrag} onChange={e => setBedrag(e.target.value)} placeholder="0,00" inputMode="decimal" />
+        </label>
+        <label className="block">
+          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">BTW</span>
+          <BtwKeuze waarde={btw} pending={pending} onKies={setBtw} className={inputCls} />
         </label>
         <label className="block">
           <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400" title="Kostprijs-budget voor de bewakingscode. Bewust niet het stelpostbedrag: dat is omzet inclusief AK en winst.">
@@ -547,6 +576,7 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
             onOpslaan({
               omschrijving: oms.trim(),
               bedrag_excl_btw: bedragNum as number,
+              btw_pct: btw,
               in_aanneemsom: inSom,
               begroot_excl_btw: getal(begroot),
               grondslag,
@@ -554,7 +584,7 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
               eenheidsprijs: grondslag === 'eenheidsprijzen' ? getal(prijs) : null,
               opslag_pct: grondslag === 'geboekte_kosten' ? getal(opslag) : null,
             })
-            setOms(''); setBedrag(''); setBegroot(''); setInSom(true); setOpen(false)
+            setOms(''); setBedrag(''); setBegroot(''); setInSom(true); setBtw(21); setOpen(false)
             setEenheid(''); setPrijs(''); setOpslag('')
           }}
           className="rounded-md bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
@@ -669,7 +699,7 @@ function OpdrachtDetailDialog({
   onToggleOptie: (id: string, aan: boolean) => void
   onWijsCodes: () => void
   onNieuweStelpost: (invoer: {
-    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    omschrijving: string; bedrag_excl_btw: number; btw_pct: number | null; in_aanneemsom: boolean
     begroot_excl_btw: number | null; grondslag: StelpostGrondslag
     eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) => void
@@ -678,6 +708,7 @@ function OpdrachtDetailDialog({
   onZetAfrekening: (id: string, patch: {
     grondslag?: StelpostGrondslag; eenheid?: string | null; eenheidsprijs?: number | null
     hoeveelheid_werkelijk?: number | null; opslag_pct?: number | null
+    bedrag_excl_btw?: number; btw_pct?: number | null
   }) => void
   pending: boolean
 }) {
@@ -737,9 +768,20 @@ function OpdrachtDetailDialog({
                 <div key={sp.id} className="py-[5px] first:pt-0">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
-                    <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
-                      {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
-                    </span>
+                    {!readOnly && !sp.verrekendMeerwerkId ? (
+                      <GetalVeld
+                        waarde={sp.bedrag_excl_btw} breedte="w-24" plaatshouder="0,00"
+                        label="Bedrag excl. BTW" pending={pending}
+                        onCommit={v => {
+                          if (v == null || !(v > 0)) { toast.error('Vul een bedrag groter dan nul in.'); return }
+                          onZetAfrekening(sp.id, { bedrag_excl_btw: v })
+                        }}
+                      />
+                    ) : (
+                      <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
+                        {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
+                      </span>
+                    )}
                     {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
                       <button
                         type="button"
@@ -754,6 +796,11 @@ function OpdrachtDetailDialog({
                   </div>
                   {/* Kenmerken op een eigen regel — in een smalle kolom past dat niet naast de omschrijving. */}
                   <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                    {!readOnly && !sp.verrekendMeerwerkId ? (
+                      <BtwKeuze waarde={sp.btw_pct} pending={pending} onKies={v => onZetAfrekening(sp.id, { btw_pct: v })} />
+                    ) : sp.btw_pct != null && (
+                      <span className="text-[10px] tabular-nums text-neutral-400">btw {String(sp.btw_pct).replace('.', ',')}%</span>
+                    )}
                     {sp.bewakingscode && (
                       <span className="rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
                     )}
@@ -1650,7 +1697,7 @@ export function InformatieTab({
     })
   }
   function nieuweStelpost(invoer: {
-    omschrijving: string; bedrag_excl_btw: number; in_aanneemsom: boolean
+    omschrijving: string; bedrag_excl_btw: number; btw_pct: number | null; in_aanneemsom: boolean
     begroot_excl_btw: number | null; grondslag: StelpostGrondslag
     eenheid: string | null; eenheidsprijs: number | null; opslag_pct: number | null
   }) {
@@ -1667,6 +1714,8 @@ export function InformatieTab({
     eenheidsprijs?: number | null
     hoeveelheid_werkelijk?: number | null
     opslag_pct?: number | null
+    bedrag_excl_btw?: number
+    btw_pct?: number | null
   }) {
     startOptieTransition(async () => {
       const res = await updateStelpost(id, patch)
