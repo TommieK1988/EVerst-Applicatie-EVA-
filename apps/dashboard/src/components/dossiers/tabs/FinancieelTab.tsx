@@ -1,7 +1,9 @@
 import { Fragment, Suspense } from 'react'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { magCorrecties } from '@/lib/dossiers/correctie-bewakingscode'
-import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
+import { getResultaatPerCode } from '@/lib/dossiers/resultaat-per-code-laden'
+import type { ResultaatSoort, VerkoopGrondslag } from '@/lib/dossiers/resultaat-per-code'
+import { Badge, Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import ParkeerkostenBlok from './ParkeerkostenBlok'
@@ -406,6 +408,118 @@ function ProjecttotalenSkeleton() {
   )
 }
 
+/* ── verwacht resultaat per bewakingscode ────────────────────────────── */
+
+const SOORT_BADGE: Record<ResultaatSoort, { label: string; tone: 'neutral' | 'brand' | 'info' | 'warning' }> = {
+  aanneemsom: { label: 'Aanneemsom', tone: 'neutral' },
+  stelpost:   { label: 'Stelpost',   tone: 'info' },
+  meerwerk:   { label: 'Meerwerk',   tone: 'brand' },
+  regie:      { label: 'Regie',      tone: 'warning' },
+}
+
+const GRONDSLAG_UITLEG: Record<VerkoopGrondslag, string> = {
+  vast:          'Afgesproken bedrag',
+  eenheidsprijs: 'Eenheidsprijs × werkelijke hoeveelheid',
+  doorgerekend:  'Geboekte verkoopwaarde + nog te verwachten kosten, doorgerekend tegen dezelfde verhouding',
+  mandaat:       'Mandaat (doorgerekend komt lager uit)',
+  aanneemsom:    'Aanneemsom zonder stelposten, plus losse posten zonder eigen code',
+}
+
+const fmtMarge = (v: number | null): string =>
+  v == null ? '—' : `${new Intl.NumberFormat('nl-NL', { maximumFractionDigits: 1 }).format(v)} %`
+
+const resultaatKleur = (v: number): string | undefined =>
+  v < 0 ? ROOD : v > 0 ? 'var(--success-700, #2e7d4f)' : undefined
+
+async function ResultaatPerCodeBlok({ dossierId }: { dossierId: string }) {
+  const data = await getResultaatPerCode(dossierId, { verbergCorrecties: !(await magCorrecties()) })
+  const t = data.totaal
+  const totaalGrijs = 'var(--neutral-100, #eef2f3)'
+
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <CardHeader>Verwacht resultaat per bewakingscode</CardHeader>
+      <CardBody style={{ padding: 0 }}>
+        {data.regels.length === 0 ? (
+          <LegeNotitie>
+            Geen bewakingscodes met een verkoopbedrag: dit dossier heeft geen aanneemsom, stelposten,
+            goedgekeurd meerwerk of regie.
+          </LegeNotitie>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '30%' }} />{/* Bewakingscode */}
+              <col style={{ width: '11%' }} />{/* Soort */}
+              <col style={{ width: '12%' }} />{/* Verkoop */}
+              <col style={{ width: '12%' }} />{/* Kosten */}
+              <col style={{ width: '12%' }} />{/* Geboekt */}
+              <col style={{ width: '12%' }} />{/* Resultaat */}
+              <col style={{ width: '11%' }} />{/* Marge */}
+            </colgroup>
+            <thead>
+              <tr>
+                <TH>Bewakingscode</TH>
+                <TH>Soort</TH>
+                <TH right>Verkoop verwacht</TH>
+                <TH right>Kosten verwacht</TH>
+                <TH right>Geboekte kosten</TH>
+                <TH right>Resultaat</TH>
+                <TH right>Marge</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {data.regels.map((r) => {
+                const badge = SOORT_BADGE[r.soort]
+                return (
+                  <tr key={`${r.soort}-${r.code ?? 'overig'}`}>
+                    <CodeCel code={r.code} naam={r.naam} />
+                    <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
+                      <Badge size="sm" tone={badge.tone}>{badge.label}</Badge>
+                    </td>
+                    <td
+                      title={GRONDSLAG_UITLEG[r.grondslag]}
+                      style={{
+                        padding: '6px 12px', fontSize: 13, textAlign: 'right', color: 'var(--neutral-700)',
+                        borderBottom: '1px solid var(--neutral-100, #f4f7f8)', whiteSpace: 'nowrap', cursor: 'help',
+                      }}
+                    >
+                      {fmt(r.verkoop, true)}
+                    </td>
+                    <TD>{fmt(r.kosten, true)}</TD>
+                    <TD>{fmt(r.geboekteKosten)}</TD>
+                    <TD vet kleur={resultaatKleur(r.resultaat)}>{fmt(r.resultaat, true)}</TD>
+                    <TD kleur={r.margePct != null && r.margePct < 0 ? ROOD : undefined}>{fmtMarge(r.margePct)}</TD>
+                  </tr>
+                )
+              })}
+              <tr style={{ background: totaalGrijs }}>
+                <CodeCel code={null} naam="Totaal" vet achtergrond={totaalGrijs} />
+                <td style={{ borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }} />
+                <TD vet>{fmt(t.verkoop, true)}</TD>
+                <TD vet>{fmt(t.kosten, true)}</TD>
+                <TD vet>{fmt(t.geboekteKosten, true)}</TD>
+                <TD vet kleur={resultaatKleur(t.resultaat)}>{fmt(t.resultaat, true)}</TD>
+                <TD vet kleur={t.margePct != null && t.margePct < 0 ? ROOD : undefined}>{fmtMarge(t.margePct)}</TD>
+              </tr>
+            </tbody>
+          </table>
+        )}
+        <div style={{
+          padding: '12px', fontSize: 11.5, color: 'var(--neutral-500)',
+          borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5,
+        }}>
+          <strong>Kosten verwacht</strong> = de prognose uit Bouw7, of wat er al geboekt is als dat hoger
+          ligt. <strong>Verkoop verwacht</strong> hangt af van de post: een vast bedrag, eenheidsprijs ×
+          hoeveelheid, of bij regie en nacalculatie de geboekte verkoopwaarde plus de nog te verwachten
+          kosten, doorgerekend tegen dezelfde verhouding (minimaal het mandaat); ga met de muis over
+          een verkoopbedrag om te zien welke. Alle codes zonder eigen verkoop staan samen tegen de aanneemsom
+          {data.meerwerkZonderCode !== 0 && <>, inclusief {fmt(data.meerwerkZonderCode, true)} meerwerk zonder eigen bewakingscode</>}.
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
 /* ── projecttotalen (Athena project-financial) ───────────────────────── */
 
 async function Projecttotalen({ dossierId }: { dossierId: string }) {
@@ -552,6 +666,13 @@ export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie
       <Suspense fallback={<BewakingSkeleton />}>
         <BewakingTabel dossierId={dossierId} sectie={sectie} />
       </Suspense>
+
+      {/* Verwacht resultaat — alleen codes met een eigen verkoopbedrag, plus de aanneemsom */}
+      <div style={{ maxWidth: 960 }}>
+        <Suspense fallback={<SkeletonCard />}>
+          <ResultaatPerCodeBlok dossierId={dossierId} />
+        </Suspense>
+      </div>
 
       {/* Projecttotalen — smaller blok eronder */}
       <div style={{ maxWidth: 960 }}>
