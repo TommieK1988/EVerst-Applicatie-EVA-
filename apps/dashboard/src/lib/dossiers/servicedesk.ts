@@ -7,6 +7,7 @@ import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
+import { tekstNaarBouw7RichText } from '@/lib/bouw7/rich-text'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
 import { zorgVoorBonBewakingscode } from './bon-bewakingscode'
@@ -14,7 +15,7 @@ import { bonBewakingscode } from '@/components/dossiers/types'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
   bedragUitOpslag, bedragUitTarief, isLosseRegel, nieuweHandmatigeSleutel, nieuweLosseSleutel,
-  soortVan, tariefEnOpslag, telbareRegels, type Groepering,
+  soortVan, standaardFactuurtekst, tariefEnOpslag, telbareRegels, type Groepering,
 } from './factuurregel-groepen'
 
 /** Terugval voor de opslag op overige (niet-uren) kosten bij regie-facturatie, als er niets is
@@ -430,6 +431,11 @@ export type CodeRegelView = {
   /** Btw voor de hele code; een factuurregel mag er alsnog van afwijken. */
   btwTariefBouw7Id: number | null
   meefactureren: boolean
+  /**
+   * Eigen factuurtekst in platte tekst, zoals ingetypt. Gaat bij het klaarzetten omgezet naar de
+   * Bouw7-opmaak mee als tekst op de factuur. Leeg = `standaardFactuurtekst`.
+   */
+  factuurtekst: string | null
   /** De factuurregels die deze code oplevert, in factuurvolgorde. */
   groepen: GroepView[]
   /** Alle nog te factureren boekingen, plus de al gefactureerde ter informatie. */
@@ -659,6 +665,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       groepering,
       btwTariefBouw7Id: codeBtw,
       meefactureren,
+      factuurtekst: (inst?.factuurtekst ?? '').trim() || null,
       groepen: groepenView,
       boekingen: [
         ...eigen.map(r => naarView(r, false)),
@@ -752,6 +759,9 @@ function herlaadFacturatie(dossierId: string) {
   revalidatePath('/servicedesk/' + dossierId + '/financieel')
 }
 
+/** Ruim genoeg voor een beheercode-blok plus een verslag van het werk; geen opstel. */
+const FACTUURTEKST_MAX = 4000
+
 /** Slaat de instellingen van één bewakingscode op: naam, opslag, groepering, btw, wel/niet mee. */
 export async function bewaarCodeInstelling(
   dossierId: string,
@@ -762,8 +772,13 @@ export async function bewaarCodeInstelling(
     groepering?: Groepering
     btw_tarief_bouw7_id?: number | null
     meefactureren?: boolean
+    /** Platte tekst; leeg = de standaardtekst. */
+    factuurtekst?: string | null
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (patch.factuurtekst != null && patch.factuurtekst.length > FACTUURTEKST_MAX) {
+    return { ok: false, error: `De factuurtekst is te lang (maximaal ${FACTUURTEKST_MAX} tekens).` }
+  }
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
   if (!toegang.ok) return toegang
 
@@ -785,6 +800,10 @@ export async function bewaarCodeInstelling(
     groepering: patch.groepering !== undefined ? patch.groepering : bestaand?.groepering ?? 'per_soort',
     btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
     meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
+    // Alleen rand-witruimte weg: lege regels ertussen zijn bewust, die worden een lege alinea.
+    factuurtekst: patch.factuurtekst !== undefined
+      ? (patch.factuurtekst?.replace(/\r\n?/g, '\n').trim() || null)
+      : bestaand?.factuurtekst ?? null,
     updated_at: new Date().toISOString(),
   }
 
@@ -1159,6 +1178,17 @@ export async function maakRegieFactuurInBouw7(
     ? null
     : (voorstel.codes.find(c => c.bewakingscode === code)?.omschrijving ?? code)
 
+  // De tekst op de factuur: wat er in de popup is ingetypt, anders de vaste standaard. Gaat in de
+  // opmaak die Bouw7 zelf schrijft, zodat hij daar net zo bewerkbaar is als een eigen tekst.
+  // Zonder code (hele dossier) staan de eigen teksten van de meegaande posten onder elkaar.
+  const metRegels = new Set(regels.map(r => r.bewakingscode))
+  const eigenTeksten = voorstel.codes
+    .filter(c => metRegels.has(c.bewakingscode) && c.factuurtekst)
+    .map(c => c.factuurtekst as string)
+  const factuurtekst = eigenTeksten.length > 0
+    ? eigenTeksten.join('\n\n')
+    : standaardFactuurtekst(postNaam)
+
   // Sleutel over de inhoud: dezelfde regels met dezelfde bedragen leveren dezelfde sleutel op, dus
   // een tweede klik vindt de bestaande conceptfactuur terug in plaats van een duplicaat te maken.
   // De post staat er apart in: twee posten met toevallig hetzelfde bedrag mogen niet op dezelfde
@@ -1170,7 +1200,7 @@ export async function maakRegieFactuurInBouw7(
   const res = await maakConceptVerkoopfactuur({
     projectId: Number(ctx.bouw7Id),
     idempotentieSleutel: sleutel,
-    omschrijving: postNaam ? `Nacalculatie — ${postNaam}` : 'Nacalculatie regiewerk en stelposten',
+    omschrijving: tekstNaarBouw7RichText(factuurtekst),
     regels: regels.map(r => ({
       omschrijving: r.omschrijving,
       aantal: r.aantal,

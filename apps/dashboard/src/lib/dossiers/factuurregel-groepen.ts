@@ -208,3 +208,12 @@ export function telbareRegels<
     return g.meefactureren && g.bedrag !== 0
   })
 }
+
+/**
+ * De tekst op een regiefactuur als er in de popup niets eigens is ingetypt. Staat hier en niet in
+ * `servicedesk.ts` zodat het scherm hem als voorbeeld kan tonen: dat is een `'use server'`-module
+ * en mag geen synchrone functies exporteren.
+ */
+export function standaardFactuurtekst(postNaam: string | null): string {
+  return postNaam ? `Nacalculatie — ${postNaam}` : 'Nacalculatie regiewerk en stelposten'
+}

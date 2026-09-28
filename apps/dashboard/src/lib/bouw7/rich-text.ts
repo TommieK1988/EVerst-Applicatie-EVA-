@@ -41,3 +41,27 @@ export function bouw7RichTextNaarTekst(html: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
+
+/**
+ * Het omgekeerde: platte tekst naar de rich-text-vorm die Bouw7 zelf schrijft.
+ *
+ * Gemeten op 600 facturen: de Bouw7-editor maakt van elke regel (Enter) een eigen `<p>`, en van een
+ * lege regel `<p>&nbsp;</p>`. Door precies die vorm aan te leveren ziet een factuurtekst uit EVA er
+ * in Bouw7 hetzelfde uit als een die de administratie daar zelf typt — en blijft hij daar gewoon
+ * bewerkbaar. Lege regels aan het begin en eind vallen weg; lege invoer geeft `''`.
+ */
+export function tekstNaarBouw7RichText(tekst: string | null | undefined): string {
+  if (!tekst) return ''
+  const regels = tekst.replace(/\r\n?/g, '\n').split('\n').map(r => r.trimEnd())
+  while (regels.length > 0 && regels[0].trim() === '') regels.shift()
+  while (regels.length > 0 && regels[regels.length - 1].trim() === '') regels.pop()
+  return regels
+    .map(r => r.trim() === ''
+      ? '<p>&nbsp;</p>'
+      : `<p>${r
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')}</p>`)
+    .join('')
+}

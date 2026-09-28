@@ -58,7 +58,7 @@ const codes: CodeRegelView[] = [
   {
     bewakingscode: '4300', bron: 'meerwerk', omschrijving: 'Extra herstelwerk kozijnen zuidgevel',
     inkoop: 4820.15, berekend: 6023.44, bedrag: 6023.44, opslagPct: 25, groepering: 'per_soort',
-    btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
+    btwTariefBouw7Id: null, meefactureren: true, factuurtekst: null, groepen: [], boekingen: [],
     urenBedrag: 3800, kostenBedrag: 2223.44, urenAantal: 76.5,
     aantalBoekingen: 12, aantalGefactureerd: 0, alGefactureerdBedrag: 0,
     // Meer geboekt dan het mandaat: toont de indicator.
@@ -67,7 +67,7 @@ const codes: CodeRegelView[] = [
   {
     bewakingscode: '4310', bron: 'stelpost', omschrijving: 'Stelpost schilderwerk buitenzijde',
     inkoop: 11240, berekend: 14050, bedrag: 5825.35, opslagPct: null, groepering: 'samen',
-    btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
+    btwTariefBouw7Id: null, meefactureren: true, factuurtekst: null, groepen: [], boekingen: [],
     urenBedrag: 9000, kostenBedrag: 5050, urenAantal: 180,
     aantalBoekingen: 4, aantalGefactureerd: 9, alGefactureerdBedrag: 8224.65,
     inBouw7: true, vergrendeld: false, mandaat: null,
@@ -75,7 +75,7 @@ const codes: CodeRegelView[] = [
   {
     bewakingscode: '4320', bron: 'meerwerk', omschrijving: 'Voorrijkosten en opstart',
     inkoop: 0, berekend: 950, bedrag: 0, opslagPct: null, groepering: 'samen',
-    btwTariefBouw7Id: null, meefactureren: true, groepen: [], boekingen: [],
+    btwTariefBouw7Id: null, meefactureren: true, factuurtekst: null, groepen: [], boekingen: [],
     urenBedrag: 0, kostenBedrag: 950, urenAantal: 0,
     aantalBoekingen: 0, aantalGefactureerd: 2, alGefactureerdBedrag: 950,
     // Binnen het mandaat: alleen het mandaat ter informatie.
@@ -92,6 +92,7 @@ const facturen = [
 
 const proefCode: CodeRegelView = {
   ...codes[0],
+  factuurtekst: 'Beheercode: 6400.2033.400.075\nKostensoort: 1320\n\nKozijnen zuidgevel hersteld en geschilderd.',
   groepen: [
     {
       groepSleutel: 'uur:Timmerman', omschrijving: 'Timmerwerk kozijnen', eigenOmschrijving: null,

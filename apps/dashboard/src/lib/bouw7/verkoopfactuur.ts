@@ -25,6 +25,7 @@
  */
 
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import { bouw7RichTextNaarTekst } from '@/lib/bouw7/rich-text'
 
 /** Bouw7-factuurstatus. Vaste enum, er is geen `/invoice/statuses`-endpoint (404). */
 export const FACTUUR_STATUS_CONCEPT = 3
@@ -234,6 +235,12 @@ export async function maakConceptVerkoopfactuur(
   const terugCenten = terug.reduce((s, l) => s + centen(Number(l.subTotal ?? 0)), 0)
   if (terugCenten !== verwachtCenten) {
     bezwaren.push(`bedrag € ${(terugCenten / 100).toFixed(2)} in plaats van € ${(verwachtCenten / 100).toFixed(2)}`)
+  }
+  // De factuurtekst is wat de klant bovenaan leest. Vergeleken als platte tekst, zodat een kleine
+  // herschrijving van de HTML door Bouw7 geen vals alarm geeft — een lege of andere tekst wel.
+  const verstuurdeTekst = bouw7RichTextNaarTekst(body.description ?? '')
+  if (verstuurdeTekst && bouw7RichTextNaarTekst(doc.description ?? '') !== verstuurdeTekst) {
+    bezwaren.push('de factuurtekst is niet goed overgekomen')
   }
 
   if (bezwaren.length > 0) {

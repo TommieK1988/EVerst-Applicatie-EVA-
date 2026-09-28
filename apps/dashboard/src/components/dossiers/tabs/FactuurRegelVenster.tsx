@@ -34,7 +34,7 @@ import React, { useEffect, useId, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 import { Lock, ArrowLeft, ArrowRight, Plus, Trash2 } from 'lucide-react'
 import {
-  Button, Input, Checkbox, useDialogen,
+  Button, Input, Textarea, Checkbox, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui'
 import {
@@ -42,7 +42,9 @@ import {
   voegLosseRegelToe, verwijderLosseRegel, maakRegieFactuurInBouw7,
   type CodeRegelView, type BoekingView, type GroepView,
 } from '@/lib/dossiers/servicedesk'
-import { GROEPERINGEN, telbareRegels, type Groepering } from '@/lib/dossiers/factuurregel-groepen'
+import {
+  GROEPERINGEN, standaardFactuurtekst, telbareRegels, type Groepering,
+} from '@/lib/dossiers/factuurregel-groepen'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 
 const fmt = (v: number) =>
@@ -387,6 +389,7 @@ export default function FactuurRegelVenster({
       omschrijving: `${teFactureren.length} factuurregel${teFactureren.length === 1 ? '' : 's'} `
         + `van "${post.omschrijving}", samen ${fmt(teFacturerenTotaal)} excl. btw`
         + `${tarief ? ` (${tarief.label}, tenzij per regel anders)` : ''}. `
+        + (post.factuurtekst ? 'Je eigen factuurtekst gaat mee. ' : '')
         + 'De factuur krijgt nog geen factuurnummer; de administratie verstuurt hem in Bouw7.',
       bevestigLabel: 'Klaarzetten',
     })
@@ -511,6 +514,27 @@ export default function FactuurRegelVenster({
                 {GROEPERINGEN.map(g => <option key={g.waarde} value={g.waarde}>{g.label}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label htmlFor={`${veld}-tekst`} className={labelStijl}>Factuurtekst</label>
+            {/* Ongecontroleerd en met een key per post, net als de naam hierboven: opslaan bij
+                verlaten, en bij wisselen van post een vers veld in plaats van de vorige tekst. */}
+            <Textarea
+              key={code.bewakingscode}
+              id={`${veld}-tekst`}
+              rows={3}
+              defaultValue={code.factuurtekst ?? ''}
+              placeholder={standaardFactuurtekst(code.omschrijving)}
+              disabled={opslot}
+              maxLength={4000}
+              onBlur={e => {
+                if (e.target.value.trim() !== (code.factuurtekst ?? '')) codePatch({ factuurtekst: e.target.value })
+              }}
+            />
+            <p className="mt-1 text-[12px] text-neutral-500">
+              Komt als tekst op de factuur in Bouw7. Elke regel wordt een eigen alinea; leeg = de tekst
+              hierboven in grijs. Vet of opsommingen kun je daarna in Bouw7 zelf aanbrengen.
+            </p>
           </div>
         </div>
 

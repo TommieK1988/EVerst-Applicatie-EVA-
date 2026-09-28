@@ -190,6 +190,8 @@ export type CodeInstelling = {
   groepering: 'per_soort' | 'samen' | 'per_boeking'
   btw_tarief_bouw7_id: number | null
   meefactureren: boolean
+  /** Eigen factuurtekst in platte tekst; leeg = de standaardtekst. */
+  factuurtekst: string | null
 }
 
 export async function getCodeInstellingen(dossierId: string): Promise<CodeInstelling[]> {
@@ -197,7 +199,7 @@ export async function getCodeInstellingen(dossierId: string): Promise<CodeInstel
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('factuur_regelinstellingen')
-    .select('bewakingscode, omschrijving, opslag_pct, groepering, btw_tarief_bouw7_id, meefactureren')
+    .select('bewakingscode, omschrijving, opslag_pct, groepering, btw_tarief_bouw7_id, meefactureren, factuurtekst')
     .eq('dossier_id', dossierId)
   return (data ?? []) as CodeInstelling[]
 }
