@@ -26,9 +26,10 @@ export default function RegieOpslagBeheer({ initial }: { initial: number }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: 0 }}>
         Opslag op <strong>geboekte kosten</strong> (materiaal, onderaanneming, inkoop) bij regiewerk en bij
-        het verrekenen van een stelpost die op geboekte kosten afrekent. Uren rekenen niet met deze opslag
-        maar met het afgesproken verkooptarief per uursoort. Een handmatig aangepaste regel, en een stelpost
-        met een eigen opslagpercentage, gaan altijd vóór deze standaard.
+        het verrekenen van een stelpost die op geboekte kosten afrekent. Regie-uren rekenen met het
+        uurtarief dat met de opdrachtgever is afgesproken (relatiepagina → Regie-uurtarieven); zonder
+        afspraak ook met kostprijs + deze opslag. Een handmatig aangepaste regel, en een stelpost met een
+        eigen opslagpercentage, gaan altijd vóór deze standaard.
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Input

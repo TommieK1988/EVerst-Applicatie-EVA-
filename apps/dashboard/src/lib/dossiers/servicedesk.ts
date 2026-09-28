@@ -196,7 +196,9 @@ export async function getServicedeskRegie(
       uitgesloten: opgesl?.uitgesloten ?? false,
       status: (opgesl?.status as 'concept' | 'gefactureerd') ?? 'concept',
       bouw7InvoiceId: opgesl?.bouw7_invoice_id ?? null,
-      tariefUitRelatie,
+      // Alleen als het afgesproken tarief de prijs nog werkelijk bepaalt; een handmatig tarief of
+      // bedrag op de factuur gaat er overheen.
+      tariefUitRelatie: tariefUitRelatie && opgesl?.verkoop_tarief == null && opgesl?.verkoop_bedrag == null,
     })
   }
 
@@ -369,6 +371,8 @@ export type BoekingView = {
   verkoopBedrag: number
   /** Prijs is hier handmatig vastgezet; leeg = hij volgt nog het relatietarief of de bedrijfsopslag. */
   handmatigePrijs: boolean
+  /** Het uurtarief volgt het met de opdrachtgever afgesproken tarief (relatiepagina). */
+  tariefAfgesproken: boolean
   uitgesloten: boolean
   /** Staat al op een verstuurde factuur: alleen ter informatie, niet meer te wijzigen. */
   gefactureerd: boolean
@@ -643,6 +647,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       ...tariefEnOpslag(r.verkoopBedrag, r.aantal, r.inkoopBedrag),
       verkoopBedrag: r.verkoopBedrag,
       handmatigePrijs: r.handmatigePrijs,
+      tariefAfgesproken: r.tariefUitRelatie,
       uitgesloten: r.uitgesloten,
       gefactureerd: isGefactureerd,
       groepSleutel: groepSleutelVoor(r, groepering),
@@ -918,6 +923,8 @@ export async function voegLosseRegelToe(
     bedragExclBtw: number | null
     aantal?: number | null
     eenheid?: string | null
+    /** Btw van een gekozen standaardregel; leeg = de btw van de factuur. */
+    btwTariefBouw7Id?: number | null
   },
 ): Promise<{ ok: true; groepSleutel: string } | { ok: false; error: string }> {
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
@@ -931,6 +938,7 @@ export async function voegLosseRegelToe(
     bedrag_excl_btw: regel.bedragExclBtw,
     aantal: regel.aantal ?? null,
     eenheid: regel.eenheid ?? null,
+    ...(regel.btwTariefBouw7Id != null ? { btw_tarief_bouw7_id: regel.btwTariefBouw7Id } : {}),
   })
   if (!r.ok) return r
   return { ok: true, groepSleutel: sleutel }

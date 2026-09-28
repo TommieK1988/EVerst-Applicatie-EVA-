@@ -50,6 +50,8 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
     objecten,
     notities,
     medewerker,
+    uursoortenRes,
+    uurtarievenRes,
   ] = await Promise.all([
     supabase.from('relaties').select('*').eq('id', params.id).maybeSingle(),
     supabase.from('relatie_factuuradressen').select('*').eq('relatie_id', params.id).order('label'),
@@ -66,6 +68,13 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
     // (`relatie_notities_relatie_created_idx`), en het blok staat boven de vouw.
     getRelatieNotities(params.id),
     getCurrentMedewerker().catch(() => null),
+    // Regie-uurtarieven: alleen uursoorten waarop gewerkt wordt en die in Bouw7 bestaan — de
+    // regiefactuur koppelt een boeking via het Bouw7-hourType aan het tarief.
+    supabase.from('planning_uursoorten').select('id, naam')
+      .eq('actief', true).eq('uren_categorie', 'werk').not('bouw7_id', 'is', null)
+      .order('volgorde').order('naam'),
+    supabase.from('relatie_uurtarieven').select('uursoort_id, tarief_verkoop, bron')
+      .eq('relatie_id', params.id),
   ])
 
   if (!relatieRes.data) notFound()
@@ -90,8 +99,23 @@ export default async function RelatieDetailPage(props: { params: Promise<{ id: s
         .filter(Boolean).join(' ').trim() || 'Naamloos',
     }))
 
+  const tariefPerUursoort = new Map<string, { tarief_verkoop: number | null; bron: string }>(
+    ((uurtarievenRes.data ?? []) as { uursoort_id: string; tarief_verkoop: number | null; bron: string }[])
+      .map(t => [t.uursoort_id, t]),
+  )
+  const regieUurtarieven = ((uursoortenRes.data ?? []) as { id: string; naam: string }[]).map(u => {
+    const t = tariefPerUursoort.get(u.id)
+    return {
+      uursoortId: u.id,
+      naam: u.naam,
+      tarief: t?.tarief_verkoop != null ? Number(t.tarief_verkoop) : null,
+      bron: t?.bron ?? null,
+    }
+  })
+
   return (
     <RelatieDetailView
+      regieUurtarieven={regieUurtarieven}
       relatie={relatieRes.data as Relatie}
       factuuradressen={adressen}
       factuuradresContacten={factuuradresContacten}

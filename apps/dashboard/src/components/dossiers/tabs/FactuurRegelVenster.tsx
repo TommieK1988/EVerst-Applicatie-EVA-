@@ -46,6 +46,7 @@ import {
   GROEPERINGEN, standaardFactuurtekst, telbareRegels, type Groepering,
 } from '@/lib/dossiers/factuurregel-groepen'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
+import { getLosseRegelKeuzes, type LosseRegelKeuze } from '@/lib/dossiers/factuur-standaardregels'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v)
@@ -197,6 +198,71 @@ const HERKOMST_LABEL: Record<CodeRegelView['bron'], string> = {
   meerwerk: 'Meerwerk (regie)',
 }
 
+/**
+ * Kieslijst onder "+ Losse regel": eerst de prijsafspraken met de opdrachtgever, dan de
+ * bedrijfsbrede standaardregels (Instellingen → Facturatie), onderaan een vrije regel.
+ *
+ * Bewust inline en niet als popover: een popover portalt naar body, buiten `.eva`, en daar
+ * bestaan de kleur-tokens niet.
+ */
+function LosseRegelKiezer({ dossierId, onKies, onVrij, onSluit }: {
+  dossierId: string
+  onKies: (k: LosseRegelKeuze) => void
+  onVrij: () => void
+  onSluit: () => void
+}) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof getLosseRegelKeuzes>> | null>(null)
+  const [fout, setFout] = useState(false)
+
+  useEffect(() => {
+    let weg = false
+    getLosseRegelKeuzes(dossierId)
+      .then(d => { if (!weg) setData(d) })
+      .catch(() => { if (!weg) setFout(true) })
+    return () => { weg = true }
+  }, [dossierId])
+
+  const groep = (titel: string, items: LosseRegelKeuze[]) => items.length > 0 && (
+    <div>
+      <div className="px-3 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-neutral-500">{titel}</div>
+      {items.map(k => (
+        <button key={k.sleutel} type="button" onClick={() => onKies(k)}
+                className="flex w-full items-baseline gap-3 rounded-md px-3 py-2 text-left text-[13px] text-neutral-800 hover:bg-neutral-100">
+          <span className="min-w-0 flex-1 truncate">{k.omschrijving}</span>
+          {k.btwLabel && <span className="shrink-0 text-[12px] text-neutral-500">{k.btwLabel}</span>}
+          <span className="shrink-0 tabular-nums text-neutral-600">
+            {k.prijs != null ? fmt(k.prijs) : '—'}{k.eenheid ? ` / ${k.eenheid}` : ''}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+
+  const leeg = data != null && data.afspraken.length === 0 && data.standaard.length === 0
+
+  return (
+    <div className="border-b border-neutral-200 bg-neutral-50 p-2" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onSluit() } }}>
+      <div className="max-h-[280px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1">
+        {data == null && !fout && <div className="px-3 py-2 text-[13px] text-neutral-500">Laden…</div>}
+        {fout && <div className="px-3 py-2 text-[13px] text-error-700">De kieslijst kon niet worden geladen.</div>}
+        {data && groep(data.klantNaam ? `Afspraken met ${data.klantNaam}` : 'Afspraken met de opdrachtgever', data.afspraken)}
+        {data && groep('Standaard', data.standaard)}
+        {leeg && (
+          <div className="px-3 py-2 text-[12px] text-neutral-500">
+            Nog geen standaardregels. Leg ze vast onder Instellingen → Facturatie, of als prijsafspraak op de relatie.
+          </div>
+        )}
+        <div className="mt-1 border-t border-neutral-100 pt-1">
+          <button type="button" onClick={onVrij}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] font-medium text-neutral-800 hover:bg-neutral-100">
+            <Plus className="h-3.5 w-3.5" /> Vrije regel…
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function FactuurRegelVenster({
   dossierId, code, tarieven, readOnly, onSluit, onBewaard, onGefactureerd,
 }: {
@@ -219,6 +285,8 @@ export default function FactuurRegelVenster({
   const [doel, setDoel] = useState<string | null>(null)
   const [bezig, start] = useTransition()
   const [geopendVoor, setGeopendVoor] = useState<string | null>(null)
+  /** De kiezer voor een losse regel (afspraken met de klant, standaardregels, vrije regel). */
+  const [kiezerOpen, setKiezerOpen] = useState(false)
 
   // Standaard 21%, net als voorheen in het nacalculatie-blok. Pas zetten zodra de tarieven er zijn,
   // en daarna een eigen keuze niet meer overschrijven.
@@ -237,6 +305,7 @@ export default function FactuurRegelVenster({
     setGeopendVoor(code.bewakingscode)
     setSelectie(new Set())
     setDoel(null)
+    setKiezerOpen(false)
   }
 
   if (!code) return null
@@ -327,7 +396,25 @@ export default function FactuurRegelVenster({
   }
 
   /** Een post die nergens geboekt staat: opstartkosten, voorrijkosten, een afgesproken toeslag. */
+  /** Een regel uit de kieslijst: omschrijving, eenheid, prijs en btw worden gekopieerd. */
+  function kiesLosseRegel(k: LosseRegelKeuze) {
+    setKiezerOpen(false)
+    start(async () => {
+      const r = await voegLosseRegelToe(dossierId, post.bewakingscode, {
+        omschrijving: k.omschrijving,
+        bedragExclBtw: k.prijs,
+        aantal: 1,
+        eenheid: k.eenheid,
+        btwTariefBouw7Id: k.btwTariefBouw7Id,
+      })
+      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
+      setDoel(r.groepSleutel)
+      onBewaard()
+    })
+  }
+
   async function losseRegel() {
+    setKiezerOpen(false)
     const naam = await vraagTekst({
       titel: 'Losse regel toevoegen',
       omschrijving: 'Een regel die niet uit een boeking volgt. Aantal, eenheid en prijs vul je zo in de tabel in.',
@@ -638,13 +725,22 @@ export default function FactuurRegelVenster({
                           {/* Prijs per eenheid. Een kostenpost telt als één post en heeft er dus
                               geen; daar ís het verkoopbedrag de prijs. */}
                           {b.bronType === 'uur' && b.aantal ? (
-                            <BewaarVeld
-                              waarde={alsTekst(b.verkoopTarief)}
-                              uitlijnen="rechts"
-                              titel="Verkoopprijs per uur — past het verkoopbedrag en de opslag aan"
-                              disabled={vast}
-                              opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
-                            />
+                            <>
+                              <BewaarVeld
+                                waarde={alsTekst(b.verkoopTarief)}
+                                uitlijnen="rechts"
+                                titel={b.tariefAfgesproken
+                                  ? 'Afgesproken uurtarief van de opdrachtgever (relatiepagina) — aanpassen geldt alleen voor deze factuur'
+                                  : 'Verkoopprijs per uur — past het verkoopbedrag en de opslag aan'}
+                                disabled={vast}
+                                opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
+                              />
+                              {b.tariefAfgesproken && (
+                                <div className="px-1 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-success-700">
+                                  afspraak
+                                </div>
+                              )}
+                            </>
                           ) : (
                             <div className="px-1 text-right text-[13px] text-neutral-400"
                                  title="Een kostenpost telt als één post; het verkoopbedrag ís de prijs">—</div>
@@ -730,12 +826,21 @@ export default function FactuurRegelVenster({
                 <span className="text-[11.5px] font-normal text-neutral-500">regel {doelNummer} gekozen</span>
               )}
               {!opslot && (
-                <Button variant="outline" size="sm" disabled={bezig} onClick={losseRegel}
+                <Button variant="outline" size="sm" disabled={bezig} onClick={() => setKiezerOpen(o => !o)}
+                        aria-expanded={kiezerOpen}
                         title="Een regel die niet uit een boeking volgt, zoals voorrijkosten">
                   <Plus className="h-3.5 w-3.5" /> Losse regel
                 </Button>
               )}
             </div>
+            {kiezerOpen && !opslot && (
+              <LosseRegelKiezer
+                dossierId={dossierId}
+                onKies={kiesLosseRegel}
+                onVrij={losseRegel}
+                onSluit={() => setKiezerOpen(false)}
+              />
+            )}
             <div className={scrollBak}>
               <table className="w-full min-w-[545px] table-fixed border-collapse">
                 <colgroup>

@@ -373,6 +373,65 @@ export async function deleteVerkoopPrijsafspraak(
   return { ok: true }
 }
 
+/* ─── Regie-uurtarieven (per uursoort, opdrachtgever) ────────────── */
+
+/**
+ * Bewaart de afgesproken verkoop-uurtarieven van een opdrachtgever, per uursoort. De regiefactuur
+ * leest ze via `relatie_uurtarieven` (zie `verkooptarievenVoorRelatie` in lib/dossiers/servicedesk.ts)
+ * en laat ze vóór kostprijs + opslag gaan.
+ *
+ * `bron = 'eva'` markeert de rij als EVA-afspraak: de Bouw7-contactsync slaat zulke paren over, zodat
+ * een tarief dat hier is ingevuld niet stil wordt teruggezet. Een leeg tarief betekent "geen
+ * afspraak" en verwijdert de rij.
+ */
+export async function bewaarRelatieUurtarieven(
+  relatieId: string,
+  rijen: { uursoortId: string; tarief: number | null }[],
+): Promise<ActionResult> {
+  for (const r of rijen) {
+    if (r.tarief != null && (!Number.isFinite(r.tarief) || r.tarief < 0 || r.tarief >= 1000)) {
+      return { ok: false, error: 'Een uurtarief moet een bedrag tussen € 0 en € 1.000 zijn.' }
+    }
+  }
+  const supabase = createAdminClient() as any
+  const ids = rijen.map(r => r.uursoortId)
+  if (ids.length === 0) return { ok: true }
+
+  const { data: uursoorten, error: uErr } = await supabase
+    .from('planning_uursoorten')
+    .select('id, bouw7_id')
+    .in('id', ids)
+  if (uErr) return { ok: false, error: uErr.message }
+  const bouw7Id = new Map<string, string | null>(
+    ((uursoorten ?? []) as { id: string; bouw7_id: string | null }[]).map(u => [u.id, u.bouw7_id]),
+  )
+
+  const weg = rijen.filter(r => r.tarief == null).map(r => r.uursoortId)
+  const bewaar = rijen
+    .filter(r => r.tarief != null)
+    .map(r => ({
+      relatie_id: relatieId,
+      uursoort_id: r.uursoortId,
+      tarief_verkoop: Math.round((r.tarief as number) * 100) / 100,
+      bouw7_hourtype_id: bouw7Id.get(r.uursoortId) ?? null,
+      bron: 'eva',
+      updated_at: new Date().toISOString(),
+    }))
+
+  if (weg.length > 0) {
+    const { error } = await supabase
+      .from('relatie_uurtarieven').delete().eq('relatie_id', relatieId).in('uursoort_id', weg)
+    if (error) return { ok: false, error: error.message }
+  }
+  if (bewaar.length > 0) {
+    const { error } = await supabase
+      .from('relatie_uurtarieven').upsert(bewaar, { onConflict: 'relatie_id,uursoort_id' })
+    if (error) return { ok: false, error: error.message }
+  }
+  revalidatePath(`/relaties/${relatieId}`)
+  return { ok: true }
+}
+
 /* ─── Kortingsafspraken (1:n, leverancier) ───────────────────────── */
 
 export async function upsertKortingsafspraak(input: {

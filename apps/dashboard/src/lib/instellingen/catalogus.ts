@@ -200,10 +200,10 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
       {
         href: '/instellingen/facturatie',
         titel: 'Facturatie',
-        omschrijving: 'Opslag op geboekte kosten bij regiewerk en stelposten, en de redenen “niet betaald” op het Facturen-scherm.',
+        omschrijving: 'Opslag op geboekte kosten bij regiewerk en stelposten, standaard factuurregels, en de redenen “niet betaald” op het Facturen-scherm.',
         module: 'financieel',
         guard: { module: 'financieel', niveau: 'beheren' },
-        synoniemen: ['regie', 'opslag', 'stelpost', 'marge', 'factuur', 'debiteur', 'reden', 'onbetaald', 'aanmaning'],
+        synoniemen: ['regie', 'opslag', 'stelpost', 'marge', 'factuur', 'debiteur', 'reden', 'onbetaald', 'aanmaning', 'standaardregel', 'factuurregel', 'losse regel', 'voorrijkosten', 'opstartkosten'],
       },
       {
         href: '/instellingen/btw-kostensoorten',

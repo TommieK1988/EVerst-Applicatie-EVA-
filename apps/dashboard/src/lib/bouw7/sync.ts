@@ -559,10 +559,21 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
           })
         }
       }
-      for (let i = 0; i < tariefRows.length; i += 500) {
+      // Een tarief dat in EVA is afgesproken (bron 'eva', relatiepagina → Regie-uurtarieven) is
+      // leidend: Bouw7 mag het niet overschrijven. Er is geen write-back, dus zonder deze
+      // uitzondering zou elke sync-run een afspraak stil terugzetten naar de Bouw7-waarde.
+      const evaParen = new Set<string>()
+      if (tariefRows.length > 0) {
+        const evaRijen = await haalAlleRijen<{ relatie_id: string; uursoort_id: string }>((van, tot) => supabase
+          .from('relatie_uurtarieven').select('relatie_id, uursoort_id')
+          .eq('bron', 'eva').order('id').range(van, tot))
+        for (const r of evaRijen) evaParen.add(`${r.relatie_id}:${r.uursoort_id}`)
+      }
+      const teSchrijven = tariefRows.filter(r => !evaParen.has(`${r.relatie_id}:${r.uursoort_id}`))
+      for (let i = 0; i < teSchrijven.length; i += 500) {
         await supabase
           .from('relatie_uurtarieven')
-          .upsert(tariefRows.slice(i, i + 500), { onConflict: 'relatie_id,uursoort_id' })
+          .upsert(teSchrijven.slice(i, i + 500), { onConflict: 'relatie_id,uursoort_id' })
       }
     } catch { /* tarief-sync is best-effort; faalt nooit de hele contact-sync */ }
 

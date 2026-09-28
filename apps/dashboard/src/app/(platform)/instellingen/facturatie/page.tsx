@@ -3,6 +3,8 @@ import { vereisModuleToegang } from '@/lib/auth/rechten'
 import { getRedencodes, type Redencode } from '@/lib/debiteuren/actions'
 import { PageHeader, Card, CardBody } from '@/components/ui'
 import RegieOpslagBeheer from './RegieOpslagBeheer'
+import StandaardRegelsBeheer from './StandaardRegelsBeheer'
+import { getStandaardregels, getBtwKeuzes } from '@/lib/dossiers/factuur-standaardregels'
 import RedencodesBeheer from '../debiteur-redencodes/RedencodesBeheer'
 import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
 
@@ -19,7 +21,11 @@ export const dynamic = 'force-dynamic'
 export default async function Page() {
   await vereisModuleToegang('financieel', 'beheren')
 
-  const opslag = await getRegieOpslagPct()
+  const [opslag, standaardregels, btwKeuzes] = await Promise.all([
+    getRegieOpslagPct(),
+    getStandaardregels({ inclusiefInactief: true }),
+    getBtwKeuzes(),
+  ])
 
   let redencodes: Redencode[] = []
   try {
@@ -42,6 +48,20 @@ export default async function Page() {
             Opslag op geboekte kosten
           </h2>
           <RegieOpslagBeheer initial={opslag} />
+        </CardBody>
+      </Card>
+
+      <Card style={{ maxWidth: 560, marginTop: 16 }}>
+        <CardBody>
+          <h2 style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, margin: '0 0 12px' }}>
+            Standaard factuurregels
+          </h2>
+          <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: '0 0 12px' }}>
+            Losse regels om uit te kiezen bij het opstellen van een regiefactuur (&quot;+ Losse regel&quot;).
+            Afspraken met één opdrachtgever leg je vast als verkoop prijsafspraak op de relatie; die
+            verschijnen in dezelfde lijst.
+          </p>
+          <StandaardRegelsBeheer initial={standaardregels} btw={btwKeuzes} />
         </CardBody>
       </Card>
 

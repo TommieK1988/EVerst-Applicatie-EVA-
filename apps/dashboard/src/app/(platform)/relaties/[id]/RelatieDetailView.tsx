@@ -34,6 +34,7 @@ import {
   upsertInkoop,
   upsertVerkoopPrijsafspraak,
   deleteVerkoopPrijsafspraak,
+  bewaarRelatieUurtarieven,
   upsertKortingsafspraak,
   deleteKortingsafspraak,
   upsertInkoopPrijsafspraak,
@@ -893,6 +894,87 @@ function FacturatieBlok({ relatieId, initial }: { relatieId: string; initial: Re
   )
 }
 
+/* ─── Regie-uurtarieven (opdrachtgever) ─────────────────────────────── */
+
+type RegieUurtarief = { uursoortId: string; naam: string; tarief: number | null; bron: string | null }
+
+const euro = (n: number) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * Het verkoop-uurtarief dat met deze opdrachtgever is afgesproken, per uursoort. Een regiefactuur
+ * neemt het automatisch over; zonder afspraak rekent die met kostprijs + de regie-opslag.
+ */
+function RegieUurtarievenBlok({ relatieId, initial }: { relatieId: string; initial: RegieUurtarief[] }) {
+  const [bewerken, setBewerken] = useState(false)
+  const [waarden, setWaarden] = useState<Record<string, string>>(
+    () => Object.fromEntries(initial.map(r => [r.uursoortId, r.tarief != null ? String(r.tarief) : ''])),
+  )
+  const [bezig, setBezig] = useState(false)
+  const router = useRouter()
+  const afgesproken = initial.filter(r => r.tarief != null)
+
+  async function opslaan() {
+    const rijen: { uursoortId: string; tarief: number | null }[] = []
+    for (const r of initial) {
+      const tekst = (waarden[r.uursoortId] ?? '').trim().replace(',', '.')
+      const nieuw = tekst === '' ? null : Number(tekst)
+      if (nieuw != null && !Number.isFinite(nieuw)) {
+        toast.error(`"${waarden[r.uursoortId]}" bij ${r.naam} is geen bedrag.`)
+        return
+      }
+      if (nieuw !== r.tarief) rijen.push({ uursoortId: r.uursoortId, tarief: nieuw })
+    }
+    if (rijen.length === 0) { setBewerken(false); return }
+    setBezig(true)
+    const res = await bewaarRelatieUurtarieven(relatieId, rijen)
+    setBezig(false)
+    if (!res.ok) { toast.error(res.error); return }
+    setBewerken(false)
+    router.refresh()
+    toast.success('Uurtarieven opgeslagen')
+  }
+
+  return (
+    <Blok titel="Regie-uurtarieven" actie={!bewerken && initial.length > 0 ? <Button variant="ghost" size="sm" onClick={() => setBewerken(true)}>Bewerken</Button> : null}>
+      {initial.length === 0 ? (
+        <EmptyState size="sm" tone="neutral" title="Geen uursoorten" description="Er zijn geen actieve werk-uursoorten uit Bouw7." />
+      ) : bewerken ? (
+        <div className="flex flex-col gap-4">
+          <FormRow cols="2">
+            {initial.map(r => (
+              <FormField key={r.uursoortId} label={r.naam.replace(/^Gewerkte uren - /, '')} upper>
+                <Input
+                  type="number" min="0" step="0.01" inputMode="decimal"
+                  value={waarden[r.uursoortId] ?? ''}
+                  onChange={e => setWaarden(p => ({ ...p, [r.uursoortId]: e.target.value }))}
+                  placeholder="Geen afspraak"
+                />
+              </FormField>
+            ))}
+          </FormRow>
+          <p className="text-[12px] text-neutral-500 m-0">
+            Bedragen per uur, excl. btw. Leeg laten = geen afspraak: dan rekent de regiefactuur met kostprijs + opslag.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={opslaan} disabled={bezig}>{bezig ? 'Opslaan…' : 'Opslaan'}</Button>
+            <Button variant="ghost" onClick={() => setBewerken(false)}>Annuleer</Button>
+          </div>
+        </div>
+      ) : afgesproken.length === 0 ? (
+        <p className="text-[13px] text-neutral-500 m-0">
+          Geen tarief afgesproken. Regie-uren worden gefactureerd tegen kostprijs + opslag.
+        </p>
+      ) : (
+        <div>
+          {afgesproken.map(r => (
+            <Rij key={r.uursoortId} label={r.naam.replace(/^Gewerkte uren - /, '')} waarde={`${euro(r.tarief as number)} / uur`} />
+          ))}
+        </div>
+      )}
+    </Blok>
+  )
+}
+
 /* ─── Inkoop blok (leverancier + onderaannemer) ──────────────────────── */
 
 function InkoopBlok({ relatieId, initial }: { relatieId: string; initial: RelatieInkoop | null }) {
@@ -1332,6 +1414,8 @@ type Props = {
   facturatie: RelatieFacturatie | null
   inkoop: RelatieInkoop | null
   verkoopPrijsafspraken: RelatieVerkoopPrijsafspraak[]
+  /** Afgesproken verkoop-uurtarief per (werk)uursoort; `tarief` null = geen afspraak. */
+  regieUurtarieven: RegieUurtarief[]
   kortingsafspraken: RelatieInkoopKortingsafspraak[]
   inkoopPrijsafspraken: RelatieInkoopPrijsafspraak[]
   contactpersonen: (ContactpersoonOrganisatie & { contactpersoon: any })[]
@@ -1354,6 +1438,7 @@ export default function RelatieDetailView({
   facturatie,
   inkoop,
   verkoopPrijsafspraken,
+  regieUurtarieven,
   kortingsafspraken,
   inkoopPrijsafspraken,
   contactpersonen,
@@ -1426,6 +1511,7 @@ export default function RelatieDetailView({
                   />
                 </div>
                 <FacturatieBlok relatieId={relatie.id} initial={facturatie} />
+                <RegieUurtarievenBlok relatieId={relatie.id} initial={regieUurtarieven} />
                 {acquisitie}
                 <div style={{ gridColumn: '1 / -1' }}>
                   <VerkoopPrijsafsprakenBlok relatieId={relatie.id} initial={verkoopPrijsafspraken} />
