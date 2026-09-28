@@ -344,6 +344,8 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
       // reservering krijgt geen document, dus ook geen sjabloon.
       sjabloon_id: v.isReservering ? null : (g?.sjabloonId || sjabloonPerVoorstel[v.sleutel] || standaardSjabloon(v.soort) || null),
       is_reservering: v.isReservering,
+      // Alleen via het opdrachtvenster bekend; zonder venster (reservering) blijft wat er stond.
+      mandaat_bedrag: g ? g.mandaatBedrag : undefined,
     }
     slaBestellingOp(bestelling)
     setBezigId(v.sleutel)
@@ -1079,6 +1081,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
             afspraken: '',
             interneNotitie: '',
             sjabloonId: sjabloonPerVoorstel[venster.sleutel] || standaardSjabloon(venster.soort as Soort) || null,
+            mandaatBedrag: null,
           }}
           onSluit={() => setVenster(null)}
           onBevestig={g => {

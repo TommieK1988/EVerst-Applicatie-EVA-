@@ -43,6 +43,7 @@ import {
   previewWerkbegrotingBestelregelsBouw7, type WerkbegrotingPayload,
 } from './werkbegroting'
 import { vulMailTekst, netteRegel, naarPlatteTekst } from '@/lib/mail/sjabloontekst'
+import { geldigMandaat, mandaatTekst } from '@/lib/everts-calc/mandaat'
 
 /** Componenttype → documentsoort. `arbeid` ontbreekt bewust: eigen uren worden niet ingekocht. */
 const SOORT_PER_TYPE: Record<'onderaanneming' | 'materieel', ContractSoort> = {
@@ -495,7 +496,7 @@ export async function maakBestellingInBouw7(
   // (upsert op het bestaande contract), zodat een gewijzigde omschrijving/bedrag nog meekan.
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('bouw7_contract_id, bouw7_leverbon_id, verstuurd_op')
+    .select('bouw7_contract_id, bouw7_leverbon_id, verstuurd_op, mandaat_bedrag')
     .eq('id', bestelling.id)
     .maybeSingle()
   const bestaandContractId: number | null = rij?.bouw7_contract_id ?? null
@@ -519,6 +520,12 @@ export async function maakBestellingInBouw7(
     return { ok: false, reden: 'fout', error: 'Deze bestelling mengt onderaanneming met materiaal — splits hem in twee bestellingen.' }
   }
   const soort = [...soorten][0] as ContractSoort
+
+  // Mandaat: alleen bij een onderaannemer. `undefined` = niet meegegeven (bestelling uit een
+  // cache zonder dit veld) → wat er al stond blijft staan; `null` = bewust vaste prijs.
+  const mandaat = soort === 'oa_contract'
+    ? geldigMandaat(bestelling.mandaat_bedrag !== undefined ? bestelling.mandaat_bedrag : rij?.mandaat_bedrag)
+    : null
 
   // Relatie → Bouw7-contact.
   const relatieId = bestelling.relatie_id ?? gate.componenten.find(c => c.relatie_id)?.relatie_id ?? null
@@ -616,7 +623,13 @@ export async function maakBestellingInBouw7(
     naam: bestelling.omschrijving,
     // Specifieke afspraken horen bij de opdracht zelf, niet in een intern veld: zo staan ze ook in
     // Bouw7 onder het contract en niet alleen op het document dat de partij krijgt.
-    omschrijving: [bestelling.omschrijving, (bestelling.afspraken ?? '').trim()].filter(Boolean).join('\n\n'),
+    // Bij een mandaat staan de mandaatteksten vooraan: in Bouw7 is het contractbedrag anders niet
+    // van een aanneemsom te onderscheiden.
+    omschrijving: [
+      bestelling.omschrijving,
+      mandaat != null ? mandaatTekst(mandaat, bestelling.oplever_datum) : '',
+      (bestelling.afspraken ?? '').trim(),
+    ].filter(Boolean).join('\n\n'),
     bedrag: totaal.toFixed(2),
     termijnen,
     bouw7ContractId: bestaandContractId,
@@ -657,6 +670,7 @@ export async function maakBestellingInBouw7(
     .update({
       soort,
       is_reservering: isReservering,
+      mandaat_bedrag: mandaat,
       bouw7_contract_id: res.contractId,
       bouw7_nummer: res.nummer,
       bouw7_sync_status: 'ok',
@@ -1209,7 +1223,7 @@ export async function verstuurBestelling(
 
   const { data: rij } = await db
     .from('werkbegroting_bestellingen')
-    .select('id, soort, sjabloon_id, is_reservering, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, bouw7_bonnummer, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, werkadres, interne_notitie')
+    .select('id, soort, sjabloon_id, is_reservering, bouw7_contract_id, bouw7_nummer, bouw7_leverbon_id, bouw7_bonnummer, verstuurd_op, relatie_id, betaalafspraak, levering_datum, levering_tekst, werkadres, interne_notitie, mandaat_bedrag')
     .eq('id', bestellingId)
     .maybeSingle()
   if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
@@ -1299,6 +1313,7 @@ export async function verstuurBestelling(
     leverdatum: rij.levering_datum ? nlDatum(rij.levering_datum) : (rij.levering_tekst ?? null),
     betaalafspraak: rij.betaalafspraak ?? null,
     totaal,
+    mandaat: soort === 'oa_contract' ? geldigMandaat(rij.mandaat_bedrag) : null,
   })
 
   // Mailen via Outlook namens de medewerker. Pas ná succes gaan we verder.

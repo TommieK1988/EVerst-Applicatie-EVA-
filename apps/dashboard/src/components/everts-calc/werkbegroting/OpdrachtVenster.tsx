@@ -19,10 +19,11 @@
  *
  * Een opdracht kan ook **in regie** gaan: dan staat de prijs niet vast en krijgt de partij een
  * mandaat mee — tot dit bedrag mag hij doorwerken, daarboven eerst overleggen. Dat is op een
- * servicedeskbon de gebruikelijke vorm. Bouw7-contracten zijn per definitie vaste prijs, dus het
- * mandaat ís daar het contractbedrag; wat het betekent staat met zoveel woorden op de opdracht,
- * samen met de datum waarop het klaar moet zijn. Zonder die zin leest een onderaannemer het
- * bedrag als een aanneemsom en rekent hij het volledig af, ook als hij half zoveel uren maakte.
+ * servicedeskbon de gebruikelijke vorm. Het venster geeft alleen het bedrag terug
+ * (`mandaatBedrag`); de server zet er de vaste mandaatteksten uit `lib/everts-calc/mandaat.ts`
+ * bij, op het document én in Bouw7. Hier staan ze als voorbeeld, zodat je ziet wat de partij leest.
+ * Komt het mandaat al vast uit de regels (`vastMandaat`, het bestelvenster op een bon), dan staat
+ * de regieoptie aan en is het bedrag niet los te wijzigen: het ís de som van die regels.
  *
  * Er is bewust géén standaardschema. Wat je met een onderaannemer afspreekt verschilt per opdracht
  * (omvang, doorlooptijd, hoeveel er vooruit betaald wordt), en een voorgevulde staffel wordt
@@ -32,6 +33,7 @@
 import { useMemo, useState } from 'react'
 import { X, HardHat, Truck, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { formatEuro, parseGetal } from '@/lib/everts-calc/calculations'
+import { mandaatTekstregels, geldigMandaat } from '@/lib/everts-calc/mandaat'
 
 export type Termijn = { omschrijving: string; pct: number }
 
@@ -48,6 +50,8 @@ export type OpdrachtGegevens = {
   afspraken: string
   interneNotitie: string
   sjabloonId: string | null
+  /** Mandaat (excl. btw) bij een opdracht in regie; null = vaste prijs. */
+  mandaatBedrag: number | null
 }
 
 /**
@@ -100,35 +104,39 @@ interface Props {
   sjablonen: { id: string; naam: string }[]
   begin: OpdrachtGegevens
   bezig: boolean
+  /**
+   * Het mandaat staat al vast: deze opdracht gaat verplicht in regie, met dit bedrag. Gebruikt
+   * door het bestelvenster, waar je per regel aangeeft of het een mandaat is.
+   */
+  vastMandaat?: number | null
+  /** Voor een reeks opdrachten uit één venster: "1 van 2". */
+  volgnummer?: string | null
   onSluit: () => void
   onBevestig: (gegevens: OpdrachtGegevens) => void
-}
-
-/** Witregel tussen de regieafspraak en wat er verder is afgesproken. */
-const SCHEIDING = '\n\n'
-
-/** Datum zoals hij op een opdracht hoort te staan: 4 oktober 2026. */
-function nlDatum(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 const veld = 'mt-1 w-full text-sm px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-everts/40 focus:ring-1 focus:ring-everts/20'
 const label = 'block text-xs font-semibold text-slate-600'
 
 export default function OpdrachtVenster({
-  soort, relatieNaam, aantalRegels, totaal, sjablonen, begin, bezig, onSluit, onBevestig,
+  soort, relatieNaam, aantalRegels, totaal, sjablonen, begin, bezig, vastMandaat, volgnummer, onSluit, onBevestig,
 }: Props) {
   const isOa = soort === 'oa_contract'
+  const mandaatVast = isOa && geldigMandaat(vastMandaat) != null
   const [g, setG] = useState<OpdrachtGegevens>(begin)
   const [termijnen, setTermijnen] = useState<Termijn[]>(begin.termijnschema ?? [])
   /** '' = nog geen schema gekozen, 'eigen' = handmatig samengesteld. */
   const [schemaKeuze, setSchemaKeuze] = useState<string>(begin.termijnschema?.length ? 'eigen' : '')
   /** Gaat deze opdracht in regie, en zo ja tot welk bedrag? Alleen voor een onderaannemer. */
-  const [inRegie, setInRegie] = useState(false)
-  const [regieMandaat, setRegieMandaat] = useState<string>(totaal > 0 ? String(totaal) : '')
+  const [inRegie, setInRegie] = useState(mandaatVast || begin.mandaatBedrag != null)
+  const [regieMandaat, setRegieMandaat] = useState<string>(
+    mandaatVast ? String(vastMandaat)
+      : begin.mandaatBedrag != null ? String(begin.mandaatBedrag)
+        : totaal > 0 ? String(totaal) : '',
+  )
+  const mandaat = mandaatVast ? geldigMandaat(vastMandaat) : geldigMandaat(parseGetal(regieMandaat))
+  /** Regie aangevinkt maar geen bruikbaar bedrag: dan valt er geen mandaat af te spreken. */
+  const regieZonderBedrag = isOa && inRegie && mandaat == null
 
   const zet = <K extends keyof OpdrachtGegevens>(sleutel: K, waarde: OpdrachtGegevens[K]) =>
     setG(p => ({ ...p, [sleutel]: waarde }))
@@ -149,39 +157,14 @@ export default function OpdrachtVenster({
     else if (id !== 'eigen') setTermijnen(TERMIJNSCHEMAS.find(x => x.id === id)?.termijnen ?? [])
   }
 
-  /**
-   * De regiezin die op de opdracht komt.
-   *
-   * Vooraan in de afspraken en niet als los veld: de partij leest één blok met wat er is
-   * afgesproken, en dit is daarvan het belangrijkste. Je kunt hem daarna gewoon bijschaven —
-   * het is een voorzet, geen vaste tekst.
-   */
-  const regieZin = () => {
-    const bedrag = parseGetal(regieMandaat)
-    const deel = [
-      'Deze opdracht wordt in regie uitgevoerd.',
-      bedrag > 0
-        ? `Het mandaat bedraagt ${formatEuro(bedrag)} exclusief btw: tot dat bedrag kan worden doorgewerkt, daarboven eerst overleggen met de uitvoerder.`
-        : 'Er kan worden doorgewerkt tot het afgesproken mandaat; daarboven eerst overleggen met de uitvoerder.',
-      g.opleverDatum
-        ? `Het werk moet uiterlijk ${nlDatum(g.opleverDatum)} gereed zijn.`
-        : '',
-      'Factureer op basis van werkelijk bestede uren en gemaakte kosten, met urenverantwoording als bijlage.',
-    ]
-    return deel.filter(Boolean).join(' ')
-  }
-
   const bevestig = () => {
-    if (!g.omschrijving.trim() || bezig) return
-    // De regiezin gaat pas bij bevestigen samen met de afspraken, zodat hij meeverandert met een
-    // datum of bedrag dat tot het laatste moment is aangepast.
-    const afspraken = inRegie
-      ? [regieZin(), g.afspraken.trim()].filter(Boolean).join(SCHEIDING)
-      : g.afspraken
+    if (!g.omschrijving.trim() || bezig || regieZonderBedrag) return
     onBevestig({
       ...g,
-      afspraken,
       omschrijving: g.omschrijving.trim(),
+      // Alleen het bedrag: de mandaatteksten zet de server erbij, zodat ze op het document en in
+      // Bouw7 altijd gelijk zijn aan wat hier als voorbeeld staat.
+      mandaatBedrag: isOa && inRegie ? mandaat : null,
       // Niets gekozen = geen termijnen op de opdracht. Er is geen stille terugval: een schema dat
       // niemand heeft aangewezen hoort niet op papier bij een onderaannemer te belanden.
       termijnschema: isOa
@@ -193,14 +176,15 @@ export default function OpdrachtVenster({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[1000] bg-black/30 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {isOa ? <HardHat className="w-5 h-5 text-violet-600 shrink-0" /> : <Truck className="w-5 h-5 text-sky-600 shrink-0" />}
             <div className="min-w-0">
               <h2 className="font-semibold text-slate-800 truncate">
-                {isOa ? 'Opdracht aan onderaannemer' : 'Bestelling bij leverancier'}
+                {mandaatVast ? 'Mandaatopdracht aan onderaannemer' : isOa ? 'Opdracht aan onderaannemer' : 'Bestelling bij leverancier'}
+                {volgnummer ? <span className="ml-2 text-xs font-normal text-slate-400">({volgnummer})</span> : null}
               </h2>
               <p className="text-xs text-slate-400 truncate">
                 {relatieNaam} · {aantalRegels} regel(s) · {formatEuro(totaal)}
@@ -254,7 +238,7 @@ export default function OpdrachtVenster({
             <div className="rounded-lg border border-slate-200 p-3">
               <label className="flex items-start gap-2 text-xs font-semibold text-slate-600">
                 <input type="checkbox" checked={inRegie} onChange={e => setInRegie(e.target.checked)}
-                  className="mt-0.5" />
+                  disabled={mandaatVast} className="mt-0.5" />
                 <span>
                   Opdracht in regie, met een mandaat
                   <span className="mt-0.5 block font-normal text-[11px] text-slate-400">
@@ -268,7 +252,13 @@ export default function OpdrachtVenster({
                   <label className={label}>
                     Mandaat (excl. btw)
                     <input value={regieMandaat} onChange={e => setRegieMandaat(e.target.value)}
-                      inputMode="decimal" placeholder="bijv. 1500" className={veld} />
+                      readOnly={mandaatVast} inputMode="decimal" placeholder="bijv. 1500"
+                      className={`${veld} ${mandaatVast ? 'bg-slate-50 text-slate-500' : ''}`} />
+                    {mandaatVast && (
+                      <span className="mt-1 block text-[11px] font-normal text-slate-400">
+                        De som van de mandaatregels.
+                      </span>
+                    )}
                   </label>
                   <label className={label}>
                     Uiterlijk gereed
@@ -279,6 +269,20 @@ export default function OpdrachtVenster({
                     </span>
                   </label>
                 </div>
+              )}
+              {inRegie && (
+                mandaat != null ? (
+                  <div className="mt-3 rounded-md bg-slate-50 px-3 py-2">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
+                      Komt zo op de opdrachtbon
+                    </p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11.5px] text-slate-600">
+                      {mandaatTekstregels(mandaat, g.opleverDatum).map(t => <li key={t}>{t}</li>)}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[11px] text-amber-700">Vul een mandaat in, of zet de regieoptie uit.</p>
+                )
               )}
             </div>
           )}
@@ -395,9 +399,9 @@ export default function OpdrachtVenster({
           </p>
           <div className="flex items-center gap-3">
             <button onClick={onSluit} className="text-sm px-4 py-2 text-slate-600 hover:text-slate-800">Annuleren</button>
-            <button onClick={bevestig} disabled={bezig || !g.omschrijving.trim()}
+            <button onClick={bevestig} disabled={bezig || !g.omschrijving.trim() || regieZonderBedrag}
               className="text-sm px-4 py-2 bg-everts text-white rounded-lg hover:bg-everts/90 disabled:opacity-50 disabled:cursor-not-allowed font-semibold">
-              {isOa ? 'Opdracht aanmaken' : 'Bestelling aanmaken'}
+              {bezig ? 'Bezig…' : isOa ? 'Opdracht aanmaken' : 'Bestelling aanmaken'}
             </button>
           </div>
         </div>

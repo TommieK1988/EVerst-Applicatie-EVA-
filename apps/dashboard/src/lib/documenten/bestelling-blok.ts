@@ -21,6 +21,7 @@
 
 import 'server-only'
 import { datumNL, datumISO } from './format'
+import { geldigMandaat, mandaatTekst, mandaatTekstregels } from '@/lib/everts-calc/mandaat'
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
 const GETAL = new Intl.NumberFormat('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -85,6 +86,12 @@ export interface BestellingBlok {
   termijnen: BestellingTermijn[]
   /** True bij een onderaannemerscontract; voor {#bestelling.is_oa}…{/bestelling.is_oa}. */
   is_oa: boolean
+  /** Opdracht in regie met een mandaat; voor {#bestelling.is_mandaat}…{/bestelling.is_mandaat}. */
+  is_mandaat: boolean
+  /** Het mandaat ("€ 600,00"); leeg bij een opdracht tegen vaste prijs. */
+  mandaat: string
+  /** De vaste mandaatteksten, één per regel; binnenin {tekst}. Staan óók vooraan in `afspraken`. */
+  mandaat_regels: { tekst: string }[]
   is_inkooporder: boolean
 }
 
@@ -113,6 +120,7 @@ export const LEEG_BESTELLING_BLOK: BestellingBlok = {
   betaalafspraak: '', afspraken: '', inhouding: '', boete: '', werkadres: '', interne_notitie: '',
   offertenummer: '', aantal_regels: '0', totaal: fmtEur(0), totaal_getal: 0, regels: [],
   termijnen: [], is_oa: false, is_inkooporder: false,
+  is_mandaat: false, mandaat: '', mandaat_regels: [],
 }
 
 export const LEEG_LEVERANCIER_BLOK: LeverancierBlok = {
@@ -255,7 +263,7 @@ export async function laadBestellingBlokken(
   try {
     const { data: rij } = await supabase
       .from('werkbegroting_bestellingen')
-      .select('id, omschrijving, soort, relatie_id, bouw7_nummer, bouw7_bonnummer, levering_datum, levering_tekst, oplever_datum, betaalafspraak, termijnschema, afspraken, inhouding_pct, boete_tekst, werkadres, interne_notitie')
+      .select('id, omschrijving, soort, relatie_id, bouw7_nummer, bouw7_bonnummer, levering_datum, levering_tekst, oplever_datum, betaalafspraak, termijnschema, afspraken, inhouding_pct, boete_tekst, werkadres, interne_notitie, mandaat_bedrag')
       .eq('id', bestellingId)
       .maybeSingle()
     if (!rij) return leeg
@@ -266,6 +274,7 @@ export async function laadBestellingBlokken(
     ])
 
     const totaal = rond(regels.reduce((s, r) => s + r.bedrag_getal, 0))
+    const mandaat = rij.soort === 'oa_contract' ? geldigMandaat(rij.mandaat_bedrag) : null
 
     return {
       bestelling: {
@@ -283,7 +292,10 @@ export async function laadBestellingBlokken(
         oplever_datum: datumNL(rij.oplever_datum),
         oplever_datum_iso: datumISO(rij.oplever_datum),
         betaalafspraak: rij.betaalafspraak ?? '',
-        afspraken: rij.afspraken ?? '',
+        // Mandaatteksten vooraan: zo staan ze ook op sjablonen die {bestelling.mandaat_regels}
+        // (nog) niet kennen — en dat zijn alle sjablonen van vóór de mandaatopdracht.
+        afspraken: [mandaat != null ? mandaatTekst(mandaat, rij.oplever_datum) : '', (rij.afspraken ?? '').trim()]
+          .filter(Boolean).join('\n\n'),
         inhouding: rij.inhouding_pct != null ? `${fmtGetal(Number(rij.inhouding_pct))}%` : '',
         boete: rij.boete_tekst ?? '',
         werkadres: rij.werkadres ?? '',
@@ -296,6 +308,11 @@ export async function laadBestellingBlokken(
         termijnen: bouwTermijnen(totaal, leesTermijnschema(rij.termijnschema)),
         is_oa: rij.soort === 'oa_contract',
         is_inkooporder: rij.soort === 'inkooporder',
+        is_mandaat: mandaat != null,
+        mandaat: mandaat != null ? fmtEur(mandaat) : '',
+        mandaat_regels: mandaat != null
+          ? mandaatTekstregels(mandaat, rij.oplever_datum).map(tekst => ({ tekst }))
+          : [],
       },
       leverancier,
     }

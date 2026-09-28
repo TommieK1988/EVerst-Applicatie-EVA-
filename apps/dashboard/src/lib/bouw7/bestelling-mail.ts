@@ -27,6 +27,8 @@ export type BestellingMailData = {
   betaalafspraak?: string | null
   /** Totaalbedrag excl. btw. */
   totaal?: number | null
+  /** Gevuld bij een mandaatopdracht: dan is het bedrag een bovengrens, geen prijs. */
+  mandaat?: number | null
 }
 
 const GROEN = '#009439'
@@ -84,7 +86,9 @@ export function bouwBestellingMailHtml(data: BestellingMailData): string {
     rij('Project', data.project) +
     rij('Werkadres', data.werkadres) +
     rij(isOa ? 'Startdatum' : 'Gewenste levering', data.leverdatum) +
-    rij('Bedrag', data.totaal != null ? `${euro(data.totaal)} excl. btw` : null) +
+    (data.mandaat != null
+      ? rij('Mandaat', `${euro(data.mandaat)} excl. btw — in regie, bovengrens`)
+      : rij('Bedrag', data.totaal != null ? `${euro(data.totaal)} excl. btw` : null)) +
     rij('Betaalafspraak', data.betaalafspraak)
 
   const blok = gegevens

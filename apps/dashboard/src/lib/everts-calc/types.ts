@@ -577,6 +577,12 @@ export interface WerkbegrotingBestelling {
    * Volgt uit de componenten en wordt server-side gezet, net als `sjabloon_id`.
    */
   is_reservering?: boolean | null
+  /**
+   * Mandaat (excl. btw) bij een opdracht in regie; null = vaste prijs. Server-side eigendom:
+   * `maakBestellingInBouw7` legt hem vast. `undefined` betekent "niet meegegeven, laat staan"
+   * — zo wist een bestelling uit een cache zonder dit veld het mandaat niet.
+   */
+  mandaat_bedrag?: number | null
 }
 
 export interface RelatieRef {

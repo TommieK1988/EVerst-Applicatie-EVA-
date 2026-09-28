@@ -109,6 +109,9 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{#bestelling.heeft}…{/bestelling.heeft}',   label: 'Alleen tonen als er een bestelling aan hangt' },
       { v: '{#bestelling.is_oa}…{/bestelling.is_oa}',   label: 'Alleen bij een onderaannemerscontract' },
       { v: '{#bestelling.is_inkooporder}…{/bestelling.is_inkooporder}', label: 'Alleen bij een inkooporder' },
+      { v: '{#bestelling.is_mandaat}…{/bestelling.is_mandaat}', label: 'Alleen bij een mandaatopdracht (in regie)' },
+      { v: '{bestelling.mandaat}',       label: 'Mandaat excl. btw ("€ 600,00"); leeg bij vaste prijs' },
+      { v: '{#bestelling.mandaat_regels}{tekst}{/bestelling.mandaat_regels}', label: 'De vaste mandaatteksten, één per regel (staan ook vooraan in {bestelling.afspraken})' },
     ],
   },
   {
