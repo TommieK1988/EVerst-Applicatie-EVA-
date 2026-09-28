@@ -22,7 +22,8 @@ export type KaartBedrag = {
   /** Aanneemsom excl. btw, uit de bron die ook de kostprijs levert. */
   aanneemsom: number | null
   /** Waar de aanneemsom vandaan komt — bepaalt welke kostprijs erbij hoort. */
-  bron: 'eva' | 'bouw7' | 'bouw7-verstuurd' | null
+  /** 'verkoop' = contracttotaal van de Verkoop-tab; 'offerte' = offertebedrag, nog geen opdracht (servicedesk). */
+  bron: 'eva' | 'bouw7' | 'bouw7-verstuurd' | 'verkoop' | 'offerte' | null
   /** Kostprijs excl. btw uit diezelfde bron; null als die er niet is. */
   kostprijs: number | null
   /**
@@ -39,7 +40,51 @@ export type KaartBedrag = {
   heeftOpbouw: boolean
 }
 
+/**
+ * Servicedeskbon: het contracttotaal van de Verkoop-tab, niet de kaartrekenregel hierboven. Op een
+ * regiebon is er meestal geen aanneemsom; de waarde zit in de geboekte regie (of het mandaat), en
+ * die kent alleen de Verkoop-tab-berekening. Het bord laadt dat getal na de eerste render
+ * (lib/dossiers/contracttotaal.ts). Tot die tijd geen bedrag — eerst het oude getal tonen en dan
+ * laten verspringen is erger dan een paar seconden niets.
+ *
+ * Zonder opdracht is er geen contracttotaal (Bouw7 kent dan geen contractprijs), maar een bon met
+ * een uitgebrachte offerte heeft wél een bedrag dat ertoe doet. Dan toont de kaart het
+ * offertebedrag, gemarkeerd als offerte (`bron: 'offerte'`), zodat het niet voor een contract
+ * wordt aangezien.
+ */
+function servicedeskBedrag(dossier: DossierRij): KaartBedrag {
+  const ct = dossier.contracttotaal
+  if (ct !== undefined && !(ct && ct.totaal !== 0)) {
+    const offerte = kiesAanneemsom({
+      hoofdstatus:       dossier.hoofdstatus,
+      bouw7ExclBtw:      dossier.bedrag_excl_btw != null ? Number(dossier.bedrag_excl_btw) : null,
+      evaOfferteExclBtw: dossier.eva_offerte_excl_btw ?? null,
+    }).aanneemsom
+    if (offerte != null && offerte !== 0) {
+      return {
+        aanneemsom: offerte, bron: 'offerte', kostprijs: null, afwijkendeEvaOfferte: null,
+        meerwerk: 0, stelpostenApart: 0, gekozenOpties: 0,
+        totaalExclBtw: offerte, heeftOpbouw: false,
+      }
+    }
+  }
+  const meerwerk = ct ? (ct.evaBron ? rond(ct.aangenomen + ct.regie) : ct.meerwerk) : 0
+  return {
+    aanneemsom: ct ? ct.aanneemsom : null,
+    bron: ct ? 'verkoop' : null,
+    kostprijs: null,
+    afwijkendeEvaOfferte: null,
+    meerwerk,
+    stelpostenApart: 0,
+    gekozenOpties: 0,
+    totaalExclBtw: ct && ct.totaal !== 0 ? ct.totaal : null,
+    heeftOpbouw: meerwerk !== 0,
+  }
+}
+
 export function berekenKaartBedrag(dossier: DossierRij, sectie?: DossierSectie): KaartBedrag {
+  if (sectie === 'servicedesk') return servicedeskBedrag(dossier)
+
   const meerwerk        = dossier.meerwerk_goedgekeurd_excl_btw ?? 0
   const stelpostenApart = dossier.stelposten_apart_excl_btw ?? 0
   const gekozenOpties   = dossier.gekozen_opties_excl_btw ?? 0

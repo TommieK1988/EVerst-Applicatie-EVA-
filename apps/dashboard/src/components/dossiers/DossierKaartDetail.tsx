@@ -1,7 +1,7 @@
 'use client'
 import React from 'react'
 import type { DossierRij, DossierSectie } from './types'
-import { IndicatorIcoon, TONE_KLEUREN, isVerlopen, type KaartIndicator } from './kaart-indicatoren'
+import { IndicatorIcoon, TONE_KLEUREN, isVerlopen, servicedeskOpdrachtdatum, type KaartIndicator } from './kaart-indicatoren'
 import { berekenKaartBedrag, type KaartBedrag } from './kaart-bedrag'
 
 /**
@@ -159,8 +159,13 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
     && verkoopprijs != null && verkoopprijs > 0
   const opslagPct = toonFinancieel ? ((verkoopprijs! - kostprijs!) / kostprijs!) * 100 : 0
 
-  const heeftDatums = !!(dossier.deadline || dossier.verwacht_startdatum
-    || dossier.verwacht_einddatum || (sectie === 'offerte' && dossier.verzonden_op))
+  const isServicedesk = sectie === 'servicedesk'
+  const opdrachtdatum = isServicedesk ? servicedeskOpdrachtdatum(dossier) : null
+  const heeftDatums = isServicedesk
+    ? !!(opdrachtdatum || dossier.status_sinds)
+    : !!(dossier.deadline || dossier.verwacht_startdatum
+      || dossier.verwacht_einddatum || (sectie === 'offerte' && dossier.verzonden_op))
+  const ct = isServicedesk ? dossier.contracttotaal : null
 
   const uitlegIndicatoren = indicatoren.filter(ind => !ind.eigenBlok)
   const notitieIndicator  = indicatoren.find(ind => ind.soort === 'notitie')
@@ -194,7 +199,32 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
 
       {/* Opbouw van het kaartbedrag: alleen tonen als er iets bij de aanneemsom op komt, zodat
           zichtbaar is waarom de kaart een ander bedrag toont dan de kale aanneemsom. */}
-      {b.heeftOpbouw && (
+      {/* Servicedesk: dezelfde opbouw als "Contractwaarde" op de Verkoop-tab. Op een regiebon is
+          de regie meestal het hele bedrag; de aanneemsom staat er alleen bij als die er is. */}
+      {isServicedesk && b.bron === 'offerte' && b.totaalExclBtw != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <BedragRegel label="Offertebedrag excl. BTW" bedrag={b.totaalExclBtw} />
+          <span style={{ fontSize: 11, color: 'var(--neutral-500)' }}>
+            Nog geen opdracht, dus nog geen contracttotaal.
+          </span>
+        </div>
+      )}
+      {ct && b.heeftOpbouw && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {ct.aanneemsom !== 0 && <BedragRegel label="Aanneemsom" bedrag={ct.aanneemsom} />}
+          {ct.evaBron ? (
+            <>
+              {ct.aangenomen !== 0 && <BedragRegel label="Meerwerk aangenomen" bedrag={ct.aangenomen} />}
+              {ct.regie !== 0 && <BedragRegel label="Regie / nacalculatie" bedrag={ct.regie} />}
+            </>
+          ) : (
+            ct.meerwerk !== 0 && <BedragRegel label="Meerwerk" bedrag={ct.meerwerk} />
+          )}
+          <BedragRegel label="Contracttotaal excl. BTW" bedrag={ct.totaal} vet />
+        </div>
+      )}
+
+      {!isServicedesk && b.heeftOpbouw && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {b.aanneemsom != null && <BedragRegel label="Aanneemsom" bedrag={b.aanneemsom} />}
           {b.meerwerk !== 0 && (
@@ -256,7 +286,13 @@ export function DossierKaartDetail({ dossier, sectie, indicatoren, bedrag }: {
       )}
 
       {/* Datums */}
-      {heeftDatums && (
+      {heeftDatums && isServicedesk && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <DatumRegel label="Opdrachtdatum"         iso={opdrachtdatum} />
+          <DatumRegel label="In deze status sinds" iso={dossier.status_sinds ?? null} />
+        </div>
+      )}
+      {heeftDatums && !isServicedesk && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {sectie === 'offerte' && <DatumRegel label="Verzonden"        iso={dossier.verzonden_op} />}
           <DatumRegel label="Gewenste deadline" iso={dossier.deadline}            markeerVerlopen />

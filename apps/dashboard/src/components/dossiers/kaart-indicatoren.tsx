@@ -109,8 +109,9 @@ export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): Kaar
   }
 
   // Deadline-signaal alleen bij een lopend dossier: op een afgesloten dossier is een
-  // verstreken deadline geen actiepunt meer.
-  const deadline = d.deadline ?? d.verwacht_einddatum
+  // verstreken deadline geen actiepunt meer. Niet op de servicedesk: een bon heeft geen
+  // offertedeadline, en het verwachte einde uit Bouw7 kleurde er vrijwel elke kaart rood mee.
+  const deadline = sectie === 'servicedesk' ? null : (d.deadline ?? d.verwacht_einddatum)
   const dagen = deadline && !isDossierAfgesloten(d) ? dagenTot(deadline) : null
   if (deadline && dagen != null) {
     if (dagen < 0) {
@@ -156,6 +157,17 @@ export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): Kaar
 }
 
 /**
+ * Opdrachtdatum van een servicedeskbon. Een bon blijft op hoofdstatus `aanvraag`, dus de kolom
+ * `opdrachtdatum` (gestempeld bij de overgang naar opdracht) blijft daar vrijwel altijd leeg. Een
+ * bon ís een opdracht zodra de melding binnenkomt; vandaar dezelfde volgorde als de doorlooptijd
+ * op het servicedeskpaneel (lib/dossiers/datums.ts): handmatige aanvraagdatum, dan de
+ * Bouw7-aanmaakdatum, `created_at` pas als laatste (dat is bij veel bonnen de importdag).
+ */
+export function servicedeskOpdrachtdatum(d: DossierRij): string | null {
+  return d.opdrachtdatum ?? d.aanvraagdatum ?? d.bouw7_aanmaakdatum ?? d.created_at ?? null
+}
+
+/**
  * True als er genoeg extra informatie is om het uitklappaneel te vullen. De aanmaakdatum telt
  * niet mee — die staat al op de compacte kaart — zodat een kaal dossier niet opengaat met een
  * paneel waar niets in staat.
@@ -164,7 +176,13 @@ export function heeftKaartDetail(
   d: DossierRij,
   indicatoren: KaartIndicator[],
   bedrag?: KaartBedrag,
+  sectie?: DossierSectie,
 ): boolean {
+  // Servicedesk: de datums op de kaart (opdracht, sinds) staan al in de voettekst; alleen de
+  // klant, signalen of een opbouw van het contracttotaal rechtvaardigen het paneel.
+  if (sectie === 'servicedesk') {
+    return indicatoren.length > 0 || !!d.klant_naam || !!bedrag?.heeftOpbouw || bedrag?.bron === 'offerte'
+  }
   return (
     indicatoren.length > 0 ||
     !!d.klant_naam ||

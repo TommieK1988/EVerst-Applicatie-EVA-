@@ -68,6 +68,22 @@ export type DossierRij = Dossier & {
   stelposten_apart_excl_btw?: number
   /** Gekozen opties — extra omzet. */
   gekozen_opties_excl_btw?: number
+  /* ── Servicedesk-kaart ──────────────────────────────────────────────────────
+     Alleen gevuld op het servicedeskbord. */
+  /** Moment van de laatste substatuswissel (dossier_substatus_historie); null = geen historie. */
+  status_sinds?: string | null
+  /**
+   * Contracttotaal zoals de Verkoop-tab het toont (lib/dossiers/contracttotaal.ts). Het bord haalt
+   * het na de eerste render op: `undefined` = nog aan het laden, `null` = niet te bepalen.
+   */
+  contracttotaal?: {
+    totaal: number
+    aanneemsom: number
+    aangenomen: number
+    regie: number
+    meerwerk: number
+    evaBron: boolean
+  } | null
   /* ── Offertebewaking (zie lib/commercie) ───────────────────────────────────
      Alleen gevuld voor dossiers in de offertefase die een bewakingskaart hebben. De kleur op
      de kaart wordt niet opgeslagen maar afgeleid met `bewakingsStatus()` uit lib/commercie. */

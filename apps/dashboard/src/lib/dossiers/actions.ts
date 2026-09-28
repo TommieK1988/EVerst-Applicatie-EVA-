@@ -116,7 +116,7 @@ const LIJST_KOLOMMEN = `
   id, dossiernummer, titel, klant_id, hoofdstatus,
   aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus,
   bedrag_excl_btw, bedrag_incl_btw, kostprijs_excl_btw, mandaat_bedrag,
-  verwacht_startdatum, verwacht_einddatum, aanvraagdatum, deadline, verzonden_op,
+  verwacht_startdatum, verwacht_einddatum, aanvraagdatum, deadline, verzonden_op, opdrachtdatum,
   created_at, updated_at, gearchiveerd,
   categorie, referentie, opdracht_referentie, opmerkingen, vve_code, facturatiemethode,
   werkadres_naam, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad,
@@ -489,19 +489,59 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
  * {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
  */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
-  return haalDossierLijst(q => q
+  return metStatusSinds(await haalDossierLijst(q => q
     .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
     .neq('bouw7_projectstatus_naam', '08. Afgewezen')
     .or(nogNietVerlopenFinancieelGereed('servicedesk_substatus'))
-    .order('created_at', { ascending: false }))
+    .order('created_at', { ascending: false })))
 }
 
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
 export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
-  return haalDossierLijst(q => q
+  return metStatusSinds(await haalDossierLijst(q => q
     .in('bouw7_categorie_naam', ['Dagelijks onderhoud', 'Mutatie'])
     .eq('bouw7_projectstatus_naam', '08. Afgewezen')
-    .order('created_at', { ascending: false }))
+    .order('created_at', { ascending: false })))
+}
+
+/**
+ * Zet op elke bon het moment van zijn laatste substatuswissel (`status_sinds`), voor het
+ * "sinds …" op de servicedeskkaart. Bron is `dossier_substatus_historie`, dezelfde tabel waar de
+ * doorlooptijd per fase uit komt.
+ *
+ * Geen historie = geen datum. Die tabel bestaat sinds 29 juni 2026; een bon die sindsdien niet van
+ * kolom is gewisseld heeft er geen rij, en de aanmaakdatum invullen zou een datum suggereren die
+ * niemand weet.
+ *
+ * Per blok van {@link ID_BLOK} ids en gepagineerd: een bon kan tientallen wissels hebben, dus ook
+ * binnen één blok kan het over de 1000 rijen van PostgREST gaan.
+ */
+async function metStatusSinds(result: DossierResult): Promise<DossierResult> {
+  if (!result.ok || result.data.length === 0) return result
+  const supabase = createAdminClient()
+  const ids = result.data.map(d => d.id)
+  const blokken: string[][] = []
+  for (let i = 0; i < ids.length; i += ID_BLOK) blokken.push(ids.slice(i, i + ID_BLOK))
+
+  const laatste = new Map<string, string>()
+  try {
+    const perBlok = await Promise.all(blokken.map(blok =>
+      haalAlleRijen<{ dossier_id: string; gewijzigd_op: string }>((van, tot) => supabase
+        .from('dossier_substatus_historie')
+        .select('dossier_id, gewijzigd_op')
+        .in('dossier_id', blok)
+        .order('dossier_id')
+        .order('gewijzigd_op', { ascending: false })
+        .order('id')
+        .range(van, tot))))
+    for (const r of perBlok.flat()) {
+      if (!laatste.has(r.dossier_id)) laatste.set(r.dossier_id, r.gewijzigd_op)
+    }
+  } catch {
+    // Best effort: zonder historie tonen de kaarten gewoon geen "sinds".
+    return result
+  }
+  return { ...result, data: result.data.map(d => ({ ...d, status_sinds: laatste.get(d.id) ?? null })) }
 }
 
 /** Haal financieel afgesloten dossiers op (Bouw7 status 07). */

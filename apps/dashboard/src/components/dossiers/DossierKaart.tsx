@@ -5,7 +5,7 @@ import { crewKleur, crewInitialen } from '@/lib/utils/crew'
 import { DossierKaartDetail } from './DossierKaartDetail'
 import { berekenKaartBedrag } from './kaart-bedrag'
 import {
-  getKaartIndicatoren, heeftKaartDetail, IndicatorIcoon, TONE_KLEUREN,
+  getKaartIndicatoren, heeftKaartDetail, servicedeskOpdrachtdatum, IndicatorIcoon, TONE_KLEUREN,
   type KaartIndicator,
 } from './kaart-indicatoren'
 import { bewakingsStatus, stapOmschrijving, STATUS_PRESENTATIE } from '@/lib/commercie/types'
@@ -88,7 +88,7 @@ export const DossierKaart = React.memo(function DossierKaart({
   // rekenregel als het Financiële-totalen-blok op het Informatie-tab. Zie ./kaart-bedrag.
   const bedrag      = berekenKaartBedrag(dossier, sectie)
   const toonBedrag  = bedrag.totaalExclBtw
-  const heeftDetail = heeftKaartDetail(dossier, indicatoren, bedrag)
+  const heeftDetail = heeftKaartDetail(dossier, indicatoren, bedrag, sectie)
 
   const wisTimers = React.useCallback(() => {
     if (openTimerRef.current)  clearTimeout(openTimerRef.current)
@@ -150,9 +150,13 @@ export const DossierKaart = React.memo(function DossierKaart({
     : null
 
   // Aanvragen-tab: aanmaakdatum dossier. Offerte-tab: datum dat de offerte verzonden is.
-  const kaartDatum = sectie === 'offerte'
-    ? (dossier.verzonden_op ?? dossier.created_at)
-    : dossier.created_at
+  // Servicedesk: opdrachtdatum, en daarnaast sinds wanneer de bon in zijn huidige kolom staat.
+  const isServicedesk = sectie === 'servicedesk'
+  const kaartDatum = isServicedesk
+    ? servicedeskOpdrachtdatum(dossier)
+    : sectie === 'offerte'
+      ? (dossier.verzonden_op ?? dossier.created_at)
+      : dossier.created_at
 
   // Offertebewaking. De status wordt hier afgeleid en niet gelezen: hij hangt van de dag af,
   // dus opslaan zou hem elke nacht onwaar maken. Alleen op het offertebord — daar hoort hij.
@@ -245,11 +249,16 @@ export const DossierKaart = React.memo(function DossierKaart({
             )}
           </div>
           {/* Ook een negatief totaal tonen: per saldo minderwerk is een echte uitkomst. */}
+          {/* Offertebedrag zonder opdracht (servicedesk) lichter: het is geen contracttotaal. */}
           {toonBedrag != null && toonBedrag !== 0 && (
-            <span style={{
-              fontSize: 12, fontWeight: 700,
-              color: 'var(--neutral-800)', whiteSpace: 'nowrap', flexShrink: 0,
-            }}>
+            <span
+              title={bedrag.bron === 'offerte' ? 'Offertebedrag, nog geen opdracht' : undefined}
+              style={{
+                fontSize: 12, fontWeight: 700,
+                color: bedrag.bron === 'offerte' ? 'var(--neutral-500)' : 'var(--neutral-800)',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
               {formatBedrag(toonBedrag)}
             </span>
           )}
@@ -311,12 +320,35 @@ export const DossierKaart = React.memo(function DossierKaart({
           ) : (
             <span />
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
-            {indicatoren.map(ind => <IndicatorChip key={ind.soort} indicator={ind} />)}
-            <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
-              {formatDatum(kaartDatum)}
-            </span>
-          </div>
+          {isServicedesk ? (
+            /* Twee datums passen niet altijd naast avatar en chips: de kolommen zijn flexibel en
+               op een smal scherm krap. Dan breekt "sinds" netjes naar een tweede regel in plaats
+               van over de rand van de kaart te lopen. */
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end',
+              columnGap: 4, rowGap: 2, marginLeft: 'auto', minWidth: 0,
+              fontSize: 11, color: 'var(--neutral-400)',
+            }}>
+              {indicatoren.map(ind => <IndicatorChip key={ind.soort} indicator={ind} />)}
+              {kaartDatum && (
+                <span title="Opdrachtdatum" style={{ whiteSpace: 'nowrap' }}>
+                  Opdr. {formatDatum(kaartDatum)}{dossier.status_sinds ? ' ·' : ''}
+                </span>
+              )}
+              {dossier.status_sinds && (
+                <span title={`In deze status sinds ${formatDatum(dossier.status_sinds)}`} style={{ whiteSpace: 'nowrap' }}>
+                  sinds {formatDatum(dossier.status_sinds)}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+              {indicatoren.map(ind => <IndicatorChip key={ind.soort} indicator={ind} />)}
+              <span style={{ fontSize: 11, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
+                {kaartDatum && formatDatum(kaartDatum)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

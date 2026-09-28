@@ -77,6 +77,43 @@ export function berekenContractwaarde({ aanneemsom, meerwerk, nacalculatie }: {
   }
 }
 
+export type ContracttotaalVerkoop = {
+  waarde: Contractwaarde
+  /** Leidt EVA het meerwerk (goedgekeurde regels of nacalculatie), of blijft het Bouw7-aggregaat staan? */
+  evaBron: boolean
+  aanneemsom: number
+  meerwerk: number
+  contractTotaal: number
+}
+
+/**
+ * Het contracttotaal zoals de Verkoop-tab het toont. Staat hier en niet in de tab zelf omdat het
+ * servicedeskbord hetzelfde getal op de kaart zet; twee rekenwegen lopen vroeg of laat uit elkaar.
+ *
+ * `basis` is het Bouw7-aggregaat uit `getDossierVerkoop`. EVA neemt het meerwerk over zodra er
+ * goedgekeurde meerwerkregels zijn — op het AANTAL, niet het bedrag: bij per saldo minderwerk is de
+ * som negatief en heeft EVA nog steeds de waarheid — of zodra er nacalculatie op het dossier staat.
+ * Die komt deels uit stelposten die geen meerwerkregel zijn, en dan is er geen Bouw7-getal om op
+ * terug te vallen.
+ */
+export function berekenContracttotaalVerkoop({ basis, goedgekeurdAantal, meerwerk, nacalculatie }: {
+  basis: { aanneemsom: number; meerwerk: number; contractTotaal: number }
+  goedgekeurdAantal: number
+  meerwerk: MeerwerkTotalenInvoer | null
+  nacalculatie: NacalculatieInvoer | null
+}): ContracttotaalVerkoop {
+  const waarde = berekenContractwaarde({ aanneemsom: basis.aanneemsom, meerwerk, nacalculatie })
+  const evaBron = goedgekeurdAantal > 0 || Math.abs(waarde.nacalculatie) > 0.005
+  const evaMeerwerk = evaBron && Math.abs(waarde.meerwerk - basis.meerwerk) > 0.005
+  return {
+    waarde,
+    evaBron,
+    aanneemsom: basis.aanneemsom,
+    meerwerk: evaMeerwerk ? waarde.meerwerk : basis.meerwerk,
+    contractTotaal: evaMeerwerk ? rond(basis.aanneemsom + waarde.meerwerk) : basis.contractTotaal,
+  }
+}
+
 /** De vier regels onder "Contractwaarde" op de Verkoop-tab. Samen precies `aangenomen + regie`. */
 export type MeerwerkSplitsing = {
   minderwerkAangenomen: number

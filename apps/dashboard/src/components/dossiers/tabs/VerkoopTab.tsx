@@ -12,7 +12,7 @@ import ServicedeskMargeBlok from './ServicedeskMargeBlok'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
-import { berekenContractwaarde, splitsMeerwerk } from '@/lib/dossiers/contractwaarde'
+import { berekenContracttotaalVerkoop, splitsMeerwerk } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import { bonBewakingscode, type DossierSectie } from '../types'
 
@@ -191,33 +191,25 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   // een lege plek. Alleen de reden komt erboven.
   const nogNiets = !data.beschikbaar && !bg && goedgekeurdeRegels.length === 0 && !heeftNacalculatie && !opRegie
 
-  // EVA-native meerwerkregels zijn leidend voor het meerwerk in het contracttotaal; valt terug op het
-  // Bouw7-aggregaat uit getDossierVerkoop wanneer er geen goedgekeurde EVA-regels zijn.
-  //
-  // De voorwaarde kijkt naar het AANTAL regels, niet naar het bedrag. Bij per saldo minderwerk is de
-  // som negatief, en dan zou "bedrag > 0" het Bouw7-getal laten staan terwijl EVA de waarheid heeft.
-  const evaLeidend = goedgekeurdeRegels.length > 0
-
-  // Zelfde berekening als het Informatie-tab; de opbouw staat in berekenContractwaarde.
-  const waarde = berekenContractwaarde({
-    aanneemsom: data.totalen.aanneemsom,
+  // Wie het meerwerk in het contracttotaal levert (EVA of het Bouw7-aggregaat) bepaalt
+  // berekenContracttotaalVerkoop — dezelfde functie die het servicedeskbord voor de kaart gebruikt,
+  // zodat kaart en tab hetzelfde getal tonen.
+  const ct = berekenContracttotaalVerkoop({
+    basis: data.totalen,
+    goedgekeurdAantal: goedgekeurdeRegels.length,
     meerwerk: meerwerk?.totalen ?? null,
     nacalculatie: voorstel,
   })
+  const waarde = ct.waarde
   const nacalculatie = waarde.nacalculatie
   const meerwerkRegie = waarde.regie
-  const meerwerkEva = waarde.meerwerk
   const splitsing = splitsMeerwerk(goedgekeurdeRegels, waarde)
-  /* Leidt EVA het meerwerk in dit overzicht? Ja zodra er goedgekeurde regels zijn, en ook zodra er
-   * nacalculatie op het dossier staat: die komt deels uit stelposten die helemaal geen meerwerkregel
-   * zijn, en dan is er niets waar het Bouw7-aggregaat op terug kan vallen. */
-  const evaBron = evaLeidend || Math.abs(nacalculatie) > 0.005
+  const evaBron = ct.evaBron
 
   let t = data.totalen
   let dk = data.termijnenDekking
-  if (evaBron && Math.abs(meerwerkEva - t.meerwerk) > 0.005) {
-    const contractTotaal = rond(t.aanneemsom + meerwerkEva)
-    t = { ...t, meerwerk: meerwerkEva, contractTotaal, openstaand: Math.max(0, contractTotaal - t.gefactureerd) }
+  if (ct.meerwerk !== t.meerwerk || ct.contractTotaal !== t.contractTotaal) {
+    t = { ...t, meerwerk: ct.meerwerk, contractTotaal: ct.contractTotaal, openstaand: Math.max(0, ct.contractTotaal - t.gefactureerd) }
   }
 
   /* — Waar de termijnen tegen gemeten worden —

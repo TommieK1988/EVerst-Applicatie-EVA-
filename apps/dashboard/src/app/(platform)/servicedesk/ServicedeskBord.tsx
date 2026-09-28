@@ -20,6 +20,7 @@ import {
   type DossierRij, type DossierSubstatus, type ServicedeskLadder, type StatusDef,
 } from '@/components/dossiers/types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
+import { laadContracttotalen } from '@/lib/dossiers/contracttotaal'
 
 const COOKIE_MAXAGE = 60 * 60 * 24 * 365
 
@@ -52,12 +53,30 @@ export function ServicedeskBord({
     document.cookie = `${SERVICEDESK_LADDER_COOKIE}=${keuze}; Path=/; Max-Age=${COOKIE_MAXAGE}; SameSite=Lax${secure}`
   }
 
+  /* Contracttotalen (zelfde getal als de Verkoop-tab) komen na de eerste render: ze kosten per bon
+   * zo'n twintig lezingen en de pagina hoeft daar niet op te wachten. Opnieuw ophalen alleen als
+   * er andere bonnen op het bord staan — een statuswissel verandert het bedrag niet. */
+  const [totalen, setTotalen] = React.useState<Record<string, DossierRij['contracttotaal']>>({})
+  const idSleutel = React.useMemo(() => dossiers.map(d => d.id).sort().join(','), [dossiers])
+  React.useEffect(() => {
+    if (!idSleutel) return
+    let actief = true
+    laadContracttotalen(idSleutel.split(','))
+      .then(r => { if (actief) setTotalen(r) })
+      // Lukt het niet, dan tonen de kaarten geen bedrag; het bord zelf blijft gewoon werken.
+      .catch(() => { if (actief) setTotalen(Object.fromEntries(idSleutel.split(',').map(id => [id, null]))) })
+    return () => { actief = false }
+  }, [idSleutel])
+
   const { onderhoud, mutatie } = React.useMemo(() => {
     const onderhoud: DossierRij[] = []
     const mutatie: DossierRij[] = []
-    for (const d of dossiers) (isMutatieDossier(d) ? mutatie : onderhoud).push(d)
+    for (const d of dossiers) {
+      const rij = d.id in totalen ? { ...d, contracttotaal: totalen[d.id] } : d
+      ;(isMutatieDossier(d) ? mutatie : onderhoud).push(rij)
+    }
     return { onderhoud, mutatie }
-  }, [dossiers])
+  }, [dossiers, totalen])
 
   const isMutatie = ladder === 'mutatie'
   const zichtbaar = isMutatie ? mutatie : onderhoud
