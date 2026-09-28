@@ -24,7 +24,9 @@ import {
 } from '@/lib/auth/rechten'
 import { schrijfPlatteDesktopSet } from '@/lib/auth/rechten-opslag'
 import { bouwUitnodigingsMail } from '@/lib/auth/uitnodiging-mail'
-import { verstuurMailNamensMedewerker } from '@/lib/o365/mail'
+import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
+import { controleerEenAccount } from '@/lib/auth/account-controle'
+import { verstuurMailNamensMedewerker, type MailBijlage } from '@/lib/o365/mail'
 import { O365TokenError } from '@/lib/o365/tokens'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { herberekenMedewerkerDeadlines } from '@/app/(platform)/taken/actions/deadlines'
@@ -573,12 +575,16 @@ export async function verstuurUitnodiging(
   const nope = await eisBeheer(); if (nope) return nope
   const { data: med, error: fetchErr } = await db()
     .from('medewerkers')
-    .select('email, voornaam, achternaam, gebruiker_type')
+    .select('email, voornaam, achternaam, gebruiker_type, auth_user_id')
     .eq('id', medewerker_id)
     .maybeSingle()
 
   if (fetchErr || !med) return { ok: false, error: 'Medewerker niet gevonden' }
   if (!med.email) return { ok: false, error: 'Medewerker heeft geen e-mailadres' }
+
+  // Eén account per medewerker — zie lib/auth/account-controle.ts voor wat er misgaat zonder.
+  const bestaandeKoppeling = await controleerEenAccount(medewerker_id, med.auth_user_id, med.email)
+  if (bestaandeKoppeling) return bestaandeKoppeling
 
   // De uitnodiging wordt namens de uitnodigende beheerder gemaild (Graph), niet
   // door de Supabase-mailer. Zonder O365-koppeling kunnen we dus niets sturen.
@@ -588,17 +594,26 @@ export async function verstuurUitnodiging(
   const gebruikerType = (med.gebruiker_type ?? 'platform_gebruiker') as GebruikerType
   const volledigeNaam = [med.voornaam, med.achternaam].filter(Boolean).join(' ')
 
-  // Platformgebruikers loggen altijd met Microsoft in — ook op de telefoon. Voor
-  // hen maken we bewust GEEN Supabase-account aan: een e-mail/wachtwoord-account
-  // is niet alleen overbodig, het gaat ook stuk zodra het Microsoft-adres afwijkt
-  // van het mailadres (dan blijven er twee losse accounts achter). /auth/callback
-  // koppelt de medewerker bij de eerste Microsoft-login op e-mailadres.
-  // App-gebruikers hebben geen Microsoft-account en krijgen wél een activatielink.
+  /**
+   * De inlogweg volgt het ADRES, niet het gebruikerstype.
+   *
+   * Eerder hing dit aan `gebruiker_type`: alles wat geen platformgebruiker was, kreeg een
+   * wachtwoordaccount. Daarmee kon één medewerker met een bedrijfsadres twee identiteiten
+   * krijgen — een Microsoft-account omdat hij dat adres nu eenmaal heeft, en een
+   * wachtwoordaccount omdat iemand hem als app-gebruiker aanzette. Precies de situatie die
+   * niemand zelf kan oplossen.
+   *
+   * Nu: een bedrijfsadres betekent Microsoft, ongeacht het type. Voor die medewerker maken we
+   * geen Supabase-account aan; `/auth/callback` koppelt hem bij de eerste Microsoft-login op
+   * e-mailadres. Een app-gebruiker met een privé- of inhuuradres krijgt wél een activatielink.
+   */
+  const viaMicrosoft = logtInMetMicrosoft(med.email)
+
   let actieLink: string | null = null
   let auth_user_id: string | null = null
   let herhaling = false
 
-  if (gebruikerType !== 'platform_gebruiker') {
+  if (!viaMicrosoft) {
     const supabase = createAdminClient()
 
     // Bepaal redirect-URL voor de activatielink in de e-mail. Na het volgen van de
@@ -615,8 +630,7 @@ export async function verstuurUitnodiging(
     // verstuurt zelf geen mail — precies wat we willen, want de mail gaat hieronder
     // in EVA-huisstijl de deur uit. Bestaat het account al (type 'invite' weigert dat),
     // dan valt hij terug op een herstel-link: dezelfde bestemming, ander token.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const admin = (supabase as any).auth.admin
+    const admin = supabase.auth.admin
     let { data: linkData, error: linkErr } = await admin.generateLink({
       type: 'invite',
       email: med.email,
@@ -641,12 +655,34 @@ export async function verstuurUitnodiging(
     }
   }
 
+  // De handleiding voor EVA Mobiel gaat mee als bijlage. Alleen voor app-gebruikers: die krijgen de
+  // app als hun enige ingang, terwijl een platformgebruiker op kantoor achter de volledige EVA zit
+  // en aan een handleiding voor de buitendienst weinig heeft.
+  //
+  // Fail-soft: gaat het opbouwen van de PDF mis (logo onbereikbaar, sharp valt om), dan gaat de
+  // uitnodiging gewoon zónder bijlage de deur uit. Een nieuwe collega die niet binnenkomt omdat
+  // zijn handleiding niet gerenderd kon worden, zou een slechte ruil zijn.
+  let bijlagen: MailBijlage[] = []
+  let bijlageNaam: string | null = null
+  if (gebruikerType === 'app_gebruiker') {
+    try {
+      const { bouwMobieleHandleidingPdf } = await import('@/lib/handleiding/pdf')
+      const { bytes, bestandsnaam } = await bouwMobieleHandleidingPdf()
+      bijlagen = [{ naam: bestandsnaam, contentType: 'application/pdf', inhoud: Buffer.from(bytes) }]
+      bijlageNaam = bestandsnaam
+    } catch {
+      bijlagen = []
+      bijlageNaam = null
+    }
+  }
+
   const mail = await bouwUitnodigingsMail({
     voornaam: med.voornaam ?? null,
-    gebruikerType,
+    viaMicrosoft,
     actieLink,
     afzenderNaam: [afzender.voornaam, afzender.tussenvoegsel, afzender.achternaam].filter(Boolean).join(' ') || null,
     herhaling,
+    bijlageNaam,
   })
 
   try {
@@ -654,6 +690,7 @@ export async function verstuurUitnodiging(
       to: [med.email],
       subject: mail.onderwerp,
       bodyHtml: mail.bodyHtml,
+      attachments: bijlagen,
     })
   } catch (err) {
     // Bij een app-gebruiker staat het account er inmiddels wel; alleen de mail ging

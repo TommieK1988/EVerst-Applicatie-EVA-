@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { COOKIE_SESSIE_VERLOOPT } from '@/lib/sessie'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
+import { logtInMetMicrosoft, MICROSOFT_UITLEG } from '@/lib/auth/account-regels'
 
 const loginSchema = z.object({
   email: z.string().email('Ongeldig e-mailadres'),
@@ -24,6 +25,14 @@ export async function wachtwoordLogin(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = loginSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
+
+  // Een bedrijfsadres hoort bij een Microsoft-account en heeft hier niets te zoeken. Zonder deze
+  // regel krijgt zo iemand "Onjuiste inloggegevens" — feitelijk waar, maar hij gaat dan een
+  // wachtwoord instellen en maakt precies het tweede account dat we willen voorkomen.
+  // Dit verraadt niets: het geldt voor élk adres op dit domein, bestaand of niet.
+  if (logtInMetMicrosoft(parsed.data.email)) {
+    return { ok: false, error: `Log in met de knop Inloggen met Microsoft. ${MICROSOFT_UITLEG}` }
+  }
 
   // Wachtwoord-login is een mobiel-pad; het apparaat bepaalt de persistente
   // 3-daagse sessie.
@@ -76,6 +85,12 @@ export async function stuurHerstelLink(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = z.object({ email: z.string().email('Ongeldig e-mailadres') }).safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldig' }
+
+  // Geen herstellink naar een bedrijfsadres: die link zet een wachtwoord op een account dat naast
+  // het Microsoft-account komt te staan. Dit is de knop waarmee iemand dat per ongeluk doet.
+  if (logtInMetMicrosoft(parsed.data.email)) {
+    return { ok: false, error: `Voor dit adres stel je geen wachtwoord in. ${MICROSOFT_UITLEG}` }
+  }
 
   const h = await headers()
   const host = h.get('host') ?? 'localhost:3000'

@@ -74,7 +74,7 @@
       "apps/dashboard/src/app/(platform)/materieelbeheer/controle/page.tsx": 1,
       "apps/dashboard/src/app/(platform)/materieelbeheer/dashboard/page.tsx": 1,
       "apps/dashboard/src/app/(platform)/materieelbeheer/page.tsx": 2,
-      "apps/dashboard/src/app/(platform)/medewerkers/[id]/actions.ts": 2,
+      "apps/dashboard/src/app/(platform)/medewerkers/[id]/actions.ts": 1,
       "apps/dashboard/src/app/(platform)/medewerkers/[id]/page.tsx": 3,
       "apps/dashboard/src/app/(platform)/medewerkers/[id]/uren-actions.ts": 1,
       "apps/dashboard/src/app/(platform)/medewerkers/medewerkersActions.ts": 1,

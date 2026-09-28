@@ -33,7 +33,9 @@ export default async function MobielProfielPage() {
             Geen medewerker-koppeling gevonden voor dit account.
           </div>
           {/* Ook zonder koppeling moet je bij de instellingen en bij uitloggen kunnen:
-              dat zijn precies de twee dingen die je nodig hebt als er iets misgaat. */}
+              dat zijn precies de twee dingen die je nodig hebt als er iets misgaat.
+              De handleiding staat hier bewust niet: die vraagt een medewerkerrecord
+              en zou hier dus op "geen toegang" uitkomen. */}
           <InstellingenKnop />
           <UitlogKnop />
         </div>
@@ -86,6 +88,7 @@ export default async function MobielProfielPage() {
         {gegevens && <MedewerkerGegevensBlok gegevens={gegevens} />}
 
         <InstellingenKnop />
+        <HandleidingKnop />
         <UitlogKnop />
       </div>
     </>
@@ -124,6 +127,45 @@ function InstellingenKnop() {
         <path d="m9 18 6-6-6-6" />
       </svg>
     </Link>
+  )
+}
+
+/**
+ * De handleiding voor EVA Mobiel (PDF).
+ *
+ * Staat hier omdat dit de plek is waar iemand gaat zoeken die de uitnodigingsmail
+ * met de bijlage kwijt is. Géén `Link` maar een gewone `<a>` met `target="_blank"`:
+ * de route levert een PDF en geen pagina, dus de client-router kan er niets mee, en
+ * binnen de PWA openen zou je zonder terugknop achterlaten.
+ */
+function HandleidingKnop() {
+  return (
+    <a
+      href="/api/handleiding/mobiel"
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 16px', borderRadius: 14,
+        background: 'var(--bg-elev)', border: '1px solid var(--border)',
+        color: 'var(--fg)', textDecoration: 'none',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+      </svg>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Handleiding</div>
+        <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 2 }}>
+          Hoe EVA op je telefoon werkt
+        </div>
+      </div>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </a>
   )
 }
 

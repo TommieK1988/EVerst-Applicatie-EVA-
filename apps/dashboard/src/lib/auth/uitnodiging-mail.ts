@@ -1,5 +1,4 @@
 import 'server-only'
-import type { GebruikerType } from '@everts/database/platform-types'
 import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { mailTekstNaarHtml, mailOnderwerp } from '@/lib/mail/opmaak'
 
@@ -66,27 +65,41 @@ function wikkel(titel: string, inhoud: string): string {
 
 export type UitnodigingMailInput = {
   voornaam: string | null
-  gebruikerType: GebruikerType
-  /** Activatielink uit Supabase (`generateLink`) — alleen voor app-gebruikers. */
+  /**
+   * Logt deze medewerker met Microsoft in? Dat volgt uit zijn e-mailadres, niet uit zijn
+   * gebruikerstype — zie lib/auth/account-regels.ts. Het bepaalt welk sjabloon en welke knop
+   * de mail krijgt: "Ga naar EVA" of "Wachtwoord instellen".
+   *
+   * Dit stond eerder op `gebruikerType`, maar dat is het verkeerde onderscheid: een
+   * app-gebruiker met een bedrijfsadres kreeg dan een mail die hem een wachtwoord liet
+   * instellen dat hij niet mag hebben.
+   */
+  viaMicrosoft: boolean
+  /** Activatielink uit Supabase (`generateLink`) — alleen bij een wachtwoordaccount. */
   actieLink: string | null
   /** Naam van de beheerder die uitnodigt; verschijnt in de afsluiting. */
   afzenderNaam: string | null
   /** Herinnering i.p.v. eerste uitnodiging (account bestond al). */
   herhaling?: boolean
+  /**
+   * Naam van de handleiding die als bijlage meegaat. Alleen gezet als het bouwen van de PDF is
+   * gelukt — een mail die een bijlage aankondigt die er niet in zit, is erger dan een mail zonder
+   * aankondiging.
+   */
+  bijlageNaam?: string | null
 }
 
 /**
  * Bouwt onderwerp + HTML van de uitnodiging. De tekst komt uit Instellingen -> E-mailsjablonen;
- * er zijn twee sjablonen omdat de twee gebruikerstypen langs verschillende wegen binnenkomen.
- * De knop wordt hier gebouwd: de activatielink van een app-gebruiker is eenmalig en persoonlijk en
- * hoort niet in een beheerd tekstveld thuis.
+ * er zijn twee sjablonen omdat de twee inlogwegen verschillende instructies nodig hebben.
+ * De knop wordt hier gebouwd: een activatielink is eenmalig en persoonlijk en hoort niet in een
+ * beheerd tekstveld thuis.
  */
 export async function bouwUitnodigingsMail(
   input: UitnodigingMailInput,
 ): Promise<{ onderwerp: string; bodyHtml: string }> {
-  const { voornaam, gebruikerType, actieLink, afzenderNaam, herhaling } = input
+  const { voornaam, viaMicrosoft, actieLink, afzenderNaam, herhaling, bijlageNaam } = input
   const app = appBaseUrl()
-  const platform = gebruikerType === 'platform_gebruiker'
   const titel = herhaling ? 'Je toegang tot EVA' : 'Welkom bij EVA'
 
   const vars: Record<string, string> = {
@@ -99,16 +112,36 @@ export async function bouwUitnodigingsMail(
   }
 
   const sjabloon = await getMailSjabloonTekst(
-    platform ? 'gebruiker_uitnodiging_platform' : 'gebruiker_uitnodiging_app',
+    viaMicrosoft ? 'gebruiker_uitnodiging_platform' : 'gebruiker_uitnodiging_app',
   )
   const bodyHtml = mailTekstNaarHtml(sjabloon.tekst, {
     vars,
     blokken: {
-      knop: platform
+      knop: viaMicrosoft
         ? knop(app, 'Ga naar EVA')
         : knop(actieLink ?? app, 'Wachtwoord instellen'),
     },
   })
 
-  return { onderwerp: mailOnderwerp(sjabloon.onderwerp, vars), bodyHtml: wikkel(titel, bodyHtml) }
+  return {
+    onderwerp: mailOnderwerp(sjabloon.onderwerp, vars),
+    bodyHtml: wikkel(titel, bodyHtml + bijlageRegel(bijlageNaam)),
+  }
+}
+
+/**
+ * De aankondiging van de meegestuurde handleiding.
+ *
+ * Staat hier in code en niet in het beheerde sjabloon: of er een bijlage meegaat weet pas de
+ * verzendkant (de PDF wordt per mail opgebouwd en dat kan misgaan), terwijl de sjabloontekst in
+ * Instellingen door een beheerder is overgetypt en dan blijft staan zoals hij stond. Zou de zin
+ * daar staan, dan belooft een bestaand sjabloon een bijlage die er niet altijd is — en een
+ * aangepast sjabloon noemt hem juist nooit.
+ */
+function bijlageRegel(bijlageNaam: string | null | undefined): string {
+  if (!bijlageNaam) return ''
+  return `<p style="margin:16px 0 0;font-size:13px;line-height:1.55;color:#4d575e">
+    Bij deze mail zit de handleiding <strong>${esc(bijlageNaam)}</strong>. Daarin staat stap voor stap
+    hoe je inlogt, hoe je EVA op je beginscherm zet en wat je per onderdeel kunt doen.
+  </p>`
 }

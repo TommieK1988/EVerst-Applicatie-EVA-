@@ -58,8 +58,12 @@ export default function MobielLogin({ fout, next }: { fout?: string; next?: stri
     setWwFout(null); setMelding(null)
     if (!email) { setWwFout('Vul eerst je e-mailadres in.'); return }
     setBezig(true)
-    await stuurHerstelLink({ email })
+    const res = await stuurHerstelLink({ email })
     setBezig(false)
+    // Bewust wél de fout tonen. De melding hieronder is expres vaag (geen account-enumeratie),
+    // maar "voor dit adres log je met Microsoft in" moet de gebruiker juist zien — anders blijft
+    // hij op een link wachten die nooit komt.
+    if (!res.ok) { setWwFout(res.error); return }
     setMelding('Als dit account bestaat, is er een link verstuurd om een wachtwoord in te stellen.')
   }
 
