@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { MedewerkerAfwezigheid } from '@everts/database/platform-types'
+import { vereisRecht } from '@/lib/auth/rechten'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -48,6 +49,7 @@ export async function wijzigAfwezigheid(
   id: string,
   input: z.infer<typeof afwezigheidSchema>,
 ): Promise<{ ok: true; data: MedewerkerAfwezigheid } | { ok: false; error: string }> {
+  await vereisRecht('planning', 'schrijven')
   const parsed = afwezigheidSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
   if (parsed.data.eind_datum < parsed.data.start_datum)
