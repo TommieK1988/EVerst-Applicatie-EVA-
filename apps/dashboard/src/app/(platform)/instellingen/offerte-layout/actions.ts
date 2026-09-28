@@ -41,9 +41,16 @@ export async function kopieerLayout(id: string): Promise<{ id: string; waarschuw
   return resultaat
 }
 
-export async function verwijderLayout(id: string): Promise<void> {
-  await _verwijderLayout(id)
+/** Geeft de fout terug in plaats van te gooien: in productie verbergt Next de
+ *  melding van een gegooide fout, en die melding legt juist uit wat je moet doen. */
+export async function verwijderLayout(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await _verwijderLayout(id)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen' }
+  }
   revalidatePath(LIJST)
+  return { ok: true }
 }
 
 export async function setStandaardLayout(id: string): Promise<void> {

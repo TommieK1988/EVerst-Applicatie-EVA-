@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { layoutMetTerugval } from '@/lib/everts-calc/layout-terugval'
 import {
   STANDAARD_LAYOUT,
   type BedrijfContext,
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // ── 2. Layout context ────────────────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawLayout: any = (quote as any).layout ?? {}
+    const rawLayout: any = await layoutMetTerugval(supabase, quote)
     const layout: LayoutContext = {
       primaire_kleur: rawLayout.primaire_kleur ?? STANDAARD_LAYOUT.primaire_kleur,
       secundaire_kleur: rawLayout.secundaire_kleur ?? STANDAARD_LAYOUT.secundaire_kleur,

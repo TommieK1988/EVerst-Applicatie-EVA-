@@ -75,7 +75,8 @@ export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
     if (!await bevestig({ titel: `Layout "${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
     startT(async () => {
       try {
-        await verwijderLayout(id)
+        const r = await verwijderLayout(id)
+        if (!r.ok) { toast.error(r.error); return }
         setLayouts(l => l.filter(x => x.id !== id))
         toast.success('Verwijderd')
         router.refresh()

@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/everts-calc/supabase/server'
+import { layoutMetTerugval } from '@/lib/everts-calc/layout-terugval'
 import {
   STANDAARD_LAYOUT,
   type BedrijfContext,
@@ -90,6 +91,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return htmlMelding('<p>Offerte niet gevonden</p>', 404)
       }
       quote = data
+      // Verwijderde lay-out → standaard-lay-out, anders is er geen Word-sjabloon.
+      quote.layout = await layoutMetTerugval(supabase, data)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

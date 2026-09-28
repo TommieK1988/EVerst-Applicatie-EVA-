@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { ArrowLeft } from 'lucide-react'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
@@ -10,10 +10,11 @@ import OfferteDetail from './OfferteDetail'
 import { maakProjectVanAanvraag } from '@/app/(platform)/everts-calc/actions/projecten'
 import { koppelDossierAanProject } from '@/lib/dossiers/actions'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
-import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { getScenarios, hydrateCalculatie, verwijderScenario } from '@/lib/everts-calc/local-store'
+import { verwijderConceptVersie } from '@/app/(platform)/everts-calc/actions/versie-verwijderen'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-import { Button } from '@/components/ui'
+import { Button, useDialogen } from '@/components/ui'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 
@@ -32,6 +33,8 @@ interface Props {
 export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, initieelProjectId, rijen = [] }: Props) {
   const readOnly = useDossierReadOnly()
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const { bevestig } = useDialogen()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [isLaden, setIsLaden]     = useState(false)
   const [fout, setFout]           = useState<string | null>(null)
@@ -103,6 +106,24 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     if (!nieuw) { toast.error('Reviseren mislukt'); return }
     toast.success('Nieuwe versie aangemaakt')
     handleScenariosGewijzigd(nieuw.id)
+  }
+
+  async function handleVerwijder(sid: string) {
+    if (!projectId) return
+    const s = scenarios.find(x => x.id === sid)
+    if (!await bevestig({
+      titel: `${[s?.nummer || s?.naam, `v${s?.versie ?? 1}`].filter(Boolean).join(' ')} verwijderen?`,
+      omschrijving: 'De calculatie en de concept-offerte van deze versie worden verwijderd. Dit kan niet ongedaan worden gemaakt.',
+      bevestigLabel: 'Verwijderen',
+      destructief: true,
+    })) return
+    const r = await verwijderConceptVersie(aanvraagId, projectId, sid)
+    if (!r.ok) { toast.error(r.error); return }
+    // Ook uit de werkkopie van deze sessie, anders zet een autosave hem terug.
+    verwijderScenario(sid)
+    toast.success('Versie verwijderd')
+    setCalcTick(t => t + 1)
+    router.refresh()
   }
 
   async function handleKoppelen() {
@@ -198,6 +219,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
         onOpenOfferte={setOfferteId}
         onReviseer={handleReviseer}
         onReviseerMeerwerk={handleReviseer}
+        onVerwijder={handleVerwijder}
       />
     )
   }

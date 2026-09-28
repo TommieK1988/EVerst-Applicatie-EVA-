@@ -228,8 +228,33 @@ export async function kopieerLayout(id: string): Promise<{ id: string; waarschuw
   return { id: nieuw.id, waarschuwing }
 }
 
+/**
+ * Offertes op deze lay-out gaan eerst over naar de standaard-lay-out van dezelfde
+ * soort. De FK staat op ON DELETE SET NULL: zonder dit houden ze géén lay-out over
+ * en kunnen ze niet meer als PDF gemaakt, goedgekeurd of verzonden worden.
+ */
 export async function verwijderLayout(id: string): Promise<void> {
   const supabase = await getDb()
+  const { data: rij } = await supabase
+    .from('quote_layouts').select('soort, is_standaard').eq('id', id).maybeSingle()
+  if (!rij) return
+  const { count } = await supabase
+    .from('quotes').select('id', { count: 'exact', head: true }).eq('layout_id', id)
+  if ((count ?? 0) > 0) {
+    if (rij.is_standaard) {
+      throw new Error('Deze lay-out is de standaard en er staan nog offertes op. Maak eerst een andere lay-out standaard.')
+    }
+    const { data: standaard } = await supabase
+      .from('quote_layouts').select('id')
+      .eq('soort', rij.soort ?? 'offerte').eq('is_standaard', true).neq('id', id)
+      .limit(1).maybeSingle()
+    if (!standaard) {
+      throw new Error('Er staan nog offertes op deze lay-out en er is geen standaard-lay-out om ze naartoe te verplaatsen.')
+    }
+    const { error: verplaatsFout } = await supabase
+      .from('quotes').update({ layout_id: standaard.id }).eq('layout_id', id)
+    if (verplaatsFout) throw new Error(verplaatsFout.message)
+  }
   const { error } = await supabase
     .from('quote_layouts')
     .delete()

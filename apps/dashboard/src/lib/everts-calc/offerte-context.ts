@@ -18,6 +18,7 @@ import {
   type RenderContext,
 } from './quote-renderer'
 import { laadBedrijfEnDossier } from './offerte-bronnen'
+import { layoutMetTerugval } from './layout-terugval'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapLayout(rawLayout: any): LayoutContext {
@@ -80,7 +81,7 @@ export async function laadOfferteContext(quoteId: string): Promise<OfferteContex
   if (error || !quote) throw new Error('Offerte niet gevonden')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawLayout: any = quote.layout ?? {}
+  const rawLayout: any = await layoutMetTerugval(supabase, quote)
   const layout = mapLayout(rawLayout)
   const { bedrijf, dossier } = await laadBedrijfEnDossier(supabase, quote)
   const ctx = buildRenderContext(quote, bedrijf, layout, dossier)

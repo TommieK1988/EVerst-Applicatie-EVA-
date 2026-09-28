@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Copy, Calculator } from 'lucide-react'
+import { Copy, Calculator, Trash2 } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, Badge } from '@/components/ui'
 import { fmt, fmtDatum, TH, TD, LegeRij } from '@/components/dossiers/tabs/tab-ui'
 import { berekenCalcTotalen, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
@@ -47,13 +47,16 @@ interface Props {
   /** Reviseren van een meerwerk-calculatie. Staat los van `onReviseer`: meerwerk mag
    *  ook ná opdracht nog een nieuwe versie krijgen. */
   onReviseerMeerwerk?: (scenarioId: string) => void
+  /** Verwijderen van één concept-versie (calculatie + concept-offerte). Alleen zichtbaar
+   *  zolang de versie niet definitief/bevroren is. */
+  onVerwijder?: (scenarioId: string) => void
   /** Extra knoppen in de kaartkop (bijv. Verwijderen op de opdracht-tab). */
   headerExtra?: ReactNode
 }
 
 export default function CalculatiesTabel({
   projectId, scenarios, rijen, tick = 0, readOnly = false,
-  onOpenCalculatie, onOpenOfferte, onReviseer, onReviseerMeerwerk, headerExtra,
+  onOpenCalculatie, onOpenOfferte, onReviseer, onReviseerMeerwerk, onVerwijder, headerExtra,
 }: Props) {
   // Totalen per calculatie, gerekend over de gedeelde calculatie uit Supabase
   // (één snapshot voor alle versies) — niet uit de lokale kopie van dit apparaat.
@@ -180,6 +183,11 @@ export default function CalculatiesTabel({
                             <Copy className="h-3.5 w-3.5" /> Reviseren
                           </Button>
                         )}
+                        {!definitief && !s.bevroren_op && !readOnly && onVerwijder && (
+                          <Button variant="ghost" size="sm" onClick={() => onVerwijder(s.id)} title="Deze concept-versie verwijderen">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </TD>
                   </tr>
@@ -254,6 +262,11 @@ export default function CalculatiesTabel({
                           {definitief && !readOnly && onReviseerMeerwerk && (
                             <Button variant="ghost" size="sm" onClick={() => onReviseerMeerwerk(s.id)} title="Nieuwe versie van deze meerwerk-calculatie">
                               <Copy className="h-3.5 w-3.5" /> Reviseren
+                            </Button>
+                          )}
+                          {!definitief && !s.bevroren_op && !readOnly && onVerwijder && (
+                            <Button variant="ghost" size="sm" onClick={() => onVerwijder(s.id)} title="Deze concept-versie verwijderen">
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>

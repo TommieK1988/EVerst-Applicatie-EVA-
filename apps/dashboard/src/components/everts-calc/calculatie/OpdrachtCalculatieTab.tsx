@@ -4,14 +4,15 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import OfferteDetail from './OfferteDetail'
 import toast from 'react-hot-toast'
-import { Calculator, ArrowLeft, Trash2 } from 'lucide-react'
+import { Calculator, ArrowLeft } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, useDialogen } from '@/components/ui'
-import { koppelCalculatieProject, deleteCalculatieVanDossier } from '@/lib/dossiers/actions'
+import { koppelCalculatieProject } from '@/lib/dossiers/actions'
+import { verwijderConceptVersie } from '@/app/(platform)/everts-calc/actions/versie-verwijderen'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import { TH, LegeRij } from '@/components/dossiers/tabs/tab-ui'
-import { getScenarios, hydrateCalculatie } from '@/lib/everts-calc/local-store'
+import { getScenarios, hydrateCalculatie, verwijderScenario } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import type { Scenario } from '@/lib/everts-calc/types'
@@ -48,7 +49,6 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     setOfferteId(offerteParam)
   }, [offerteParam])
   const [bezig, setBezig] = useState(false)
-  const [deleteInProgress, setDeleteInProgress] = useState(false)
   const { bevestig } = useDialogen()
   // Calculaties (scenario's) van dit project — meerdere ontstaan door kopiëren.
   const [scenarios, setScenarios]                   = useState<Scenario[]>([])
@@ -104,21 +104,21 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
     router.refresh()
   }
 
-  async function handleDelete() {
+  async function handleVerwijder(sid: string) {
+    if (!projectId) return
+    const s = scenarios.find(x => x.id === sid)
     if (!await bevestig({
-      titel: 'Alle calculaties en offertes verwijderen?',
-      omschrijving: 'Dit kan niet ongedaan worden gemaakt.',
+      titel: `${[s?.nummer || s?.naam, `v${s?.versie ?? 1}`].filter(Boolean).join(' ')} verwijderen?`,
+      omschrijving: 'De calculatie en de concept-offerte van deze versie worden verwijderd. Dit kan niet ongedaan worden gemaakt.',
       bevestigLabel: 'Verwijderen',
       destructief: true,
     })) return
-    setDeleteInProgress(true)
-    const result = await deleteCalculatieVanDossier(dossierId)
-    setDeleteInProgress(false)
-    if (!result.ok) {
-      toast.error(result.error || 'Verwijderen mislukt')
-      return
-    }
-    toast.success('Calculatie verwijderd')
+    const r = await verwijderConceptVersie(dossierId, projectId, sid)
+    if (!r.ok) { toast.error(r.error); return }
+    // Ook uit de werkkopie van deze sessie, anders zet een autosave hem terug.
+    verwijderScenario(sid)
+    toast.success('Versie verwijderd')
+    setCalcTick(t => t + 1)
     router.refresh()
   }
 
@@ -223,19 +223,12 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
       onOpenCalculatie={(sid) => { setSelectedScenarioId(sid); setToonCalculatie(true) }}
       onOpenOfferte={setOfferteId}
       onReviseerMeerwerk={handleReviseerMeerwerk}
+      onVerwijder={handleVerwijder}
       headerExtra={
-        <div className="flex gap-2">
-          <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>
-            <Calculator className="h-3.5 w-3.5" />
-            Calculatie openen
-          </Button>
-          {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleteInProgress} title="Verwijder alle calculaties en offertes">
-              <Trash2 className="h-3.5 w-3.5" />
-              {deleteInProgress ? 'Bezig…' : 'Verwijderen'}
-            </Button>
-          )}
-        </div>
+        <Button variant="primary" size="sm" onClick={() => { setSelectedScenarioId(null); setToonCalculatie(true) }}>
+          <Calculator className="h-3.5 w-3.5" />
+          Calculatie openen
+        </Button>
       }
     />
   )
