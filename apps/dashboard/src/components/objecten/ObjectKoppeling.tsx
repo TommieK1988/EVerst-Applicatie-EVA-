@@ -41,12 +41,12 @@ export default function ObjectKoppeling({ dossierId, readOnly }: { dossierId: st
   async function herlaad() {
     try {
       const res = await getDossierObject(dossierId)
+      // Geen leesrecht op objectenbeheer: het blok verdwijnt dan helemaal — een
+      // koppelknop tonen die bij elke klik afketst is erger dan niets tonen.
       setObject(res.object)
       setWijktAf(res.wijktAf)
-      setGeenToegang(false)
+      setGeenToegang(Boolean(res.geenToegang))
     } catch {
-      // Geen leesrecht op objectenbeheer. Het blok verdwijnt dan helemaal — een
-      // koppelknop tonen die bij elke klik afketst is erger dan niets tonen.
       setGeenToegang(true)
     } finally {
       setLaden(false)

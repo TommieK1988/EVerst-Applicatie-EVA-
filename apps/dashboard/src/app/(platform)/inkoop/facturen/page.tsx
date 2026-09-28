@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisRecht, heeftModuleToegang } from '@/lib/auth/rechten'
+import { vereisModuleToegang, vereisRecht, heeftModuleToegang } from '@/lib/auth/rechten'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import { getInkoopfacturen } from '@/lib/inkoopfacturen/actions'
 import InkoopfacturenOverzicht from './InkoopfacturenOverzicht'
@@ -9,6 +9,9 @@ import InkoopfacturenOverzicht from './InkoopfacturenOverzicht'
 export const metadata: Metadata = { title: 'Inkoopfacturen' }
 
 export default async function InkoopfacturenPage() {
+  // Eerst de redirectende guard: vereisRecht gooit, en een gegooide GeenToegangError
+  // tijdens het renderen wordt voor de gebruiker een kapotte pagina.
+  await vereisModuleToegang('inkoopfacturen', 'lezen')
   const { rechten } = await vereisRecht('inkoopfacturen', 'lezen')
 
   let user_id: string | null = null

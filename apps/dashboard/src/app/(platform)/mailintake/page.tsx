@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { createClient as createServerClient } from '@everts/database/server'
 
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisModuleToegang, vereisRecht } from '@/lib/auth/rechten'
 // Niet `rechten.mailintake === 'beheren'`: die vergelijking mist de beheerder,
 // die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
 // dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
@@ -21,6 +21,9 @@ export default async function MailintakePage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
+  // Eerst de redirectende guard: vereisRecht gooit, en een gegooide GeenToegangError
+  // tijdens het renderen wordt voor de gebruiker een kapotte pagina.
+  await vereisModuleToegang('mailintake', 'lezen')
   const { rechten } = await vereisRecht('mailintake', 'lezen')
   const params = await searchParams
   const tab = (GELDIGE_TABS.includes(params.tab ?? '') ? params.tab : 'te_behandelen') as PostvakTab

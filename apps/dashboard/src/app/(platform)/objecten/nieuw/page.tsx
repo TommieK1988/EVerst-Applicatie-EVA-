@@ -1,13 +1,16 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisModuleToegang, vereisRecht } from '@/lib/auth/rechten'
 import { PageHeader } from '@/components/ui'
 import ObjectFormClient from '../ObjectFormClient'
 
 export const metadata: Metadata = { title: 'Nieuw object' }
 
 export default async function NieuwObjectPage() {
+  // Eerst de redirectende guard: vereisRecht gooit, en een gegooide GeenToegangError
+  // tijdens het renderen wordt voor de gebruiker een kapotte pagina.
+  await vereisModuleToegang('objectenbeheer', 'schrijven')
   await vereisRecht('objectenbeheer', 'schrijven')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

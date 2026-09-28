@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { createAdminClient } from '@everts/database/server'
 
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisModuleToegang, vereisRecht } from '@/lib/auth/rechten'
 // Niet `rechten.mailintake === 'beheren'`: die vergelijking mist de beheerder,
 // die via isBeheerder overal doorkomt. vereisRecht gebruikt dezelfde helper,
 // dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
@@ -15,6 +15,9 @@ export const metadata: Metadata = { title: 'Mailintake' }
 export const dynamic = 'force-dynamic'
 
 export default async function MailintakeInstellingenPage() {
+  // Eerst de redirectende guard: vereisRecht gooit, en een gegooide GeenToegangError
+  // tijdens het renderen wordt voor de gebruiker een kapotte pagina.
+  await vereisModuleToegang('mailintake', 'lezen')
   const { rechten } = await vereisRecht('mailintake', 'lezen')
 
   const supabase = createAdminClient()

@@ -302,12 +302,21 @@ export async function ontkoppelDossierVanObject(dossierId: string): Promise<Acti
  * Het object waaraan een dossier hangt, plus of het werkadres ervan afwijkt.
  * Eigen action zodat het koppelblok op het dossier zichzelf kan vullen en de
  * dossier-pagina er geen extra query voor hoeft door te geven.
+ *
+ * Zonder leesrecht op objectenbeheer geeft dit `geenToegang` terug in plaats van te
+ * gooien. Het blok staat op élk dossier; een gegooide GeenToegangError werd bij elke
+ * dossierweergave een 500 in de logs, voor iedereen zonder dat recht.
  */
 export async function getDossierObject(dossierId: string): Promise<{
   object: { id: string; naam: string; objectnummer: string; adres: string } | null
   wijktAf: boolean
+  geenToegang?: true
 }> {
-  await vereisRecht('objectenbeheer', 'lezen')
+  try {
+    await vereisRecht('objectenbeheer', 'lezen')
+  } catch {
+    return { object: null, wijktAf: false, geenToegang: true }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 

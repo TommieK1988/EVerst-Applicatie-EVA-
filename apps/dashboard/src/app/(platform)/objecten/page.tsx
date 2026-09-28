@@ -2,13 +2,16 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createClient as createServerClient } from '@everts/database/server'
 import { laadLayouts } from '@/app/actions/layouts'
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisModuleToegang, vereisRecht } from '@/lib/auth/rechten'
 import { getObjecten } from '@/lib/objecten/data'
 import ObjectenOverzicht from './ObjectenOverzicht'
 
 export const metadata: Metadata = { title: 'Objecten' }
 
 export default async function ObjectenPage() {
+  // Eerst de redirectende guard: vereisRecht gooit, en een gegooide GeenToegangError
+  // tijdens het renderen wordt voor de gebruiker een kapotte pagina.
+  await vereisModuleToegang('objectenbeheer', 'lezen')
   const { rechten } = await vereisRecht('objectenbeheer', 'lezen')
 
   let user_id: string | null = null
