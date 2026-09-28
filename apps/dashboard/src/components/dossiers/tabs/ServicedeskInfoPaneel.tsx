@@ -55,12 +55,39 @@ const DAG = new Intl.DateTimeFormat('nl-NL', {
 const dagSleutel = (ts: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date(ts))
 
-/** "di 30 sep" of "di 30 sep – vr 3 okt"; valt terug op de datum in woorden. */
+const TIJD = new Intl.DateTimeFormat('nl-NL', {
+  hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
+})
+
+/**
+ * Kloktijd in NL-tijd, of niets. Een OA-opdracht heeft alleen een datum ('2026-10-26'), en een
+ * planitem van middernacht is een hele dag — in beide gevallen zegt een tijd niets.
+ */
+function tijdVan(ts: string): string | null {
+  if (ts.length <= 10) return null
+  const t = TIJD.format(new Date(ts))
+  return t === '00:00' || t === '23:59' ? null : t
+}
+
+/**
+ * "di 30 sep, 07:30–16:15" of "ma 26 okt 07:30 – di 27 okt 16:15"; zonder tijden als die er niet
+ * zijn, en de datum in woorden als er helemaal geen datum is.
+ */
 function wanneer(r: UitvoeringRegel): string {
   if (!r.van) return r.datumTekst ?? 'Nog geen datum'
   const van = DAG.format(new Date(r.van))
-  if (!r.tot || dagSleutel(r.tot) === dagSleutel(r.van)) return van
-  return `${van} – ${DAG.format(new Date(r.tot))}`
+  const vanTijd = tijdVan(r.van)
+  const totTijd = r.tot ? tijdVan(r.tot) : null
+  // Een hele dag eindigt om middernacht van de dág erna; dat is geen tweede dag.
+  const totDag = r.tot && r.tot.length > 10 && TIJD.format(new Date(r.tot)) === '00:00'
+    ? new Date(new Date(r.tot).getTime() - 1).toISOString()
+    : r.tot
+  if (!totDag || dagSleutel(totDag) === dagSleutel(r.van)) {
+    if (vanTijd && totTijd) return `${van}, ${vanTijd}–${totTijd}`
+    return vanTijd ? `${van}, ${vanTijd}` : van
+  }
+  const tot = DAG.format(new Date(totDag))
+  return `${van}${vanTijd ? ` ${vanTijd}` : ''} – ${tot}${totTijd ? ` ${totTijd}` : ''}`
 }
 
 const STAND: Record<UitvoeringRegel['stand'], { label: string; tone: 'success' | 'info' | 'neutral' }> = {
@@ -87,7 +114,9 @@ function Uitvoering({ regels }: { regels: UitvoeringRegel[] | null }) {
         <div className="flex flex-col divide-y divide-neutral-200">
           {regels.map((r, i) => (
             <div key={i} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
-              <div className="flex items-baseline justify-between gap-3 text-[12px]">
+              {/* Mag omslaan: met tijden erbij past naam + moment niet altijd op één regel in een
+                  derde van het blok, en dan liever de datum eronder dan een afgekapte naam. */}
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[12px]">
                 <span className="min-w-0 truncate font-semibold text-neutral-800">{r.naam}</span>
                 <span className="shrink-0 tabular-nums text-neutral-700">{wanneer(r)}</span>
               </div>
