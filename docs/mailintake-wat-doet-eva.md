@@ -515,6 +515,29 @@ staan ingesteld: nieuw te behandelen, onbekende afzender, EVA weet niet wat dit 
 
 ---
 
+## 8b. Antwoorden op een bericht
+
+Op het behandelscherm staat rechtsboven de mail een knop **Beantwoorden**. Het antwoord gaat
+vanuit **je eigen mailadres** en komt in je eigen Verzonden items te staan — niet vanuit de
+gedeelde postbus. Dat is een bewuste grens: de app-registratie die de postbussen leest mag
+daar niet namens mailen, en een klant hoort antwoord te krijgen van een mens.
+
+**Naar wie het gaat, staat niet vast.** Bij gewone post is dat de afzender, maar intake-post
+komt vaak van een postbus of van `no_reply@`, met onderaan "u kunt hier niet op reageren". EVA
+vult daarom de beste kandidaat voor — meestal de contactpersoon die op het bericht staat — en
+zegt eronder waaróm. Is het een no-reply-adres, dan blijft het veld leeg met die melding erbij;
+liever een leeg veld dan een antwoord dat in een zwart gat verdwijnt.
+
+De oorspronkelijke mail wordt standaard onder je antwoord meegestuurd; dat vinkje kun je
+uitzetten. Wat je verstuurt komt in het logboek van het bericht te staan.
+
+**Het is geen echte reply.** Outlook zet het bij de ontvanger niet onder het origineel in
+dezelfde conversatie. Dat kan niet: een antwoord in de keten hangen kan alleen als het
+oorspronkelijke bericht in jóuw mailbox staat, en het staat in de gedeelde postbus. Het wordt
+dus een nieuw bericht met "RE:" in het onderwerp.
+
+---
+
 ## 9. Wat er in Outlook gebeurt
 
 Eén vaste regel voor alle drie de postbussen, met één principe:

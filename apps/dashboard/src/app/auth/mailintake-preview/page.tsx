@@ -27,6 +27,7 @@ import React from 'react'
 
 import { DialoogProvider } from '@/components/ui/dialogen'
 import BerichtBehandelen from '@/app/(platform)/mailintake/[id]/BerichtBehandelen'
+import AntwoordVenster from '@/app/(platform)/mailintake/[id]/panelen/AntwoordVenster'
 
 const WERKMAATSCHAPPIJEN = [
   { id: 'wm-schilders', naam: 'Everts Onderhoudsschilders B.V.' },
@@ -189,8 +190,20 @@ function aanvraagVariant() {
   }
 }
 
+/** Zoals `getAntwoordConcept` hem zou opleveren voor de opdrachtbon hierboven. */
+const ANTWOORD = {
+  aan: 'bv@vvebeheer.nl',
+  onderwerp: 'RE: Opdrachtbon 184-64879-6',
+  origineel: DETAIL.bericht.body_tekst,
+  toelichting: 'Voorgesteld: Barbara Vogelesang, de contactpersoon op dit bericht.',
+  relatieId: null,
+  dossierId: null,
+  noReply: false,
+}
+
 export default function Voorbeeld() {
   const [aanvraag, setAanvraag] = React.useState(true)
+  const [antwoord, setAntwoord] = React.useState(false)
   const knop = (actief: boolean) => ({
     padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
     border: `1px solid ${actief ? 'hsl(var(--primary))' : 'var(--border)'}`,
@@ -208,7 +221,18 @@ export default function Voorbeeld() {
         <button type="button" style={knop(!aanvraag)} onClick={() => setAanvraag(false)}>
           B — opdracht
         </button>
+        <button type="button" style={knop(antwoord)} onClick={() => setAntwoord(true)}>
+          Antwoordvenster
+        </button>
       </div>
+
+      <AntwoordVenster
+        berichtId="voorbeeld"
+        open={antwoord}
+        onSluit={() => setAntwoord(false)}
+        onVerstuurd={() => setAntwoord(false)}
+        conceptVooraf={ANTWOORD}
+      />
 
       <div style={{
         marginBottom: 16, padding: '8px 12px', borderRadius: 8, fontSize: 12.5,

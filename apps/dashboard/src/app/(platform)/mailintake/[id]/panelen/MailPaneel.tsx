@@ -11,7 +11,9 @@
 
 import React from 'react'
 
-import { Badge, Card } from '@/components/ui'
+import { Badge, Button, Card } from '@/components/ui'
+
+import AntwoordVenster from './AntwoordVenster'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
@@ -113,9 +115,10 @@ function Afbeeldingen({
 }
 
 export default function MailPaneel({
-  bericht, bijlagen, groepsMails = [], onOpenBijlage, haalBijlageUrl,
+  bericht, bijlagen, groepsMails = [], onOpenBijlage, haalBijlageUrl, magAntwoorden,
 }: {
   bericht: {
+    id: string
     onderwerp: string | null
     van_naam: string | null
     van_adres: string | null
@@ -143,10 +146,20 @@ export default function MailPaneel({
   onOpenBijlage: (id: string) => void
   /** Kortlopende link naar één bijlage; gebruikt voor de voorbeelden. */
   haalBijlageUrl: (id: string) => Promise<string | null>
+  /**
+   * Mag deze gebruiker antwoorden? Het venster zit hier en niet in het
+   * behandelscherm: antwoorden hoort bij de mail, niet bij het formulier ernaast.
+   * Ook op een afgehandeld bericht -- een vraag beantwoorden staat los van of het
+   * dossier al is aangemaakt.
+   */
+  magAntwoorden?: boolean
 }) {
+  const [antwoordOpen, setAntwoordOpen] = React.useState(false)
+
   return (
     <Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
         <div style={kop}>{bericht.onderwerp ?? '(geen onderwerp)'}</div>
         <div style={zacht}>{bericht.van_naam ?? ''} &lt;{bericht.van_adres ?? 'onbekend'}&gt;</div>
         <div style={klein}>
@@ -154,7 +167,22 @@ export default function MailPaneel({
         </div>
         {bericht.aan?.length ? <div style={klein}>Aan: {bericht.aan.join(', ')}</div> : null}
         {bericht.cc?.length ? <div style={klein}>Cc: {bericht.cc.join(', ')}</div> : null}
+        </div>
+        {magAntwoorden && (
+          <Button variant="outline" onClick={() => setAntwoordOpen(true)} style={{ flexShrink: 0 }}>
+            Beantwoorden
+          </Button>
+        )}
       </div>
+
+      {magAntwoorden && (
+        <AntwoordVenster
+          berichtId={bericht.id}
+          open={antwoordOpen}
+          onSluit={() => setAntwoordOpen(false)}
+          onVerstuurd={() => setAntwoordOpen(false)}
+        />
+      )}
 
       <div style={{
         whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5,

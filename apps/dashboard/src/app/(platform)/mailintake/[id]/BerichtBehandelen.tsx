@@ -767,6 +767,7 @@ export default function BerichtBehandelen({
           groepsMails={detail.groepsMails}
           onOpenBijlage={openBijlage}
           haalBijlageUrl={haalBijlageUrl}
+          magAntwoorden={magSchrijven}
         />
 
         <BeoordelingPaneel
