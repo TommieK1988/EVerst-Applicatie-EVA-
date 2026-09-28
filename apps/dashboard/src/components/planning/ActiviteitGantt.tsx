@@ -119,20 +119,26 @@ function medewerkerOpties(medewerkers: Medewerker[]): ComboboxOption[] {
 const COMBO_BOVEN_MODAL = 'z-[300]'
 
 /**
- * Backdrop + dialoog, via een portal op `document.body`. De dialogen worden vanuit de
+ * Backdrop + dialoog, via een portal. De dialogen worden vanuit de
  * Gantt-balken en -rijen geopend, en die hebben een eigen stapelcontext (een `zIndex`):
  * zonder portal zit de z-index 200 van de backdrop daarin gevangen en tekenen de
  * sticky kopbalk en de balken van latere rijen dwars over de dialoog heen.
+ *
+ * Het doel is de `.eva`-wortel van de PlatformShell, niet `document.body`: de DS-tokens
+ * (`--bg-elev`, `--border`, …) en het thema (`data-theme`) staan op dat element. Buiten
+ * `.eva` zijn alle `var(--…)` leeg en wordt de kaart doorzichtig. Die wortel heeft geen
+ * z-index of transform, dus de backdrop stapelt er gewoon op paginaniveau.
  */
 function ModalLaag({ children }: { children: React.ReactNode }) {
   // Versleepbaar aan de titel (de h3 bovenin elk venster), zodat je de planning erachter ziet.
   const sleep = useVersleepbaar('h3')
   if (typeof document === 'undefined') return null
+  const doel = document.querySelector<HTMLElement>('.eva')
   return createPortal(
-    <div style={S.backdrop}>
+    <div className={doel ? undefined : 'eva'} style={S.backdrop}>
       <div className="eva-sleepvenster" style={{ maxWidth: '95vw', ...sleep.style }} onPointerDown={sleep.onPointerDown}>{children}</div>
     </div>,
-    document.body,
+    doel ?? document.body,
   )
 }
 
