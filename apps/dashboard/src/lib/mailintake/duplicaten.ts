@@ -172,6 +172,9 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
       .from('mailintake_bijlagen')
       .select('sha256, bericht:mailintake_berichten!inner(dossier_id)')
       .in('sha256', invoer.bijlageHashes.slice(0, 20))
+      // Het eigen bericht niet: bij opnieuw verwerken hangt het al aan zijn dossier
+      // en zou het zichzelf terugvinden.
+      .neq('bericht_id', invoer.berichtId)
       .not('bericht.dossier_id', 'is', null)
       .limit(50)
     // Een bestand dat al aan meerdere dossiers hangt is geen projectstuk maar
@@ -255,7 +258,7 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
 
     if (invoer.relatieId && d.klant_id === invoer.relatieId && pc && d.werkadres_postcode === pc) {
       score += 0.1
-      redenen.push('Zelfde opdrachtgever op dit adres')
+      if (!redenen.includes('Zelfde opdrachtgever op dit adres')) redenen.push('Zelfde opdrachtgever op dit adres')
     }
     const ref = (invoer.referentie ?? '').trim()
     if (ref.length >= 3 && d.referentie && String(d.referentie).trim() === ref) {
