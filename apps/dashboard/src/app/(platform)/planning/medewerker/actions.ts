@@ -44,6 +44,44 @@ export async function maakAfwezigheid(
   return { ok: true, data }
 }
 
+export async function wijzigAfwezigheid(
+  id: string,
+  input: z.infer<typeof afwezigheidSchema>,
+): Promise<{ ok: true; data: MedewerkerAfwezigheid } | { ok: false; error: string }> {
+  const parsed = afwezigheidSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.message }
+  if (parsed.data.eind_datum < parsed.data.start_datum)
+    return { ok: false, error: 'Einddatum mag niet vóór startdatum liggen' }
+
+  // Verlof dat al in Bouw7 staat (gesynct, of via een goedgekeurde aanvraag daarheen geschreven)
+  // blijft hier ongewijzigd: de day-off in Bouw7 zou anders andere datums houden dan EVA.
+  const { data: bestaand } = await db()
+    .from('medewerker_afwezigheid')
+    .select('bron, bouw7_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (!bestaand) return { ok: false, error: 'Deze afwezigheid bestaat niet meer.' }
+  if (bestaand.bron === 'bouw7' || bestaand.bouw7_id) {
+    return { ok: false, error: 'Dit verlof staat in Bouw7 en kan alleen daar gewijzigd worden.' }
+  }
+
+  const { data, error } = await db()
+    .from('medewerker_afwezigheid')
+    .update({
+      ...parsed.data,
+      start_tijd: parsed.data.start_tijd ?? null,
+      eind_tijd:  parsed.data.eind_tijd  ?? null,
+      opmerking:  parsed.data.opmerking  ?? null,
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/planning/medewerker')
+  return { ok: true, data }
+}
+
 export async function verwijderAfwezigheid(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

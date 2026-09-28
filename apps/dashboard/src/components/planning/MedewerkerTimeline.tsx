@@ -977,7 +977,7 @@ function TimelineRij({
   medewerker, top, dagen, layout, entries, conflicten, roosters, afwezigheid,
   overCellId, dossierMap, projectleiders, balkLabel,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
-  onOpenDossier, onStartKopie, onCelKlik, onConflictKlik, kopieerModus,
+  onOpenDossier, onStartKopie, onCelKlik, onAfwezigheidKlik, onConflictKlik, kopieerModus,
 }: {
   medewerker:        Medewerker
   top:               number
@@ -999,6 +999,7 @@ function TimelineRij({
   onOpenDossier:     (entry: EntryMetDossier) => void
   onStartKopie:      (entry: EntryMetDossier) => void
   onCelKlik:         (medewerker_id: string, datum: string) => void
+  onAfwezigheidKlik: (afwezigheid: MedewerkerAfwezigheid) => void
   onConflictKlik:    (conflict: ConflictDetail) => void
   kopieerModus:      boolean
 }) {
@@ -1040,7 +1041,9 @@ function TimelineRij({
         const geblokkeerd = feest || atv
         const cellTitle   = feest ? feestdagenNamen[iso]
                           : atv   ? 'ATV-dag'
-                          : afwez ? medewerkerAfwezigheidLabels[afwez.type]
+                          : afwez ? (kopieerModus
+                                      ? medewerkerAfwezigheidLabels[afwez.type]
+                                      : `${medewerkerAfwezigheidLabels[afwez.type]} — klik om te bewerken`)
                           : vrijeDag ? `Vaste vrije dag volgens het rooster (${format(dag, 'EEEE', { locale: nl })})`
                           : undefined
         return (
@@ -1058,7 +1061,8 @@ function TimelineRij({
             geblokkeerd={geblokkeerd}
             title={cellTitle}
             kopieerModus={kopieerModus}
-            onCelKlik={onCelKlik}
+            // Een verlofdag opent het verlof; plakken in kopieermodus gaat voor.
+            onCelKlik={afwez && !kopieerModus ? () => onAfwezigheidKlik(afwez) : onCelKlik}
           />
         )
       })}
@@ -1185,6 +1189,7 @@ export default function MedewerkerTimeline({
   const [activeItem,    setActiveItem]    = useState<{ entry: PlanningItemVerrijkt; dossier_id: string } | null>(null)
   const [overCellId,    setOverCellId]    = useState<string | null>(null)
   const [verlofModalOpen, setVerlofModalOpen] = useState(false)
+  const [bewerkVerlof,    setBewerkVerlof]    = useState<MedewerkerAfwezigheid | null>(null)
   const [editingEntry,  setEditingEntry]  = useState<EntryMetDossier | null>(null)
   const [nieuwItem,     setNieuwItem]     = useState<{ medewerker_id: string; datum: string } | null>(null)
   const [kopieerBron,   setKopieerBron]   = useState<EntryMetDossier | null>(null)
@@ -1622,6 +1627,7 @@ export default function MedewerkerTimeline({
           onOpenDossier={openDossier}
           onStartKopie={entry => setKopieerBron(entry)}
           onCelKlik={handleCelKlik}
+          onAfwezigheidKlik={a => { setBewerkVerlof(a); setVerlofModalOpen(true) }}
           onConflictKlik={conflict => setOplosConflict({ medewerkerId: m.id, conflict })}
           kopieerModus={!!kopieerBron}
         />
@@ -1789,9 +1795,11 @@ export default function MedewerkerTimeline({
           medewerkers={medewerkers}
           periodeStart={format(vs, 'yyyy-MM-dd')}
           periodeEinde={format(ve, 'yyyy-MM-dd')}
-          onClose={() => setVerlofModalOpen(false)}
+          bewerk={bewerkVerlof}
+          onClose={() => { setVerlofModalOpen(false); setBewerkVerlof(null) }}
           onSaved={() => {
             setVerlofModalOpen(false)
+            setBewerkVerlof(null)
             startTransition(() => router.refresh())
           }}
         />
