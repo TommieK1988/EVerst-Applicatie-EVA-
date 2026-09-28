@@ -1793,8 +1793,6 @@ export default function MedewerkerTimeline({
       {verlofModalOpen && (
         <VerlofModal
           medewerkers={medewerkers}
-          periodeStart={format(vs, 'yyyy-MM-dd')}
-          periodeEinde={format(ve, 'yyyy-MM-dd')}
           bewerk={bewerkVerlof}
           onClose={() => { setVerlofModalOpen(false); setBewerkVerlof(null) }}
           onSaved={() => {

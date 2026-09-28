@@ -168,17 +168,3 @@ export async function verwijderAfwezigheid(
   revalidatePath('/planning/medewerker')
   return { ok: true }
 }
-
-export async function haalAfwezigheidInPeriode(
-  start: string,
-  einde: string,
-): Promise<MedewerkerAfwezigheid[]> {
-  const { data } = await db()
-    .from('medewerker_afwezigheid')
-    .select('*')
-    .gte('eind_datum', start)
-    .lte('start_datum', einde)
-    .order('start_datum')
-
-  return data ?? []
-}

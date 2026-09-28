@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Trash2 } from 'lucide-react'
 import type { Medewerker, MedewerkerAfwezigheid, MedewerkerAfwezigheidType } from '@everts/database/platform-types'
 import { medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
-import { maakAfwezigheid, wijzigAfwezigheid, verwijderAfwezigheid, haalAfwezigheidInPeriode } from '@/app/(platform)/planning/medewerker/actions'
+import { maakAfwezigheid, wijzigAfwezigheid, verwijderAfwezigheid } from '@/app/(platform)/planning/medewerker/actions'
 import {
   Dialog,
   DialogContent,
@@ -18,8 +17,6 @@ import {
 
 type Props = {
   medewerkers: Pick<Medewerker, 'id' | 'voornaam' | 'tussenvoegsel' | 'achternaam'>[]
-  periodeStart: string
-  periodeEinde: string
   /** Bestaande afwezigheid om te bewerken; zonder deze prop voer je een nieuwe in. */
   bewerk?: MedewerkerAfwezigheid | null
   onClose: () => void
@@ -82,39 +79,16 @@ function formulierVan(a: MedewerkerAfwezigheid): FormState {
   }
 }
 
-function tijdLabel(a: MedewerkerAfwezigheid): string {
-  if (a.start_tijd && a.eind_tijd) return ` · ${a.start_tijd}–${a.eind_tijd}`
-  if (a.start_tijd) return ` · vanaf ${a.start_tijd}`
-  return ''
-}
-
-export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, bewerk = null, onClose, onSaved }: Props) {
+export default function VerlofModal({ medewerkers, bewerk = null, onClose, onSaved }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [bestaand, setBestaand] = useState<MedewerkerAfwezigheid[]>([])
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [bewerkt, setBewerkt] = useState<MedewerkerAfwezigheid | null>(bewerk)
+  const [verwijderen, setVerwijderen] = useState(false)
+  const bewerkt = bewerk
 
   const [form, setForm] = useState<FormState>(() =>
     bewerk ? formulierVan(bewerk) : leegFormulier(medewerkers[0]?.id ?? ''))
 
-  function startBewerken(a: MedewerkerAfwezigheid) {
-    setBewerkt(a)
-    setForm(formulierVan(a))
-  }
-
-  function nieuwInvoeren() {
-    setBewerkt(null)
-    setForm(f => leegFormulier(f.medewerker_id))
-  }
-
   // Bouw7 kent geen soort afwezigheid; bij gesynct verlof blijft die daarom vast op wat hij is.
   const soortVast = bewerkt?.bron === 'bouw7'
-
-  function laadBestaand() {
-    haalAfwezigheidInPeriode(periodeStart, periodeEinde).then(setBestaand)
-  }
-
-  useEffect(() => { laadBestaand() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -133,25 +107,21 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
         : await maakAfwezigheid(invoer)
       if (!result.ok) { toast.error(result.error); return }
       toast.success(bewerkt ? 'Afwezigheid bijgewerkt' : 'Afwezigheid opgeslagen')
-      laadBestaand()
       onSaved()
     })
   }
 
-  function handleVerwijder(id: string) {
-    setDeletingId(id)
+  function handleVerwijder() {
+    if (!bewerkt) return
+    setVerwijderen(true)
     startTransition(async () => {
-      const result = await verwijderAfwezigheid(id)
-      setDeletingId(null)
+      const result = await verwijderAfwezigheid(bewerkt.id)
+      setVerwijderen(false)
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Afwezigheid verwijderd')
-      if (bewerkt?.id === id) nieuwInvoeren()
-      laadBestaand()
       onSaved()
     })
   }
-
-  const medewerkerMap = Object.fromEntries(medewerkers.map(m => [m.id, m]))
 
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
@@ -283,99 +253,16 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button type="submit" variant="primary" loading={isPending}>
-              {isPending ? 'Bezig…' : bewerkt ? 'Wijzigingen opslaan' : 'Opslaan'}
+            <Button type="submit" variant="primary" loading={isPending && !verwijderen} disabled={isPending}>
+              {isPending && !verwijderen ? 'Bezig…' : bewerkt ? 'Wijzigingen opslaan' : 'Opslaan'}
             </Button>
             {bewerkt && (
-              <Button type="button" variant="secondary" onClick={nieuwInvoeren} disabled={isPending}>
-                Nieuwe invoeren
+              <Button type="button" variant="secondary" onClick={handleVerwijder} loading={verwijderen} disabled={isPending}>
+                {inBouw7(bewerkt) ? 'Verwijderen (ook uit Bouw7)' : 'Verwijderen'}
               </Button>
             )}
           </div>
         </form>
-
-        {/* Bestaande records in deze periode */}
-        {bestaand.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <div style={{
-              fontSize: 10, fontWeight: 700,
-              color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-              marginBottom: 8,
-            }}>
-              Afwezigheid in deze periode
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {bestaand.map(a => {
-                const med = medewerkerMap[a.medewerker_id]
-                const actief = bewerkt?.id === a.id
-                return (
-                  <div
-                    key={a.id}
-                    role="button"
-                    tabIndex={0}
-                    title="Klik om te bewerken"
-                    onClick={() => startBewerken(a)}
-                    onKeyDown={e => { if (e.key === 'Enter') startBewerken(a) }}
-                    style={{
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '7px 10px',
-                      background: 'var(--bg)',
-                      border: `1px solid ${actief ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: 6,
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{
-                        fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg)',
-                      }}>
-                        {med ? medNaam(med) : a.medewerker_id}
-                        <span style={{
-                          marginLeft: 6,
-                          fontSize: 9, fontWeight: 700,
-                          color: 'var(--fg-muted)', textTransform: 'uppercase',
-                        }}>
-                          {medewerkerAfwezigheidLabels[a.type]}
-                        </span>
-                        {a.bron === 'bouw7' && (
-                          <span style={{
-                            marginLeft: 6,
-                            fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-                            color: 'var(--accent)', textTransform: 'uppercase',
-                          }}>
-                            Bouw7
-                          </span>
-                        )}
-                      </div>
-                      <div style={{
-                        fontSize: 10, color: 'var(--fg-muted)', marginTop: 1,
-                      }}>
-                        {a.start_datum === a.eind_datum ? a.start_datum : `${a.start_datum} – ${a.eind_datum}`}
-                        {tijdLabel(a)}
-                        {a.opmerking && ` · ${a.opmerking}`}
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={e => { e.stopPropagation(); handleVerwijder(a.id) }}
-                      disabled={deletingId === a.id}
-                      style={{
-                        flexShrink: 0,
-                        opacity: deletingId === a.id ? 0.4 : 1,
-                      }}
-                      title={inBouw7(a) ? 'Verwijder (ook uit Bouw7)' : 'Verwijder'}
-                    >
-                      <Trash2 size={13} />
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
         </DialogBody>
       </DialogContent>
     </Dialog>
