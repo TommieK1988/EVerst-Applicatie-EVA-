@@ -34,8 +34,6 @@ export type UitvoeringRegel = {
   stand: 'ingepland' | 'opgedragen' | 'concept'
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
 
 /** Kalenderdag in NL-tijd: een planitem van 00:00 staat in UTC op de dag ervoor. */
 const dagVan = (ts: string) => nlDelen(ts).datum
@@ -49,7 +47,7 @@ function dagenVanItem(start: string, eind: string, in_: Set<string>) {
 
 export async function getServicedeskUitvoering(dossierId: string): Promise<UitvoeringRegel[]> {
   await vereisRecht('dossiers', 'lezen')
-  const supabase = db()
+  const supabase = createAdminClient()
 
   // Begrensd door dossier_id: een bon heeft een handvol activiteiten, geen duizend.
   const [{ data: activiteitenRaw }, { data: begrotingenRaw }] = await Promise.all([
