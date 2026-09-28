@@ -18,7 +18,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
-import { getRechtenBundel, vereisFunctie, GeenToegangError } from '@/lib/auth/rechten'
+import { getRechtenBundel, vereisFunctie, vereisSessie, GeenToegangError } from '@/lib/auth/rechten'
 import { heeftFunctie, kiesKanaal } from '@/lib/auth/rechten-shared'
 import { CORRECTIE_BEWAKINGSCODE, CORRECTIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
 import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
@@ -26,6 +26,7 @@ import { maakMeerwerkBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/act
 /** Mag de ingelogde gebruiker de correctie-kostengroep zien en bewerken? */
 export async function magCorrecties(): Promise<boolean> {
   try {
+    await vereisSessie()
     return heeftFunctie(kiesKanaal(await getRechtenBundel(), 'desktop'), 'dossiers.correcties')
   } catch {
     return false
@@ -45,6 +46,7 @@ export type CorrectieCodeResultaat =
  * ontbrekende code alsnog aan.
  */
 export async function voegCorrectieKostengroepToe(dossierId: string): Promise<CorrectieCodeResultaat> {
+  await vereisSessie()
   try {
     await vereisFunctie('dossiers.correcties', { kanaal: 'desktop' })
   } catch (e) {

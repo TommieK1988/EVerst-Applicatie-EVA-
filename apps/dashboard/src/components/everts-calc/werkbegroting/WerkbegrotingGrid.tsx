@@ -23,7 +23,7 @@ import RelatieZoekveld from './RelatieZoekveld'
 import MateriaalZoekveld from './MateriaalZoekveld'
 import KostengroepKiezer from './KostengroepKiezer'
 import type { EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
-import { voegCorrectieKostengroepToe } from '@/lib/dossiers/correctie-bewakingscode'
+import { magCorrecties as haalMagCorrecties, voegCorrectieKostengroepToe } from '@/lib/dossiers/correctie-bewakingscode'
 import { CORRECTIE_BEWAKINGSCODE, isCorrectieCode } from '@/components/dossiers/types'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
 
@@ -50,13 +50,6 @@ interface Props {
    * zo'n component wordt read-only; de rest onder dezelfde bewakingscode blijft bewerkbaar.
    */
   vergrendeldeRegels?: VergrendeldeBestelregel[] | null
-  /**
-   * Mag de gebruiker de kostengroep Correcties (CO01) zien en bewerken? Zonder dit recht zijn
-   * CO01-regels onzichtbaar en tellen ze niet mee in de totalen op het scherm. Ze blijven wél in
-   * de lokale store, zodat de sync ze niet als verwijderd wegzet en "Naar Bouw7" de correctie
-   * gewoon meeneemt in de prognose.
-   */
-  magCorrecties?: boolean
   /** Na het aanmaken van een eigen code (Correcties) de lijst eigen codes opnieuw laden. */
   onEigenCodesGewijzigd?: () => void | Promise<void>
 }
@@ -547,7 +540,15 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeRegels, magCorrecties = false, onEigenCodesGewijzigd }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeRegels, onEigenCodesGewijzigd }: Props) {
+  /**
+   * Mag de gebruiker de kostengroep Correcties (CO01) zien en bewerken (`dossiers.correcties`)?
+   * Zonder dit recht zijn CO01-regels onzichtbaar en tellen ze niet mee in de totalen op het
+   * scherm. Ze blijven wél in de lokale store, zodat de sync ze niet als verwijderd wegzet en
+   * "Naar Bouw7" de correctie gewoon meeneemt in de prognose.
+   */
+  const [magCorrecties, setMagCorrecties] = useState(false)
+  useEffect(() => { haalMagCorrecties().then(setMagCorrecties).catch(() => setMagCorrecties(false)) }, [])
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
