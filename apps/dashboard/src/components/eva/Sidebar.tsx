@@ -257,12 +257,12 @@ const OPDRACHT_TABS: DossierTab[] = [
 ]
 
 /**
- * Servicedesk bundelt zijn tabs: vijf in plaats van veertien.
+ * Servicedesk heeft een eigen, kortere tabset dan een opdracht.
  *
  * De opdracht-set kreeg servicedesk in september 2026 één op één overgenomen, omdat een bon
  * net zo goed materiaal bestelt en werk uitbesteedt. Dat klopte inhoudelijk maar niet in de
- * praktijk: bij een bon van gemiddeld vierhonderd euro is veertien tabs zoeken. De tabs zijn
- * er nog allemaal — ze staan nu als deel onder een van de vijf koppen, achter `?deel=`.
+ * praktijk: bij een bon van gemiddeld vierhonderd euro is veertien tabs zoeken. De tabs
+ * die er niet in staan zijn nog bereikbaar op hun eigen adres; oude links worden omgeleid.
  *
  * Wat waar valt staat in `components/dossiers/servicedesk-tabs.ts`; die tabel voedt óók de
  * router en de omleiding van oude links. Hier staat alleen welk icoon erbij hoort.
@@ -372,8 +372,8 @@ export default function Sidebar({
     return () => { actief = false }
   }, [isDossierDetail, dossierId, dossierSectie])
 
-  // Servicedesk: welke van de vijf gebundelde tabs iets te tonen hebben. Zolang het antwoord
-  // op `heeftCalc` nog onderweg is telt hij als 'nee' — anders verschijnt Opname & offerte
+  // Servicedesk: welke tabs iets te tonen hebben. Zolang het antwoord
+  // op `heeftCalc` nog onderweg is telt hij als 'nee' — anders verschijnt Calculatie
   // even en valt daarna weer weg.
   const servicedeskZichtbaar = React.useMemo(
     () => new Set(zichtbareServicedeskGroepen({

@@ -92,7 +92,7 @@ export default function BonActies({
           }
           const r = await maakOfferteVoorServicedesk(dossierId)
           if (!r.ok) { toast.error(r.error); return }
-          router.push(`/servicedesk/${dossierId}/voorbereiding?deel=calculatie`)
+          router.push(`/servicedesk/${dossierId}/calculatie`)
           router.refresh()
         })
     }

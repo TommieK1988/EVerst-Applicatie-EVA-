@@ -1,11 +1,18 @@
 /**
- * De vijf tabs van een servicedeskbon, en wat er onder elke tab valt.
+ * De tabs van een servicedeskbon, en wat er onder elke tab valt.
  *
  * Een servicedeskbon had dezelfde veertien tabs als een opdracht. Voor een opdracht van
  * gemiddeld zestigduizend euro is dat terecht; voor een bon van gemiddeld vierhonderd euro
  * betekende het dat je bij elke handeling eerst de goede tab moest zoeken. Gemeten op
  * 22 september 2026: 357 bonnen, waarvan er 352 geen calculatie hebben — voor die bonnen
  * stonden Opname en Calculatie er puur in de weg.
+ *
+ * Een tijd lang waren er vijf tabs met een schakelbalk erboven (Bon: Informatie | Bestanden,
+ * Facturatie: Verkoop | Meerwerk, Opname & offerte: Opname | Calculatie). Die schakelbalk is
+ * teruggedraaid (september 2026): Bestanden en Meerwerk zocht je daarachter te lang, en een tweede
+ * navigatieregel boven de inhoud bleek meer te kosten dan één tab extra in de zijbalk. Elke groep
+ * heeft nu precies één deel, en dan tekent de router geen balk. Het mechanisme blijft staan, zodat
+ * bundelen weer één regel in deze tabel is als dat ooit wél gewenst is.
  *
  * De bundeling gebruikt hetzelfde `?deel=`-mechanisme als KAM/VGM: elk deel is een gewone
  * link, zodat de server alleen het gekozen deel rendert. Zou dit client-state zijn, dan zat
@@ -23,8 +30,17 @@
 const OPNAME_ICOON =
   'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2M8.5 11h7M8.5 14.5h7M8.5 18h4'
 
-/** De vijf tab-sleutels zoals ze in de URL staan: `/servicedesk/<id>/<slug>`. */
-export type ServicedeskGroepSlug = 'bon' | 'voorbereiding' | 'uitvoering' | 'inkoop' | 'facturatie'
+/** Map met een vouw: Bestanden. Zelfde pad als in de opdrachtlijst. */
+const BESTANDEN_ICOON =
+  'M3.6 7.2a1.2 1.2 0 0 1 1.2-1.2h4.8l2.4 2.4h7.2a1.2 1.2 0 0 1 1.2 1.2v8.4a1.2 1.2 0 0 1-1.2 1.2H4.8a1.2 1.2 0 0 1-1.2-1.2V7.2Z'
+
+/** Rekenmachine: Calculatie. Zelfde pad als in de opdrachtlijst. */
+const CALCULATIE_ICOON =
+  'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7.5 6.5h9v3.4h-9zM8.6 13.6h.01M12 13.6h.01M15.4 13.6h.01M8.6 16.8h.01M12 16.8h.01M15.4 16.8h.01'
+
+/** De tab-sleutels zoals ze in de URL staan: `/servicedesk/<id>/<slug>`. */
+export type ServicedeskGroepSlug =
+  | 'bon' | 'bestanden' | 'opname' | 'calculatie' | 'uitvoering' | 'inkoop' | 'facturatie' | 'meerwerk'
 
 export type ServicedeskDeel = {
   /** Waarde van `?deel=`. Eigen naam, los van de tab die hem rendert. */
@@ -58,6 +74,10 @@ export type ServicedeskTabContext = {
   heeftCalculatie: boolean
 }
 
+/** Opname en Calculatie: alleen bij mutatiewerk of als er een calculatie aan de bon hangt. */
+const toonVoorbereiding = ({ toggles, heeftCalculatie }: ServicedeskTabContext) =>
+  toggles.has('mutatie_opname') || heeftCalculatie
+
 export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
   {
     slug: 'bon',
@@ -65,23 +85,38 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
     icoon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     delen: [
       { deel: 'informatie', label: 'Informatie', tab: 'informatie' },
-      { deel: 'bestanden',  label: 'Bestanden',  tab: 'bestanden'  },
+    ],
+  },
+  {
+    slug: 'bestanden',
+    label: 'Bestanden',
+    icoon: BESTANDEN_ICOON,
+    delen: [
+      { deel: 'bestanden', label: 'Bestanden', tab: 'bestanden' },
     ],
   },
   {
     /**
-     * De weg naar een prijs voor de klant. Staat er alleen als hij ergens over gaat: bij
-     * mutatiewerk (waar de opname-toggle vanzelf aangaat) of zodra er een calculatie hangt.
-     * Een gewone bon op regie ziet deze tab dus niet.
+     * Opname en Calculatie: de weg naar een prijs voor de klant. Staan er alleen als ze ergens
+     * over gaan: bij mutatiewerk (waar de opname-toggle vanzelf aangaat) of zodra er een
+     * calculatie hangt. Een gewone bon op regie ziet ze dus niet.
      */
-    slug: 'voorbereiding',
-    label: 'Opname & offerte',
+    slug: 'opname',
+    label: 'Opname',
     icoon: OPNAME_ICOON,
     delen: [
-      { deel: 'opname',     label: 'Opname',     tab: 'opname'     },
+      { deel: 'opname', label: 'Opname', tab: 'opname' },
+    ],
+    toonAls: toonVoorbereiding,
+  },
+  {
+    slug: 'calculatie',
+    label: 'Calculatie',
+    icoon: CALCULATIE_ICOON,
+    delen: [
       { deel: 'calculatie', label: 'Calculatie', tab: 'calculatie' },
     ],
-    toonAls: ({ toggles, heeftCalculatie }) => toggles.has('mutatie_opname') || heeftCalculatie,
+    toonAls: toonVoorbereiding,
   },
   {
     slug: 'uitvoering',
@@ -113,7 +148,14 @@ export const SERVICEDESK_GROEPEN: readonly ServicedeskGroep[] = [
     label: 'Facturatie',
     icoon: 'M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15.5l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3ZM9 8h6M9 11h6M9 14h3.5',
     delen: [
-      { deel: 'verkoop',  label: 'Verkoop',  tab: 'verkoop'  },
+      { deel: 'verkoop', label: 'Verkoop', tab: 'verkoop' },
+    ],
+  },
+  {
+    slug: 'meerwerk',
+    label: 'Meerwerk',
+    icoon: 'M12 4.8v14.4M4.8 12h14.4',
+    delen: [
       { deel: 'meerwerk', label: 'Meerwerk', tab: 'meerwerk' },
     ],
   },
@@ -156,4 +198,5 @@ export const SERVICEDESK_OUDE_TABS: Readonly<Record<string, string>> = {
   uren: 'inkoop',        // de urentabel staat nu bovenaan Inkoop
   taken: 'bon',          // de acties staan op de Bon-pagina
   financieel: 'inkoop',  // de bewaking per bewakingscode is van de bon af; kosten staan hier
+  voorbereiding: 'calculatie', // "Opname & offerte" is weer Opname en Calculatie; Calculatie is er vaker
 }

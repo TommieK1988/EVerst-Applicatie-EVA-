@@ -41,8 +41,8 @@ describe('servicedesk-tabs: omleiden van oude links', () => {
 
   it('laat elke oude tab op zijn eigen deel landen', () => {
     expect(SERVICEDESK_OUDE_TABS.informatie).toBe('bon?deel=informatie')
-    expect(SERVICEDESK_OUDE_TABS.calculatie).toBe('voorbereiding?deel=calculatie')
     expect(SERVICEDESK_OUDE_TABS.verkoop).toBe('facturatie?deel=verkoop')
+    expect(SERVICEDESK_OUDE_TABS.voorbereiding).toBe('calculatie')
   })
 
   /**
@@ -72,10 +72,12 @@ describe('servicedesk-tabs: sleutels die zowel groep als tab zijn', () => {
    * Die botsing is opgeheven — de Inkoop-pagina heeft nu een eigen sleutel (`sd-kosten`) — maar
    * de test blijft staan, want de fout is met één regel zo weer terug.
    */
-  it('gebruikt geen groep-sleutel als tab-sleutel', () => {
+  it('gebruikt geen groep-sleutel als tab-sleutel binnen een schakelbalk', () => {
+    // Een groep met één deel mag wél zijn eigen sleutel als tab hebben (`bestanden`, `meerwerk`):
+    // de router rendert die direct, zonder balk en zonder terug te komen in de groep-tak.
     const groepSlugs = new Set<string>(SERVICEDESK_GROEPEN.map(g => g.slug))
     const botsend = SERVICEDESK_GROEPEN
-      .flatMap(g => g.delen)
+      .flatMap(g => g.delen.length === 1 && g.delen[0].tab === g.slug ? [] : g.delen)
       .filter(d => groepSlugs.has(d.tab))
       .map(d => d.tab)
 
@@ -84,23 +86,27 @@ describe('servicedesk-tabs: sleutels die zowel groep als tab zijn', () => {
 })
 
 describe('servicedesk-tabs: welke tabs een bon laat zien', () => {
-  it('toont Opname & offerte niet op een gewone bon op regie', () => {
+  it('toont Opname en Calculatie niet op een gewone bon op regie', () => {
     const slugs = zichtbareServicedeskGroepen(GEEN_TOGGLES).map(g => g.slug)
-    expect(slugs).toEqual(['bon', 'uitvoering', 'inkoop', 'facturatie'])
+    expect(slugs).toEqual(['bon', 'bestanden', 'uitvoering', 'inkoop', 'facturatie', 'meerwerk'])
   })
 
-  it('toont Opname & offerte bij mutatiewerk', () => {
+  it('toont Opname en Calculatie bij mutatiewerk', () => {
     const slugs = zichtbareServicedeskGroepen({
       toggles: new Set(['mutatie_opname']), heeftCalculatie: false,
     }).map(g => g.slug)
-    expect(slugs).toContain('voorbereiding')
+    expect(slugs).toEqual(expect.arrayContaining(['opname', 'calculatie']))
   })
 
-  it('toont Opname & offerte zodra er een calculatie hangt', () => {
+  it('toont Calculatie zodra er een calculatie hangt', () => {
     const slugs = zichtbareServicedeskGroepen({
       toggles: new Set<string>(), heeftCalculatie: true,
     }).map(g => g.slug)
-    expect(slugs).toContain('voorbereiding')
+    expect(slugs).toContain('calculatie')
+  })
+
+  it('heeft geen schakelbalk meer: elke tab is één deel', () => {
+    for (const g of SERVICEDESK_GROEPEN) expect(g.delen, g.slug).toHaveLength(1)
   })
 })
 
@@ -112,11 +118,12 @@ describe('servicedesk-tabs: het gekozen deel', () => {
   })
 
   it('valt terug op het eerste deel bij een onbekende keuze', () => {
-    expect(servicedeskDeel(facturatie, 'bestaat-niet').deel).toBe('verkoop')
+    // Een oude link /facturatie?deel=meerwerk landt op Verkoop, niet op een leeg scherm.
+    expect(servicedeskDeel(facturatie, 'meerwerk').deel).toBe('verkoop')
   })
 
   it('geeft de tab terug die het deel moet renderen', () => {
-    expect(servicedeskDeel(facturatie, 'meerwerk').tab).toBe('meerwerk')
+    expect(servicedeskDeel(servicedeskGroep('meerwerk')!, undefined).tab).toBe('meerwerk')
   })
 
   it('kent geen groep voor een tab die er geen is', () => {

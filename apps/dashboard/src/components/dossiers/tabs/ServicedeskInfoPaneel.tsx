@@ -3,11 +3,12 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody, Input } from '@/components/ui'
+import { Badge, Card, CardHeader, CardBody, Input } from '@/components/ui'
 import {
   getServicedeskMandaat, getDoorlooptijdPerFase, updateServicedeskInstellingen,
   type MandaatStatus, type SubstatusFase,
 } from '@/lib/dossiers/servicedesk'
+import { getServicedeskUitvoering, type UitvoeringRegel } from '@/lib/dossiers/servicedesk-uitvoering'
 import { FACTURATIE_LABELS, SERVICEDESK_ALLE_STATUSSEN } from '../types'
 import { MandaatMeter } from '../servicedesk/MandaatMeter'
 
@@ -48,6 +49,64 @@ function Kop({ children }: { children: React.ReactNode }) {
   )
 }
 
+const DAG = new Intl.DateTimeFormat('nl-NL', {
+  weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Amsterdam',
+})
+const dagSleutel = (ts: string) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date(ts))
+
+/** "di 30 sep" of "di 30 sep – vr 3 okt"; valt terug op de datum in woorden. */
+function wanneer(r: UitvoeringRegel): string {
+  if (!r.van) return r.datumTekst ?? 'Nog geen datum'
+  const van = DAG.format(new Date(r.van))
+  if (!r.tot || dagSleutel(r.tot) === dagSleutel(r.van)) return van
+  return `${van} – ${DAG.format(new Date(r.tot))}`
+}
+
+const STAND: Record<UitvoeringRegel['stand'], { label: string; tone: 'success' | 'info' | 'neutral' }> = {
+  ingepland:  { label: 'Ingepland',  tone: 'success' },
+  opgedragen: { label: 'Opgedragen', tone: 'info' },
+  concept:    { label: 'Concept',    tone: 'neutral' },
+}
+
+/**
+ * Wie er op deze bon aan het werk gaat en wanneer — in één oogopslag, zonder naar de planning of
+ * de inkoop te hoeven. Eén regel per medewerker (per activiteit) of onderaannemer, op datum.
+ */
+function Uitvoering({ regels }: { regels: UitvoeringRegel[] | null }) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+        Ingepland &amp; opgedragen
+      </div>
+      {regels == null ? (
+        <div className="text-[12px] text-neutral-400">Laden…</div>
+      ) : regels.length === 0 ? (
+        <div className="text-[12px] text-neutral-400">Nog niemand ingepland of opgedragen.</div>
+      ) : (
+        <div className="flex flex-col divide-y divide-neutral-200">
+          {regels.map((r, i) => (
+            <div key={i} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
+              <div className="flex items-baseline justify-between gap-3 text-[12px]">
+                <span className="min-w-0 truncate font-semibold text-neutral-800">{r.naam}</span>
+                <span className="shrink-0 tabular-nums text-neutral-700">{wanneer(r)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[11px] text-neutral-500">
+                <span className="min-w-0 truncate">
+                  {r.soort === 'onderaannemer' ? 'Onderaannemer' : 'Medewerker'}
+                  {r.wat ? ` · ${r.wat}` : ''}
+                  {r.dagen != null && r.dagen > 1 ? ` · ${r.dagen} dagen` : ''}
+                </span>
+                <Badge size="sm" tone={STAND[r.stand].tone}>{STAND[r.stand].label}</Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Regel({ label, bedrag }: { label: string; bedrag: number }) {
   return (
     <div className="flex items-center justify-between">
@@ -65,10 +124,12 @@ export default function ServicedeskInfoPaneel({
   const [methode, setMethode]       = useState<'regie' | 'termijnen'>(initieleFacturatiemethode)
   const [status, setStatus]         = useState<MandaatStatus | null>(null)
   const [fases, setFases]           = useState<SubstatusFase[]>([])
+  const [uitvoering, setUitvoering] = useState<UitvoeringRegel[] | null>(null)
 
   useEffect(() => {
     getServicedeskMandaat(dossierId).then(setStatus).catch(() => setStatus(null))
     getDoorlooptijdPerFase(dossierId).then(setFases).catch(() => setFases([]))
+    getServicedeskUitvoering(dossierId).then(setUitvoering).catch(() => setUitvoering([]))
   }, [dossierId])
 
   const dagenOpen = createdAt
@@ -160,9 +221,29 @@ export default function ServicedeskInfoPaneel({
                   />
                 </div>
               </div>
+              {/* Tijd per fase onder het mandaat: het hoort bij de stand van de bon, niet bij wie
+                  er aan het werk is. Zo komt het midden vrij voor de uitvoering. */}
+              {fases.length > 0 && (
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Tijd per fase</div>
+                  <div className="flex flex-col gap-1">
+                    {fases.map((f, i) => (
+                      <div key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
+                        <span className="min-w-0 truncate text-neutral-700">{faseLabel(f.substatus)}</span>
+                        <span className="shrink-0 tabular-nums text-neutral-500">
+                          {f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Kolom 2 — hoe het mandaat ervoor staat én waar dat bedrag vandaan komt. Dat waren
+            {/* Kolom 2 — wie er aan het werk gaat en wanneer. */}
+            <Uitvoering regels={uitvoering} />
+
+            {/* Kolom 3 — hoe het mandaat ervoor staat én waar dat bedrag vandaan komt. Dat waren
                 twee losse dingen op twee plekken: de meter in een balk boven de tabs, de opbouw
                 hier. Je las dan een percentage zonder te zien waardoor het vol liep. */}
             {status?.mandaat != null && status.mandaat > 0 && (
@@ -185,23 +266,6 @@ export default function ServicedeskInfoPaneel({
               </div>
             )}
 
-            {/* Kolom 3 — waar de tijd is gebleven. In een eigen kader met dezelfde breedte als het
-                mandaatblok ernaast, zodat fase en aantal dagen bij elkaar blijven staan. */}
-            {fases.length > 0 && (
-              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Tijd per fase</div>
-                <div className="flex flex-col gap-1">
-                  {fases.map((f, i) => (
-                    <div key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
-                      <span className="min-w-0 truncate text-neutral-700">{faseLabel(f.substatus)}</span>
-                      <span className="shrink-0 tabular-nums text-neutral-500">
-                        {f.dagen} {f.dagen === 1 ? 'dag' : 'dagen'}{f.tot ? '' : ' (huidig)'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {acties && (
