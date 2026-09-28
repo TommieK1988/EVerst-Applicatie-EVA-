@@ -171,8 +171,7 @@ export type MandaatMailConcept = {
  */
 export async function getMandaatMailConcept(dossierId: string): Promise<MandaatMailConcept> {
   await vereisRecht('servicedesk', 'schrijven')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const { data: d } = await supabase
     .from('dossiers')
