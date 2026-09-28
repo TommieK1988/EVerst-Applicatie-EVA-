@@ -12,8 +12,7 @@ import {
 /** Zelfde terugval als de regie-berekening, als er in de bedrijfsinstellingen niets staat. */
 const REGIE_OPSLAG_STANDAARD = 25
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function standaardOpslagPct(supabase: any): Promise<number> {
+async function standaardOpslagPct(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
   const { data } = await supabase.from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
   const v = (data?.overige as Record<string, unknown> | null)?.regie_opslag_pct
   const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
@@ -31,8 +30,7 @@ export async function getResultaatPerCode(
   dossierId: string,
   opties?: { verbergCorrecties?: boolean },
 ): Promise<ResultaatPerCode & { beschikbaar: boolean }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
 
   const [bewaking, overzicht, factureerbaar, meerwerkRes, standaardOpslag] = await Promise.all([
     getDossierBewaking(dossierId, { verbergCorrecties: opties?.verbergCorrecties }),
@@ -79,7 +77,8 @@ export async function getResultaatPerCode(
   const uitkomst = berekenResultaatPerCode({
     codes: [...codes.values()],
     stelposten,
-    meerwerk: (meerwerkRes.data ?? []) as MeerwerkInvoer[],
+    // mandaat_excl_btw ontbreekt nog in de gegenereerde types; de kolom bestaat wel.
+    meerwerk: (meerwerkRes.data ?? []) as unknown as MeerwerkInvoer[],
     regieCode: factureerbaar.find(f => f.bron === 'regie')?.bewakingscode ?? null,
     verkoopPerCode,
     inkoopPerCode,
