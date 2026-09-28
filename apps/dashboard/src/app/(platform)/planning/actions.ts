@@ -16,7 +16,7 @@ import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 import { dagenTussen, nlTijdstip, roostertijdenOp, verschuifNlDagen } from '@/lib/planning/nl-tijd'
-import { zoekDubbeleInplanning, type DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
+import { zoekDubbeleInplanning, zoekDubbeleInplanningVoorDossier, type DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
 
 const db = () => createAdminClient() as any
 
@@ -729,6 +729,15 @@ export async function verplaatsPlanningItem(
   await spiegelNaarBouw7(id)
   await naPlanningWijziging()
   return { ok: true, dubbel: await zoekDubbeleInplanning([id]) }
+}
+
+/**
+ * Het overzicht "dubbel ingepland" boven de detailplanning: alle lopende en toekomstige
+ * planitems van dit dossier die botsen met ander werk (ook in andere dossiers) of verlof.
+ */
+export async function haalDubbeleInplanning(dossier_id: string): Promise<DubbeleInplanning[]> {
+  await vereisRecht('planning', 'lezen')
+  return zoekDubbeleInplanningVoorDossier(dossier_id)
 }
 
 /**

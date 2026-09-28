@@ -18,6 +18,26 @@ import {
 } from '@/components/ui'
 import { Search, Plus, Inbox, Euro, Clock, Users, MapPin } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { DubbelOverzicht } from '@/components/planning/dubbel-melding'
+import type { DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
+
+/** Verzonnen voorbeeld voor het overzicht "dubbel ingepland" in de detailplanning. */
+const VOORBEELD_DUBBEL: DubbeleInplanning[] = [
+  {
+    item_id: 'a', medewerker_id: 'm1', medewerker: 'Jan de Vries',
+    hier: { activiteit_id: 'x', activiteit: 'Timmerman', wanneer: 'di 6 okt 07:30 – 16:15' },
+    soort: 'planitem', wat: '2026-041 Kozijnen Zeist · Schilderwerk', wanneer: 'di 6 okt 12:00 – 16:15',
+    ander_item_id: 'b', ander_dossier_id: 'd', ander_href: '#',
+    overlap_van: '2026-10-06T10:00:00Z', overlap_tot: '2026-10-06T14:15:00Z', overlap: 'di 6 okt 12:00 – 16:15',
+  },
+  {
+    item_id: 'c', medewerker_id: 'm2', medewerker: 'Petra Bakker',
+    hier: { activiteit_id: 'y', activiteit: 'Schilder', wanneer: 'wo 7 okt 07:30 – vr 9 okt 16:15' },
+    soort: 'afwezig', wat: 'Verlof', wanneer: 'do 8 okt – vr 9 okt',
+    ander_item_id: null, ander_dossier_id: null, ander_href: null,
+    overlap_van: '2026-10-08T05:30:00Z', overlap_tot: '2026-10-09T14:15:00Z', overlap: 'do 8 okt 07:30 – vr 9 okt 16:15',
+  },
+]
 
 type Demo = { naam: string; status: string; bedrag: number }
 const DEMO_ROWS: Demo[] = [
@@ -193,6 +213,12 @@ export default function UiPreview() {
             description="Zodra er een aanvraag binnenkomt verschijnt die hier."
             actions={<Button size="md"><Plus className="h-4 w-4" />Aanvraag toevoegen</Button>}
           />
+        </div>
+      </Row>
+
+      <Row title="Planning — dubbel ingepland">
+        <div style={{ width: '100%' }}>
+          <DubbelOverzicht dubbel={VOORBEELD_DUBBEL} onToon={() => {}} />
         </div>
       </Row>
 

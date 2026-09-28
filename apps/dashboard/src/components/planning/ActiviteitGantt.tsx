@@ -9,7 +9,8 @@ import {
 import { nl } from 'date-fns/locale'
 import { createPortal } from 'react-dom'
 import toast from 'react-hot-toast'
-import { meldDubbeleInplanning } from './dubbel-melding'
+import { DubbelOverzicht, meldDubbeleInplanning } from './dubbel-melding'
+import type { DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
 import { Combobox, useDialogen, useVersleepbaar, type ComboboxOption } from '@/components/ui'
 import { useRouter } from 'next/navigation'
 import type {
@@ -21,7 +22,7 @@ import {
   maakPlanningActiviteit, updatePlanningActiviteit, verwijderPlanningActiviteit,
   maakPlanningItem, verplaatsPlanningItem, verwijderPlanningItem,
   maakPlanningFase, updatePlanningFase, verschuifPlanningFase, verwijderPlanningFase,
-  kopieerPlanningFase,
+  kopieerPlanningFase, haalDubbeleInplanning,
   maakAfhankelijkheid, verwijderAfhankelijkheid,
 } from '@/app/(platform)/planning/actions'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
@@ -832,12 +833,14 @@ function ActiviteitBalk({ activiteit, vs, ppd, totalDays, accentKleur, partijKle
 
 type DragRef = { type: 'move' | 'left' | 'right'; startX: number; origStartDt: string; origEindDt: string; origUren: number; medewerker_id: string; uursoort_id: string | null }
 
-function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewerkers, roosters, afwezigheid, isDubbel, kleurweergave, medewerkerKleuren, uursoortKleuren, onUpdated, onDeleted, onCreated }: {
+function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewerkers, roosters, afwezigheid, isDubbel, isGemarkeerd, kleurweergave, medewerkerKleuren, uursoortKleuren, onUpdated, onDeleted, onCreated }: {
   item: PlanningItemVerrijkt; activiteit: PlanningActiviteit
   vs: Date; ppd: number; totalDays: number
   dossier_id: string; medewerkers: Medewerker[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
   isDubbel: boolean
+  /** Opgelicht via "Toon in planning" in het overzicht dubbele inplanningen. */
+  isGemarkeerd: boolean
   kleurweergave: Kleurweergave
   medewerkerKleuren: Record<string, string | null>
   uursoortKleuren: Record<string, string>
@@ -952,9 +955,9 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
 
   return (
     <>
-      <div data-bar="item"
+      <div data-bar="item" data-planitem-id={item.id} className={isGemarkeerd ? 'eva-puls' : undefined}
         title={isDubbel ? 'Medewerker staat ook elders in dezelfde periode ingepland' : undefined}
-        style={{ position: 'absolute', top: 10, bottom: 10, left: eLeft, width: eWidth, borderRadius: 5, background: kleur, zIndex: dragType ? 10 : 2, display: 'flex', alignItems: 'center', paddingLeft: 10, overflow: 'hidden', cursor: dragType ? 'grabbing' : 'grab', boxShadow: isDubbel ? `0 0 0 2px #e67e22, ${dragType ? '0 4px 16px rgba(0,0,0,0.3)' : 'none'}` : dragType ? '0 4px 16px rgba(0,0,0,0.3)' : undefined, opacity: dragType ? 0.85 : 1, userSelect: 'none', touchAction: 'none' }}
+        style={{ position: 'absolute', top: 10, bottom: 10, left: eLeft, width: eWidth, borderRadius: 5, background: kleur, zIndex: dragType ? 10 : isGemarkeerd ? 6 : 2, display: 'flex', alignItems: 'center', paddingLeft: 10, overflow: 'hidden', cursor: dragType ? 'grabbing' : 'grab', boxShadow: isDubbel ? `0 0 0 2px #e67e22, ${dragType ? '0 4px 16px rgba(0,0,0,0.3)' : 'none'}` : dragType ? '0 4px 16px rgba(0,0,0,0.3)' : undefined, opacity: dragType ? 0.85 : 1, userSelect: 'none', touchAction: 'none' }}
         onPointerDown={ev => { if (ev.button !== 0) return; startDrag(ev, 'move') }} onPointerMove={onMove} onPointerUp={onUp}
       >
         {isDubbel && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#e67e22', borderRadius: '5px 5px 0 0', pointerEvents: 'none' }} />}
@@ -1332,7 +1335,7 @@ function FaseRij({ fase, totalW, vs, ppd, totalDays, faseStart, faseEind, ingekl
 
 // ─── PlanitemRij (sub-rij per medewerker, alleen zichtbaar bij uitgeklapt) ────
 
-function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalDays, dossier_id, medewerkers, roosters, afwezigheid, dubbelGeplandSet, kleurweergave, medewerkerKleuren, uursoortKleuren, onItemUpdated, onItemVerwijderd, onItemCreated }: {
+function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalDays, dossier_id, medewerkers, roosters, afwezigheid, dubbelGeplandSet, markeerItemId, kleurweergave, medewerkerKleuren, uursoortKleuren, onItemUpdated, onItemVerwijderd, onItemCreated }: {
   activiteit: PlanningActiviteit
   medewerker: Medewerker
   items: PlanningItemVerrijkt[]
@@ -1340,6 +1343,7 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
   dossier_id: string; medewerkers: Medewerker[]
   roosters: MedewerkerRooster[]; afwezigheid: MedewerkerAfwezigheid[]
   dubbelGeplandSet: Set<string>
+  markeerItemId: string | null
   kleurweergave: Kleurweergave
   medewerkerKleuren: Record<string, string | null>
   uursoortKleuren: Record<string, string>
@@ -1374,7 +1378,7 @@ function PlanitemRij({ activiteit, medewerker, items, gridUnits, vs, ppd, totalD
         ))}
 
         {items.map(item => (
-          <PlanItemBar key={item.id} item={item} activiteit={activiteit} vs={vs} ppd={ppd} totalDays={totalDays} dossier_id={dossier_id} medewerkers={medewerkers} roosters={roosters} afwezigheid={afwezigheid} isDubbel={dubbelGeplandSet.has(item.id)} kleurweergave={kleurweergave} medewerkerKleuren={medewerkerKleuren} uursoortKleuren={uursoortKleuren} onUpdated={onItemUpdated} onDeleted={onItemVerwijderd} onCreated={onItemCreated} />
+          <PlanItemBar key={item.id} item={item} activiteit={activiteit} vs={vs} ppd={ppd} totalDays={totalDays} dossier_id={dossier_id} medewerkers={medewerkers} roosters={roosters} afwezigheid={afwezigheid} isDubbel={dubbelGeplandSet.has(item.id)} isGemarkeerd={markeerItemId === item.id} kleurweergave={kleurweergave} medewerkerKleuren={medewerkerKleuren} uursoortKleuren={uursoortKleuren} onUpdated={onItemUpdated} onDeleted={onItemVerwijderd} onCreated={onItemCreated} />
         ))}
       </div>
     </div>
@@ -1625,9 +1629,11 @@ type Props = {
   afwezigheid?: MedewerkerAfwezigheid[]
   uurtarieven?: Uurtarief[]
   taken?: TaakMarker[]
+  /** Dubbele inplanningen van dit dossier bij het laden (over alle dossiers + verlof heen). */
+  dubbel?: DubbeleInplanning[]
 }
 
-export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, partijen, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, bewakingscodes = [], roosters = [], afwezigheid = [], uurtarieven = [], taken = [] }: Props) {
+export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items: initI, medewerkers, uursoorten, partijen, werkbegrotingUursoortIds, fasen: initF, afhankelijkheden: initAfh, bewakingscodes = [], roosters = [], afwezigheid = [], uurtarieven = [], taken = [], dubbel: initDubbel = [] }: Props) {
   const router     = useRouter()
   const [, startT] = useTransition()
   const rowsRef    = useRef<HTMLDivElement>(null)
@@ -1732,9 +1738,39 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   // Per-medewerker groepering binnen een activiteit (voor uitgeklapte sub-rijen)
   const medewerkerMap = useMemo(() => Object.fromEntries(medewerkers.map(m => [m.id, m])), [medewerkers])
 
+  // Dubbele inplanning over alle dossiers + verlof heen (server). Na elke wijziging van de
+  // planitems opnieuw ophalen: dan klopt het overzicht ook als een botsing is opgelost.
+  const [dubbel, setDubbel] = useState(initDubbel)
+  useEffect(() => { setDubbel(initDubbel) }, [initDubbel])
+  const eersteItems = useRef(true)
+  useEffect(() => {
+    if (eersteItems.current) { eersteItems.current = false; return }
+    const t = setTimeout(() => { haalDubbeleInplanning(dossier_id).then(setDubbel).catch(() => {}) }, 800)
+    return () => clearTimeout(t)
+  }, [items, dossier_id])
+
+  // "Toon in planning": klap de activiteit (en zijn fase) open, spring naar het dubbele moment
+  // en licht het planitem even op.
+  const [markeerItemId, setMarkeerItemId] = useState<string | null>(null)
+  function toonDubbel(d: DubbeleInplanning) {
+    setUitgeklapt(prev => new Set(prev).add(d.hier.activiteit_id))
+    const faseId = activiteiten.find(a => a.id === d.hier.activiteit_id)?.fase_id
+    if (faseId) setIngeklapteFasen(prev => { const n = new Set(prev); n.delete(faseId); return n })
+    handleScrub(new Date(d.overlap_van))
+    setMarkeerItemId(d.item_id)
+    setTimeout(() => {
+      document.querySelector(`[data-planitem-id="${d.item_id}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+    }, 150)
+    setTimeout(() => setMarkeerItemId(cur => (cur === d.item_id ? null : cur)), 4000)
+  }
+
   // Dubbele inplanning detectie
   const dubbelGeplandSet = useMemo(() => {
     const set = new Set<string>()
+    for (const d of dubbel) {
+      set.add(d.item_id)
+      if (d.ander_item_id) set.add(d.ander_item_id)
+    }
     const perMed: Record<string, PlanningItemVerrijkt[]> = {}
     for (const i of items) {
       if (!perMed[i.medewerker_id]) perMed[i.medewerker_id] = []
@@ -1751,7 +1787,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
       }
     }
     return set
-  }, [items])
+  }, [items, dubbel])
 
   // Fase-bereik (min start, max deadline van haar activiteiten)
   const faseBereik = useMemo(() => {
@@ -2233,6 +2269,8 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
 
       <PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />
 
+      <DubbelOverzicht dubbel={dubbel} onToon={toonDubbel} />
+
       {/* Nieuwe fase */}
       {toonNwFase && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, padding: '8px 12px', background: 'var(--bg-elev)', borderRadius: 8, border: '1px solid var(--border)', alignItems: 'center' }}>
@@ -2325,6 +2363,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                   dossier_id={dossier_id} medewerkers={medewerkers}
                   roosters={roosters} afwezigheid={afwezigheid}
                   dubbelGeplandSet={dubbelGeplandSet}
+                  markeerItemId={markeerItemId}
                   kleurweergave={kleurweergave}
                   medewerkerKleuren={medewerkerKleuren}
                   uursoortKleuren={uursoortKleuren}

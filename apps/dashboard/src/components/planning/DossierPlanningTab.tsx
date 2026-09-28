@@ -16,6 +16,7 @@ import { getBedrijfsinstellingen } from '@/app/(platform)/instellingen/bedrijfsi
 import { berekenPlanUren } from '@/lib/planning/werkuren'
 import { getPlanningBewakingscodes } from '@/lib/planning/bewakingscodes'
 import { haalAfwezigheidVoorPlanning } from '@/lib/planning/afwezigheid'
+import { zoekDubbeleInplanningVoorDossier } from '@/lib/planning/dubbel-ingepland'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -29,7 +30,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const [
     medewerkerRes, activiteitenRes, roostersRes,
     afwezigheidRes, werkbegrotingRes, uursoortRes, dossierRes, partijenRes,
-    fasenRes, bewakingscodes,
+    fasenRes, bewakingscodes, dubbel,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('actief', true).order('achternaam'),
     supabase.from('planning_activiteiten').select('*').eq('dossier_id', dossier_id).order('volgorde'),
@@ -51,6 +52,8 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
     // Keuzelijst voor de verplichte bewakingscode per activiteit: Bouw7-snapshot + werkbegroting
     // + stelposten/meerwerk, alles uit de database en nooit live uit Bouw7.
     getPlanningBewakingscodes(dossier_id),
+    // Wie van dit dossier op hetzelfde moment ook elders staat of verlof heeft (fail-soft).
+    zoekDubbeleInplanningVoorDossier(dossier_id),
   ])
 
   // Taken (uit task_lists gekoppeld aan dit dossier als 'project'-entity)
@@ -183,6 +186,7 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
             afwezigheid={afwezigheid}
             uurtarieven={uurtarieven}
             taken={taken}
+            dubbel={dubbel}
           />
         }
         medewerkers={

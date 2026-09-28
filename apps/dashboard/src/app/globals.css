@@ -594,6 +594,10 @@
 }
 /* Venster dat aan zijn titel te verslepen is (useVersleepbaar). */
 .eva-sleepvenster h3 { cursor: move; user-select: none; }
+/* Planitem opgelicht via "Toon in planning" (overzicht dubbele inplanningen). */
+@keyframes eva-puls { 0%, 100% { outline-color: var(--warning-500); } 50% { outline-color: transparent; } }
+.eva-puls { outline: 3px solid var(--warning-500); outline-offset: 2px; animation: eva-puls 0.8s ease-in-out 4; }
+@media (prefers-reduced-motion: reduce) { .eva-puls { animation: none; } }
 
 .eva-section-label {
   font-family: var(--font-ui); font-size: 10px; font-weight: 700;
