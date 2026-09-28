@@ -3,26 +3,23 @@
 /**
  * De factuurregels van één bewakingscode samenstellen uit de boekingen die eronder hangen.
  *
- * Twee tabellen van gelijke breedte naast elkaar, met de verplaatsknoppen ertussen — het klassieke
- * dual-list-patroon. Links staat wát er geboekt is, rechts wát de klant op zijn factuur leest. Dat
- * verband is waar nacalculatie om draait, en het is alleen af te lezen als beide in dezelfde vorm
- * naast elkaar staan; onder elkaar, of links een tabel en rechts kaartjes, moet je twee lijsten uit
- * je hoofd vergelijken.
+ * Twee tabellen naast elkaar: links wát er geboekt is, rechts wát de klant op zijn factuur leest.
  *
- * Werkwijze: rijen links aanklikken om ze te selecteren, rechts een factuurregel aanwijzen als doel,
- * en dan → om ze daarheen te verplaatsen, ← om ze weer de automatische indeling te laten volgen, of
- * + om er een nieuwe factuurregel van te maken.
+ * Links is alleen-lezen, op het vinkje na dat zegt of een boeking óp de factuur komt. De prijs
+ * wordt uitsluitend rechts gemaakt, per factuurregel: prijsvelden op twee plekken lieten niet meer
+ * zien welk bedrag waar vandaan kwam. Het regelnummer achter elke boeking verbindt de twee.
  *
- * Het vinkje vooraan links is iets anders dan de selectie: dat zegt of de boeking óp de factuur komt.
+ * Rechts is per regel alles aan te passen: omschrijving, aantal, eenheid, opslag, prijs per eenheid,
+ * totaal en btw. Opslag, eenheidsprijs en totaal zijn drie vensters op één opgeslagen getal — het
+ * regeltotaal — en worden daaruit teruggerekend. Een veld leegmaken zet de regel terug op de som van
+ * de boekingen. Aantal en eenheid wijzigen verandert alleen hoe de regel gelezen wordt: het totaal
+ * blijft staan en de eenheidsprijs rekent mee ("6 uur" → "1 post" blijft € 450).
  *
- * Prijzen zijn op twee plekken te sturen, en dat onderscheid is bewust: een tarief of opslag per
- * boeking rekent door met wat er nog geboekt wordt, een bedrag op de factuurregel zet dat juist stil
- * omdat er iets anders is afgesproken. In één veld is achteraf niet meer te zien of een bedrag
- * berekend was of afgesproken.
+ * Een losse regel heeft geen boekingen onder zich en stelt daarom zijn eigen regel samen: daar is het
+ * opgeslagen getal de prijs per eenheid, en het regelbedrag aantal maal die prijs.
  *
- * Een losse regel heeft geen boekingen onder zich en stelt daarom zijn eigen aantal, eenheid en
- * prijs samen: het bedrag in het veld is daar de prijs per eenheid, en het regelbedrag aantal maal
- * die prijs. Bij een afgeleide regel komen aantal en eenheid uit de boekingen en liggen ze vast.
+ * Regels selecteren en "Samenvoegen" zet hun boekingen samen op één nieuwe regel; "Splitsen" laat
+ * die boekingen de indeling van de post weer volgen.
  *
  * Elke handeling slaat meteen op. Een tabel met een losse Opslaan-knop nodigt uit tot half werk: je
  * vinkt drie regels uit, sluit het venster en weet niet of het is meegegaan.
@@ -32,18 +29,19 @@
 
 import React, { useEffect, useId, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, ArrowLeft, ArrowRight, Plus, Trash2 } from 'lucide-react'
+import { Lock, Plus, Trash2, Merge, Split } from 'lucide-react'
 import {
   Button, Input, Textarea, Checkbox, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui'
 import {
   bewaarCodeInstelling, bewaarFactuurGroep, bewaarBoekingen, zetBoekingGroep,
-  voegLosseRegelToe, verwijderLosseRegel, maakRegieFactuurInBouw7,
+  voegLosseRegelToe, verwijderLosseRegel, maakRegieFactuurInBouw7, voegFactuurRegelsSamen,
   type CodeRegelView, type BoekingView, type GroepView,
 } from '@/lib/dossiers/servicedesk'
 import {
-  GROEPERINGEN, standaardFactuurtekst, telbareRegels, type Groepering,
+  GROEPERINGEN, bedragUitOpslag, bedragUitTarief, isHandmatigeGroep, standaardFactuurtekst,
+  telbareRegels, type Groepering,
 } from '@/lib/dossiers/factuurregel-groepen'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 import { getLosseRegelKeuzes, type LosseRegelKeuze } from '@/lib/dossiers/factuur-standaardregels'
@@ -280,9 +278,8 @@ export default function FactuurRegelVenster({
   const { vraagTekst, bevestig } = useDialogen()
   /** Btw voor de hele factuur; een regel mag er via zijn eigen kolom van afwijken. */
   const [factuurTariefId, setFactuurTariefId] = useState<number | null>(null)
+  /** Geselecteerde factuurregels rechts, om samen te voegen of te splitsen. */
   const [selectie, setSelectie] = useState<Set<string>>(new Set())
-  /** De factuurregel die als doel is aangewezen voor de →-knop. */
-  const [doel, setDoel] = useState<string | null>(null)
   const [bezig, start] = useTransition()
   const [geopendVoor, setGeopendVoor] = useState<string | null>(null)
   /** De kiezer voor een losse regel (afspraken met de klant, standaardregels, vrije regel). */
@@ -299,12 +296,11 @@ export default function FactuurRegelVenster({
     })
   }, [tarieven])
 
-  // Van code wisselen betekent een schone selectie; anders zouden regels van de vorige post meegaan
-  // in een verplaatsing.
+  // Van code wisselen betekent een schone selectie; anders zouden regels van de vorige post
+  // meegaan in een samenvoeging.
   if (code && geopendVoor !== code.bewakingscode) {
     setGeopendVoor(code.bewakingscode)
     setSelectie(new Set())
-    setDoel(null)
     setKiezerOpen(false)
   }
 
@@ -315,10 +311,11 @@ export default function FactuurRegelVenster({
   const opslot = code.vergrendeld || !!readOnly
 
   /** Elke handeling loopt hierlangs: uitvoeren, fout tonen, en anders opnieuw ophalen. */
-  function doe(actie: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+  function doe(actie: () => Promise<{ ok: true } | { ok: false; error: string }>, daarna?: () => void) {
     start(async () => {
       const r = await actie()
       if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
+      daarna?.()
       onBewaard()
     })
   }
@@ -327,20 +324,27 @@ export default function FactuurRegelVenster({
     doe(() => bewaarCodeInstelling(dossierId, code.bewakingscode, patch))
   const groepPatch = (sleutel: string, patch: Parameters<typeof bewaarFactuurGroep>[3]) =>
     doe(() => bewaarFactuurGroep(dossierId, code.bewakingscode, sleutel, patch))
-  const boekingPatch = (b: BoekingView, patch: Parameters<typeof bewaarBoekingen>[3]) =>
-    doe(() => bewaarBoekingen(dossierId, code.bewakingscode,
-      [{ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }], patch))
 
-  const teKiezen = code.boekingen.filter(b => !b.gefactureerd)
-  const gekozen = teKiezen.filter(b => selectie.has(b.sleutel))
+  // ── Prijsvelden rechts: drie vensters op één opgeslagen getal ────────────
+  // Bij een afgeleide regel is dat getal het regeltotaal, bij een losse regel de prijs per eenheid.
+  const zetTotaal = (g: GroepView, totaal: number | null) =>
+    groepPatch(g.groepSleutel, {
+      bedrag_excl_btw: totaal == null ? null
+        : g.los ? Math.round((totaal / (g.aantal || 1)) * 100) / 100
+        : totaal,
+    })
+  const zetPrijs = (g: GroepView, prijs: number | null) =>
+    groepPatch(g.groepSleutel, {
+      bedrag_excl_btw: prijs == null ? null : g.los ? prijs : bedragUitTarief(prijs, g.aantal),
+    })
+  const zetOpslag = (g: GroepView, pct: number | null) =>
+    groepPatch(g.groepSleutel, { bedrag_excl_btw: pct == null ? null : bedragUitOpslag(g.inkoop, pct) })
+
   const nummerVan = new Map(code.groepen.map((g, i) => [g.groepSleutel, i + 1]))
 
-  // Het doel wordt afgeleid en niet blind vertrouwd: groepen ontstaan en verdwijnen bij elke
-  // herlading, dus een onthouden sleutel kan zomaar niet meer bestaan.
-  const actiefDoel = doel != null && code.groepen.some(g => g.groepSleutel === doel) ? doel : null
-  const doelNummer = actiefDoel ? nummerVan.get(actiefDoel) : null
-
-  const bronnenVanSelectie = () => gekozen.map(b => ({ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }))
+  // Afgeleid en niet blind vertrouwd: groepen ontstaan en verdwijnen bij elke herlading, dus een
+  // onthouden sleutel kan zomaar niet meer bestaan.
+  const gekozen = code.groepen.filter(g => selectie.has(g.groepSleutel))
 
   function wissel(sleutel: string) {
     setSelectie(vorig => {
@@ -350,69 +354,45 @@ export default function FactuurRegelVenster({
     })
   }
 
-  function verplaatsNaarDoel() {
-    if (!actiefDoel) return
-    const bronnen = bronnenVanSelectie()
+  async function samenvoegen() {
+    const ja = await bevestig({
+      titel: `${gekozen.length} regels samenvoegen?`,
+      omschrijving: `Ze komen als één regel op de factuur, met de tekst van regel ${nummerVan.get(gekozen[0].groepSleutel)}. `
+        + 'Die kun je daarna aanpassen; met Splitsen maak je het ongedaan.',
+      bevestigLabel: 'Samenvoegen',
+    })
+    if (!ja) return
+    const sleutels = gekozen.map(g => g.groepSleutel)
     start(async () => {
-      const r = await zetBoekingGroep(dossierId, post.bewakingscode, bronnen, { groepSleutel: actiefDoel })
+      const r = await voegFactuurRegelsSamen(dossierId, post.bewakingscode, sleutels)
       if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
-      setSelectie(new Set())
+      setSelectie(new Set([r.groepSleutel]))
       onBewaard()
     })
   }
 
-  function losmaken() {
-    const bronnen = bronnenVanSelectie()
-    start(async () => {
-      const r = await zetBoekingGroep(dossierId, post.bewakingscode, bronnen, { groepSleutel: null })
-      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
-      setSelectie(new Set())
-      onBewaard()
-    })
+  function splitsen() {
+    const g = gekozen[0]
+    const bronnen = post.boekingen
+      .filter(b => b.groepSleutel === g.groepSleutel && !b.gefactureerd)
+      .map(b => ({ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }))
+    doe(() => zetBoekingGroep(dossierId, post.bewakingscode, bronnen, { groepSleutel: null }),
+      () => setSelectie(new Set()))
   }
 
-  async function nieuweRegel() {
-    const naam = await vraagTekst({
-      titel: gekozen.length === 1 ? 'Nieuwe factuurregel' : `${gekozen.length} boekingen als één regel`,
-      omschrijving: 'Ze komen als één regel op de factuur. De tekst hieronder is wat de klant leest.',
-      label: 'Omschrijving op de factuur',
-      standaard: post.omschrijving,
-      verplicht: true,
-      bevestigLabel: 'Aanmaken',
-    })
-    if (naam == null) return
-    const bronnen = bronnenVanSelectie()
-    start(async () => {
-      const r = await zetBoekingGroep(dossierId, post.bewakingscode, bronnen, 'nieuw')
-      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
-      if (r.groepSleutel) {
-        const n = await bewaarFactuurGroep(dossierId, post.bewakingscode, r.groepSleutel, { omschrijving: naam })
-        if (!n.ok) { toast.error(n.error, { duration: 8000 }); return }
-        setDoel(r.groepSleutel)
-      }
-      setSelectie(new Set())
-      onBewaard()
-    })
-  }
-
-  /** Een post die nergens geboekt staat: opstartkosten, voorrijkosten, een afgesproken toeslag. */
   /** Een regel uit de kieslijst: omschrijving, eenheid, prijs en btw worden gekopieerd. */
   function kiesLosseRegel(k: LosseRegelKeuze) {
     setKiezerOpen(false)
-    start(async () => {
-      const r = await voegLosseRegelToe(dossierId, post.bewakingscode, {
-        omschrijving: k.omschrijving,
-        bedragExclBtw: k.prijs,
-        aantal: 1,
-        eenheid: k.eenheid,
-        btwTariefBouw7Id: k.btwTariefBouw7Id,
-      })
-      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
-      setDoel(r.groepSleutel)
-      onBewaard()
-    })
+    doe(() => voegLosseRegelToe(dossierId, post.bewakingscode, {
+      omschrijving: k.omschrijving,
+      bedragExclBtw: k.prijs,
+      aantal: 1,
+      eenheid: k.eenheid,
+      btwTariefBouw7Id: k.btwTariefBouw7Id,
+    }))
   }
 
+  /** Een post die nergens geboekt staat: opstartkosten, voorrijkosten, een afgesproken toeslag. */
   async function losseRegel() {
     setKiezerOpen(false)
     const naam = await vraagTekst({
@@ -424,12 +404,7 @@ export default function FactuurRegelVenster({
       bevestigLabel: 'Toevoegen',
     })
     if (naam == null) return
-    start(async () => {
-      const r = await voegLosseRegelToe(dossierId, post.bewakingscode, { omschrijving: naam, bedragExclBtw: null })
-      if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
-      setDoel(r.groepSleutel)
-      onBewaard()
-    })
+    doe(() => voegLosseRegelToe(dossierId, post.bewakingscode, { omschrijving: naam, bedragExclBtw: null }))
   }
 
   async function verwijderRegel(g: GroepView) {
@@ -449,7 +424,7 @@ export default function FactuurRegelVenster({
       const ja = await bevestig({
         titel: 'Indeling opnieuw laten bepalen?',
         omschrijving: `${handmatig} boeking${handmatig === 1 ? '' : 'en'} ${handmatig === 1 ? 'is' : 'zijn'} `
-          + 'handmatig aan een regel toegewezen. Die toewijzing blijft staan en volgt de nieuwe indeling niet.',
+          + 'handmatig samengevoegd. Die samenvoeging blijft staan en volgt de nieuwe indeling niet.',
         bevestigLabel: 'Doorgaan',
       })
       if (!ja) return
@@ -494,21 +469,21 @@ export default function FactuurRegelVenster({
   }
 
   // ── Knopstatus ────────────────────────────────────────────────────────────
-  const kanNaarDoel = !opslot && !bezig && gekozen.length > 0 && actiefDoel != null
-  const kanLosmaken = !opslot && !bezig && gekozen.some(b => b.handmatigToegewezen)
-  const kanNieuw = !opslot && !bezig && gekozen.length > 0
+  const samenvoegbaar = gekozen.filter(g => !g.los && !g.gefactureerd)
+  const kanSamenvoegen = !opslot && !bezig && gekozen.length >= 2 && samenvoegbaar.length === gekozen.length
+  const kanSplitsen = !opslot && !bezig && gekozen.length === 1 && isHandmatigeGroep(gekozen[0].groepSleutel)
+  const samenvoegUitleg = gekozen.length < 2
+    ? 'Selecteer eerst twee of meer regels'
+    : samenvoegbaar.length !== gekozen.length
+      ? 'Een losse regel kan niet worden samengevoegd'
+      : `${gekozen.length} regels samenvoegen tot één`
   // Een vergrendelde post, een afgesloten dossier of een post waar niets van meegaat: dan is er
   // niets af te drukken en hoort de knop er ook niet te staan.
   const kanKlaarzetten = !opslot && teFactureren.length > 0
-  const doelUitleg = gekozen.length === 0
-    ? 'Selecteer eerst boekingen links'
-    : actiefDoel == null ? 'Kies eerst een factuurregel rechts'
-    : `Toevoegen aan regel ${doelNummer}`
 
   // ── Totalen ───────────────────────────────────────────────────────────────
   const opFactuur = code.boekingen.filter(b => !b.uitgesloten && !b.gefactureerd)
   const somKosten = opFactuur.reduce((s, b) => s + b.inkoopBedrag, 0)
-  const somVerkoop = opFactuur.reduce((s, b) => s + b.verkoopBedrag, 0)
   const uitRegels = code.groepen.filter(g => !g.meefactureren)
   const uitRegelBedrag = uitRegels.reduce((s, g) => s + g.bedrag, 0)
   const uitBoekingen = code.boekingen.filter(b => b.uitgesloten && !b.gefactureerd)
@@ -541,7 +516,7 @@ export default function FactuurRegelVenster({
     <Dialog open={code != null} onOpenChange={o => { if (!o) onSluit() }}>
       {/* Breder en met een vaste hoogte, net als ActiviteitToevoegenModal: twee tabellen naast
           elkaar passen niet in de 920px van size="xl", en een vaste hoogte houdt beide panelen even
-          groot met hun eigen scroll. 1440 = 2 × 660 tabel + 44 knoppen + 32 gaps + 40 padding. */}
+          groot met hun eigen scroll. */}
       <DialogContent size="xl" className="flex flex-col p-0 max-w-[1440px] h-[85vh]">
         <DialogHeader className="shrink-0 border-b border-neutral-200 px-6 py-4">
           <div className="pr-8">
@@ -562,7 +537,7 @@ export default function FactuurRegelVenster({
               </p>
             </div>
           )}
-          <div className="grid gap-4 sm:grid-cols-[2fr,1fr,1.4fr]">
+          <div className="grid gap-4 sm:grid-cols-[2fr,1.4fr]">
             <div>
               <label htmlFor={`${veld}-oms`} className={labelStijl}>Naam van de post</label>
               <Input
@@ -571,21 +546,6 @@ export default function FactuurRegelVenster({
                 disabled={opslot}
                 onBlur={e => {
                   if (e.target.value.trim() !== code.omschrijving) codePatch({ omschrijving: e.target.value })
-                }}
-              />
-            </div>
-            <div>
-              <label htmlFor={`${veld}-opslag`} className={labelStijl}>Opslag %</label>
-              <Input
-                id={`${veld}-opslag`}
-                suffix={<span className="text-[13px]">%</span>}
-                defaultValue={alsTekst(code.opslagPct)}
-                inputMode="decimal"
-                placeholder="standaard"
-                disabled={opslot}
-                onBlur={e => {
-                  const v = getal(e.target.value)
-                  if (v !== code.opslagPct) codePatch({ opslag_pct: v })
                 }}
               />
             </div>
@@ -625,35 +585,24 @@ export default function FactuurRegelVenster({
           </div>
         </div>
 
-        {/* ── Links de boekingen, knoppen ertussen, rechts de factuur ─────────── */}
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] gap-4 px-5 py-4">
+        {/* ── Links de boekingen, rechts de factuur ─────────────────────────── */}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(340px,1fr)_minmax(0,2.2fr)] gap-4 px-5 py-4">
 
-          {/* LINKS */}
+          {/* LINKS — alleen-lezen, op het vinkje na */}
           <section className="flex min-h-0 min-w-0 flex-col">
             <div className={paneelKop}>
               <span>Geboekte uren en kosten</span>
-              <span className="flex-1" />
-              {gekozen.length > 0 && (
-                <span className="rounded-full bg-brand-500 px-2 py-0.5 text-[11px] font-semibold text-white">
-                  {gekozen.length} geselecteerd
-                </span>
-              )}
             </div>
             <div className={scrollBak}>
-              <table className="w-full min-w-[600px] table-fixed border-collapse">
+              <table className="w-full min-w-[340px] table-fixed border-collapse">
                 <colgroup>
-                  <col style={{ width: 30 }} />
-                  <col style={{ width: 62 }} />
+                  <col style={{ width: 28 }} />
+                  <col style={{ width: 60 }} />
                   <col style={{ width: '99%' }} />
-                  <col style={{ width: 58 }} />
-                  {/* Ruim genoeg voor het totaal in de voetregel (€ 2.724,65), niet alleen voor
-                      een enkele boeking. */}
-                  <col style={{ width: 84 }} />
-                  <col style={{ width: 72 }} />
-                  {/* Een opslag kan 76,47 zijn; met het %-teken ín het veld is 80px het minimum
-                      waarbij dat niet wordt afgekapt. */}
-                  <col style={{ width: 80 }} />
-                  <col style={{ width: 100 }} />
+                  <col style={{ width: 56 }} />
+                  {/* Ruim genoeg voor het totaal in de voetregel (€ 2.724,65). */}
+                  <col style={{ width: 88 }} />
+                  <col style={{ width: 48 }} />
                 </colgroup>
                 <thead>
                   <tr className="text-left">
@@ -662,34 +611,29 @@ export default function FactuurRegelVenster({
                     <th className={kop}>Geboekt als</th>
                     <th className={`${kop} text-right`}>Aantal</th>
                     <th className={`${kop} text-right`}>Kostprijs</th>
-                    <th className={`${kop} text-right`} title="Verkoopprijs per uur">Uurtarief</th>
-                    <th className={`${kop} text-right`}>Opslag</th>
-                    <th className={`${kop} text-right`}>Verkoop</th>
+                    <th className={`${kop} text-center`} title="Factuurregel waar deze boeking in valt">Regel</th>
                   </tr>
                 </thead>
                 <tbody>
                   {code.boekingen.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-[13px] text-neutral-500">
+                      <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-neutral-500">
                         Er is nog niets op deze bewakingscode geboekt.
                       </td>
                     </tr>
                   )}
                   {code.boekingen.map(b => {
                     const vast = opslot || b.gefactureerd || bezig
-                    const isGekozen = selectie.has(b.sleutel)
-                    const bijDoel = actiefDoel != null && b.groepSleutel === actiefDoel && !b.uitgesloten
+                    const regel = !b.uitgesloten && !b.gefactureerd ? nummerVan.get(b.groepSleutel) : undefined
+                    const bijSelectie = regel != null && selectie.has(b.groepSleutel)
                     const tekst = tekstVan(b)
                     return (
                       <tr
                         key={b.sleutel}
-                        onClick={() => { if (!opslot && !b.gefactureerd) wissel(b.sleutel) }}
-                        className={`border-b border-neutral-100 align-middle last:border-0 ${
-                          opslot || b.gefactureerd ? '' : 'cursor-pointer'
-                        } ${isGekozen ? 'bg-brand-50' : bijDoel ? 'bg-neutral-100' : 'hover:bg-neutral-50'}`}
+                        className={`border-b border-neutral-100 align-middle last:border-0 ${bijSelectie ? 'bg-brand-50' : ''}`}
                         style={{ opacity: b.gefactureerd || b.uitgesloten ? 0.5 : 1 }}
                       >
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
                           {b.gefactureerd ? (
                             <Lock className="h-3.5 w-3.5 text-neutral-400" aria-label="Staat op een verstuurde factuur" />
                           ) : (
@@ -698,7 +642,8 @@ export default function FactuurRegelVenster({
                               disabled={vast}
                               aria-label="Deze boeking op de factuur zetten"
                               title="Op de factuur"
-                              onCheckedChange={v => boekingPatch(b, { uitgesloten: v !== true })}
+                              onCheckedChange={v => doe(() => bewaarBoekingen(dossierId, post.bewakingscode,
+                                [{ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }], { uitgesloten: v !== true }))}
                             />
                           )}
                         </td>
@@ -718,59 +663,13 @@ export default function FactuurRegelVenster({
                         <td className="whitespace-nowrap px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
                           {b.bronType === 'uur' ? `${fmtAantal(b.aantal ?? 0)} u` : '1'}
                         </td>
-                        <td className="px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-500">
+                        <td className="px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
                           {fmt(b.inkoopBedrag)}
                         </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
-                          {/* Prijs per eenheid. Een kostenpost telt als één post en heeft er dus
-                              geen; daar ís het verkoopbedrag de prijs. */}
-                          {b.bronType === 'uur' && b.aantal ? (
-                            <>
-                              <BewaarVeld
-                                waarde={alsTekst(b.verkoopTarief)}
-                                uitlijnen="rechts"
-                                titel={b.tariefAfgesproken
-                                  ? 'Afgesproken uurtarief van de opdrachtgever (relatiepagina) — aanpassen geldt alleen voor deze factuur'
-                                  : 'Verkoopprijs per uur — past het verkoopbedrag en de opslag aan'}
-                                disabled={vast}
-                                opslaan={t => boekingPatch(b, { verkoopTarief: getal(t) })}
-                              />
-                              {b.tariefAfgesproken && (
-                                <div className="px-1 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-success-700">
-                                  afspraak
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <div className="px-1 text-right text-[13px] text-neutral-400"
-                                 title="Een kostenpost telt als één post; het verkoopbedrag ís de prijs">—</div>
+                        <td className="px-1.5 py-2">
+                          {regel != null && (
+                            <div className="flex justify-center"><Nummer n={regel} actief={bijSelectie} /></div>
                           )}
-                        </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
-                          {b.inkoopBedrag > 0 ? (
-                            <BewaarVeld
-                              waarde={alsTekst(b.opslagPct)}
-                              uitlijnen="rechts"
-                              eenheid="%"
-                              titel="Opslag op de kostprijs — past het verkoopbedrag en het tarief aan"
-                              disabled={vast}
-                              opslaan={t => boekingPatch(b, { opslagPct: getal(t) })}
-                            />
-                          ) : (
-                            <div className="px-1 text-right text-[13px] text-neutral-400"
-                                 title="Zonder kostprijs valt er geen opslag op te rekenen">—</div>
-                          )}
-                        </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
-                          <BewaarVeld
-                            waarde={fmtGetal(b.verkoopBedrag)}
-                            uitlijnen="rechts"
-                            eenheid="€"
-                            eenheidVoor
-                            titel="Verkoopbedrag excl. btw — past het tarief en de opslag aan"
-                            disabled={vast}
-                            opslaan={t => boekingPatch(b, { verkoopBedrag: getal(t) })}
-                          />
                         </td>
                       </tr>
                     )
@@ -781,8 +680,7 @@ export default function FactuurRegelVenster({
                     <tr className="text-[13px] font-semibold text-neutral-900">
                       <th colSpan={4} className={`${voet} text-left`}>Meegerekend</th>
                       <td className={`${voet} text-right tabular-nums`}>{fmt(somKosten)}</td>
-                      <td className={voet} colSpan={2} />
-                      <td className={`${voet} text-right tabular-nums`}>{fmt(somVerkoop)}</td>
+                      <td className={voet} />
                     </tr>
                   </tfoot>
                 )}
@@ -790,47 +688,35 @@ export default function FactuurRegelVenster({
             </div>
           </section>
 
-          {/* KNOPPEN ERTUSSEN */}
-          <div className="flex min-h-0 flex-col items-center justify-center gap-2">
-            <Button
-              variant="outline" size="sm" className="h-8 w-8 p-0"
-              disabled={!kanNaarDoel} onClick={verplaatsNaarDoel}
-              title={doelUitleg} aria-label={doelUitleg}
-            >
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline" size="sm" className="h-8 w-8 p-0"
-              disabled={!kanNieuw} onClick={nieuweRegel}
-              title={kanNieuw ? 'Selectie als nieuwe factuurregel' : 'Selecteer eerst boekingen links'}
-              aria-label="Selectie als nieuwe factuurregel"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline" size="sm" className="h-8 w-8 p-0"
-              disabled={!kanLosmaken} onClick={losmaken}
-              title={kanLosmaken ? 'Losmaken — volgt weer de indeling' : 'Niets in de selectie is handmatig toegewezen'}
-              aria-label="Losmaken"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* RECHTS */}
+          {/* RECHTS — de factuur */}
           <section className="flex min-h-0 min-w-0 flex-col">
             <div className={paneelKop}>
               <span>Op de factuur</span>
-              <span className="flex-1" />
-              {doelNummer != null && (
-                <span className="text-[11.5px] font-normal text-neutral-500">regel {doelNummer} gekozen</span>
+              {gekozen.length > 0 && (
+                <span className="rounded-full bg-brand-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {gekozen.length} geselecteerd
+                </span>
               )}
+              <span className="flex-1" />
               {!opslot && (
-                <Button variant="outline" size="sm" disabled={bezig} onClick={() => setKiezerOpen(o => !o)}
-                        aria-expanded={kiezerOpen}
-                        title="Een regel die niet uit een boeking volgt, zoals voorrijkosten">
-                  <Plus className="h-3.5 w-3.5" /> Losse regel
-                </Button>
+                <>
+                  {kanSplitsen ? (
+                    <Button variant="outline" size="sm" disabled={bezig} onClick={splitsen}
+                            title="De boekingen van deze regel volgen weer de indeling van de post">
+                      <Split className="h-3.5 w-3.5" /> Splitsen
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled={!kanSamenvoegen} onClick={samenvoegen}
+                            title={samenvoegUitleg}>
+                      <Merge className="h-3.5 w-3.5" /> Samenvoegen
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" disabled={bezig} onClick={() => setKiezerOpen(o => !o)}
+                          aria-expanded={kiezerOpen}
+                          title="Een regel die niet uit een boeking volgt, zoals voorrijkosten">
+                    <Plus className="h-3.5 w-3.5" /> Losse regel
+                  </Button>
+                </>
               )}
             </div>
             {kiezerOpen && !opslot && (
@@ -842,23 +728,32 @@ export default function FactuurRegelVenster({
               />
             )}
             <div className={scrollBak}>
-              <table className="w-full min-w-[545px] table-fixed border-collapse">
+              <table className="w-full min-w-[780px] table-fixed border-collapse">
                 <colgroup>
-                  <col style={{ width: 34 }} />
+                  <col style={{ width: 28 }} />
                   <col style={{ width: 30 }} />
+                  <col style={{ width: 28 }} />
                   <col style={{ width: '99%' }} />
-                  <col style={{ width: 126 }} />
-                  <col style={{ width: 108 }} />
-                  <col style={{ width: 116 }} />
-                  <col style={{ width: 30 }} />
+                  <col style={{ width: 60 }} />
+                  <col style={{ width: 60 }} />
+                  {/* Een opslag kan 76,47 zijn; met het %-teken ín het veld is 84px het minimum. */}
+                  <col style={{ width: 84 }} />
+                  <col style={{ width: 92 }} />
+                  <col style={{ width: 104 }} />
+                  <col style={{ width: 112 }} />
+                  <col style={{ width: 36 }} />
                 </colgroup>
                 <thead>
                   <tr className="text-left">
+                    <th className={kop} title="Selecteren om samen te voegen of te splitsen" />
                     <th className={kop}>Nr</th>
                     <th className={kop} title="Deze regel meenemen">Op</th>
                     <th className={kop}>Omschrijving op de factuur</th>
-                    <th className={`${kop} text-right`}>Aantal · eenheid</th>
-                    <th className={`${kop} text-right`}>Bedrag</th>
+                    <th className={`${kop} text-right`}>Aantal</th>
+                    <th className={kop}>Eenheid</th>
+                    <th className={`${kop} text-right`}>Opslag</th>
+                    <th className={`${kop} text-right`}>Eh-prijs</th>
+                    <th className={`${kop} text-right`}>Totaal</th>
                     <th className={kop}>Btw</th>
                     <th className={kop} />
                   </tr>
@@ -866,28 +761,39 @@ export default function FactuurRegelVenster({
                 <tbody>
                   {code.groepen.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center text-[13px] text-neutral-500">
+                      <td colSpan={11} className="px-3 py-6 text-center text-[13px] text-neutral-500">
                         Er staat nog niets op de factuur. Vink links boekingen aan, of voeg een losse
                         regel toe.
                       </td>
                     </tr>
                   )}
                   {code.groepen.map((g: GroepView, i) => {
-                    const isDoel = actiefDoel === g.groepSleutel
+                    const isGekozen = selectie.has(g.groepSleutel)
                     // Een losse regel die al op een factuur staat ligt vast, net als een afgeboekte
                     // boeking links.
                     const regelVast = opslot || bezig || g.gefactureerd
+                    // Zonder vast bedrag staan de prijsvelden in grijs: dan zijn het berekende
+                    // waarden die meebewegen met wat er nog geboekt wordt.
+                    const vastgezet = g.bedragOverride != null
                     return (
                       <tr
                         key={g.groepSleutel}
-                        onClick={() => setDoel(d => d === g.groepSleutel ? null : g.groepSleutel)}
-                        className={`cursor-pointer border-b border-neutral-100 align-middle last:border-0 ${
-                          isDoel ? 'bg-brand-50 ring-1 ring-inset ring-brand-300' : 'hover:bg-neutral-50'
+                        className={`border-b border-neutral-100 align-middle last:border-0 ${
+                          isGekozen ? 'bg-brand-50' : ''
                         }`}
                         style={{ opacity: g.meefactureren && !g.gefactureerd ? 1 : 0.55 }}
                       >
-                        <td className="px-1.5 py-2"><Nummer n={i + 1} actief={isDoel} /></td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
+                          <Checkbox
+                            checked={isGekozen}
+                            disabled={opslot || g.gefactureerd}
+                            aria-label="Regel selecteren"
+                            title="Selecteren om samen te voegen of te splitsen"
+                            onCheckedChange={() => wissel(g.groepSleutel)}
+                          />
+                        </td>
+                        <td className="px-1.5 py-2"><Nummer n={i + 1} actief={isGekozen} /></td>
+                        <td className="px-1.5 py-2">
                           <Checkbox
                             checked={g.meefactureren}
                             disabled={regelVast}
@@ -896,68 +802,84 @@ export default function FactuurRegelVenster({
                             onCheckedChange={v => groepPatch(g.groepSleutel, { meefactureren: v === true })}
                           />
                         </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
                           <BewaarVeld
                             waarde={g.eigenOmschrijving ?? ''}
                             placeholder={g.omschrijving}
                             titel={g.los
                               ? (g.gefactureerd ? 'Losse regel — staat al op een factuur' : 'Losse regel, niet uit een boeking')
                               : `${g.aantalBoekingen} boeking${g.aantalBoekingen === 1 ? '' : 'en'}`
-                                + `${g.handmatig ? ' · handmatig samengevoegd' : ''}`}
+                                + `${g.handmatig ? ' · samengevoegd' : ''}`}
                             disabled={regelVast}
                             opslaan={t => groepPatch(g.groepSleutel, { omschrijving: t })}
                           />
                         </td>
-                        {/* Bij een afgeleide regel volgen aantal en eenheid uit de boekingen
-                            eronder en zijn ze dus niet te bewerken. Een losse regel heeft die
-                            boekingen niet: daar stel je de regel zelf samen — 3 dagen × € 85. */}
-                        {g.los ? (
-                          <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
-                            <div className="flex gap-1">
-                              <BewaarVeld
-                                waarde={alsTekst(g.aantal)}
-                                placeholder="1"
-                                uitlijnen="rechts"
-                                titel="Aantal op de factuur"
-                                disabled={regelVast}
-                                opslaan={t => groepPatch(g.groepSleutel, { aantal: getal(t) })}
-                              />
-                              <BewaarVeld
-                                waarde={g.eenheid ?? ''}
-                                placeholder="post"
-                                titel="Eenheid achter het aantal — post, uur, dag, stuks, m²"
-                                disabled={regelVast}
-                                opslaan={t => groepPatch(g.groepSleutel, { eenheid: t })}
-                              />
-                            </div>
-                          </td>
-                        ) : (
-                          <td className="whitespace-nowrap px-1.5 py-2 text-right text-[13px] tabular-nums text-neutral-600">
-                            {g.eenheid === 'uur' ? `${fmtAantal(g.aantal)} uur` : '1 post'}
-                          </td>
-                        )}
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
                           <BewaarVeld
-                            waarde={alsTekst(g.bedragOverride)}
-                            placeholder={fmtGetal(g.berekend)}
+                            waarde={g.eigenAantal ? alsTekst(g.aantal) : ''}
+                            placeholder={fmtAantal(g.aantal)}
+                            uitlijnen="rechts"
+                            titel={g.los
+                              ? 'Aantal op de factuur'
+                              : 'Aantal op de factuur; leeg = uit de boekingen. Het totaal blijft staan.'}
+                            disabled={regelVast}
+                            opslaan={t => groepPatch(g.groepSleutel, { aantal: getal(t) })}
+                          />
+                        </td>
+                        <td className="px-1.5 py-2">
+                          <BewaarVeld
+                            waarde={g.eigenEenheid ? (g.eenheid ?? '') : ''}
+                            placeholder={g.eenheid ?? 'post'}
+                            titel="Eenheid achter het aantal — post, uur, dag, stuks, m²"
+                            disabled={regelVast}
+                            opslaan={t => groepPatch(g.groepSleutel, { eenheid: t })}
+                          />
+                        </td>
+                        <td className="px-1.5 py-2">
+                          {g.inkoop > 0 ? (
+                            <BewaarVeld
+                              waarde={vastgezet ? alsTekst(g.opslagPct) : ''}
+                              placeholder={g.opslagPct != null ? fmtGetal(g.opslagPct) : ''}
+                              uitlijnen="rechts"
+                              eenheid="%"
+                              titel={`Opslag op de kostprijs (${fmt(g.inkoop)}) — past eh-prijs en totaal aan`}
+                              disabled={regelVast}
+                              opslaan={t => zetOpslag(g, getal(t))}
+                            />
+                          ) : (
+                            <div className="px-1 text-right text-[13px] text-neutral-400"
+                                 title={g.los ? 'Een losse regel heeft geen kostprijs' : 'Zonder kostprijs valt er geen opslag op te rekenen'}>
+                              —
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-2">
+                          <BewaarVeld
+                            waarde={vastgezet ? alsTekst(g.stukprijs) : ''}
+                            placeholder={fmtGetal(g.stukprijs)}
+                            uitlijnen="rechts"
+                            eenheid="€"
+                            eenheidVoor
+                            titel={`Prijs per ${g.eenheid ?? 'post'} — totaal = aantal × deze prijs`}
+                            disabled={regelVast}
+                            opslaan={t => zetPrijs(g, getal(t))}
+                          />
+                        </td>
+                        <td className="px-1.5 py-2">
+                          <BewaarVeld
+                            waarde={vastgezet ? alsTekst(g.bedrag) : ''}
+                            placeholder={fmtGetal(g.los ? g.bedrag : g.berekend)}
                             uitlijnen="rechts"
                             eenheid="€"
                             eenheidVoor
                             titel={g.los
-                              ? `Prijs per ${g.eenheid ?? 'post'}; het regelbedrag is aantal × deze prijs`
-                              : `Vast bedrag; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
+                              ? 'Regeltotaal excl. btw'
+                              : `Regeltotaal excl. btw; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
                             disabled={regelVast}
-                            opslaan={t => groepPatch(g.groepSleutel, { bedrag_excl_btw: getal(t) })}
+                            opslaan={t => zetTotaal(g, getal(t))}
                           />
-                          {/* Zodra het aantal niet 1 is, is de prijs in het veld niet meer het
-                              regelbedrag — en dat is wél wat er onderaan wordt opgeteld. */}
-                          {g.los && g.aantal !== 1 && (
-                            <div className="mt-1 text-right text-[11.5px] tabular-nums text-neutral-500">
-                              = {fmt(g.bedrag)}
-                            </div>
-                          )}
                         </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
                           <BtwKeuze
                             waarde={g.btwTariefBouw7Id}
                             tarieven={tarieven}
@@ -965,7 +887,7 @@ export default function FactuurRegelVenster({
                             opslaan={v => groepPatch(g.groepSleutel, { btw_tarief_bouw7_id: v })}
                           />
                         </td>
-                        <td className="px-1.5 py-2" onClick={e => e.stopPropagation()}>
+                        <td className="px-1.5 py-2">
                           {/* Alleen een losse regel is te verwijderen. Een afgeleide groep wissen
                               heeft geen betekenis: die wordt bij het volgende laden gewoon opnieuw
                               uit de boekingen afgeleid. */}
@@ -989,8 +911,7 @@ export default function FactuurRegelVenster({
                 {code.groepen.length > 0 && (
                   <tfoot>
                     <tr className="text-[14px] font-semibold text-neutral-900">
-                      <th colSpan={3} className={`${voet} text-left`}>Samen excl. btw</th>
-                      <td className={voet} />
+                      <th colSpan={8} className={`${voet} text-left`}>Samen excl. btw</th>
                       <td className={`${voet} text-right tabular-nums`}>{fmt(code.bedrag)}</td>
                       <td className={voet} colSpan={2} />
                     </tr>
@@ -998,7 +919,7 @@ export default function FactuurRegelVenster({
                       <tr>
                         {/* Zonder deze regel staat er een kale € 0,00 naast regels van honderden
                             euro's, en is nergens te zien waarom ze niet meetellen. */}
-                        <td colSpan={7}
+                        <td colSpan={11}
                             className="sticky bottom-0 z-[1] border-t border-warning-300 bg-warning-50 px-3 py-2 text-[12px] leading-relaxed text-warning-900">
                           {uitleg.join(' · ')}
                         </td>
@@ -1023,8 +944,8 @@ export default function FactuurRegelVenster({
             </label>
             {!opslot && (
               <span className="text-[12px] text-neutral-500">
-                Klik rijen links aan, kies rechts een factuurregel en gebruik <b>→</b> om ze daarheen te
-                zetten. <b>+</b> maakt er een nieuwe regel van, <b>←</b> laat ze de indeling weer volgen.
+                Vink links aan wat op de factuur komt. Rechts pas je elke regel aan; grijze bedragen zijn
+                berekend, een veld leegmaken zet de berekening terug. Selecteer regels om ze samen te voegen.
               </span>
             )}
           </div>

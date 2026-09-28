@@ -402,6 +402,17 @@ export type GroepView = {
   /** Prijs per eenheid; `aantal × stukprijs` is wat er als regel naar Bouw7 gaat. */
   stukprijs: number
   eenheid: string | null
+  /** Aantal is zelf ingevuld in plaats van afgeleid uit de boekingen. */
+  eigenAantal: boolean
+  /** Eenheid is zelf ingevuld in plaats van afgeleid uit de boekingen. */
+  eigenEenheid: boolean
+  /** Kostprijs van de boekingen in deze regel; 0 bij een losse regel. */
+  inkoop: number
+  /**
+   * Opslag op de kostprijs die naar `bedrag` leidt. Afgeleid, nooit opgeslagen — om dezelfde reden
+   * als bij `tariefEnOpslag`. Leeg zonder kostprijs.
+   */
+  opslagPct: number | null
   btwTariefBouw7Id: number | null
   meefactureren: boolean
   aantalBoekingen: number
@@ -566,7 +577,7 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
 
     const codeOmschrijving = (inst?.omschrijving ?? '').trim() || c.omschrijving
     const meefactureren = inst?.meefactureren ?? true
-    const groepering: Groepering = inst?.groepering ?? 'per_soort'
+    const groepering: Groepering = inst?.groepering ?? 'per_boeking'
     const codeBtw = inst?.btw_tarief_bouw7_id ?? null
 
     // Groeperen gebeurt met dezelfde functie als het scherm gebruikt, zodat wat er op het scherm
@@ -580,7 +591,15 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       const override = opgeslagenGroep?.bedrag_excl_btw != null
         ? Number(opgeslagenGroep.bedrag_excl_btw)
         : null
-      const { aantal, eenheid } = aantalEnEenheid(g.boekingen)
+      // Aantal en eenheid volgen uit de boekingen, tenzij ze op de regel zelf zijn ingevuld. Dat
+      // verandert alleen hoe de regel gelezen wordt ("1 post" in plaats van "6 uur"); het totaal
+      // blijft gedekt door de boekingen, dus de stukprijs rekent mee en niet het totaal.
+      const afgeleid = aantalEnEenheid(g.boekingen)
+      const eigenAantal = opgeslagenGroep?.aantal != null ? Number(opgeslagenGroep.aantal) : null
+      const eigenEenheid = (opgeslagenGroep?.eenheid ?? '').trim() || null
+      const aantal = eigenAantal ?? afgeleid.aantal
+      const eenheid = eigenEenheid ?? afgeleid.eenheid
+      const inkoopGroep = rond(g.boekingen.reduce((s, b) => s + (b.inkoopBedrag || 0), 0))
       return {
         groepSleutel: g.groepSleutel,
         omschrijving: eigenOms ?? afgeleideOmschrijving(g.groepSleutel, codeOmschrijving, {
@@ -596,6 +615,10 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         // factuur een aantal maal een prijs tonen die niet op het regeltotaal uitkomt.
         stukprijs: aantal ? rond((override ?? g.berekend) / aantal) : (override ?? g.berekend),
         eenheid,
+        eigenAantal: eigenAantal != null,
+        eigenEenheid: eigenEenheid != null,
+        inkoop: inkoopGroep,
+        opslagPct: tariefEnOpslag(override ?? g.berekend, null, inkoopGroep).opslagPct,
         btwTariefBouw7Id: opgeslagenGroep?.btw_tarief_bouw7_id ?? codeBtw,
         meefactureren: opgeslagenGroep?.meefactureren ?? true,
         aantalBoekingen: g.boekingen.length,
@@ -624,6 +647,10 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         aantal: losAantal,
         stukprijs,
         eenheid: (l.eenheid ?? '').trim() || 'post',
+        eigenAantal: l.aantal != null,
+        eigenEenheid: (l.eenheid ?? '').trim() !== '',
+        inkoop: 0,
+        opslagPct: null,
         btwTariefBouw7Id: l.btw_tarief_bouw7_id ?? codeBtw,
         meefactureren: l.meefactureren,
         aantalBoekingen: 0,
@@ -802,7 +829,7 @@ export async function bewaarCodeInstelling(
     bewakingscode,
     omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
     opslag_pct: patch.opslag_pct !== undefined ? patch.opslag_pct : bestaand?.opslag_pct ?? null,
-    groepering: patch.groepering !== undefined ? patch.groepering : bestaand?.groepering ?? 'per_soort',
+    groepering: patch.groepering !== undefined ? patch.groepering : bestaand?.groepering ?? 'per_boeking',
     btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
     meefactureren: patch.meefactureren !== undefined ? patch.meefactureren : bestaand?.meefactureren ?? true,
     // Alleen rand-witruimte weg: lege regels ertussen zijn bewust, die worden een lege alinea.
@@ -835,9 +862,9 @@ export async function bewaarFactuurGroep(
     omschrijving?: string | null
     /** Afgeleide regel: vast regeltotaal. Losse regel: de prijs per eenheid. */
     bedrag_excl_btw?: number | null
-    /** Alleen bij losse regels. */
+    /** Leeg = bij een afgeleide regel uit de boekingen, bij een losse regel 1. */
     aantal?: number | null
-    /** Alleen bij losse regels. */
+    /** Leeg = bij een afgeleide regel uit de boekingen, bij een losse regel 'post'. */
     eenheid?: string | null
     btw_tarief_bouw7_id?: number | null
     meefactureren?: boolean
@@ -846,16 +873,8 @@ export async function bewaarFactuurGroep(
   const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
   if (!toegang.ok) return toegang
 
-  // Aantal en eenheid horen bij een losse regel, die zijn eigen regel samenstelt. Bij een afgeleide
-  // regel komen ze uit de boekingen eronder; ze daar overschrijven zou een aantal op de factuur
-  // zetten dat niet meer bij de geboekte uren hoort.
-  if ((patch.aantal !== undefined || patch.eenheid !== undefined) && !isLosseRegel(groepSleutel)) {
-    return {
-      ok: false,
-      error: 'Aantal en eenheid volgen bij deze regel uit de boekingen eronder en zijn alleen op een '
-        + 'losse regel in te vullen.',
-    }
-  }
+  // Aantal en eenheid mogen ook op een afgeleide regel: daar bepalen ze alleen hoe de regel gelezen
+  // wordt, het regeltotaal blijft de som van de boekingen (of het vaste bedrag).
   if (patch.aantal !== undefined && patch.aantal != null
       && (!Number.isFinite(patch.aantal) || patch.aantal <= 0 || patch.aantal > 1_000_000)) {
     return { ok: false, error: 'Vul een aantal groter dan nul in.' }
@@ -979,32 +998,22 @@ export async function verwijderLosseRegel(
 }
 
 /**
- * Voegt de opgegeven boekingen samen tot één factuurregel, of haalt ze juist uit hun handmatige
- * regel (`groepSleutel: null`) zodat ze de groepering van de code weer volgen.
- *
- * De sleutel wordt hier bepaald en niet in het scherm: twee mensen die tegelijk samenvoegen mogen
- * elkaars regel niet overschrijven.
+ * Legt voor elk van de boekingen vast in welke factuurregel hij valt (`null` = volg de groepering).
+ * Intern: de aanroeper heeft de toegang al gecontroleerd en geeft het voorstel mee.
  */
-export async function zetBoekingGroep(
+async function zetGroepOpBoekingen(
   dossierId: string,
   bewakingscode: string,
+  code: CodeRegelView | undefined,
   boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
-  doel: { groepSleutel: string | null; omschrijving?: string | null } | 'nieuw',
-): Promise<{ ok: true; groepSleutel: string | null } | { ok: false; error: string }> {
-  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
-  if (!toegang.ok) return toegang
-  if (boekingen.length === 0) return { ok: false, error: 'Kies eerst welke boekingen bij elkaar horen.' }
-
-  const sleutel = doel === 'nieuw' ? nieuweHandmatigeSleutel() : doel.groepSleutel
-  const omschrijving = doel === 'nieuw' ? null : (doel.omschrijving ?? undefined)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
+  sleutel: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = createAdminClient()
 
   // De boekingen zelf zijn Bouw7-data; EVA bewaart alleen de afwijking. Bestaat er nog geen rij,
   // dan moet de bekende verkoopwaarde mee — anders zou de regel bij het volgende laden terugvallen
   // op de standaardberekening en stilletjes van bedrag veranderen.
-  const bekend = new Map((toegang.code?.boekingen ?? []).map(b => [b.sleutel, b]))
+  const bekend = new Map((code?.boekingen ?? []).map(b => [b.sleutel, b]))
 
   for (const b of boekingen) {
     const bron = bekend.get(`${b.bronType}:${b.bronBouw7Id}`)
@@ -1030,6 +1039,93 @@ export async function zetBoekingGroep(
     }, { onConflict: 'dossier_id,bron_type,bron_bouw7_id' })
     if (error) return { ok: false, error: error.message }
   }
+  return { ok: true }
+}
+
+/**
+ * Voegt factuurregels samen tot één regel: alle boekingen eronder gaan naar een nieuwe handmatige
+ * regel. Tekst en btw komen van de eerste regel.
+ *
+ * Had een van de regels een vast bedrag, dan krijgt de nieuwe regel de som van wat er stond als
+ * vast bedrag — anders zou het totaal na samenvoegen ongemerkt terugspringen naar de berekening.
+ * Losse regels doen niet mee: die hebben geen boekingen om te verplaatsen.
+ */
+export async function voegFactuurRegelsSamen(
+  dossierId: string,
+  bewakingscode: string,
+  groepSleutels: string[],
+): Promise<{ ok: true; groepSleutel: string } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  const code = toegang.code
+  if (!code) return { ok: false, error: 'Deze post bestaat niet meer.' }
+
+  const regels = groepSleutels
+    .map(s => code.groepen.find(g => g.groepSleutel === s))
+    .filter((g): g is GroepView => g != null)
+  if (regels.length < 2) return { ok: false, error: 'Kies minstens twee regels om samen te voegen.' }
+  if (regels.some(g => g.los)) {
+    return { ok: false, error: 'Een losse regel heeft geen boekingen en kan niet worden samengevoegd.' }
+  }
+
+  const sleutels = new Set(regels.map(g => g.groepSleutel))
+  const boekingen = code.boekingen
+    .filter(b => !b.gefactureerd && !b.uitgesloten && sleutels.has(b.groepSleutel))
+    .map(b => ({ bronType: b.bronType, bronBouw7Id: b.bronBouw7Id }))
+  if (boekingen.length === 0) return { ok: false, error: 'Er zijn geen boekingen om samen te voegen.' }
+
+  const sleutel = nieuweHandmatigeSleutel()
+  const gezet = await zetGroepOpBoekingen(dossierId, bewakingscode, code, boekingen, sleutel)
+  if (!gezet.ok) return gezet
+
+  const eerste = regels[0]
+  const vastBedrag = regels.some(g => g.bedragOverride != null)
+    ? rond(regels.reduce((s, g) => s + g.bedrag, 0))
+    : null
+
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('factuur_regelgroepen').upsert({
+    dossier_id: dossierId,
+    bewakingscode,
+    groep_sleutel: sleutel,
+    omschrijving: eerste.omschrijving,
+    bedrag_excl_btw: vastBedrag,
+    aantal: null,
+    eenheid: null,
+    // Alleen een afwijkend btw-tarief overnemen; het tarief van de code volgt vanzelf.
+    btw_tarief_bouw7_id: eerste.btwTariefBouw7Id !== code.btwTariefBouw7Id ? eerste.btwTariefBouw7Id : null,
+    meefactureren: regels.every(g => g.meefactureren),
+    volgorde: 0,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'dossier_id,bewakingscode,groep_sleutel' })
+  if (error) return { ok: false, error: error.message }
+
+  herlaadFacturatie(dossierId)
+  return { ok: true, groepSleutel: sleutel }
+}
+
+/**
+ * Voegt de opgegeven boekingen samen tot één factuurregel, of haalt ze juist uit hun handmatige
+ * regel (`groepSleutel: null`) zodat ze de groepering van de code weer volgen.
+ *
+ * De sleutel wordt hier bepaald en niet in het scherm: twee mensen die tegelijk samenvoegen mogen
+ * elkaars regel niet overschrijven.
+ */
+export async function zetBoekingGroep(
+  dossierId: string,
+  bewakingscode: string,
+  boekingen: { bronType: 'uur' | 'kost'; bronBouw7Id: string }[],
+  doel: { groepSleutel: string | null; omschrijving?: string | null } | 'nieuw',
+): Promise<{ ok: true; groepSleutel: string | null } | { ok: false; error: string }> {
+  const toegang = await vereisBewerkbareCode(dossierId, bewakingscode)
+  if (!toegang.ok) return toegang
+  if (boekingen.length === 0) return { ok: false, error: 'Kies eerst welke boekingen bij elkaar horen.' }
+
+  const sleutel = doel === 'nieuw' ? nieuweHandmatigeSleutel() : doel.groepSleutel
+  const omschrijving = doel === 'nieuw' ? null : (doel.omschrijving ?? undefined)
+
+  const gezet = await zetGroepOpBoekingen(dossierId, bewakingscode, toegang.code, boekingen, sleutel)
+  if (!gezet.ok) return gezet
 
   if (sleutel && omschrijving !== undefined) {
     const r = await bewaarFactuurGroep(dossierId, bewakingscode, sleutel, { omschrijving })
