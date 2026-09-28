@@ -4,6 +4,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@everts/ui'
+import { useVersleepbaar } from './versleepbaar'
 
 /** EVA Modal — Overlays en Containers.html (#01). Radix Dialog, sm/md/lg, focus-trap native. */
 const Dialog = DialogPrimitive.Root
@@ -48,14 +49,24 @@ interface DialogContentProps
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, size, children, hideClose, ...props }, ref) => (
+>(({ className, size, children, hideClose, style, onPointerDown, ...props }, ref) => {
+  // Versleepbaar aan de kop (DialogHeader/DialogTitle), zodat je opzij kunt schuiven om te
+  // zien wat eronder staat.
+  const sleep = useVersleepbaar()
+  return (
   <DialogPortal>
     <DialogOverlay />
     {/* Fixed, viewport-vullende flex-wrapper centreert de modal via layout (immuun voor de
         animatie-transform). pointer-events-none laat kliks náást de modal door naar de overlay
         (sluiten); de content zelf zet ze weer op auto. */}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-      <DialogPrimitive.Content ref={ref} className={cn(contentVariants({ size }), className)} {...props}>
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(contentVariants({ size }), className)}
+        style={{ ...style, ...sleep.style }}
+        onPointerDown={e => { onPointerDown?.(e); sleep.onPointerDown(e) }}
+        {...props}
+      >
         {children}
         {!hideClose && (
         <DialogPrimitive.Close className="absolute right-5 top-5 grid h-7 w-7 place-items-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-100">
@@ -66,11 +77,12 @@ const DialogContent = React.forwardRef<
       </DialogPrimitive.Content>
     </div>
   </DialogPortal>
-))
+  )
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex shrink-0 items-start justify-between px-6 pb-0 pt-5', className)} {...props} />
+  return <div data-sleepgreep className={cn('flex shrink-0 cursor-move items-start justify-between px-6 pb-0 pt-5', className)} {...props} />
 }
 
 const DialogTitle = React.forwardRef<
@@ -79,7 +91,8 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('m-0 text-[17px] font-bold tracking-[-0.01em] text-neutral-900', className)}
+    data-sleepgreep
+    className={cn('m-0 cursor-move text-[17px] font-bold tracking-[-0.01em] text-neutral-900', className)}
     {...props}
   />
 ))

@@ -9,7 +9,8 @@ import {
 import { nl } from 'date-fns/locale'
 import { createPortal } from 'react-dom'
 import toast from 'react-hot-toast'
-import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
+import { meldDubbeleInplanning } from './dubbel-melding'
+import { Combobox, useDialogen, useVersleepbaar, type ComboboxOption } from '@/components/ui'
 import { useRouter } from 'next/navigation'
 import type {
   PlanningActiviteit, PlanningItemVerrijkt, Medewerker, PlanningUursoort,
@@ -124,8 +125,15 @@ const COMBO_BOVEN_MODAL = 'z-[300]'
  * sticky kopbalk en de balken van latere rijen dwars over de dialoog heen.
  */
 function ModalLaag({ children }: { children: React.ReactNode }) {
+  // Versleepbaar aan de titel (de h3 bovenin elk venster), zodat je de planning erachter ziet.
+  const sleep = useVersleepbaar('h3')
   if (typeof document === 'undefined') return null
-  return createPortal(<div style={S.backdrop}>{children}</div>, document.body)
+  return createPortal(
+    <div style={S.backdrop}>
+      <div className="eva-sleepvenster" style={{ maxWidth: '95vw', ...sleep.style }} onPointerDown={sleep.onPointerDown}>{children}</div>
+    </div>,
+    document.body,
+  )
 }
 
 // ─── ItemEditDialog ───────────────────────────────────────────────────────────
@@ -329,6 +337,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
     setBusy(false)
     if (!result.ok) { toast.error(result.error); return }
     onCreated(result.data as PlanningItemVerrijkt)
+    meldDubbeleInplanning(result.dubbel)
     onClose()
   }
 
@@ -888,7 +897,8 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
       : drag.origUren
     onUpdated(item.id, { start_dt: ns, eind_dt: ne, uren: nieuweUren })
     const result = await verplaatsPlanningItem(item.id, { start_dt: ns, eind_dt: ne, medewerker_id: drag.medewerker_id, dossier_id, uursoort_id: drag.uursoort_id, uren: nieuweUren })
-    if (!result.ok) { toast.error(result.error); onUpdated(item.id, { start_dt: drag.origStartDt, eind_dt: drag.origEindDt, uren: drag.origUren }) }
+    if (!result.ok) { toast.error(result.error); onUpdated(item.id, { start_dt: drag.origStartDt, eind_dt: drag.origEindDt, uren: drag.origUren }); return }
+    meldDubbeleInplanning(result.dubbel)
   }
 
   async function handleCopy() {
@@ -948,7 +958,7 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
       </div>
       {editOpen && (
         <ItemEditDialog item={item} medewerkers={medewerkers} roosters={roosters} afwezigheid={afwezigheid}
-          onSave={async p => { onUpdated(item.id, p); const r = await verplaatsPlanningItem(item.id, { ...p, dossier_id, uursoort_id: (item as any).planning_activiteiten?.uursoort_id ?? null }); if (!r.ok) { toast.error(r.error); onUpdated(item.id, { start_dt: item.start_dt, eind_dt: item.eind_dt }) } }}
+          onSave={async p => { onUpdated(item.id, p); const r = await verplaatsPlanningItem(item.id, { ...p, dossier_id, uursoort_id: (item as any).planning_activiteiten?.uursoort_id ?? null }); if (!r.ok) { toast.error(r.error); onUpdated(item.id, { start_dt: item.start_dt, eind_dt: item.eind_dt }); return }; meldDubbeleInplanning(r.dubbel) }}
           onDelete={async () => { const r = await verwijderPlanningItem(item.id); if (!r.ok) { toast.error(r.error); return }; onDeleted(item.id) }}
           onCopy={handleCopy}
           onSplit={handleSplit}
@@ -963,6 +973,7 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
             onUpdated(postCopyItem.id, patch)
             const r = await verplaatsPlanningItem(postCopyItem.id, { ...p, dossier_id, uursoort_id: (postCopyItem as any).planning_activiteiten?.uursoort_id ?? null })
             if (!r.ok) toast.error(r.error)
+            else meldDubbeleInplanning(r.dubbel)
           }}
           onDelete={async () => { const r = await verwijderPlanningItem(postCopyItem.id); if (!r.ok) { toast.error(r.error); return }; onDeleted(postCopyItem.id) }}
           onCopy={async () => { /* no recursive copy-of-copy */ }}
@@ -1863,7 +1874,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
 
     const result = await updatePlanningActiviteit(id, patch as any)
     if (!result.ok) toast.error(result.error)
-    else startT(() => router.refresh())
+    else { meldDubbeleInplanning(result.dubbel); startT(() => router.refresh()) }
   }
 
   async function handleNieuweActiviteit(faseId?: string) {
@@ -1954,7 +1965,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
     }))
     const result = await verschuifPlanningFase(faseId, deltaDagen)
     if (!result.ok) toast.error(result.error)
-    else startT(() => router.refresh())
+    else { meldDubbeleInplanning(result.dubbel); startT(() => router.refresh()) }
   }
 
   /**
@@ -1989,6 +2000,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
       result.items > 0 ? `${result.items} planitem${result.items === 1 ? '' : 's'}` : null,
     ].filter(Boolean).join(', ')
     toast.success(`Fase gekopieerd${delen ? ` — ${delen}` : ''}`)
+    meldDubbeleInplanning(result.dubbel)
     startT(() => router.refresh())
   }
 

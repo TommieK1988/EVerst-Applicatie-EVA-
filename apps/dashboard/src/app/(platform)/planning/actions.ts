@@ -16,6 +16,7 @@ import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 import { dagenTussen, nlTijdstip, roostertijdenOp, verschuifNlDagen } from '@/lib/planning/nl-tijd'
+import { zoekDubbeleInplanning, type DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
 
 const db = () => createAdminClient() as any
 
@@ -240,7 +241,7 @@ export async function maakPlanningActiviteit(
 export async function updatePlanningActiviteit(
   id: string,
   input: Partial<z.infer<typeof activiteitSchema>>,
-): Promise<{ ok: true; cascade?: { items_verschoven: number } } | { ok: false; error: string }> {
+): Promise<{ ok: true; cascade?: { items_verschoven: number }; dubbel: DubbeleInplanning[] } | { ok: false; error: string }> {
   const supabase = db()
 
   // Lees huidige waarden om cascade-type te bepalen
@@ -311,6 +312,8 @@ export async function updatePlanningActiviteit(
 
   const items = (planItems ?? []) as { id: string; start_dt: string; eind_dt: string; medewerker_id: string }[]
   let itemsVerschoven = 0
+  // Alleen écht verschoven items: inkorten kan geen nieuwe dubbele inplanning opleveren.
+  const verschovenIds: string[] = []
 
   const nieuweStart    = input.gewenste_start
   const nieuweDeadline = input.deadline
@@ -329,6 +332,7 @@ export async function updatePlanningActiviteit(
         const ne = verschuifNlDagen(item.eind_dt, dagen)
         await supabase.from('planning_items').update({ start_dt: ns, eind_dt: ne }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
+        verschovenIds.push(item.id)
         itemsVerschoven++
       }
     }
@@ -365,7 +369,11 @@ export async function updatePlanningActiviteit(
   }
 
   await naPlanningWijziging()
-  return { ok: true, cascade: itemsVerschoven > 0 ? { items_verschoven: itemsVerschoven } : undefined }
+  return {
+    ok: true,
+    cascade: itemsVerschoven > 0 ? { items_verschoven: itemsVerschoven } : undefined,
+    dubbel: await zoekDubbeleInplanning(verschovenIds),
+  }
 }
 
 /**
@@ -504,7 +512,7 @@ const itemSchema = z.object({
 export async function maakPlanningItem(
   input: z.infer<typeof itemSchema> & { dossier_id: string; uursoort_id?: string | null },
 ): Promise<
-  | { ok: true; data: PlanningItem }
+  | { ok: true; data: PlanningItem; dubbel: DubbeleInplanning[] }
   | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
 > {
   const parsed = itemSchema.safeParse(input)
@@ -537,7 +545,7 @@ export async function maakPlanningItem(
   // Eigen mensen op een servicedeskbon: die staat daarmee op Ingepland. Aan het aanmaken
   // van het planitem en niet aan een knop, zodat de kolom volgt op wat er echt staat.
   await meldWerkToegewezen(input.dossier_id, 'ingepland')
-  return { ok: true, data: data as PlanningItem }
+  return { ok: true, data: data as PlanningItem, dubbel: await zoekDubbeleInplanning([data.id]) }
 }
 
 const snelItemSchema = z.object({
@@ -641,7 +649,7 @@ export async function kopieerPlanningItem(
   id: string,
   doel: { medewerker_id: string; start_dt: string; eind_dt: string },
 ): Promise<
-  | { ok: true; data: PlanningItem }
+  | { ok: true; data: PlanningItem; dubbel: DubbeleInplanning[] }
   | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
 > {
   const supabase = db()
@@ -677,7 +685,7 @@ export async function kopieerPlanningItem(
   if (error) return { ok: false, error: error.message }
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
-  return { ok: true, data: data as PlanningItem }
+  return { ok: true, data: data as PlanningItem, dubbel: await zoekDubbeleInplanning([data.id]) }
 }
 
 export async function verplaatsPlanningItem(
@@ -693,7 +701,7 @@ export async function verplaatsPlanningItem(
     overrule_reden?: string
   },
 ): Promise<
-  | { ok: true }
+  | { ok: true; dubbel: DubbeleInplanning[] }
   | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
 > {
   await assertDossierBewerkbaar(input.dossier_id)
@@ -720,7 +728,7 @@ export async function verplaatsPlanningItem(
 
   await spiegelNaarBouw7(id)
   await naPlanningWijziging()
-  return { ok: true }
+  return { ok: true, dubbel: await zoekDubbeleInplanning([id]) }
 }
 
 /**
@@ -1047,8 +1055,8 @@ function schuifTijdstip(ts: string, dagen: number): string {
 export async function verschuifPlanningFase(
   fase_id: string,
   delta_dagen: number,
-): Promise<{ ok: true; activiteiten_verschoven: number; items_verschoven: number } | { ok: false; error: string }> {
-  if (delta_dagen === 0) return { ok: true, activiteiten_verschoven: 0, items_verschoven: 0 }
+): Promise<{ ok: true; activiteiten_verschoven: number; items_verschoven: number; dubbel: DubbeleInplanning[] } | { ok: false; error: string }> {
+  if (delta_dagen === 0) return { ok: true, activiteiten_verschoven: 0, items_verschoven: 0, dubbel: [] }
   const supabase = db()
 
   const { data: activiteiten, error: aErr } = await supabase
@@ -1059,6 +1067,7 @@ export async function verschuifPlanningFase(
   if (aErr) return { ok: false, error: aErr.message }
 
   let aShift = 0, iShift = 0
+  const verschovenIds: string[] = []
 
   for (const a of activiteiten ?? []) {
     const patch: { gewenste_start?: string; deadline?: string } = {}
@@ -1079,12 +1088,13 @@ export async function verschuifPlanningFase(
         start_dt: schuifTijdstip(item.start_dt, delta_dagen),
         eind_dt:  schuifTijdstip(item.eind_dt,  delta_dagen),
       }).eq('id', item.id)
+      verschovenIds.push(item.id)
       iShift++
     }
   }
 
   await naPlanningWijziging()
-  return { ok: true, activiteiten_verschoven: aShift, items_verschoven: iShift }
+  return { ok: true, activiteiten_verschoven: aShift, items_verschoven: iShift, dubbel: await zoekDubbeleInplanning(verschovenIds) }
 }
 
 /**
@@ -1115,7 +1125,7 @@ export async function kopieerPlanningFase(
     overrule?: boolean
   } = {},
 ): Promise<
-  | { ok: true; fase: PlanningFase; activiteiten: number; items: number }
+  | { ok: true; fase: PlanningFase; activiteiten: number; items: number; dubbel: DubbeleInplanning[] }
   | { ok: false; error: string; overschrijding?: true }
 > {
   // Een kopie legt in een klap een fase, activiteiten en planning aan. Dat is planningswerk,
@@ -1305,6 +1315,7 @@ export async function kopieerPlanningFase(
     fase: nieuweFase as PlanningFase,
     activiteiten: activiteiten.length,
     items: nieuweItemIds.length,
+    dubbel: await zoekDubbeleInplanning(nieuweItemIds),
   }
 }
 

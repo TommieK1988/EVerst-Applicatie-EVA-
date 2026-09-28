@@ -592,6 +592,8 @@
   background: var(--error-50); border: 1px solid var(--error-300); border-radius: var(--radius-2xl);
   padding: 20px 24px;
 }
+/* Venster dat aan zijn titel te verslepen is (useVersleepbaar). */
+.eva-sleepvenster h3 { cursor: move; user-select: none; }
 
 .eva-section-label {
   font-family: var(--font-ui); font-size: 10px; font-weight: 700;
