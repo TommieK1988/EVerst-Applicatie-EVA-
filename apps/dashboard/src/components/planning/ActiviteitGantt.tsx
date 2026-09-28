@@ -7,6 +7,7 @@ import {
   differenceInDays, differenceInCalendarDays, startOfDay, getISOWeek,
 } from 'date-fns'
 import { nl } from 'date-fns/locale'
+import { createPortal } from 'react-dom'
 import toast from 'react-hot-toast'
 import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import { useRouter } from 'next/navigation'
@@ -116,6 +117,17 @@ function medewerkerOpties(medewerkers: Medewerker[]): ComboboxOption[] {
  */
 const COMBO_BOVEN_MODAL = 'z-[300]'
 
+/**
+ * Backdrop + dialoog, via een portal op `document.body`. De dialogen worden vanuit de
+ * Gantt-balken en -rijen geopend, en die hebben een eigen stapelcontext (een `zIndex`):
+ * zonder portal zit de z-index 200 van de backdrop daarin gevangen en tekenen de
+ * sticky kopbalk en de balken van latere rijen dwars over de dialoog heen.
+ */
+function ModalLaag({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(<div style={S.backdrop}>{children}</div>, document.body)
+}
+
 // ─── ItemEditDialog ───────────────────────────────────────────────────────────
 
 /**
@@ -209,7 +221,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
   )
 
   return (
-    <div style={S.backdrop}>
+    <ModalLaag>
       <div className="eva-card" style={{ padding: '22px 26px', width: 400, maxWidth: '95vw' }}>
         <h3 style={S.dlgTitle}>Planitem bewerken</h3>
         <p style={S.dlgSub}>{item.planning_activiteiten?.titel ?? medNaam(item)}</p>
@@ -278,7 +290,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
           </button>
         </div>
       </div>
-    </div>
+    </ModalLaag>
   )
 }
 
@@ -321,7 +333,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   }
 
   return (
-    <div style={S.backdrop}>
+    <ModalLaag>
       {/* Breed genoeg voor twee datumvelden naast elkaar: bij 340px werd dd-mm-jjjj samen met
           het kalendericoon afgekapt. */}
       <div className="eva-card" style={{ padding: '20px 24px', width: 420, maxWidth: '95vw' }}>
@@ -356,7 +368,7 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
           <button className="eva-btn-primary" onClick={opslaan} disabled={busy || !medId}>{busy ? '…' : 'Toewijzen'}</button>
         </div>
       </div>
-    </div>
+    </ModalLaag>
   )
 }
 
@@ -557,7 +569,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
   )
 
   return (
-    <div style={S.backdrop}>
+    <ModalLaag>
       <div className="eva-card" style={{ padding: '24px 28px', width: 560, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, margin: '0 0 18px', color: 'var(--fg)' }}>Activiteit bewerken</h3>
 
@@ -725,7 +737,7 @@ function ActiviteitEditModal({ activiteit, items, uursoorten, partijen, medewerk
           roosters={roosters} afwezigheid={afwezigheid}
           onClose={() => setToewijzenOpen(false)} onCreated={e => { onItemCreated(e); setToewijzenOpen(false) }} />
       )}
-    </div>
+    </ModalLaag>
   )
 }
 
@@ -1065,7 +1077,7 @@ function FaseEditModal({ fase, bewakingscodes, activiteitenInFase, onOpslaan, on
   }
 
   return (
-    <div style={S.backdrop}>
+    <ModalLaag>
       <div className="eva-card" style={{ padding: '24px 28px', width: 460, maxWidth: '95vw' }}>
         <h3 style={S.dlgTitle}>Fase bewerken</h3>
         <p style={S.dlgSub}>De bewakingscode van een fase geldt voor de activiteiten eronder.</p>
@@ -1096,7 +1108,7 @@ function FaseEditModal({ fase, bewakingscodes, activiteitenInFase, onOpslaan, on
           <button className="eva-btn-primary" onClick={opslaan} disabled={busy || !naam.trim()}>{busy ? '…' : 'Opslaan'}</button>
         </div>
       </div>
-    </div>
+    </ModalLaag>
   )
 }
 
@@ -1142,7 +1154,7 @@ function FaseKopieerModal({ fase, activiteitenInFase, aantalItems, faseStart, fa
   }
 
   return (
-    <div style={S.backdrop}>
+    <ModalLaag>
       <div className="eva-card" style={{ padding: '24px 28px', width: 480, maxWidth: '95vw' }}>
         <h3 style={S.dlgTitle}>Fase kopiëren</h3>
         <p style={S.dlgSub}>
@@ -1208,7 +1220,7 @@ function FaseKopieerModal({ fase, activiteitenInFase, aantalItems, faseStart, fa
           </button>
         </div>
       </div>
-    </div>
+    </ModalLaag>
   )
 }
 
