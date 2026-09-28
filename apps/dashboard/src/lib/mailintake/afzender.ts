@@ -409,3 +409,152 @@ export async function hulplijstRelaties(vanAdres: string | null, onderwerp: stri
 
   return [...uit].slice(0, 10)
 }
+
+export interface VerfijndeContactpersoon {
+  id: string
+  naam: string
+  /** In gewone taal, voor het besluitenlog en het scherm. */
+  reden: string
+  /** true als het op het e-mailadres matchte; dat is hard bewijs. */
+  hard: boolean
+}
+
+/**
+ * Corrigeert de contactpersoon met wat de mail zélf noemt.
+ *
+ * WAAROM DIT BOVEN DE LADDER GAAT
+ * De ladder kiest de persoon op het adres waarvandaan de mail kwam. Bij een
+ * postbus is dat de verkeerde vraag. Werkorders van KesslerPerspektief komen
+ * allemaal van servicedesk@kesslerperspektief.nl, en dat adres hangt aan een
+ * contactpersoon die letterlijk ". Servicedesk" heet. Elke bon kreeg die, terwijl
+ * er in de tekst stond:
+ *
+ *     Contactpersoon: Angela Bindesar
+ *     Email adres: a.bindesar@kesslerperspektief.nl
+ *
+ * Hetzelfde bij Schep Vastgoed (no_reply@, en er werd een willekeurige Helen
+ * Hollander aan gehangen) en bij VvE-beheerders die vanaf denhaag@ mailen.
+ *
+ * Een adres in de handtekening is specifieker bewijs dan het adres in de kop: het
+ * hoort bij dít bericht, niet bij het kanaal waarover het binnenkwam. Daarom mag
+ * deze stap de ladder overrulen -- ook een alias, want die is per adres gekozen en
+ * niet per mail.
+ *
+ * WAT DIT NOOIT DOET
+ * Iemand aanmaken. Er wordt uitsluitend gezocht tussen de contactpersonen die deze
+ * klant al heeft; wie daar niet tussen staat, laat de keuze ongemoeid. Een naam uit
+ * een mail is geen bewijs dat iemand bestaat.
+ */
+export async function verfijnContactpersoon(opts: {
+  relatieId: string | null
+  huidigeId: string | null
+  emailUitMail: string | null
+  naamUitMail: string | null
+}): Promise<VerfijndeContactpersoon | null> {
+  if (!opts.relatieId) return null
+
+  const email = (opts.emailUitMail ?? '').trim().toLowerCase()
+  const naam = (opts.naamUitMail ?? '').trim()
+  if (!email && naam.length < 3) return null
+
+  const supabase = createAdminClient()
+
+  // Begrensd op deze ene relatie; ruim onder de PostgREST-grens.
+  const { data } = await supabase
+    .from('contactpersoon_organisaties')
+    .select('email, contactpersoon:contactpersonen(id, voornaam, tussenvoegsel, achternaam, email, actief)')
+    .eq('organisatie_id', opts.relatieId)
+    .limit(500)
+
+  type Rij = {
+    email: string | null
+    contactpersoon: {
+      id: string; voornaam: string | null; tussenvoegsel: string | null
+      achternaam: string | null; email: string | null; actief: boolean | null
+    } | null
+  }
+
+  const mensen: { id: string; naam: string; adressen: string[] }[] = []
+  for (const k of (data ?? []) as unknown as Rij[]) {
+    const cp = k.contactpersoon
+    if (!cp || cp.actief === false) continue
+    const bestaand = mensen.find(m => m.id === cp.id)
+    const adressen = [cp.email, k.email].filter(Boolean).map(a => (a as string).toLowerCase())
+    if (bestaand) bestaand.adressen.push(...adressen)
+    else {
+      mensen.push({
+        id: cp.id,
+        naam: [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ').trim(),
+        adressen,
+      })
+    }
+  }
+  if (!mensen.length) return null
+
+  // ── Op het adres: hard bewijs ─────────────────────────────────────────────
+  if (email) {
+    const opAdres = mensen.filter(m => m.adressen.includes(email))
+    if (opAdres.length === 1 && opAdres[0].id !== opts.huidigeId) {
+      return {
+        id: opAdres[0].id,
+        naam: opAdres[0].naam,
+        reden: `De mail noemt ${opAdres[0].naam} als contactpersoon, met ${email}.`,
+        hard: true,
+      }
+    }
+    // Staat het adres er wél in maar hoort het bij niemand van deze klant, dan
+    // zegt dat niets over wie het wél is; verder zoeken op de naam.
+  }
+
+  // ── Op de achternaam, en alleen als die naar één iemand wijst ─────────────
+  const woorden = normaliseerPersoon(naam).split(' ').filter(w => w.length >= 3)
+  if (!woorden.length) return null
+
+  const opNaam = mensen.filter(m => {
+    const kaal = normaliseerPersoon(m.naam).split(' ')
+    return woorden.some(w => kaal.includes(w))
+  })
+  if (opNaam.length !== 1 || opNaam[0].id === opts.huidigeId) return null
+
+  return {
+    id: opNaam[0].id,
+    naam: opNaam[0].naam,
+    reden: `De mail noemt ${naam} als contactpersoon.`,
+    hard: false,
+  }
+}
+
+/**
+ * De volledige afzenderherkenning: de ladder, daarna de correctie uit de mail.
+ *
+ * Twee stappen die altijd samen horen. De ladder beantwoordt "van welk adres kwam
+ * dit?", de correctie "en wie staat er in de tekst?". Los aangeroepen is het te
+ * makkelijk om de tweede te vergeten, en dan valt EVA stilletjes terug op de
+ * contactpersoon van een postbusadres.
+ */
+export async function herkenEnVerfijn(opts: {
+  vanAdres: string | null
+  klantNaamUitMail: string | null
+  contactpersoonNaamUitMail?: string | null
+  contactpersoonEmailUitMail?: string | null
+  doorgestuurd?: boolean
+  eigenDomeinen?: Set<string>
+}): Promise<AfzenderTreffer> {
+  const afz = await herkenAfzender(opts)
+
+  const verfijnd = await verfijnContactpersoon({
+    relatieId: afz.relatieId,
+    huidigeId: afz.contactpersoonId,
+    emailUitMail: opts.contactpersoonEmailUitMail ?? null,
+    naamUitMail: opts.contactpersoonNaamUitMail ?? null,
+  }).catch(() => null)
+
+  if (!verfijnd) return afz
+
+  return {
+    ...afz,
+    contactpersoonId: verfijnd.id,
+    contactpersoonNaam: verfijnd.naam,
+    toelichting: `${afz.toelichting} ${verfijnd.reden}`.trim(),
+  }
+}

@@ -169,8 +169,33 @@ EVA kiest de klant; de AI kan alleen een naam noemen. De ladder stopt bij de eer
 | Niets gevonden | 0 % |
 
 **Doorgestuurde mail.** Is de afzender een eigen medewerker, dan zoekt EVA de oorspronkelijke
-afzender in de doorgestuurde kop. De zekerheid wordt dan afgetopt op 80 %, dus zo'n bericht
-gaat nooit volautomatisch door.
+afzender in de doorgestuurde kop. Wordt die gevonden, dan telt hij gewoon mee — het is immers
+hetzelfde adres dat de klant zelf gebruikte. Alleen als de oorspronkelijke afzender níet te
+vinden is, wordt de zekerheid afgetopt op 80 % en gaat het bericht nooit volautomatisch door.
+
+Ons eigen domein telt daarbij nooit als bewijs van een klant. Dat lijkt vanzelfsprekend, maar
+stond er niet: bij één klant staat een eigen collega als contactpersoon, en daardoor werd elke
+doorgestuurde mail waarvan de afzender onvindbaar was aan díé klant toegeschreven.
+
+### De contactpersoon
+
+De ladder hierboven kiest de persoon op het adres wáárvandaan de mail kwam. Bij een postbus is
+dat de verkeerde vraag: werkorders komen van `servicedesk@…`, opdrachtbonnen van `no_reply@…`,
+en beheerkantoren mailen allemaal vanaf hetzelfde algemene adres.
+
+Daarom kijkt EVA daarna naar wat er in de mail zelf staat. Veel systemen zetten het er letterlijk
+bij:
+
+    Contactpersoon: Angela Bindesar
+    Email adres: a.bindesar@kesslerperspektief.nl
+
+Hoort dat adres bij een contactpersoon van deze klant, dan wint die — ook van een handmatig
+gekoppeld adres, want een alias hoort bij het kanaal en dit bij dít bericht. Staat er geen adres
+maar wel een naam, dan telt die mee zolang hij naar precies één persoon wijst. Twee mensen met
+dezelfde achternaam leveren geen keuze op maar een overslag.
+
+**Er wordt nooit iemand aangemaakt.** Er wordt uitsluitend gezocht tussen de contactpersonen die
+deze klant al heeft; een naam uit een mail is geen bewijs dat die persoon bestaat.
 
 **Een onbekende opdrachtgever wordt nooit zelf aangemaakt.** Dan gaat het bericht naar een
 mens, met alles voorgevuld. Een dossier zonder klant levert in Bouw7 een project zonder klant

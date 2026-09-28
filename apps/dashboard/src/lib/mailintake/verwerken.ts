@@ -19,7 +19,7 @@ import {
   extraheer, keurEnKalibreer,
   type BijlageVoorAI, type WitteLijsten,
 } from './extractie'
-import { herkenAfzender, hulplijstRelaties } from './afzender'
+import { herkenEnVerfijn, hulplijstRelaties } from './afzender'
 import { zoekDuplicaten } from './duplicaten'
 import { beslis, samenvattendeReden } from './beslis'
 import { zetOfferteGewonnenUitBericht } from './opdracht'
@@ -324,13 +324,12 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     // ronde over de hele klus -- TypeScript laat de zekerheid dan los.
     let gelezen: NonNullable<typeof ex.data> = ex.data
 
-    const afz = await herkenAfzender({
+    const afz = await herkenEnVerfijn({
       vanAdres: echteAfzender,
       klantNaamUitMail: gelezen.klant_naam,
-      // Nodig om te kiezen bij een gedeeld postbusadres van een beheerkantoor.
       contactpersoonNaamUitMail: gelezen.contactpersoon_naam,
+      contactpersoonEmailUitMail: gelezen.contactpersoon_email,
       doorgestuurd: bewijsIsTweedehands,
-      // Ons eigen domein bewijst nooit een klant; zie de ladder in afzender.ts.
       eigenDomeinen: eigen,
     })
 
