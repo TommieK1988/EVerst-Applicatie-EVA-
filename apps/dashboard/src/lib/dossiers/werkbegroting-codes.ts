@@ -14,10 +14,13 @@
 
 import { leesEigenBewakingscodes, type EigenBewakingscode } from '@/lib/dossiers/eigen-bewakingscodes'
 import { vereisSessie } from '@/lib/auth/rechten'
+import { magCorrecties } from '@/lib/dossiers/correctie-bewakingscode'
 
 export type { EigenBewakingscode }
 
 export async function getEigenBewakingscodes(dossierId: string): Promise<EigenBewakingscode[]> {
   await vereisSessie()
-  return leesEigenBewakingscodes(dossierId)
+  const [codes, correcties] = await Promise.all([leesEigenBewakingscodes(dossierId), magCorrecties()])
+  // De kostengroep Correcties bestaat alleen voor wie hem mag zien.
+  return correcties ? codes : codes.filter(c => c.soort !== 'correctie')
 }

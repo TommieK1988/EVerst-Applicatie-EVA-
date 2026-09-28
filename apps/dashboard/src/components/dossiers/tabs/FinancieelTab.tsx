@@ -1,5 +1,6 @@
 import { Fragment, Suspense } from 'react'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
+import { magCorrecties } from '@/lib/dossiers/correctie-bewakingscode'
 import { Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
 import { ProjectVoortgangEditor, BewakingProgressCel } from './VoortgangEditors'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
@@ -222,7 +223,8 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
 )
 
 async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
-  const data = await getDossierBewaking(dossierId)
+  // De kostengroep Correcties alleen voor wie hem mag zien (Projectbureau/Administratie).
+  const data = await getDossierBewaking(dossierId, { verbergCorrecties: !(await magCorrecties()) })
   // Standopname per bewakingscode is alleen bij Opdrachten bewerkbaar.
   const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id
 

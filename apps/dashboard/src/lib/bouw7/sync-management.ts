@@ -1,4 +1,5 @@
 import { createAdminClient } from '@everts/database/server'
+import { isCorrectieCode } from '@/components/dossiers/types'
 import {
   getBouw7Client,
   fetchAllPages,
@@ -213,6 +214,7 @@ async function berekenProjectControl(
     hourInfo?: HourInfo | null
     name?: string | null
     id?: number | null
+    code?: string | null
   }
   type Chapters = { items?: { chapterInfo?: Entry | null; securityCodes?: Entry[] }[] }
 
@@ -261,7 +263,9 @@ async function berekenProjectControl(
     for (const item of arbeid.items ?? []) {
       const ci = item.chapterInfo
       if (ci && (ci.name === 'uncoded_costs' || ci.id === 0)) tel(ci)
-      for (const sc of item.securityCodes ?? []) tel(sc)
+      // De kostengroep Correcties telt niet mee: die uren zijn een bijstelling voor de
+      // maandcijfers, geen werk dat de uitvoering nog moet doen.
+      for (const sc of item.securityCodes ?? []) if (!isCorrectieCode(sc.code)) tel(sc)
     }
   }
 

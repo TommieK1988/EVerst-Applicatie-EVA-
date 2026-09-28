@@ -94,7 +94,8 @@ function Uren({ geboekt, prognose }: { geboekt: number; prognose: number }) {
 }
 
 export default async function VoortgangView({ dossierId }: { dossierId: string }) {
-  const data = await getDossierBewaking(dossierId).catch(() => null)
+  // De app is van de uitvoering: de kostengroep Correcties hoort hier nooit bij.
+  const data = await getDossierBewaking(dossierId, { verbergCorrecties: true }).catch(() => null)
 
   if (!data || !data.beschikbaar) {
     return (

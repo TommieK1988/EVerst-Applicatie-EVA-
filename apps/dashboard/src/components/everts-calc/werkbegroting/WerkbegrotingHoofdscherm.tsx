@@ -14,6 +14,8 @@ import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/syn
 import { previewWerkbegrotingPrognoseBouw7, resolveBewakingscodes, getProjectHoofdstukken, syncWerkbegrotingNaarSupabase, accordeerWerkbegroting, getWerkbegrotingGoedkeuringStatus, laadWerkbegrotingSnapshot, magPrognoseSturen, laadPrognoseDoelHoofdstuk, bewaarPrognoseDoelHoofdstuk, getVergrendeldeBestelregels, previewWerkbegrotingBestelregelsBouw7, stuurWerkbegrotingBestelEnPrognoseBouw7, type PrognoseResultaat, type PrognoseRegel, type WerkbegrotingPrognoseTotalen, type WerkbegrotingCodeTotaal, type Hoofdstuk, type WerkbegrotingPayload, type BestelregelPreviewResultaat, type BestelregelPlanRegel, type BestelEnPrognoseResultaat, type VergrendeldeBestelregel } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { vraagGoedkeuringAan, getGoedkeuring } from '@/lib/goedkeuring/actions'
 import { getEigenBewakingscodes, type EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
+import { magCorrecties as haalMagCorrecties } from '@/lib/dossiers/correctie-bewakingscode'
+import { isCorrectieCode } from '@/components/dossiers/types'
 import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
@@ -69,6 +71,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [doelHoofdstukId, setDoelHoofdstukId] = useState<number | null>(null)
   /** Door EVA uitgedeelde codes (stelposten + goedgekeurd meerwerk); zie `getEigenBewakingscodes`. */
   const [eigenCodes, setEigenCodes] = useState<EigenBewakingscode[]>([])
+  /** Mag de gebruiker de kostengroep Correcties zien en bewerken (`dossiers.correcties`)? */
+  const [magCorrecties, setMagCorrecties] = useState(false)
   /** Bestelregels die aan een inkooporder/OA-contract hangen → die regels worden read-only. */
   const [vergrendeldeRegels, setVergrendeldeRegels] = useState<VergrendeldeBestelregel[]>([])
   const [bestelPreview, setBestelPreview] = useState<BestelregelPreviewResultaat | null>(null)
@@ -158,14 +162,19 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   // Eigen bewakingscodes (stelposten + goedgekeurd meerwerk) ophalen. Zie
   // `getEigenBewakingscodes`: Bouw7 kent een net uitgedeelde code pas na de volgende sync, en
   // soms helemaal niet.
-  useEffect(() => {
+  const laadEigenCodes = useCallback(async () => {
     if (!dossierId) { setEigenCodes([]); return }
-    let actief = true
-    getEigenBewakingscodes(dossierId)
-      .then(codes => { if (actief) setEigenCodes(codes) })
-      .catch(() => { if (actief) setEigenCodes([]) })
-    return () => { actief = false }
+    try { setEigenCodes(await getEigenBewakingscodes(dossierId)) } catch { setEigenCodes([]) }
   }, [dossierId])
+  useEffect(() => { void laadEigenCodes() }, [laadEigenCodes])
+
+  useEffect(() => {
+    let actief = true
+    haalMagCorrecties()
+      .then(m => { if (actief) setMagCorrecties(m) })
+      .catch(() => { if (actief) setMagCorrecties(false) })
+    return () => { actief = false }
+  }, [])
 
   // Bestelde regels ophalen → grid maakt die regels read-only.
   useEffect(() => {
@@ -223,9 +232,11 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     return componenten.reduce((sum, comp) => {
       const regel = regels.find(r => r.id === comp.werkbegroting_regel_id)
       if (!regel) return sum
+      // Wie Correcties niet ziet, ziet ze ook niet in het totaal.
+      if (!magCorrecties && isCorrectieCode(regel.kostengroep)) return sum
       return sum + regel.hoeveelheid * comp.norm_hoeveelheid * comp.tarief
     }, 0)
-  }, [wb, refreshTeller])
+  }, [wb, refreshTeller, magCorrecties])
 
   /**
    * Wat de goedkeuringsknop en de statuschip tonen. Afgeleid van de goedkeuringsronde in
@@ -507,6 +518,8 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
           onWijziging={handleWijziging}
           bewakingscodes={bewakingscodes}
           eigenCodes={eigenCodes}
+          onEigenCodesGewijzigd={laadEigenCodes}
+          magCorrecties={magCorrecties}
           dossierId={dossierId}
           vergrendeldeRegels={vergrendeldeRegels}
         />

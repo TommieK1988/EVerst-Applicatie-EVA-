@@ -22,13 +22,17 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
-import { REGIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
+import { CORRECTIE_BEWAKINGSCODE_NAAM, REGIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
 
 /** Eén door EVA uitgedeelde bewakingscode, met waar hij vandaan komt. */
 export type EigenBewakingscode = {
   code: string
   naam: string
-  soort: 'stelpost' | 'meerwerk' | 'regie'
+  /**
+   * `correctie` is de kostengroep Correcties: alleen voor wie het recht `dossiers.correcties`
+   * heeft. Deze kale lezer geeft hem altijd terug; filteren doet de aanroeper.
+   */
+  soort: 'stelpost' | 'meerwerk' | 'regie' | 'correctie'
 }
 
 /** Statussen waarin meerwerk daadwerkelijk uitgevoerd wordt en dus begroot moet worden. */
@@ -58,7 +62,7 @@ export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenB
     // De regiecode staat op het dossier zelf: één opvangcode per bon, geen lijst.
     supabase
       .from('dossiers')
-      .select('regie_bewakingscode')
+      .select('regie_bewakingscode, correctie_bewakingscode')
       .eq('id', dossierId)
       .maybeSingle(),
   ])
@@ -75,7 +79,9 @@ export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenB
 
   // De regiecode eerst: op een regie-bon is dát de kostengroep waar alles op hoort, en in de
   // kiezer staat hij dan bovenaan in plaats van onder het meerwerk.
-  const regieCode = (regieRes.data as { regie_bewakingscode: string | null } | null)?.regie_bewakingscode
+  const dossierRij = regieRes.data as
+    { regie_bewakingscode: string | null; correctie_bewakingscode: string | null } | null
+  const regieCode = dossierRij?.regie_bewakingscode
   if (regieCode) {
     voegToe('regie')({ bewakingscode: regieCode, omschrijving: REGIE_BEWAKINGSCODE_NAAM })
   }
@@ -83,6 +89,11 @@ export async function leesEigenBewakingscodes(dossierId: string): Promise<EigenB
     .forEach(voegToe('stelpost'))
   ;((meerwerkRes.data ?? []) as { bewakingscode: string | null; omschrijving: string | null }[])
     .forEach(voegToe('meerwerk'))
+  // Correcties achteraan: het is geen werk, alleen een bijstelling van de prognose.
+  const correctieCode = dossierRij?.correctie_bewakingscode
+  if (correctieCode) {
+    voegToe('correctie')({ bewakingscode: correctieCode, omschrijving: CORRECTIE_BEWAKINGSCODE_NAAM })
+  }
 
   return uit
 }

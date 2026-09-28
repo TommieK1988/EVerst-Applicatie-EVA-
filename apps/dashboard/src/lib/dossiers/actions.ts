@@ -21,7 +21,7 @@ import { revalidatePath, unstable_cache } from 'next/cache'
 import { after } from 'next/server'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
-import { isMutatieDossier } from '@/components/dossiers/types'
+import { isCorrectieCode, isMutatieDossier } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, projectstatusCacheVelden, type Bouw7WriteResult } from './bouw7-status'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
@@ -1958,7 +1958,15 @@ const UNCODED_HOOFDSTUK_ID = -1
  *
  * Géén opslag — alles wordt live opgehaald bij het openen van de tab.
  */
-export async function getDossierBewaking(dossierId: string): Promise<DossierBewakingData> {
+export async function getDossierBewaking(
+  dossierId: string,
+  /**
+   * `verbergCorrecties`: laat de kostengroep Correcties (CO01) weg uit regels én totalen. Voor
+   * schermen die iemand zonder het recht `dossiers.correcties` ziet — de uitvoering stuurt op
+   * deze cijfers, en een bijstelling voor de maandcijfers hoort daar niet in.
+   */
+  opties?: { verbergCorrecties?: boolean },
+): Promise<DossierBewakingData> {
   const leeg: DossierBewakingData = {
     beschikbaar: false, bouw7Id: null, hoofdstukken: [],
     totalen: {
@@ -2221,6 +2229,12 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
     })
     for (const h of hoofdstukken) {
       h.regels.sort((a, b) => (a.code ?? '').localeCompare(b.code ?? '', 'nl'))
+      if (opties?.verbergCorrecties) h.regels = h.regels.filter((r) => !isCorrectieCode(r.code))
+    }
+    if (opties?.verbergCorrecties) {
+      for (let i = hoofdstukken.length - 1; i >= 0; i--) {
+        if (hoofdstukken[i].regels.length === 0) hoofdstukken.splice(i, 1)
+      }
     }
 
     const alleRegels = hoofdstukken.flatMap((h) => h.regels)
@@ -2239,7 +2253,9 @@ export async function getDossierBewaking(dossierId: string): Promise<DossierBewa
       materiaal: som((r) => r.materiaal),
       inkoopMaterieelAfvalPrognose: som((r) => r.inkoopMaterieelAfvalPrognose),
       inkoopMaterieelAfval: som((r) => r.inkoopMaterieelAfval),
-      verwachteKosten: orderLines.total || som((r) => r.verwachteKosten),
+      // Het bestelregeltotaal is per project, niet per code; zonder Correcties dan de som van
+      // de getoonde regels, anders telt de weggelaten groep via de achterdeur toch mee.
+      verwachteKosten: (opties?.verbergCorrecties ? 0 : orderLines.total) || som((r) => r.verwachteKosten),
       geboekteKosten: som((r) => r.geboekteKosten),
     }
 
@@ -4042,7 +4058,7 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const comp of componenten as any[]) {
         const code = regelKostengroep.get(comp.werkbegroting_regel_id)
-        if (!code) continue
+        if (!code || isCorrectieCode(code)) continue
         const uren = toGetal(comp.norm_hoeveelheid)
         const bedrag = uren * toGetal(comp.tarief)
         const cur = codeMap.get(code) ?? { uren: 0, bedrag: 0 }
@@ -4060,6 +4076,9 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
   for (const hfd of bewaking.hoofdstukken) {
     for (const r of hfd.regels) {
       if (!r.code || (r.prognoseUren <= 0 && r.arbeidPrognose <= 0 && r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
+      // Correcties zijn prognose voor de maandcijfers, geen urenbudget van de uitvoering: ze
+      // horen niet in het urensaldo.
+      if (isCorrectieCode(r.code)) continue
       bouwMap.set(r.code, { prognose_uren: r.prognoseUren, prognose_kosten: r.arbeidPrognose, geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
     }
   }
@@ -4154,7 +4173,8 @@ export async function getBewakingscodesVoorUurlog(
       if (ci?.name === 'uncoded_costs' || ci?.id === 0) continue
       for (const sc of item.securityCodes ?? []) {
         const code = (sc.code ?? '').trim()
-        if (!code) continue
+        // Op de kostengroep Correcties wordt nooit geboekt — het is prognose, geen werk.
+        if (!code || isCorrectieCode(code)) continue
         const pslId = sc.pslIds?.[0]
         if (pslId == null) continue
         // prognosisHours valt terug op budgetHours: een code die nog niet herzien is heeft
@@ -4217,7 +4237,8 @@ export async function getUrenDoelcodes(dossierId: string): Promise<UrenDoelcode[
         const hoofdstukId = ci?.id ?? null
         for (const sc of item.securityCodes ?? []) {
           const code = (sc.code ?? '').trim()
-          if (!code) continue
+          // Ook niet als verplaatsdoel: uren op Correcties zouden de prognose als realisatie tellen.
+          if (!code || isCorrectieCode(code)) continue
           const sleutel = `${hoofdstukId ?? ''}|${code}`
           if (perSleutel.has(sleutel)) continue
           const arbeid = ct === 1

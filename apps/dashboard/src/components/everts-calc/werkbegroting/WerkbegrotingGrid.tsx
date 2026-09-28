@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch, DownloadCloud, Lock } from 'lucide-react'
+import { Plus, Trash2, Merge, SplitSquareVertical, Tag, RotateCcw, ChevronDown, ChevronRight, StickyNote, GitBranch, DownloadCloud, Lock, SlidersHorizontal } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   getGroepen, getWerkbegrotingRegels, getWerkbegrotingComponenten,
@@ -23,6 +23,8 @@ import RelatieZoekveld from './RelatieZoekveld'
 import MateriaalZoekveld from './MateriaalZoekveld'
 import KostengroepKiezer from './KostengroepKiezer'
 import type { EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
+import { voegCorrectieKostengroepToe } from '@/lib/dossiers/correctie-bewakingscode'
+import { CORRECTIE_BEWAKINGSCODE, isCorrectieCode } from '@/components/dossiers/types'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
 
 interface Props {
@@ -48,6 +50,15 @@ interface Props {
    * zo'n component wordt read-only; de rest onder dezelfde bewakingscode blijft bewerkbaar.
    */
   vergrendeldeRegels?: VergrendeldeBestelregel[] | null
+  /**
+   * Mag de gebruiker de kostengroep Correcties (CO01) zien en bewerken? Zonder dit recht zijn
+   * CO01-regels onzichtbaar en tellen ze niet mee in de totalen op het scherm. Ze blijven wél in
+   * de lokale store, zodat de sync ze niet als verwijderd wegzet en "Naar Bouw7" de correctie
+   * gewoon meeneemt in de prognose.
+   */
+  magCorrecties?: boolean
+  /** Na het aanmaken van een eigen code (Correcties) de lijst eigen codes opnieuw laden. */
+  onEigenCodesGewijzigd?: () => void | Promise<void>
 }
 
 /** Kostengroep → kale bewakingscode (strip een eventueel "— naam"-achtervoegsel). */
@@ -198,12 +209,15 @@ const EIGEN_SOORT_UITLEG: Record<EigenBewakingscode['soort'], string> = {
   stelpost: 'Bewakingscode van een stelpost uit de opdracht. Wat je hier begroot, bewaak je op die stelpost.',
   meerwerk: 'Bewakingscode van goedgekeurd meerwerk. Wat je hier begroot, bewaak je op dat meerwerk.',
   regie:    'Bewakingscode van deze servicedeskbon op regie. Hierop koop je in, schrijf je uren en factureer je na.',
+  correctie: 'Bijstelling van de prognose voor de maandcijfers (bedragen en uren, ook negatief). '
+    + 'Onzichtbaar voor de uitvoering: telt niet mee in planning, urensaldo of werkvoorraad.',
 }
 
 const EIGEN_SOORT_REGEL_TITEL: Record<EigenBewakingscode['soort'], string> = {
   stelpost: 'Voeg een werkbegroting-regel toe onder deze stelpost',
   meerwerk: 'Voeg een werkbegroting-regel toe onder dit meerwerk',
   regie:    'Voeg een werkbegroting-regel toe onder het regiewerk',
+  correctie: 'Voeg een correctie toe (een negatieve hoeveelheid verlaagt de prognose)',
 }
 
 // ─── BedragInput ──────────────────────────────────────────────────────────────
@@ -533,7 +547,7 @@ function TotalenPanel({ componenten, regels, calcCompMap }: TotalenPanelProps) {
 
 // ─── Hoofdcomponent ────────────────────────────────────────────────────────────
 
-export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeRegels }: Props) {
+export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijziging, bewakingscodes, eigenCodes, dossierId, vergrendeldeRegels, magCorrecties = false, onEigenCodesGewijzigd }: Props) {
   const [groepen,         setGroepen]         = useState<Groep[]>([])
   const [regels,          setRegels]          = useState<WerkbegrotingRegel[]>([])
   const [componenten,     setComponenten]     = useState<WerkbegrotingComponent[]>([])
@@ -669,7 +683,8 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
    * dan ontstaat er een tweede kostengroep met hetzelfde nummer.
    */
   const bekendeCodes = useMemo((): { code: string; naam: string | null }[] => {
-    const uit = [...(bewakingscodes ?? [])]
+    // Correcties komen ook uit de Bouw7-snapshot binnen; zonder recht niet kiesbaar.
+    const uit = (bewakingscodes ?? []).filter(b => magCorrecties || !isCorrectieCode(b.code))
     const bekend = new Set(uit.map(b => b.code.trim().toUpperCase()))
     for (const e of eigenCodes ?? []) {
       const kaal = e.code.trim().toUpperCase()
@@ -678,7 +693,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       uit.push({ code: e.code, naam: e.naam })
     }
     return uit
-  }, [bewakingscodes, eigenCodes])
+  }, [bewakingscodes, eigenCodes, magCorrecties])
 
   const alleKostengroepen = useMemo((): { value: string; label: string | null }[] => {
     if (bekendeCodes.length > 0) {
@@ -711,8 +726,34 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   }, [bekendeCodes])
 
   // ─── Actieve en verwijderde componenten ───────────────────────────────────
-  const actieveComponenten  = useMemo(() => componenten.filter(c => !c.is_verwijderd), [componenten])
-  const verwijderdeComponenten = useMemo(() => componenten.filter(c => c.is_verwijderd), [componenten])
+  // Zonder recht op Correcties: die regels en hun componenten bestaan voor dit scherm niet.
+  const verborgenRegelIds = useMemo(
+    () => new Set(magCorrecties ? [] : regels.filter(r => isCorrectieCode(r.kostengroep)).map(r => r.id)),
+    [regels, magCorrecties],
+  )
+  const zichtbareComponenten = useMemo(
+    () => componenten.filter(c => !verborgenRegelIds.has(c.werkbegroting_regel_id)),
+    [componenten, verborgenRegelIds],
+  )
+  const actieveComponenten  = useMemo(() => zichtbareComponenten.filter(c => !c.is_verwijderd), [zichtbareComponenten])
+  const verwijderdeComponenten = useMemo(() => zichtbareComponenten.filter(c => c.is_verwijderd), [zichtbareComponenten])
+  const heeftCorrectieCode = (eigenCodes ?? []).some(e => e.soort === 'correctie')
+  const [correctieBezig, setCorrectieBezig] = useState(false)
+  const voegCorrectiesToe = async () => {
+    if (!dossierId || correctieBezig) return
+    setCorrectieBezig(true)
+    try {
+      const res = await voegCorrectieKostengroepToe(dossierId)
+      if (!res.ok) { toast.error(res.error); return }
+      if (res.waarschuwing) toast(res.waarschuwing, { icon: '⚠️' })
+      else toast.success(`Kostengroep ${CORRECTIE_BEWAKINGSCODE} Correcties staat klaar`)
+      await onEigenCodesGewijzigd?.()
+    } catch {
+      toast.error('Correcties toevoegen mislukt.')
+    } finally {
+      setCorrectieBezig(false)
+    }
+  }
 
   // ─── Tabelrijen opbouwen ──────────────────────────────────────────────────
   const tabelRijen = useMemo((): TabelRij[] => {
@@ -720,7 +761,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
     const displayRijen: DisplayRij[] = []
     for (const regel of regels) {
-      if (regel.is_verwijderd) continue
+      if (regel.is_verwijderd || verborgenRegelIds.has(regel.id)) continue
       const groepNaam  = groepMap.get(regel.groep_id)?.naam ?? '—'
       const regelComps = actieveComponenten.filter(c => c.werkbegroting_regel_id === regel.id)
       for (const comp of regelComps) {
@@ -842,7 +883,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     }
 
     return result
-  }, [groepen, regels, actieveComponenten, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, eigenCodes, eigenSoortPerCode])
+  }, [groepen, regels, actieveComponenten, verborgenRegelIds, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, eigenCodes, eigenSoortPerCode])
 
   // ─── Selectie helpers ─────────────────────────────────────────────────────
   const displayRijen = tabelRijen.filter((r): r is DisplayRij => r.type === 'rij')
@@ -1041,7 +1082,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       //    bestaat. De eigen codes (stelposten, goedgekeurd meerwerk) zitten er bewust bij: die
       //    zijn in EVA uitgedeeld en pas daarna in Bouw7 aangemaakt, dus de snapshot waar
       //    `res.codes` uit komt kent ze nog niet.
-      const importCodes = [...res.codes]
+      const importCodes = res.codes.filter(c => magCorrecties || !isCorrectieCode(c.code))
       const bekendImport = new Set(importCodes.map(c => c.code.trim().toUpperCase()))
       for (const e of eigenCodes ?? []) {
         const kaal = e.code.trim().toUpperCase()
@@ -1130,7 +1171,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     } finally {
       setImportBezig(false)
     }
-  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, eigenCodes, onWijziging, onComponentWijzig])
+  }, [dossierId, importBezig, regels, componenten, werkbegrotingId, eigenCodes, onWijziging, onComponentWijzig, magCorrecties])
 
   // Soft-delete component
   const verwijderComp = useCallback((compId: string) => {
@@ -1584,6 +1625,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
             <Tag className="w-3.5 h-3.5" /> Nieuwe kostengroep
           </button>
 
+          {magCorrecties && dossierId && !heeftCorrectieCode && (
+            <button onClick={voegCorrectiesToe} disabled={correctieBezig}
+              title={`Kostengroep ${CORRECTIE_BEWAKINGSCODE} Correcties aanmaken (ook in Bouw7): de prognose bijstellen voor de maandcijfers, onzichtbaar voor de uitvoering`}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <SlidersHorizontal className="w-3.5 h-3.5" /> {correctieBezig ? 'Aanmaken…' : 'Correcties toevoegen'}
+            </button>
+          )}
+
           {dossierId && bewakingscodes && (
             <button onClick={importeerUitBouw7} disabled={importBezig}
               title="Bewakingscodes en bestelregels uit Bouw7 overhalen naar deze werkbegroting"
@@ -1870,7 +1919,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       </div>
 
       {/* ── Totalen panel ────────────────────────────────────────────────── */}
-      <TotalenPanel componenten={componenten} regels={regels} calcCompMap={calcCompMap} />
+      <TotalenPanel componenten={zichtbareComponenten} regels={regels} calcCompMap={calcCompMap} />
 
       {/* ── Samenvoegen modal ─────────────────────────────────────────────── */}
       {samenvoegenItems && (

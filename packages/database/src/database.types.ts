@@ -3351,6 +3351,9 @@ export type Database = {
           categorie: string | null
           contactpersoon_id: string | null
           controller_id: string | null
+          correctie_bewakingscode: string | null
+          correctie_bouw7_chapter_id: number | null
+          correctie_bouw7_security_code_id: number | null
           created_at: string
           created_by: string | null
           deadline: string | null
@@ -3456,6 +3459,9 @@ export type Database = {
           categorie?: string | null
           contactpersoon_id?: string | null
           controller_id?: string | null
+          correctie_bewakingscode?: string | null
+          correctie_bouw7_chapter_id?: number | null
+          correctie_bouw7_security_code_id?: number | null
           created_at?: string
           created_by?: string | null
           deadline?: string | null
@@ -3561,6 +3567,9 @@ export type Database = {
           categorie?: string | null
           contactpersoon_id?: string | null
           controller_id?: string | null
+          correctie_bewakingscode?: string | null
+          correctie_bouw7_chapter_id?: number | null
+          correctie_bouw7_security_code_id?: number | null
           created_at?: string
           created_by?: string | null
           deadline?: string | null

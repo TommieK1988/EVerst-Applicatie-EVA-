@@ -6,7 +6,9 @@ import { createAdminClient } from '@everts/database/server'
 import { Bouw7Client } from '@/lib/bouw7/client'
 import type { Bouw7ControlResponse, Bouw7ContractOrderLine, Bouw7CostTypeId } from '@/lib/bouw7/client'
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
-import { vereisSessie } from '@/lib/auth/rechten'
+import { getRechtenBundel, vereisSessie } from '@/lib/auth/rechten'
+import { heeftFunctie, kiesKanaal } from '@/lib/auth/rechten-shared'
+import { isCorrectieCode } from '@/components/dossiers/types'
 import { dossierBouw7Id, leesDossierBron, ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type { AthenaControlPayload, ContractOrderLinesPayload } from '@/lib/bouw7/snapshot-bronnen'
 import { haalGoedgekeurdMeerwerkNaarWerkbegroting } from '@/lib/dossiers/meerwerk-werkbegroting'
@@ -58,9 +60,35 @@ export async function syncWerkbegrotingNaarSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = (await createClient()) as any
   const nu = new Date().toISOString()
-  const { wb, regels, componenten, wijzigingen, dossierId, geladenOp } = payload
+  const { wb, wijzigingen, dossierId, geladenOp } = payload
+  let { regels, componenten } = payload
 
   try {
+    /*
+     * 0. De kostengroep Correcties (CO01) is alleen van wie het recht `dossiers.correcties` heeft.
+     *    De grid verbergt hem voor anderen, maar verbergen is geen toegangscontrole: zonder recht
+     *    laat deze sync CO01-regels en hun componenten ongemoeid — niet schrijven, niet
+     *    soft-deleten, en een bestaande regel kan niet stiekem naar of van CO01 verhuizen.
+     */
+    let beschermdeRegelIds: string[] = []
+    const magCorrecties = heeftFunctie(kiesKanaal(await getRechtenBundel(), 'desktop'), 'dossiers.correcties')
+    if (!magCorrecties) {
+      const { data: bestaand } = await db
+        .from('werkbegroting_regels')
+        .select('id, kostengroep')
+        .eq('werkbegroting_id', wb.id)
+        .ilike('kostengroep', 'CO01%')
+      beschermdeRegelIds = ((bestaand ?? []) as { id: string; kostengroep: string | null }[])
+        .filter(r => isCorrectieCode(r.kostengroep))
+        .map(r => r.id)
+      const beschermd = new Set(beschermdeRegelIds)
+      const toegestaan = new Set(
+        regels.filter(r => !beschermd.has(r.id) && !isCorrectieCode(r.kostengroep)).map(r => r.id),
+      )
+      regels = regels.filter(r => toegestaan.has(r.id))
+      componenten = componenten.filter(c => toegestaan.has(c.werkbegroting_regel_id))
+    }
+
     // 1. Upsert werkbegroting header. Synthetische project-ids ("wb-direct-…",
     //    geen uuid, niet in projects) gaan als null mee; dossier_id is het anker.
     const projectId = UUID_RE.test(wb.project_id) ? wb.project_id : null
@@ -134,12 +162,15 @@ export async function syncWerkbegrotingNaarSupabase(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const alleenGezien = (q: any) => (geladenOp ? q.lte('aangemaakt_op', geladenOp) : q)
     const regelIds = regels.map(r => r.id)
-    if (regelIds.length > 0) {
+    // Beschermde correctieregels tellen als "gezien" voor de soft-delete van regels, maar hun
+    // componenten blijven buiten de component-soft-delete (die loopt op `regelIds`).
+    const houdRegelIds = [...regelIds, ...beschermdeRegelIds]
+    if (houdRegelIds.length > 0) {
       await alleenGezien(db
         .from('werkbegroting_regels')
         .update({ is_verwijderd: true, bijgewerkt_op: nu })
         .eq('werkbegroting_id', wb.id)
-        .not('id', 'in', inLijst(regelIds)))
+        .not('id', 'in', inLijst(houdRegelIds)))
     } else {
       await alleenGezien(db
         .from('werkbegroting_regels')
@@ -1901,6 +1932,12 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
     let reden: string | undefined
     if (vergrendeld) { actie = 'skip'; reden = `Besteld: ${vergReden}` }
     else if (!code) { actie = 'skip'; reden = 'Regel zonder bewakingscode (kostengroep leeg).' }
+    // Correcties zijn alleen prognose voor de maandcijfers: nooit iets om te bestellen. Een
+    // eerder toch verzonden regel wordt geneutraliseerd.
+    else if (isCorrectieCode(code)) {
+      if (bouw7LineId != null) actie = 'neutraliseren'
+      else { actie = 'skip'; reden = 'Correctie: alleen prognose, geen bestelregel.' }
+    }
     else if (verwijderd) {
       if (bouw7LineId != null) actie = 'neutraliseren'
       else { actie = 'skip'; reden = 'Verwijderd, nooit verzonden.' }

@@ -155,6 +155,15 @@ export const RECHTEN_CATALOGUS = [
         // nergens wordt gecontroleerd.
         kanalen: ['mobiel'],
       },
+      {
+        key: 'dossiers.correcties',
+        label: 'Correcties in de werkbegroting',
+        uitleg:
+          'De kostengroep Correcties zien en bewerken: de prognose bijstellen voor de maandcijfers '
+          + 'zonder het urenbudget van de uitvoering te raken. Voor anderen is die groep onzichtbaar.',
+        // De werkbegroting bestaat alleen op de desktop.
+        kanalen: ['desktop'],
+      },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { leesDossierBron } from '@/lib/bouw7/snapshot'
 import type { AthenaControlPayload } from '@/lib/bouw7/snapshot-bronnen'
 import type { Bouw7CostTypeId } from '@/lib/bouw7/client'
 import { leesEigenBewakingscodes } from '@/lib/dossiers/eigen-bewakingscodes'
+import { isCorrectieCode } from '@/components/dossiers/types'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { createAdminClient } from '@everts/database/server'
 
@@ -227,6 +228,7 @@ export async function getPlanningBewakingscodes(dossierId: string): Promise<Plan
   // 4. Codes die EVA zelf heeft uitgedeeld: een stelpost, goedgekeurd meerwerk, of de regiecode
   //    van een servicedeskbon. Die laatste is op zo'n bon meestal de énige keuze die er is.
   for (const e of eigenCodes) {
+    if (e.soort === 'correctie') continue
     zet(e.code, e.naam, HOOFDSTUK_EVA[e.soort], null, e.soort)
   }
 
@@ -241,7 +243,10 @@ export async function getPlanningBewakingscodes(dossierId: string): Promise<Plan
     zet(code, null, null, r.bouw7_security_code_id, 'gepland')
   }
 
+  // De kostengroep Correcties is prognose voor de maandcijfers, geen werk: nooit inplannen. Hij
+  // komt via de Bouw7-snapshot en de werkbegroting (bron 1–3) binnen, dus pas hier eruit.
   return [...map.values()]
+    .filter(c => !isCorrectieCode(c.code))
     .map(c => ({ ...c, in_gebruik: c.herkomst.length > 0 }))
     .sort((a, b) =>
       (a.hoofdstuk ?? '').localeCompare(b.hoofdstuk ?? '', 'nl')

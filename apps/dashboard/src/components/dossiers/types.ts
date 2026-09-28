@@ -235,6 +235,26 @@ export const REGIE_BEWAKINGSCODE_NAAM = 'Regiewerkzaamheden'
 export const AANGENOMEN_BEWAKINGSCODE = 'AW01'
 export const AANGENOMEN_BEWAKINGSCODE_NAAM = 'Aangenomen werk'
 
+/**
+ * De kostengroep "Correcties": een aparte bewakingscode waarop Projectbureau en Administratie de
+ * prognose van een project bijstellen (bedragen én uren, ook negatief) zodat de maandcijfers
+ * kloppen — zónder de kostengroepen aan te raken waar de uitvoering op stuurt. Hij gaat gewoon
+ * naar Bouw7 (daar tellen de projecttotalen), maar EVA houdt hem buiten elk uitvoeringsscherm:
+ * planning, uren boeken, urensaldo, werkvoorraad. Er wordt nooit op geboekt; het is prognose.
+ */
+export const CORRECTIE_BEWAKINGSCODE = 'CO01'
+export const CORRECTIE_BEWAKINGSCODE_NAAM = 'Correcties'
+
+/**
+ * Is dit de correctie-kostengroep? Accepteert zowel de kale code als een kostengroep-string in
+ * de vorm `"CODE — Naam"` (zo staat hij in `werkbegroting_regels.kostengroep`).
+ */
+export function isCorrectieCode(code: string | null | undefined): boolean {
+  if (!code) return false
+  const kaal = code.split(/\s+[—–-]\s+/)[0].trim().toUpperCase()
+  return kaal === CORRECTIE_BEWAKINGSCODE
+}
+
 /** De vaste kostengroep die bij deze afrekenwijze hoort. */
 export function bonBewakingscode(
   facturatiemethode: string | null | undefined,
