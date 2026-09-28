@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@everts/database/server'
+import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { revalidatePath } from 'next/cache'
 import type {
   Relatie,
@@ -388,12 +389,20 @@ export async function bewaarRelatieUurtarieven(
   relatieId: string,
   rijen: { uursoortId: string; tarief: number | null }[],
 ): Promise<ActionResult> {
+  // Een uurtarief is een prijsafspraak die rechtstreeks op facturen landt: schrijfrecht op
+  // relaties, zelfde gate als de notities op de relatiepagina.
+  try {
+    await vereisRecht('relaties', 'schrijven')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Geen rechten om relaties te bewerken.' }
+    throw e
+  }
   for (const r of rijen) {
     if (r.tarief != null && (!Number.isFinite(r.tarief) || r.tarief < 0 || r.tarief >= 1000)) {
       return { ok: false, error: 'Een uurtarief moet een bedrag tussen € 0 en € 1.000 zijn.' }
     }
   }
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const ids = rijen.map(r => r.uursoortId)
   if (ids.length === 0) return { ok: true }
 

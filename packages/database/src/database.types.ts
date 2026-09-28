@@ -4063,6 +4063,50 @@ export type Database = {
           },
         ]
       }
+      factuur_standaardregels: {
+        Row: {
+          actief: boolean
+          btw_tarief_id: string | null
+          created_at: string
+          eenheid: string | null
+          id: string
+          omschrijving: string
+          prijs: number | null
+          updated_at: string
+          volgorde: number
+        }
+        Insert: {
+          actief?: boolean
+          btw_tarief_id?: string | null
+          created_at?: string
+          eenheid?: string | null
+          id?: string
+          omschrijving: string
+          prijs?: number | null
+          updated_at?: string
+          volgorde?: number
+        }
+        Update: {
+          actief?: boolean
+          btw_tarief_id?: string | null
+          created_at?: string
+          eenheid?: string | null
+          id?: string
+          omschrijving?: string
+          prijs?: number | null
+          updated_at?: string
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factuur_standaardregels_btw_tarief_id_fkey"
+            columns: ["btw_tarief_id"]
+            isOneToOne: false
+            referencedRelation: "btw_tarieven"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_bestanden: {
         Row: {
           aangemaakt_op: string

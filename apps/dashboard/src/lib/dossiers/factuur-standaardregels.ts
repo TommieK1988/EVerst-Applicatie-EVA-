@@ -2,8 +2,8 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { getEffectieveRechten } from '@/lib/auth/rechten'
-import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
+import { getEffectieveRechten, vereisRecht, vereisSessie, GeenToegangError } from '@/lib/auth/rechten'
+import { isBeheerder } from '@/lib/auth/rechten-shared'
 
 /**
  * Standaard losse factuurregels: een bedrijfsbrede kieslijst voor de regiefactuur (voorrijkosten,
@@ -36,15 +36,26 @@ export type LosseRegelKeuze = {
 
 type Resultaat = { ok: true } | { ok: false; error: string }
 
+/** Zelfde gate als de rest van Instellingen → Facturatie: `financieel: beheren`, of beheerder. */
 async function magBeheren(): Promise<boolean> {
-  const rechten = await getEffectieveRechten()
-  return isBeheerder(rechten) || heeftModuleToegang(rechten, 'financieel', 'beheren')
+  try {
+    await vereisRecht('financieel', 'beheren')
+    return true
+  } catch (e) {
+    if (!(e instanceof GeenToegangError)) throw e
+    return isBeheerder(await getEffectieveRechten())
+  }
 }
 
 const naarGetal = (v: unknown): number | null => (v == null ? null : Number(v))
 
 export async function getStandaardregels(opts?: { inclusiefInactief?: boolean }): Promise<Standaardregel[]> {
-  const supabase = createAdminClient() as any
+  await vereisSessie()
+  return leesStandaardregels(opts)
+}
+
+async function leesStandaardregels(opts?: { inclusiefInactief?: boolean }): Promise<Standaardregel[]> {
+  const supabase = createAdminClient()
   let q = supabase
     .from('factuur_standaardregels')
     .select('id, omschrijving, eenheid, prijs, btw_tarief_id, volgorde, actief')
@@ -54,7 +65,7 @@ export async function getStandaardregels(opts?: { inclusiefInactief?: boolean })
   if (!opts?.inclusiefInactief) q = q.eq('actief', true)
   const { data, error } = await q
   if (error) throw new Error(error.message)
-  return ((data ?? []) as any[]).map(r => ({ ...r, prijs: naarGetal(r.prijs) })) as Standaardregel[]
+  return (data ?? []).map(r => ({ ...r, prijs: naarGetal(r.prijs) }))
 }
 
 export async function bewaarStandaardregel(input: {
@@ -70,7 +81,7 @@ export async function bewaarStandaardregel(input: {
   if (input.prijs != null && (!Number.isFinite(input.prijs) || Math.abs(input.prijs) >= 1_000_000)) {
     return { ok: false, error: 'De prijs is geen geldig bedrag.' }
   }
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const velden = {
     omschrijving,
     eenheid: input.eenheid?.trim() || null,
@@ -96,7 +107,7 @@ export async function bewaarStandaardregel(input: {
 /** Soft-delete: een uitgezette regel verdwijnt uit de kiezer, maar is terug te zetten. */
 export async function zetStandaardregelActief(id: string, actief: boolean): Promise<Resultaat> {
   if (!(await magBeheren())) return { ok: false, error: 'Geen rechten om standaardregels te beheren.' }
-  const supabase = createAdminClient() as any
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from('factuur_standaardregels')
     .update({ actief, updated_at: new Date().toISOString() })
@@ -108,7 +119,8 @@ export async function zetStandaardregelActief(id: string, actief: boolean): Prom
 
 /** Actieve btw-tarieven voor de keuzelijst in het beheer. */
 export async function getBtwKeuzes(): Promise<{ id: string; label: string }[]> {
-  const supabase = createAdminClient() as any
+  await vereisSessie()
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from('btw_tarieven').select('id, label, percentage').eq('actief', true).order('percentage')
   return ((data ?? []) as { id: string; label: string | null; percentage: number | null }[])
@@ -127,11 +139,9 @@ export async function getLosseRegelKeuzes(dossierId: string): Promise<{
   afspraken: LosseRegelKeuze[]
   standaard: LosseRegelKeuze[]
 }> {
-  const rechten = await getEffectieveRechten()
-  if (!isBeheerder(rechten) && !heeftModuleToegang(rechten, 'financieel', 'lezen')) {
-    return { klantNaam: null, afspraken: [], standaard: [] }
-  }
-  const supabase = createAdminClient() as any
+  // Alleen lezen, en wie dit venster opent mag de factuur al samenstellen: een sessie volstaat.
+  await vereisSessie()
+  const supabase = createAdminClient()
   const { data: dossier } = await supabase
     .from('dossiers').select('klant_id').eq('id', dossierId).maybeSingle()
   const klantId: string | null = dossier?.klant_id ?? null
@@ -146,7 +156,7 @@ export async function getLosseRegelKeuzes(dossierId: string): Promise<{
           .select('id, omschrijving, eenheid, prijs, geldig_vanaf, geldig_tot')
           .eq('relatie_id', klantId).order('omschrijving')
       : Promise.resolve({ data: [] }),
-    getStandaardregels(),
+    leesStandaardregels(),
     supabase.from('btw_tarieven').select('id, bouw7_id, label'),
   ])
 
@@ -154,7 +164,7 @@ export async function getLosseRegelKeuzes(dossierId: string): Promise<{
     ((btwRes.data ?? []) as { id: string; bouw7_id: number | null; label: string | null }[]).map(t => [t.id, t]),
   )
 
-  const afspraken = ((afsprakenRes.data ?? []) as any[])
+  const afspraken = (afsprakenRes.data ?? [])
     .filter(a => (!a.geldig_vanaf || a.geldig_vanaf <= vandaag) && (!a.geldig_tot || a.geldig_tot >= vandaag))
     .map(a => ({
       sleutel: `afspraak:${a.id}`,
