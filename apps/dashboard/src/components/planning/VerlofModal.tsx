@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Trash2, Lock } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { Medewerker, MedewerkerAfwezigheid, MedewerkerAfwezigheidType } from '@everts/database/platform-types'
 import { medewerkerAfwezigheidLabels } from '@everts/database/platform-types'
 import { maakAfwezigheid, wijzigAfwezigheid, verwijderAfwezigheid, haalAfwezigheidInPeriode } from '@/app/(platform)/planning/medewerker/actions'
@@ -38,7 +38,7 @@ function medNaam(m: Pick<Medewerker, 'voornaam' | 'tussenvoegsel' | 'achternaam'
   return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ')
 }
 
-/** Verlof dat al in Bouw7 staat, is daar leidend en hier alleen-lezen. */
+/** Verlof dat al in Bouw7 staat: wijzigen en verwijderen gaan daar ook heen. */
 function inBouw7(a: MedewerkerAfwezigheid): boolean {
   return a.bron === 'bouw7' || !!a.bouw7_id
 }
@@ -107,7 +107,8 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
     setForm(f => leegFormulier(f.medewerker_id))
   }
 
-  const alleenLezen = !!bewerkt && inBouw7(bewerkt)
+  // Bouw7 kent geen soort afwezigheid; bij gesynct verlof blijft die daarom vast op wat hij is.
+  const soortVast = bewerkt?.bron === 'bouw7'
 
   function laadBestaand() {
     haalAfwezigheidInPeriode(periodeStart, periodeEinde).then(setBestaand)
@@ -117,7 +118,6 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (alleenLezen) return
     startTransition(async () => {
       const invoer = {
         medewerker_id: form.medewerker_id,
@@ -164,18 +164,15 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
         {/* Formulier */}
         <DialogBody className="text-inherit">
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {alleenLezen && (
+          {bewerkt && inBouw7(bewerkt) && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 12px', borderRadius: 6,
               background: 'var(--bg)', border: '1px solid var(--border)',
               fontSize: 12, color: 'var(--fg-muted)',
             }}>
-              <Lock size={12} style={{ flexShrink: 0 }} />
-              Dit verlof staat in Bouw7 en kan alleen daar gewijzigd worden.
+              Dit verlof staat ook in Bouw7. Je wijziging gaat daar meteen mee naartoe.
             </div>
           )}
-          <fieldset disabled={alleenLezen} style={{ display: 'contents' }}>
           {/* Medewerker */}
           <div>
             <label style={labelStyle}>Medewerker</label>
@@ -198,6 +195,8 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
               className="eva-input"
               value={form.type}
               onChange={e => setForm(f => ({ ...f, type: e.target.value as MedewerkerAfwezigheidType }))}
+              disabled={soortVast}
+              title={soortVast ? 'Bouw7 kent alleen verlof; de soort is hier niet te wijzigen' : undefined}
             >
               {VERLOF_TYPEN.map(t => (
                 <option key={t} value={t}>{medewerkerAfwezigheidLabels[t]}</option>
@@ -283,14 +282,10 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
             />
           </div>
 
-          </fieldset>
-
           <div style={{ display: 'flex', gap: 8 }}>
-            {!alleenLezen && (
-              <Button type="submit" variant="primary" loading={isPending}>
-                {isPending ? 'Bezig…' : bewerkt ? 'Wijzigingen opslaan' : 'Opslaan'}
-              </Button>
-            )}
+            <Button type="submit" variant="primary" loading={isPending}>
+              {isPending ? 'Bezig…' : bewerkt ? 'Wijzigingen opslaan' : 'Opslaan'}
+            </Button>
             {bewerkt && (
               <Button type="button" variant="secondary" onClick={nieuwInvoeren} disabled={isPending}>
                 Nieuwe invoeren
@@ -318,7 +313,7 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
                     key={a.id}
                     role="button"
                     tabIndex={0}
-                    title={inBouw7(a) ? 'Bekijken' : 'Klik om te bewerken'}
+                    title="Klik om te bewerken"
                     onClick={() => startBewerken(a)}
                     onKeyDown={e => { if (e.key === 'Enter') startBewerken(a) }}
                     style={{
@@ -361,29 +356,20 @@ export default function VerlofModal({ medewerkers, periodeStart, periodeEinde, b
                         {a.opmerking && ` · ${a.opmerking}`}
                       </div>
                     </div>
-                    {inBouw7(a) ? (
-                      <span
-                        style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
-                        title="Uit Bouw7 gesynct — wijzig in Bouw7"
-                      >
-                        <Lock size={12} />
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={e => { e.stopPropagation(); handleVerwijder(a.id) }}
-                        disabled={deletingId === a.id}
-                        style={{
-                          flexShrink: 0,
-                          opacity: deletingId === a.id ? 0.4 : 1,
-                        }}
-                        title="Verwijder"
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={e => { e.stopPropagation(); handleVerwijder(a.id) }}
+                      disabled={deletingId === a.id}
+                      style={{
+                        flexShrink: 0,
+                        opacity: deletingId === a.id ? 0.4 : 1,
+                      }}
+                      title={inBouw7(a) ? 'Verwijder (ook uit Bouw7)' : 'Verwijder'}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
                   </div>
                 )
               })}
