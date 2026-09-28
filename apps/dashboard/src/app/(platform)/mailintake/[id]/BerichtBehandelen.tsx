@@ -38,6 +38,7 @@ import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
 import { useFase } from './panelen/fase-keuze'
 import { useWerkmaatschappij } from './panelen/gebruik-werkmaatschappij'
 import { useWerkadres } from './panelen/gebruik-werkadres'
+import WerkadresBlok from './panelen/WerkadresBlok'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
 import { FormSection } from '@/components/ui/form-field'
@@ -101,16 +102,22 @@ export default function BerichtBehandelen({
   const [opmerkingen, setOpmerkingen] = useState(velden.opmerkingen ?? '')
 
   // Het werkadres met de adresservice erachter; zie `gebruik-werkadres.ts`.
-  const {
-    straat, setStraat, huisnummer, setHuisnummer, postcode, setPostcode, stad, setStad,
-    bevestigd: adresBevestigd, controleer: controleerAdres,
-  } = useWerkadres({
+  const adres = useWerkadres({
     straat: velden.werkadres_straat ?? null,
     huisnummer: velden.werkadres_huisnummer ?? null,
     postcode: velden.werkadres_postcode ?? null,
     stad: velden.werkadres_stad ?? null,
+    contact: {
+      naam: velden.werkadres_contact_naam ?? null,
+      telefoon: velden.werkadres_contact_telefoon ?? null,
+      email: velden.werkadres_contact_email ?? null,
+    },
     bewerkbaar,
   })
+  const {
+    straat, setStraat, huisnummer, setHuisnummer, postcode, stad,
+    bevestigd: adresBevestigd, controleer: controleerAdres,
+  } = adres
 
   const [regie, setRegie] = useState<boolean>(Boolean(velden.regie))
   const [factuuradresOvernemen, setFactuuradresOvernemen] = useState(true)
@@ -293,6 +300,7 @@ export default function BerichtBehandelen({
       const teVersturen = bouwVeldenVoorAanmaak({
         velden, categorieen, klantId, klantNaam, contactpersoonId, objectId, calculatorId,
         projectOmschrijving, omschrijving, straat, huisnummer, postcode, stad, adresBevestigd,
+        werkadresContact: adres.contact,
         referentie, vveCode, categorieId, werkmaatschappijId, deadline, mandaat, regie,
         opmerkingen,
         factuuradres: factuuradresOvernemen ? factuuradresVoorstel : null,
@@ -635,26 +643,7 @@ export default function BerichtBehandelen({
 
         </FormSection>
 
-        <FormSection title="Werkadres">
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8 }}>
-            <Veld label="Straat" score={zekerheid.werkadres_straat}>
-              <input style={veldStijl} value={straat} onChange={e => setStraat(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
-            </Veld>
-            <Veld label="Huisnummer" score={zekerheid.werkadres_huisnummer}>
-              <input style={veldStijl} value={huisnummer} onChange={e => setHuisnummer(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
-            </Veld>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
-            <Veld label="Postcode" score={zekerheid.werkadres_postcode}>
-              <input style={veldStijl} value={postcode} onChange={e => setPostcode(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
-            </Veld>
-            <Veld label="Plaats" score={zekerheid.werkadres_stad}>
-              <input style={veldStijl} value={stad} onChange={e => setStad(e.target.value)} onBlur={controleerAdres} disabled={!bewerkbaar} />
-            </Veld>
-          </div>
-          {adresBevestigd && <span style={{ ...klein, color: 'var(--su-700, #15803d)' }}>Adres bevestigd door de adresservice.</span>}
-
-        </FormSection>
+        <WerkadresBlok adres={adres} zekerheid={zekerheid} bewerkbaar={bewerkbaar} />
 
         <FormSection title="Kenmerken">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>

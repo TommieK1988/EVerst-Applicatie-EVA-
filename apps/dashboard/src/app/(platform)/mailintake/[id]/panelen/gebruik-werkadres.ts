@@ -34,9 +34,14 @@ export function useWerkadres(begin: {
   huisnummer: string | null
   postcode: string | null
   stad: string | null
+  /** Wie er ter plaatse te bereiken is; staat los van de adresservice. */
+  contact: { naam: string | null; telefoon: string | null; email: string | null }
   /** Bij een afgehandeld of alleen-lezen bericht draait de automatische ronde niet. */
   bewerkbaar: boolean
 }) {
+  const [contactNaam, setContactNaam] = React.useState(begin.contact.naam ?? '')
+  const [contactTelefoon, setContactTelefoon] = React.useState(begin.contact.telefoon ?? '')
+  const [contactEmail, setContactEmail] = React.useState(begin.contact.email ?? '')
   const [straat, setStraat] = React.useState(begin.straat ?? '')
   const [huisnummer, setHuisnummer] = React.useState(begin.huisnummer ?? '')
   const [postcode, setPostcode] = React.useState(begin.postcode ?? '')
@@ -102,5 +107,7 @@ export function useWerkadres(begin: {
     setStad: zet('stad'),
     /** Aan `onBlur` hangen; vult aan en bevestigt. */
     controleer: () => void controleer(),
+    contact: { naam: contactNaam, telefoon: contactTelefoon, email: contactEmail },
+    setContactNaam, setContactTelefoon, setContactEmail,
   }
 }

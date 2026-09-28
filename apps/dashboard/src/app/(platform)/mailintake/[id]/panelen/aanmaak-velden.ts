@@ -29,6 +29,8 @@ export interface AanmaakSchermToestand {
   postcode: string
   stad: string
   adresBevestigd: boolean
+  /** Wie er ter plaatse te bereiken is (bewoner, huismeester); voorgevuld uit de mail. */
+  werkadresContact: { naam: string; telefoon: string; email: string }
   referentie: string
   vveCode: string
   categorieId: number | ''
@@ -84,12 +86,11 @@ export function bouwVeldenVoorAanmaak(s: AanmaakSchermToestand) {
     werkadresStad: s.stad,
     adresBevestigd: s.adresBevestigd,
 
-    // Wie er ter plaatse te bereiken is. Komt uit de lezing en staat niet in dit
-    // formulier: het is het Werkadres-blok van het dossier, en daar hoort het
-    // bijgewerkt te worden als het niet klopt.
-    werkadresNaam: (v.werkadres_contact_naam as string | null) ?? null,
-    werkadresTelefoon: (v.werkadres_contact_telefoon as string | null) ?? null,
-    werkadresEmail: (v.werkadres_contact_email as string | null) ?? null,
+    // Wie er ter plaatse te bereiken is. Voorgevuld uit de lezing, maar staat in
+    // het Werkadres-blok zodat de behandelaar het kan zien en corrigeren.
+    werkadresNaam: s.werkadresContact.naam.trim() || null,
+    werkadresTelefoon: s.werkadresContact.telefoon.trim() || null,
+    werkadresEmail: s.werkadresContact.email.trim() || null,
     betrokkenen: s.betrokkenen,
 
     referentie: s.referentie.trim() || null,
