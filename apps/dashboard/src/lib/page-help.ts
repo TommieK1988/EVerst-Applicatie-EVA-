@@ -1317,7 +1317,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Management — Lopende werken',
     description: 'Gedetailleerde tabel van alle lopende projecten met budget, voortgang en marge. Gebruik dit om onderhanden werk financieel te bewaken en afwijkingen vroeg te signaleren.',
     sections: [
-      { title: 'Kolommen', body: 'Per project zie je nummer, status, opdrachtgever, naam en projectleider, plus de financiën: geboekte kosten, totale opdracht, % gereed, prognose, verwacht resultaat, % marge en omzet/resultaat op basis van het gereedheidspercentage.' },
+      { title: 'Kolommen', body: 'Per project zie je nummer, status, opdrachtgever, naam en projectleider, plus de financiën: geboekte kosten, totale opdracht, gefactureerd, % gereed, prognose, verwacht resultaat, % marge en omzet/resultaat op basis van het gereedheidspercentage.' },
       { title: 'Filteren & sorteren', body: 'Met de slicerbalk bovenaan filter je op werkmaatschappij, categorie, projectleider en status. Klik op een kolomkop om te sorteren; de totalenbalk telt de gefilterde regels op.' },
       { title: 'Alleen lopend', body: 'Dit overzicht toont uitsluitend projecten met status "lopend". Afgeronde projecten vind je onder Gereed werken. Prognose en marge worden herrekend op het % gereed; bedragen zijn netto ná OHW-aftrek.' },
     ],
@@ -1337,7 +1337,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Management — Servicedesk',
     description: 'Financiële bewaking van servicedesk-dossiers (storingen, garantie, klein onderhoud), met dezelfde budget- en margekolommen als de lopende werken.',
     sections: [
-      { title: 'Kolommen', body: 'Nummer, status, opdrachtgever, naam, projectleider en de financiën: geboekte kosten, totale opdracht, % gereed, prognose, verwacht resultaat en % marge.' },
+      { title: 'Kolommen', body: 'Nummer, status, opdrachtgever, naam, projectleider en de financiën: geboekte kosten, totale opdracht, gefactureerd, % gereed, prognose, verwacht resultaat en % marge.' },
       { title: 'Filteren', body: 'Met de slicerbalk filter je op werkmaatschappij, categorie, projectleider en status. Bedragen zijn netto ná OHW-aftrek.' },
     ],
   }],

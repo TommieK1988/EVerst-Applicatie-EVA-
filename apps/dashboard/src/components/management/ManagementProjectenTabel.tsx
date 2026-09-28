@@ -46,6 +46,8 @@ const lopendKolommen: KolomDefinitie<ManagementProject>[] = [
     render: p => <EurCel value={p.geboekte_kosten} />, sorteerWaarde: p => p.geboekte_kosten },
   { key: 'totale_opdracht', label: 'Totale opdracht', breedte: 120,
     render: p => <EurCel value={p.totale_opdracht} />, sorteerWaarde: p => p.totale_opdracht },
+  { key: 'gefactureerd', label: 'Gefactureerd', breedte: 120,
+    render: p => <EurCel value={p.gefactureerd} />, sorteerWaarde: p => p.gefactureerd },
   { key: 'pct_gereed', label: '% gereed', breedte: 110,
     render: p => <PctGereedCel waarde={p.pct_gereed} />, sorteerWaarde: p => p.pct_gereed },
   { key: 'totale_prognose', label: 'Prognose', breedte: 120,
