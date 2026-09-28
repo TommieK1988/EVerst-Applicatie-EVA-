@@ -165,6 +165,9 @@ export default function OpdrachtVenster({
       // Alleen het bedrag: de mandaatteksten zet de server erbij, zodat ze op het document en in
       // Bouw7 altijd gelijk zijn aan wat hier als voorbeeld staat.
       mandaatBedrag: isOa && inRegie ? mandaat : null,
+      // Verborgen bij een mandaat, dus ook niet meesturen wat er eerder was ingevuld.
+      inhoudingPct: isOa && inRegie ? null : g.inhoudingPct,
+      boeteTekst: isOa && inRegie ? '' : g.boeteTekst,
       // Niets gekozen = geen termijnen op de opdracht. Er is geen stille terugval: een schema dat
       // niemand heeft aangewezen hoort niet op papier bij een onderaannemer te belanden.
       termijnschema: isOa && !inRegie
@@ -343,7 +346,9 @@ export default function OpdrachtVenster({
             </div>
           )}
 
-          {isOa && (
+          {/* Inhouding en boete horen bij een aanneemsom met een opleverplicht. Bij een mandaat wordt
+              op werkelijke kosten afgerekend; daar valt niets in te houden of te beboeten. */}
+          {isOa && !inRegie && (
             <div className="grid grid-cols-3 gap-3">
               <label className={label}>
                 Inhouding

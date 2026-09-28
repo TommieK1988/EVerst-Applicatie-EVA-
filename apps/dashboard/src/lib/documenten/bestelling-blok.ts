@@ -296,8 +296,9 @@ export async function laadBestellingBlokken(
         // (nog) niet kennen — en dat zijn alle sjablonen van vóór de mandaatopdracht.
         afspraken: [mandaat != null ? mandaatTekst(mandaat, rij.oplever_datum) : '', (rij.afspraken ?? '').trim()]
           .filter(Boolean).join('\n\n'),
-        inhouding: rij.inhouding_pct != null ? `${fmtGetal(Number(rij.inhouding_pct))}%` : '',
-        boete: rij.boete_tekst ?? '',
+        // Bij een mandaat geen inhouding of boete: die horen bij een aanneemsom.
+        inhouding: mandaat == null && rij.inhouding_pct != null ? `${fmtGetal(Number(rij.inhouding_pct))}%` : '',
+        boete: mandaat == null ? (rij.boete_tekst ?? '') : '',
         werkadres: rij.werkadres ?? '',
         interne_notitie: rij.interne_notitie ?? '',
         offertenummer,

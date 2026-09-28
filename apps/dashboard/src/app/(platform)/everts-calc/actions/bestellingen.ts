@@ -636,9 +636,9 @@ export async function maakBestellingInBouw7(
     leverDatum: bestelling.levering_datum ?? null,
     leverTekst: bestelling.levering_tekst ?? null,
     opleverDatum: bestelling.oplever_datum ?? null,
-    // Een mandaat kent geen termijnschema: er is geen vaste som om te verdelen.
+    // Een mandaat kent geen termijnschema en geen inhouding: er is geen vaste som.
     betaalafspraak: await bouwBetaalafspraakHtml(
-      mandaat != null ? { ...bestelling, termijnschema: null } : bestelling, soort, totaal,
+      mandaat != null ? { ...bestelling, termijnschema: null, inhouding_pct: null } : bestelling, soort, totaal,
     ),
     interneNotitie: bestelling.interne_notitie ?? null,
     purchaseType: soort === 'inkooporder' ? PURCHASE_TYPE.materiaal : undefined,
