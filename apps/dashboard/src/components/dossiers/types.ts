@@ -278,10 +278,16 @@ export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
  * Dat is per dossier eenduidig — de categorie bepaalt welke ladder je ziet — en het houdt de
  * bestaande Bouw7-mapping intact: die statussen komen 1-op-1 uit `04. Onderhanden` en
  * `05. Uitvoering gereed`. Alleen `opgenomen` en `in_voorbereiding` zijn nieuw.
+ *
+ * `mandaat_verhoging` staat in beide ladders omdat de knop "Mandaatverhoging aanvragen" op elke bon
+ * staat. Ontbrak hij hier, dan viel een mutatiebon na de aanvraag van het bord: een stand zonder
+ * kolom wordt nergens getoond. Hier na Opgenomen, want bij mutatiewerk blijkt een tekort meestal
+ * bij de opname.
  */
 export const SERVICEDESK_MUTATIE_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   { key: 'nieuw',               label: 'Nieuw'             },
   { key: 'opgenomen',           label: 'Opgenomen'         },
+  { key: 'mandaat_verhoging',   label: 'Mandaat verhoging aangevraagd' },
   { key: 'offerte_uitgebracht', label: 'Offerte verstuurd' },
   { key: 'in_voorbereiding',    label: 'In voorbereiding'  },
   { key: 'loopt',               label: 'Onderhanden'       },

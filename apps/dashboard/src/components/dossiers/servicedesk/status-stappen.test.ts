@@ -139,3 +139,15 @@ describe('de standen die deze knoppen zetten, komen niet uit Bouw7', () => {
     expect(doelen).toContain('kosten_compleet')
   })
 })
+
+describe('knoppen die op elke bon staan, zetten een stand die op beide borden bestaat', () => {
+  /**
+   * "Mandaatverhoging aanvragen" staat op onderhouds- én mutatiebonnen. Een stand die op één bord
+   * geen kolom heeft laat de kaart daar verdwijnen — geen foutmelding, gewoon een bon die weg is.
+   * Zo stond `mandaat_verhoging` eerst alleen op het onderhoudsbord.
+   */
+  it('mandaat_verhoging staat in beide ladders', () => {
+    expect(SERVICEDESK_STATUSSEN.map(s => s.key)).toContain('mandaat_verhoging')
+    expect(SERVICEDESK_MUTATIE_STATUSSEN.map(s => s.key)).toContain('mandaat_verhoging')
+  })
+})
