@@ -8,11 +8,8 @@
  * Die volgorde is essentieel. Andersom ("vast bijwerken, dan mailen") staat er een `aangevraagd_op` op
  * een uitvraag die nooit is verstuurd, en zit je te wachten op een offerte die niemand kan sturen.
  *
- * TESTEN ZONDER EXTERNE PARTIJEN TE MAILEN: zet `MAIL_OMLEIDEN_NAAR` in `.env.local`. Alle
- * geadresseerden worden dan vervangen door dat ene adres en het onderwerp krijgt een [TEST]-voorvoegsel
- * met de oorspronkelijke ontvangers erin. Bewust alléén hier en niet in `verstuurMailNamensMedewerker`:
- * dat is de gedeelde verzendlaag van offertes, bestellingen en opleveringen, en die pas je niet aan
- * voor een test.
+ * TESTEN ZONDER EXTERNE PARTIJEN TE MAILEN: zet `MAIL_OMLEIDEN_NAAR` in `.env.local` — zie
+ * `lib/mail/verstuur.ts`.
  */
 
 import { createAdminClient } from '@everts/database/server'
@@ -22,16 +19,13 @@ import { assertDossierBewerkbaar } from './guards'
 import { vulMailTekst, netteRegel } from '@/lib/mail/sjabloontekst'
 import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { bouwUitvraagMailHtml, type UitvraagMailRegel } from '@/lib/mail/uitvraag-mail'
+import { splitsAdressen, verstuurMetOmleiding as verstuur } from '@/lib/mail/verstuur'
 
 /** dd-mm-jjjj uit een ISO-datum. */
 function nlDatum(iso?: string | null): string {
   if (!iso) return ''
   const d = iso.slice(0, 10).split('-')
   return d.length === 3 ? `${d[2]}-${d[1]}-${d[0]}` : iso
-}
-
-function splitsAdressen(v?: string | null): string[] {
-  return (v ?? '').split(/[;,]/).map(s => s.trim()).filter(Boolean)
 }
 
 function werkadresVan(d: {
@@ -45,33 +39,6 @@ function werkadresVan(d: {
     [d.werkadres_straat, d.werkadres_huisnummer].filter(Boolean).join(' '),
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
-}
-
-/** Omleiding voor testen; leeg in productie. */
-function omleiding(): string | null {
-  const v = (process.env.MAIL_OMLEIDEN_NAAR ?? '').trim()
-  return v.includes('@') ? v : null
-}
-
-/**
- * Verstuurt één mail namens de medewerker, met de testomleiding erin verwerkt.
- * Gooit bij mislukking (net als de onderliggende Graph-laag), zodat elke aanroeper zelf beslist of
- * dat één regel of één partij raakt.
- */
-async function verstuur(
-  medewerkerId: string,
-  input: { to: string[]; cc: string[]; onderwerp: string; bodyHtml: string },
-): Promise<void> {
-  const naar = omleiding()
-  const { verstuurMailNamensMedewerker } = await import('@/lib/o365/mail')
-  await verstuurMailNamensMedewerker(medewerkerId, {
-    to: naar ? [naar] : input.to,
-    cc: naar ? [] : input.cc,
-    subject: naar
-      ? `[TEST → ${[...input.to, ...input.cc].join(', ')}] ${input.onderwerp}`
-      : input.onderwerp,
-    bodyHtml: input.bodyHtml,
-  })
 }
 
 /* ─── concept voor één uitvraag ───────────────────────────────────── */

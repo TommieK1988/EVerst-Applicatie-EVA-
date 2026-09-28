@@ -78,7 +78,7 @@ export function bonActies(ctx: BonContext): BonActie[] {
         : ctx.verhogingLoopt
           ? 'Leg vast welk mandaat de opdrachtgever heeft toegekend.'
           : ctx.heeftMandaat
-            ? 'Vraag de opdrachtgever om een hoger maximum voor deze bon.'
+            ? 'Mail de opdrachtgever een verzoek om een hoger maximum voor deze bon.'
             : 'Er staat nog geen mandaat op de bon; je vult het bedrag in het venster in.',
       // Ook zonder mandaat kan dit: het venster vraagt het bedrag dan gewoon als eerste uit.
       kan: !dicht,

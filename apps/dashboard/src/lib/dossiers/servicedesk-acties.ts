@@ -10,13 +10,16 @@
 import { z } from 'zod'
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { vereisRecht } from '@/lib/auth/rechten'
+import { vereisRecht, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { logFout, foutNaarInvoer } from '@/lib/fouten/log'
 import { assertDossierBewerkbaar } from './guards'
 import { plaatsDossierNotitie } from './notities-actions'
 import { updateServicedeskSubstatus } from './actions'
 import { standNaToewijzing, volgendeStap } from '@/components/dossiers/servicedesk/status-stappen'
 import { isMutatieDossier, type ServicedeskSubstatus } from '@/components/dossiers/types'
+import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
+import { mailTekstNaarHtml } from '@/lib/mail/opmaak'
+import { splitsAdressen, verstuurMetOmleiding } from '@/lib/mail/verstuur'
 
 const MANDAAT_VERHOGING = 'mandaat_verhoging'
 
@@ -116,6 +119,15 @@ const ToekenningSchema = z.object({
   toelichting: z.string().trim().max(2000).optional(),
 })
 
+const MailSchema = z.object({
+  to: z.string().trim().min(1, 'Vul een e-mailadres in.').max(2000),
+  cc: z.string().trim().max(2000).optional(),
+  onderwerp: z.string().trim().min(1, 'Vul een onderwerp in.').max(300),
+  bericht: z.string().trim().min(1, 'De mail is leeg.').max(20_000),
+})
+
+export type MandaatMail = z.infer<typeof MailSchema>
+
 const euro = (n: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 
@@ -140,17 +152,86 @@ async function vorigeSubstatus(supabase: ReturnType<typeof createAdminClient>, d
   return rijen.find(r => r.substatus !== MANDAAT_VERHOGING)?.substatus ?? TERUGVAL_SUBSTATUS
 }
 
+export type MandaatMailConcept = {
+  /** Voorgestelde ontvanger: de contactpersoon van de bon, anders het algemene adres. */
+  to: string
+  /** Sjabloontekst met {plaatshouders}; het venster vult ze, omdat bedrag en toelichting daar ontstaan. */
+  onderwerp: string
+  tekst: string
+  /** Alles wat de server al weet. `mandaat.gevraagd` en `toelichting` vult het venster zelf aan. */
+  vars: Record<string, string>
+}
+
+/**
+ * Het concept voor de mail aan de opdrachtgever.
+ *
+ * Geeft het sjabloon ongevuld terug in plaats van een kant-en-klare tekst: het gevraagde bedrag en de
+ * toelichting typt de gebruiker pas in het venster, en de mail moet meelopen zolang hij hem niet zelf
+ * heeft aangepast.
+ */
+export async function getMandaatMailConcept(dossierId: string): Promise<MandaatMailConcept> {
+  await vereisRecht('servicedesk', 'schrijven')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+
+  const { data: d } = await supabase
+    .from('dossiers')
+    .select(`
+      dossiernummer, titel, referentie, mandaat_bedrag,
+      werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad,
+      relaties!klant_id ( naam, email ),
+      contactpersonen ( voornaam, tussenvoegsel, achternaam, email )
+    `)
+    .eq('id', dossierId)
+    .maybeSingle()
+
+  const cp = d?.contactpersonen
+  const cpNaam = cp ? [cp.voornaam, cp.tussenvoegsel, cp.achternaam].filter(Boolean).join(' ') : ''
+  const adres = (v: unknown) => (typeof v === 'string' && v.includes('@') ? v.trim() : '')
+  const huidig = d?.mandaat_bedrag != null ? Number(d.mandaat_bedrag) : 0
+  // LET OP: `werkadres_stad`, niet `werkadres_plaats` — met de verkeerde naam faalt de select stil.
+  const werkadres = d
+    ? [
+        [d.werkadres_straat, d.werkadres_huisnummer].filter(Boolean).join(' '),
+        [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
+      ].filter(Boolean).join(', ')
+    : ''
+
+  const bron = await getMailSjabloonTekst('mandaat_verhoging')
+  return {
+    to: adres(cp?.email) || adres(d?.relaties?.email),
+    onderwerp: bron.onderwerp,
+    tekst: bron.tekst,
+    vars: {
+      'aanhef': cpNaam ? `Geachte ${cpNaam},` : 'Geachte heer/mevrouw,',
+      'dossier.nummer': d?.dossiernummer ?? '',
+      'dossier.titel': d?.titel ?? '',
+      'dossier.werkadres': werkadres,
+      'dossier.referentie': d?.referentie ?? '',
+      'klant.naam': d?.relaties?.naam ?? '',
+      'mandaat.huidig': euro(huidig > 0 ? huidig : 0),
+    },
+  }
+}
+
+const FONT = "'Segoe UI',Segoe,Arial,Helvetica,sans-serif"
+
 /**
  * Vraagt een hoger mandaat aan bij de opdrachtgever.
  *
  * Zet de bon op de kolom "Mandaat verhoging aangevraagd" en legt het gevraagde bedrag met de
  * reden vast als dossiernotitie. Bewust géén losse taak erbij: de kolom op het bord ís het
  * werksignaal, en een taak zou hetzelfde nog een keer bijhouden op een tweede plek.
+ *
+ * Met `mail` gaat het verzoek ook naar de opdrachtgever, namens de ingelogde medewerker. Dat gebeurt
+ * **eerst**: mislukt de mail, dan blijft de bon staan waar hij stond en is het opnieuw te proberen.
+ * Andersom zou de kolom "aangevraagd" zeggen over een verzoek dat nooit is aangekomen.
  */
 export async function vraagMandaatverhogingAan(
   dossierId: string,
   invoer: { gevraagdBedrag: number; toelichting: string },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  mail?: MandaatMail,
+): Promise<{ ok: true; gemaild: boolean } | { ok: false; error: string }> {
   await vereisRecht('servicedesk', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
 
@@ -174,18 +255,52 @@ export async function vraagMandaatverhogingAan(
   const huidig = bon?.mandaat_bedrag != null ? Number(bon.mandaat_bedrag) : null
   const van = huidig != null && huidig > 0 ? euro(huidig) : 'geen mandaat'
 
+  let gemaildAan = ''
+  if (mail) {
+    const m = MailSchema.safeParse(mail)
+    if (!m.success) return { ok: false, error: m.error.issues[0]?.message ?? 'Ongeldige mail.' }
+    const to = splitsAdressen(m.data.to)
+    if (to.length === 0) return { ok: false, error: 'Vul een e-mailadres in.' }
+
+    const medewerker = await getCurrentMedewerker().catch(() => null)
+    if (!medewerker) return { ok: false, error: 'Geen ingelogde medewerker gevonden om namens te versturen.' }
+
+    try {
+      await verstuurMetOmleiding(medewerker.id, {
+        to,
+        cc: splitsAdressen(m.data.cc),
+        onderwerp: m.data.onderwerp,
+        // De tekst is in het venster al gevuld; hier alleen nog alinea's en **vet** voor Outlook.
+        bodyHtml:
+          `<div style="font-family:${FONT};font-size:14px;line-height:1.55;color:#1f2933">` +
+          mailTekstNaarHtml(m.data.bericht) +
+          `</div>`,
+      })
+    } catch (e) {
+      await logFout(foutNaarInvoer(e, { omgeving: 'server', bron: 'servicedesk/mandaatverhoging-mail' }))
+      return { ok: false, error: `Mail versturen mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }
+    }
+    gemaildAan = to.join(', ')
+  }
+
+  // Vanaf hier is de mail (als die er was) de deur uit. Wat nu nog misgaat mag niet lezen als
+  // "opnieuw versturen", dus de melding zegt erbij dat de mail wél weg is.
+  const alGemaild = gemaildAan ? ' De mail aan de opdrachtgever is wel verstuurd.' : ''
+
   const notitie = await plaatsDossierNotitie(
     dossierId,
-    `Mandaatverhoging aangevraagd: van ${van} naar ${euro(gevraagdBedrag)}.\n\n${toelichting}`,
+    `Mandaatverhoging aangevraagd: van ${van} naar ${euro(gevraagdBedrag)}.` +
+      (gemaildAan ? ` Gemaild aan ${gemaildAan}.` : '') +
+      `\n\n${toelichting}`,
   )
-  if (!notitie.ok) return notitie
+  if (!notitie.ok) return { ok: false, error: notitie.error + alGemaild }
 
   const gezet = await updateServicedeskSubstatus(dossierId, MANDAAT_VERHOGING)
-  if (!gezet.ok) return { ok: false, error: gezet.error ?? 'Kon de status niet wijzigen.' }
+  if (!gezet.ok) return { ok: false, error: (gezet.error ?? 'Kon de status niet wijzigen.') + alGemaild }
 
   revalidatePath(`/servicedesk/${dossierId}/bon`)
   revalidatePath('/servicedesk')
-  return { ok: true }
+  return { ok: true, gemaild: !!gemaildAan }
 }
 
 /**

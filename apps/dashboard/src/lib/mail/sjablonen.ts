@@ -18,6 +18,7 @@ export const MAIL_SOORTEN = [
   'offerte',
   'uitvraag',
   'uitvraag_rappel',
+  'mandaat_verhoging',
   'oplever_rapportage',
   'oplever_herinnering',
   'oplever_feedback',
@@ -34,9 +35,9 @@ export function isMailSoort(v: string | null | undefined): v is MailSoort {
   return !!v && (MAIL_SOORTEN as readonly string[]).includes(v)
 }
 
-export type MailGroep = 'Offerte & inkoop' | 'Oplevering' | 'Klantportaal' | 'Medewerkers'
+export type MailGroep = 'Offerte & inkoop' | 'Servicedesk' | 'Oplevering' | 'Klantportaal' | 'Medewerkers'
 
-export const MAIL_GROEPEN: MailGroep[] = ['Offerte & inkoop', 'Oplevering', 'Klantportaal', 'Medewerkers']
+export const MAIL_GROEPEN: MailGroep[] = ['Offerte & inkoop', 'Servicedesk', 'Oplevering', 'Klantportaal', 'Medewerkers']
 
 export type MailVariabele = { sleutel: string; uitleg: string }
 
@@ -138,6 +139,39 @@ export const MAIL_SOORT_INFO: Record<MailSoort, MailSoortInfo> = {
         'Eerder vroegen wij u om een prijsopgave voor onderstaand werk. Wij hebben die nog niet ontvangen.',
         '',
         'Kunt u laten weten wanneer wij uw offerte kunnen verwachten, of dat u ervan afziet? Dan houden wij daar rekening mee in onze planning.',
+        '',
+        'Met vriendelijke groet,',
+      ].join('\n'),
+    },
+  },
+
+  mandaat_verhoging: {
+    soort: 'mandaat_verhoging',
+    label: 'Mandaatverhoging aanvragen',
+    groep: 'Servicedesk',
+    wanneer: 'Naar de opdrachtgever, vanaf de knop "Mandaatverhoging aanvragen" op een servicedeskbon. De verzender ziet de ingevulde tekst in het venster en kan hem nog aanpassen.',
+    variabelen: [
+      { sleutel: 'aanhef', uitleg: '"Geachte Jan de Vries," of "Geachte heer/mevrouw,"' },
+      { sleutel: 'dossier.nummer', uitleg: 'Bonnummer' },
+      { sleutel: 'dossier.titel', uitleg: 'Titel van de bon' },
+      { sleutel: 'dossier.werkadres', uitleg: 'Werkadres' },
+      { sleutel: 'dossier.referentie', uitleg: 'Referentie van de opdrachtgever (kan leeg zijn)' },
+      { sleutel: 'klant.naam', uitleg: 'Naam van de opdrachtgever' },
+      { sleutel: 'mandaat.huidig', uitleg: 'Het mandaat dat nu op de bon staat' },
+      { sleutel: 'mandaat.gevraagd', uitleg: 'Het gevraagde nieuwe mandaat' },
+      { sleutel: 'toelichting', uitleg: 'De toelichting die in het venster is getypt' },
+    ],
+    blokken: [],
+    standaard: {
+      onderwerp: 'Verzoek mandaatverhoging — {dossier.nummer} {dossier.werkadres}',
+      tekst: [
+        '{aanhef}',
+        '',
+        'Voor de melding op {dossier.werkadres} (ons nummer {dossier.nummer}) is het huidige mandaat van {mandaat.huidig} niet toereikend. Wij vragen u het mandaat te verhogen naar **{mandaat.gevraagd}** (excl. btw).',
+        '',
+        '{toelichting}',
+        '',
+        'Wilt u de verhoging bevestigen door op deze mail te antwoorden? Tot die tijd voeren wij alleen werkzaamheden uit binnen het huidige mandaat.',
         '',
         'Met vriendelijke groet,',
       ].join('\n'),
