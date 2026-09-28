@@ -305,7 +305,8 @@ export async function laadBestellingBlokken(
         totaal: fmtEur(totaal),
         totaal_getal: totaal,
         regels,
-        termijnen: bouwTermijnen(totaal, leesTermijnschema(rij.termijnschema)),
+        // Bij een mandaat geen termijnen, ook niet als er van vroeger nog een schema op de rij staat.
+        termijnen: mandaat != null ? [] : bouwTermijnen(totaal, leesTermijnschema(rij.termijnschema)),
         is_oa: rij.soort === 'oa_contract',
         is_inkooporder: rij.soort === 'inkooporder',
         is_mandaat: mandaat != null,

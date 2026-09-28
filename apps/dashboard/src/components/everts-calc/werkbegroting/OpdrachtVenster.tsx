@@ -167,7 +167,7 @@ export default function OpdrachtVenster({
       mandaatBedrag: isOa && inRegie ? mandaat : null,
       // Niets gekozen = geen termijnen op de opdracht. Er is geen stille terugval: een schema dat
       // niemand heeft aangewezen hoort niet op papier bij een onderaannemer te belanden.
-      termijnschema: isOa
+      termijnschema: isOa && !inRegie
         ? (termijnen.filter(t => t.omschrijving.trim() || t.pct).length > 0
             ? termijnen.filter(t => t.omschrijving.trim() || t.pct)
             : null)
@@ -287,7 +287,9 @@ export default function OpdrachtVenster({
             </div>
           )}
 
-          {isOa && (
+          {/* Geen termijnschema bij een mandaat: er is geen vast bedrag om in termijnen te knippen,
+              de partij factureert de werkelijke kosten. */}
+          {isOa && !inRegie && (
             <div className="rounded-lg border border-slate-200 p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-slate-600">Termijnschema</p>
