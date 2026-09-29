@@ -12,10 +12,10 @@ npm workspaces + Turborepo. Eén actieve Next.js 15 app onder `apps/`, vijf inte
 |-----|------|---------|
 | `apps/dashboard` (EVA) | 3000 | Centraal platform — alle modules geïntegreerd |
 
-Gearchiveerde standalone apps (niet meer starten):
-- `apps/taken` — geïntegreerd in EVA onder `/taken` (heet in de interface **Acties**/Actielijsten;
-  routes, mappen en DB-namen blijven bewust `taken`/`tasks`)
-- `apps/wagenpark` — geïntegreerd in EVA onder `/wagenpark`
+`apps/wagenpark` staat er nog als gearchiveerde standalone app — niet meer starten; wagenpark
+leeft in EVA onder `/wagenpark`. De losse **taken**-app is verwijderd; die module heet in de
+interface **Acties**/Actielijsten, maar routes, mappen en DB-namen blijven bewust
+`taken`/`tasks`.
 
 De losse **everts-calc** standalone-app (`apps/everts-calc`, poort 3001) is **verwijderd** (juli 2026);
 de calculatie-/offerte-module leeft volledig in EVA onder `apps/dashboard/src/**/everts-calc/`.
@@ -54,7 +54,40 @@ npm run lint
 npm run type-check
 ```
 
-Tests zijn nog niet geconfigureerd in deze monorepo.
+```bash
+# Tests (vitest) — 204 tests in 21 bestanden
+npm test
+npx vitest run pad/naar/een.test.ts     # één bestand
+```
+
+Ze dekken de rekenkern (calculatieregels, btw-groepering, formatters), de statusafleiding uit
+Bouw7, en de interne links: `links.test.ts` legt elke href en `router.push` naast de routes onder
+`src/app`, zodat een pad naar een niet-bestaande pagina rood wordt in plaats van bij de gebruiker.
+
+## CI — de controlepoort
+
+`.github/workflows/ci.yml` draait op elke push naar `main` en op elke PR: type-check, lint,
+tests, de schuldteller en de build. Draai die stappen lokaal vóór je pusht; dat scheelt een
+rode run.
+
+**Een rode CI-run is bijna altijd de schuldteller.** `scripts/schuld-teller.mjs` bewaakt drie
+dingen tegen het vastgelegde budget in `scripts/schuld-budget.json`: `as any`-casts, server
+actions met de service-role-client zónder rechtencontrole, en bestanden boven de 800 regels.
+Die mogen alleen omlaag. Groeit er één, dan is de keuze: oplóssen in dezelfde wijziging, of het
+budget bewust ophogen met exact het aantal dat je toevoegt én uitleggen waarom in de
+commitmelding.
+
+De build staat er bewust achteraan: die vangt `'use server'`-fouten die `tsc` mist — een
+synchrone export uit een `'use server'`-module komt door de type-check heen en breekt pas bij
+het bouwen.
+
+Er staat (nog) geen branch protection op `main`: er werken meerdere sessies tegelijk die er
+rechtstreeks naartoe pushen. Fetch dus vóór je begint en rebase vóór je pusht.
+
+De regels waar de schuldteller op let staan uitgeschreven in **`DEVELOPMENT_STANDARDS.md`** —
+onder andere §2.1: maximaal 400 regels per bestand, en boven de 800 moet je het in de
+commitmelding verantwoorden. Lees dat document als je iets toevoegt aan een bestand dat al
+groot is; vaak is het antwoord een nieuw bestand naast het bestaande.
 
 ## Database
 
@@ -162,12 +195,13 @@ insert into public.changelog (datum, categorie, module, titel, omschrijving) val
 
 **Schrijfstijl:** begrijpelijk voor niet-technische collega's. Beschrijf de *functie*, niet de code: geen endpoints, tabelnamen, componentnamen, "RLS" of commit-jargon.
 
-## Migration status (april 2026)
+## Migratiestatus (september 2026)
 
 De monorepo-migratie is functioneel maar niet volledig:
-- `@everts/ui` en `@everts/auth` zijn nog skeletten — vul deze aan vóór nieuwe apps toevoegen
-- `apps/taken` heeft duplicate code (PageHeader, ToastProvider, supabase lib) die naar `@everts/ui` / `@everts/database` moet worden verplaatst
-- Geen CI/CD geconfigureerd
+- `@everts/ui` en `@everts/auth` zijn nog skeletten (drie bestanden samen) — vul deze aan vóór
+  je nieuwe apps toevoegt. Gedeelde UI-componenten staan vandaag in
+  `apps/dashboard/src/components/ui/`.
+- `apps/wagenpark` is nog niet opgeruimd; de module draait in EVA.
 # Hoofdproces Onderhoud- en Renovatiebedrijf
 
 ## Status van dit document
