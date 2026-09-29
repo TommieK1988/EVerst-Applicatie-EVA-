@@ -4,6 +4,14 @@ import { createClient, createAdminClient } from '@everts/database/server'
 import { APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
 import { veiligNextPad } from '@/lib/auth/next-pad'
+import { controleerKoppeling, type KoppelingStatus } from '@/lib/o365/tokens'
+
+/**
+ * Langer dan dit mag de koppelingscheck het inloggen niet ophouden. Meestal is het
+ * access-token nog geldig en kost de check alleen een database-read; hangt Microsoft,
+ * dan gaat het inloggen gewoon door.
+ */
+const KOPPELING_CHECK_MS = 4_000
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -49,6 +57,20 @@ export async function GET(request: Request) {
             path: '/', sameSite: 'lax', maxAge: MOBIEL_SESSIE_MAXAGE,
           })
         }
+
+        // Heeft Microsoft de mailkoppeling ingetrokken (wachtwoord gewijzigd, sessies
+        // ingetrokken)? Dan nu herstellen, nu de medewerker toch net bij Microsoft is
+        // ingelogd — en niet pas als er een offerte verstuurd moet worden. Wie nooit
+        // gekoppeld heeft ('geen') laten we met rust.
+        const koppeling = await Promise.race<KoppelingStatus>([
+          controleerKoppeling(medewerker.id),
+          new Promise(resolve => setTimeout(() => resolve('onbekend'), KOPPELING_CHECK_MS)),
+        ])
+        if (koppeling === 'verlopen') {
+          const herstel = new URLSearchParams({ medewerker_id: medewerker.id, terug: next, stil: '1' })
+          return NextResponse.redirect(`${origin}/api/auth/o365?${herstel}`)
+        }
+
         return NextResponse.redirect(`${origin}${next}`)
       }
     }

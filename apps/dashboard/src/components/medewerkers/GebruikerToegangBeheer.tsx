@@ -37,6 +37,8 @@ export default function GebruikerToegangBeheer({
   gebruiker_type: initial_type,
   auth_user_id,
   o365_email: initial_o365_email,
+  o365_verlopen,
+  isEigenKaart,
   rechten_override: initial_rechten,
   afdeling_standaard_rechten,
 }: {
@@ -53,6 +55,10 @@ export default function GebruikerToegangBeheer({
   gebruiker_type: GebruikerType
   auth_user_id: string | null
   o365_email: string | null
+  /** Microsoft heeft de mailkoppeling ingetrokken (`medewerker_o365_tokens.verlopen_op`). */
+  o365_verlopen: boolean
+  /** Opnieuw koppelen kan alleen op je eigen kaart: je logt in met je eigen Microsoft-account. */
+  isEigenKaart: boolean
   rechten_override: RechtenSet
   afdeling_standaard_rechten: RechtenSet
 }) {
@@ -231,13 +237,25 @@ export default function GebruikerToegangBeheer({
       <div>
         <label style={labelStyle}>Office 365</label>
         {initial_o365_email ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
+              {o365_verlopen ? (
+                <span style={{ ...valueStyle, color: 'var(--warning-700)', fontWeight: 600 }}>● Verlopen</span>
+              ) : (
+                <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
+              )}
               <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {initial_o365_email}
               </span>
             </div>
+            {/* Alleen op je eigen kaart: bij koppelen log je in met je éígen Microsoft-account. */}
+            {isEigenKaart && o365Configured && (
+              <Button asChild variant={o365_verlopen ? 'primary' : 'ghost'} size="sm">
+                <a href={`/api/auth/o365?medewerker_id=${medewerker_id}`}>
+                  Opnieuw koppelen
+                </a>
+              </Button>
+            )}
             {magOntkoppelenO365 && (
               <Button
                 variant="ghost"
@@ -247,6 +265,13 @@ export default function GebruikerToegangBeheer({
               >
                 Ontkoppelen
               </Button>
+            )}
+            {o365_verlopen && (
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', margin: 0, flexBasis: '100%' }}>
+                Microsoft heeft deze koppeling ingetrokken, bijvoorbeeld na een wachtwoordwijziging.
+                Mailen vanuit EVA lukt pas weer na opnieuw koppelen
+                {isEigenKaart ? '.' : ' — dat gebeurt vanzelf bij de volgende keer inloggen, of via de eigen medewerkerkaart.'}
+              </p>
             )}
           </div>
         ) : o365Configured ? (

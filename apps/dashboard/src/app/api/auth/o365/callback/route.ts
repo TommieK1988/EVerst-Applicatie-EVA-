@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, isBeheerder, getEffectieveRechten } from '@/lib/auth/rechten'
 import { fetchMetDeadline } from '@/lib/net/deadline'
+import { veiligNextPad } from '@/lib/auth/next-pad'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
@@ -9,8 +10,18 @@ export async function GET(request: NextRequest) {
   const state        = searchParams.get('state')
   const errorParam   = searchParams.get('error')
 
+  // Gezet door /api/auth/o365 als de koppeling vanuit de login werd hersteld: de
+  // medewerker wilde ergens anders heen dan zijn kaart. Mislukt het herstel, dan
+  // laten we hem daar gewoon aankomen — de mailactie legt later zelf uit wat er mis is.
+  const terug = veiligNextPad(request.cookies.get('o365_terug')?.value)
+  const naar = (pad: string) => {
+    const res = NextResponse.redirect(`${origin}${pad}`)
+    res.cookies.delete('o365_terug')
+    return res
+  }
+
   if (errorParam) {
-    return NextResponse.redirect(`${origin}/medewerkers?fout=o365_afgebroken`)
+    return naar(terug ?? '/medewerkers?fout=o365_afgebroken')
   }
   if (!code || !state) {
     return NextResponse.redirect(`${origin}/medewerkers?fout=o365_ongeldig`)
@@ -56,7 +67,7 @@ export async function GET(request: NextRequest) {
   )
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?fout=o365_token`)
+    return naar(terug ?? `/medewerkers/${medewerker_id}?fout=o365_token`)
   }
 
   const tokens = await tokenRes.json() as {
@@ -72,7 +83,7 @@ export async function GET(request: NextRequest) {
   }, { dienst: 'Microsoft Graph', timeoutMs: 15_000 })
 
   if (!meRes.ok) {
-    return NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?fout=o365_profiel`)
+    return naar(terug ?? `/medewerkers/${medewerker_id}?fout=o365_profiel`)
   }
 
   const me = await meRes.json() as { id: string; mail?: string; userPrincipalName?: string; tenantId?: string }
@@ -106,10 +117,13 @@ export async function GET(request: NextRequest) {
       token_expires_at: tokenExpiresAt,
       scopes:           ['offline_access', 'User.Read', 'Mail.Send'],
       updated_at:       new Date().toISOString(),
+      // Verse koppeling: een eerdere weigering door Microsoft is hiermee opgelost.
+      verlopen_op:      null,
+      verlopen_reden:   null,
     }, { onConflict: 'medewerker_id' })
 
   // State-cookie is verbruikt — opruimen.
-  const done = NextResponse.redirect(`${origin}/medewerkers/${medewerker_id}?o365=gekoppeld`)
+  const done = naar(terug ?? `/medewerkers/${medewerker_id}?o365=gekoppeld`)
   done.cookies.delete('o365_oauth_state')
   return done
 }

@@ -8779,6 +8779,8 @@ export type Database = {
           todo_sync_actief: boolean
           token_expires_at: string | null
           updated_at: string
+          verlopen_op: string | null
+          verlopen_reden: string | null
         }
         Insert: {
           access_token: string
@@ -8791,6 +8793,8 @@ export type Database = {
           todo_sync_actief?: boolean
           token_expires_at?: string | null
           updated_at?: string
+          verlopen_op?: string | null
+          verlopen_reden?: string | null
         }
         Update: {
           access_token?: string
@@ -8803,6 +8807,8 @@ export type Database = {
           todo_sync_actief?: boolean
           token_expires_at?: string | null
           updated_at?: string
+          verlopen_op?: string | null
+          verlopen_reden?: string | null
         }
         Relationships: [
           {

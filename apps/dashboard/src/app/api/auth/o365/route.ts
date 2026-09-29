@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, isBeheerder, getEffectieveRechten } from '@/lib/auth/rechten'
+import { veiligNextPad } from '@/lib/auth/next-pad'
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.O365_CLIENT_ID
@@ -42,28 +44,47 @@ export async function GET(request: NextRequest) {
   const nonce = randomUUID()
   const state = `${nonce}:${medewerker_id}`
 
+  // Herstel vanuit de login (zie app/auth/callback): de medewerker is net bij Microsoft
+  // ingelogd, dus met een login_hint en zonder accountkiezer loopt de koppeling meestal
+  // zonder één klik door. Daarna terug naar waar de login heen wilde.
+  const terug = veiligNextPad(request.nextUrl.searchParams.get('terug'))
+  let loginHint: string | null = null
+  if (request.nextUrl.searchParams.get('stil') === '1' && huidige.id === medewerker_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (createAdminClient() as any)
+      .from('medewerkers').select('email, o365_email').eq('id', medewerker_id).maybeSingle()
+    loginHint = data?.o365_email ?? data?.email ?? null
+  }
+
   const params = new URLSearchParams({
     client_id:     clientId,
     response_type: 'code',
     redirect_uri:  redirectUri,
     scope:         scopes,
     state,
+  })
+  if (loginHint) {
+    params.set('login_hint', loginHint)
+  } else {
     // Alleen het account laten kiezen — NIET prompt=consent. In een tenant waar
     // gebruikers zelf niet mogen consenten zou prompt=consent de gebruiker om
     // toestemming vragen en dus blokkeren, óók als de beheerder al org-brede
     // toestemming (admin consent) heeft gegeven. Met select_account gebruikt de
     // koppeling die beheerdersgoedkeuring en wordt het token (incl. Mail.Send) uitgegeven.
-    prompt:        'select_account',
-  })
+    params.set('prompt', 'select_account')
+  }
 
   const authUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`
   const response = NextResponse.redirect(authUrl)
-  response.cookies.set('o365_oauth_state', nonce, {
+  const cookieOpties = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'lax' as const,
     path: '/',
     maxAge: 600, // 10 minuten — genoeg voor de OAuth-round-trip
-  })
+  }
+  response.cookies.set('o365_oauth_state', nonce, cookieOpties)
+  if (terug) response.cookies.set('o365_terug', terug, cookieOpties)
+  else response.cookies.delete('o365_terug')
   return response
 }

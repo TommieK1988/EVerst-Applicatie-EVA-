@@ -17,7 +17,7 @@ import { createAdminClient } from '@everts/database/server'
 
 import { fetchMetDeadline } from '@/lib/net/deadline'
 
-export type O365TokenFout = 'geen_koppeling' | 'refresh_mislukt'
+export type O365TokenFout = 'geen_koppeling' | 'verlopen' | 'refresh_mislukt'
 
 export class O365TokenError extends Error {
   constructor(public readonly reden: O365TokenFout, message?: string) {
@@ -26,11 +26,21 @@ export class O365TokenError extends Error {
   }
 }
 
+/**
+ * Wat de medewerker te zien krijgt als Microsoft de koppeling heeft ingetrokken.
+ * Dit komt via `e.message` in elke mailactie terecht, dus het moet zeggen wat je
+ * moet dóén — "Token verversen mislukt: HTTP 400" hielp niemand verder.
+ */
+export const O365_VERLOPEN_MELDING =
+  'Je Office 365-koppeling is verlopen (bijvoorbeeld na een wachtwoordwijziging). ' +
+  'Log uit en opnieuw in bij EVA, of klik op je medewerkerkaart op "Opnieuw koppelen", en probeer het daarna nog eens.'
+
 interface TokenRij {
   access_token: string
   refresh_token: string | null
   token_expires_at: string | null
   scopes: string[] | null
+  verlopen_op: string | null
 }
 
 /** Marge waarmee we een token als "bijna verlopen" beschouwen. */
@@ -38,6 +48,14 @@ const EXPIRY_BUFFER_MS = 60_000
 
 /** Een tokenendpoint hoort binnen seconden te antwoorden. Zie lib/net/deadline.ts. */
 const TOKEN_TIMEOUT_MS = 15_000
+
+/**
+ * Foutcodes waarmee Microsoft zegt: dit refresh-token is definitief onbruikbaar,
+ * alleen opnieuw inloggen helpt. `invalid_grant` dekt wachtwoordwijziging,
+ * ingetrokken sessies en verlopen tokens; `interaction_required` komt van
+ * conditional access (bijv. MFA opnieuw vereist).
+ */
+const OPNIEUW_KOPPELEN_CODES = new Set(['invalid_grant', 'interaction_required'])
 
 function tenantFor(o365TenantId?: string | null): string {
   return o365TenantId || process.env.O365_TENANT_ID || 'common'
@@ -49,7 +67,9 @@ function tenantFor(o365TenantId?: string | null): string {
  * is, en persisteert het geroteerde refresh-token.
  *
  * @throws O365TokenError('geen_koppeling') als de medewerker geen O365-binding heeft
- * @throws O365TokenError('refresh_mislukt') als verversen faalt (re-consent nodig)
+ * @throws O365TokenError('verlopen') als Microsoft de koppeling heeft ingetrokken
+ *         (vastgelegd in `verlopen_op`; de volgende login herstelt hem)
+ * @throws O365TokenError('refresh_mislukt') bij een tijdelijke fout (Microsoft onbereikbaar, config)
  */
 export async function getValidAccessToken(medewerkerId: string): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,13 +77,18 @@ export async function getValidAccessToken(medewerkerId: string): Promise<string>
 
   const { data: tokenRij } = await supabase
     .from('medewerker_o365_tokens')
-    .select('access_token, refresh_token, token_expires_at, scopes')
+    .select('access_token, refresh_token, token_expires_at, scopes, verlopen_op')
     .eq('medewerker_id', medewerkerId)
     .maybeSingle()
 
   const rij = tokenRij as TokenRij | null
   if (!rij?.access_token) {
     throw new O365TokenError('geen_koppeling', 'Geen Office 365-koppeling voor deze medewerker.')
+  }
+
+  // Al eerder geweigerd: niet opnieuw bij Microsoft aankloppen, meteen de uitleg geven.
+  if (rij.verlopen_op) {
+    throw new O365TokenError('verlopen', O365_VERLOPEN_MELDING)
   }
 
   const expiresAt = rij.token_expires_at ? new Date(rij.token_expires_at).getTime() : 0
@@ -74,7 +99,8 @@ export async function getValidAccessToken(medewerkerId: string): Promise<string>
   }
 
   if (!rij.refresh_token) {
-    throw new O365TokenError('refresh_mislukt', 'Geen refresh-token; opnieuw koppelen vereist.')
+    await markeerVerlopen(medewerkerId, 'geen refresh-token')
+    throw new O365TokenError('verlopen', O365_VERLOPEN_MELDING)
   }
 
   // Tenant van de medewerker ophalen voor de juiste token-endpoint
@@ -85,7 +111,16 @@ export async function getValidAccessToken(medewerkerId: string): Promise<string>
     .maybeSingle()
 
   const tenant = tenantFor(medewerker?.o365_tenant_id)
-  const refreshed = await refreshAccessToken(rij.refresh_token, tenant)
+  let refreshed: RefreshResponse
+  try {
+    refreshed = await refreshAccessToken(rij.refresh_token, tenant)
+  } catch (e) {
+    if (e instanceof RefreshGeweigerd) {
+      await markeerVerlopen(medewerkerId, e.message)
+      throw new O365TokenError('verlopen', O365_VERLOPEN_MELDING)
+    }
+    throw e
+  }
 
   // Geroteerd refresh-token + nieuwe expiry persisteren
   const nieuwExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
@@ -103,11 +138,45 @@ export async function getValidAccessToken(medewerkerId: string): Promise<string>
   return refreshed.access_token
 }
 
+async function markeerVerlopen(medewerkerId: string, reden: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createAdminClient() as any
+  await supabase
+    .from('medewerker_o365_tokens')
+    .update({ verlopen_op: new Date().toISOString(), verlopen_reden: reden.slice(0, 500) })
+    .eq('medewerker_id', medewerkerId)
+}
+
+export type KoppelingStatus = 'geen' | 'bruikbaar' | 'verlopen' | 'onbekend'
+
+/**
+ * Staat de mailkoppeling van deze medewerker nog? Gebruikt bij het inloggen: is hij
+ * verlopen, dan stuurt de login-callback de medewerker meteen door de koppelflow,
+ * zodat hij het niet pas merkt als er een offerte de deur uit moet.
+ *
+ * Ververst het token als dat nodig is — dat houdt de koppeling bij elke login ook
+ * actief. Gooit nooit: een haperend Microsoft mag het inloggen niet blokkeren
+ * (dan 'onbekend', en merkt de mailactie het later alsnog).
+ */
+export async function controleerKoppeling(medewerkerId: string): Promise<KoppelingStatus> {
+  try {
+    await getValidAccessToken(medewerkerId)
+    return 'bruikbaar'
+  } catch (e) {
+    if (e instanceof O365TokenError && e.reden === 'geen_koppeling') return 'geen'
+    if (e instanceof O365TokenError && e.reden === 'verlopen') return 'verlopen'
+    return 'onbekend'
+  }
+}
+
 interface RefreshResponse {
   access_token: string
   refresh_token?: string
   expires_in: number
 }
+
+/** Microsoft weigert het refresh-token definitief; alleen opnieuw koppelen helpt. */
+class RefreshGeweigerd extends Error {}
 
 async function refreshAccessToken(refreshToken: string, tenant: string): Promise<RefreshResponse> {
   const clientId = process.env.O365_CLIENT_ID
@@ -128,8 +197,15 @@ async function refreshAccessToken(refreshToken: string, tenant: string): Promise
   }, { dienst: 'Microsoft (token)', timeoutMs: TOKEN_TIMEOUT_MS })
 
   if (!res.ok) {
-    // invalid_grant = refresh-token verlopen/ingetrokken → re-consent nodig
-    throw new O365TokenError('refresh_mislukt', `Token verversen mislukt: HTTP ${res.status}`)
+    const body = await res.json().catch(() => null) as { error?: string; error_description?: string } | null
+    if (body?.error && OPNIEUW_KOPPELEN_CODES.has(body.error)) {
+      // error_description begint met de AADSTS-code (bijv. AADSTS50173 = wachtwoord gewijzigd).
+      throw new RefreshGeweigerd(`${body.error}: ${body.error_description ?? ''}`)
+    }
+    throw new O365TokenError(
+      'refresh_mislukt',
+      `Microsoft gaf een fout bij het verversen van je Office 365-koppeling (HTTP ${res.status}${body?.error ? `, ${body.error}` : ''}). Probeer het over een paar minuten opnieuw.`,
+    )
   }
 
   return (await res.json()) as RefreshResponse

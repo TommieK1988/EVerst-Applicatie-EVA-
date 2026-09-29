@@ -104,6 +104,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     vrijeDagenRes,
     saldoRes,
     saldoCorrectiesRes,
+    o365KoppelingRes,
   ] = await Promise.all([
     supabase.from('medewerkers').select('*').eq('id', params.id).maybeSingle(),
     supabase
@@ -190,7 +191,13 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       .from('uren_saldo_correcties')
       .select('id, datum, uren, reden, medewerkers!uren_saldo_correcties_door_fkey(voornaam, achternaam)')
       .eq('medewerker_id', params.id)
-      .order('datum', { ascending: false })
+      .order('datum', { ascending: false }),
+    // Alleen of Microsoft de mailkoppeling heeft ingetrokken — nooit de tokens zelf.
+    supabase
+      .from('medewerker_o365_tokens')
+      .select('verlopen_op')
+      .eq('medewerker_id', params.id)
+      .maybeSingle(),
   ])
 
   if (!medewerkerRes.data) notFound()
@@ -394,6 +401,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
                   magOntkoppelenO365={heeftModuleToegang(eigenRechten, 'medewerkers', 'schrijven')}
                   medewerker_id={params.id}
                   o365_email={medewerker.o365_email}
+                  o365_verlopen={!!o365KoppelingRes.data?.verlopen_op}
+                  isEigenKaart={isEigenKaart}
                   medewerker_email={isRechtenBeheerder ? medewerker.email : null}
                   gebruiker_type={isRechtenBeheerder ? medewerker.gebruiker_type : 'geen'}
                   auth_user_id={isRechtenBeheerder ? medewerker.auth_user_id : null}
