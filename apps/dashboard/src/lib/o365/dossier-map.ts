@@ -17,6 +17,7 @@ import { appGraphFetch } from './graph'
 import {
   matchDossierFolder,
   maakContainerMap,
+  kiesDossierMap,
   resolveDriveContext,
   dossierMapNaam,
   saneerMapNaam,
@@ -109,7 +110,14 @@ export async function bepaalOfMaakDossierMap(
     return { driveId: m.driveId, itemId: m.itemId, webUrl: m.webUrl ?? null, nieuw: false, naam: null }
   }
 
-  // Niet (uniek) gevonden → map aanmaken. maakContainerMap vangt de naambotsing zelf af.
+  // Meerdere mappen met dit dossiernummer: er is dus al een map, alleen niet één. Een
+  // nieuwe ernaast zetten maakte van twee mappen drie (20261.00598); neem een bestaande.
+  if (m.status === 'meerdere') {
+    const gekozen = kiesDossierMap(m.kandidaten ?? [], d)
+    if (gekozen) return { driveId: ctx.driveId, itemId: gekozen.id, webUrl: gekozen.webUrl, nieuw: false, naam: null }
+  }
+
+  // Niet gevonden → map aanmaken. maakContainerMap vangt de naambotsing zelf af.
   const naam = dossierMapNaam(d) || `Dossier ${d.dossiernummer ?? ''}`.trim()
   const map = await maakContainerMap(ctx, naam)
   return {

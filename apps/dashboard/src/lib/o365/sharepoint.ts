@@ -13,7 +13,7 @@
  * gebruiker de map zelf vanaf de Bestanden-tab.
  */
 
-import { appGraphFetch, appGraphGet } from './graph'
+import { appGraphFetch, appGraphGet, GraphError } from './graph'
 
 export interface SharePointBestand {
   id: string
@@ -215,12 +215,25 @@ export async function zoekContainerMappen(
 /* ─── Mapnamen ────────────────────────────────────────────────────────────── */
 
 /**
+ * Het calculatiepakket kapt zijn mapnamen af op 94 tekens. Vastgesteld aan de mappen die
+ * het zelf aanmaakte (`… Buitenschilderwerk houten en stalen g`, `… kozijne`).
+ */
+const CALC_MAPNAAM_MAX = 94
+
+/**
  * De naamconventie in de container: `20267.00600 - Toepad 120 Rotterdam, …`.
  * Het dossiernummer-prefix is wat de automatische match later terugvindt.
+ *
+ * **Moet exact gelijk zijn aan wat het calculatiepakket schrijft.** Dat pakket zoekt de
+ * map op naam; wijkt EVA's naam één teken af, dan maakt het er een tweede naast. Zo
+ * ontstonden `… 55 tm 60 …` (EVA) naast `… 55 t m 60 …` (pakket) en een volledige naam
+ * naast een op 94 tekens afgekapte. Daarom: `/` en `\` worden een spatie (niet
+ * weggehaald) en de naam wordt op dezelfde lengte afgekapt.
  */
 export function dossierMapNaam(d: { dossiernummer: string | null; titel: string | null }): string {
   const delen = [d.dossiernummer, d.titel].filter((x): x is string => !!x && !!x.trim())
-  return delen.join(' - ')
+  const schoon = saneerMapNaam(delen.join(' - ').replace(/[\\/]/g, ' '))
+  return schoon.slice(0, CALC_MAPNAAM_MAX).replace(/[.\s]+$/, '')
 }
 
 /** Haalt tekens weg die SharePoint niet in een mapnaam accepteert. */
@@ -493,14 +506,41 @@ export async function hernoemMapItem(
   }
 }
 
-/** Huidige naam van een driveItem; `null` als hij niet (meer) bestaat. */
+/**
+ * Huidige naam van een driveItem; `null` als hij niet (meer) bestaat.
+ *
+ * Alleen een 404 betekent "weg". Een time-out, 429 of 5xx gooit door: de aanroeper
+ * ontkoppelt bij `null`, en daarna maakt de aanmaak-naloop een verse map naast de
+ * bestaande — een Graph-hik mag nooit tot een dubbele map leiden.
+ */
 export async function haalMapNaam(driveId: string, itemId: string): Promise<string | null> {
   try {
     const item = await appGraphGet<DriveItem>(`/drives/${driveId}/items/${itemId}?$select=id,name`)
     return item.name ?? null
-  } catch {
-    return null
+  } catch (err) {
+    if (err instanceof GraphError && err.status === 404) return null
+    throw err
   }
+}
+
+/**
+ * Kiest uit 'meerdere'-kandidaten de map die op het dossiernummer begint, voor een
+ * aanroeper die hoe dan ook een map nodig heeft (uploads). Voorkeur: exact de
+ * conventienaam, anders de laatst gewijzigde. `null` als geen enkele kandidaat het
+ * dossiernummer draagt — dan bestaat er echt nog geen map voor dit dossier.
+ */
+export function kiesDossierMap(
+  kandidaten: SharePointMap[],
+  d: { dossiernummer: string | null; titel: string | null },
+): SharePointMap | null {
+  if (!d.dossiernummer) return null
+  const opNummer = opPrefix(kandidaten, d.dossiernummer, true)
+  if (!opNummer.length) return null
+  const conventie = normaliseer(dossierMapNaam(d))
+  return (
+    opNummer.find((m) => normaliseer(m.naam) === conventie) ??
+    [...opNummer].sort((a, b) => (b.gewijzigd ?? '').localeCompare(a.gewijzigd ?? ''))[0]
+  )
 }
 
 /**
