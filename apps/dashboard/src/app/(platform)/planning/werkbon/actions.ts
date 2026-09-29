@@ -79,7 +79,8 @@ export async function sluitWerkbon(
   const supabase = db()
   const now = new Date().toISOString()
 
-  // Upload handtekening indien aanwezig
+  // Upload handtekening indien aanwezig. Mislukt dat, dan sluiten we de werkbon niet:
+  // anders staat hij als klaar gemeld zonder de handtekening die de monteur wél zette.
   let handtekeningUrl: string | null = null
   if (input.handtekening_b64) {
     const base64Data = input.handtekening_b64.replace(/^data:image\/\w+;base64,/, '')
@@ -89,10 +90,11 @@ export async function sluitWerkbon(
       .from('werkbon-fotos')
       .upload(path, buffer, { contentType: 'image/png', upsert: true })
 
-    if (!uploadErr) {
-      const { data } = supabase.storage.from('werkbon-fotos').getPublicUrl(path)
-      handtekeningUrl = data.publicUrl
+    if (uploadErr) {
+      return { ok: false, error: `Handtekening opslaan mislukt: ${uploadErr.message}` }
     }
+    const { data } = supabase.storage.from('werkbon-fotos').getPublicUrl(path)
+    handtekeningUrl = data.publicUrl
   }
 
   // Haal werkbon + item-info op
