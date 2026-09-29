@@ -50,8 +50,7 @@ export async function GET(request: NextRequest) {
   const terug = veiligNextPad(request.nextUrl.searchParams.get('terug'))
   let loginHint: string | null = null
   if (request.nextUrl.searchParams.get('stil') === '1' && huidige.id === medewerker_id) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (createAdminClient() as any)
+    const { data } = await createAdminClient()
       .from('medewerkers').select('email, o365_email').eq('id', medewerker_id).maybeSingle()
     loginHint = data?.o365_email ?? data?.email ?? null
   }

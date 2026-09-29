@@ -139,9 +139,7 @@ export async function getValidAccessToken(medewerkerId: string): Promise<string>
 }
 
 async function markeerVerlopen(medewerkerId: string, reden: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  await supabase
+  await createAdminClient()
     .from('medewerker_o365_tokens')
     .update({ verlopen_op: new Date().toISOString(), verlopen_reden: reden.slice(0, 500) })
     .eq('medewerker_id', medewerkerId)
