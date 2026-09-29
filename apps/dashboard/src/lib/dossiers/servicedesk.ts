@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { getDossierUren, getDossierInkoop, bouw7VoorDossier } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
+import { maakConceptVerkoopfactuur, verdwenenFacturen } from '@/lib/bouw7/verkoopfactuur'
 import { tekstNaarBouw7RichText } from '@/lib/bouw7/rich-text'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
@@ -518,6 +518,9 @@ export type RegieVoorstel = {
  * gebracht — en zodat je per post kunt corrigeren.
  */
 export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieVoorstel> {
+  // Vóór het ophalen, zodat wat vrijkomt in dit voorstel meteen weer als te factureren meetelt.
+  await geefVerwijderdeFacturenVrij(dossierId)
+
   const [codes, instellingen, groepen] = await Promise.all([
     getFactureerbareCodes(dossierId),
     getCodeInstellingen(dossierId),
@@ -757,6 +760,52 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     },
     buitenBeschouwing,
   }
+}
+
+/**
+ * Geeft boekingen en losse regels vrij die op een conceptfactuur stonden die in Bouw7 is
+ * verwijderd.
+ *
+ * Klaarzetten boekt in EVA af op het factuurnummer van Bouw7. Wordt die conceptfactuur daar
+ * weggegooid, dan wist EVA dat niet en bleef alles op "gefactureerd" staan: de post zat op slot en
+ * er was niets meer opnieuw klaar te zetten. Hier gaan die regels terug naar concept.
+ *
+ * `verdwenenFacturen` geeft alleen iets terug bij een expliciete 404 van Bouw7; bij twijfel blijft
+ * alles vastliggen. Kost één Bouw7-aanroep, en alleen voor een dossier waar iets afgeboekt staat.
+ *
+ * Een vast bedrag op een afgeleide regel komt niet terug: dat wordt bij het klaarzetten gewist en is
+ * nergens bewaard. De regel rekent dan weer met de som van zijn boekingen.
+ */
+async function geefVerwijderdeFacturenVrij(dossierId: string): Promise<void> {
+  const supabase = createAdminClient()
+  const [{ data: boekingen }, { data: losse }] = await Promise.all([
+    // Begrensd door het dossier; een dossier heeft geen duizend afgeboekte boekingen.
+    supabase.from('regie_factuurregels').select('bouw7_invoice_id')
+      .eq('dossier_id', dossierId).eq('status', 'gefactureerd').not('bouw7_invoice_id', 'is', null),
+    supabase.from('factuur_regelgroepen').select('bouw7_invoice_id')
+      .eq('dossier_id', dossierId).not('bouw7_invoice_id', 'is', null),
+  ])
+  const ids = [...new Set([...(boekingen ?? []), ...(losse ?? [])]
+    .map(r => r.bouw7_invoice_id)
+    .filter((id): id is string => !!id))]
+  if (ids.length === 0) return
+
+  const { data: dossier } = await supabase.from('dossiers').select('bouw7_id').eq('id', dossierId).maybeSingle()
+  const projectId = Number(dossier?.bouw7_id)
+  if (!Number.isFinite(projectId) || projectId <= 0) return
+
+  const weg = await verdwenenFacturen(projectId, ids)
+  if (weg.length === 0) return
+
+  const nu = new Date().toISOString()
+  await Promise.all([
+    supabase.from('regie_factuurregels')
+      .update({ status: 'concept', bouw7_invoice_id: null, updated_at: nu })
+      .eq('dossier_id', dossierId).in('bouw7_invoice_id', weg),
+    supabase.from('factuur_regelgroepen')
+      .update({ bouw7_invoice_id: null, gefactureerd_op: null, updated_at: nu })
+      .eq('dossier_id', dossierId).in('bouw7_invoice_id', weg),
+  ])
 }
 
 /**

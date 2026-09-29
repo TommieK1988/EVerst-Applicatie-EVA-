@@ -132,6 +132,43 @@ export async function vindConceptMetSleutel(
 }
 
 /**
+ * Welke van deze facturen bestaan niet meer in Bouw7? Een conceptfactuur zonder nummer mag daar
+ * gewoon worden weggegooid, en dan moet wat EVA erop had afgeboekt weer vrijkomen.
+ *
+ * Voorzichtig in één richting: alleen een expliciete 404 van Bouw7 telt als "weg". Een storing,
+ * timeout of onverwacht antwoord laat de factuur staan — onterecht vrijgeven betekent dat hetzelfde
+ * werk twee keer gefactureerd kan worden, onterecht vasthouden alleen dat je het nog eens probeert.
+ *
+ * Eerst één lijstaanroep voor het hele project; alleen wat daar ontbreekt wordt los nagevraagd.
+ */
+export async function verdwenenFacturen(projectId: number, invoiceIds: string[]): Promise<string[]> {
+  if (invoiceIds.length === 0) return []
+  let client: Awaited<ReturnType<typeof getBouw7Client>>
+  let inLijst: Set<string>
+  try {
+    client = await getBouw7Client()
+    const res = await client.get<{ items?: { id: number }[] }>('/list/invoices', {
+      q: `project.id = ${projectId} SORT(id, DESC) LIMIT 50`,
+    })
+    inLijst = new Set((res.items ?? []).map(i => String(i.id)))
+  } catch {
+    return []
+  }
+
+  const weg: string[] = []
+  for (const id of invoiceIds) {
+    if (inLijst.has(id)) continue
+    try {
+      await client.get(`/invoice/${id}`)
+    } catch (e) {
+      const tekst = foutTekst(e)
+      if (tekst.includes('(404)') && tekst.includes('entity_not_found')) weg.push(id)
+    }
+  }
+  return weg
+}
+
+/**
  * Zet één conceptfactuur klaar in Bouw7.
  *
  * Meerdere regels op één factuur is precies wat Bouw7 zelf doet bij een termijnstaat: één regel per
