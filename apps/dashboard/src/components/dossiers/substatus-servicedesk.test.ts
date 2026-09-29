@@ -37,7 +37,7 @@ describe('getDossierSubstatus: de servicedeskladder gaat voor', () => {
   })
 
   it('laat een echte aanvraag met rust', () => {
-    expect(getDossierSubstatus(bon({ aanvraag_substatus: 'opgenomen' }))).toBe('opgenomen')
+    expect(getDossierSubstatus(bon({ aanvraag_substatus: 'werkopname' }))).toBe('werkopname')
   })
 
   it('laat een offerte met rust', () => {
