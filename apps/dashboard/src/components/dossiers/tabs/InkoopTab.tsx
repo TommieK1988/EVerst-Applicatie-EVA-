@@ -229,11 +229,11 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
 
   // Zonder gegevens blijft de opmaak staan — kaarten, kolomkoppen en nulbedragen. Alleen de
   // reden waarom er niets staat komt erboven. "Nog niet opgehaald" is iets anders dan "niets
-  // besteld"; in het eerste geval helpt de knop Vernieuwen.
+  // besteld"; in het eerste geval helpt de knop Synchroniseer in de topbalk.
   const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
   const uitleg = !data.beschikbaar
     ? nooitOpgehaald
-      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Vernieuwen om ze nu binnen te halen.'
+      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Synchroniseer rechtsboven om ze nu binnen te halen.'
       : 'Nog geen inkoopgegevens: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen inkooporders, onderaannemerscontracten of geboekte kosten.'
     : null
 

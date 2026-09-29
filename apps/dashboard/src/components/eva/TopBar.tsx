@@ -8,6 +8,7 @@ import { useBreadcrumb } from '@/lib/breadcrumb-context';
 import HelpPanel from './HelpPanel';
 import NotificatiesDropdown from './NotificatiesDropdown';
 import { getPageHelp } from '@/lib/page-help';
+import { DossierVerversKnop } from '@/components/dossiers/DossierVerversKnop';
 
 /* ── Tab-slug → label (voor dossier-detailpagina's) ── */
 const TAB_LABELS: Record<string, string> = {
@@ -278,6 +279,13 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0, aantalNieuw
   const [helpOpen, setHelpOpen] = useState(false)
   const helpContent = getPageHelp(pathname, deel)
 
+  // Eén sync-knop per dossier, hier in de topbalk zodat hij op elk tab op dezelfde plek staat.
+  // Het id moet bij de huidige route horen: tijdens het wisselen van dossier staat de context
+  // heel even nog op het vorige.
+  const dossierIdUitPad = pathname.match(/^\/(?:aanvragen|offertes|opdrachten|servicedesk)\/([^/]+)/)?.[1]
+  const dossierSync = breadcrumbCtx?.dossierSync
+  const toonDossierSync = !!dossierSync?.heeftBouw7 && dossierSync.id === dossierIdUitPad
+
   let displayTitle = title
   if (withTabs && breadcrumbCtx?.recordName) {
     const lastSegment = pathname.split('/').filter(Boolean).pop() ?? ''
@@ -307,6 +315,14 @@ export default function TopBar({ dark, setDark, aantalOngelezen = 0, aantalNieuw
             whiteSpace: 'nowrap',
           }}>{displayTitle}</h1>
         </div>
+
+        {toonDossierSync && (
+          <DossierVerversKnop
+            key={dossierSync!.id}
+            dossierId={dossierSync!.id}
+            laatsteSync={dossierSync!.laatsteSync}
+          />
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <TopbarZoek />

@@ -23,7 +23,6 @@ import {
 } from '@/lib/dossiers/datum-regels'
 import { getQuoteTotalenVoorProject } from '@/app/(platform)/everts-calc/actions/quotes'
 import C4yDropCard from '@/components/everts-calc/calculatie/C4yDropCard'
-import { DossierVerversKnop } from '../DossierVerversKnop'
 import { berekenCalcTotalen, type CalcTotalen } from '@/lib/everts-calc/calc-totalen'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
@@ -1944,7 +1943,6 @@ export function InformatieTab({
                   Open in Bouw7
                 </a>
               </Button>
-              <DossierVerversKnop dossierId={dossier.id} laatsteSync={dossier.bouw7_laatst_sync ?? null} />
               <div className="h-6 w-px shrink-0 bg-neutral-200" />
             </>
           )}

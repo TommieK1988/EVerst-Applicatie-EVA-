@@ -211,7 +211,18 @@ async function renderEnkeleTab(
   { id, tab, sectie, deel }: Props,
   dossier: DossierRij | null,
 ): Promise<ReactNode> {
-  const titleInjector = dossier ? <BreadcrumbTitle title={dossier.titel} /> : null
+  // Zet ook het dossier achter de sync-knop in de topbalk: één knop voor het hele dossier, op
+  // elk tab op dezelfde plek, in plaats van een eigen ververs-knop per tab.
+  const titleInjector = dossier ? (
+    <BreadcrumbTitle
+      title={dossier.titel}
+      sync={{
+        id: dossier.id,
+        laatsteSync: dossier.bouw7_laatst_sync ?? null,
+        heeftBouw7: dossier.bouw7_id != null,
+      }}
+    />
+  ) : null
 
   if (tab === 'informatie' && dossier) {
     // Ook dit tab kan op Bouw7 wachten (het meerwerk-aggregaat), dus net als de tabs hieronder

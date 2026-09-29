@@ -1,20 +1,16 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { syncTijdLabel } from '@/components/eva/SyncKnop'
-import { vernieuwDossierSnapshots } from '@/lib/bouw7/snapshot-actions'
-import { SOORTEN_PER_TAB, type SnapshotTab } from '@/lib/bouw7/snapshot-soorten'
+import type { SnapshotTab } from '@/lib/bouw7/snapshot-soorten'
 
 /**
- * Regeltje bovenaan een dossiertab: hoe oud de Bouw7-cijfers zijn, met een knop om ze nu op te
- * halen.
+ * Regeltje bovenaan een dossiertab: hoe oud de Bouw7-cijfers zijn.
  *
  * EVA haalt deze gegevens niet meer op bij het openen van een scherm — dat kostte per tab tien tot
  * veertig Bouw7-calls en maakte het hele platform traag. De cron ververst ze twee keer per dag.
  * Daardoor moet wél zichtbaar zijn wat je ziet: "Stand Bouw7: vandaag 07:02". Wie iets recenters
- * nodig heeft, klikt Vernieuwen en haalt precies de bronnen van dít tab op.
+ * nodig heeft, gebruikt de ene Synchroniseer-knop van het dossier in de topbalk; die haalt alle
+ * tabs tegelijk op. Een eigen knop per tab is er bewust niet meer.
  */
 export type Bouw7StandProps = {
   dossierId: string
@@ -26,38 +22,18 @@ export type Bouw7StandProps = {
   fout?: string | null
 }
 
-export function Bouw7StandStrip({ dossierId, tab, opgehaaldOp, ontbreekt = [], fout }: Bouw7StandProps) {
-  const router = useRouter()
-  const [bezig, startTransition] = useTransition()
-  const [melding, setMelding] = useState<string | null>(null)
-  const [laden, setLaden] = useState(false)
-
+export function Bouw7StandStrip({ opgehaaldOp, ontbreekt = [], fout }: Bouw7StandProps) {
   const nooitOpgehaald = opgehaaldOp == null
 
-  async function vernieuw() {
-    if (laden || bezig) return
-    setLaden(true)
-    setMelding(null)
-    try {
-      const r = await vernieuwDossierSnapshots(dossierId, [...SOORTEN_PER_TAB[tab]])
-      if (r.fouten.length > 0) setMelding(r.fouten[0])
-      startTransition(() => router.refresh())
-    } catch (e) {
-      setMelding(e instanceof Error ? e.message : 'Vernieuwen mislukt')
-    } finally {
-      setLaden(false)
-    }
-  }
-
   const tekst = nooitOpgehaald
-    ? 'Nog niet opgehaald uit Bouw7'
+    ? 'Nog niet opgehaald uit Bouw7 — klik Synchroniseer rechtsboven'
     : `Stand Bouw7: ${syncTijdLabel(opgehaaldOp)}`
 
   return (
     <div
       style={{
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '6px 0 10px', fontSize: 11, color: 'var(--neutral-400)',
+        padding: '4px 0 12px', fontSize: 11, color: 'var(--neutral-400)',
       }}
     >
       <span style={{ color: nooitOpgehaald ? 'var(--warning-700, #8a6d3b)' : undefined }}>{tekst}</span>
@@ -73,21 +49,6 @@ export function Bouw7StandStrip({ dossierId, tab, opgehaaldOp, ontbreekt = [], f
           · ⚠ laatste poging mislukt
         </span>
       )}
-
-      {melding && (
-        <span title={melding} style={{ color: 'var(--error-500)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          · {melding}
-        </span>
-      )}
-
-      <Button
-        variant={nooitOpgehaald ? 'primary' : 'secondary'}
-        size="sm"
-        loading={laden || bezig}
-        onClick={vernieuw}
-      >
-        {laden || bezig ? 'Ophalen…' : 'Vernieuwen'}
-      </Button>
     </div>
   )
 }

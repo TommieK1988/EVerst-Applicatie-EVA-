@@ -234,11 +234,11 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
 
   // Zonder cijfers blijft de tabel staan — koppen, een nulregel en een nultotaal — met de reden
   // eronder. "Nog niet opgehaald" is iets anders dan "geen codes"; alleen bij het eerste helpt
-  // de knop Vernieuwen.
+  // de knop Synchroniseer in de topbalk.
   const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
   const uitleg = !data.beschikbaar
     ? nooitOpgehaald
-      ? 'Deze cijfers zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen.'
+      ? 'Deze cijfers zijn nog niet uit Bouw7 opgehaald. Klik Synchroniseer rechtsboven om ze nu binnen te halen.'
       : 'Geen bewakingscodes gevonden voor dit project in Bouw7.'
     : null
 

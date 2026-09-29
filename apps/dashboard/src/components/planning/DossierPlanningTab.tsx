@@ -9,7 +9,6 @@ import { Suspense } from 'react'
 import ActiviteitGantt, { type TaakMarker } from './ActiviteitGantt'
 import KostengroepUrenBewaking from './KostengroepUrenBewaking'
 import SyncWerkbegrotingKnop from './SyncWerkbegrotingKnop'
-import SyncBouw7PlanningKnop from './SyncBouw7PlanningKnop'
 import MedewerkerTimeline from './MedewerkerTimeline'
 import PlanningTabSwitcher from './PlanningTabSwitcher'
 import { getBedrijfsinstellingen } from '@/app/(platform)/instellingen/bedrijfsinstellingen/actions'
@@ -101,14 +100,6 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
   const fasen             = (fasenRes.data ?? []) as PlanningFase[]
   const afhankelijkheden  = (afhankelijkhedenRes.data ?? []) as PlanningAfhankelijkheid[]
   const heeftCalcProject  = !!(dossierRes.data?.everts_calc_project_id)
-  const heeftBouw7        = !!(dossierRes.data?.bouw7_id)
-  const bouw7LaatstSync   = activiteiten
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((a: any) => a.bron === 'bouw7' && a.bouw7_laatst_sync)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((a: any) => a.bouw7_laatst_sync as string)
-    .sort()
-    .pop() ?? null
   // Laatste werkbegroting-overname = jongste updated_at van de begrote regels.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const werkbegrotingLaatstSync = ((werkbegrotingRes.data ?? []) as any[])
@@ -162,10 +153,11 @@ export default async function DossierPlanningTab({ dossier_id }: { dossier_id: s
       <Suspense fallback={<div style={{ height: 48 }} />}>
         <KostengroepUrenBewaking dossier_id={dossier_id} geplandePerBewakingscode={geplandePerBewakingscode} />
       </Suspense>
-      {(heeftCalcProject || heeftBouw7) && (
+      {/* De Bouw7-planning komt mee met de ene Synchroniseer-knop van het dossier (topbalk).
+          Wat hier overblijft is geen sync maar een overname uit de calculatie. */}
+      {heeftCalcProject && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          {heeftCalcProject && <SyncWerkbegrotingKnop dossier_id={dossier_id} laatstSync={werkbegrotingLaatstSync} />}
-          {heeftBouw7 && <SyncBouw7PlanningKnop dossier_id={dossier_id} laatstSync={bouw7LaatstSync} />}
+          <SyncWerkbegrotingKnop dossier_id={dossier_id} laatstSync={werkbegrotingLaatstSync} />
         </div>
       )}
 

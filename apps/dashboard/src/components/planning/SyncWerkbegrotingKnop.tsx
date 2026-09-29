@@ -32,7 +32,7 @@ export default function SyncWerkbegrotingKnop({
     <SyncKnop
       laatsteSync={laatstSync ?? null}
       onSync={handleSync}
-      label="Sync werkbegroting (everts-calc)"
+      label="Begrote uren overnemen uit calculatie"
     />
   )
 }

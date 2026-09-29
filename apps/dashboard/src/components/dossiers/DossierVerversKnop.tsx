@@ -8,7 +8,10 @@ import { vernieuwDossierSnapshots } from '@/lib/bouw7/snapshot-actions'
  * Ververs één dossier volledig uit Bouw7: eerst de projectvelden/offerte/planning
  * (`syncEnkelDossier`), daarna alle snapshots waaruit de tabs lezen (financiën, inkoop, verkoop,
  * uren, bestanden). Dit is de knop voor "ik wil nú de actuele stand", los van de tweemaal-daagse
- * cron; per tab zit er een lichtere variant boven de tabel.
+ * cron.
+ *
+ * Er is er maar één per dossier: hij staat in de topbalk (`TopBar`) en is zo op elk tab gelijk.
+ * De tabs tonen alleen nog hoe oud hun cijfers zijn (`Bouw7StandStrip`), zonder eigen knop.
  */
 export function DossierVerversKnop({ dossierId, laatsteSync }: { dossierId: string; laatsteSync: string | null }) {
   async function ververs(): Promise<SyncUitkomst> {

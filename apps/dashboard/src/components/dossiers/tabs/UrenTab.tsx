@@ -19,7 +19,7 @@ async function UrenBewakingInhoud({ dossierId }: { dossierId: string }) {
   const nooitOpgehaald = data.stand.opgehaaldOp == null && data.stand.ontbreekt.length > 0
   const uitleg = !data.beschikbaar
     ? nooitOpgehaald
-      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Vernieuwen om ze nu binnen te halen.'
+      ? 'Nog niet opgehaald uit Bouw7. Deze gegevens worden twee keer per dag opgehaald; klik Synchroniseer rechtsboven om ze nu binnen te halen.'
       : 'Nog geen uren per bewakingscode: dit dossier heeft geen Bouw7-koppeling, of er zijn nog geen arbeidsurenboekingen.'
     : null
 
@@ -150,7 +150,7 @@ async function UrenDetailInhoud({ dossierId, metStand }: { dossierId: string; me
         />
         <div style={{ padding: '10px 12px', fontSize: 11.5, color: 'var(--neutral-500)', borderTop: '1px solid var(--neutral-100)', lineHeight: 1.5 }}>
           {nooitOpgehaald
-            ? 'De uren per medewerker zijn nog niet uit Bouw7 opgehaald. Klik Vernieuwen om ze nu binnen te halen; hierboven staat zolang het totaal per bewakingscode.'
+            ? 'De uren per medewerker zijn nog niet uit Bouw7 opgehaald. Klik Synchroniseer rechtsboven om ze nu binnen te halen; hierboven staat zolang het totaal per bewakingscode.'
             : !data.beschikbaar
               ? 'Nog geen uren geboekt op dit dossier — zodra er uren binnenkomen verschijnen ze hier per medewerker.'
               : perMedewerker
@@ -161,7 +161,7 @@ async function UrenDetailInhoud({ dossierId, metStand }: { dossierId: string; me
     </Card>
   )
 
-  // Zonder de bewakingstabel (servicedeskbon) staat hier de enige Vernieuwen-knop van dit tab.
+  // Zonder de bewakingstabel (servicedeskbon) staat hier de enige standregel van dit tab.
   if (!metStand) return detail
   return (
     <div>
