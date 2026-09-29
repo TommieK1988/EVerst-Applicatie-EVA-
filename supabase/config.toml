@@ -9,11 +9,8 @@
 # Edge Functions
 # ---------------------------------------------------------------------------
 
-[functions.daily-sync]
-# Dagelijkse ULU-sync om 06:00 UTC (= 07:00 of 08:00 NL, afhankelijk van zomertijd)
-# Pas aan naar "0 4 * * *" voor 06:00 NL wintertijd / "0 5 * * *" voor zomertijd.
-# Of gebruik "0 5 * * *" als vaste tijd (05:00 UTC = 06:00/07:00 NL).
-schedule = "0 5 * * *"
-verify_jwt = false
+# Er draaien geen Edge Functions. `daily-sync` riep de ULU-sync aan op de losse
+# wagenpark-app; die app is opgeheven en EVA draait de sync zelf via Vercel Cron
+# (/api/cron/ulu-sync in apps/dashboard/vercel.json).
 
 # Bouw7-sync draait via Vercel Cron (apps/dashboard/vercel.json), niet via Supabase.
