@@ -60,7 +60,9 @@ import {
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverItem,
   Separator,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody,
+  FormField, Badge,
 } from '@/components/ui'
+import { X } from 'lucide-react'
 import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
@@ -168,17 +170,29 @@ function InfoVeld({
    Hoe een stelpost afrekent is een uitvoeringsbeslissing, geen offerte-afspraak:
    ook een stelpost die uit de calculatie komt mag hier op eenheidsprijzen of
    geboekte kosten worden gezet. De velden die daarbij horen verschijnen alleen
-   bij de gekozen grondslag, zodat de regel smal blijft. Getypte tekst blijft
-   apart van het getal, anders kun je geen komma intypen. */
-function GetalVeld({ waarde, breedte, plaatshouder, label, pending, onCommit }: {
+   bij de gekozen grondslag. Getypte tekst blijft apart van het getal, anders kun
+   je geen komma intypen. */
+
+/** Invoerveld in het stelpostvenster — zelfde maat als Input (h-8, 12,5px). */
+const SP_VELD = cn(
+  'h-8 w-full rounded-md border border-neutral-200 bg-white px-2 text-[12.5px] text-neutral-800 outline-none',
+  'transition-[border-color,box-shadow] [transition-duration:120ms] hover:border-neutral-300',
+  'focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 disabled:opacity-50 placeholder:text-neutral-400',
+)
+
+function GetalVeld({ waarde, plaatshouder, label, pending, onCommit, className, bedrag }: {
   waarde: number | null
-  breedte: string
+  /** Toon als bedrag: 118.889,40 i.p.v. 118889,4. */
+  bedrag?: boolean
   plaatshouder: string
   label: string
   pending: boolean
   onCommit: (v: number | null) => void
+  className?: string
 }) {
-  const alsTekst = (v: number | null) => (v != null ? String(v).replace('.', ',') : '')
+  const alsTekst = (v: number | null) => v == null ? ''
+    : bedrag ? v.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : String(v).replace('.', ',')
   const [tekst, setTekst] = React.useState(alsTekst(waarde))
   React.useEffect(() => { setTekst(alsTekst(waarde)) }, [waarde])
 
@@ -187,7 +201,7 @@ function GetalVeld({ waarde, breedte, plaatshouder, label, pending, onCommit }: 
     if (schoon === '') { if (waarde != null) onCommit(null); return }
     const n = parseFloat(schoon.replace(/\./g, '').replace(',', '.'))
     if (!Number.isFinite(n)) { setTekst(alsTekst(waarde)); return }
-    if (n === waarde) return
+    if (n === waarde) { setTekst(alsTekst(waarde)); return }
     onCommit(n)
   }
 
@@ -201,7 +215,7 @@ function GetalVeld({ waarde, breedte, plaatshouder, label, pending, onCommit }: 
       inputMode="decimal"
       placeholder={plaatshouder}
       aria-label={label}
-      className={`${breedte} rounded border border-neutral-200 bg-white px-1 py-px text-right text-[10.5px] tabular-nums text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50`}
+      className={cn(SP_VELD, 'text-right tabular-nums', className)}
     />
   )
 }
@@ -222,14 +236,15 @@ function BtwKeuze({ waarde, pending, onKies, className }: {
       disabled={pending}
       onChange={e => onKies(e.target.value === '' ? null : Number(e.target.value))}
       aria-label="BTW-tarief van deze stelpost"
-      className={className ?? 'rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50'}
+      className={className ?? SP_VELD}
     >
-      <option value="">btw —</option>
-      {tarieven.map(t => <option key={t} value={String(t)}>btw {String(t).replace('.', ',')}%</option>)}
+      <option value="">— kies —</option>
+      {tarieven.map(t => <option key={t} value={String(t)}>{String(t).replace('.', ',')}%</option>)}
     </select>
   )
 }
 
+/** De afrekenvelden als losse FormFields — de aanroeper zet ze in zijn eigen raster. */
 function StelpostAfrekening({ stelpost, pending, onZet }: {
   stelpost: {
     grondslag: StelpostGrondslag | null
@@ -246,61 +261,64 @@ function StelpostAfrekening({ stelpost, pending, onZet }: {
 }) {
   const grondslag = stelpost.grondslag ?? 'vast'
   return (
-    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10.5px] text-neutral-400">rekent af op</span>
-      <select
-        value={grondslag}
-        disabled={pending}
-        onChange={e => onZet({ grondslag: e.target.value as StelpostGrondslag })}
-        aria-label="Afrekenwijze van deze stelpost"
-        className="rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50"
-      >
-        <option value="geboekte_kosten">geboekte kosten</option>
-        <option value="eenheidsprijzen">eenheidsprijs</option>
-        <option value="vast">vast bedrag</option>
-      </select>
-
-      {grondslag === 'eenheidsprijzen' && (
-        <>
-          <input
-            defaultValue={stelpost.eenheid ?? ''}
-            key={`eenheid-${stelpost.eenheid ?? ''}`}
-            onBlur={e => {
-              const v = e.target.value.trim() || null
-              if (v !== stelpost.eenheid) onZet({ eenheid: v })
-            }}
-            disabled={pending}
-            placeholder="eenheid"
-            aria-label="Eenheid"
-            className="w-16 rounded border border-neutral-200 bg-white px-1 py-px text-[10.5px] text-neutral-700 outline-none focus:border-brand-400 disabled:opacity-50"
-          />
-          <GetalVeld
-            waarde={stelpost.eenheidsprijs} breedte="w-16" plaatshouder="prijs"
-            label="Prijs per eenheid" pending={pending}
-            onCommit={v => onZet({ eenheidsprijs: v })}
-          />
-          <span className="text-[10.5px] text-neutral-400">×</span>
-          <GetalVeld
-            waarde={stelpost.hoeveelheid_werkelijk} breedte="w-14" plaatshouder="aantal"
-            label="Werkelijk uitgevoerde hoeveelheid" pending={pending}
-            onCommit={v => onZet({ hoeveelheid_werkelijk: v })}
-          />
-        </>
-      )}
+    <>
+      <FormField upper label="Rekent af op">
+        <select
+          value={grondslag}
+          disabled={pending}
+          onChange={e => onZet({ grondslag: e.target.value as StelpostGrondslag })}
+          aria-label="Afrekenwijze van deze stelpost"
+          className={SP_VELD}
+        >
+          <option value="geboekte_kosten">Geboekte kosten</option>
+          <option value="eenheidsprijzen">Eenheidsprijs</option>
+          <option value="vast">Vast bedrag</option>
+        </select>
+      </FormField>
 
       {grondslag === 'geboekte_kosten' && (
-        <>
+        <FormField upper label={<span title="Leeg = de bedrijfsstandaard uit Instellingen > Facturatie">Opslag %</span>}>
           <GetalVeld
-            waarde={stelpost.opslag_pct} breedte="w-12" plaatshouder="std"
+            waarde={stelpost.opslag_pct} plaatshouder="standaard"
             label="Opslag in procenten op de geboekte kosten" pending={pending}
             onCommit={v => onZet({ opslag_pct: v })}
           />
-          <span className="text-[10.5px] text-neutral-400" title="Leeg = de bedrijfsstandaard uit Instellingen > Facturatie">
-            % opslag
-          </span>
+        </FormField>
+      )}
+
+      {grondslag === 'eenheidsprijzen' && (
+        <>
+          <FormField upper label="Eenheid">
+            <input
+              defaultValue={stelpost.eenheid ?? ''}
+              key={`eenheid-${stelpost.eenheid ?? ''}`}
+              onBlur={e => {
+                const v = e.target.value.trim() || null
+                if (v !== stelpost.eenheid) onZet({ eenheid: v })
+              }}
+              disabled={pending}
+              placeholder="m², stuks"
+              aria-label="Eenheid"
+              className={SP_VELD}
+            />
+          </FormField>
+          <FormField upper label="Prijs per eenheid">
+            <GetalVeld
+              waarde={stelpost.eenheidsprijs} plaatshouder="0,00" bedrag
+              label="Prijs per eenheid" pending={pending}
+              onCommit={v => onZet({ eenheidsprijs: v })}
+            />
+          </FormField>
+          <FormField upper label={<span title="Werkelijk uitgevoerde hoeveelheid">Aantal</span>}>
+            <GetalVeld
+              waarde={stelpost.hoeveelheid_werkelijk} plaatshouder="aantal"
+              label="Werkelijk uitgevoerde hoeveelheid" pending={pending}
+              onCommit={v => onZet({ hoeveelheid_werkelijk: v })}
+            />
+          </FormField>
         </>
       )}
-    </div>
+    </>
   )
 }
 
@@ -490,33 +508,29 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50"
-      >
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         + Stelpost aanwijzen
-      </button>
+      </Button>
     )
   }
-  const inputCls = 'w-full rounded-md border border-neutral-200 bg-white px-2 py-1 text-[12px] text-neutral-800 outline-none focus:border-brand-400'
+  const inputCls = SP_VELD
   return (
-    <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50/60 p-2.5">
-      <div className="grid grid-cols-2 gap-2">
+    <div className="w-full rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
+      <div className="grid grid-cols-2 gap-3">
         <label className="col-span-2 block">
-          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Omschrijving</span>
+          <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Omschrijving</span>
           <input className={inputCls} value={oms} onChange={e => setOms(e.target.value)} placeholder="bijv. Stelpost houtrotherstel" />
         </label>
         <label className="block">
-          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Bedrag excl. BTW</span>
+          <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Bedrag excl. BTW</span>
           <input className={inputCls} value={bedrag} onChange={e => setBedrag(e.target.value)} placeholder="0,00" inputMode="decimal" />
         </label>
         <label className="block">
-          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">BTW</span>
+          <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">BTW</span>
           <BtwKeuze waarde={btw} pending={pending} onKies={setBtw} className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400" title="Kostprijs-budget voor de bewakingscode. Bewust niet het stelpostbedrag: dat is omzet inclusief AK en winst.">
+          <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500" title="Kostprijs-budget voor de bewakingscode. Bewust niet het stelpostbedrag: dat is omzet inclusief AK en winst.">
             Begroot (kostprijs)
           </span>
           <input className={inputCls} value={begroot} onChange={e => setBegroot(e.target.value)} placeholder="optioneel" inputMode="decimal" />
@@ -528,7 +542,7 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
           </span>
         </label>
         <label className="block">
-          <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Afrekenen op</span>
+          <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Afrekenen op</span>
           <select
             className={inputCls}
             value={grondslag}
@@ -542,11 +556,11 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
         {grondslag === 'eenheidsprijzen' && (
           <>
             <label className="block">
-              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Eenheid</span>
+              <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Eenheid</span>
               <input className={inputCls} value={eenheid} onChange={e => setEenheid(e.target.value)} placeholder="m², stuks, woning" />
             </label>
             <label className="block">
-              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400">Prijs per eenheid</span>
+              <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Prijs per eenheid</span>
               <input className={inputCls} value={prijs} onChange={e => setPrijs(e.target.value)} placeholder="0,00" inputMode="decimal" />
             </label>
           </>
@@ -554,7 +568,7 @@ function NieuweStelpostRegel({ onOpslaan, pending }: {
         {grondslag === 'geboekte_kosten' && (
           <label className="block">
             <span
-              className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400"
+              className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500"
               title="Opslag op de geboekte kosten van deze stelpost. Leeg = de bedrijfsstandaard."
             >
               Opslag %
@@ -721,12 +735,12 @@ function OpdrachtDetailDialog({
     : overzicht.stelpostenTotaal
   return (
     <Dialog open={soort != null} onOpenChange={o => { if (!o) onClose() }}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent className="max-w-[680px]">
         <DialogHeader>
           <DialogTitle>{titel}</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <div className="mb-2 flex items-baseline justify-between border-b border-neutral-200 pb-2">
+          <div className="mb-4 flex items-baseline justify-between border-b border-neutral-200 pb-3">
             <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
               Totaal excl. BTW
             </span>
@@ -755,143 +769,171 @@ function OpdrachtDetailDialog({
               bedragen nog kloppen — EVA past ze bewust niet zelf aan.
             </div>
           )}
-          <div>
-          <div className="divide-y divide-neutral-100">
-              {/* Nog geen stelposten: dezelfde regelvorm, met een nulbedrag. */}
-              {stelposten.length === 0 && (
-                <div className="flex items-baseline justify-between gap-2 py-[5px] first:pt-0 text-neutral-400">
-                  <span className="min-w-0 flex-1 truncate text-[12px]">Nog geen stelposten aangewezen</span>
-                  <span className="shrink-0 tabular-nums text-[12px] font-semibold">{fmtBedrag(0)}</span>
-                </div>
-              )}
-              {stelposten.map(sp => (
-                <div key={sp.id} className="py-[5px] first:pt-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-700">{sp.omschrijving}</span>
-                    {!readOnly && !sp.verrekendMeerwerkId ? (
-                      <GetalVeld
-                        waarde={sp.bedrag_excl_btw} breedte="w-24" plaatshouder="0,00"
-                        label="Bedrag excl. BTW" pending={pending}
-                        onCommit={v => {
-                          if (v == null || !(v > 0)) { toast.error('Vul een bedrag groter dan nul in.'); return }
-                          onZetAfrekening(sp.id, { bedrag_excl_btw: v })
-                        }}
-                      />
-                    ) : (
-                      <span className="shrink-0 tabular-nums text-[12px] font-semibold text-neutral-800">
-                        {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
-                      </span>
-                    )}
-                    {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
-                      <button
-                        type="button"
-                        onClick={() => onVerwijderStelpost(sp.id)}
-                        disabled={pending}
-                        title="Stelpost verwijderen"
-                        className="shrink-0 rounded px-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-50"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  {/* Kenmerken op een eigen regel — in een smalle kolom past dat niet naast de omschrijving. */}
-                  <div className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
-                    {!readOnly && !sp.verrekendMeerwerkId ? (
-                      <BtwKeuze waarde={sp.btw_pct} pending={pending} onKies={v => onZetAfrekening(sp.id, { btw_pct: v })} />
-                    ) : sp.btw_pct != null && (
-                      <span className="text-[10px] tabular-nums text-neutral-400">btw {String(sp.btw_pct).replace('.', ',')}%</span>
-                    )}
-                    {sp.bewakingscode && (
-                      <span className="rounded bg-neutral-100 px-1 py-px font-mono text-[10px] text-neutral-500">{sp.bewakingscode}</span>
-                    )}
-                    {sp.in_aanneemsom ? (
-                      <span
-                        className="rounded-full bg-neutral-100 px-1.5 py-px text-[9.5px] font-semibold text-neutral-500"
-                        title="Zit in de aanneemsom — verlaagt de basisscope, telt niet extra mee in het contracttotaal."
-                      >
-                        in aanneemsom
-                      </span>
-                    ) : (
-                      <span
-                        className="rounded-full px-1.5 py-px text-[9.5px] font-semibold"
-                        style={{ background: 'var(--warning-50, #fff7ed)', color: 'var(--warning-800, #9a3412)' }}
-                        title="Valt buiten de aanneemsom — apart factureren, telt bij het contracttotaal op."
-                      >
-                        apart factureren
-                      </span>
-                    )}
-                    {sp.begroot != null && (
-                      <span
-                        className="tabular-nums text-[10px]"
-                        style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : 'var(--fg-muted)' }}
-                        title="Geboekt / begroot (kostprijs)"
-                      >
-                        {fmtBedrag(sp.geboekt ?? 0)} / {fmtBedrag(sp.begroot)}
-                      </span>
-                    )}
-                    {sp.grondslag === 'eenheidsprijzen' && sp.eenheidsprijs != null && (
-                      <span className="text-[10px] tabular-nums text-neutral-400" title="Afgesproken prijs per eenheid">
-                        {fmtBedrag(sp.eenheidsprijs)}{sp.eenheid ? ` / ${sp.eenheid}` : ' p.e.'}
-                      </span>
-                    )}
-                    {sp.grondslag === 'geboekte_kosten' && sp.opslag_pct != null && (
-                      <span className="text-[10px] tabular-nums text-neutral-400" title="Eigen opslag op de geboekte kosten van deze stelpost">
-                        opslag {sp.opslag_pct}%
-                      </span>
-                    )}
-                  </div>
-                  {/* Eenheidsprijs-stelpost: de werkelijke hoeveelheid is handmatige invoer en
-                      bepaalt het afrekenbedrag. Zolang hij leeg is valt er niets te verrekenen. */}
-                  {!sp.verrekendMeerwerkId && !readOnly && (
-                    <StelpostAfrekening stelpost={sp} pending={pending} onZet={p => onZetAfrekening(sp.id, p)} />
-                  )}
-                  {/* Verrekening: werkelijk vs. stelpost. Het verschil landt als één meer-/minderwerkregel. */}
-                  {sp.verrekenSaldo != null && (
-                    <div className="mt-0.5 flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 truncate text-[10.5px] text-neutral-400">
-                        werkelijk {fmtBedrag(sp.werkelijkVerkoop ?? 0)} ·{' '}
-                        <span style={{ color: sp.verrekenSaldo > 0 ? '#d97706' : sp.verrekenSaldo < 0 ? '#009439' : undefined }}>
-                          {sp.verrekenSaldo > 0 ? 'meerwerk' : 'minderwerk'} {fmtBedrag(Math.abs(sp.verrekenSaldo))}
-                        </span>
-                      </span>
-                      {sp.verrekendMeerwerkId ? (
-                        <span className="shrink-0 text-[10px] font-semibold text-neutral-400">verrekend</span>
-                      ) : (!readOnly && sp.verrekenSaldo !== 0 && (
-                        <button
-                          type="button"
-                          onClick={() => onVerreken(sp.id)}
-                          disabled={pending}
-                          title="Maak van het verschil één meer-/minderwerkregel (status Aangevraagd, dus via klantakkoord)."
-                          className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
-                        >
-                          Verrekenen
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-          </div>
-          {!readOnly && stelposten.some(sp => !sp.bewakingscode) && (
-            <button
-              type="button"
-              onClick={onWijsCodes}
-              disabled={pending}
-              className="mt-1.5 mr-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 disabled:opacity-50"
-              title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…) en maak die in Bouw7 aan."
-            >
-              Codes toewijzen
-            </button>
+          {stelposten.length === 0 && (
+            <p className="rounded-lg border border-dashed border-neutral-200 px-3 py-4 text-center text-[12.5px] text-neutral-500">
+              Nog geen stelposten aangewezen
+            </p>
           )}
-          {!readOnly && overzicht.handmatigMogelijk && (
-            <NieuweStelpostRegel onOpslaan={onNieuweStelpost} pending={pending} />
+          {stelposten.map(sp => {
+            const bewerkbaar = !readOnly && !sp.verrekendMeerwerkId
+            return (
+              <div key={sp.id} className="rounded-lg border border-neutral-200 bg-white">
+                {/* Kop: code, de volledige omschrijving (niet afgekapt) en waar de post valt. */}
+                <div className="flex items-start gap-2 px-3 pt-3">
+                  {sp.bewakingscode && (
+                    <span className="mt-px shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-neutral-600">
+                      {sp.bewakingscode}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-neutral-900">{sp.omschrijving}</span>
+                  {sp.in_aanneemsom ? (
+                    <Badge size="sm" tone="neutral" className="mt-0.5 shrink-0" title="Zit in de aanneemsom — verlaagt de basisscope, telt niet extra mee in het contracttotaal.">
+                      in aanneemsom
+                    </Badge>
+                  ) : (
+                    <Badge size="sm" tone="warning" className="mt-0.5 shrink-0" title="Valt buiten de aanneemsom — apart factureren, telt bij het contracttotaal op.">
+                      apart factureren
+                    </Badge>
+                  )}
+                  {!readOnly && sp.bron === 'handmatig' && !sp.verrekendMeerwerkId && (
+                    <Button
+                      variant="ghost" size="icon-sm"
+                      className="-mr-1.5 -mt-1 shrink-0 text-neutral-400"
+                      onClick={() => onVerwijderStelpost(sp.id)}
+                      disabled={pending}
+                      title="Stelpost verwijderen"
+                      aria-label="Stelpost verwijderen"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Velden: elk met een eigen label, op één raster. */}
+                <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+                  {bewerkbaar ? (
+                    <>
+                      <FormField upper label="Bedrag excl. BTW">
+                        <GetalVeld
+                          waarde={sp.bedrag_excl_btw} plaatshouder="0,00" bedrag
+                          label="Bedrag excl. BTW" pending={pending}
+                          onCommit={v => {
+                            if (v == null || !(v > 0)) { toast.error('Vul een bedrag groter dan nul in.'); return }
+                            onZetAfrekening(sp.id, { bedrag_excl_btw: v })
+                          }}
+                        />
+                      </FormField>
+                      <FormField upper label="BTW">
+                        <BtwKeuze waarde={sp.btw_pct} pending={pending} onKies={v => onZetAfrekening(sp.id, { btw_pct: v })} />
+                      </FormField>
+                      <StelpostAfrekening stelpost={sp} pending={pending} onZet={p => onZetAfrekening(sp.id, p)} />
+                    </>
+                  ) : (
+                    <>
+                      <FormField upper label="Bedrag excl. BTW">
+                        <span className="text-[12.5px] font-semibold tabular-nums text-neutral-800">
+                          {sp.bedrag_excl_btw != null ? fmtBedrag(sp.bedrag_excl_btw) : '—'}
+                        </span>
+                      </FormField>
+                      <FormField upper label="BTW">
+                        <span className="text-[12.5px] tabular-nums text-neutral-800">
+                          {sp.btw_pct != null ? `${String(sp.btw_pct).replace('.', ',')}%` : '—'}
+                        </span>
+                      </FormField>
+                      <FormField upper label="Rekent af op">
+                        <span className="text-[12.5px] text-neutral-800">
+                          {sp.grondslag === 'geboekte_kosten' ? 'Geboekte kosten'
+                            : sp.grondslag === 'eenheidsprijzen' ? 'Eenheidsprijs' : 'Vast bedrag'}
+                        </span>
+                      </FormField>
+                      {sp.grondslag === 'eenheidsprijzen' && sp.eenheidsprijs != null && (
+                        <FormField upper label="Prijs per eenheid">
+                          <span className="text-[12.5px] tabular-nums text-neutral-800">
+                            {fmtBedrag(sp.eenheidsprijs)}{sp.eenheid ? ` / ${sp.eenheid}` : ''}
+                          </span>
+                        </FormField>
+                      )}
+                      {sp.grondslag === 'geboekte_kosten' && sp.opslag_pct != null && (
+                        <FormField upper label="Opslag %">
+                          <span className="text-[12.5px] tabular-nums text-neutral-800">{sp.opslag_pct}%</span>
+                        </FormField>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Voet: budget en verrekening. Het verschil landt als één meer-/minderwerkregel. */}
+                {(sp.begroot != null || sp.verrekenSaldo != null) && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-b-lg border-t border-neutral-100 bg-neutral-50 px-3 py-2 text-[12px] text-neutral-500">
+                    {sp.begroot != null && (
+                      <span title="Geboekt / begroot (kostprijs)">
+                        Geboekt{' '}
+                        <span
+                          className="font-semibold tabular-nums"
+                          style={{ color: (sp.geboekt ?? 0) > sp.begroot ? '#d9534f' : undefined }}
+                        >
+                          {fmtBedrag(sp.geboekt ?? 0)}
+                        </span>
+                        {' '}van <span className="font-semibold tabular-nums text-neutral-800">{fmtBedrag(sp.begroot)}</span> begroot
+                      </span>
+                    )}
+                    {sp.verrekenSaldo != null && (
+                      <>
+                        <span>
+                          Werkelijk <span className="font-semibold tabular-nums text-neutral-800">{fmtBedrag(sp.werkelijkVerkoop ?? 0)}</span>
+                        </span>
+                        {sp.verrekenSaldo !== 0 && (
+                          <span
+                            className="font-semibold tabular-nums"
+                            style={{ color: sp.verrekenSaldo > 0 ? '#d97706' : '#009439' }}
+                          >
+                            {sp.verrekenSaldo > 0 ? 'Meerwerk' : 'Minderwerk'} {fmtBedrag(Math.abs(sp.verrekenSaldo))}
+                          </span>
+                        )}
+                        <span className="ml-auto">
+                          {sp.verrekendMeerwerkId ? (
+                            <Badge size="sm" tone="success">verrekend</Badge>
+                          ) : (!readOnly && sp.verrekenSaldo !== 0 && (
+                            <Button
+                              variant="outline" size="sm"
+                              onClick={() => onVerreken(sp.id)}
+                              disabled={pending}
+                              title="Maak van het verschil één meer-/minderwerkregel (status Aangevraagd, dus via klantakkoord)."
+                            >
+                              Verrekenen
+                            </Button>
+                          ))}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {!readOnly && (stelposten.some(sp => !sp.bewakingscode) || overzicht.handmatigMogelijk) && (
+            <div className="flex flex-wrap items-start gap-2">
+              {stelposten.some(sp => !sp.bewakingscode) && (
+                <Button
+                  variant="outline" size="sm"
+                  onClick={onWijsCodes}
+                  disabled={pending}
+                  title="Geef elke stelpost een eigen bewakingscode (SP01, SP02…) en maak die in Bouw7 aan."
+                >
+                  Codes toewijzen
+                </Button>
+              )}
+              {overzicht.handmatigMogelijk && (
+                <NieuweStelpostRegel onOpslaan={onNieuweStelpost} pending={pending} />
+              )}
+            </div>
           )}
           {stelposten.some(sp => sp.bewakingscode) && (
-            <p className="mt-2 text-[10px] italic text-neutral-400">
+            <p className="text-[11.5px] leading-snug text-neutral-500">
               Gebruik deze codes als kostengroep in de werkbegroting; begroot/werkelijk verschijnt zodra de begroting naar Bouw7 is gestuurd.
             </p>
           )}
-          </div>
         </div>
         )}
 
