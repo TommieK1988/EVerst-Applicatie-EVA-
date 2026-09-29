@@ -97,15 +97,28 @@ export async function verplaatsDossierNaarFase(
   // volgende ochtend weer terug, zonder spoor van waarom.
   let bouw7Ok = true
   let bouw7Fout: string | null = null
-  if (plaatsing.bouw7Via && d.bouw7_id) {
-    const { schrijfBouw7Projectstatus } = await import('@/lib/dossiers/bouw7-status')
-    const res = await schrijfBouw7Projectstatus(d.bouw7_id, plaatsing.bouw7Via)
+  const moetNaarBouw7 = plaatsing.bouw7Via != null || plaatsing.bouw7Prefix != null
+
+  if (moetNaarBouw7 && d.bouw7_id) {
+    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix } =
+      await import('@/lib/dossiers/bouw7-status')
+    // Servicedesk gaat op zijn naam-prefix (LB.); daar hoort geen EVA-substatus bij.
+    const res = plaatsing.bouw7Prefix
+      ? await schrijfBouw7Projectstatusprefix(d.bouw7_id, plaatsing.bouw7Prefix)
+      : await schrijfBouw7Projectstatus(d.bouw7_id, plaatsing.bouw7Via as string)
     bouw7Ok = res.ok
     bouw7Fout = res.ok ? null : res.error
-  } else if (plaatsing.bouw7Via && !d.bouw7_id) {
+  } else if (moetNaarBouw7 && !d.bouw7_id) {
     bouw7Ok = false
     bouw7Fout = 'Dit dossier staat niet in Bouw7; daar is de projectstatus niet gewijzigd.'
   }
+
+  // Zie `zetFaseNaAanmaken`: het Bouw7-project blijft op LB staan, dus zonder deze
+  // markering zou de lees-sync de bon van "Nieuw" naar "Onderhanden" schuiven.
+  const beschermd = doel === 'servicedesk'
+    ? await (await import('@/lib/bouw7/handmatige-velden'))
+        .markeerHandmatig(supabase, 'dossiers', dossierId, ['servicedesk_substatus'])
+    : null
 
   const { error } = await supabase
     .from('dossiers')
@@ -114,6 +127,7 @@ export async function verplaatsDossierNaarFase(
       aanvraag_substatus:    plaatsing.kolommen.aanvraag_substatus,
       opdracht_substatus:    plaatsing.kolommen.opdracht_substatus,
       servicedesk_substatus: plaatsing.kolommen.servicedesk_substatus,
+      ...(beschermd ? { handmatige_velden: beschermd } : {}),
       ...(bouw7Ok ? {} : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7Fout }),
     } as never)
     .eq('id', dossierId)

@@ -56,11 +56,30 @@ export async function schrijfBouw7Projectstatus(
   sectie: 'opdracht' | 'servicedesk' = 'opdracht',
 ): Promise<Bouw7WriteResult> {
   // Servicedesk-substatussen hebben geen 1:1 Bouw7-projectstatus → niet terugschrijven.
+  // De bon stáát in Bouw7 op "LB. Lopende bonnen" en blijft daar; de fasering
+  // gebeurt alleen in EVA. Zie `schrijfBouw7Projectstatusprefix` voor het zetten van
+  // die LB-status bij het aanmaken.
   if (sectie !== 'opdracht') return { ok: false, error: 'Servicedesk-status wordt niet naar Bouw7 geschreven.' }
 
   const prefix = opdrachtSubstatusNaarPrefix(substatus)
   if (!prefix) return { ok: false, error: `Geen Bouw7-status bekend voor "${substatus}".` }
 
+  return schrijfBouw7Projectstatusprefix(bouw7Id, prefix)
+}
+
+/**
+ * Zet de projectstatus op de status waarvan de naam met `prefix` begint.
+ *
+ * Los van de substatus-variant hierboven, omdat niet elke Bouw7-status bij een
+ * EVA-substatus hoort. "LB. Lopende bonnen" is daar het voorbeeld van: dat is waar
+ * servicedeskbonnen in Bouw7 thuishoren, en er is geen EVA-substatus die daarop
+ * afbeeldt -- de bon doorloopt in EVA een eigen ladder terwijl Bouw7 hem op LB laat
+ * staan.
+ */
+export async function schrijfBouw7Projectstatusprefix(
+  bouw7Id: string | number,
+  prefix: string,
+): Promise<Bouw7WriteResult> {
   try {
     const client = await getBouw7Client()
 

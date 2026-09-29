@@ -21,12 +21,17 @@
  * anders beloven dan er wordt weggeschreven, dan is dat precies de stille fout waar
  * die controle voor bestaat.
  *
- * Let op de Bouw7-kant. Een verse servicedeskbon gaat naar **02. Nieuwe opdracht**,
- * niet naar 01. Offerte: de lees-sync vertaalt 01 voor een servicedeskcategorie naar
- * substatus `offerte_uitgebracht` (zie BOUW7_NAAR_SERVICEDESK_SUBSTATUS), en dan
- * staat een bon waar nooit een offerte voor is gemaakt op het bord onder "Offerte
- * uitgebracht". Op 02 leidt dezelfde tabel 'nieuw' af. Zo landt een dossier waar de
- * sync het toch al zou neerzetten -- er komt geen nieuwe regel bij.
+ * Let op de Bouw7-kant. Een verse servicedeskbon gaat naar **LB. Lopende bonnen**.
+ * Dáár horen servicedeskbonnen in Bouw7 thuis, en daar blijven ze ook staan: de
+ * fasering van een bon -- nieuw, uitgezet, uitgevoerd, financieel gereed -- gebeurt
+ * alleen in EVA. Bouw7 kent die ladder niet en hoeft hem niet te volgen.
+ *
+ * Dat betekent wél dat de lees-sync van de bon af moet blijven. LB vertaalt in
+ * BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar `loopt`, dus zonder bescherming zou een
+ * verse bon binnen een halve dag van "Nieuw" naar "Onderhanden" springen zonder dat
+ * iemand iets deed. Vandaar dat `zetFaseNaAanmaken` de substatus meteen als
+ * handmatig markeert -- hetzelfde mechanisme dat een met de hand versleepte bon al
+ * beschermde (zie lib/bouw7/handmatige-velden.ts).
  *
  * Twee lezers, één tabel: de mailintake zet er een nieuw dossier mee neer, en de
  * statuskiezer op het dossier verplaatst er een bestaand dossier mee. Zou elk zijn
@@ -57,8 +62,16 @@ export interface DossierPlaatsing {
   /**
    * De opdracht-substatus waaruit de Bouw7-projectstatus wordt afgeleid, of null
    * als het project al goed staat (01. Offerte, wat `maakBouw7Project` zet).
+   *
+   * Servicedesk gebruikt dit niet: die bon gaat naar een Bouw7-status waar geen
+   * EVA-substatus op afbeeldt. Zie `bouw7Prefix`.
    */
   bouw7Via: 'nieuwe_opdracht' | null
+  /**
+   * De Bouw7-projectstatus rechtstreeks op zijn naam-prefix, voor het geval er geen
+   * EVA-substatus is die erop afbeeldt. Alleen servicedesk gebruikt dit.
+   */
+  bouw7Prefix?: string
 }
 
 export const FASE_PLAATSINGEN: Record<DossierFase, DossierPlaatsing> = {
@@ -87,7 +100,7 @@ export const FASE_PLAATSINGEN: Record<DossierFase, DossierPlaatsing> = {
   servicedesk: {
     fase: 'Servicedesk',
     substatus: 'Nieuw',
-    bouw7Status: '02. Nieuwe opdracht',
+    bouw7Status: 'LB. Lopende bonnen',
     uitleg: 'Een onderhoudsbon of mutatie; komt op het servicedeskbord.',
     kolommen: {
       // Servicedesk draait op een eigen ladder náást de aanvraagfase; zo staan alle
@@ -95,7 +108,8 @@ export const FASE_PLAATSINGEN: Record<DossierFase, DossierPlaatsing> = {
       hoofdstatus: 'aanvraag', aanvraag_substatus: 'nieuw',
       opdracht_substatus: null, servicedesk_substatus: 'nieuw',
     },
-    bouw7Via: 'nieuwe_opdracht',
+    bouw7Via: null,
+    bouw7Prefix: 'LB.',
   },
 }
 

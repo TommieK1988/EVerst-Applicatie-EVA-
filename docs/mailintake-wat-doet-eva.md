@@ -411,6 +411,16 @@ Eerst kijkt EVA of er een offerte bij hoort:
 Die categorieklem is geen detail. Of een dossier bij de servicedesk opduikt hangt volledig aan
 de categorie; staat daar iets anders, dan belandt de bon in het aanvragenscherm.
 
+**In Bouw7 komt de bon op "LB. Lopende bonnen"** te staan — dáár horen servicedeskbonnen thuis,
+en daar blijven ze ook staan. De fasering van een bon (nieuw, uitgezet, uitgevoerd, financieel
+gereed) gebeurt **alleen in EVA**: Bouw7 kent die ladder niet en hoeft hem niet te volgen.
+
+Dat vraagt één voorziening. De lees-sync vertaalt "LB. Lopende bonnen" normaal naar de kolom
+Onderhanden, dus zonder meer zou een verse bon binnen een halve dag vanzelf van Nieuw naar
+Onderhanden springen. EVA markeert de kolom daarom bij het aanmaken als handmatig gezet —
+hetzelfde mechanisme dat een bon beschermt die je zelf versleept. Wat er op het bord staat is
+dus altijd wat een mens daar heeft neergezet.
+
 ---
 
 ## 6b. Mail in de verkeerde postbus

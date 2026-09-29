@@ -53,15 +53,34 @@ export async function zetFaseNaAanmaken(
   // waarom.
   let bouw7Ok = true
   let bouw7Fout: string | null = null
-  if (plaatsing.bouw7Via && bouw7Id) {
-    const { schrijfBouw7Projectstatus } = await import('@/lib/dossiers/bouw7-status')
-    const res = await schrijfBouw7Projectstatus(bouw7Id, plaatsing.bouw7Via)
+  const moetNaarBouw7 = plaatsing.bouw7Via != null || plaatsing.bouw7Prefix != null
+
+  if (moetNaarBouw7 && bouw7Id) {
+    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix } =
+      await import('@/lib/dossiers/bouw7-status')
+    // Servicedesk gaat op zijn naam-prefix (LB.); daar hoort geen EVA-substatus bij.
+    const res = plaatsing.bouw7Prefix
+      ? await schrijfBouw7Projectstatusprefix(bouw7Id, plaatsing.bouw7Prefix)
+      : await schrijfBouw7Projectstatus(bouw7Id, plaatsing.bouw7Via as string)
     bouw7Ok = res.ok
     bouw7Fout = res.ok ? null : res.error
-  } else if (plaatsing.bouw7Via && !bouw7Id) {
+  } else if (moetNaarBouw7 && !bouw7Id) {
     bouw7Ok = false
     bouw7Fout = 'Het dossier staat nog niet in Bouw7; de projectstatus is niet gezet.'
   }
+
+  // De servicedesk-substatus meteen beschermen tegen de lees-sync.
+  //
+  // Het Bouw7-project staat op "LB. Lopende bonnen" en blijft daar; de ladder van een
+  // bon loopt alleen in EVA. Maar LB vertaalt in BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar
+  // `loopt`, dus zonder deze markering zou de eerstvolgende sync de verse bon van
+  // "Nieuw" naar "Onderhanden" schuiven -- binnen een halve dag, zonder dat iemand iets
+  // deed. Hetzelfde mechanisme beschermt al een bon die een mens versleept; hier zetten
+  // we de vlag bij het aanmaken, want dan is de EVA-waarde net zo goed een keuze.
+  const beschermd = fase === 'servicedesk'
+    ? await (await import('@/lib/bouw7/handmatige-velden'))
+        .markeerHandmatig(supabase, 'dossiers', dossierId, ['servicedesk_substatus'])
+    : null
 
   const { error } = await supabase
     .from('dossiers')
@@ -70,6 +89,7 @@ export async function zetFaseNaAanmaken(
       aanvraag_substatus:    plaatsing.kolommen.aanvraag_substatus,
       opdracht_substatus:    plaatsing.kolommen.opdracht_substatus,
       servicedesk_substatus: plaatsing.kolommen.servicedesk_substatus,
+      ...(beschermd ? { handmatige_velden: beschermd } : {}),
       ...(bouw7Ok ? {} : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7Fout }),
     } as never)
     .eq('id', dossierId)
