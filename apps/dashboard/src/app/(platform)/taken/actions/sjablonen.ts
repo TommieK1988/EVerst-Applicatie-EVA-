@@ -572,11 +572,16 @@ async function laadDossierContext(sb: any, dossier_id: string): Promise<DossierC
     .maybeSingle()
   if (!d) return null
 
+  // Servicedesk eerst. Een bon heeft hóófdstatus 'aanvraag' met een eigen ladder ernaast,
+  // dus met de hoofdstatus-takken vooraan viel hij altijd in de eerste en kreeg hij
+  // `aanvraag_substatus` -- die voor elke bon 'nieuw' is, ook als hij allang is
+  // uitgevoerd. De servicedesk-tak hieronder was daarmee onbereikbaar: er bestaat geen
+  // dossier met een hoofdstatus buiten deze drie.
   const actieve_substatus =
-    d.hoofdstatus === 'aanvraag' ? d.aanvraag_substatus
+    d.servicedesk_substatus ? d.servicedesk_substatus
+    : d.hoofdstatus === 'aanvraag' ? d.aanvraag_substatus
     : d.hoofdstatus === 'offerte'  ? d.offerte_substatus
-    : d.hoofdstatus === 'opdracht' ? d.opdracht_substatus
-    : d.servicedesk_substatus
+    : d.opdracht_substatus
 
   let relatieTypes: string[] = []
   if (d.klant_id) {

@@ -106,8 +106,17 @@ export type DossierRij = Dossier & {
   intern: boolean
 }
 
-/** Geeft de actieve substatus terug voor een dossier, ongeacht de fase. */
+/**
+ * Geeft de actieve substatus terug voor een dossier, ongeacht de fase.
+ *
+ * Servicedesk eerst, en dat is geen detail. Een bon heeft hóófdstatus 'aanvraag' met
+ * een eigen ladder ernaast; wie alleen op hoofdstatus kiest, krijgt voor elke bon
+ * 'nieuw' terug -- ook voor één die allang is uitgevoerd. Elke aanroeper had daar zijn
+ * eigen omweg voor (`d.servicedesk_substatus ?? getDossierSubstatus(d)`); die blijven
+ * werken en zijn nu overbodig.
+ */
 export function getDossierSubstatus(dossier: Dossier): DossierSubstatus {
+  if (dossier.servicedesk_substatus) return dossier.servicedesk_substatus as DossierSubstatus
   if (dossier.hoofdstatus === 'aanvraag') return dossier.aanvraag_substatus!
   if (dossier.hoofdstatus === 'offerte')  return dossier.offerte_substatus!
   return dossier.opdracht_substatus!
