@@ -978,10 +978,20 @@ export async function getMijnDossiers(
   // count: 'exact' telt álle dossiers die aan het filter voldoen, niet alleen de
   // `limit` rijen die worden teruggegeven — anders toont de home-widget de teller
   // van wat hij laat zien in plaats van het echte totaal.
+  // Servicedeskbonnen eruit. Die hebben óók hoofdstatus 'aanvraag' -- servicedesk is
+  // geen eigen hoofdstatus maar een ladder ernáást -- dus zonder dit filter komen ze
+  // hier mee als "aanvraag". Ze horen bij `getMijnServicedesk`, en elk scherm dat deze
+  // functie gebruikt haalt die apart op.
+  //
+  // Dit ging lang goed omdat er per medewerker zelden een bon binnen de sorteervolgorde
+  // viel. Toen 372 bonnen op één dag werden bijgewerkt, stonden ze allemaal bovenaan
+  // `updated_at` en vulden ze de mobiele lijst onder Aanvragen -- tegenover 62 echte
+  // aanvragen. De fout zat er dus al; hij werd alleen zichtbaar.
   const { data, error, count } = await supabase
     .from('dossiers')
     .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`, { count: 'exact' })
     .eq('hoofdstatus', hoofdstatus)
+    .is('servicedesk_substatus', null)
     .or(rolKolommen.map(kolom => `${kolom}.eq.${medewerkerID}`).join(','))
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
     .limit(limit)
