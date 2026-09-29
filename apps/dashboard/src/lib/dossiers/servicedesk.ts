@@ -391,11 +391,10 @@ export type GroepView = {
   eigenOmschrijving: string | null
   /** Som van de boekingen in deze regel. */
   berekend: number
-  /**
-   * Zelf ingevuld bedrag; leeg = `berekend` telt. Bij een afgeleide regel is dit het regeltotaal,
-   * bij een losse regel de prijs per eenheid — daar is het regeltotaal `aantal × stukprijs`.
-   */
+  /** Hard ingevuld regeltotaal; leeg = aantal × stukprijs. */
   bedragOverride: number | null
+  /** Zelf ingevulde prijs per eenheid; leeg = uit de boekingen (losse regel: 0). */
+  stukprijsOverride: number | null
   /** Wat er werkelijk op de factuur komt: het regeltotaal. */
   bedrag: number
   aantal: number
@@ -591,17 +590,21 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     const groepenView: GroepView[] = gegroepeerd.map(g => {
       const opgeslagenGroep = groep.get(`${c.bewakingscode}|${g.groepSleutel}`)
       const eigenOms = (opgeslagenGroep?.omschrijving ?? '').trim() || null
-      const override = opgeslagenGroep?.bedrag_excl_btw != null
+      const vastTotaal = opgeslagenGroep?.bedrag_excl_btw != null
         ? Number(opgeslagenGroep.bedrag_excl_btw)
         : null
-      // Aantal en eenheid volgen uit de boekingen, tenzij ze op de regel zelf zijn ingevuld. Dat
-      // verandert alleen hoe de regel gelezen wordt ("1 post" in plaats van "6 uur"); het totaal
-      // blijft gedekt door de boekingen, dus de stukprijs rekent mee en niet het totaal.
+      const eigenPrijs = opgeslagenGroep?.stukprijs != null ? Number(opgeslagenGroep.stukprijs) : null
+      // Aantal, eenheid en prijs volgen uit de boekingen, tenzij ze op de regel zelf zijn ingevuld.
+      // Het totaal is aantal × prijs; alleen een hard ingevuld totaal wint daarvan.
       const afgeleid = aantalEnEenheid(g.boekingen)
       const eigenAantal = opgeslagenGroep?.aantal != null ? Number(opgeslagenGroep.aantal) : null
       const eigenEenheid = (opgeslagenGroep?.eenheid ?? '').trim() || null
       const aantal = eigenAantal ?? afgeleid.aantal
       const eenheid = eigenEenheid ?? afgeleid.eenheid
+      const prijs = eigenPrijs ?? (afgeleid.aantal ? rond(g.berekend / afgeleid.aantal) : g.berekend)
+      // Niets ingevuld: exact de som van de boekingen, zonder afrondingsverschil via de stukprijs.
+      const bedrag = vastTotaal
+        ?? (eigenPrijs == null && eigenAantal == null ? g.berekend : rond(aantal * prijs))
       const inkoopGroep = rond(g.boekingen.reduce((s, b) => s + (b.inkoopBedrag || 0), 0))
       return {
         groepSleutel: g.groepSleutel,
@@ -611,17 +614,18 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
         }),
         eigenOmschrijving: eigenOms,
         berekend: g.berekend,
-        bedragOverride: override,
-        bedrag: override ?? g.berekend,
+        bedragOverride: vastTotaal,
+        stukprijsOverride: eigenPrijs,
+        bedrag,
         aantal,
-        // Stukprijs volgt uit het regeltotaal, ook als dat handmatig is vastgezet: anders zou de
-        // factuur een aantal maal een prijs tonen die niet op het regeltotaal uitkomt.
-        stukprijs: aantal ? rond((override ?? g.berekend) / aantal) : (override ?? g.berekend),
+        // Bij een hard totaal volgt de stukprijs daaruit: anders zou de factuur een aantal maal een
+        // prijs tonen die niet op het regeltotaal uitkomt.
+        stukprijs: vastTotaal != null ? (aantal ? rond(vastTotaal / aantal) : vastTotaal) : prijs,
         eenheid,
         eigenAantal: eigenAantal != null,
         eigenEenheid: eigenEenheid != null,
         inkoop: inkoopGroep,
-        opslagPct: tariefEnOpslag(override ?? g.berekend, null, inkoopGroep).opslagPct,
+        opslagPct: tariefEnOpslag(bedrag, null, inkoopGroep).opslagPct,
         btwTariefBouw7Id: opgeslagenGroep?.btw_tarief_bouw7_id ?? codeBtw,
         meefactureren: opgeslagenGroep?.meefactureren ?? true,
         aantalBoekingen: g.boekingen.length,
@@ -635,20 +639,21 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
     // kent ze niet — ze bestaan puur als opgeslagen rij en dragen hun eigen bedrag.
     for (const l of groepen) {
       if (l.bewakingscode !== c.bewakingscode || !isLosseRegel(l.groep_sleutel)) continue
-      // Bij een losse regel is het opgeslagen bedrag de prijs per eenheid en niet het regeltotaal:
-      // je stelt hier een factuurregel samen ("3 dagen × € 85") in plaats van een som van boekingen
-      // af te dekken. Met het standaardaantal van 1 komt dat op hetzelfde neer.
-      const stukprijs = l.bedrag_excl_btw != null ? Number(l.bedrag_excl_btw) : 0
+      // Zelfde rekenregel als hierboven, maar zonder boekingen om op terug te vallen: je stelt de
+      // regel zelf samen ("3 dagen × € 85"), en een hard totaal wint.
+      const losPrijs = l.stukprijs != null ? Number(l.stukprijs) : 0
       const losAantal = l.aantal != null ? Number(l.aantal) : 1
+      const losVast = l.bedrag_excl_btw != null ? Number(l.bedrag_excl_btw) : null
       groepenView.push({
         groepSleutel: l.groep_sleutel,
         omschrijving: (l.omschrijving ?? '').trim() || 'Losse regel',
         eigenOmschrijving: l.omschrijving,
         berekend: 0,
-        bedragOverride: l.bedrag_excl_btw != null ? stukprijs : null,
-        bedrag: rond(losAantal * stukprijs),
+        bedragOverride: losVast,
+        stukprijsOverride: l.stukprijs != null ? losPrijs : null,
+        bedrag: losVast ?? rond(losAantal * losPrijs),
         aantal: losAantal,
-        stukprijs,
+        stukprijs: losVast != null ? rond(losVast / (losAantal || 1)) : losPrijs,
         eenheid: (l.eenheid ?? '').trim() || 'post',
         eigenAantal: l.aantal != null,
         eigenEenheid: (l.eenheid ?? '').trim() !== '',
@@ -909,8 +914,10 @@ export async function bewaarFactuurGroep(
   groepSleutel: string,
   patch: {
     omschrijving?: string | null
-    /** Afgeleide regel: vast regeltotaal. Losse regel: de prijs per eenheid. */
+    /** Hard regeltotaal; leeg = aantal × stukprijs. */
     bedrag_excl_btw?: number | null
+    /** Prijs per eenheid; leeg = uit de boekingen (losse regel: 0). */
+    stukprijs?: number | null
     /** Leeg = bij een afgeleide regel uit de boekingen, bij een losse regel 1. */
     aantal?: number | null
     /** Leeg = bij een afgeleide regel uit de boekingen, bij een losse regel 'post'. */
@@ -957,6 +964,7 @@ export async function bewaarFactuurGroep(
     groep_sleutel: groepSleutel,
     omschrijving: patch.omschrijving !== undefined ? (patch.omschrijving?.trim() || null) : bestaand?.omschrijving ?? null,
     bedrag_excl_btw: patch.bedrag_excl_btw !== undefined ? patch.bedrag_excl_btw : bestaand?.bedrag_excl_btw ?? null,
+    stukprijs: patch.stukprijs !== undefined ? patch.stukprijs : bestaand?.stukprijs ?? null,
     aantal: patch.aantal !== undefined ? patch.aantal : bestaand?.aantal ?? null,
     eenheid: patch.eenheid !== undefined ? (patch.eenheid?.trim().slice(0, 24) || null) : bestaand?.eenheid ?? null,
     btw_tarief_bouw7_id: patch.btw_tarief_bouw7_id !== undefined ? patch.btw_tarief_bouw7_id : bestaand?.btw_tarief_bouw7_id ?? null,
@@ -1003,7 +1011,7 @@ export async function voegLosseRegelToe(
   const sleutel = nieuweLosseSleutel()
   const r = await bewaarFactuurGroep(dossierId, bewakingscode, sleutel, {
     omschrijving,
-    bedrag_excl_btw: regel.bedragExclBtw,
+    stukprijs: regel.bedragExclBtw,
     aantal: regel.aantal ?? null,
     eenheid: regel.eenheid ?? null,
     ...(regel.btwTariefBouw7Id != null ? { btw_tarief_bouw7_id: regel.btwTariefBouw7Id } : {}),
@@ -1128,7 +1136,9 @@ export async function voegFactuurRegelsSamen(
   if (!gezet.ok) return gezet
 
   const eerste = regels[0]
-  const vastBedrag = regels.some(g => g.bedragOverride != null)
+  // Week een regel af van de som van zijn boekingen (eigen prijs, aantal of totaal), dan houdt de
+  // samengevoegde regel het totaal dat er stond als hard totaal.
+  const vastBedrag = regels.some(g => g.bedrag !== g.berekend)
     ? rond(regels.reduce((s, g) => s + g.bedrag, 0))
     : null
 
@@ -1139,6 +1149,7 @@ export async function voegFactuurRegelsSamen(
     groep_sleutel: sleutel,
     omschrijving: eerste.omschrijving,
     bedrag_excl_btw: vastBedrag,
+    stukprijs: null,
     aantal: null,
     eenheid: null,
     // Alleen een afwijkend btw-tarief overnemen; het tarief van de code volgt vanzelf.
@@ -1385,12 +1396,13 @@ export async function maakRegieFactuurInBouw7(
   // zo'n val: de boekingen verdwijnen, de override blijft staan, en de eerstvolgende boeking die in
   // dezelfde groep valt laat het hele vaste bedrag opnieuw meegaan. Dat bedrag was een afspraak
   // over wát er gefactureerd is, niet over wat er daarna nog binnenkomt — dus wordt het gewist en
-  // rekent nieuw werk weer met zijn eigen berekende bedrag.
+  // rekent nieuw werk weer met zijn eigen berekende bedrag. Een ingevuld aantal en een eigen prijs
+  // gaan om dezelfde reden mee: "1 post à € 450" zou anders bij de volgende boeking terugkomen.
   for (const c of voorstel.codes) {
     for (const g of c.groepen) {
       if (g.gefactureerd) continue
       if (!opFactuur.has(`${c.bewakingscode}|${g.groepSleutel}`)) continue
-      if (!g.los && g.bedragOverride == null) continue
+      if (!g.los && g.bedragOverride == null && g.stukprijsOverride == null && !g.eigenAantal) continue
       await supabase
         .from('factuur_regelgroepen')
         .update({
@@ -1398,7 +1410,7 @@ export async function maakRegieFactuurInBouw7(
           // blijft bestaan zolang er boekingen in vallen; die raakt alleen zijn vaste bedrag kwijt.
           ...(g.los
             ? { bouw7_invoice_id: String(res.invoiceId), gefactureerd_op: new Date().toISOString() }
-            : { bedrag_excl_btw: null }),
+            : { bedrag_excl_btw: null, stukprijs: null, aantal: null }),
           updated_at: new Date().toISOString(),
         })
         .eq('dossier_id', dossierId)

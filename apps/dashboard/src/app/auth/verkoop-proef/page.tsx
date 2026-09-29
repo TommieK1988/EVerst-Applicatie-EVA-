@@ -96,21 +96,21 @@ const proefCode: CodeRegelView = {
   groepen: [
     {
       groepSleutel: 'uur:Timmerman', omschrijving: 'Timmerwerk kozijnen', eigenOmschrijving: null,
-      berekend: 3800, bedragOverride: null, bedrag: 3800, aantal: 76.5, stukprijs: 49.67,
+      berekend: 3800, bedragOverride: null, stukprijsOverride: null, bedrag: 3800, aantal: 76.5, stukprijs: 49.67,
       eenheid: 'uur', eigenAantal: false, eigenEenheid: false, inkoop: 2983.5, opslagPct: 27.37,
       btwTariefBouw7Id: null, meefactureren: true, aantalBoekingen: 8,
       handmatig: false, los: false, gefactureerd: false,
     },
     {
       groepSleutel: 'kost:Materiaal', omschrijving: 'Materiaal', eigenOmschrijving: null,
-      berekend: 2223.44, bedragOverride: null, bedrag: 2223.44, aantal: 1, stukprijs: 2223.44,
+      berekend: 2223.44, bedragOverride: null, stukprijsOverride: null, bedrag: 2223.44, aantal: 1, stukprijs: 2223.44,
       eenheid: 'post', eigenAantal: false, eigenEenheid: false, inkoop: 1778.75, opslagPct: 25,
       btwTariefBouw7Id: 3, meefactureren: true, aantalBoekingen: 4,
       handmatig: false, los: false, gefactureerd: false,
     },
     {
       groepSleutel: 'los:abc', omschrijving: 'Voorrijkosten', eigenOmschrijving: 'Voorrijkosten',
-      berekend: 0, bedragOverride: 85, bedrag: 255, aantal: 3, stukprijs: 85,
+      berekend: 0, bedragOverride: null, stukprijsOverride: 85, bedrag: 255, aantal: 3, stukprijs: 85,
       eenheid: 'dag', eigenAantal: true, eigenEenheid: true, inkoop: 0, opslagPct: null,
       btwTariefBouw7Id: null, meefactureren: true, aantalBoekingen: 0,
       handmatig: false, los: true, gefactureerd: false,

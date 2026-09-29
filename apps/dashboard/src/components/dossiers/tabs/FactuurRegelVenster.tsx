@@ -10,13 +10,13 @@
  * zien welk bedrag waar vandaan kwam. Het regelnummer achter elke boeking verbindt de twee.
  *
  * Rechts is per regel alles aan te passen: omschrijving, aantal, eenheid, opslag, prijs per eenheid,
- * totaal en btw. Opslag, eenheidsprijs en totaal zijn drie vensters op één opgeslagen getal — het
- * regeltotaal — en worden daaruit teruggerekend. Een veld leegmaken zet de regel terug op de som van
- * de boekingen. Aantal en eenheid wijzigen verandert alleen hoe de regel gelezen wordt: het totaal
- * blijft staan en de eenheidsprijs rekent mee ("6 uur" → "1 post" blijft € 450).
+ * totaal en btw. Het totaal is aantal × prijs per eenheid, tenzij je het totaal zelf invult — dan
+ * wint dat, en volgt de prijs eruit. Zonder ingevulde prijs komt die uit de boekingen (som ÷
+ * geboekt aantal); een opslag invullen zet de prijs op kostprijs + opslag. Een veld leegmaken zet
+ * dat stuk terug op de berekening.
  *
- * Een losse regel heeft geen boekingen onder zich en stelt daarom zijn eigen regel samen: daar is het
- * opgeslagen getal de prijs per eenheid, en het regelbedrag aantal maal die prijs.
+ * Een losse regel heeft geen boekingen onder zich en stelt zijn eigen regel samen: zelfde regel,
+ * met aantal 1 en prijs 0 als vertrekpunt.
  *
  * Regels selecteren en "Samenvoegen" zet hun boekingen samen op één nieuwe regel; "Splitsen" laat
  * die boekingen de indeling van de post weer volgen.
@@ -40,7 +40,7 @@ import {
   type CodeRegelView, type BoekingView, type GroepView,
 } from '@/lib/dossiers/servicedesk'
 import {
-  GROEPERINGEN, bedragUitOpslag, bedragUitTarief, isHandmatigeGroep, standaardFactuurtekst,
+  GROEPERINGEN, bedragUitOpslag, isHandmatigeGroep, standaardFactuurtekst,
   telbareRegels, type Groepering,
 } from '@/lib/dossiers/factuurregel-groepen'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
@@ -325,20 +325,19 @@ export default function FactuurRegelVenster({
   const groepPatch = (sleutel: string, patch: Parameters<typeof bewaarFactuurGroep>[3]) =>
     doe(() => bewaarFactuurGroep(dossierId, code.bewakingscode, sleutel, patch))
 
-  // ── Prijsvelden rechts: drie vensters op één opgeslagen getal ────────────
-  // Bij een afgeleide regel is dat getal het regeltotaal, bij een losse regel de prijs per eenheid.
+  // ── Prijsvelden rechts ───────────────────────────────────────────────────
+  // Totaal = aantal × prijs, tenzij het totaal hard is ingevuld. Een prijs of opslag invullen
+  // betekent "reken het totaal uit", dus die wissen een eerder hard totaal.
   const zetTotaal = (g: GroepView, totaal: number | null) =>
-    groepPatch(g.groepSleutel, {
-      bedrag_excl_btw: totaal == null ? null
-        : g.los ? Math.round((totaal / (g.aantal || 1)) * 100) / 100
-        : totaal,
-    })
+    groepPatch(g.groepSleutel, { bedrag_excl_btw: totaal })
   const zetPrijs = (g: GroepView, prijs: number | null) =>
-    groepPatch(g.groepSleutel, {
-      bedrag_excl_btw: prijs == null ? null : g.los ? prijs : bedragUitTarief(prijs, g.aantal),
-    })
+    groepPatch(g.groepSleutel, { stukprijs: prijs, bedrag_excl_btw: null })
   const zetOpslag = (g: GroepView, pct: number | null) =>
-    groepPatch(g.groepSleutel, { bedrag_excl_btw: pct == null ? null : bedragUitOpslag(g.inkoop, pct) })
+    groepPatch(g.groepSleutel, {
+      stukprijs: pct == null ? null
+        : Math.round((bedragUitOpslag(g.inkoop, pct) / (g.aantal || 1)) * 100) / 100,
+      bedrag_excl_btw: null,
+    })
 
   const nummerVan = new Map(code.groepen.map((g, i) => [g.groepSleutel, i + 1]))
 
@@ -772,9 +771,8 @@ export default function FactuurRegelVenster({
                     // Een losse regel die al op een factuur staat ligt vast, net als een afgeboekte
                     // boeking links.
                     const regelVast = opslot || bezig || g.gefactureerd
-                    // Zonder vast bedrag staan de prijsvelden in grijs: dan zijn het berekende
-                    // waarden die meebewegen met wat er nog geboekt wordt.
-                    const vastgezet = g.bedragOverride != null
+                    // Wat niet zelf is ingevuld staat in grijs: dat is berekend en beweegt mee.
+                    const prijsIngevuld = g.stukprijsOverride != null && g.bedragOverride == null
                     return (
                       <tr
                         key={g.groepSleutel}
@@ -820,8 +818,8 @@ export default function FactuurRegelVenster({
                             placeholder={fmtAantal(g.aantal)}
                             uitlijnen="rechts"
                             titel={g.los
-                              ? 'Aantal op de factuur'
-                              : 'Aantal op de factuur; leeg = uit de boekingen. Het totaal blijft staan.'}
+                              ? 'Aantal op de factuur; totaal = aantal × prijs'
+                              : 'Aantal op de factuur; leeg = uit de boekingen. Totaal = aantal × prijs.'}
                             disabled={regelVast}
                             opslaan={t => groepPatch(g.groepSleutel, { aantal: getal(t) })}
                           />
@@ -838,11 +836,11 @@ export default function FactuurRegelVenster({
                         <td className="px-1.5 py-2">
                           {g.inkoop > 0 ? (
                             <BewaarVeld
-                              waarde={vastgezet ? alsTekst(g.opslagPct) : ''}
+                              waarde={prijsIngevuld ? alsTekst(g.opslagPct) : ''}
                               placeholder={g.opslagPct != null ? fmtGetal(g.opslagPct) : ''}
                               uitlijnen="rechts"
                               eenheid="%"
-                              titel={`Opslag op de kostprijs (${fmt(g.inkoop)}) — past eh-prijs en totaal aan`}
+                              titel={`Opslag op de kostprijs (${fmt(g.inkoop)}) — zet de prijs per eenheid`}
                               disabled={regelVast}
                               opslaan={t => zetOpslag(g, getal(t))}
                             />
@@ -855,26 +853,26 @@ export default function FactuurRegelVenster({
                         </td>
                         <td className="px-1.5 py-2">
                           <BewaarVeld
-                            waarde={vastgezet ? alsTekst(g.stukprijs) : ''}
+                            waarde={prijsIngevuld ? alsTekst(g.stukprijsOverride) : ''}
                             placeholder={fmtGetal(g.stukprijs)}
                             uitlijnen="rechts"
                             eenheid="€"
                             eenheidVoor
-                            titel={`Prijs per ${g.eenheid ?? 'post'} — totaal = aantal × deze prijs`}
+                            titel={g.bedragOverride != null
+                              ? `Prijs per ${g.eenheid ?? 'post'} volgt uit het ingevulde totaal; invullen rekent het totaal weer uit`
+                              : `Prijs per ${g.eenheid ?? 'post'} — totaal = aantal × deze prijs`}
                             disabled={regelVast}
                             opslaan={t => zetPrijs(g, getal(t))}
                           />
                         </td>
                         <td className="px-1.5 py-2">
                           <BewaarVeld
-                            waarde={vastgezet ? alsTekst(g.bedrag) : ''}
-                            placeholder={fmtGetal(g.los ? g.bedrag : g.berekend)}
+                            waarde={g.bedragOverride != null ? alsTekst(g.bedragOverride) : ''}
+                            placeholder={fmtGetal(g.bedrag)}
                             uitlijnen="rechts"
                             eenheid="€"
                             eenheidVoor
-                            titel={g.los
-                              ? 'Regeltotaal excl. btw'
-                              : `Regeltotaal excl. btw; leeg = de optelling van de boekingen (${fmt(g.berekend)})`}
+                            titel="Regeltotaal excl. btw; leeg = aantal × prijs. Zelf invullen zet het vast."
                             disabled={regelVast}
                             opslaan={t => zetTotaal(g, getal(t))}
                           />
@@ -944,8 +942,8 @@ export default function FactuurRegelVenster({
             </label>
             {!opslot && (
               <span className="text-[12px] text-neutral-500">
-                Vink links aan wat op de factuur komt. Rechts pas je elke regel aan; grijze bedragen zijn
-                berekend, een veld leegmaken zet de berekening terug. Selecteer regels om ze samen te voegen.
+                Vink links aan wat op de factuur komt. Rechts is het totaal aantal × prijs, tenzij je het
+                zelf invult; grijs is berekend, leegmaken zet de berekening terug. Selecteer regels om ze samen te voegen.
               </span>
             )}
           </div>

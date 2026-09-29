@@ -209,14 +209,13 @@ export type RegelGroep = {
   bewakingscode: string
   groep_sleutel: string
   omschrijving: string | null
-  /**
-   * Bij een afgeleide regel het vaste regeltotaal, bij een losse regel de prijs per eenheid.
-   * Zie de kolomcommentaren in `20260918e_losse_factuurregel_aantal.sql`.
-   */
+  /** Hard ingevuld regeltotaal; leeg = aantal × prijs per eenheid. */
   bedrag_excl_btw: number | null
-  /** Alleen bij losse regels: het aantal op de factuur. Leeg = 1. */
+  /** Ingevulde prijs per eenheid; leeg = uit de boekingen (bij een losse regel: 0). */
+  stukprijs: number | null
+  /** Ingevuld aantal; leeg = uit de boekingen (bij een losse regel: 1). */
   aantal: number | null
-  /** Alleen bij losse regels: de eenheid achter het aantal. Leeg = post. */
+  /** Ingevulde eenheid; leeg = uit de boekingen (bij een losse regel: post). */
   eenheid: string | null
   btw_tarief_bouw7_id: number | null
   meefactureren: boolean
@@ -230,7 +229,7 @@ export async function getRegelGroepen(dossierId: string): Promise<RegelGroep[]> 
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('factuur_regelgroepen')
-    .select('bewakingscode, groep_sleutel, omschrijving, bedrag_excl_btw, aantal, eenheid, btw_tarief_bouw7_id, meefactureren, volgorde, bouw7_invoice_id')
+    .select('bewakingscode, groep_sleutel, omschrijving, bedrag_excl_btw, stukprijs, aantal, eenheid, btw_tarief_bouw7_id, meefactureren, volgorde, bouw7_invoice_id')
     .eq('dossier_id', dossierId)
     .order('volgorde')
   return (data ?? []) as RegelGroep[]

@@ -3924,6 +3924,7 @@ export type Database = {
         Row: {
           aantal: number | null
           bedrag_excl_btw: number | null
+          stukprijs: number | null
           bewakingscode: string
           bouw7_invoice_id: string | null
           btw_tarief_bouw7_id: number | null
@@ -3941,6 +3942,7 @@ export type Database = {
         Insert: {
           aantal?: number | null
           bedrag_excl_btw?: number | null
+          stukprijs?: number | null
           bewakingscode: string
           bouw7_invoice_id?: string | null
           btw_tarief_bouw7_id?: number | null
@@ -3958,6 +3960,7 @@ export type Database = {
         Update: {
           aantal?: number | null
           bedrag_excl_btw?: number | null
+          stukprijs?: number | null
           bewakingscode?: string
           bouw7_invoice_id?: string | null
           btw_tarief_bouw7_id?: number | null
