@@ -34,6 +34,7 @@ import UitvraagTab from './tabs/UitvraagTab'
 import BestandenTab from './tabs/BestandenTab'
 import KamTab, { KAM_DELEN, standaardKamDeel, type KamDeel } from './tabs/KamTab'
 import { DossierTabSkeleton } from './DossierTabSkeleton'
+import ServicedeskAfrondingKaart from './servicedesk/ServicedeskAfrondingKaart'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
 import { isDossierAfgesloten } from './types'
@@ -219,6 +220,12 @@ async function renderEnkeleTab(
     return (
       <>
         {titleInjector}
+        {/* Gereedmelding van de monteur (mobiel) — rendert niets zolang er geen is. */}
+        {sectie === 'servicedesk' && (
+          <Suspense fallback={null}>
+            <ServicedeskAfrondingKaart dossierId={id} deel="gereed" />
+          </Suspense>
+        )}
         <Suspense fallback={<DossierTabSkeleton />}>
           <InformatieTabInhoud id={id} dossier={dossier} sectie={sectie} />
         </Suspense>
@@ -411,6 +418,10 @@ async function renderEnkeleTab(
         {titleInjector}
         <Suspense fallback={<DossierTabSkeleton />}>
           <UrenTab dossierId={id} toonBewaking={false} />
+        </Suspense>
+        {/* Pakbonfoto's van de buitendienst: welke inkoopfacturen er nog komen. */}
+        <Suspense fallback={null}>
+          <ServicedeskAfrondingKaart dossierId={id} deel="pakbonnen" />
         </Suspense>
         <Suspense fallback={<DossierTabSkeleton />}>
           <InkoopTab dossierId={id} />

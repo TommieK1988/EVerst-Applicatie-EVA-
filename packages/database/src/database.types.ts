@@ -2832,6 +2832,48 @@ export type Database = {
           },
         ]
       }
+      dossier_pakbonnen: {
+        Row: {
+          dossier_id: string
+          foto_url: string
+          geupload_door: string | null
+          geupload_op: string
+          id: string
+          opmerking: string | null
+        }
+        Insert: {
+          dossier_id: string
+          foto_url: string
+          geupload_door?: string | null
+          geupload_op?: string
+          id?: string
+          opmerking?: string | null
+        }
+        Update: {
+          dossier_id?: string
+          foto_url?: string
+          geupload_door?: string | null
+          geupload_op?: string
+          id?: string
+          opmerking?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_pakbonnen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_pakbonnen_geupload_door_fkey"
+            columns: ["geupload_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossier_status_historie: {
         Row: {
           door_user_id: string | null
@@ -15342,6 +15384,51 @@ export type Database = {
             columns: ["onderdeel_id"]
             isOneToOne: false
             referencedRelation: "schilder_onderdelen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      servicedesk_gereedmeldingen: {
+        Row: {
+          dossier_id: string
+          gemeld_door: string | null
+          gemeld_op: string
+          getekend_door: string | null
+          handtekening_url: string | null
+          id: string
+          uitgevoerde_werkzaamheden: string
+        }
+        Insert: {
+          dossier_id: string
+          gemeld_door?: string | null
+          gemeld_op?: string
+          getekend_door?: string | null
+          handtekening_url?: string | null
+          id?: string
+          uitgevoerde_werkzaamheden: string
+        }
+        Update: {
+          dossier_id?: string
+          gemeld_door?: string | null
+          gemeld_op?: string
+          getekend_door?: string | null
+          handtekening_url?: string | null
+          id?: string
+          uitgevoerde_werkzaamheden?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servicedesk_gereedmeldingen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servicedesk_gereedmeldingen_gemeld_door_fkey"
+            columns: ["gemeld_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
             referencedColumns: ["id"]
           },
         ]

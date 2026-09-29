@@ -22,6 +22,7 @@ import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 import OpleveringView from '@/components/mobiel/dossier-tabs/OpleveringView'
 import OpnameView from '@/components/mobiel/dossier-tabs/OpnameView'
+import ServicedeskAfrondenView from '@/components/mobiel/servicedesk/ServicedeskAfrondenView'
 import { metTerug, veiligTerugPad } from '@/lib/mobiel/terug'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
@@ -74,6 +75,13 @@ export default async function MobielDossierTabPage(
     redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
   }
 
+  // Een servicedeskbon heeft geen Voortgang en geen Formulieren: bij een bon van een paar honderd
+  // euro bewaakt niemand een % gereed per code, en de afronding loopt via "Bon gereed melden" op
+  // de Info-tab. Zelfde keuze als op de desktop (SERVICEDESK_GROEPEN).
+  if ((actief === 'voortgang' || actief === 'formulieren') && isServicedesk) {
+    redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
+  }
+
   // Houtrot verschijnt alleen bij een opdracht-dossier waar de toggle aanstaat.
   const toggles = await getDossierToggles(id).catch(() => [])
   const houtrotAan =
@@ -104,7 +112,7 @@ export default async function MobielDossierTabPage(
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref={terug ?? '/m/dossiers'} />
       <DossierTabStrip
         id={id} active={actief} houtrotAan={houtrotAan} opnameAan={opnameAan}
-        isOpdracht={isOpdracht} isUitvoering={isUitvoering} terug={terug}
+        isOpdracht={isOpdracht} isUitvoering={isUitvoering} isServicedesk={isServicedesk} terug={terug}
       />
 
       {actief === 'informatie' && (
@@ -112,6 +120,13 @@ export default async function MobielDossierTabPage(
           <InformatieTab
             d={d} statusLabel={label} dossierId={id} magStatusWijzigen={magStatusWijzigen}
           />
+          {/* Gereed melden + pakbonnen: alleen op een servicedeskbon. Eigen Suspense, zodat de
+              infokaarten er al staan terwijl dit nog laadt. */}
+          {isServicedesk && (
+            <Suspense fallback={null}>
+              <ServicedeskAfrondenView dossierId={id} magBewerken={!isDossierAfgesloten(res.data)} />
+            </Suspense>
+          )}
           {/* Acties apart in Suspense: de takenquery mag de infokaarten niet ophouden. */}
           <Suspense fallback={null}><ActiesBlok dossierId={id} magBezoekStarten={isUitvoering} /></Suspense>
         </>
