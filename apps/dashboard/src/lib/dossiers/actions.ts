@@ -1934,7 +1934,14 @@ export type BewakingRegel = {
   inkoopMaterieelAfval: number         // Inkoop + Materieel + Afval — geboekt (overige inkoopfacturen)
   verwachteKosten: number      // 9. Alle verwachte-kosten-regels (contract-order-lines, incl. arbeid)
   geboekteKosten: number       // 10. Geboekte kosten = arbeid + inkoop mét inkoopfactuur
-  progress: number | null      // 11. % gereed
+  progress: number | null      // 11. % gereed (totaal over de kostensoorten, prognose-gewogen)
+  arbeidProgress: number | null // % gereed van alleen Arbeid (kostensoort 1) — voor het mobiele Voortgang-tab
+  /**
+   * De %-weging van de óverige kostensoorten (alles behalve Arbeid), zoals `progress` hem opbouwt.
+   * Nodig om een op mobiel ingevoerd arbeid-% om te rekenen naar het totale % van de code — zie
+   * `totaalMetArbeid` in lib/dossiers/voortgang-omrekenen.ts.
+   */
+  progressOverig: { som: number; gewicht: number; simpelSom: number; simpelN: number }
 }
 
 export type BewakingTotalen = {
@@ -1981,7 +1988,8 @@ const legeRegel = (): BewakingRegel => ({
   arbeidPrognose: 0, arbeidskosten: 0,
   onderaannemingPrognose: 0, onderaanneming: 0, materiaalPrognose: 0, materiaal: 0,
   inkoopMaterieelAfvalPrognose: 0, inkoopMaterieelAfval: 0,
-  verwachteKosten: 0, geboekteKosten: 0, progress: null,
+  verwachteKosten: 0, geboekteKosten: 0, progress: null, arbeidProgress: null,
+  progressOverig: { som: 0, gewicht: 0, simpelSom: 0, simpelN: 0 },
 })
 
 const UNCODED_HOOFDSTUK_ID = -1
@@ -2061,6 +2069,8 @@ export async function getDossierBewaking(
     const progressGewicht = new Map<string, number>()   // Σ prognose (per code)
     const progressSimpelSom = new Map<string, number>() // Σ progress  (fallback zonder prognose)
     const progressSimpelN = new Map<string, number>()   // aantal kostensoorten met % (fallback)
+    // Het Arbeid-% apart: het mobiele Voortgang-tab toont en bewerkt alleen arbeid.
+    const arbeidProgress = new Map<string, number>()
 
     /**
      * Bestaande regel ophalen of nieuwe aanmaken. Bewakingscodes zijn NIET uniek per project:
@@ -2138,6 +2148,14 @@ export async function getDossierBewaking(
         if (waarde > 0) {
           progressSom.set(key, (progressSom.get(key) ?? 0) + prog * waarde)
           progressGewicht.set(key, (progressGewicht.get(key) ?? 0) + waarde)
+        }
+        if (ct === 1) {
+          arbeidProgress.set(key, prog)
+        } else {
+          const o = r.progressOverig
+          o.simpelSom += prog
+          o.simpelN += 1
+          if (waarde > 0) { o.som += prog * waarde; o.gewicht += waarde }
         }
       }
     }
@@ -2229,6 +2247,8 @@ export async function getDossierBewaking(
         const n = progressSimpelN.get(key) ?? 0
         r.progress = n > 0 ? Math.round(((progressSimpelSom.get(key) ?? 0) / n) * 100) / 100 : null
       }
+      const arbeid = arbeidProgress.get(key)
+      r.arbeidProgress = arbeid != null ? Math.round(arbeid * 100) / 100 : null
     }
 
     // EVA-overlay: een in EVA ingevoerde % gereed prevaleert boven de Bouw7-waarde

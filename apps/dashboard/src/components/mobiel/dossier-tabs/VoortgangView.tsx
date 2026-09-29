@@ -1,5 +1,7 @@
 import React from 'react'
 import { getDossierBewaking } from '@/lib/dossiers/actions'
+import { isDossierBewerkbaar, magVoortgangWijzigen } from '@/lib/dossiers/guards'
+import WerkGereedInvoer from './WerkGereedInvoer'
 
 /**
  * Voortgang per bewakingscode (mobiel).
@@ -10,6 +12,9 @@ import { getDossierBewaking } from '@/lib/dossiers/actions'
  *
  * LET OP: `progress` uit `getDossierBewaking` staat AL in procenten (0–100),
  * niet in een fractie. Niet met 100 vermenigvuldigen.
+ *
+ * Wie een projectrol op het dossier heeft, kan de "Werk gereed" per code hier wijzigen
+ * (zie WerkGereedInvoer); voor de rest blijft het scherm alleen-lezen.
  *
  * Bewust géén grafiek-library: een eigen SVG-ring en CSS-balken schelen een
  * zware clientbundel op een telefoon, en zo blijft dit een server-component.
@@ -95,7 +100,12 @@ function Uren({ geboekt, prognose }: { geboekt: number; prognose: number }) {
 
 export default async function VoortgangView({ dossierId }: { dossierId: string }) {
   // De app is van de uitvoering: de kostengroep Correcties hoort hier nooit bij.
-  const data = await getDossierBewaking(dossierId, { verbergCorrecties: true }).catch(() => null)
+  const [data, magWijzigen, bewerkbaarDossier] = await Promise.all([
+    getDossierBewaking(dossierId, { verbergCorrecties: true }).catch(() => null),
+    magVoortgangWijzigen(dossierId).catch(() => false),
+    isDossierBewerkbaar(dossierId).catch(() => false),
+  ])
+  const bewerkbaar = magWijzigen && bewerkbaarDossier
 
   if (!data || !data.beschikbaar) {
     return (
@@ -142,13 +152,14 @@ export default async function VoortgangView({ dossierId }: { dossierId: string }
 
       {/* Per bewakingscode */}
       {regels.map((r, i) => {
-        const gereed = r.progress
+        // Mobiel gaat over arbeid: toon (en bewerk) het arbeid-%, niet het totaal van de code.
+        const gereed = r.arbeidProgress
         const urenPct = (r.prognoseUren ?? 0) > 0 ? (r.geboekteUren / r.prognoseUren) * 100 : null
         const mening = oordeel(gereed, urenPct)
         const urenKleur = urenPct != null && urenPct > 100 ? ROOD : '#5b6770'
 
         return (
-          <div key={r.code ?? i} style={{
+          <div key={`${r.hoofdstukId ?? 'x'}|${r.code ?? ''}|${i}`} style={{
             background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 16,
             padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
           }}>
@@ -161,14 +172,11 @@ export default async function VoortgangView({ dossierId }: { dossierId: string }
               )}
             </div>
 
-            {/* Werk gereed — effen groen */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#6b757c' }}>Werk gereed</span>
-                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--fg)' }}>{pctTekst(gereed)}</span>
-              </div>
-              <Balk pct={gereed} kleur={GROEN} />
-            </div>
+            {/* Werk gereed — effen groen; met projectrol aan te passen */}
+            <WerkGereedInvoer
+              dossierId={dossierId} bouw7Id={data.bouw7Id} code={r.code} naam={r.naam}
+              hoofdstukId={r.hoofdstukId} initial={gereed} bewerkbaar={bewerkbaar}
+            />
 
             {/* Uren — gestreept en grijs, zodat je hem niet met "gereed" verwart */}
             <div>

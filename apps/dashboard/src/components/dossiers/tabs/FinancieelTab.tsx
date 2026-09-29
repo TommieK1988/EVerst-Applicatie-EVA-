@@ -1,6 +1,7 @@
 import { Fragment, Suspense } from 'react'
 import { getDossierFinancieel, getDossierBewaking, type BewakingRegel } from '@/lib/dossiers/actions'
 import { magCorrecties } from '@/lib/dossiers/correctie-bewakingscode'
+import { magVoortgangWijzigen } from '@/lib/dossiers/guards'
 import { getResultaatPerCode } from '@/lib/dossiers/resultaat-per-code-laden'
 import type { ResultaatSoort, VerkoopGrondslag } from '@/lib/dossiers/resultaat-per-code'
 import { Badge, Card, CardHeader, CardBody, Skeleton, SkeletonCard } from '@/components/ui'
@@ -227,8 +228,9 @@ const BewakingRow = ({ r, dossierId, bouw7Id, bewerkbaar }: {
 async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?: DossierSectie }) {
   // De kostengroep Correcties alleen voor wie hem mag zien (Projectbureau/Administratie).
   const data = await getDossierBewaking(dossierId, { verbergCorrecties: !(await magCorrecties()) })
-  // Standopname per bewakingscode is alleen bij Opdrachten bewerkbaar.
-  const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id
+  // Standopname per bewakingscode is alleen bij Opdrachten bewerkbaar, en alleen voor wie een
+  // projectrol op het dossier heeft (zelfde check als in `bewaarVoortgang`).
+  const bewerkbaar = sectie === 'opdracht' && !!data.bouw7Id && (await magVoortgangWijzigen(dossierId))
 
   // Zonder cijfers blijft de tabel staan — koppen, een nulregel en een nultotaal — met de reden
   // eronder. "Nog niet opgehaald" is iets anders dan "geen codes"; alleen bij het eerste helpt

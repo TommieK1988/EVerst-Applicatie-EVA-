@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
-import { GeenToegangError } from '@/lib/auth/rechten'
+import { GeenToegangError, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { isDossierAfgesloten } from '@/components/dossiers/types'
 
 /**
@@ -73,4 +73,13 @@ export async function heeftProjectrol(
     .maybeSingle()
   if (!data) return false
   return PROJECTROL_KOLOMMEN.some(kolom => data[kolom] === medewerkerId)
+}
+
+/**
+ * Mag de ingelogde gebruiker de % gereed per bewakingscode van dit dossier wijzigen? Alleen wie een
+ * projectrol op het dossier heeft — die waarde stuurt in Bouw7 de prognose en de standopname.
+ */
+export async function magVoortgangWijzigen(dossierId: string | null | undefined): Promise<boolean> {
+  const medewerker = await getCurrentMedewerker()
+  return heeftProjectrol(dossierId, medewerker?.id)
 }

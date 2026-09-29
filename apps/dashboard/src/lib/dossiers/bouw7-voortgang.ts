@@ -111,10 +111,11 @@ async function resolvePslIds(
   bouw7Id: string | number,
   bewakingscode: string,
   hoofdstukId?: number | null,
+  kostensoorten: Bouw7CostTypeId[] = PSL_KOSTENSOORTEN,
 ): Promise<number[]> {
   const doel = bewakingscode.trim()
   const responses = await Promise.all(
-    PSL_KOSTENSOORTEN.map((ct) =>
+    kostensoorten.map((ct) =>
       client
         .getAthena<Bouw7ControlResponse>(`/project-control/${bouw7Id}/cost-type/${ct}/chapters?include_subprojects=false`)
         .catch(() => null),
@@ -146,6 +147,13 @@ export async function schrijfBouw7VoortgangCode(
   bewakingscode: string,
   pctGereed: number,
   hoofdstukId?: number | null,
+  /**
+   * `alleenArbeid`: schrijf alleen de Arbeid-PSL (kostensoort 1). Het mobiele Voortgang-tab vraagt
+   * een arbeid-%; de overige kostensoorten houden dan hun eigen %, en het totaal van de code
+   * verschuift alleen naar rato van de arbeidsprognose. Zonder deze vlag (desktop, Management)
+   * geldt het % voor de hele code en gaat het naar álle kostensoorten.
+   */
+  opts: { alleenArbeid?: boolean } = {},
 ): Promise<VoortgangWriteResult> {
   const pct = normaliseerPct(pctGereed)
   if (!BOUW7_VOORTGANG_WRITE) return { ok: true, skipped: true }
@@ -153,9 +161,15 @@ export async function schrijfBouw7VoortgangCode(
   try {
     const client = await getBouw7Client()
 
-    const pslIds = await resolvePslIds(client, bouw7Id, bewakingscode, hoofdstukId)
+    const kostensoorten: Bouw7CostTypeId[] = opts.alleenArbeid ? [1] : PSL_KOSTENSOORTEN
+    const pslIds = await resolvePslIds(client, bouw7Id, bewakingscode, hoofdstukId, kostensoorten)
     if (pslIds.length === 0) {
-      return { ok: false, error: `Bewakingscode "${bewakingscode.trim()}" niet gevonden in Bouw7; % gereed niet teruggeschreven.` }
+      return {
+        ok: false,
+        error: opts.alleenArbeid
+          ? `Bewakingscode "${bewakingscode.trim()}" heeft geen arbeid in Bouw7; % gereed niet teruggeschreven.`
+          : `Bewakingscode "${bewakingscode.trim()}" niet gevonden in Bouw7; % gereed niet teruggeschreven.`,
+      }
     }
 
     // Standopname op elke kostensoort-PSL van de code schrijven.

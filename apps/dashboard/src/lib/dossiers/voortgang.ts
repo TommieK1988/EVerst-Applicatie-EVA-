@@ -15,7 +15,9 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { schrijfBouw7VoortgangProject, schrijfBouw7VoortgangCode } from './bouw7-voortgang'
-import { assertDossierBewerkbaar } from './guards'
+import { assertDossierBewerkbaar, magVoortgangWijzigen } from './guards'
+import { getDossierBewaking } from './actions'
+import { totaalMetArbeid } from './voortgang-omrekenen'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 
 export type VoortgangNiveau = 'project' | 'bewakingscode'
@@ -36,10 +38,16 @@ export type BewaarVoortgangInput = {
   hoofdstukId?: number | null
   /** 0–100. */
   pctGereed: number
+  /**
+   * Mobiel Voortgang-tab: `pctGereed` is het % van alléén het arbeidsdeel van de code. In Bouw7 gaat
+   * het naar de Arbeid-kostensoort; EVA rekent het om naar het totale % van de code (overige
+   * kostensoorten houden hun %) en toont dat totaal op de desktop tot Bouw7 het bevestigt.
+   */
+  alleenArbeid?: boolean
 }
 
 export type BewaarVoortgangResult =
-  | { ok: true; bouw7: 'synced' | 'pending'; melding?: string }
+  | { ok: true; bouw7: 'synced' | 'pending'; melding?: string; /** Totaal-% van de code (bij `alleenArbeid`). */ totaal?: number }
   | { ok: false; error: string }
 
 /** Sla een % gereed op in EVA en zet 'm (best-effort) door naar Bouw7. */
@@ -48,11 +56,28 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
   const bewakingscode = niveau === 'bewakingscode' ? (input.bewakingscode ?? null) : null
   const hoofdstukId = niveau === 'bewakingscode' ? (input.hoofdstukId ?? null) : null
   const pct = Math.max(0, Math.min(100, Math.round(input.pctGereed * 100) / 100))
+  const alleenArbeid = niveau === 'bewakingscode' && input.alleenArbeid === true
 
   if (!bouw7Id) return { ok: false, error: 'Geen Bouw7-koppeling voor dit project.' }
   if (niveau === 'bewakingscode' && !bewakingscode) return { ok: false, error: 'Bewakingscode ontbreekt.' }
 
   await assertDossierBewerkbaar(dossierId)
+  if (niveau === 'bewakingscode' && !(await magVoortgangWijzigen(dossierId))) {
+    return { ok: false, error: 'Alleen wie een projectrol op dit dossier heeft, kan de % gereed per bewakingscode wijzigen.' }
+  }
+
+  // Arbeid-% -> totaal-% van de code. De EVA-overlay houdt altijd het totaal vast (dat is wat de
+  // desktop en Management tonen); alleen de Bouw7-write gaat per kostensoort.
+  let totaal = pct
+  if (alleenArbeid) {
+    if (!dossierId) return { ok: false, error: 'Dossier ontbreekt.' }
+    const bewaking = await getDossierBewaking(dossierId)
+    const regel = bewaking.hoofdstukken
+      .flatMap(h => h.regels)
+      .find(r => r.code === bewakingscode && (r.hoofdstukId ?? null) === hoofdstukId)
+    if (!regel) return { ok: false, error: `Bewakingscode "${bewakingscode}" niet gevonden in de projectbewaking.` }
+    totaal = totaalMetArbeid(regel, pct)
+  }
 
   const supabase = createAdminClient() as any
 
@@ -66,7 +91,7 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
         niveau,
         bewakingscode,
         hoofdstuk_id: hoofdstukId,
-        pct_gereed: pct,
+        pct_gereed: totaal,
         bron: 'eva',
         bouw7_sync_status: 'pending',
         bouw7_sync_fout: null,
@@ -80,7 +105,7 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
   const write =
     niveau === 'project'
       ? await schrijfBouw7VoortgangProject(bouw7Id, pct)
-      : await schrijfBouw7VoortgangCode(bouw7Id, bewakingscode!, pct, hoofdstukId)
+      : await schrijfBouw7VoortgangCode(bouw7Id, bewakingscode!, pct, hoofdstukId, { alleenArbeid })
 
   // 3. Sync-status bijwerken.
   const synced = write.ok && !write.skipped
@@ -106,11 +131,12 @@ export async function bewaarVoortgang(input: BewaarVoortgangInput): Promise<Bewa
   revalidatePath('/management/servicedesk')
   revalidatePath('/management/dashboard')
 
+  const extra = alleenArbeid ? { totaal } : {}
   return synced
-    ? { ok: true, bouw7: 'synced' }
+    ? { ok: true, bouw7: 'synced', ...extra }
     : write.ok
-      ? { ok: true, bouw7: 'pending', melding: 'Opgeslagen in EVA. Doorzetten naar Bouw7 volgt zodra de koppeling actief is.' }
-      : { ok: true, bouw7: 'pending', melding: `Opgeslagen in EVA. Bouw7 nog niet bijgewerkt: ${write.error}` }
+      ? { ok: true, bouw7: 'pending', melding: 'Opgeslagen in EVA. Doorzetten naar Bouw7 volgt zodra de koppeling actief is.', ...extra }
+      : { ok: true, bouw7: 'pending', melding: `Opgeslagen in EVA. Bouw7 nog niet bijgewerkt: ${write.error}`, ...extra }
 }
 
 export type VoortgangOverlay = {
