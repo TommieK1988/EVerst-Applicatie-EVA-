@@ -12,7 +12,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
-import { Card, CardHeader, CardBody } from '@/components/ui'
+import { Button, Card, CardHeader, CardBody } from '@/components/ui'
 import { UploadCloud } from 'lucide-react'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
 import {
@@ -38,6 +38,7 @@ import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
 import MarkdownVenster from './bestanden/MarkdownVenster'
 import OpenInVerkenner from './OpenInVerkenner'
+import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
 
 /**
  * Uploaden loopt via een server-action, en die heeft een maximale payload
@@ -207,18 +208,39 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   const [uploadVoortgang, setUploadVoortgang] = useState({ klaar: 0, totaal: 0 })
   // Elk kind-element vuurt zijn eigen dragenter/dragleave; tellen voorkomt geflikker.
   const sleepDiepte = useRef(0)
+  const kiezer = useRef<HTMLInputElement>(null)
 
-  const bevatBestanden = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+  // Slepen binnen de pagina zelf (een foto uit de galerij, geselecteerde tekst) is geen
+  // upload. `dragstart` vuurt alleen voor sleepacties die in dit document beginnen.
+  const sleeptVanuitPagina = useRef(false)
+  useEffect(() => {
+    const start = () => { sleeptVanuitPagina.current = true }
+    const eind = () => { sleeptVanuitPagina.current = false }
+    window.addEventListener('dragstart', start)
+    window.addEventListener('dragend', eind)
+    window.addEventListener('drop', eind)
+    return () => {
+      window.removeEventListener('dragstart', start)
+      window.removeEventListener('dragend', eind)
+      window.removeEventListener('drop', eind)
+    }
+  }, [])
+
+  // Bewust níét alleen sleepacties met `Files` toelaten. Een bijlage uit de nieuwe
+  // Outlook of Outlook in de browser komt binnen als link, niet als bestand; weigerden
+  // we die, dan kon je hem niet eens loslaten (verbodsteken) en wist niemand waarom.
+  // Nu mag hij neer en legt opDrop uit wat er aan de hand is.
+  const isUploadSleep = () => kanUploaden && !sleeptVanuitPagina.current
 
   function opDragEnter(e: React.DragEvent) {
-    if (!kanUploaden || !bevatBestanden(e)) return
+    if (!isUploadSleep()) return
     e.preventDefault()
     sleepDiepte.current++
     setSleept(true)
   }
 
   function opDragOver(e: React.DragEvent) {
-    if (!kanUploaden || !bevatBestanden(e)) return
+    if (!isUploadSleep()) return
     // Zonder preventDefault weigert de browser de drop en opent hij het bestand.
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
@@ -234,14 +256,38 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   }
 
   async function opDrop(e: React.DragEvent) {
-    if (!kanUploaden || !bevatBestanden(e)) return
+    if (!isUploadSleep()) return
     e.preventDefault()
     sleepDiepte.current = 0
     setSleept(false)
 
     const gesleept = Array.from(e.dataTransfer.files)
-    if (gesleept.length === 0) return
+    if (gesleept.length === 0) {
+      const soorten = Array.from(e.dataTransfer.types)
+      toast.error(
+        'Dit komt niet als bestand binnen — Outlook geeft hier alleen een verwijzing mee. ' +
+        'Sleep de bijlage eerst naar je bureaublad en van daar hierheen, of gebruik "Bestanden toevoegen".',
+        { duration: 9000 },
+      )
+      // Vastleggen wát er binnenkwam, zodat we kunnen zien welke mailprogramma's dit doen
+      // en of er een bruikbare bron in zit.
+      meldFoutVanuitBrowser(
+        new Error(`Sleepactie zonder bestand naar Bestanden-tab: ${soorten.join(', ') || '(geen soorten)'}`),
+        'bestanden-slepen',
+      )
+      return
+    }
+    await uploadBestanden(gesleept)
+  }
 
+  function opGekozen(e: React.ChangeEvent<HTMLInputElement>) {
+    const gekozen = Array.from(e.target.files ?? [])
+    // Leegmaken, anders vuurt onChange niet als je hetzelfde bestand nog eens kiest.
+    e.target.value = ''
+    if (gekozen.length) void uploadBestanden(gekozen)
+  }
+
+  async function uploadBestanden(gesleept: File[]) {
     // Te groot voor één server-action eruit filteren mét naam. Zonder deze check
     // krijgt de gebruiker een nietszeggende netwerkfout terug.
     const teGroot = gesleept.filter(b => b.size > MAX_BESTAND_BYTES)
@@ -320,15 +366,16 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
       {/* Lijst links, foto's rechts — elk de helft. Het fotoblok blijft ook staan als
           er geen foto's zijn, zodat de indeling niet verspringt. Onder lg stapelen ze. */}
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <Card
-          className="relative"
-          onDragEnter={opDragEnter}
-          onDragOver={opDragOver}
-          onDragLeave={opDragLeave}
-          onDrop={opDrop}
-        >
-          {(sleept || uploadt) && (
+      {/* De hele lijst-plus-foto's is één dropzone: waar je iets loslaat, lijst of galerij,
+          maakt niet uit — het landt toch in dezelfde SharePoint-map. */}
+      <div
+        className="relative grid items-start gap-5 lg:grid-cols-2"
+        onDragEnter={opDragEnter}
+        onDragOver={opDragOver}
+        onDragLeave={opDragLeave}
+        onDrop={opDrop}
+      >
+        {(sleept || uploadt) && (
             <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[10px] border-2 border-dashed border-brand-400 bg-white/85">
               <span className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
                 <UploadCloud className="h-4 w-4" />
@@ -338,6 +385,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
               </span>
             </div>
           )}
+        <Card>
           <SharePointMapPicker
             dossierId={dossierId}
             open={pickerOpen}
@@ -349,12 +397,24 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           <CardHeader>
             <div className="flex items-center justify-between">
               <span>Bestanden</span>
-              <span className="text-[11px] font-normal text-neutral-400">
-                {[
-                  inApp.size > 0 ? `${inApp.size} in de app` : null,
-                  inPortaal && inPortaal.size > 0 ? `${inPortaal.size} in het portaal` : null,
-                ].filter(Boolean).join(' · ')}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-normal text-neutral-400">
+                  {[
+                    inApp.size > 0 ? `${inApp.size} in de app` : null,
+                    inPortaal && inPortaal.size > 0 ? `${inPortaal.size} in het portaal` : null,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+                {/* Slepen lukt niet vanuit elk mailprogramma; kiezen werkt altijd. */}
+                {kanUploaden && (
+                  <>
+                    <input ref={kiezer} type="file" multiple hidden onChange={opGekozen} />
+                    <Button variant="ghost" size="sm" disabled={uploadt} onClick={() => kiezer.current?.click()}>
+                      <UploadCloud className="h-3.5 w-3.5" />
+                      Bestanden toevoegen
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardBody style={{ padding: 0 }}>
@@ -383,7 +443,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                     />
                     {kanUploaden && (
                       <p className="mt-1.5 text-[10.5px] text-neutral-400">
-                        Sleep bestanden hierheen om ze in de SharePoint-dossiermap te zetten.
+                        Sleep bestanden hierheen of gebruik "Bestanden toevoegen" om ze in de SharePoint-dossiermap te zetten.
                       </p>
                     )}
                   </div>
