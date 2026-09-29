@@ -118,6 +118,47 @@ describe('berekenResultaatPerCode', () => {
     expect(r.totaal).toMatchObject({ verkoop: 11000, kosten: 8000, resultaat: 3000 })
   })
 
+  it('zet meerwerk zonder eigen code onder de gekoppelde kostencode', () => {
+    const r = berekenResultaatPerCode(basis({
+      codes: [{ code: 'HR.A', naam: 'Houtrot', prognose: 1800, geboekt: 1500, begroot: 0, meerwerk: 2000 }],
+      meerwerk: [
+        meerwerk({ bewakingscode: null, kosten_bewakingscode: 'HR.A', bedrag_excl_btw: 1500 }),
+        meerwerk({ bewakingscode: null, kosten_bewakingscode: 'HR.A', bedrag_excl_btw: 1000 }),
+      ],
+      aanneemsomBasis: 5000,
+    }))
+    expect(r.meerwerkZonderCode).toBe(0)
+    expect(r.regels.find(x => x.code === 'HR.A')).toMatchObject({
+      soort: 'meerwerk', naam: 'Houtrot', verkoop: 2500, kosten: 1800, resultaat: 700, kostenAandeel: null,
+    })
+    // De code zit niet meer in de verzamelregel.
+    expect(r.regels.find(x => x.soort === 'aanneemsom')).toMatchObject({ verkoop: 5000, kosten: 0 })
+  })
+
+  it('verdeelt een code met aanneemsom- én meerwerkbudget naar verhouding', () => {
+    const r = berekenResultaatPerCode(basis({
+      // 3000 begroot + 1000 meerwerk → een kwart van de kosten is meerwerk.
+      codes: [{ code: 'GEVEL.A', naam: null, prognose: 4000, geboekt: 2000, begroot: 3000, meerwerk: 1000 }],
+      meerwerk: [meerwerk({ bewakingscode: null, kosten_bewakingscode: 'GEVEL.A', bedrag_excl_btw: 1400 })],
+      aanneemsomBasis: 3600,
+    }))
+    expect(r.regels.find(x => x.code === 'GEVEL.A')).toMatchObject({
+      kosten: 1000, geboekteKosten: 500, resultaat: 400, kostenAandeel: 0.25,
+    })
+    expect(r.regels.find(x => x.soort === 'aanneemsom')).toMatchObject({ kosten: 3000, geboekteKosten: 1500, resultaat: 600 })
+    expect(r.totaal).toMatchObject({ verkoop: 5000, kosten: 4000, resultaat: 1000 })
+  })
+
+  it('rekent gekoppeld regiemeerwerk niet door op de kosten van die code', () => {
+    const r = berekenResultaatPerCode(basis({
+      codes: [{ code: 'HR.A', naam: null, prognose: 900, geboekt: 900 }],
+      meerwerk: [meerwerk({ bewakingscode: null, kosten_bewakingscode: 'HR.A', afrekenwijze: 'regie', mandaat_excl_btw: 1200 })],
+      verkoopPerCode: new Map([['HR.A', 5000]]),
+      inkoopPerCode: new Map([['HR.A', 4000]]),
+    }))
+    expect(r.regels.find(x => x.code === 'HR.A')).toMatchObject({ verkoop: 1200, grondslag: 'mandaat' })
+  })
+
   it('laat de aanneemsomregel weg op een regiebon', () => {
     const r = berekenResultaatPerCode(basis({
       codes: [{ code: 'RW01', naam: 'Regie', prognose: 1000, geboekt: 1000 }],

@@ -32,6 +32,11 @@ export type ResultaatCodeRegel = {
   resultaat: number
   /** resultaat ÷ verkoop in %; null zonder verkoop. */
   margePct: number | null
+  /**
+   * Deel van de kosten van de code dat bij deze regel hoort, als de code ook aanneemsomwerk draagt
+   * (0–1). null = de hele code. De rest staat in de aanneemsomregel.
+   */
+  kostenAandeel: number | null
 }
 
 export type ResultaatPerCode = {
@@ -41,8 +46,15 @@ export type ResultaatPerCode = {
   meerwerkZonderCode: number
 }
 
-/** Eén bewakingscode uit de Bouw7-bewaking (al opgeteld over de hoofdstukken). */
-export type CodeKosten = { code: string; naam: string | null; prognose: number; geboekt: number }
+/**
+ * Eén bewakingscode uit de Bouw7-bewaking (al opgeteld over de hoofdstukken). `begroot` en
+ * `meerwerk` zijn de twee budgetdelen in Bouw7; samen bepalen ze hoe de kosten van een code die
+ * zowel aanneemsom- als meerwerk draagt worden verdeeld.
+ */
+export type CodeKosten = {
+  code: string; naam: string | null; prognose: number; geboekt: number
+  begroot?: number; meerwerk?: number
+}
 
 export type StelpostInvoer = {
   bewakingscode: string | null
@@ -67,6 +79,8 @@ export type MeerwerkInvoer = {
   hoeveelheid_werkelijk: number | null
   mandaat_excl_btw: number | null
   opdracht_onderdeel_id: string | null
+  /** Bestaande code waar de kosten staan, voor meerwerk zonder eigen `bewakingscode`. */
+  kosten_bewakingscode?: string | null
 }
 
 export type ResultaatInvoer = {
@@ -185,13 +199,17 @@ export function berekenResultaatPerCode(invoer: ResultaatInvoer): ResultaatPerCo
 
     let verkoop: number
     let grondslag: VerkoopGrondslag
+    // Een gekoppelde code (geen eigen code) rekent niet op de geboekte kosten van die code: daar kan
+    // ook aanneemsomwerk op staan. Hij telt dus zoals zonder code, alleen onder die code.
+    const code = m.bewakingscode || null
+    const kostencode = code ?? (m.kosten_bewakingscode || null)
     const opGeboekteKosten = m.afrekenwijze === 'regie'
       || (m.is_stelpost === true && m.stelpost_grondslag === 'geboekte_kosten')
     if (m.is_stelpost && m.stelpost_grondslag === 'eenheidsprijzen') {
       verkoop = getal(m.eenheidsprijs) * getal(m.hoeveelheid_werkelijk)
       grondslag = 'eenheidsprijs'
     } else if (opGeboekteKosten) {
-      verkoop = m.bewakingscode ? doorgerekend(m.bewakingscode, null) : 0
+      verkoop = code ? doorgerekend(code, null) : 0
       grondslag = 'doorgerekend'
       // Zelfde regel als `metMandaat`: zolang er minder verwacht wordt, is het toegezegde bedrag
       // de beste schatting van de opdrachtwaarde.
@@ -204,19 +222,36 @@ export function berekenResultaatPerCode(invoer: ResultaatInvoer): ResultaatPerCo
       grondslag = 'vast'
     }
 
-    if (!m.bewakingscode) { meerwerkZonderCode += verkoop; continue }
-    voegToe(m.bewakingscode, m.omschrijving, 'meerwerk', grondslag, verkoop)
+    if (!kostencode) { meerwerkZonderCode += verkoop; continue }
+    voegToe(kostencode, m.omschrijving, 'meerwerk', grondslag, verkoop)
+  }
+
+  // Een meerwerkcode die in Bouw7 óók aanneemsombudget draagt (bv. HR.A met begroting én
+  // meerwerk): alleen het meerwerkdeel hoort bij de meerwerkregel, naar verhouding van de twee
+  // budgetten. Het aanneemsomdeel blijft in de verzamelregel, bij de aanneemsom waar het hoort.
+  const aandeelVan = (code: string, soort: ResultaatSoort): number | null => {
+    if (soort !== 'meerwerk') return null
+    const k = kostenPerCode.get(code)
+    const begroot = Math.max(0, k?.begroot ?? 0)
+    const meerwerk = Math.max(0, k?.meerwerk ?? 0)
+    if (begroot <= 0 || meerwerk <= 0) return null
+    return meerwerk / (begroot + meerwerk)
   }
 
   const regels: ResultaatCodeRegel[] = []
+  const restAandeel = new Map<string, number>()
   for (const [code, v] of perCode) {
     const k = kostenPerCode.get(code)
-    const kosten = rond(verwachteKosten(k))
+    const aandeel = aandeelVan(code, v.soort)
+    const deel = aandeel ?? 1
+    if (aandeel != null) restAandeel.set(code, 1 - aandeel)
+    const kosten = rond(verwachteKosten(k) * deel)
     const resultaat = rond(v.verkoop - kosten)
     regels.push({
       code, naam: k?.naam ?? v.naam, soort: v.soort, grondslag: v.grondslag,
-      verkoop: v.verkoop, kosten, geboekteKosten: rond(k?.geboekt ?? 0),
+      verkoop: v.verkoop, kosten, geboekteKosten: rond((k?.geboekt ?? 0) * deel),
       resultaat, margePct: margeVan(resultaat, v.verkoop),
+      kostenAandeel: aandeel == null ? null : rond(aandeel * 10000) / 10000,
     })
   }
   const volgorde: Record<ResultaatSoort, number> = { regie: 0, stelpost: 1, meerwerk: 2, aanneemsom: 3 }
@@ -224,16 +259,20 @@ export function berekenResultaatPerCode(invoer: ResultaatInvoer): ResultaatPerCo
 
   // Verzamelregel: alle codes zonder eigen verkoop, tegen de aanneemsom. Zonder aanneemsom (een
   // regiebon) is er niets om ze tegen af te zetten; dan tonen we alleen wat er los aan meerwerk is.
-  const overig = invoer.codes.filter(c => !perCode.has(c.code))
-  const overigeKosten = rond(overig.reduce((s, c) => s + verwachteKosten(c), 0))
-  const overigGeboekt = rond(overig.reduce((s, c) => s + c.geboekt, 0))
+  // Per code het deel dat níet bij een eigen regel hoort: hele codes zonder regel, plus het
+  // aanneemsomdeel van gedeelde meerwerkcodes.
+  const overig = invoer.codes
+    .map(c => ({ c, deel: perCode.has(c.code) ? (restAandeel.get(c.code) ?? 0) : 1 }))
+    .filter(x => x.deel > 0)
+  const overigeKosten = rond(overig.reduce((s, x) => s + verwachteKosten(x.c) * x.deel, 0))
+  const overigGeboekt = rond(overig.reduce((s, x) => s + x.c.geboekt * x.deel, 0))
   const overigeVerkoop = rond((invoer.aanneemsomBasis ?? 0) + losseVerkoop + meerwerkZonderCode)
   if (invoer.aanneemsomBasis != null || overigeVerkoop !== 0) {
     const resultaat = rond(overigeVerkoop - overigeKosten)
     regels.push({
       code: null, naam: 'Aanneemsom (overige codes)', soort: 'aanneemsom', grondslag: 'aanneemsom',
       verkoop: overigeVerkoop, kosten: overigeKosten, geboekteKosten: overigGeboekt,
-      resultaat, margePct: margeVan(resultaat, overigeVerkoop),
+      resultaat, margePct: margeVan(resultaat, overigeVerkoop), kostenAandeel: null,
     })
   }
 

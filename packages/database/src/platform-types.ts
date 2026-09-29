@@ -575,6 +575,12 @@ export type MeerwerkRegel = {
   factuurreferentie: string | null
   termijn_wijze: MeerwerkTermijnWijze | null
   bewakingscode: string | null
+  /**
+   * Bestaande Bouw7-code waarop de kosten van dit meerwerk staan, voor meerwerk zónder eigen
+   * `bewakingscode` (vooral uit Bouw7 geïmporteerd). Alleen voor het resultaat per code op het
+   * Financieel-tab: geen kostengroep, geen nacalculatie, geen Bouw7-write. EVA-veld.
+   */
+  kosten_bewakingscode: string | null
   bouw7_security_code_id: number | null
   bouw7_chapter_id: number | null
   quote_id: string | null

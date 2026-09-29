@@ -11,6 +11,7 @@ import {
   verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
+import { getMeerwerkKostencodes, koppelMeerwerkKostencode, type MeerwerkKostencode } from '@/lib/dossiers/meerwerk-kostencode'
 import { getOpdrachtOverzicht, verrekenStelpost } from '@/lib/dossiers/opdracht-onderdelen'
 import type { OpdrachtOverzicht } from '@/lib/dossiers/opdracht-onderdelen'
 import AfrekenstandBlok from './AfrekenstandBlok'
@@ -110,6 +111,8 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
   /** Opdracht-samenstelling (aanneemsom + stelposten) voor de afrekenstand; null = niet beschikbaar. */
   const [overzicht, setOverzicht] = useState<OpdrachtOverzicht | null>(null)
   const [zoek, setZoek] = useState('')
+  /** Bestaande projectcodes voor "kosten staan op …" bij meerwerk zonder eigen code. */
+  const [kostencodes, setKostencodes] = useState<MeerwerkKostencode[]>([])
 
   /** Elk los woord moet ergens in de regel voorkomen ("dak mw03" → regel MW03 over het dak). */
   const zichtbareRegels = useMemo(() => {
@@ -125,6 +128,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     // Stelposten en aanneemsom horen bij hetzelfde beeld, maar mogen het meerwerk niet ophouden:
     // dit overzicht raakt Bouw7 aan en is daarom trager dan de meerwerkregels zelf.
     getOpdrachtOverzicht(dossierId).then(setOverzicht).catch(() => setOverzicht(null))
+    getMeerwerkKostencodes(dossierId).then(setKostencodes).catch(() => setKostencodes([]))
   }
   useEffect(herlaad, [dossierId])
 
@@ -193,6 +197,14 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
     if (r.melding) toast(r.melding, { icon: '✅', duration: 8000 })
     herlaad(); router.refresh()
+  }
+
+  async function koppelKostencode(regel: MeerwerkRegelView, code: string | null) {
+    setBezig(true)
+    const r = await koppelMeerwerkKostencode(regel.id, code)
+    setBezig(false)
+    if (!r.ok) { toast.error(r.error); return }
+    herlaad()
   }
 
   async function naarBouw7(regel: MeerwerkRegelView) {
@@ -506,9 +518,33 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                       )}
                     </td>
                     <td className="py-2 px-2 text-neutral-700">
-                      {r.bewakingscode ?? '—'}
-                      {r.bewakingscode && r.bouw7_chapter_id == null && (
-                        <span className="ml-1 text-[10px] text-warning-700">(nog niet in Bouw7)</span>
+                      {r.bewakingscode ? (
+                        <>
+                          {r.bewakingscode}
+                          {r.bouw7_chapter_id == null && (
+                            <span className="ml-1 text-[10px] text-warning-700">(nog niet in Bouw7)</span>
+                          )}
+                        </>
+                      ) : readOnly || kostencodes.length === 0 ? (
+                        r.kosten_bewakingscode
+                          ? <span title="Kosten staan op deze bestaande code">{r.kosten_bewakingscode}</span>
+                          : '—'
+                      ) : (
+                        // Geen eigen code (vaak uit Bouw7 geïmporteerd): kies op welke bestaande code
+                        // de kosten staan. Alleen voor het resultaat per code op het Financieel-tab.
+                        <select className={`${selectCls} max-w-[160px]`} value={r.kosten_bewakingscode ?? ''} disabled={bezig}
+                          title="Op welke bewakingscode staan de kosten van dit meerwerk?"
+                          onChange={e => koppelKostencode(r, e.target.value || null)}>
+                          <option value="">Kosten op code…</option>
+                          {r.kosten_bewakingscode && !kostencodes.some(c => c.code === r.kosten_bewakingscode) && (
+                            <option value={r.kosten_bewakingscode}>{r.kosten_bewakingscode}</option>
+                          )}
+                          {kostencodes.map(c => (
+                            <option key={c.code} value={c.code}>
+                              {c.code}{c.naam ? ` — ${c.naam}` : ''}{c.meerwerk > 0 ? ' (meerwerk)' : ''}
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </td>
                     <td className="py-2 px-2">

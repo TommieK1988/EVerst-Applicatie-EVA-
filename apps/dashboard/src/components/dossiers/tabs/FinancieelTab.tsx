@@ -474,7 +474,12 @@ async function ResultaatPerCodeBlok({ dossierId }: { dossierId: string }) {
                 const badge = SOORT_BADGE[r.soort]
                 return (
                   <tr key={`${r.soort}-${r.code ?? 'overig'}`}>
-                    <CodeCel code={r.code} naam={r.naam} />
+                    <CodeCel
+                      code={r.code}
+                      naam={r.kostenAandeel != null
+                        ? `${r.naam ?? ''} (${fmtMarge(r.kostenAandeel * 100)} van de kosten)`.trim()
+                        : r.naam}
+                    />
                     <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--neutral-100, #f4f7f8)' }}>
                       <Badge size="sm" tone={badge.tone}>{badge.label}</Badge>
                     </td>
@@ -515,7 +520,9 @@ async function ResultaatPerCodeBlok({ dossierId }: { dossierId: string }) {
           hoeveelheid, of bij regie en nacalculatie de geboekte verkoopwaarde plus de nog te verwachten
           kosten, doorgerekend tegen dezelfde verhouding (minimaal het mandaat); ga met de muis over
           een verkoopbedrag om te zien welke. Alle codes zonder eigen verkoop staan samen tegen de aanneemsom
-          {data.meerwerkZonderCode !== 0 && <>, inclusief {fmt(data.meerwerkZonderCode, true)} meerwerk zonder eigen bewakingscode</>}.
+          {data.meerwerkZonderCode !== 0 && <>, inclusief {fmt(data.meerwerkZonderCode, true)} meerwerk zonder
+          bewakingscode. Kies op het tabblad Meerwerk op welke code de kosten staan, dan krijgt het een eigen regel</>}.
+          Draagt een code zowel aanneemsom- als meerwerkbudget, dan verdelen we de kosten naar verhouding van die twee.
         </div>
       </CardBody>
     </Card>

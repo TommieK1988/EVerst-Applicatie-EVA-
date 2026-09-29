@@ -38,7 +38,7 @@ export async function getResultaatPerCode(
     getFactureerbareCodes(dossierId).catch(() => []),
     supabase
       .from('meerwerk_regels')
-      .select('bewakingscode, omschrijving, status, afrekenwijze, is_stelpost, stelpost_grondslag, bedrag_excl_btw, eenheidsprijs, hoeveelheid_werkelijk, mandaat_excl_btw, opdracht_onderdeel_id')
+      .select('bewakingscode, omschrijving, status, afrekenwijze, is_stelpost, stelpost_grondslag, bedrag_excl_btw, eenheidsprijs, hoeveelheid_werkelijk, mandaat_excl_btw, opdracht_onderdeel_id, kosten_bewakingscode')
       .eq('dossier_id', dossierId),
     standaardOpslagPct(supabase),
   ])
@@ -48,9 +48,11 @@ export async function getResultaatPerCode(
   for (const h of bewaking.hoofdstukken) {
     for (const r of h.regels) {
       if (!r.code) continue
-      const c = codes.get(r.code) ?? { code: r.code, naam: r.naam, prognose: 0, geboekt: 0 }
+      const c = codes.get(r.code) ?? { code: r.code, naam: r.naam, prognose: 0, geboekt: 0, begroot: 0, meerwerk: 0 }
       c.prognose += r.prognose
       c.geboekt += r.geboekteKosten
+      c.begroot = (c.begroot ?? 0) + r.begroot
+      c.meerwerk = (c.meerwerk ?? 0) + r.meerwerk
       codes.set(r.code, c)
     }
   }
@@ -77,8 +79,7 @@ export async function getResultaatPerCode(
   const uitkomst = berekenResultaatPerCode({
     codes: [...codes.values()],
     stelposten,
-    // mandaat_excl_btw ontbreekt nog in de gegenereerde types; de kolom bestaat wel.
-    meerwerk: (meerwerkRes.data ?? []) as unknown as MeerwerkInvoer[],
+    meerwerk: (meerwerkRes.data ?? []) as MeerwerkInvoer[],
     regieCode: factureerbaar.find(f => f.bron === 'regie')?.bewakingscode ?? null,
     verkoopPerCode,
     inkoopPerCode,

@@ -9321,6 +9321,8 @@ export type Database = {
           besluit_op: string | null
           besluit_opmerking: string | null
           bewakingscode: string | null
+          mandaat_excl_btw: number | null
+          kosten_bewakingscode: string | null
           bouw7_bron_sleutel: string | null
           bouw7_chapter_id: number | null
           bouw7_line_id: number | null
@@ -9363,6 +9365,8 @@ export type Database = {
           besluit_op?: string | null
           besluit_opmerking?: string | null
           bewakingscode?: string | null
+          mandaat_excl_btw?: number | null
+          kosten_bewakingscode?: string | null
           bouw7_bron_sleutel?: string | null
           bouw7_chapter_id?: number | null
           bouw7_line_id?: number | null
@@ -9405,6 +9409,8 @@ export type Database = {
           besluit_op?: string | null
           besluit_opmerking?: string | null
           bewakingscode?: string | null
+          mandaat_excl_btw?: number | null
+          kosten_bewakingscode?: string | null
           bouw7_bron_sleutel?: string | null
           bouw7_chapter_id?: number | null
           bouw7_line_id?: number | null
