@@ -45,7 +45,6 @@ function formatDatum(iso: string | null): string {
 
 /** Servicedesk gebruikt een eigen substatus-veld; overige secties gaan via getDossierSubstatus. */
 function actieveSubstatus(d: DossierRij, sectie?: DossierSectie): string {
-  if (sectie === 'servicedesk') return d.servicedesk_substatus ?? getDossierSubstatus(d)
   return getDossierSubstatus(d)
 }
 

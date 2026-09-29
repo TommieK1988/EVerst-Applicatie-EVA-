@@ -105,13 +105,9 @@ export default function AntwoordVenster({
   return (
     <Dialog open={open} onOpenChange={o => { if (!o && !bezig) onSluit() }}>
       <DialogContent className="max-w-2xl">
-        {/*
-          De titel en de omschrijving in één blok: `DialogHeader` is een flexbox met
-          `justify-between`, bedoeld voor tekst links en een knop rechts. Twee losse
-          kinderen komen dus náást elkaar op één regel te staan.
-        */}
         <DialogHeader>
-          <div>
+          {/* Één blok, met ruimte voor de sluitknop — zie dialog.tsx. */}
+          <div className="pr-8">
             <DialogTitle>Beantwoorden</DialogTitle>
             <DialogDescription>
               Het antwoord gaat vanuit je eigen mailadres en komt in je Verzonden items te staan.

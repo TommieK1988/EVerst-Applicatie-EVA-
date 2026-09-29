@@ -131,10 +131,12 @@ export function KlantportaalBlok({ dossierId }: { dossierId: string }) {
       >
         <DialogContent size="xl">
           <DialogHeader>
-            <DialogTitle>Klantportaal</DialogTitle>
-            <DialogDescription>
-              Wat de opdrachtgever van dit dossier ziet, en wie er mag meekijken.
-            </DialogDescription>
+            <div className="pr-8">
+              <DialogTitle>Klantportaal</DialogTitle>
+              <DialogDescription>
+                Wat de opdrachtgever van dit dossier ziet, en wie er mag meekijken.
+              </DialogDescription>
+            </div>
           </DialogHeader>
           <DialogBody>
             {volledig

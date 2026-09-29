@@ -161,11 +161,13 @@ export default function TermijnschemaVenster({ dossierId, open, onSluit, onKlaar
     <Dialog open onOpenChange={v => { if (!v && !bezig) onSluit() }}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Termijnen aanmaken</DialogTitle>
-          <DialogDescription>
-            Het schema wordt als termijnstaat in Bouw7 gezet. Er wordt nog niets gefactureerd —
-            dat doe je daarna met &ldquo;Klaarzetten in Bouw7&rdquo;.
-          </DialogDescription>
+          <div className="pr-8">
+            <DialogTitle>Termijnen aanmaken</DialogTitle>
+            <DialogDescription>
+              Het schema wordt als termijnstaat in Bouw7 gezet. Er wordt nog niets gefactureerd —
+              dat doe je daarna met &ldquo;Klaarzetten in Bouw7&rdquo;.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <DialogBody>

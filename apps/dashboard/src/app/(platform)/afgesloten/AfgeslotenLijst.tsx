@@ -29,7 +29,7 @@ function routeSegmentVoor(d: DossierRij): string {
  * en zou voor een bon de (lege) opdracht-substatus teruggeven.
  */
 function afsluitSubstatus(d: DossierRij): string {
-  return d.servicedesk_substatus ?? getDossierSubstatus(d)
+  return getDossierSubstatus(d)
 }
 
 /** Label + kleur per eindstatus (gereed/afgesloten/verloren/vervallen/afgewezen). */

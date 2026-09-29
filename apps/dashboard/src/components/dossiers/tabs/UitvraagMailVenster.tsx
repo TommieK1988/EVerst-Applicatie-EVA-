@@ -79,15 +79,17 @@ export default function UitvraagMailVenster({ uitvraagId, dossierId, onSluit, on
     <Dialog open={open} onOpenChange={o => { if (!o && !bezig) onSluit() }}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>
-            {isRappel ? 'Herinnering sturen' : 'Prijsopgave aanvragen'}
-            {concept?.partijNaam ? ` — ${concept.partijNaam}` : ''}
-          </DialogTitle>
-          <DialogDescription>
-            {isRappel
-              ? 'Herinner deze partij aan de prijsopgave die nog openstaat.'
-              : 'Vraag deze partij om een prijs voor het gekozen onderdeel.'}
-          </DialogDescription>
+          <div className="pr-8">
+            <DialogTitle>
+              {isRappel ? 'Herinnering sturen' : 'Prijsopgave aanvragen'}
+              {concept?.partijNaam ? ` — ${concept.partijNaam}` : ''}
+            </DialogTitle>
+            <DialogDescription>
+              {isRappel
+                ? 'Herinner deze partij aan de prijsopgave die nog openstaat.'
+                : 'Vraag deze partij om een prijs voor het gekozen onderdeel.'}
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <DialogBody>

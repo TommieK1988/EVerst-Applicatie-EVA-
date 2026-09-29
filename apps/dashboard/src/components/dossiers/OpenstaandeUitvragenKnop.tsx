@@ -124,16 +124,18 @@ export default function OpenstaandeUitvragenKnop() {
         {/* xl is 920px; met dossiernaam + datums naast elkaar is dat krap, dus iets breder. */}
         <DialogContent size="xl" style={{ maxWidth: 'min(1100px, 94vw)', width: '94vw' }}>
           <DialogHeader>
-            <DialogTitle>
-              {stap === 'selectie' && 'Openstaand bij onderaannemers en leveranciers'}
-              {stap === 'bericht'  && `Herinnering aan ${geselecteerd.length} partij(en)`}
-              {stap === 'verslag'  && 'Verstuurd'}
-            </DialogTitle>
-            <DialogDescription>
-              {stap === 'selectie' && 'Kies de partijen die je aan hun prijsopgave wilt herinneren.'}
-              {stap === 'bericht'  && 'Controleer de tekst en de adressen voordat je verstuurt.'}
-              {stap === 'verslag'  && 'Wat er is verstuurd en wat niet.'}
-            </DialogDescription>
+            <div className="pr-8">
+              <DialogTitle>
+                {stap === 'selectie' && 'Openstaand bij onderaannemers en leveranciers'}
+                {stap === 'bericht'  && `Herinnering aan ${geselecteerd.length} partij(en)`}
+                {stap === 'verslag'  && 'Verstuurd'}
+              </DialogTitle>
+              <DialogDescription>
+                {stap === 'selectie' && 'Kies de partijen die je aan hun prijsopgave wilt herinneren.'}
+                {stap === 'bericht'  && 'Controleer de tekst en de adressen voordat je verstuurt.'}
+                {stap === 'verslag'  && 'Wat er is verstuurd en wat niet.'}
+              </DialogDescription>
+            </div>
           </DialogHeader>
 
           <DialogBody>

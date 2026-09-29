@@ -112,8 +112,8 @@ export type DossierRij = Dossier & {
  * Servicedesk eerst, en dat is geen detail. Een bon heeft hóófdstatus 'aanvraag' met
  * een eigen ladder ernaast; wie alleen op hoofdstatus kiest, krijgt voor elke bon
  * 'nieuw' terug -- ook voor één die allang is uitgevoerd. Elke aanroeper had daar zijn
- * eigen omweg voor (`d.servicedesk_substatus ?? getDossierSubstatus(d)`); die blijven
- * werken en zijn nu overbodig.
+ * eigen omweg voor (`d.servicedesk_substatus ?? getDossierSubstatus(d)`) -- zes pleisters
+ * op één lek. Die zijn opgeruimd; de helper doet het nu zelf.
  */
 export function getDossierSubstatus(dossier: Dossier): DossierSubstatus {
   if (dossier.servicedesk_substatus) return dossier.servicedesk_substatus as DossierSubstatus

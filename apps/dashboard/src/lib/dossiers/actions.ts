@@ -358,12 +358,6 @@ async function haalDossierLijst(
   }
 }
 
-export async function getDossiers(hoofdstatus: Hoofdstatus): Promise<DossierResult> {
-  return haalDossierLijst(q => q
-    .eq('hoofdstatus', hoofdstatus)
-    .order('created_at', { ascending: false }))
-}
-
 /**
  * Nawerktijd van de kolom "Financieel gereed": zolang een dossier binnen dit venster gereed is
  * gemeld blijft het op het bord staan, daarna verhuist het naar Afgesloten. Zeven dagen omdat

@@ -52,10 +52,10 @@ describe('getDossierSubstatus: de servicedeskladder gaat voor', () => {
     }))).toBe('onderhanden')
   })
 
-  it('de omweg die aanroepers zelf hadden geeft nu hetzelfde', () => {
-    // Zes plekken deden `d.servicedesk_substatus ?? getDossierSubstatus(d)`. Die blijven
-    // werken; deze test legt vast dat ze overbodig zijn geworden en niet iets ánders doen.
-    const d = bon({ servicedesk_substatus: 'uitgezet' })
-    expect(d.servicedesk_substatus ?? getDossierSubstatus(d)).toBe(getDossierSubstatus(d))
+  it('kiest de servicedeskladder ook als de aanvraag-substatus gevuld is', () => {
+    // Een bon dráágt altijd allebei: hoofdstatus 'aanvraag' met aanvraag_substatus 'nieuw',
+    // én de servicedesk-substatus. De tweede wint. Dit was de kern van de fout.
+    const d = bon({ aanvraag_substatus: 'nieuw', servicedesk_substatus: 'uitgezet' })
+    expect(getDossierSubstatus(d)).toBe('uitgezet')
   })
 })
