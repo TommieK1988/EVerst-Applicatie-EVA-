@@ -580,7 +580,7 @@ export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
 export async function updateServicedeskSubstatus(
   id: string,
   nieuweSubstatus: ServicedeskSubstatus | string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; waarschuwing?: string }> {
   await assertDossierBewerkbaar(id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
@@ -588,18 +588,44 @@ export async function updateServicedeskSubstatus(
   // Alleen loggen wanneer de substatus daadwerkelijk wijzigt (voorkomt ruis in de historie).
   const { data: huidig } = await supabase
     .from('dossiers')
-    .select('servicedesk_substatus')
+    .select('servicedesk_substatus, bouw7_id')
     .eq('id', id)
     .single()
 
-  // Elke servicedesk-kolom is in EVA te zetten, ook de kolommen die de sync uit de
-  // Bouw7-projectstatus afleidt (Nieuw, Loopt, Uitgevoerd, Financieel gereed). Er is geen
-  // terugschrijven naar Bouw7: de mapping is daar veel-op-één (02. en 03. worden allebei "Nieuw",
-  // LB. en 04. allebei "Loopt"), dus een omgekeerde write zou moeten raden welke projectstatus je
-  // bedoelt — en zou een LB.-bon uit de lopende-bonnenlijst kunnen trekken. In plaats daarvan
-  // geldt de EVA-keuze: de lees-sync laat de kolom staan tot Bouw7 de projectstatus écht wijzigt
-  // (zie syncProjects, dat de markering dan zelf opruimt).
-  const handmatig = await markeerHandmatig(supabase, 'dossiers', id, ['servicedesk_substatus'])
+  // ── De bon loopt: EVA is leidend ─────────────────────────────────
+  // Een servicedeskbon staat in Bouw7 op "LB. Lopende bonnen" en blijft daar zolang hij
+  // loopt. Terugschrijven kan voor die tussenstappen ook niet zinnig: de mapping is
+  // veel-op-één (02. en 03. worden allebei "Nieuw", LB. en 04. allebei "Loopt"), dus een
+  // omgekeerde write zou moeten raden welke projectstatus je bedoelt — en zou de bon uit
+  // de lopende-bonnenlijst kunnen trekken. De lees-sync laat de kolom daarom staan.
+  //
+  // ── Behalve aan het eind ───────────────────────────────────────
+  // Bij financieel gereed en financieel afgesloten hóórt EVA weer gelijk te lopen met
+  // Bouw7: daar is de mapping wél eenduidig (06. en 07.), en het is de administratie die
+  // verder moet. Dus: de projectstatus terugschrijven, en bij succes de bescherming
+  // ópheffen zodat de lees-sync het veld weer bijhoudt. Blijft de markering staan, dan
+  // zou een latere wijziging in Bouw7 voor altijd buiten de deur blijven.
+  const eindstatus = nieuweSubstatus === 'financieel_gereed' || nieuweSubstatus === 'financieel_afgesloten'
+  let bouw7Fout: string | null = null
+  let bouw7Gelukt = false
+
+  if (eindstatus && huidig?.bouw7_id) {
+    const { opdrachtSubstatusNaarPrefix } = await import('@/lib/bouw7/status-map')
+    const prefix = opdrachtSubstatusNaarPrefix(String(nieuweSubstatus))
+    if (prefix) {
+      const { schrijfBouw7Projectstatusprefix } = await import('@/lib/dossiers/bouw7-status')
+      const res = await schrijfBouw7Projectstatusprefix(huidig.bouw7_id, prefix)
+      bouw7Gelukt = res.ok
+      bouw7Fout = res.ok ? null : res.error
+    }
+  }
+
+  // Bij een geslaagde eindstatus-write laten we de kolom weer door Bouw7 bepalen; in alle
+  // andere gevallen beschermen we de EVA-keuze tegen de eerstvolgende lees-sync.
+  const handmatig = bouw7Gelukt
+    ? await ontmarkeerHandmatig(supabase, 'dossiers', id, ['servicedesk_substatus'])
+    : await markeerHandmatig(supabase, 'dossiers', id, ['servicedesk_substatus'])
+
   const { error } = await supabase
     .from('dossiers')
     .update({ servicedesk_substatus: nieuweSubstatus, ...(handmatig ? { handmatige_velden: handmatig } : {}) })
@@ -614,6 +640,14 @@ export async function updateServicedeskSubstatus(
   await verwerkDossierTriggers(id).catch(() => {})
 
   revalidatePath('/servicedesk')
+
+  // De bon staat in EVA waar je hem hebt neergezet, dus dit is geen fout -- de wijziging
+  // is gelukt. Maar dat Bouw7 achterblijft is wél iets om te weten, want de administratie
+  // werkt daar verder. Vandaar een eigen veld: met `error` bij `ok: true` zou elke
+  // aanroeper die op `!ok` kijkt er stil overheen lopen.
+  if (eindstatus && bouw7Fout) {
+    return { ok: true, waarschuwing: `In EVA bijgewerkt, maar Bouw7 bleef achter: ${bouw7Fout}` }
+  }
   return { ok: true }
 }
 

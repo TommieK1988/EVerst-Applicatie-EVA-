@@ -39,6 +39,8 @@ export default function StatusStapKnop({ dossierId, stap, blok }: {
         // Alleen bevestigen wát er is gebeurd. De nieuwe stand staat een seconde later op het
         // scherm zelf; die hier in woorden herhalen vraagt om twee teksten die uit elkaar lopen.
         toast.success(res.label)
+        // De stap is gezet; bleef Bouw7 achter, dan hoort dat er apart bij te staan.
+        if (res.waarschuwing) toast(res.waarschuwing, { icon: '⚠️', duration: 6000 })
         router.refresh()
       })}
     >

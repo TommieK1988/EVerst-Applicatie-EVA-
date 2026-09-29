@@ -90,6 +90,26 @@ async function main() {
   }
   console.log(`  ${springers.length} in totaal — dit zijn bestaande bonnen, niet het gevolg van deze wijziging`)
 
+  console.log('\n── Aan het eind weer gelijklopen ───────────────────────────')
+  // Zolang de bon loopt is EVA leidend; bij financieel gereed en financieel afgesloten
+  // hoort hij weer gelijk te lopen met Bouw7. Daar is de mapping wél eenduidig.
+  const { opdrachtSubstatusNaarPrefix } = await import('@/lib/bouw7/status-map')
+  for (const [sub, verwacht] of [['financieel_gereed', '06.'], ['financieel_afgesloten', '07.']]) {
+    const prefix = opdrachtSubstatusNaarPrefix(sub)
+    console.log(`  ${sub.padEnd(22)} → Bouw7 ${prefix ?? '(geen)'}`)
+    toets(`${sub} heeft een Bouw7-status`, prefix === verwacht, `kreeg ${prefix}`)
+  }
+
+  // En terug: wat Bouw7 op 06 zet, moet in EVA weer financieel gereed worden zodra de
+  // bescherming eraf is. Anders zou ontmarkeren de bon alsnog verplaatsen.
+  const terug = BOUW7_NAAR_SERVICEDESK_SUBSTATUS['06. Financieel gereed']
+  console.log(`  06. Financieel gereed → ${terug}`)
+  toets('de weg terug levert dezelfde stand op', terug === 'financieel_gereed', String(terug))
+
+  const tussenstap = BOUW7_NAAR_SERVICEDESK_SUBSTATUS['LB. Lopende bonnen']
+  toets('een lopende bon is juist níét eenduidig', tussenstap !== 'nieuw',
+    'LB valt samen met 04; daarom blijft EVA daar leidend')
+
   console.log(fouten === 0 ? '\nAlles goed\n' : `\n${fouten} fout(en)\n`)
   process.exit(fouten === 0 ? 0 : 1)
 }

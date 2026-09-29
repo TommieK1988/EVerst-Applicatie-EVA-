@@ -47,7 +47,11 @@ type Props<K extends string> = {
   /** Welk veld als kolomsleutel gebruiken (serialiseerbaar). Default: 'auto'. */
   kolomKeyModus?: KolomKeyModus
   /** Overschrijf de status-update actie bij drag & drop (default: updateDossierSubstatus). */
-  onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
+  /**
+   * `waarschuwing` is geen fout: de wijziging is gelukt, maar er is iets waar de gebruiker
+   * van moet weten -- bijvoorbeeld dat Bouw7 achterbleef bij een eindstatus.
+   */
+  onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string; waarschuwing?: string }>
 }
 
 export function DossierKanban<K extends string>({
@@ -182,6 +186,10 @@ export function DossierKanban<K extends string>({
           prev.map(d => d.id !== id ? d : { ...d, servicedesk_substatus: vorige as any })
         )
         toast.error(res.error ?? 'Status bijwerken mislukt')
+      } else if (res.waarschuwing) {
+        // De kaart blijft liggen -- in EVA is het gelukt. Alleen Bouw7 bleef achter, en dat
+        // hoort zichtbaar te zijn bij een eindstatus waar de administratie verder werkt.
+        toast(res.waarschuwing, { icon: '⚠️', duration: 6000 })
       }
       router.refresh()
       return

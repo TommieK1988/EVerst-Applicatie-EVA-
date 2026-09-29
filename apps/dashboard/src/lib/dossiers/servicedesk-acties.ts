@@ -34,7 +34,10 @@ const MANDAAT_VERHOGING = 'mandaat_verhoging'
  */
 export async function zetVolgendeStap(
   dossierId: string,
-): Promise<{ ok: true; naar: string; label: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; naar: string; label: string; waarschuwing?: string }
+  | { ok: false; error: string }
+> {
   await vereisRecht('servicedesk', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
 
@@ -56,10 +59,14 @@ export async function zetVolgendeStap(
 
   const gezet = await updateServicedeskSubstatus(dossierId, stap.naar)
   if (!gezet.ok) return { ok: false, error: gezet.error ?? 'Kon de status niet wijzigen.' }
+  const statusWaarschuwing = gezet.waarschuwing ?? null
 
   revalidatePath(`/servicedesk/${dossierId}/bon`)
   revalidatePath('/servicedesk')
-  return { ok: true, naar: stap.naar, label: stap.label }
+  return {
+    ok: true, naar: stap.naar, label: stap.label,
+    ...(statusWaarschuwing ? { waarschuwing: statusWaarschuwing } : {}),
+  }
 }
 
 /**

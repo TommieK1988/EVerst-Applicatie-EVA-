@@ -421,6 +421,17 @@ Onderhanden springen. EVA markeert de kolom daarom bij het aanmaken als handmati
 hetzelfde mechanisme dat een bon beschermt die je zelf versleept. Wat er op het bord staat is
 dus altijd wat een mens daar heeft neergezet.
 
+**Aan het eind lopen ze weer gelijk.** Zet je een bon op **Financieel gereed** (of, bij een
+opdracht, Financieel afgesloten), dan schrijft EVA de Bouw7-projectstatus wél bij — naar
+"06. Financieel gereed" respectievelijk "07." — en wordt de bescherming opgeheven. Vanaf dat
+moment volgt EVA Bouw7 weer, want daar werkt de administratie verder en is de vertaling
+eenduidig. Dat kan bij de tussenstappen juist níet: "Nieuw" en "Loopt" vallen in Bouw7 allebei
+met twee projectstatussen samen, dus een terugschrijving zou moeten raden.
+
+Lukt die laatste schrijfactie niet, dan staat de bon in EVA gewoon op Financieel gereed en
+verschijnt er een melding dat Bouw7 achterbleef. De wijziging wordt niet teruggedraaid — maar
+je weet het wél.
+
 ---
 
 ## 6b. Mail in de verkeerde postbus

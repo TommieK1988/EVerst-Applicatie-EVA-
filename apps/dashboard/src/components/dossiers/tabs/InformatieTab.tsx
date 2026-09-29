@@ -1341,6 +1341,8 @@ export function InformatieTab({
     if (sectie === 'servicedesk') {
       const res = await updateServicedeskSubstatus(dossier.id, next)
       if (!res.ok) toast.error(res.error ?? 'Bijwerken mislukt')
+      // Gelukt, maar Bouw7 bleef achter: dat hoort niet stil te blijven.
+      else if (res.waarschuwing) toast(res.waarschuwing, { icon: '⚠️', duration: 6000 })
       return
     }
     // Two-way: opdracht naar de projectstatus, aanvraag/offerte naar het gedeelde maatwerkveld
