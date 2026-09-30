@@ -5,7 +5,6 @@ import {
   type ContractSoort,
 } from '@/lib/bouw7/contracten'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
-import { updateServicedeskSubstatus } from '@/lib/dossiers/actions'
 
 export type IntrekResultaat = { ok: true } | { ok: false; error: string }
 
@@ -80,54 +79,9 @@ export async function trekContractInKern(
     ['inkooporders', 'oa_contracten'],
     ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
   )
-  await zetBonTerugNaIntrekken(dossierId)
+  // De servicedeskbon blijft staan waar hij staat. Tot oktober 2026 ging hij terug van "Uitgezet";
+  // die kolom is opgegaan in In voorbereiding, en daar hoort een bon na een ingetrokken opdracht
+  // ook: het werk moet opnieuw geregeld worden. Terug naar Nieuw zou wegpoetsen dat de offerte al
+  // gewonnen of het mandaat al goedgekeurd is.
   return { ok: true }
-}
-
-/**
- * Een servicedeskbon schuift naar "Uitgezet" zodra er een OA-opdracht de deur uitgaat
- * (`meldWerkToegewezen`). Trek je die in, dan klopt die kolom niet meer: de bon gaat terug,
- * tenzij er nog een andere verstuurde opdracht op staat.
- *
- * Terug naar "Ingepland" als er nog iemand in de planning staat, anders naar "Nieuw". De stand
- * van vóór het uitzetten wordt nergens bewaard; "Nieuw" is dezelfde terugval als elders in de
- * servicedeskstroom. Alleen vanaf "Uitgezet": staat de bon al verder (onderhanden, uitgevoerd),
- * dan is het werk al gaande en blijft de kolom staan.
- *
- * Gooit niet: het intrekken zelf is dan al gelukt.
- */
-async function zetBonTerugNaIntrekken(dossierId: string): Promise<void> {
-  try {
-    const db = createAdminClient()
-    const { data: bon } = await db
-      .from('dossiers').select('servicedesk_substatus').eq('id', dossierId).maybeSingle()
-    if (bon?.servicedesk_substatus !== 'uitgezet') return
-
-    const [{ data: wbs }, { data: activiteiten }] = await Promise.all([
-      db.from('werkbegrotingen').select('id').eq('dossier_id', dossierId),
-      db.from('planning_activiteiten').select('id, onderaannemer_id').eq('dossier_id', dossierId),
-    ])
-    const wbIds = (wbs ?? []).map(w => w.id)
-    if (wbIds.length > 0) {
-      const { data: nogUitgezet } = await db
-        .from('werkbegroting_bestellingen')
-        .select('id')
-        .in('werkbegroting_id', wbIds)
-        .eq('soort', 'oa_contract')
-        .not('verstuurd_op', 'is', null)
-        .not('bouw7_contract_id', 'is', null)
-        .limit(1)
-      if ((nogUitgezet ?? []).length > 0) return
-    }
-
-    const actIds = (activiteiten ?? []).map(a => a.id)
-    let ingepland = (activiteiten ?? []).some(a => a.onderaannemer_id != null)
-    if (!ingepland && actIds.length > 0) {
-      const { data: items } = await db.from('planning_items').select('id').in('activiteit_id', actIds).limit(1)
-      ingepland = (items ?? []).length > 0
-    }
-    await updateServicedeskSubstatus(dossierId, ingepland ? 'ingepland' : 'nieuw')
-  } catch (e) {
-    console.warn('Bon terugzetten na intrekken mislukt:', e)
-  }
 }

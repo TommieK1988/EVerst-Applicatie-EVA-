@@ -14,7 +14,7 @@
 
 export const BOEKBARE_OPDRACHT_STATUSSEN = ['werkvoorbereiding', 'onderhanden', 'uitvoering_gereed'] as const
 
-export const GESLOTEN_SERVICEDESK_STATUSSEN = ['kosten_compleet', 'financieel_gereed'] as const
+export const GESLOTEN_SERVICEDESK_STATUSSEN = ['kosten_compleet', 'financieel_gereed', 'vervallen'] as const
 
 /**
  * Hetzelfde als `isBoekbaarDossier`, als PostgREST-filter voor `.or(...)`. Combineer met

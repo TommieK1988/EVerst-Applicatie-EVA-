@@ -39,7 +39,7 @@ export function substatusKleur(s: string): string {
   if (['gewonnen', 'offerte_gereed', 'financieel_afgesloten'].includes(s)) return '#009439'
   if ([
     'verzonden', 'nabellen', 'in_behandeling', 'mondelinge_toezegging',
-    'onderhanden', 'uitvoering_gereed', 'loopt', 'ingepland', 'uitgezet',
+    'onderhanden', 'uitvoering_gereed', 'loopt', 'in_voorbereiding', 'wacht_op_opdrachtgever',
   ].includes(s)) return '#2e90fa'
   return '#6b757c'
 }
@@ -47,8 +47,8 @@ export function substatusKleur(s: string): string {
 /**
  * Label + kleur voor een dossier-substatus (mobiele StatusBadge).
  *
- * Bij een servicedeskdossier hoort het label uit de ladder van dát dossier: `loopt` heet
- * op mutatiewerk "Onderhanden" en op dagelijks onderhoud "Loopt".
+ * Bij een servicedeskdossier komt het label uit de servicedeskladder: `loopt` heet daar
+ * "Onderhanden", niet "Loopt".
  */
 export function dossierStatusBadge(dossier: Dossier): { label: string; color: string } {
   const s = actieveSubstatus(dossier)

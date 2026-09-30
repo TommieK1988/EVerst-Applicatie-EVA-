@@ -53,59 +53,51 @@ export const OFFERTE_EINDSTATUSSEN = ['gewonnen', 'verloren', 'vervallen', 'mond
  *
  * **`01. Offerte` is geen verstuurde offerte.** In Bouw7 is 01 de fase waarin een aanvraag
  * binnenkomt en eventueel geprijsd wordt; pas `09.Verzonden offertes` betekent dat er iets de
- * deur uit is. De afleiding voor aanvragen/offertes hieronder gaat daar ook van uit (01 → de
- * Aanvragen-tab). Deze tabel zei het omgekeerde en zette elke verse bon meteen op "Offerte
- * uitgebracht" — een kolom waar niemand op wacht en waar hij met de hand uit gesleept moest
- * worden. Is er wél een offerte de deur uit, dan zegt de offertestatus dat; zie
+ * deur uit is. Is er wél een offerte de deur uit, dan zegt de offertestatus dat; zie
  * `servicedeskKolom`.
+ *
+ * Dagelijks onderhoud en mutatie delen sinds oktober 2026 één bord en dus één tabel.
+ * `08. Afgewezen` is voor een bon "vervallen": hij verdwijnt van het bord naar Afgesloten. EVA
+ * schrijft 08. ook zelf terug als iemand een bon op Vervallen zet.
  */
 export const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
   '01. Offerte':           'nieuw',
   '02. Nieuwe opdracht':   'nieuw',
-  '03. Werkvoorbereiding': 'nieuw',
+  '03. Werkvoorbereiding': 'in_voorbereiding',
   '04. Onderhanden':       'loopt',
   '05. Uitvoering gereed': 'uitgevoerd',
   '06. Financieel gereed': 'financieel_gereed',
-  '08. Afgewezen':         'financieel_gereed',
-  '09.Verzonden offertes': 'offerte_uitgebracht',
+  '08. Afgewezen':         'vervallen',
+  '09.Verzonden offertes': 'wacht_op_opdrachtgever',
   // LB. is waar élke servicedeskbon in Bouw7 staat, vers of al half af. Het zegt niets over de
   // voortgang, dus een bon begint op Nieuw; verder schuiven gebeurt in EVA.
   'LB. Lopende bonnen':    'nieuw',
 }
 
 /**
- * Zelfde mapping voor mutatiewerk, dat een eigen kolomreeks heeft (zie
- * SERVICEDESK_MUTATIE_STATUSSEN in components/dossiers/types.ts). Alleen "03. Werkvoorbereiding"
- * wijkt af: dagelijks onderhoud kent geen voorbereidingsfase en laat die bon op Nieuw staan, een
- * mutatie krijgt er een eigen kolom voor. De overige statussen landen op dezelfde sleutels, die op
- * het mutatiebord alleen een ander label dragen (loopt = "Onderhanden",
- * uitgevoerd = "Uitvoering gereed", offerte_uitgebracht = "Offerte verstuurd").
- */
-export const BOUW7_NAAR_MUTATIE_SUBSTATUS: Record<string, string> = {
-  ...BOUW7_NAAR_SERVICEDESK_SUBSTATUS,
-  '03. Werkvoorbereiding': 'in_voorbereiding',
-}
-
-/**
  * De kolom waar een bon op landt, projectstatus én offertestatus meegewogen.
  *
  * De projectstatus is leidend, met één uitzondering: staat het project nog op `01. Offerte` maar
- * zegt de offertestatus in Bouw7 dat er een offerte is verstuurd (of al gewonnen/verloren is),
- * dan is er wél iets de deur uit en hoort de bon op "Offerte uitgebracht". Zonder die controle
- * zou een bon die net geoffreerd is bij de eerstvolgende sync terugvallen naar Nieuw.
+ * zegt de offertestatus in Bouw7 iets over een offerte die de deur uit is, dan volgt de kolom
+ * daaruit. Verstuurd of mondeling toegezegd = wachten op de opdrachtgever; gewonnen = de
+ * voorbereiding kan beginnen; verloren of vervallen = de bon vervalt. Zonder die controle zou een
+ * bon die net geoffreerd is bij de eerstvolgende sync terugvallen naar Nieuw.
+ *
+ * `categorieNaam` telt niet meer mee (één bord), maar blijft in de signatuur zodat aanroepers en
+ * de sync niet hoeven te veranderen.
  */
 export function servicedeskKolom(
   bouw7StatusNaam: string | null | undefined,
-  categorieNaam: string | null | undefined,
+  _categorieNaam?: string | null | undefined,
   offertestatusNaam: string | null | undefined = null,
 ): string {
   const naam = bouw7StatusNaam ?? ''
-  const ladder = (categorieNaam ?? '') === 'Mutatie'
-    ? BOUW7_NAAR_MUTATIE_SUBSTATUS
-    : BOUW7_NAAR_SERVICEDESK_SUBSTATUS
-  const kolom = ladder[naam] ?? 'nieuw'
-  if (kolom === 'nieuw' && naam.startsWith('01.') && mapOffertestatusNaarSubstatus(offertestatusNaam)) {
-    return 'offerte_uitgebracht'
+  const kolom = BOUW7_NAAR_SERVICEDESK_SUBSTATUS[naam] ?? 'nieuw'
+  if (kolom === 'nieuw' && naam.startsWith('01.')) {
+    const offerte = mapOffertestatusNaarSubstatus(offertestatusNaam)
+    if (offerte === 'gewonnen') return 'in_voorbereiding'
+    if (offerte === 'verloren' || offerte === 'vervallen') return 'vervallen'
+    if (offerte) return 'wacht_op_opdrachtgever'
   }
   return kolom
 }

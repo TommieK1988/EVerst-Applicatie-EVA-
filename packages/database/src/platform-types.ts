@@ -437,37 +437,45 @@ export type Hoofdstatus = 'aanvraag' | 'offerte' | 'opdracht'
 export type DossierBord = 'aanvragen' | 'offertes' | 'opdrachten' | 'servicedesk' | 'afgesloten' | 'intern'
 
 /**
- * Eén reeks voor twee trajecten. Dagelijks onderhoud gebruikt `mandaat_verhoging`, `uitgezet` en
- * `ingepland`; mutatiewerk gebruikt `opgenomen` en `in_voorbereiding`. De rest is gedeeld. Welke
- * kolommen een dossier ziet, bepaalt de categorie — zie `SERVICEDESK_MUTATIE_STATUSSEN` in
- * `components/dossiers/types.ts`.
+ * De servicedesk-standen. Dagelijks onderhoud en mutatie delen sinds oktober 2026 één bord met
+ * dezelfde kolommen — zie `SERVICEDESK_STATUSSEN` in `components/dossiers/types.ts`.
+ * `vervallen` heeft geen kolom: zo'n bon staat alleen nog onder Afgesloten.
  */
 export type ServicedeskSubstatus =
   | 'nieuw'
-  | 'mandaat_verhoging'
-  | 'opgenomen'
-  | 'offerte_uitgebracht'
+  | 'wacht_op_opdrachtgever'
   | 'in_voorbereiding'
-  | 'uitgezet'
-  | 'ingepland'
   | 'loopt'
   | 'uitgevoerd'
   | 'kosten_compleet'
   | 'financieel_gereed'
+  | 'vervallen'
 
-/** Neutrale labels per sleutel. Het mutatiebord toont voor drie sleutels een eigen label. */
-export const servicedeskSubstatusLabels: Record<ServicedeskSubstatus, string> = {
-  nieuw:               'Nieuw',
-  mandaat_verhoging:   'Mandaat verhoging aangevraagd',
-  opgenomen:           'Opgenomen',
-  offerte_uitgebracht: 'Offerte uitgebracht',
-  in_voorbereiding:    'In voorbereiding',
-  uitgezet:            'Uitgezet',
-  ingepland:           'Ingepland',
-  loopt:               'Loopt',
-  uitgevoerd:          'Uitgevoerd',
-  kosten_compleet:     'Kosten compleet',
-  financieel_gereed:   'Financieel gereed',
+/**
+ * Standen die niet meer gezet worden maar nog wel in `dossier_substatus_historie` staan
+ * (samengevoegd in oktober 2026). Alleen voor het label bij oude historie.
+ */
+export type OudeServicedeskSubstatus =
+  | 'mandaat_verhoging'
+  | 'offerte_uitgebracht'
+  | 'opgenomen'
+  | 'uitgezet'
+  | 'ingepland'
+
+export const servicedeskSubstatusLabels: Record<ServicedeskSubstatus | OudeServicedeskSubstatus, string> = {
+  nieuw:                  'Nieuw',
+  wacht_op_opdrachtgever: 'Wachten op opdrachtgever',
+  in_voorbereiding:       'In voorbereiding',
+  loopt:                  'Onderhanden',
+  uitgevoerd:             'Uitvoering gereed',
+  kosten_compleet:        'Kosten compleet',
+  financieel_gereed:      'Financieel gereed',
+  vervallen:              'Vervallen',
+  mandaat_verhoging:      'Mandaat verhoging aangevraagd',
+  offerte_uitgebracht:    'Offerte uitgebracht',
+  opgenomen:              'Opgenomen',
+  uitgezet:               'Uitgezet',
+  ingepland:              'Ingepland',
 }
 
 export type AanvraagSubstatus =

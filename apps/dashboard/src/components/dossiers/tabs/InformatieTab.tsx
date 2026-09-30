@@ -71,7 +71,7 @@ const statusKleur = (s: string) =>
   ['verloren', 'vervallen', 'afgewezen'].includes(s) ? '#d9534f' :
   ['gewonnen', 'offerte_gereed', 'financieel_afgesloten', 'financieel_gereed'].includes(s) ? '#009439' :
   ['verzonden', 'nabellen', 'in_behandeling', 'mondelinge_toezegging', 'onderhanden', 'uitvoering_gereed',
-   'loopt', 'uitgevoerd', 'ingepland', 'offerte_uitgebracht', 'kosten_compleet'].includes(s) ? 'var(--accent)' :
+   'loopt', 'uitgevoerd', 'in_voorbereiding', 'wacht_op_opdrachtgever', 'kosten_compleet'].includes(s) ? 'var(--accent)' :
   'var(--fg-muted)'
 
 const fmtBedrag = (v: number) =>
@@ -2052,7 +2052,6 @@ export function InformatieTab({
                 dossierId={dossier.id}
                 heeftCalculatie={!!dossier.everts_calc_project_id || projectId != null}
                 mandaatBedrag={dossier.mandaat_bedrag ?? null}
-                verhogingLoopt={dossier.servicedesk_substatus === 'mandaat_verhoging'}
                 kostengroep={dossier.regie_bewakingscode
                   ? { code: dossier.regie_bewakingscode, naam: bonBewakingscode(dossier.facturatiemethode).naam }
                   : null}

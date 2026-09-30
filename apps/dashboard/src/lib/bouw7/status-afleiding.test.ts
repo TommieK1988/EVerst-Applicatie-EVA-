@@ -16,11 +16,17 @@ describe('servicedeskKolom: waar een bon op het bord landt', () => {
     expect(servicedeskKolom('01. Offerte', 'Mutatie')).toBe('nieuw')
   })
 
-  it('zet hem wél op Offerte uitgebracht zodra de offerte de deur uit is', () => {
+  it('zet hem op Wachten op opdrachtgever zodra de offerte de deur uit is', () => {
     expect(servicedeskKolom('01. Offerte', 'Dagelijks onderhoud', '03. Verstuurd'))
-      .toBe('offerte_uitgebracht')
-    expect(servicedeskKolom('01. Offerte', 'Mutatie', '04. Gewonnen'))
-      .toBe('offerte_uitgebracht')
+      .toBe('wacht_op_opdrachtgever')
+    expect(servicedeskKolom('01. Offerte', 'Mutatie', '07. Mondelinge toezegging'))
+      .toBe('wacht_op_opdrachtgever')
+  })
+
+  it('zet een gewonnen offerte op In voorbereiding en een verloren op Vervallen', () => {
+    expect(servicedeskKolom('01. Offerte', 'Mutatie', '04. Gewonnen')).toBe('in_voorbereiding')
+    expect(servicedeskKolom('01. Offerte', 'Dagelijks onderhoud', '05. Verloren')).toBe('vervallen')
+    expect(servicedeskKolom('01. Offerte', 'Dagelijks onderhoud', '06. Vervallen')).toBe('vervallen')
   })
 
   it('laat een offertestatus zonder uitkomst de bon op Nieuw', () => {
@@ -28,13 +34,17 @@ describe('servicedeskKolom: waar een bon op het bord landt', () => {
     expect(servicedeskKolom('01. Offerte', 'Dagelijks onderhoud', '02. Onderhanden')).toBe('nieuw')
   })
 
-  it('houdt 09. Verzonden offertes op Offerte uitgebracht', () => {
-    expect(servicedeskKolom('09.Verzonden offertes', 'Dagelijks onderhoud')).toBe('offerte_uitgebracht')
+  it('zet 09. Verzonden offertes op Wachten op opdrachtgever', () => {
+    expect(servicedeskKolom('09.Verzonden offertes', 'Dagelijks onderhoud')).toBe('wacht_op_opdrachtgever')
   })
 
-  it('geeft mutatiewerk zijn eigen voorbereidingskolom', () => {
+  it('zet 03. Werkvoorbereiding voor elke bon op In voorbereiding', () => {
     expect(servicedeskKolom('03. Werkvoorbereiding', 'Mutatie')).toBe('in_voorbereiding')
-    expect(servicedeskKolom('03. Werkvoorbereiding', 'Dagelijks onderhoud')).toBe('nieuw')
+    expect(servicedeskKolom('03. Werkvoorbereiding', 'Dagelijks onderhoud')).toBe('in_voorbereiding')
+  })
+
+  it('leest 08. Afgewezen als Vervallen', () => {
+    expect(servicedeskKolom('08. Afgewezen', 'Dagelijks onderhoud')).toBe('vervallen')
   })
 
   it('valt terug op Nieuw bij een status die de ladder niet kent', () => {

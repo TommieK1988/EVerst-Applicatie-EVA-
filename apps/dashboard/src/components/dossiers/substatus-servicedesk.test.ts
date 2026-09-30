@@ -55,7 +55,7 @@ describe('getDossierSubstatus: de servicedeskladder gaat voor', () => {
   it('kiest de servicedeskladder ook als de aanvraag-substatus gevuld is', () => {
     // Een bon dráágt altijd allebei: hoofdstatus 'aanvraag' met aanvraag_substatus 'nieuw',
     // én de servicedesk-substatus. De tweede wint. Dit was de kern van de fout.
-    const d = bon({ aanvraag_substatus: 'nieuw', servicedesk_substatus: 'uitgezet' })
-    expect(getDossierSubstatus(d)).toBe('uitgezet')
+    const d = bon({ aanvraag_substatus: 'nieuw', servicedesk_substatus: 'in_voorbereiding' })
+    expect(getDossierSubstatus(d)).toBe('in_voorbereiding')
   })
 })

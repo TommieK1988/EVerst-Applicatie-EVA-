@@ -121,7 +121,7 @@ export type WarmSetDossier = {
 export function warmSetVoor(d: WarmSetDossier, aanwezig?: ReadonlySet<DossierSoort>): DossierSoort[] {
   const afgesloten =
     d.servicedesk_substatus != null
-      ? d.servicedesk_substatus === 'financieel_gereed'
+      ? d.servicedesk_substatus === 'financieel_gereed' || d.servicedesk_substatus === 'vervallen'
       : d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_afgesloten'
 
   if (afgesloten) {

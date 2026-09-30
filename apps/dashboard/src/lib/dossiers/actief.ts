@@ -45,9 +45,12 @@ export function isActiefDossier(d: DossierActiefVelden): boolean {
       actief = true
   }
 
-  // Servicedesk-overlay: een dossier met servicedesk-substatus is afgerond bij financieel_gereed.
+  // Servicedesk-overlay: een dossier met servicedesk-substatus is afgerond bij financieel_gereed
+  // of vervallen.
   if (d.servicedesk_substatus) {
-    actief = actief && d.servicedesk_substatus !== 'financieel_gereed'
+    actief = actief
+      && d.servicedesk_substatus !== 'financieel_gereed'
+      && d.servicedesk_substatus !== 'vervallen'
   }
 
   return actief

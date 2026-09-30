@@ -16,12 +16,15 @@ import { assertDossierBewerkbaar } from './guards'
 import { plaatsDossierNotitie } from './notities-actions'
 import { updateServicedeskSubstatus } from './actions'
 import { standNaToewijzing, volgendeStap } from '@/components/dossiers/servicedesk/status-stappen'
-import { isMutatieDossier, type ServicedeskSubstatus } from '@/components/dossiers/types'
+import type { ServicedeskSubstatus } from '@/components/dossiers/types'
 import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { mailTekstNaarHtml } from '@/lib/mail/opmaak'
 import { splitsAdressen, verstuurMetOmleiding } from '@/lib/mail/verstuur'
 
-const MANDAAT_VERHOGING = 'mandaat_verhoging'
+/** Na een mandaatverhoging-aanvraag of een verstuurde offerte: de bon wacht op een ja of nee. */
+const WACHT_OP_OPDRACHTGEVER: ServicedeskSubstatus = 'wacht_op_opdrachtgever'
+/** Na "Mandaatverhoging goedgekeurd" of "Offerte gewonnen": het werk mag door. */
+const IN_VOORBEREIDING: ServicedeskSubstatus = 'in_voorbereiding'
 
 /**
  * Zet de bon een stap verder, en alleen de stap die uit zijn huidige stand volgt.
@@ -82,15 +85,12 @@ export async function zetVolgendeStap(
  * fout laten eindigen — de bon staat dan gewoon nog op zijn oude kolom en is met de hand te
  * verslepen. Hij wordt wel gelogd, want stil verdwijnen is erger dan een verkeerde kolom.
  */
-export async function meldWerkToegewezen(
-  dossierId: string,
-  soort: 'uitgezet' | 'ingepland',
-): Promise<void> {
+export async function meldWerkToegewezen(dossierId: string): Promise<void> {
   try {
     const supabase = createAdminClient()
     const { data } = await supabase
       .from('dossiers')
-      .select('servicedesk_substatus, bouw7_categorie_naam, categorie')
+      .select('servicedesk_substatus')
       .eq('id', dossierId)
       .maybeSingle()
 
@@ -98,10 +98,7 @@ export async function meldWerkToegewezen(
     // eigen statusladder en die wordt hier niet aangeraakt.
     if (!data?.servicedesk_substatus) return
 
-    const naar = standNaToewijzing(soort, {
-      isMutatie: isMutatieDossier(data),
-      substatus: data.servicedesk_substatus as ServicedeskSubstatus,
-    })
+    const naar = standNaToewijzing(data.servicedesk_substatus as ServicedeskSubstatus)
     if (!naar) return
 
     await updateServicedeskSubstatus(dossierId, naar)
@@ -110,9 +107,6 @@ export async function meldWerkToegewezen(
     await logFout(foutNaarInvoer(e, { omgeving: 'server', bron: 'servicedesk/werk-toegewezen' }))
   }
 }
-
-/** Waar een bon op terugvalt als zijn vorige stand niet meer te achterhalen is. */
-const TERUGVAL_SUBSTATUS = 'nieuw'
 
 const bedrag = z.number().finite().positive().max(10_000_000)
 
@@ -137,27 +131,6 @@ export type MandaatMail = z.infer<typeof MailSchema>
 
 const euro = (n: number) =>
   new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
-
-/**
- * De substatus waar de bon stond vóór de mandaatverhoging.
- *
- * Een verhoging kan op elk moment nodig blijken — bij binnenkomst, maar net zo goed als het werk
- * al loopt. Zou de bon na toekenning altijd op "Nieuw" landen, dan zou een lopende klus op het
- * bord terugspringen naar het begin en zou de planning die eraan hangt niet meer kloppen met de
- * kolom. De historie weet waar hij vandaan kwam, dus daar hoeft geen kolom voor bij.
- */
-async function vorigeSubstatus(supabase: ReturnType<typeof createAdminClient>, dossierId: string) {
-  const { data } = await supabase
-    .from('dossier_substatus_historie')
-    .select('substatus, gewijzigd_op')
-    .eq('dossier_id', dossierId)
-    .order('gewijzigd_op', { ascending: false })
-    .limit(20)
-
-  const rijen = (data ?? []) as { substatus: string }[]
-  // De eerste die géén mandaatverhoging is; meerdere verhogingen achter elkaar slaan we over.
-  return rijen.find(r => r.substatus !== MANDAAT_VERHOGING)?.substatus ?? TERUGVAL_SUBSTATUS
-}
 
 export type MandaatMailConcept = {
   /** Voorgestelde ontvanger: de contactpersoon van de bon, anders het algemene adres. */
@@ -225,7 +198,8 @@ const FONT = "'Segoe UI',Segoe,Arial,Helvetica,sans-serif"
 /**
  * Vraagt een hoger mandaat aan bij de opdrachtgever.
  *
- * Zet de bon op de kolom "Mandaat verhoging aangevraagd" en legt het gevraagde bedrag met de
+ * Zet de bon op de kolom "Wachten op opdrachtgever" — vanuit elke stand, ook als het werk al
+ * loopt: tot de opdrachtgever ja zegt, wacht de bon op hem. Legt het gevraagde bedrag met de
  * reden vast als dossiernotitie. Bewust géén losse taak erbij: de kolom op het bord ís het
  * werksignaal, en een taak zou hetzelfde nog een keer bijhouden op een tweede plek.
  *
@@ -301,7 +275,7 @@ export async function vraagMandaatverhogingAan(
   )
   if (!notitie.ok) return { ok: false, error: notitie.error + alGemaild }
 
-  const gezet = await updateServicedeskSubstatus(dossierId, MANDAAT_VERHOGING)
+  const gezet = await updateServicedeskSubstatus(dossierId, WACHT_OP_OPDRACHTGEVER)
   if (!gezet.ok) return { ok: false, error: (gezet.error ?? 'Kon de status niet wijzigen.') + alGemaild }
 
   revalidatePath(`/servicedesk/${dossierId}/bon`)
@@ -310,7 +284,9 @@ export async function vraagMandaatverhogingAan(
 }
 
 /**
- * Legt een toegekende verhoging vast: nieuw mandaat erop, en de bon terug naar waar hij was.
+ * Legt een toegekende verhoging vast ("Mandaatverhoging goedgekeurd"): nieuw mandaat erop, en de
+ * bon naar In voorbereiding. Altijd daarheen, ook als hij vóór de aanvraag al verder was: na de
+ * goedkeuring moet het vervolg opnieuw worden georganiseerd.
  *
  * Het nieuwe bedrag vervángt het oude en telt er niet bij op — dat is hoe een opdrachtgever het
  * ook formuleert ("het mandaat gaat naar €2.500"), en optellen zou bij een tweede verhoging een
@@ -330,7 +306,6 @@ export async function kenMandaatverhogingToe(
   const { nieuwMandaat, toelichting } = gecontroleerd.data
 
   const supabase = createAdminClient()
-  const terug = await vorigeSubstatus(supabase, dossierId)
 
   const { error } = await supabase
     .from('dossiers')
@@ -354,10 +329,46 @@ export async function kenMandaatverhogingToe(
     }))
   }
 
-  const gezet = await updateServicedeskSubstatus(dossierId, terug)
+  const gezet = await updateServicedeskSubstatus(dossierId, IN_VOORBEREIDING)
   if (!gezet.ok) return { ok: false, error: gezet.error ?? 'Kon de status niet wijzigen.' }
 
   revalidatePath(`/servicedesk/${dossierId}/bon`)
   revalidatePath('/servicedesk')
-  return { ok: true, substatus: terug }
+  return { ok: true, substatus: IN_VOORBEREIDING }
+}
+
+const VervallenSchema = z.object({
+  reden: z.string().trim().min(1, 'Schrijf erbij waarom de bon vervalt.').max(2000),
+})
+
+/**
+ * Laat een bon vervallen: de opdrachtgever gaat niet verder (mandaat of offerte afgewezen, werk
+ * niet meer nodig). De bon gaat van het bord af en staat daarna alleen nog onder Afgesloten,
+ * alleen-lezen. In Bouw7 gaat het project naar `08. Afgewezen` (zie `updateServicedeskSubstatus`).
+ *
+ * De reden gaat eerst als notitie op het dossier: na het vervallen is het dossier dicht en kan
+ * er niets meer bij.
+ */
+export async function laatServicedeskbonVervallen(
+  dossierId: string,
+  invoer: { reden: string },
+): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
+  await vereisRecht('servicedesk', 'schrijven')
+  await assertDossierBewerkbaar(dossierId)
+
+  const gecontroleerd = VervallenSchema.safeParse(invoer)
+  if (!gecontroleerd.success) {
+    return { ok: false, error: gecontroleerd.error.issues[0]?.message ?? 'Ongeldige invoer.' }
+  }
+
+  const notitie = await plaatsDossierNotitie(dossierId, `Bon vervallen.\n\n${gecontroleerd.data.reden}`)
+  if (!notitie.ok) return { ok: false, error: notitie.error }
+
+  const gezet = await updateServicedeskSubstatus(dossierId, 'vervallen')
+  if (!gezet.ok) return { ok: false, error: gezet.error ?? 'Kon de status niet wijzigen.' }
+
+  revalidatePath(`/servicedesk/${dossierId}/bon`)
+  revalidatePath('/servicedesk')
+  revalidatePath('/afgesloten')
+  return { ok: true, ...(gezet.waarschuwing ? { waarschuwing: gezet.waarschuwing } : {}) }
 }

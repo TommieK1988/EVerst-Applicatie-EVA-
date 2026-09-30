@@ -14,12 +14,15 @@ export type BonActieSleutel = 'onderaannemer' | 'inplannen' | 'offerte' | 'manda
 
 /** Wat er van de bon bekend moet zijn om te weten welke knoppen kunnen. */
 export type BonContext = {
-  /** Hangt er een calculatie/offerte aan? Bepaalt of "Offerte maken" of "Offerte akkoord" staat. */
+  /** Hangt er een calculatie/offerte aan? Bepaalt of "Offerte maken" of "Offerte gewonnen" staat. */
   heeftCalculatie: boolean
   /** Staat er een mandaatbedrag op? Zonder mandaat is verhogen betekenisloos. */
   heeftMandaat: boolean
-  /** Wacht er al een verhoging op antwoord? */
-  verhogingLoopt: boolean
+  /**
+   * Staat de bon op Wachten op opdrachtgever? Dan leggen de knoppen bovenaan het antwoord vast
+   * (goedgekeurd, gewonnen, vervallen) en is "Offerte gewonnen" hieronder dubbel.
+   */
+  wachtOpOpdrachtgever: boolean
   /** Afgesloten bonnen zijn overal alleen-lezen. */
   alleenLezen: boolean
 }
@@ -57,29 +60,26 @@ export function bonActies(ctx: BonContext): BonActie[] {
     },
     {
       sleutel: 'offerte',
-      label: ctx.heeftCalculatie ? 'Offerte akkoord' : 'Offerte maken',
+      label: ctx.heeftCalculatie ? 'Offerte gewonnen' : 'Offerte maken',
       uitleg: dicht
         ? 'Deze bon is afgesloten.'
         : ctx.heeftCalculatie
-          ? 'Leg vast dat de klant akkoord is; de bon gaat op aangenomen.'
+          ? ctx.wachtOpOpdrachtgever
+            ? 'Gebruik "Offerte gewonnen" bovenaan.'
+            : 'De klant is akkoord: de bon gaat naar In voorbereiding en rekent af op aangenomen.'
           : 'Maak een calculatie bij deze bon en werk die uit tot een offerte.',
-      kan: !dicht,
+      kan: !dicht && !(ctx.heeftCalculatie && ctx.wachtOpOpdrachtgever),
     },
     {
       sleutel: 'mandaatverhoging',
-      /**
-       * Loopt er al een aanvraag, dan is de vervolgstap niet nóg een aanvraag maar het antwoord
-       * vastleggen. De knop verandert dus mee in plaats van grijs te worden: een uitgeschakelde
-       * knop die "aanvragen" zegt vertelt je niet wat je dan wél moet doen.
-       */
-      label: ctx.verhogingLoopt ? 'Verhoging toekennen' : 'Mandaatverhoging aanvragen',
+      // Het antwoord vastleggen ("Mandaatverhoging goedgekeurd") staat bovenaan zodra de bon op
+      // Wachten op opdrachtgever staat; deze knop is altijd de vraag zelf.
+      label: 'Mandaatverhoging aanvragen',
       uitleg: dicht
         ? 'Deze bon is afgesloten.'
-        : ctx.verhogingLoopt
-          ? 'Leg vast welk mandaat de opdrachtgever heeft toegekend.'
-          : ctx.heeftMandaat
-            ? 'Mail de opdrachtgever een verzoek om een hoger maximum voor deze bon.'
-            : 'Er staat nog geen mandaat op de bon; je vult het bedrag in het venster in.',
+        : ctx.heeftMandaat
+          ? 'Mail de opdrachtgever een verzoek om een hoger maximum; de bon gaat op Wachten op opdrachtgever.'
+          : 'Er staat nog geen mandaat op de bon; je vult het bedrag in het venster in.',
       // Ook zonder mandaat kan dit: het venster vraagt het bedrag dan gewoon als eerste uit.
       kan: !dicht,
     },

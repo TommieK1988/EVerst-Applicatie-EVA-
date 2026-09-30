@@ -1,30 +1,27 @@
 'use client'
 
 /**
- * De servicedesk toont twee trajecten die niets met elkaar te maken hebben, en dus twee borden.
+ * Het servicedeskbord: dagelijks onderhoud (regie) en mutatie (aangenomen) op één bord met
+ * dezelfde kolommen. Tot oktober 2026 waren dat twee borden met elk een eigen kolomreeks; die
+ * waren zo naar elkaar toegegroeid dat ze zijn samengevoegd.
  *
- *  * **Dagelijks onderhoud** — bon binnen, mandaat toetsen, uitzetten, kosten verzamelen,
- *    factureren. Werk op regie.
- *  * **Mutatie** — opname, offerte, werkvoorbereiding, uitvoering. Aangenomen werk.
- *
- * Deze component doet drie dingen: de toggle tonen, de dossiers splitsen op categorie, en de
- * bijbehorende kolomreeks doorgeven. De query blijft één query — beide kanten zitten al in de
- * opgehaalde lijst, dus omschakelen kost geen serverronde.
+ * Bovenaan staat een filter (Alle / Dagelijks onderhoud / Mutatie). De query blijft één query —
+ * alles zit al in de opgehaalde lijst, dus filteren kost geen serverronde.
  */
 
 import React from 'react'
 import { DossierViewSwitcher } from '@/components/dossiers/DossierViewSwitcher'
-import { DossierLijst } from '@/components/dossiers/DossierLijst'
 import {
-  SERVICEDESK_STATUSSEN, SERVICEDESK_MUTATIE_STATUSSEN, SERVICEDESK_LADDER_COOKIE, isMutatieDossier,
-  type DossierRij, type DossierSubstatus, type ServicedeskLadder, type StatusDef,
+  SERVICEDESK_STATUSSEN, SERVICEDESK_FILTER_COOKIE, isMutatieDossier,
+  type DossierRij, type ServicedeskFilter,
 } from '@/components/dossiers/types'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { laadContracttotalen } from '@/lib/dossiers/contracttotaal'
 
 const COOKIE_MAXAGE = 60 * 60 * 24 * 365
 
-const LADDERS: { key: ServicedeskLadder; label: string }[] = [
+const FILTERS: { key: ServicedeskFilter; label: string }[] = [
+  { key: 'alle',      label: 'Alle'                },
   { key: 'onderhoud', label: 'Dagelijks onderhoud' },
   { key: 'mutatie',   label: 'Mutatie'             },
 ]
@@ -34,23 +31,21 @@ type Props = {
   layouts: GebruikerLayout[]
   user_id: string | null
   mijnNaam?: string | null
-  /** Kant waarop de gebruiker het laatst stond, uit het cookie gelezen door de serverpagina. */
-  initieleLadder?: ServicedeskLadder
-  /** Archiefweergave: alleen de lijst, geen kanban en geen slepen. */
-  archief?: boolean
+  /** Filter dat de gebruiker het laatst koos, uit het cookie gelezen door de serverpagina. */
+  initieelFilter?: ServicedeskFilter
   extraActies?: React.ReactNode
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 export function ServicedeskBord({
-  dossiers, layouts, user_id, mijnNaam, initieleLadder = 'onderhoud', archief, extraActies, onStatusChange,
+  dossiers, layouts, user_id, mijnNaam, initieelFilter = 'alle', extraActies, onStatusChange,
 }: Props) {
-  const [ladder, setLadder] = React.useState<ServicedeskLadder>(initieleLadder)
+  const [filter, setFilter] = React.useState<ServicedeskFilter>(initieelFilter)
 
-  function kiesLadder(keuze: ServicedeskLadder) {
-    setLadder(keuze)
+  function kiesFilter(keuze: ServicedeskFilter) {
+    setFilter(keuze)
     const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : ''
-    document.cookie = `${SERVICEDESK_LADDER_COOKIE}=${keuze}; Path=/; Max-Age=${COOKIE_MAXAGE}; SameSite=Lax${secure}`
+    document.cookie = `${SERVICEDESK_FILTER_COOKIE}=${keuze}; Path=/; Max-Age=${COOKIE_MAXAGE}; SameSite=Lax${secure}`
   }
 
   /* Contracttotalen (zelfde getal als de Verkoop-tab) komen na de eerste render: ze kosten per bon
@@ -68,25 +63,25 @@ export function ServicedeskBord({
     return () => { actief = false }
   }, [idSleutel])
 
-  const { onderhoud, mutatie } = React.useMemo(() => {
+  const { alle, onderhoud, mutatie } = React.useMemo(() => {
+    const alle: DossierRij[] = []
     const onderhoud: DossierRij[] = []
     const mutatie: DossierRij[] = []
     for (const d of dossiers) {
       const rij = d.id in totalen ? { ...d, contracttotaal: totalen[d.id] } : d
+      alle.push(rij)
       ;(isMutatieDossier(d) ? mutatie : onderhoud).push(rij)
     }
-    return { onderhoud, mutatie }
+    return { alle, onderhoud, mutatie }
   }, [dossiers, totalen])
 
-  const isMutatie = ladder === 'mutatie'
-  const zichtbaar = isMutatie ? mutatie : onderhoud
-  const statussen = isMutatie ? SERVICEDESK_MUTATIE_STATUSSEN : SERVICEDESK_STATUSSEN
-  const aantallen = { onderhoud: onderhoud.length, mutatie: mutatie.length }
+  const zichtbaar = filter === 'mutatie' ? mutatie : filter === 'onderhoud' ? onderhoud : alle
+  const aantallen = { alle: alle.length, onderhoud: onderhoud.length, mutatie: mutatie.length }
 
   const toggle = (
     <div
       role="tablist"
-      aria-label="Servicedesk-traject"
+      aria-label="Servicedesk-filter"
       style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '10px 16px',
@@ -94,14 +89,14 @@ export function ServicedeskBord({
         flexShrink: 0,
       }}
     >
-      {LADDERS.map(l => {
-        const actief = ladder === l.key
+      {FILTERS.map(l => {
+        const actief = filter === l.key
         return (
           <button
             key={l.key}
             role="tab"
             aria-selected={actief}
-            onClick={() => kiesLadder(l.key)}
+            onClick={() => kiesFilter(l.key)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
               height: 32, padding: '0 14px', borderRadius: 99,
@@ -128,28 +123,12 @@ export function ServicedeskBord({
     </div>
   )
 
-  if (archief) {
-    return (
-      <>
-        {toggle}
-        <DossierLijst
-          sectie="servicedesk"
-          statussen={statussen as StatusDef<DossierSubstatus>[]}
-          dossiers={zichtbaar}
-          layouts={layouts}
-          user_id={user_id}
-          extraActies={extraActies}
-        />
-      </>
-    )
-  }
-
   return (
     <>
       {toggle}
       <DossierViewSwitcher
         sectie="servicedesk"
-        statussen={statussen}
+        statussen={SERVICEDESK_STATUSSEN}
         dossiers={zichtbaar}
         layouts={layouts}
         user_id={user_id}

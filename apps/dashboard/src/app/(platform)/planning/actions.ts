@@ -542,9 +542,9 @@ export async function maakPlanningItem(
 
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
-  // Eigen mensen op een servicedeskbon: die staat daarmee op Ingepland. Aan het aanmaken
+  // Eigen mensen op een servicedeskbon: die staat daarmee op In voorbereiding. Aan het aanmaken
   // van het planitem en niet aan een knop, zodat de kolom volgt op wat er echt staat.
-  await meldWerkToegewezen(input.dossier_id, 'ingepland')
+  await meldWerkToegewezen(input.dossier_id)
   return { ok: true, data: data as PlanningItem, dubbel: await zoekDubbeleInplanning([data.id]) }
 }
 
@@ -634,9 +634,9 @@ export async function maakSnelPlanningItem(
   if (error) return { ok: false, error: error.message }
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
-  // Eigen mensen op een servicedeskbon: die staat daarmee op Ingepland. Aan het aanmaken
+  // Eigen mensen op een servicedeskbon: die staat daarmee op In voorbereiding. Aan het aanmaken
   // van het planitem en niet aan een knop, zodat de kolom volgt op wat er echt staat.
-  await meldWerkToegewezen(inp.dossier_id, 'ingepland')
+  await meldWerkToegewezen(inp.dossier_id)
   return { ok: true, data: data as PlanningItem }
 }
 

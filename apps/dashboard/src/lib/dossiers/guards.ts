@@ -18,7 +18,7 @@ export async function isDossierBewerkbaar(dossierId: string | null | undefined):
   const supabase = createAdminClient() as any
   const { data } = await supabase
     .from('dossiers')
-    .select('hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, bouw7_projectstatus_naam')
+    .select('hoofdstatus, aanvraag_substatus, offerte_substatus, opdracht_substatus, servicedesk_substatus, bouw7_projectstatus_naam')
     .eq('id', dossierId)
     .maybeSingle()
 

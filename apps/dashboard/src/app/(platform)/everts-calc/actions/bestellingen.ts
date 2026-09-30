@@ -1247,7 +1247,7 @@ export async function verstuurBestelling(
     revalidatePath(`/dossiers/${dossierId}`)
     // De mail ging de vorige keer al; alleen de afroep is nu gelukt. De kolom is toen dus niet
     // verschoven, dus dat gebeurt hier alsnog.
-    await meldWerkToegewezen(dossierId, 'uitgezet')
+    await meldWerkToegewezen(dossierId)
     return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }
   }
 
@@ -1368,10 +1368,10 @@ export async function verstuurBestelling(
     ['inkooporders', 'oa_contracten'],
     ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
   )
-  // Een servicedeskbon waar werk is uitgezet hoort op de kolom Uitgezet te staan. Hier en niet
-  // bij de knop: pas nu is de opdracht echt de deur uit. Doet niets op een opdracht of op een
-  // mutatiebon, die deze kolom niet kent — zie meldWerkToegewezen.
-  await meldWerkToegewezen(dossierId, 'uitgezet')
+  // Een servicedeskbon waar werk is uitgezet hoort op In voorbereiding te staan. Hier en niet
+  // bij de knop: pas nu is de opdracht echt de deur uit. Doet niets op een opdracht — zie
+  // meldWerkToegewezen.
+  await meldWerkToegewezen(dossierId)
 
   revalidatePath(`/dossiers/${dossierId}`)
   return { ok: true, bonnummer: afroep.bonnummer, bonAantal: afroep.bonAantal, bonWaarschuwing: afroep.fout }

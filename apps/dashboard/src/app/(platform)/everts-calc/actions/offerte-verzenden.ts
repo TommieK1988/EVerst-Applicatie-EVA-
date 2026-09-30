@@ -190,7 +190,7 @@ const VERDER_DAN_VERZONDEN = new Set([
  * gaat er juist om dát het maatwerkveld in Bouw7 gevuld raakt, en dat kan achterlopen.
  *
  * Overslaan alleen wanneer "Verzonden" geen zinnige stap is: een dossier dat al opdracht is, een
- * servicedesk-melding (eigen ladder), of een offerte die al verder in de ladder staat — die
+ * servicedesk-melding (die gaat naar Wachten op opdrachtgever), of een offerte die al verder in de ladder staat — die
  * terugzetten zou informatie weggooien.
  *
  * Geeft een melding terug voor de toast plus of de statusstap slaagde; gooit niet.
@@ -204,7 +204,18 @@ async function zetDossierOpVerzonden(dossierId: string): Promise<{ ok: boolean; 
     .eq('id', dossierId)
     .maybeSingle()
   if (!d)                                 return { ok: false, tekst: 'dossier niet gevonden' }
-  if (d.servicedesk_substatus != null)    return { ok: true,  tekst: 'servicedeskmelding, status ongewijzigd' }
+  if (d.servicedesk_substatus != null) {
+    // Een servicedeskbon heeft geen offerteladder; daar betekent een verstuurde offerte dat de bon
+    // op de opdrachtgever wacht. Vanuit elke stand, behalve als hij al dicht is.
+    if (d.servicedesk_substatus === 'financieel_gereed' || d.servicedesk_substatus === 'vervallen'
+      || d.servicedesk_substatus === 'wacht_op_opdrachtgever') {
+      return { ok: true, tekst: 'servicedeskmelding, status ongewijzigd' }
+    }
+    const { updateServicedeskSubstatus } = await import('@/lib/dossiers/actions')
+    const res = await updateServicedeskSubstatus(dossierId, 'wacht_op_opdrachtgever')
+    if (!res.ok) return { ok: false, tekst: res.error ?? 'status niet gewijzigd' }
+    return { ok: true, tekst: 'Servicedeskbon op Wachten op opdrachtgever' }
+  }
   if (d.hoofdstatus === 'opdracht')       return { ok: true,  tekst: 'dossier is al opdracht, status ongewijzigd' }
   if (d.offerte_substatus && VERDER_DAN_VERZONDEN.has(d.offerte_substatus)) {
     return { ok: true, tekst: `offerte staat al verder in de ladder (${d.offerte_substatus}), status ongewijzigd` }

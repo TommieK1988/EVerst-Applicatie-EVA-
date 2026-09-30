@@ -4,7 +4,9 @@
  * "Wat wil je doen?" — de handelingen van een servicedeskbon, rechts in het Servicedesk-blok.
  *
  * Bovenaan de stap die uit de huidige stand volgt (Werk gestart, Gereedmelden, Kosten
- * controleren…): dat is een vaststelling, geen keuze, en daarom de primaire knop. Daaronder de
+ * controleren…): dat is een vaststelling, geen keuze, en daarom de primaire knop. Staat de bon op
+ * Wachten op opdrachtgever, dan staan daar de drie mogelijke antwoorden: mandaatverhoging
+ * goedgekeurd, offerte gewonnen (beide naar In voorbereiding) of vervallen. Daaronder de
  * vier handelingen waar wél iets te kiezen valt: uitbesteden, zelf inplannen, offreren, of meer
  * mandaat vragen.
  *
@@ -17,6 +19,8 @@ import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui'
+import { useDialogen } from '@/components/ui/dialogen'
+import { laatServicedeskbonVervallen } from '@/lib/dossiers/servicedesk-acties'
 import { maakOfferteVoorServicedesk, offerteAkkoordServicedesk } from '@/lib/dossiers/actions'
 import { bonActies, type BonActieSleutel } from './bon-acties'
 import { volgendeStap } from './status-stappen'
@@ -34,14 +38,12 @@ import StatusStapKnop from './StatusStapKnop'
 const KNOP = 'h-auto min-h-8 w-full justify-center whitespace-normal py-1.5 leading-tight'
 
 export default function BonActies({
-  dossierId, heeftCalculatie, mandaatBedrag, verhogingLoopt, kostengroep, calcProjectId,
+  dossierId, heeftCalculatie, mandaatBedrag, kostengroep, calcProjectId,
   substatus, alleenLezen,
 }: {
   dossierId: string
   heeftCalculatie: boolean
   mandaatBedrag: number | null
-  /** De bon staat op "Mandaat verhoging aangevraagd": dan is toekennen de vervolgstap. */
-  verhogingLoopt: boolean
   /** De vaste kostengroep van de bon; alles wat hier wordt uitgezet of ingepland landt erop. */
   kostengroep: { code: string; naam: string } | null
   /** Gekoppelde calculatie; bepaalt in welke werkbegroting de bestelregels terechtkomen. */
@@ -52,18 +54,61 @@ export default function BonActies({
 }) {
   const router = useRouter()
   const [bezig, start] = useTransition()
-  const [mandaatOpen, setMandaatOpen] = useState(false)
+  const { bevestig, vraagTekst } = useDialogen()
+  /** Welke kant van het mandaatvenster open staat: de vraag, of het antwoord vastleggen. */
+  const [mandaatOpen, setMandaatOpen] = useState<null | 'aanvragen' | 'toekennen'>(null)
   const [planOpen, setPlanOpen] = useState(false)
   const [bestelOpen, setBestelOpen] = useState(false)
 
-  const stap = alleenLezen ? null : volgendeStap(substatus)
+  const wacht = !alleenLezen && substatus === 'wacht_op_opdrachtgever'
+  const stap = alleenLezen || wacht ? null : volgendeStap(substatus)
 
   const acties = bonActies({
     heeftCalculatie,
     heeftMandaat: mandaatBedrag != null && mandaatBedrag > 0,
-    verhogingLoopt,
+    wachtOpOpdrachtgever: wacht,
     alleenLezen,
   })
+
+  // De vraag staat buiten de transition: anders draait de knop al terwijl je nog aan het lezen bent.
+  async function offerteGewonnen() {
+    const ok = await bevestig({
+      titel: 'Offerte gewonnen?',
+      omschrijving: heeftCalculatie
+        ? 'De bon gaat naar In voorbereiding. Het offertebedrag wordt de aanneemsom en de bon rekent af op aangenomen.'
+        : 'De bon gaat naar In voorbereiding.',
+      bevestigLabel: 'Offerte gewonnen',
+    })
+    if (!ok) return
+    start(async () => {
+      const r = await offerteAkkoordServicedesk(dossierId)
+      if (!r.ok) { toast.error(r.error); return }
+      toast.success('Offerte gewonnen — de bon staat op In voorbereiding')
+      router.refresh()
+    })
+  }
+
+  async function vervallen() {
+    const reden = await vraagTekst({
+      titel: 'Bon laten vervallen?',
+      omschrijving: 'De bon gaat van het bord af en staat daarna alleen nog onder Afgesloten, '
+        + 'alleen-lezen. In Bouw7 gaat het project naar 08. Afgewezen. Dit is niet terug te draaien.',
+      label: 'Reden',
+      placeholder: 'Bijv. opdrachtgever gaat niet akkoord met de offerte',
+      meerregelig: true,
+      verplicht: true,
+      bevestigLabel: 'Vervallen',
+    })
+    if (reden == null) return
+    start(async () => {
+      const r = await laatServicedeskbonVervallen(dossierId, { reden })
+      if (!r.ok) { toast.error(r.error); return }
+      toast.success('Bon vervallen')
+      if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 6000 })
+      router.push('/servicedesk')
+      router.refresh()
+    })
+  }
 
   function doe(sleutel: BonActieSleutel) {
     switch (sleutel) {
@@ -79,17 +124,11 @@ export default function BonActies({
         setPlanOpen(true)
         return
       case 'mandaatverhoging':
-        setMandaatOpen(true)
+        setMandaatOpen('aanvragen')
         return
       case 'offerte':
+        if (heeftCalculatie) { void offerteGewonnen(); return }
         start(async () => {
-          if (heeftCalculatie) {
-            const r = await offerteAkkoordServicedesk(dossierId)
-            if (!r.ok) { toast.error(r.error); return }
-            toast.success('Offerte op akkoord — de bon rekent nu af op aangenomen')
-            router.refresh()
-            return
-          }
           const r = await maakOfferteVoorServicedesk(dossierId)
           if (!r.ok) { toast.error(r.error); return }
           router.push(`/servicedesk/${dossierId}/calculatie`)
@@ -105,6 +144,26 @@ export default function BonActies({
       </div>
 
       <div className="flex flex-col gap-2.5">
+        {wacht && (
+          <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+            <span className="text-[11px] leading-snug text-neutral-500">
+              De bon wacht op de opdrachtgever. Wat is het antwoord?
+            </span>
+            <Button variant="primary" className={KNOP} disabled={bezig}
+              onClick={() => setMandaatOpen('toekennen')}>
+              Mandaatverhoging goedgekeurd
+            </Button>
+            <Button variant="secondary" className={KNOP} disabled={bezig}
+              onClick={() => void offerteGewonnen()}>
+              Offerte gewonnen
+            </Button>
+            <Button variant="outline" className={KNOP} disabled={bezig}
+              onClick={() => void vervallen()}>
+              Vervallen
+            </Button>
+          </div>
+        )}
+
         {stap && (
           <div className="flex flex-col gap-1">
             <StatusStapKnop dossierId={dossierId} stap={stap} blok />
@@ -120,7 +179,7 @@ export default function BonActies({
               // Eén primaire knop per blok. Is er een vervolgstap, dan is dát de primaire
               // handeling en worden de keuzes eronder secundair — anders staan er twee knoppen
               // die allebei "doe mij eerst" zeggen.
-              variant={a.primair && !stap ? 'primary' : 'secondary'}
+              variant={a.primair && !stap && !wacht ? 'primary' : 'secondary'}
               onClick={() => doe(a.sleutel)}
               disabled={!a.kan || bezig}
               loading={bezig && a.sleutel === 'offerte'}
@@ -156,8 +215,8 @@ export default function BonActies({
         <MandaatVerhogingModal
           dossierId={dossierId}
           huidigMandaat={mandaatBedrag}
-          modus={verhogingLoopt ? 'toekennen' : 'aanvragen'}
-          onSluit={() => setMandaatOpen(false)}
+          modus={mandaatOpen}
+          onSluit={() => setMandaatOpen(null)}
           onKlaar={() => router.refresh()}
         />
       )}

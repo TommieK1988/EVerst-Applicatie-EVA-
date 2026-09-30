@@ -28,7 +28,9 @@ export function bepaalFase(d: FaseVelden): DossierFase {
   if (d.gearchiveerd === true) return 'afgesloten'
   if (d.hoofdstatus === 'opdracht' && d.opdracht_substatus === 'financieel_afgesloten') return 'afgesloten'
   if (d.servicedesk_substatus) {
-    return d.servicedesk_substatus === 'financieel_gereed' ? 'afgesloten' : 'servicedesk'
+    return d.servicedesk_substatus === 'financieel_gereed' || d.servicedesk_substatus === 'vervallen'
+      ? 'afgesloten'
+      : 'servicedesk'
   }
   // Een gewonnen offerte is inmiddels een opdracht, een verloren of vervallen offerte is
   // afgehandeld — in beide gevallen loopt er niets meer op dit dossier.

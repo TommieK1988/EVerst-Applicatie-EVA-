@@ -1,6 +1,6 @@
 'use client'
 import React from 'react'
-import type { DossierRij, DossierSectie } from './types'
+import { isMutatieDossier, type DossierRij, type DossierSectie } from './types'
 import { crewKleur, crewInitialen } from '@/lib/utils/crew'
 import { DossierKaartDetail } from './DossierKaartDetail'
 import { berekenKaartBedrag } from './kaart-bedrag'
@@ -224,6 +224,16 @@ export const DossierKaart = React.memo(function DossierKaart({
             }}>
               {dossier.dossiernummer ?? 'Nieuw'}
             </span>
+            {/* Dagelijks onderhoud en mutatie delen één servicedeskbord; het label houdt ze uit elkaar. */}
+            {isServicedesk && isMutatieDossier(dossier) && (
+              <span style={{
+                fontSize: 9.5, fontWeight: 600, lineHeight: 1,
+                padding: '2px 4px', borderRadius: 4,
+                color: 'var(--neutral-600)', background: 'var(--neutral-100)',
+              }}>
+                Mutatie
+              </span>
+            )}
             {bouw7Url && (
               <a
                 href={bouw7Url}

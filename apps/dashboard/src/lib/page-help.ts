@@ -1131,7 +1131,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── Hoofdproces: Afgesloten ────────────────────────────────────────────
   [/^\/afgesloten$/, {
     title: 'Afgesloten',
-    description: 'Archief van alle afgeronde dossiers: financieel gereed gemelde en financieel afgesloten opdrachten en servicedeskbonnen, verloren offertes, afgewezen en vervallen aanvragen. Vanuit hier bekijk je oude dossiers zonder ze per ongeluk te wijzigen.',
+    description: 'Archief van alle afgeronde dossiers: financieel gereed gemelde en financieel afgesloten opdrachten en servicedeskbonnen, vervallen servicedeskbonnen, verloren offertes, afgewezen en vervallen aanvragen. Vanuit hier bekijk je oude dossiers zonder ze per ongeluk te wijzigen.',
     sections: [
       { title: 'Wat staat hier', body: 'Alle dossiers die het proces hebben verlaten: opdrachten en servicedeskbonnen met status "financieel gereed" of "financieel afgesloten", niet-gewonnen offertes en aanvragen die zijn afgewezen of vervallen. Actieve dossiers vind je in Aanvragen, Offertes, Opdrachten of Servicedesk.' },
       { title: 'Financieel gereed', body: 'Een dossier dat financieel gereed is gemeld blijft nog zeven dagen op Opdrachten of Servicedesk staan en verhuist daarna hierheen. In die eerste week staat het dus op beide plekken.' },
@@ -1467,6 +1467,9 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Kanbanbord met alle servicedesk-dossiers: storingen, garantie en klein onderhoud voor bestaande klanten. De servicedesk is een snelle, aparte ingang naast het reguliere aanvraagproces.',
     sections: [
       { title: 'Kanban-kolommen', body: 'De kolommen tonen de status van elke melding. Sleep een kaart naar een andere kolom om de status te wijzigen; elke overgang wordt gelogd met datum en gebruiker.' },
+      { title: 'Eén bord voor onderhoud en mutatie', body: 'Dagelijks onderhoud en mutatie staan op hetzelfde bord met dezelfde kolommen. Met de knoppen bovenaan (Alle / Dagelijks onderhoud / Mutatie) filter je; een mutatiebon heeft een label op de kaart.' },
+      { title: 'Wachten op opdrachtgever', body: 'Vraag je een mandaatverhoging aan of verstuur je een offerte, dan gaat de bon vanzelf naar deze kolom. Open de bon en leg het antwoord vast: "Mandaatverhoging goedgekeurd" of "Offerte gewonnen" zet hem op In voorbereiding, "Vervallen" haalt hem van het bord. Een vervallen bon vind je terug onder Afgesloten.' },
+      { title: 'In voorbereiding', body: 'Zodra je werk uitzet bij een onderaannemer of iemand inplant, gaat een bon van Nieuw of Wachten op opdrachtgever vanzelf naar In voorbereiding.' },
       { title: 'Nieuwe melding', body: 'Maak een melding aan voor een bestaande klant. Leg de urgentie, aard (lekkage, glas, verwarmingsuitval, e.d.) en locatie vast, en wijs een uitvoerder toe voor directe opvolging.' },
       { title: 'Regie vs. aangenomen', body: 'Kaarten tonen of een klus op regie (nacalculatie) of aangenomen (vaste prijs) loopt, plus de doorlooptijd. Zo zie je in één oogopslag wat aandacht nodig heeft.' },
       { title: 'Filteren', body: 'Gebruik de zoekbalk en filters om op klant, uitvoerder of status in te zoomen. Klik op een kaart voor het volledige dossier.' },

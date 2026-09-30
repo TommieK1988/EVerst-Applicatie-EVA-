@@ -386,7 +386,7 @@ function nogNietVerlopenFinancieelGereed(kolom: 'opdracht_substatus' | 'serviced
 }
 
 /**
- * Afgewezen bonnen ('08. Afgewezen') staan in het archief, niet op het bord. Als `.or()` met een
+ * Afgewezen bonnen ('08. Afgewezen') zijn vervallen en staan op Afgesloten. Als `.or()` met een
  * `is.null`-tak: een kale `.neq()` gooit ook elk dossier zónder Bouw7-status weg (NULL ≠ waar).
  */
 const NIET_AFGEWEZEN = 'bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.neq."08. Afgewezen"'
@@ -461,22 +461,19 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
 /**
  * Haal servicedesk-dossiers op: categorie Dagelijks onderhoud/Mutatie of Bouw7 'LB.' — ook een
  * lopende bon met een verkeerde categorie, die hier met een waarschuwing staat in plaats van
- * nergens. Sluit '08. Afgewezen' uit (dat is het archief), en net als bij Opdrachten alles wat
- * langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
+ * nergens. Sluit vervallen bonnen uit (EVA-stand `vervallen` of Bouw7 '08. Afgewezen' — die staan
+ * op Afgesloten), en net als bij Opdrachten alles wat langer dan
+ * {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
+ *
+ * Het filter op `vervallen` is nodig omdat die stand geen kolom heeft: zonder filter zou het bord
+ * zo'n bon in de eerste kolom zetten (zie `resolveKey` in DossierKanban).
  */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
   return metStatusSinds(await haalDossierLijst(q => q
     .eq('bord', 'servicedesk')
     .or(NIET_AFGEWEZEN)
+    .or('servicedesk_substatus.is.null,servicedesk_substatus.neq.vervallen')
     .or(nogNietVerlopenFinancieelGereed('servicedesk_substatus'))
-    .order('created_at', { ascending: false })))
-}
-
-/** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
-export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
-  return metStatusSinds(await haalDossierLijst(q => q
-    .eq('bord', 'servicedesk')
-    .eq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order('created_at', { ascending: false })))
 }
 
@@ -530,7 +527,7 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
 /**
  * Haal alle afgeronde dossiers op voor de "Afgesloten"-tab, over alle secties heen:
  * - Opdrachten:  Financieel gereed of Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
- * - Servicedesk: Financieel gereed
+ * - Servicedesk: Financieel gereed of Vervallen
  * - Offertes:    Verloren of Vervallen
  * - Aanvragen:   Afgewezen of Vervallen
  *
@@ -549,7 +546,7 @@ export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
   return haalDossierLijst(q => q
     .or(
       'and(hoofdstatus.eq.opdracht,opdracht_substatus.in.(financieel_gereed,financieel_afgesloten)),' +
-      'servicedesk_substatus.eq.financieel_gereed,' +
+      'servicedesk_substatus.in.(financieel_gereed,vervallen),' +
       'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
       'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.in.(afgewezen,vervallen)),' +
       'bord.eq.afgesloten'
@@ -581,19 +578,23 @@ export async function updateServicedeskSubstatus(
   // de lopende-bonnenlijst kunnen trekken. De lees-sync laat de kolom daarom staan.
   //
   // ── Behalve aan het eind ───────────────────────────────────────
-  // Bij financieel gereed en financieel afgesloten hóórt EVA weer gelijk te lopen met
-  // Bouw7: daar is de mapping wél eenduidig (06. en 07.), en het is de administratie die
-  // verder moet. Dus: de projectstatus terugschrijven, en bij succes de bescherming
-  // ópheffen zodat de lees-sync het veld weer bijhoudt. Blijft de markering staan, dan
-  // zou een latere wijziging in Bouw7 voor altijd buiten de deur blijven.
-  const eindstatus = nieuweSubstatus === 'financieel_gereed' || nieuweSubstatus === 'financieel_afgesloten'
+  // Bij financieel gereed, financieel afgesloten en vervallen hóórt EVA weer gelijk te lopen
+  // met Bouw7: daar is de mapping wél eenduidig (06., 07. en 08. Afgewezen), en het is de
+  // administratie die verder moet. Dus: de projectstatus terugschrijven, en bij succes de
+  // bescherming ópheffen zodat de lees-sync het veld weer bijhoudt. Blijft de markering staan,
+  // dan zou een latere wijziging in Bouw7 voor altijd buiten de deur blijven.
+  const eindstatus = nieuweSubstatus === 'financieel_gereed'
+    || nieuweSubstatus === 'financieel_afgesloten'
+    || nieuweSubstatus === 'vervallen'
   let bouw7Fout: string | null = null
   let bouw7Gelukt = false
   let bouw7Cache: Record<string, unknown> = {}
 
   if (eindstatus && huidig?.bouw7_id) {
     const { opdrachtSubstatusNaarPrefix } = await import('@/lib/bouw7/status-map')
-    const prefix = opdrachtSubstatusNaarPrefix(String(nieuweSubstatus))
+    const prefix = nieuweSubstatus === 'vervallen'
+      ? '08.'
+      : opdrachtSubstatusNaarPrefix(String(nieuweSubstatus))
     if (prefix) {
       const { schrijfBouw7Projectstatusprefix } = await import('@/lib/dossiers/bouw7-status')
       const res = await schrijfBouw7Projectstatusprefix(huidig.bouw7_id, prefix)
@@ -818,9 +819,12 @@ export async function koppelDossierAanProject(
 }
 
 /**
- * Servicedesk: markeer de gekoppelde offerte als Akkoord. Zet de aanneemsom (uit de
- * gegenereerde quote) in het dossier, schakelt naar termijn-facturatie (tenzij handmatig
- * vastgezet) en werkt de substatus bij. Het Calculatie-tab blijft zichtbaar.
+ * Servicedesk: de offerte is gewonnen. Zet de aanneemsom (uit de gegenereerde quote) in het
+ * dossier, schakelt naar termijn-facturatie (tenzij handmatig vastgezet) en zet de bon op
+ * In voorbereiding. Het Calculatie-tab blijft zichtbaar.
+ *
+ * Zonder gekoppelde calculatie (de offerte is buiten EVA gemaakt, bijv. in Bouw7) verschuift
+ * alleen de bon: er is dan geen bedrag om over te nemen.
  */
 export async function offerteAkkoordServicedesk(
   dossierId: string,
@@ -831,46 +835,47 @@ export async function offerteAkkoordServicedesk(
   const supabase = createAdminClient() as any
   const { data: dossier, error } = await supabase
     .from('dossiers')
-    .select('everts_calc_project_id, facturatiemethode_handmatig, servicedesk_substatus, '
-      + 'bouw7_categorie_naam, categorie')
+    .select('everts_calc_project_id, facturatiemethode_handmatig, servicedesk_substatus')
     .eq('id', dossierId)
     .single()
   if (error) return { ok: false, error: error.message }
-  if (!dossier?.everts_calc_project_id) {
-    return { ok: false, error: 'Geen offerte/calculatie gekoppeld aan dit dossier.' }
+  const heeftCalculatie = !!dossier?.everts_calc_project_id
+
+  if (heeftCalculatie) {
+    // Aanneemsom + BTW-totaal uit de gegenereerde quote (kan null zijn als nog niet gegenereerd).
+    const patch: Record<string, unknown> = {}
+    if (!dossier.facturatiemethode_handmatig) patch.facturatiemethode = 'termijnen'
+
+    try {
+      const { getQuoteTotalenVoorProject } = await import('@/app/(platform)/everts-calc/actions/quotes')
+      const totalen = await getQuoteTotalenVoorProject(dossier.everts_calc_project_id as string)
+      if (totalen) {
+        patch.bedrag_excl_btw = totalen.subtotaal_ex_btw ?? null
+        patch.bedrag_incl_btw = totalen.totaal_incl_btw ?? null
+        patch.kostprijs_excl_btw = totalen.kostprijs ?? null
+      }
+    } catch { /* quote nog niet beschikbaar — alleen status/facturatiemethode zetten */ }
+
+    const { error: updFout } = await supabase.from('dossiers').update(patch).eq('id', dossierId)
+    if (updFout) return { ok: false, error: updFout.message }
   }
 
-  // Aanneemsom + BTW-totaal uit de gegenereerde quote (kan null zijn als nog niet gegenereerd).
-  const patch: Record<string, unknown> = {}
-  if (!dossier.facturatiemethode_handmatig) patch.facturatiemethode = 'termijnen'
-
-  try {
-    const { getQuoteTotalenVoorProject } = await import('@/app/(platform)/everts-calc/actions/quotes')
-    const totalen = await getQuoteTotalenVoorProject(dossier.everts_calc_project_id as string)
-    if (totalen) {
-      patch.bedrag_excl_btw = totalen.subtotaal_ex_btw ?? null
-      patch.bedrag_incl_btw = totalen.totaal_incl_btw ?? null
-      patch.kostprijs_excl_btw = totalen.kostprijs ?? null
-    }
-  } catch { /* quote nog niet beschikbaar — alleen status/facturatiemethode zetten */ }
-
-  const { error: updFout } = await supabase.from('dossiers').update(patch).eq('id', dossierId)
-  if (updFout) return { ok: false, error: updFout.message }
-
   /**
-   * De status ging hier op 'offerte_uitgebracht' — de kolom die "offerte verstuurd" betekent.
-   * Akkoord geven zette de bon dus terug naar de stand waar hij al voorbij was, en op een bon die
-   * al liep sprong hij op het bord naar links.
-   *
-   * Mutatiewerk gaat door naar de werkvoorbereiding; dat is de volgende stap in die ladder.
-   * Bij dagelijks onderhoud blijft de bon staan waar hij staat: akkoord op een offerte zegt
-   * nog niet wie het werk doet. Dat bepaalt de volgende handeling — een opdracht uitzetten of
-   * iemand inplannen — en díé zet de kolom.
+   * Gewonnen = het werk mag door, dus naar In voorbereiding. Alleen vanuit Nieuw en Wachten op
+   * opdrachtgever: staat de bon al verder (een offerte voor extra werk op een lopende bon), dan
+   * zou hij op het bord naar links springen.
    */
-  if (isMutatieDossier(dossier) && dossier.servicedesk_substatus !== 'in_voorbereiding') {
+  const stand = dossier.servicedesk_substatus as string | null
+  if (stand === 'nieuw' || stand === 'wacht_op_opdrachtgever') {
     // Via updateServicedeskSubstatus, want die markeert de kolom als handmatig gezet; een
     // rechtstreekse update zou door de eerstvolgende Bouw7-sync worden overschreven.
     await updateServicedeskSubstatus(dossierId, 'in_voorbereiding')
+  }
+
+  if (!heeftCalculatie) {
+    await verwerkDossierTriggers(dossierId).catch(() => {})
+    revalidatePath('/servicedesk')
+    return { ok: true }
   }
 
   /**
@@ -3835,6 +3840,11 @@ async function herleidSectieUitCategorie(supabase: any, dossierId: string): Prom
     d.verzonden_op ?? null,
     d.bouw7_quotation_status ?? null,
   )
+
+  // Van Dagelijks onderhoud naar Mutatie (of terug) blijft de bon op hetzelfde bord met dezelfde
+  // kolommen. Dan de kolom laten staan: opnieuw afleiden zou een bon die op Wachten of In
+  // voorbereiding staat terugzetten naar wat Bouw7 zegt (meestal Nieuw).
+  if (d.servicedesk_substatus && nieuw.servicedesk_substatus) return
 
   const ongewijzigd =
     d.hoofdstatus === nieuw.hoofdstatus

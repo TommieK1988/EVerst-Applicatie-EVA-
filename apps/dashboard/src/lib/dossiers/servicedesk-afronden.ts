@@ -30,7 +30,7 @@ const BUCKET = 'servicedesk-fotos'
  * terug: de administratie is er al mee bezig, en een late melding van de monteur is dan alleen
  * nog informatie.
  */
-const VOORBIJ_UITGEVOERD = new Set(['uitgevoerd', 'kosten_compleet', 'financieel_gereed', 'financieel_afgesloten'])
+const VOORBIJ_UITGEVOERD = new Set(['uitgevoerd', 'kosten_compleet', 'financieel_gereed', 'financieel_afgesloten', 'vervallen'])
 
 type Uitkomst = { ok: true } | { ok: false; error: string }
 

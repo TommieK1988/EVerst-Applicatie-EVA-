@@ -13,8 +13,6 @@ import type { ServicedeskSubstatus } from '../types'
  *   toelichting (`FinancieelGereedDialog`). Die hier nabouwen zou een tweede, lossere route
  *   naast een bestaande strengere zetten — precies hoe twee waarheden ontstaan.
  *
- * Beide ladders delen deze sleutels, dus één tabel volstaat; alleen de labels op het bord
- * verschillen per ladder (zie `SERVICEDESK_MUTATIE_STATUSSEN`).
  */
 export type StatusStap = {
   /** Waar de bon heen gaat. */
@@ -25,20 +23,10 @@ export type StatusStap = {
 }
 
 const STAPPEN: Partial<Record<ServicedeskSubstatus, StatusStap>> = {
-  uitgezet: {
-    naar: 'loopt',
-    label: 'Werk gestart',
-    uitleg: 'De onderaannemer is begonnen.',
-  },
-  ingepland: {
-    naar: 'loopt',
-    label: 'Werk gestart',
-    uitleg: 'De eerste monteur staat op de bon.',
-  },
   in_voorbereiding: {
     naar: 'loopt',
     label: 'Werk gestart',
-    uitleg: 'De voorbereiding is rond en de uitvoering loopt.',
+    uitleg: 'Het werk is uitgezet of ingepland en de uitvoering loopt.',
   },
   loopt: {
     naar: 'uitgevoerd',
@@ -58,29 +46,25 @@ export function volgendeStap(substatus: ServicedeskSubstatus | null | undefined)
 }
 
 /**
- * Standen waarin het werk nog aan niemand is toegewezen. Alleen vanuit deze drie schuift een
- * bon door zodra er een opdracht uitgaat of iemand wordt ingepland; staat hij al op Loopt of
+ * Standen waarin het werk nog aan niemand is toegewezen. Alleen vanuit deze twee schuift een
+ * bon door zodra er een opdracht uitgaat of iemand wordt ingepland; staat hij al op Onderhanden of
  * verder, dan is een tweede opdracht gewoon extra werk en geen stap terug.
+ *
+ * Wachten op opdrachtgever hoort erbij: wie in die stand toch al uitzet of inplant, heeft kennelijk
+ * het akkoord binnen.
  */
-const NOG_NIET_TOEGEWEZEN: ServicedeskSubstatus[] = ['nieuw', 'mandaat_verhoging', 'offerte_uitgebracht']
+const NOG_NIET_TOEGEWEZEN: ServicedeskSubstatus[] = ['nieuw', 'wacht_op_opdrachtgever']
 
 /**
- * Waar een bon heen gaat zodra het werk wordt toegewezen — of niets, als hij niet hoort te
- * verschuiven.
+ * Waar een bon heen gaat zodra het werk wordt toegewezen (opdracht verstuurd of iemand
+ * ingepland) — of niets, als hij niet hoort te verschuiven.
  *
- * **De reden dat dit een functie is en geen regel in de aanroeper:** `uitgezet` en `ingepland`
- * bestaan alleen in de onderhoudsladder. Zou een mutatiebon op zo'n stand worden gezet, dan valt
- * hij van het bord: het mutatiebord kent die kolommen niet en toont hem dus nergens meer. Dat is
- * geen zichtbare fout maar een verdwenen dossier.
- *
- * Mutatiewerk heeft die stap ook niet nodig: daar gaat uitbesteden en inplannen binnen
- * "In voorbereiding" en is Onderhanden de volgende kolom.
+ * Tot oktober 2026 waren dat twee kolommen (Uitgezet en Ingepland) die alleen op het bord voor
+ * dagelijks onderhoud bestonden. Nu is het voor elke bon In voorbereiding.
  */
 export function standNaToewijzing(
-  soort: 'uitgezet' | 'ingepland',
-  { isMutatie, substatus }: { isMutatie: boolean; substatus: ServicedeskSubstatus | null | undefined },
+  substatus: ServicedeskSubstatus | null | undefined,
 ): ServicedeskSubstatus | undefined {
-  if (isMutatie) return undefined
   if (!substatus || !NOG_NIET_TOEGEWEZEN.includes(substatus)) return undefined
-  return soort
+  return 'in_voorbereiding'
 }

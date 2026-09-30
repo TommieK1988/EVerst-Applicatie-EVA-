@@ -6,6 +6,7 @@ import type {
   OpdrachtSubstatus,
   ServicedeskSubstatus,
 } from '@everts/database'
+import { servicedeskSubstatusLabels } from '@everts/database/platform-types'
 import { isServicedeskCategorie } from './fase-plaatsing'
 
 export type { Dossier, Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus }
@@ -132,7 +133,7 @@ export function getDossierSubstatus(dossier: Dossier): DossierSubstatus {
 /**
  * True als een dossier definitief is afgesloten en daarmee overal **alleen-lezen**:
  * Afgewezen/Vervallen (aanvraag), Verloren/Vervallen (offerte), Financieel afgesloten
- * (opdracht), of een Bouw7-projectstatus in de 07-reeks (afgesloten projecten).
+ * (opdracht), Vervallen (servicedeskbon), of een Bouw7-projectstatus in de 07-reeks (afgesloten projecten).
  * Structureel getypeerd zodat zowel een volledige `DossierRij` als een kale status-select
  * (zie `lib/dossiers/guards.ts`) hierin passen.
  */
@@ -141,10 +142,14 @@ export function isDossierAfgesloten(dossier: {
   aanvraag_substatus?: AanvraagSubstatus | null
   offerte_substatus?: OfferteSubstatus | null
   opdracht_substatus?: OpdrachtSubstatus | null
+  servicedesk_substatus?: ServicedeskSubstatus | string | null
   bouw7_projectstatus_naam?: string | null
 }): boolean {
   const b7 = dossier.bouw7_projectstatus_naam?.trim()
   if (b7 && b7.startsWith('07')) return true
+  // Een vervallen servicedeskbon is dicht. Hij heeft hoofdstatus 'aanvraag' met substatus 'nieuw',
+  // dus zonder deze regel zou de switch hieronder hem als open aanvraag zien.
+  if (dossier.servicedesk_substatus === 'vervallen') return true
   switch (dossier.hoofdstatus) {
     case 'aanvraag': return dossier.aanvraag_substatus === 'afgewezen' || dossier.aanvraag_substatus === 'vervallen'
     case 'offerte':  return dossier.offerte_substatus === 'verloren'  || dossier.offerte_substatus === 'vervallen'
@@ -279,84 +284,56 @@ export function bonBewakingscode(
 }
 
 /**
- * Servicedesk kent twee trajecten die los van elkaar lopen, en dus twee kolomreeksen:
- *
- *  * **Dagelijks onderhoud** — bon binnen, mandaat toetsen, uitzetten bij eigen mensen of een
- *    onderaannemer, kosten verzamelen, factureren. Werk op regie.
- *  * **Mutatie** — opname ter plaatse, offerte, werkvoorbereiding, uitvoering. Lijkt op een gewone
- *    opdracht en gaat aangenomen.
- *
- * Beide ladders schrijven op dezelfde kolom `dossiers.servicedesk_substatus`; alleen de getoonde
- * reeks verschilt. Gedeelde sleutels houden daardoor hun historie en hun Bouw7-koppeling — een
- * dossier dat van categorie wisselt springt niet van plek.
+ * Het servicedeskbord toont twee soorten werk: **Dagelijks onderhoud** (regie) en **Mutatie**
+ * (aangenomen). Tot oktober 2026 hadden die elk een eigen kolomreeks; die waren zo naar elkaar
+ * toegegroeid dat ze zijn samengevoegd tot één bord. De keuze bovenaan het bord is nu een filter,
+ * geen andere set kolommen.
  */
-export type ServicedeskLadder = 'onderhoud' | 'mutatie'
+export type ServicedeskFilter = 'alle' | 'onderhoud' | 'mutatie'
 
 /**
- * Cookie waarin staat welke kant van het servicedeskbord de gebruiker het laatst koos.
+ * Cookie waarin staat welk filter de gebruiker op het servicedeskbord het laatst koos.
  *
  * Een cookie en geen localStorage: de serverpagina moet de keuze al bij de eerste render kennen,
- * anders flitst er bij elke paginaload eerst een frame Dagelijks onderhoud voorbij. Deze constante
- * staat bewust hier en niet in ServicedeskBord — dat bestand heeft 'use client', en dan levert een
+ * anders flitst er bij elke paginaload eerst het verkeerde filter voorbij. Deze constante staat
+ * bewust hier en niet in ServicedeskBord — dat bestand heeft 'use client', en dan levert een
  * import vanuit een Server Component een client-referentie op in plaats van de string zelf.
  */
-export const SERVICEDESK_LADDER_COOKIE = 'servicedesk_ladder'
+export const SERVICEDESK_FILTER_COOKIE = 'servicedesk_filter'
 
-/** Leest de cookiewaarde uit; alles wat geen geldige keuze is, valt terug op Dagelijks onderhoud. */
-export function ladderUitCookie(waarde: string | null | undefined): ServicedeskLadder {
-  return waarde === 'mutatie' ? 'mutatie' : 'onderhoud'
+/** Leest de cookiewaarde uit; alles wat geen geldige keuze is, valt terug op Alle. */
+export function filterUitCookie(waarde: string | null | undefined): ServicedeskFilter {
+  return waarde === 'onderhoud' || waarde === 'mutatie' ? waarde : 'alle'
 }
 
-/** De ladder voor Dagelijks onderhoud (en voor elk servicedeskdossier dat geen mutatie is). */
-export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
-  { key: 'nieuw',               label: 'Nieuw'                         },
-  { key: 'mandaat_verhoging',   label: 'Mandaat verhoging aangevraagd' },
-  { key: 'offerte_uitgebracht', label: 'Offerte uitgebracht'           },
-  { key: 'uitgezet',            label: 'Uitgezet'                      },
-  { key: 'ingepland',           label: 'Ingepland'                     },
-  { key: 'loopt',               label: 'Loopt'                         },
-  { key: 'uitgevoerd',          label: 'Uitgevoerd'                    },
-  { key: 'kosten_compleet',     label: 'Kosten compleet'               },
-  { key: 'financieel_gereed',   label: 'Financieel gereed'             },
-]
-
 /**
- * De ladder voor mutatiewerk.
+ * De kolommen van het servicedeskbord, voor dagelijks onderhoud en mutatie gelijk.
  *
- * Drie sleutels dragen hier bewust een ander label dan op het onderhoudsbord: `offerte_uitgebracht`
- * heet "Offerte verstuurd", `loopt` heet "Onderhanden" en `uitgevoerd` heet "Uitvoering gereed".
- * Dat is per dossier eenduidig — de categorie bepaalt welke ladder je ziet — en het houdt de
- * bestaande Bouw7-mapping intact: die statussen komen 1-op-1 uit `04. Onderhanden` en
- * `05. Uitvoering gereed`. Alleen `opgenomen` en `in_voorbereiding` zijn nieuw.
+ *  * **Wachten op opdrachtgever** — er is een mandaatverhoging aangevraagd of een offerte
+ *    verstuurd; de bon wacht op een ja of nee. Daar komt hij automatisch terecht.
+ *  * **In voorbereiding** — het werk mag door: er gaat een opdracht uit of iemand wordt ingepland.
  *
- * `mandaat_verhoging` staat in beide ladders omdat de knop "Mandaatverhoging aanvragen" op elke bon
- * staat. Ontbrak hij hier, dan viel een mutatiebon na de aanvraag van het bord: een stand zonder
- * kolom wordt nergens getoond. Hier na Opgenomen, want bij mutatiewerk blijkt een tekort meestal
- * bij de opname.
+ * `vervallen` heeft bewust geen kolom: die bon staat alleen nog onder Afgesloten.
  */
-export const SERVICEDESK_MUTATIE_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
-  { key: 'nieuw',               label: 'Nieuw'             },
-  { key: 'opgenomen',           label: 'Opgenomen'         },
-  { key: 'mandaat_verhoging',   label: 'Mandaat verhoging aangevraagd' },
-  { key: 'offerte_uitgebracht', label: 'Offerte verstuurd' },
-  { key: 'in_voorbereiding',    label: 'In voorbereiding'  },
-  { key: 'loopt',               label: 'Onderhanden'       },
-  { key: 'uitgevoerd',          label: 'Uitvoering gereed' },
-  { key: 'kosten_compleet',     label: 'Kosten compleet'   },
-  { key: 'financieel_gereed',   label: 'Financieel gereed' },
+export const SERVICEDESK_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
+  { key: 'nieuw',                  label: 'Nieuw'                    },
+  { key: 'wacht_op_opdrachtgever', label: 'Wachten op opdrachtgever' },
+  { key: 'in_voorbereiding',       label: 'In voorbereiding'         },
+  { key: 'loopt',                  label: 'Onderhanden'              },
+  { key: 'uitgevoerd',             label: 'Uitvoering gereed'        },
+  { key: 'kosten_compleet',        label: 'Kosten compleet'          },
+  { key: 'financieel_gereed',      label: 'Financieel gereed'        },
 ]
 
 /**
- * Alle servicedesk-substatussen samen, voor plekken die alleen een label bij een sleutel zoeken en
- * de categorie van het dossier niet kennen (widgets, mobiele lijst, actieve-dossiers-view). Bij een
- * sleutel die in beide ladders zit wint het onderhoudslabel: dat is verreweg de grootste groep.
- * Ken je het dossier wél, gebruik dan `servicedeskLadder(dossier)`.
+ * Alle servicedesk-standen mét labels, ook `vervallen` en de standen die in oktober 2026 zijn
+ * samengevoegd. Voor plekken die alleen een label bij een sleutel zoeken — de Afgesloten-lijst,
+ * widgets, en de doorlooptijd uit de historie, waar de oude sleutels nog in staan.
  */
 export const SERVICEDESK_ALLE_STATUSSEN: StatusDef<ServicedeskSubstatus>[] = [
   ...SERVICEDESK_STATUSSEN,
-  ...SERVICEDESK_MUTATIE_STATUSSEN.filter(
-    m => !SERVICEDESK_STATUSSEN.some(o => o.key === m.key),
-  ),
+  ...(['vervallen', 'mandaat_verhoging', 'offerte_uitgebracht', 'opgenomen', 'uitgezet', 'ingepland'] as const)
+    .map(key => ({ key: key as ServicedeskSubstatus, label: servicedeskSubstatusLabels[key] })),
 ]
 
 /**
@@ -373,14 +350,15 @@ export function isMutatieDossier(dossier: {
 }
 
 /**
- * De kolomreeks die bij dít dossier hoort. Alles wat servicedesk is en geen mutatie, valt onder
- * Dagelijks onderhoud.
+ * De kolomreeks van een servicedeskdossier. Sinds oktober 2026 voor elk dossier dezelfde; de
+ * functie blijft zodat de aanroepers niet hoeven te weten dát het bord ooit twee reeksen had.
  */
-export function servicedeskLadder(dossier: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function servicedeskLadder(_dossier?: {
   bouw7_categorie_naam?: string | null
   categorie?: string | null
 }): StatusDef<ServicedeskSubstatus>[] {
-  return isMutatieDossier(dossier) ? SERVICEDESK_MUTATIE_STATUSSEN : SERVICEDESK_STATUSSEN
+  return SERVICEDESK_STATUSSEN
 }
 
 /**
@@ -392,5 +370,6 @@ export function servicedeskLadder(dossier: {
 export function isAfsluitendeSubstatus(sectie: DossierSectie, key: string): boolean {
   if (sectie === 'aanvraag') return key === 'afgewezen' || key === 'vervallen'
   if (sectie === 'offerte')  return key === 'verloren'  || key === 'vervallen'
+  if (sectie === 'servicedesk') return key === 'vervallen'
   return false
 }

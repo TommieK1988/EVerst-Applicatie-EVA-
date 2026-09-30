@@ -208,6 +208,7 @@ export async function zorgVoorBonBewakingscodes(
     query = query
       .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
       .or('bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.neq."08. Afgewezen"')
+      .or('servicedesk_substatus.is.null,servicedesk_substatus.neq.vervallen')
       // Losse .or()-aanroepen worden door PostgREST met AND verbonden; dit is dezelfde knijp als
       // in `getDossiersVoorServicedesk`.
       .or(`servicedesk_substatus.is.null,servicedesk_substatus.neq.financieel_gereed,financieel_gereed_op.gte.${cutoff}`)

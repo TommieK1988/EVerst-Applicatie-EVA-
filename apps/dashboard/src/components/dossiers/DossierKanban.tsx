@@ -86,9 +86,9 @@ export function DossierKanban<K extends string>({
    * bord. Nu valt hij terug op de eerste kolom; buiten de servicedesk krijgt hij daar ook een
    * waarschuwing (`status_afwijkend`), zodat iemand de status rechtzet.
    *
-   * Op de servicedesk geen waarschuwing: daar is het normaal dat een substatus niet in de getoonde
-   * ladder valt (Dagelijks onderhoud en Mutatie delen één kolom in de database), en de eerstvolgende
-   * Bouw7-sync herschrijft hem volgens de categorie.
+   * Op de servicedesk geen waarschuwing: daar kan een oude stand van vóór de samenvoeging van
+   * oktober 2026 (uitgezet, ingepland, …) nog voorkomen tot de omzetmigratie heeft gedraaid.
+   * `vervallen` komt hier niet: de boardquery haalt die eraf.
    *
    * Offertebord: een gewonnen offerte is al een opdracht (hoofdstatus `opdracht`) maar staat hier
    * nog zeven dagen in Gewonnen, als terugblik.

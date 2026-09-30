@@ -23,7 +23,7 @@ const AFGEROND = new Set(['financieel_gereed', 'financieel_afgesloten'])
  * "Uitvoering gereed") of Kosten compleet is, is het werk op locatie klaar en rest alleen nog
  * kantoorwerk.
  */
-const SERVICEDESK_AFGEROND = new Set(['uitgevoerd', 'kosten_compleet', 'financieel_gereed'])
+const SERVICEDESK_AFGEROND = new Set(['uitgevoerd', 'kosten_compleet', 'financieel_gereed', 'vervallen'])
 
 export default async function MobielDossiersPage() {
   const medewerker = await getCurrentMedewerker()
