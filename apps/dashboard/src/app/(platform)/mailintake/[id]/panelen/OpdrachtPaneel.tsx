@@ -18,11 +18,11 @@ import React, { useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button, Card, useDialogen } from '@/components/ui'
+import { bevestigOpdrachtOpDossier } from '@/lib/mailintake/actions'
 import {
-  bevestigOpdrachtOpDossier, toetsOfferteVoorOpdracht,
-  getFactuuradressenVoorIntake, bewaarFactuuradresVoorIntake,
-  getOfferteDossiersVoorRelatie,
-} from '@/lib/mailintake/actions'
+  toetsOfferteVoorOpdracht, getFactuuradressenVoorIntake,
+  bewaarFactuuradresVoorIntake, getOfferteDossiersVoorRelatie,
+} from '@/lib/mailintake/dossier-kiezen'
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { DUPLICAAT_HARD } from '@/lib/mailintake/types'
 import { adresOvereenkomst } from '@/lib/mailintake/regels'

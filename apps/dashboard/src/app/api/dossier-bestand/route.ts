@@ -124,7 +124,11 @@ export async function GET(req: NextRequest) {
   // In de portaaltak komt de naam uit de database, niet uit het verzoek — anders
   // bepaalt de bezoeker zelf onder welke bestandsnaam iets wordt opgeslagen.
   const naam = (vasteNaam ?? params.get('naam') ?? bestand.fileName ?? 'bestand').replace(/["\r\n]/g, '')
-  const dispositie = params.get('download') === '1' ? 'attachment' : 'inline'
+  // Een mailbestand kan geen enkele browser tonen: `inline` levert of ruwe MIME-tekst
+  // op het scherm, of een tabblad dat niets doet. Als download geeft Windows het door
+  // aan Outlook, en dat is de enige manier waarop iemand de mail werkelijk leest.
+  const isMail = /\.(eml|msg)$/i.test(naam)
+  const dispositie = params.get('download') === '1' || isMail ? 'attachment' : 'inline'
 
   let data = bestand.data
   let contentType = bestand.contentType || 'application/octet-stream'

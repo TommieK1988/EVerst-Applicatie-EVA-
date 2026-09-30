@@ -13,7 +13,7 @@ import React, { useState } from 'react'
 
 import { Button, Badge, Card } from '@/components/ui'
 import { dossierHref } from '@/lib/dossiers/href'
-import { zoekDossierVoorIntake } from '@/lib/mailintake/actions'
+import { zoekDossierVoorIntake } from '@/lib/mailintake/dossier-kiezen'
 import {
   MAIL_SOORT_LABELS, HERKEND_VIA_LABELS, DUPLICAAT_HARD,
 } from '@/lib/mailintake/types'

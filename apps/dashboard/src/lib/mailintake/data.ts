@@ -315,7 +315,7 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
     duplicaten: await versDossierzoek(
       bericht,
       extractie.data,
-      (bijlagen.data ?? []) as any[],
+      (bijlagen.data ?? []).map(b => b.sha256).filter((h): h is string => Boolean(h)),
       ((duplicaten.data ?? []) as any[]).map(d => ({
         id: d.id,
         dossierId: d.dossier_id,
@@ -357,8 +357,7 @@ async function versDossierzoek(
   bericht: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   extractie: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  bijlagen: any[],
+  bijlageHashes: string[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   opgeslagen: any[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -374,7 +373,7 @@ async function versDossierzoek(
       onderwerp: bericht.onderwerp ?? null,
       bodyTekst: bericht.body_tekst ?? null,
       conversationId: bericht.conversation_id ?? null,
-      bijlageHashes: bijlagen.map(b => b.sha256).filter(Boolean),
+      bijlageHashes,
       straat: v.werkadresStraat ?? null,
       postcode: v.werkadresPostcode ?? null,
       huisnummer: v.werkadresHuisnummer ?? null,

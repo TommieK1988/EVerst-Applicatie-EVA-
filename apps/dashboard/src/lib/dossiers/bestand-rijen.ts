@@ -128,7 +128,17 @@ export function sharePointRij(b: SharePointBestand): BestandRij {
     bronQuery: query.toString(),
     // In SharePoint openen is prettiger dan downloaden: Office-bestanden gaan
     // rechtstreeks open in Word/Excel online.
-    openUrl: b.webUrl ?? (b.driveId ? `/api/dossier-bestand?${query.toString()}` : null),
+    //
+    // BEHALVE EEN MAILBESTAND
+    // SharePoint heeft geen viewer voor `.eml` en `.msg`. Klik je zo'n bestand daar
+    // aan, dan opent er een pagina die niets kan tonen -- geen foutmelding, gewoon
+    // niets bruikbaars. Sinds de intake de mail zelf in de dossiermap zet staan er
+    // tientallen van, en die waren daardoor niet te lezen. Voor deze twee gaat de
+    // link daarom langs de EVA-proxy met `download=1`: dan komt het bestand als
+    // download binnen en geeft Windows het aan Outlook, dat het wél opent.
+    openUrl: MAIL_EXT.has((extensie ?? '').toLowerCase()) && b.driveId
+      ? `/api/dossier-bestand?${query.toString()}&download=1`
+      : b.webUrl ?? (b.driveId ? `/api/dossier-bestand?${query.toString()}` : null),
     thumbUrl: b.thumbUrl,
     previewUrl: b.previewUrl,
   }
