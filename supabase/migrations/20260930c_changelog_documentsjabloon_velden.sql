@@ -1,0 +1,3 @@
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-09-30','verbeterd','Documenten','Nieuwe velden voor documentsjablonen',
+   'In een documentsjabloon kun je nu de naam, het telefoonnummer en het e-mailadres van het werkadres invoegen. Bij een inkooporder of onderaannemerscontract is de datum "Uiterlijk gereed" een los veld, met een schakelaar om de regel weg te laten als er geen datum is. En er is een werkomschrijving: de projectnaam zonder projectnummer en adres, zodat je alleen "Buitenschilderwerk" op papier krijgt in plaats van het hele adres ervoor.');
