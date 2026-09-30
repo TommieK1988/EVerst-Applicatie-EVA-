@@ -77,7 +77,7 @@ caOfferteSubstatus, caCalculator
 - `02.`–`07.*` → opdracht (met substatus)
 - `08. Afgewezen` → offerte / verloren
 - `09. Verzonden` → offerte / verzonden
-- `LB.*` of categorie `Dagelijks onderhoud` / `Mutatie` → servicedesk
+- categorie `Dagelijks onderhoud` / `Mutatie` → servicedesk, ongeacht de projectstatus (ook `LB.*` telt sinds sept. 2026 niet meer mee)
 
 ### Offertes
 

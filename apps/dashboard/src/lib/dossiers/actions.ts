@@ -59,6 +59,7 @@ import {
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { SERVICEDESK_CATEGORIEEN } from '@/components/dossiers/fase-plaatsing'
 
 type DossierResult =
   /** `totaal` = het aantal rijen dat aan het filter voldoet, ook als `data` door een limit is ingekort. */
@@ -385,20 +386,21 @@ function nogNietVerlopenFinancieelGereed(kolom: 'opdracht_substatus' | 'serviced
 
 /**
  * Servicedesk-dossiers uit een projectenlijst weren. Dit is de databasekant van
- * `isServicedeskDossier` (components/dossiers/types.ts): projectstatus 'LB.' óf categorie
- * Dagelijks onderhoud/Mutatie. Zonder deze grens staat een onderhoudsbon op Servicedesk én
- * op Opdrachten — op het bord valt hij nog weg omdat hij geen `opdracht_substatus` heeft,
- * maar de lijstweergave toont hem gewoon.
+ * `isServicedeskDossier` (components/dossiers/types.ts): categorie Dagelijks onderhoud/Mutatie.
+ * De Bouw7-projectstatus telt niet mee — ook 'LB.' niet (september 2026). Zonder deze grens
+ * staat een onderhoudsbon op Servicedesk én op Opdrachten — op het bord valt hij nog weg omdat
+ * hij geen `opdracht_substatus` heeft, maar de lijstweergave toont hem gewoon.
  *
- * Twee losse regels omdat meerdere `.or()`-aanroepen door PostgREST met AND worden verbonden:
- * samen zijn ze NOT (LB. OR servicedeskcategorie). De `is.null`-tak hoort er in beide gevallen
- * bij — `NOT IN` levert op een lege kolom NULL op, en dan zou elk dossier zónder categorie of
- * zonder Bouw7-status juist uit de lijst vallen.
+ * De `is.null`-tak hoort erbij: `NOT IN` levert op een lege kolom NULL op, en dan zou elk
+ * dossier zónder categorie juist uit de lijst vallen.
  */
-const NIET_SERVICEDESK: [string, string] = [
-  'bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.not.ilike.LB.%',
-  'bouw7_categorie_naam.is.null,bouw7_categorie_naam.not.in.(Dagelijks onderhoud,Mutatie)',
-]
+const NIET_SERVICEDESK = `bouw7_categorie_naam.is.null,bouw7_categorie_naam.not.in.(${SERVICEDESK_CATEGORIEEN.join(',')})`
+
+/**
+ * Afgewezen bonnen ('08. Afgewezen') staan in het archief, niet op het bord. Als `.or()` met een
+ * `is.null`-tak: een kale `.neq()` gooit ook elk dossier zónder Bouw7-status weg (NULL ≠ waar).
+ */
+const NIET_AFGEWEZEN = 'bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.neq."08. Afgewezen"'
 
 /**
  * Haal dossiers op voor het Opdrachten-bord: Bouw7-projectstatus 02 t/m 06, plus opdrachten
@@ -426,8 +428,7 @@ export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
   return haalDossierLijst(q => q
     .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht),`
       + `and(${eigenBord},hoofdstatus.eq.opdracht)`)
-    .or(NIET_SERVICEDESK[0])
-    .or(NIET_SERVICEDESK[1])
+    .or(NIET_SERVICEDESK)
     .or(nogNietVerlopenFinancieelGereed('opdracht_substatus'))
     .order('created_at', { ascending: false }))
 }
@@ -452,8 +453,7 @@ export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
     // Servicedesk hoort hier niet. Een bon van Dagelijks onderhoud of Mutatie staat in Bouw7 op
     // '01. Offerte' zolang hij nog niet in uitvoering is, en stond daardoor tegelijk op het
     // servicedeskbord én tussen de commerciële aanvragen. Zelfde uitsluiting als bij Opdrachten.
-    .or(NIET_SERVICEDESK[0])
-    .or(NIET_SERVICEDESK[1])
+    .or(NIET_SERVICEDESK)
     .order('created_at', { ascending: false }))
 }
 
@@ -472,20 +472,20 @@ export async function getDossiersVoorOffertes(): Promise<DossierResult> {
     )
     // Ook hier geen servicedesk: een bon die geoffreerd wordt heeft daar zijn eigen kolom
     // ("Offerte uitgebracht"), en hoort niet daarnaast in de commerciële trechter te staan.
-    .or(NIET_SERVICEDESK[0])
-    .or(NIET_SERVICEDESK[1])
+    .or(NIET_SERVICEDESK)
     .order('created_at', { ascending: false }))
 }
 
 /**
- * Haal servicedesk-dossiers op: status LB of categorie Dagelijks onderhoud/Mutatie. Sluit
- * '08. Afgewezen' uit, en net als bij Opdrachten ook alles wat langer dan
- * {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
+ * Haal servicedesk-dossiers op: categorie Dagelijks onderhoud/Mutatie, ongeacht de
+ * Bouw7-projectstatus. Sluit '08. Afgewezen' uit (dat is het archief), en net als bij Opdrachten
+ * ook alles wat langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel
+ * gereed is gemeld.
  */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
   return metStatusSinds(await haalDossierLijst(q => q
-    .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
-    .neq('bouw7_projectstatus_naam', '08. Afgewezen')
+    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
+    .or(NIET_AFGEWEZEN)
     .or(nogNietVerlopenFinancieelGereed('servicedesk_substatus'))
     .order('created_at', { ascending: false })))
 }
@@ -493,7 +493,7 @@ export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
 export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
   return metStatusSinds(await haalDossierLijst(q => q
-    .in('bouw7_categorie_naam', ['Dagelijks onderhoud', 'Mutatie'])
+    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
     .eq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order('created_at', { ascending: false })))
 }
@@ -589,7 +589,7 @@ export async function updateServicedeskSubstatus(
   // ── De bon loopt: EVA is leidend ─────────────────────────────────
   // Een servicedeskbon staat in Bouw7 op "LB. Lopende bonnen" en blijft daar zolang hij
   // loopt. Terugschrijven kan voor die tussenstappen ook niet zinnig: de mapping is
-  // veel-op-één (02. en 03. worden allebei "Nieuw", LB. en 04. allebei "Loopt"), dus een
+  // veel-op-één (LB., 02. en 03. worden allemaal "Nieuw"), dus een
   // omgekeerde write zou moeten raden welke projectstatus je bedoelt — en zou de bon uit
   // de lopende-bonnenlijst kunnen trekken. De lees-sync laat de kolom daarom staan.
   //
@@ -1002,7 +1002,7 @@ export async function getMijnDossiers(
 /**
  * Haal servicedesk-dossiers op die aan een medewerker zijn gekoppeld als projectleider
  * of uitvoerder. Zelfde servicedesk-afbakening als `getDossiersVoorServicedesk`
- * (Bouw7 status LB of categorie Dagelijks onderhoud/Mutatie, excl. '08. Afgewezen').
+ * (categorie Dagelijks onderhoud/Mutatie, excl. '08. Afgewezen').
  */
 export async function getMijnServicedesk(
   medewerkerID: string,
@@ -1015,9 +1015,9 @@ export async function getMijnServicedesk(
   const { data, error, count } = await supabase
     .from('dossiers')
     .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`, { count: 'exact' })
-    .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
+    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
     .or(`project_manager_id.eq.${medewerkerID},uitvoerder_id.eq.${medewerkerID}`)
-    .neq('bouw7_projectstatus_naam', '08. Afgewezen')
+    .or(NIET_AFGEWEZEN)
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
     .limit(limit)
 

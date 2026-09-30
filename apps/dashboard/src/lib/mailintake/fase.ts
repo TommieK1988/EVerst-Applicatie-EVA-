@@ -72,10 +72,9 @@ export async function zetFaseNaAanmaken(
   // De servicedesk-substatus meteen beschermen tegen de lees-sync.
   //
   // Het Bouw7-project staat op "LB. Lopende bonnen" en blijft daar; de ladder van een
-  // bon loopt alleen in EVA. Maar LB vertaalt in BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar
-  // `loopt`, dus zonder deze markering zou de eerstvolgende sync de verse bon van
-  // "Nieuw" naar "Onderhanden" schuiven -- binnen een halve dag, zonder dat iemand iets
-  // deed. Hetzelfde mechanisme beschermt al een bon die een mens versleept; hier zetten
+  // bon loopt alleen in EVA. LB vertaalt in BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar `nieuw`,
+  // maar zodra iemand de bon verder schuift mag de sync hem niet terugzetten. Hetzelfde
+  // mechanisme beschermt al een bon die een mens versleept; hier zetten
   // we de vlag bij het aanmaken, want dan is de EVA-waarde net zo goed een keuze.
   const beschermd = fase === 'servicedesk'
     ? await (await import('@/lib/bouw7/handmatige-velden'))

@@ -230,9 +230,8 @@ const FUNNEL_DOSSIER_KOLOMMEN =
  * euro voor een lekkende kraan is geen offertekans. Dat maakte de conversie onleesbaar en de
  * trechter onbruikbaar om op te sturen.
  *
- * `servicedesk_substatus` is de markering, net als in `bepaalFase`: elke bon heeft er een, ook de
- * paar die onder een andere categorie op 'LB. Lopende bonnen' staan. Filteren gebeurt aan de
- * databasekant, dus het scheelt meteen 357 rijen paginering.
+ * `servicedesk_substatus` is de markering, net als in `bepaalFase`: elke bon heeft er een. Filteren
+ * gebeurt aan de databasekant, dus het scheelt meteen 357 rijen paginering.
  *
  * Vastgestelde maandsnapshots houden hun eigen (nog vervuilde) cijfers — die zijn bevroren op het
  * moment van vaststellen en horen niet met terugwerkende kracht te veranderen.

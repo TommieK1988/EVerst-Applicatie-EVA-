@@ -46,6 +46,7 @@ import {
   REGIE_BEWAKINGSCODE, REGIE_BEWAKINGSCODE_NAAM,
 } from '@/components/dossiers/types'
 import { maakRegieBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
+import { SERVICEDESK_CATEGORIEEN } from '@/components/dossiers/fase-plaatsing'
 
 // De codes en hun namen staan in `components/dossiers/types.ts` — leesbaar aan beide kanten van
 // de client/server-grens, zonder dit bestand (en daarmee de Bouw7-write) mee te slepen.
@@ -205,8 +206,8 @@ export async function zorgVoorBonBewakingscodes(
     query = query.is('regie_bewakingscode', null)
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     query = query
-      .or('bouw7_projectstatus_naam.ilike.LB.%,bouw7_categorie_naam.in.(Dagelijks onderhoud,Mutatie)')
-      .neq('bouw7_projectstatus_naam', '08. Afgewezen')
+      .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
+      .or('bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.neq."08. Afgewezen"')
       // Losse .or()-aanroepen worden door PostgREST met AND verbonden; dit is dezelfde knijp als
       // in `getDossiersVoorServicedesk`.
       .or(`servicedesk_substatus.is.null,servicedesk_substatus.neq.financieel_gereed,financieel_gereed_op.gte.${cutoff}`)

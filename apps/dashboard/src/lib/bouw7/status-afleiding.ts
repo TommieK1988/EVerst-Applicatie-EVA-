@@ -15,6 +15,7 @@
 
 import { OPDRACHT_PREFIX_NAAR_SUBSTATUS } from './status-map'
 import { bouw7SubstatusNaarEva } from './substatus-map'
+import { isServicedeskCategorie } from '@/components/dossiers/fase-plaatsing'
 
 export type EvaStatusVelden = {
   hoofdstatus: 'aanvraag' | 'offerte' | 'opdracht'
@@ -67,7 +68,9 @@ export const BOUW7_NAAR_SERVICEDESK_SUBSTATUS: Record<string, string> = {
   '06. Financieel gereed': 'financieel_gereed',
   '08. Afgewezen':         'financieel_gereed',
   '09.Verzonden offertes': 'offerte_uitgebracht',
-  'LB. Lopende bonnen':    'loopt',
+  // LB. is waar élke servicedeskbon in Bouw7 staat, vers of al half af. Het zegt niets over de
+  // voortgang, dus een bon begint op Nieuw; verder schuiven gebeurt in EVA.
+  'LB. Lopende bonnen':    'nieuw',
 }
 
 /**
@@ -113,17 +116,14 @@ export function isOpdrachtStatus(naam: string): boolean {
 }
 
 /**
- * Hoort een dossier met deze Bouw7-projectstatus + categorie op het servicedeskbord? Dezelfde
- * afbakening als `isServicedeskDossier` in components/dossiers/types.ts en als de
- * servicedesk-query in lib/dossiers/actions.ts.
+ * Hoort een dossier met deze Bouw7-categorie op het servicedeskbord? Dezelfde afbakening als
+ * `isServicedeskDossier` in components/dossiers/types.ts en als de servicedesk-query in
+ * lib/dossiers/actions.ts: alleen de categorie. De projectstatus (ook 'LB.') telt niet mee.
  */
 export function isServicedeskCombinatie(
-  bouw7StatusNaam: string | null | undefined,
   categorieNaam: string | null | undefined,
 ): boolean {
-  const naam = (bouw7StatusNaam ?? '').trim()
-  const cat  = (categorieNaam ?? '').trim()
-  return naam.toUpperCase().startsWith('LB.') || cat === 'Dagelijks onderhoud' || cat === 'Mutatie'
+  return isServicedeskCategorie(categorieNaam)
 }
 
 /**
@@ -158,7 +158,7 @@ export function pakStatusVelden(rij: Record<string, unknown>): Record<string, un
  * maatwerkveld "Offerte Sub-status".
  *
  * Volgorde van bronnen:
- *  1. Categorie DO/MU of LB.-status → Servicedesk (wint altijd).
+ *  1. Categorie DO/MU → Servicedesk (wint altijd, ongeacht de projectstatus).
  *  2. Projectstatus 02.–07. → opdracht-substatus (altijd overschreven vanuit Bouw7).
  *  3. Maatwerkveld `caOfferteSubstatus` → aanvraag/offerte-substatus, zodra het gevuld is. Dit is
  *     het veld dat EVA deelt met de tweede Bouw7-app; het is dus leidend boven de afleiding uit
@@ -184,8 +184,8 @@ export function mapBouw7NaarEvaStatus(
   const offerteSub  = mapOffertestatusNaarSubstatus(offertestatusNaam)
   const eindstatus  = offerteSub && OFFERTE_EINDSTATUSSEN.includes(offerteSub) ? offerteSub : null
 
-  // Servicedesk: LB of categorie Dagelijks onderhoud/Mutatie (categorie wint over projectstatus)
-  if (isServicedeskCombinatie(naam, cat)) {
+  // Servicedesk: categorie Dagelijks onderhoud/Mutatie (wint over projectstatus)
+  if (isServicedeskCombinatie(cat)) {
     return {
       hoofdstatus:           'aanvraag',
       aanvraag_substatus:    'nieuw',

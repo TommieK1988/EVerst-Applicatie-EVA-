@@ -6,6 +6,7 @@ import type {
   OpdrachtSubstatus,
   ServicedeskSubstatus,
 } from '@everts/database'
+import { isServicedeskCategorie } from './fase-plaatsing'
 
 export type { Dossier, Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus }
 
@@ -148,16 +149,14 @@ export function isDossierAfgesloten(dossier: {
 
 /**
  * True als een dossier tot de servicedesk hoort. Zelfde afbakening als de servicedesk-query
- * in `lib/dossiers/actions.ts` en de sectie-bepaling in de Bouw7-sync: Bouw7-projectstatus
- * "LB.*" of Bouw7-categorie "Dagelijks onderhoud"/"Mutatie".
+ * in `lib/dossiers/actions.ts` en de sectie-bepaling in de Bouw7-sync: alleen de Bouw7-categorie
+ * ("Dagelijks onderhoud"/"Mutatie"). De Bouw7-projectstatus telt bewust niet mee: een 'LB.'-bon
+ * met een andere categorie hoort niet op de servicedesk (september 2026).
  */
 export function isServicedeskDossier(dossier: {
-  bouw7_projectstatus_naam?: string | null
   bouw7_categorie_naam?: string | null
 }): boolean {
-  if ((dossier.bouw7_projectstatus_naam ?? '').trim().toUpperCase().startsWith('LB.')) return true
-  const categorie = dossier.bouw7_categorie_naam?.trim()
-  return categorie === 'Dagelijks onderhoud' || categorie === 'Mutatie'
+  return isServicedeskCategorie(dossier.bouw7_categorie_naam)
 }
 
 export const AANVRAAG_STATUSSEN: StatusDef<AanvraagSubstatus>[] = [
@@ -369,7 +368,7 @@ export function isMutatieDossier(dossier: {
 
 /**
  * De kolomreeks die bij dít dossier hoort. Alles wat servicedesk is en geen mutatie, valt onder
- * Dagelijks onderhoud — inclusief de LB.-bonnen met een afwijkende categorie.
+ * Dagelijks onderhoud.
  */
 export function servicedeskLadder(dossier: {
   bouw7_categorie_naam?: string | null

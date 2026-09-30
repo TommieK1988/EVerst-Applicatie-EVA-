@@ -643,8 +643,10 @@ export async function syncAllPlanning(opts?: { mode?: SyncMode }): Promise<SyncR
     // hebben geen plan-items, dus die slaan we volledig over (geen Apollo-call). Binnen de scope zorgt
     // de planning-hash dat ongewijzigde dossiers de dure detail-calls overslaan.
     // LET OP: 'servicedesk' is GEEN hoofdstatus-enumwaarde (alleen aanvraag/offerte/opdracht) —
-    // servicedesk = Bouw7-status "LB.*" of categorie Dagelijks onderhoud/Mutatie, zoals
-    // getDossiersVoorServicedesk. De oude `.in('hoofdstatus', [...,'servicedesk'])` gaf een stille
+    // servicedesk = categorie Dagelijks onderhoud/Mutatie (getDossiersVoorServicedesk). "LB.*" staat
+    // er bewust nog naast: die telt sinds september 2026 niet meer voor het bord, maar een lopende
+    // bon heeft in Bouw7 wél planning, ook met een afwijkende categorie. De oude
+    // `.in('hoofdstatus', [...,'servicedesk'])` gaf een stille
     // enum-fout waardoor deze bulk-sync maandenlang níets synchroniseerde.
     // Afgeronde dossiers (opdracht financieel_afgesloten, servicedesk financieel_gereed, gearchiveerd)
     // filteren we hieronder met isActiefDossier — hun planning wijzigt niet meer, dus de Apollo-/detail-

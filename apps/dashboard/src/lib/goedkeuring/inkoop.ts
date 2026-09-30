@@ -15,8 +15,7 @@ import { isServicedeskDossier } from '@/components/dossiers/types'
  * offerte-goedkeuring: pas accorderen vanaf een instelbaar drempelbedrag.
  *
  * De afbakening "servicedesk" is dezelfde als overal elders (`isServicedeskDossier`):
- * Bouw7-projectstatus LB.* of categorie Dagelijks onderhoud/Mutatie. Kan het dossier niet
- * bepaald worden, dan geldt de strenge regel — een onbekend dossier is geen vrijbrief.
+ * categorie Dagelijks onderhoud/Mutatie. Kan het dossier niet bepaald worden, dan geldt de strenge regel — een onbekend dossier is geen vrijbrief.
  */
 
 const DREMPEL_DEFAULT = 1000
