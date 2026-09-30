@@ -312,18 +312,94 @@ export async function getBerichtDetail(id: string): Promise<BerichtDetail | null
       aantalBijlagen: (bijlagen.data ?? []).filter((b: any) => b.bericht_id === r.id).length,
     })),
     extractie: extractie.data ?? null,
-    duplicaten: ((duplicaten.data ?? []) as any[]).map(d => ({
-      id: d.id,
-      dossierId: d.dossier_id,
-      dossiernummer: d.dossier?.dossiernummer ?? null,
-      titel: d.dossier?.titel ?? null,
-      klantnaam: d.dossier?.klant?.naam ?? null,
-      hoofdstatus: d.dossier?.hoofdstatus ?? null,
-      score: Number(d.score),
-      redenen: d.redenen ?? [],
-      soort: d.soort,
-    })),
+    duplicaten: await versDossierzoek(
+      bericht,
+      extractie.data,
+      (bijlagen.data ?? []) as any[],
+      ((duplicaten.data ?? []) as any[]).map(d => ({
+        id: d.id,
+        dossierId: d.dossier_id,
+        dossiernummer: d.dossier?.dossiernummer ?? null,
+        titel: d.dossier?.titel ?? null,
+        klantnaam: d.dossier?.klant?.naam ?? null,
+        hoofdstatus: d.dossier?.hoofdstatus ?? null,
+        score: Number(d.score),
+        redenen: d.redenen ?? [],
+        soort: d.soort,
+      })),
+    ),
     log: (log.data ?? []) as any[],
+  }
+}
+
+/**
+ * Zoekt het bijbehorende dossier opnieuw op, voor een bericht dat nog wacht.
+ *
+ * WAAROM DIT NIET UIT DE TABEL KOMT
+ * De kandidaten worden vastgelegd op het moment dat de mail wordt verwerkt. Wordt
+ * de matching daarna verbeterd, dan bereikt die verbetering een bericht dat al
+ * binnen is nooit -- het scherm blijft het antwoord van toen tonen. Dat gebeurde
+ * bij de opdracht van Van Herk: het zoeken op ons eigen offertenummer werkte, maar
+ * het scherm zei nog altijd "er is geen offerte gevonden die hierbij hoort".
+ *
+ * Alleen voor berichten op `wacht_op_mens`, en dat onderscheid is bewust. Een
+ * afgehandeld bericht houdt de kandidaten waaróp iemand zijn besluit nam; die
+ * achteraf vervangen door een nieuwe berekening maakt het besluitenlog onleesbaar.
+ * Voor een bericht dat nog open staat is er geen besluit om te bewaren, en telt
+ * alleen dat de aanwijzing klopt.
+ *
+ * Er komt geen AI aan te pas -- dit zijn enkele queries op geïndexeerde kolommen.
+ * Mislukt het, dan blijft de opgeslagen lijst staan; een tragere aanwijzing is
+ * beter dan een leeg scherm.
+ */
+async function versDossierzoek(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  bericht: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extractie: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  bijlagen: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  opgeslagen: any[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any[]> {
+  const v = extractie?.gekeurde_velden
+  if (bericht.status !== 'wacht_op_mens' || !v) return opgeslagen
+
+  try {
+    const { zoekDuplicaten } = await import('./duplicaten')
+    const vers = await zoekDuplicaten({
+      berichtId: bericht.id,
+      relatieId: bericht.relatie_id ?? null,
+      onderwerp: bericht.onderwerp ?? null,
+      bodyTekst: bericht.body_tekst ?? null,
+      conversationId: bericht.conversation_id ?? null,
+      bijlageHashes: bijlagen.map(b => b.sha256).filter(Boolean),
+      straat: v.werkadresStraat ?? null,
+      postcode: v.werkadresPostcode ?? null,
+      huisnummer: v.werkadresHuisnummer ?? null,
+      referentie: v.referentie ?? null,
+      onzeReferentie: v.onzeReferentie ?? null,
+      omschrijving: v.omschrijving ?? null,
+      bedrag: v.bedragExclBtw ?? null,
+    })
+    if (!vers.length) return opgeslagen
+    // De opgeslagen rij-id's behouden waar we kunnen: het scherm gebruikt ze als
+    // sleutel, en `gekozen` hangt eraan.
+    const idVan = new Map(opgeslagen.map(o => [o.dossierId, o.id]))
+    return vers.map(k => ({
+      id: idVan.get(k.dossierId) ?? `vers-${k.dossierId}`,
+      dossierId: k.dossierId,
+      dossiernummer: k.dossiernummer,
+      titel: k.titel,
+      klantnaam: k.klantnaam,
+      hoofdstatus: k.hoofdstatus,
+      score: k.score,
+      redenen: k.redenen,
+      soort: k.soort,
+    }))
+  } catch {
+    return opgeslagen
   }
 }
 

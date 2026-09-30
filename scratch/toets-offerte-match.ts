@@ -76,6 +76,7 @@ async function main() {
     bodyTekst: b.body_tekst,
     conversationId: b.conversation_id,
     bijlageHashes: (bl ?? []).map(x => x.sha256).filter(Boolean) as string[],
+    straat: g.werkadresStraat,
     postcode: g.werkadresPostcode,
     huisnummer: g.werkadresHuisnummer,
     referentie: g.referentie,

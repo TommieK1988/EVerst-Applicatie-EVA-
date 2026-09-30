@@ -305,20 +305,54 @@ export async function getOfferteDossiersVoorRelatie(relatieId: string): Promise<
   const vanaf = new Date()
   vanaf.setMonth(vanaf.getMonth() - 18)
 
+  // De veldenlijst staat er twee keer letterlijk in plaats van in een constante:
+  // supabase-js leidt het rijtype uit de string zelf af, en een variabele maakt er
+  // `GenericStringError` van.
   const { data } = await supabase
     .from('dossiers')
-    .select('id, dossiernummer, titel, offerte_substatus, created_at, werkadres_straat, werkadres_huisnummer, werkadres_stad')
+    .select('id, dossiernummer, titel, aanvraag_substatus, offerte_substatus, created_at, werkadres_straat, werkadres_huisnummer, werkadres_stad')
     .eq('klant_id', relatieId)
     .eq('hoofdstatus', 'offerte')
     .gte('created_at', vanaf.toISOString())
     .order('created_at', { ascending: false })
     .limit(50)
 
-  return (data ?? []).map(d => ({
+  // DE FASE LOOPT NIET ALTIJD MEE MET DE OFFERTE
+  // Alleen op `hoofdstatus = 'offerte'` filteren laat de dossiers weg waarvan de
+  // offerte al verzonden is terwijl de fase nog op aanvraag staat. Dat was hier
+  // precies het geval: bij de opdracht van Van Herk stond 20267.00682 wél in de
+  // database met OFT-2026-171 op verzonden, maar niet in deze lijst -- het scherm
+  // meldde "nog 2 andere lopende offertes" en het juiste dossier zat daar niet bij.
+  // De behandelaar moest het dan met de hand opzoeken zonder te weten waarop.
+  const bekend = new Set((data ?? []).map(d => d.id))
+  const { data: quotes } = await supabase
+    .from('quotes').select('dossier_id')
+    .eq('status', 'verzonden')
+    .not('dossier_id', 'is', null)
+    .limit(500)
+  const metOfferte = [...new Set((quotes ?? [])
+    .map(q => q.dossier_id).filter(id => id && !bekend.has(id)) as string[])]
+
+  let achterlopers: typeof data = []
+  if (metOfferte.length) {
+    const { data: extra } = await supabase
+      .from('dossiers')
+      .select('id, dossiernummer, titel, aanvraag_substatus, offerte_substatus, created_at, werkadres_straat, werkadres_huisnummer, werkadres_stad')
+      .eq('klant_id', relatieId)
+      .eq('hoofdstatus', 'aanvraag')
+      .in('id', metOfferte)
+      .gte('created_at', vanaf.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50)
+    achterlopers = extra ?? []
+  }
+
+  return [...(data ?? []), ...achterlopers].map(d => ({
     dossierId: d.id,
     dossiernummer: d.dossiernummer ?? null,
     titel: d.titel ?? null,
-    substatus: d.offerte_substatus ?? null,
+    // Een achterloper toont zijn eigen stand, niet een offertestatus die er niet is.
+    substatus: d.offerte_substatus ?? (d.aanvraag_substatus ? `aanvraag · ${d.aanvraag_substatus}` : null),
     aangemaakt: d.created_at,
     werkadres: [d.werkadres_straat, d.werkadres_huisnummer, d.werkadres_stad, d.titel]
       .filter(Boolean).join(' ') || null,
