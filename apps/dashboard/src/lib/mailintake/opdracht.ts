@@ -87,6 +87,12 @@ export interface OpdrachtResultaat {
   /** Bouw7 gaf een conflict met de tweede app; het scherm biedt dan "toch doorzetten". */
   conflict?: { bouw7Label: string }
   dossiernummer?: string | null
+  /**
+   * Het dossier stond nog op aanvraag en is eerst op Offerte verzonden gezet; hier
+   * staat het offertenummer dat dat rechtvaardigde. Hoort in de melding terug te
+   * komen: het dossier schoof twee fases op, en dat moet navertelbaar zijn.
+   */
+  faseBijgetrokken?: string | null
   /** Wat er ná de statuswissel wel en niet lukte. Nooit blokkerend. */
   nazorg?: {
     termijnen: 'aangemaakt' | 'overgeslagen' | 'mislukt'
@@ -113,6 +119,12 @@ export async function toetsOfferteDossier(dossierId: string): Promise<
     contactpersoonNaam: string | null
     factuuradresLabel: string | null
     werkadres: string | null
+    /**
+     * Het dossier draagt een verzonden offerte maar staat zelf nog op aanvraag; de
+     * fase wordt eerst bijgetrokken. Gevuld met het offertenummer, zodat het scherm
+     * kan zeggen wat er gaat gebeuren voordat iemand op de knop drukt.
+     */
+    faseCorrectie: string | null
   }
   | { ok: false; error: string }
 > {
@@ -134,24 +146,31 @@ export async function toetsOfferteDossier(dossierId: string): Promise<
       error: `${d.dossiernummer ?? 'Dit dossier'} staat al op opdracht. Koppel de mail eraan in plaats van hem opnieuw te winnen.`,
     }
   }
+  // DE FASE KAN ACHTERLOPEN OP DE OFFERTE
+  // Een dossier hoort op `offerte` te staan zodra de offerte verzonden is, maar dat
+  // loopt niet altijd mee: OFT-2026-171 stond op verzonden terwijl dossier
+  // 20267.00682 nog op aanvraag stond -- vijf dossiers staan zo. Dan is "aanvraag"
+  // een achtergebleven kolom, geen andere werkelijkheid: de klant heeft onze offerte
+  // in handen en stuurt hem als bijlage terug.
+  //
+  // Wat er níét gebeurt: een aanvraagdossier zónder verzonden offerte promoveren.
+  // Dan is er werkelijk niets om te winnen, en een offerte verzinnen die nooit de
+  // deur uit is gegaan zou een aanneemsom naar Bouw7 duwen voor een prijs die
+  // niemand heeft afgesproken.
+  let faseCorrectie: string | null = null
   if (d.hoofdstatus !== 'offerte') {
-    // Of er ligt wél een offerte en is alleen de dossierfase achtergebleven. Dat
-    // komt voor: OFT-2026-171 stond op verzonden terwijl dossier 20267.00682 nog
-    // op aanvraag stond. De melding hieronder zei dan "er is nog geen offerte om
-    // te winnen", en dat is aantoonbaar onjuist -- de klant stuurde onze eigen
-    // offerte als bijlage terug. Wie dat leest gaat zoeken naar iets dat er is.
     const { data: q } = await supabase
       .from('quotes').select('quote_nummer')
       .eq('dossier_id', dossierId).eq('status', 'verzonden')
+      .order('created_at', { ascending: false })
       .limit(1).maybeSingle()
-    return {
-      ok: false,
-      error: q
-        ? `${d.dossiernummer ?? 'Dit dossier'} draagt offerte ${q.quote_nummer}, maar staat zelf `
-          + 'nog in de aanvraagfase. Zet het dossier eerst op Offerte verzonden; daarna kan de '
-          + 'opdracht erop.'
-        : `${d.dossiernummer ?? 'Dit dossier'} staat nog in de aanvraagfase. Er is nog geen offerte om te winnen — zet hem eerst op verzonden.`,
+    if (!q) {
+      return {
+        ok: false,
+        error: `${d.dossiernummer ?? 'Dit dossier'} staat nog in de aanvraagfase. Er is nog geen offerte om te winnen — zet hem eerst op verzonden.`,
+      }
     }
+    faseCorrectie = q.quote_nummer
   }
   const cp = d.contactpersoon_id
     ? (await supabase.from('contactpersonen')
@@ -163,6 +182,7 @@ export async function toetsOfferteDossier(dossierId: string): Promise<
     : null
   return {
     ok: true,
+    faseCorrectie,
     dossiernummer: d.dossiernummer ?? null,
     titel: d.titel ?? null,
     contactpersoonId: d.contactpersoon_id ?? null,
@@ -189,11 +209,56 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   const toets = await toetsOfferteDossier(inv.dossierId)
   if (!toets.ok) return { ok: false, error: toets.error }
 
+  const { updateDossierSubstatus } = await import('@/lib/dossiers/actions')
+
+  // ── 1b. De fase bijtrekken ────────────────────────────────────────────────
+  // Het dossier draagt een verzonden offerte maar staat nog op aanvraag. Dat moet
+  // eerst recht, want `aanvraag_substatus` is een enum zonder waarde 'gewonnen':
+  // de sprong in één keer geeft een rauwe databasefout, geen nette weigering.
+  //
+  // Eén stap, geen twee: `substatusSectie` weet dat 'verzonden' bij de offertefase
+  // hoort, dus deze aanroep verplaatst hoofdstatus én substatus tegelijk en schrijft
+  // Bouw7 op "07. Verzonden". De volgende regels doen dan de gewone winst.
+  //
+  // In Bouw7 zijn dat twee zichtbare stappen achter elkaar (07 → 02). Dat is de
+  // eerlijke weergave: de offerte is verzonden geweest en daarna gewonnen. Faalt
+  // de tweede stap, dan staat het dossier op Offerte verzonden -- achtergebleven,
+  // maar wel juister dan waar het stond, en de melding zegt wat er nog moet.
+  if (toets.faseCorrectie) {
+    let herstel: Awaited<ReturnType<typeof updateDossierSubstatus>>
+    try {
+      herstel = await updateDossierSubstatus(inv.dossierId, 'verzonden', {
+        schrijfBouw7: true,
+        forceerBouw7: inv.forceerBouw7 === true,
+      })
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!herstel.ok) {
+      await logBesluit(inv, 'fase_correctie_mislukt', {
+        offerte: toets.faseCorrectie,
+        fout: herstel.error,
+        conflict: herstel.conflict?.bouw7Label ?? null,
+      })
+      return {
+        ok: false,
+        error: `${toets.dossiernummer ?? 'Het dossier'} draagt offerte ${toets.faseCorrectie} maar `
+          + `staat nog op aanvraag, en die fase kon niet worden bijgetrokken: ${herstel.error}`,
+        conflict: herstel.conflict,
+      }
+    }
+    await logBesluit(inv, 'fase_correctie', {
+      offerte: toets.faseCorrectie,
+      van: 'aanvraag',
+      naar: 'offerte/verzonden',
+      reden: 'het dossier droeg een verzonden offerte maar stond nog in de aanvraagfase',
+    })
+  }
+
   // ── 2. De statuswissel ────────────────────────────────────────────────────
   // `updateDossierSubstatus` gooit bij een afgesloten dossier (assertDossierBewerkbaar)
   // in plaats van een resultaat terug te geven. Zonder deze try zou dat als een
   // onbegrijpelijke fout in de cron belanden.
-  const { updateDossierSubstatus } = await import('@/lib/dossiers/actions')
   let wissel: Awaited<ReturnType<typeof updateDossierSubstatus>>
   try {
     wissel = await updateDossierSubstatus(inv.dossierId, 'gewonnen', {
@@ -369,7 +434,12 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   await planNabehandeling(inv.berichtId)
   await voerNabehandelingUit(inv.berichtId).catch(() => undefined)
 
-  return { ok: true, dossiernummer: toets.dossiernummer, nazorg }
+  return {
+    ok: true,
+    dossiernummer: toets.dossiernummer,
+    faseBijgetrokken: toets.faseCorrectie,
+    nazorg,
+  }
 }
 
 async function logBesluit(

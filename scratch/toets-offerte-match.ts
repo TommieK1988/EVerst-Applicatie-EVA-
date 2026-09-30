@@ -128,6 +128,38 @@ async function main() {
   toets('de score is hoog genoeg voor een harde treffer (>= 0,80)',
     (juiste?.score ?? 0) >= 0.8, String(juiste?.score))
 
+  // ── De poort ──────────────────────────────────────────────────────────────
+  // Leest alleen; er wordt geen status geschreven. Het dossier staat op aanvraag
+  // met een verzonden offerte, en dat moet de poort nu doorlaten mét de melding
+  // dat de fase eerst wordt bijgetrokken -- in plaats van weigeren.
+  console.log('── De poort op 20267.00682 ─────────────────────────────────')
+  const { toetsOfferteDossier } = await import('@/lib/mailintake/opdracht')
+  const poort = await toetsOfferteDossier(juiste!.dossierId)
+  if (!poort.ok) {
+    console.log(`  geweigerd: ${poort.error}`)
+    toets('de poort laat het dossier door', false, poort.error)
+  } else {
+    console.log(`  doorgelaten · fasecorrectie: ${poort.faseCorrectie ?? '(niet nodig)'}`)
+    toets('de poort laat het dossier door', true)
+    toets('en meldt welke offerte de correctie rechtvaardigt',
+      poort.faseCorrectie === 'OFT-2026-171', String(poort.faseCorrectie))
+  }
+
+  // De tegenproef: een aanvraagdossier zónder verzonden offerte moet nog steeds
+  // worden geweigerd. Anders promoveert EVA dossiers waar niets voor is verstuurd.
+  const { data: zonder } = await supabase
+    .from('dossiers').select('id, dossiernummer')
+    .eq('hoofdstatus', 'aanvraag')
+    .not('id', 'in', `(${(await supabase.from('quotes').select('dossier_id')
+      .eq('status', 'verzonden').not('dossier_id', 'is', null).limit(200))
+      .data?.map(q => q.dossier_id).join(',') ?? '00000000-0000-0000-0000-000000000000'})`)
+    .limit(1).maybeSingle()
+  if (zonder) {
+    const p2 = await toetsOfferteDossier(zonder.id)
+    console.log(`\n  tegenproef ${zonder.dossiernummer}: ${p2.ok ? 'DOORGELATEN' : 'geweigerd'}`)
+    toets('een aanvraag zonder verzonden offerte wordt nog steeds geweigerd', !p2.ok)
+  }
+
   console.log(fouten === 0 ? '\nAlles goed\n' : `\n${fouten} fout(en)\n`)
   process.exit(fouten === 0 ? 0 : 1)
 }

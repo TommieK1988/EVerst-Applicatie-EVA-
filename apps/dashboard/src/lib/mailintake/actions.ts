@@ -231,6 +231,8 @@ export async function bevestigOpdrachtOpDossier(
   error?: string
   conflict?: { bouw7Label: string }
   dossiernummer?: string | null
+  /** Het offertenummer waarvoor de aanvraagfase eerst is bijgetrokken; anders leeg. */
+  faseBijgetrokken?: string | null
   nazorg?: { termijnen: string; termijnenReden?: string; bijlagen: number; notitie: boolean }
 }> {
   const { medewerker } = await vereisRecht('mailintake', 'schrijven')

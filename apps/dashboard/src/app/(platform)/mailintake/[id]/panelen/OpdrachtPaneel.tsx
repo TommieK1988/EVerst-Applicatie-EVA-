@@ -123,6 +123,8 @@ export default function OpdrachtPaneel({
   const [contactOvernemen, setContactOvernemen] = useState(false)
   const [opDossier, setOpDossier] = useState<{
     contactpersoonNaam: string | null; factuuradresLabel: string | null; werkadres: string | null
+    /** Offertenummer, als het dossier nog op aanvraag staat en de fase wordt bijgetrokken. */
+    faseCorrectie: string | null
   } | null>(null)
 
   const [bezig, setBezig] = useState(false)
@@ -169,6 +171,7 @@ export default function OpdrachtPaneel({
         contactpersoonNaam: res.contactpersoonNaam,
         factuuradresLabel: res.factuuradresLabel,
         werkadres: res.werkadres,
+        faseCorrectie: res.faseCorrectie,
       })
     })
     return () => { weg = true }
@@ -234,6 +237,14 @@ export default function OpdrachtPaneel({
       const ok = await bevestig({
         titel: 'Offerte op gewonnen zetten',
         omschrijving:
+          // Staat het dossier nog op aanvraag, dan schuift het twee fases op in plaats
+          // van één. Dat is precies het soort sprong dat achteraf vragen oproept, dus
+          // het hoort in de bevestiging te staan en niet alleen in het besluitenlog.
+          (opDossier?.faseCorrectie
+            ? `${gekozen?.dossiernummer ?? 'Het gekozen dossier'} staat nog in de aanvraagfase, terwijl `
+              + `offerte ${opDossier.faseCorrectie} al verzonden is. Het dossier gaat daarom eerst naar `
+              + 'Offerte verzonden en daarna pas op gewonnen — in Bouw7 zijn dat twee stappen.\n\n'
+            : '') +
           `Dit zet ${gekozen?.dossiernummer ?? 'het gekozen dossier'} op gewonnen en promoveert het naar de ` +
           'opdrachtfase. In Bouw7 gaat het project naar "02. Nieuwe opdracht", de werkbegroting wordt ' +
           'overgenomen als planningsbudget en de aanneemsom wordt weggeschreven. ' +
@@ -293,7 +304,9 @@ export default function OpdrachtPaneel({
         return
       }
 
-      toast.success(`${res.dossiernummer ?? 'Dossier'} staat op opdracht`)
+      toast.success(res.faseBijgetrokken
+        ? `${res.dossiernummer ?? 'Dossier'} staat op opdracht (fase bijgetrokken vanaf ${res.faseBijgetrokken})`
+        : `${res.dossiernummer ?? 'Dossier'} staat op opdracht`)
 
       // Wat er ná de statuswissel niet lukte is geen mislukking van de opdracht,
       // maar het mag ook niet ongezien blijven: zonder termijnen kan er niet
@@ -372,6 +385,18 @@ export default function OpdrachtPaneel({
             {opDossier.contactpersoonNaam ?? 'geen contactpersoon'}
             {opDossier.werkadres ? ` · ${opDossier.werkadres}` : ''}
             {opDossier.factuuradresLabel ? ` · factuur naar ${opDossier.factuuradresLabel}` : ''}
+          </div>
+        )}
+        {/* De fase loopt achter op de offerte. Dat is geen beletsel, maar wel iets
+            wat je wilt weten vóór je klikt: het dossier schuift twee fases op. */}
+        {opDossier?.faseCorrectie && (
+          <div
+            style={{ ...klein, marginTop: 6 }}
+            className="rounded-md border border-warning-300 bg-warning-50 px-3 py-2 text-warning-700"
+          >
+            Dit dossier staat nog in de aanvraagfase, terwijl offerte{' '}
+            <strong>{opDossier.faseCorrectie}</strong> al verzonden is. EVA zet het eerst op
+            Offerte verzonden en daarna op gewonnen.
           </div>
         )}
         {herkend.contactpersoonId && opDossier && (
