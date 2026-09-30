@@ -25,6 +25,7 @@ import {
   DUPLICAAT_TWIJFEL, MAIL_SOORT_LABELS, bepaalRoute,
   type MailSoort,
 } from '@/lib/mailintake/types'
+import { VELD_LABELS } from '@/lib/mailintake/schema'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import { FASE_PLAATSINGEN } from '@/components/dossiers/fase-plaatsing'
 import MailPaneel from './panelen/MailPaneel'
@@ -587,6 +588,7 @@ export default function BerichtBehandelen({
           velden={twijfelVelden}
           afhandeling={{
             bewerkbaar, bezig: inActie, compleet,
+            ontbreekt: ontbreekt.map(v => VELD_LABELS[v] ?? v),
             // Op de opdrachtroute wint een bestaande offerte en wordt er geen dossier
             // gemaakt; dan hoort die knop er ook niet te staan.
             onAanmaken: route === 'offerte_winnen' && !forceerNieuw ? null : aanmaken,

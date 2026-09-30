@@ -54,6 +54,8 @@ export interface AfhandelingProps {
   bezig: boolean
   /** Alle verplichte velden zijn gevuld; anders staat de knop uit. */
   compleet: boolean
+  /** De nog ontbrekende velden, in schermvolgorde en met hun label. */
+  ontbreekt: string[]
   /** Null als deze route geen dossier aanmaakt — een opdracht wint een offerte. */
   onAanmaken: (() => void) | null
   onGeenAanvraag: () => void
@@ -203,32 +205,25 @@ export default function TwijfelPaneel({
         </div>
       )}
 
-      {/* ── De velden die aandacht vragen ── */}
+      {/* ── Waar je naar moet kijken ──
+          Hier stond een lijst met de onzekere velden, gesorteerd op score. Dat waren
+          er nul tot vijf en elke keer in een andere volgorde -- naast het formulier
+          hiernaast, waar dezelfde velden óók stonden. Wie twee mails achter elkaar
+          behandelde, zocht elke keer opnieuw.
+
+          Het formulier kleurt nu zelf: oranje wat nagekeken moet worden, rood wat
+          ontbreekt. Hier blijft alleen de telling staan, zodat je weet of er iets te
+          doen is voordat je gaat scrollen. */}
       {velden.length === 0 ? (
         <p style={{ ...klein, margin: 0 }}>
           EVA is van alle velden voldoende zeker. Loop het voorstel hiernaast na en maak het dossier aan.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>
-            Controleer dit {velden.length === 1 ? 'veld' : `${velden.length} velden`}
-          </div>
-          {velden.map(v => {
-            const t = tint(v.score)
-            return (
-              <label key={v.sleutel} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={{ ...klein, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {v.label}
-                  <span className={`rounded-sm px-[5px] py-px text-[11px] ${t}`}>
-                    {Math.round(v.score * 100)}%
-                  </span>
-                </span>
-                {v.invoer}
-                {v.reden && <span style={klein}>{v.reden}</span>}
-              </label>
-            )
-          })}
-        </div>
+        <p style={{ ...klein, margin: 0 }}>
+          {velden.length === 1
+            ? 'Eén veld vraagt aandacht; het staat hiernaast oranje.'
+            : `${velden.length} velden vragen aandacht; ze staan hiernaast oranje of rood.`}
+        </p>
       )}
 
       {afhandeling.bewerkbaar && (
@@ -312,10 +307,13 @@ export default function TwijfelPaneel({
                 <Button onClick={afhandeling.onAanmaken} disabled={!afhandeling.compleet || afhandeling.bezig}>
                   {afhandeling.bezig ? 'Bezig…' : 'Dossier aanmaken'}
                 </Button>
-                {!afhandeling.compleet && (
+                {/* De lijst komt uit `ontbrekendeVelden()`, dezelfde bron als de
+                    voorwaarde voor de knop. Hier stond een met de hand getypte zin
+                    naast een losse `compleet`-expressie; die twee konden uit elkaar
+                    lopen, en dan noemde het scherm een veld dat allang gevuld was. */}
+                {!afhandeling.compleet && afhandeling.ontbreekt.length > 0 && (
                   <span style={klein}>
-                    Vul opdrachtgever, omschrijving, werkmaatschappij, categorie en het
-                    volledige werkadres in.
+                    Nog in te vullen: {afhandeling.ontbreekt.join(', ')}.
                   </span>
                 )}
               </>
