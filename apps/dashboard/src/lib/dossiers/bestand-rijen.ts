@@ -129,14 +129,18 @@ export function sharePointRij(b: SharePointBestand): BestandRij {
     // In SharePoint openen is prettiger dan downloaden: Office-bestanden gaan
     // rechtstreeks open in Word/Excel online.
     //
-    // BEHALVE EEN MAILBESTAND
-    // SharePoint heeft geen viewer voor `.eml` en `.msg`. Klik je zo'n bestand daar
-    // aan, dan opent er een pagina die niets kan tonen -- geen foutmelding, gewoon
-    // niets bruikbaars. Sinds de intake de mail zelf in de dossiermap zet staan er
-    // tientallen van, en die waren daardoor niet te lezen. Voor deze twee gaat de
-    // link daarom langs de EVA-proxy met `download=1`: dan komt het bestand als
-    // download binnen en geeft Windows het aan Outlook, dat het wél opent.
-    openUrl: MAIL_EXT.has((extensie ?? '').toLowerCase()) && b.driveId
+    // BEHALVE EEN `.eml`
+    // Let op het verschil met `.msg`, want dat is niet theoretisch: er staan 607
+    // `.msg`-bestanden in SharePoint die mensen zelf uit Outlook in de map hebben
+    // gesleept, en díé openen daar gewoon met een klik. De `.eml`-bestanden die de
+    // intake sinds kort neerzet niet -- aanklikken levert geen foutmelding op, maar
+    // ook niets leesbaars. Microsoft noemt beide formaten ondersteund; in deze
+    // omgeving doet alleen `.msg` het.
+    //
+    // Daarom alléén `.eml` langs de EVA-proxy met `download=1`: dan komt het bestand
+    // als download binnen en geeft Windows het aan Outlook, dat het wel opent. `.msg`
+    // blijft in SharePoint openen, want dat werkte al en dat is prettiger.
+    openUrl: (extensie ?? '').toLowerCase() === 'eml' && b.driveId
       ? `/api/dossier-bestand?${query.toString()}&download=1`
       : b.webUrl ?? (b.driveId ? `/api/dossier-bestand?${query.toString()}` : null),
     thumbUrl: b.thumbUrl,
