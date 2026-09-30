@@ -98,6 +98,9 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
     for (const r of rijen ?? []) if (r?.id) kandidaten.set(r.id, r)
   }
 
+  /** Dossiers die zijn gevonden doordat ons eigen offertenummer in hun mail staat. */
+  const viaOnsOffertenummer = new Set<string>()
+
   // ── Ingang 1: zelfde klant ────────────────────────────────────────────────
   if (invoer.relatieId) {
     const { data } = await supabase
@@ -144,6 +147,30 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
         .ilike('dossiernummer', `%${cijfers}%`)
         .limit(20)
       voegToe(opNummer)
+    }
+
+    // ONS OFFERTENUMMER LEEFT NIET OP HET DOSSIER
+    // Hierboven wordt gezocht in `referentie` en `dossiernummer`, maar het nummer
+    // dat wíj op een offerte zetten staat in `quotes.quote_nummer` -- een heel
+    // andere reeks dan het dossiernummer. "OFT-2026-171" hoort bij dossier
+    // 20267.00682; op naam of cijfers is daar niets van te vinden.
+    //
+    // Dat is precies het sterkste signaal dat er is: een klant die ons eigen
+    // offertenummer in zijn opdracht noemt, wijst het dossier zelf aan. Bij Van
+    // Herk zat onze offerte zelfs als OFT-2026-171.pdf bij de inkooporder, het
+    // model las het nummer met vertrouwen 1,0 -- en er werd niets mee gedaan.
+    const { data: viaOfferte } = await supabase
+      .from('quotes').select('dossier_id')
+      .ilike('quote_nummer', v)
+      .not('dossier_id', 'is', null)
+      .limit(20)
+    const offerteDossiers = [...new Set((viaOfferte ?? [])
+      .map(q => q.dossier_id).filter(Boolean) as string[])]
+    if (offerteDossiers.length) {
+      const { data } = await supabase
+        .from('dossiers').select(DOSSIER_SELECT).in('id', offerteDossiers).limit(20)
+      voegToe(data)
+      for (const id of offerteDossiers) viaOnsOffertenummer.add(id)
     }
   }
 
@@ -198,6 +225,21 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
     }
   }
 
+  // Welke kandidaten dragen een verzonden offerte? De hoofdstatus is daar niet
+  // altijd mee meegelopen: dossier 20267.00682 stond op `aanvraag` terwijl
+  // OFT-2026-171 allang verzonden was. Wie alleen op hoofdstatus kijkt, noemt zo'n
+  // dossier een gewone duplicaat en meldt "er is geen offerte gevonden" -- terwijl
+  // het de offerte ís. Van de dossiers met een offerte staan er vijf zo.
+  const metVerzondenOfferte = new Set<string>()
+  if (kandidaten.size) {
+    const { data: q } = await supabase
+      .from('quotes').select('dossier_id')
+      .in('dossier_id', [...kandidaten.keys()])
+      .eq('status', 'verzonden')
+      .limit(200)
+    for (const r of q ?? []) if (r.dossier_id) metVerzondenOfferte.add(r.dossier_id)
+  }
+
   // ── Scoren ────────────────────────────────────────────────────────────────
   const hn = huisnummerKern(invoer.huisnummer)
   const tekst = `${invoer.onderwerp ?? ''} ${invoer.bodyTekst ?? ''}`.toLowerCase()
@@ -232,6 +274,11 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
     if (nummerGenoemd) {
       score += 0.9
       redenen.push(`Ons eigen nummer ${d.dossiernummer ?? onsNummer} wordt in de mail genoemd`)
+    } else if (viaOnsOffertenummer.has(d.id)) {
+      // Even sterk, maar via de offerte in plaats van het dossier: de klant noemt
+      // het nummer dat op ónze offerte stond, en dat hoort bij precies één dossier.
+      score += 0.9
+      redenen.push(`Onze offerte ${invoer.onzeReferentie} hoort bij dit dossier`)
     }
     if (pc && d.werkadres_postcode === pc && hn && huisnummerKern(d.werkadres_huisnummer) === hn) {
       score += 0.45
@@ -283,8 +330,13 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
     if (score <= 0) continue
 
     // Waar hoort deze kandidaat thuis? Dat bepaalt welke knop het scherm aanbiedt.
-    if (d.hoofdstatus === 'offerte') soort = 'offerte_match'
-    else if (d.hoofdstatus === 'opdracht' && d.opdracht_substatus !== 'financieel_afgesloten') soort = 'meerwerk_kandidaat'
+    // Opdracht eerst: een dossier dat al loopt draagt vaak nog zijn verzonden
+    // offerte, en dat is dan meerwerk -- geen offerte die nog gewonnen moet worden.
+    if (d.hoofdstatus === 'opdracht') {
+      if (d.opdracht_substatus !== 'financieel_afgesloten') soort = 'meerwerk_kandidaat'
+    } else if (d.hoofdstatus === 'offerte' || metVerzondenOfferte.has(d.id)) {
+      soort = 'offerte_match'
+    }
 
     resultaten.push({
       score: Math.min(1, Math.round(score * 100) / 100),

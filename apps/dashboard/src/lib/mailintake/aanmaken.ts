@@ -427,8 +427,21 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // Een afwijkend factuuradres uit de opdracht vastleggen bij de opdrachtgever, en
   // aan het dossier hangen. De opdrachtgever zelf verandert niet -- dit gaat alleen
   // over waar de factuur heen gaat.
-  if (v.factuuradres?.straat) {
+  if (v.factuuradres?.straat || v.factuuradres?.naam) {
     await zetFactuuradres(dossierId, inv.relatieId, v.factuuradres).catch(() => undefined)
+  }
+
+  // HET INKOOPORDERNUMMER MOET OP DE FACTUUR
+  // `opdracht_referentie` -- in de dossierlijst "Inkoopordernr." -- werd alleen
+  // geschreven door de route die een offerte wint. Komt een opdracht binnen zonder
+  // dat er een offerte aan hangt, dan las EVA het nummer wel (ION112400001209,
+  // vertrouwen 1,0) en zette het nergens neer. Een factuur zonder dat nummer wordt
+  // bij deze opdrachtgevers geweigerd, dus dat is geen detail dat later wel opvalt.
+  if (v.opdrachtReferentie) {
+    await supabase.from('dossiers')
+      .update({ opdracht_referentie: v.opdrachtReferentie })
+      .eq('id', dossierId)
+      .then(() => undefined, () => undefined)
   }
 
   // Herkomst vastleggen. Dit is wat de nacontroles later leesbaar maakt:
@@ -585,7 +598,8 @@ export async function onthoudAlias(opts: {
  * Legt een factuuradres vast bij de opdrachtgever en koppelt het aan het dossier.
  *
  * Bestaat er al een adres met dezelfde straat, dan wordt dat hergebruikt; anders zou
- * elke bon van dezelfde VvE een nieuw adres opleveren.
+ * elke bon van dezelfde VvE een nieuw adres opleveren. Staat er alleen een naam, dan
+ * gaat die vergelijking op het label.
  */
 async function zetFactuuradres(
   dossierId: string,
@@ -594,15 +608,24 @@ async function zetFactuuradres(
 ): Promise<void> {
   const supabase = createAdminClient()
   const straat = (adres.straat ?? '').trim()
-  if (!straat) return
+  const naam = (adres.naam ?? '').trim()
+  // Een tenaamstelling zónder adres is de normale vorm op een opdrachtbon: "op naam
+  // stellen van Nationaal Grondbezit Romeo Foxtrot B.V." Die hoort vastgelegd, want
+  // een factuur op de verkeerde naam komt terug. Het adres erbij zoeken is werk voor
+  // later; de naam missen is de fout.
+  if (!straat && !naam) return
 
-  const label = (adres.naam ?? '').trim() || 'Factuuradres uit de opdracht'
+  const label = naam || 'Factuuradres uit de opdracht'
 
-  const { data: bestaand } = await supabase
+  // Zoeken op wat er is: op de straat als die er staat, anders op de tenaamstelling.
+  // Zonder dat onderscheid maakt elke volgende bon van dezelfde klant een nieuwe rij.
+  const zoek = supabase
     .from('relatie_factuuradressen')
     .select('id')
     .eq('relatie_id', relatieId)
-    .ilike('straat', straat)
+  const { data: bestaand } = await (straat
+    ? zoek.ilike('straat', straat)
+    : zoek.ilike('label', label))
     .limit(1)
     .maybeSingle()
 
@@ -613,7 +636,7 @@ async function zetFactuuradres(
       .insert({
         relatie_id: relatieId,
         label: label.slice(0, 120),
-        straat,
+        straat: straat || null,
         postcode: (adres.postcode ?? '').trim() || null,
         plaats: (adres.plaats ?? '').trim() || null,
       })

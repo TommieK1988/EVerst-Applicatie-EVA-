@@ -712,8 +712,15 @@ export async function keurEnKalibreer(
     mandaatBedrag: mandaat,
     regie,
     regieAanwijzing: regie ? data.regie_aanwijzing : null,
-    // Alleen aanbieden als er een adres in staat; een losse naam zegt niets.
-    factuuradres: (data.factuuradres_straat || data.factuuradres_postcode)
+    // EEN NAAM ZONDER ADRES IS GEEN LEEG FACTUURADRES
+    // Dit stond op "alleen aanbieden als er een adres in staat", en dat gooide
+    // juist het belangrijkste weg. Opdrachtgevers schrijven zelden een volledig
+    // factuuradres op de bon; ze schrijven "Correspondentie op naam stellen van
+    // Nationaal Grondbezit Romeo Foxtrot B.V." Dat de factuur naar een ándere
+    // partij moet is precies wat de behandelaar moet weten -- het adres erbij
+    // zoeken is één handeling, het missen van de tenaamstelling is een factuur
+    // die teruggestuurd wordt.
+    factuuradres: (data.factuuradres_straat || data.factuuradres_postcode || data.factuuradres_naam)
       ? {
           naam: data.factuuradres_naam,
           straat: data.factuuradres_straat,

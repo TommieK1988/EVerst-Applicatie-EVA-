@@ -135,9 +135,22 @@ export async function toetsOfferteDossier(dossierId: string): Promise<
     }
   }
   if (d.hoofdstatus !== 'offerte') {
+    // Of er ligt wél een offerte en is alleen de dossierfase achtergebleven. Dat
+    // komt voor: OFT-2026-171 stond op verzonden terwijl dossier 20267.00682 nog
+    // op aanvraag stond. De melding hieronder zei dan "er is nog geen offerte om
+    // te winnen", en dat is aantoonbaar onjuist -- de klant stuurde onze eigen
+    // offerte als bijlage terug. Wie dat leest gaat zoeken naar iets dat er is.
+    const { data: q } = await supabase
+      .from('quotes').select('quote_nummer')
+      .eq('dossier_id', dossierId).eq('status', 'verzonden')
+      .limit(1).maybeSingle()
     return {
       ok: false,
-      error: `${d.dossiernummer ?? 'Dit dossier'} staat nog in de aanvraagfase. Er is nog geen offerte om te winnen — zet hem eerst op verzonden.`,
+      error: q
+        ? `${d.dossiernummer ?? 'Dit dossier'} draagt offerte ${q.quote_nummer}, maar staat zelf `
+          + 'nog in de aanvraagfase. Zet het dossier eerst op Offerte verzonden; daarna kan de '
+          + 'opdracht erop.'
+        : `${d.dossiernummer ?? 'Dit dossier'} staat nog in de aanvraagfase. Er is nog geen offerte om te winnen — zet hem eerst op verzonden.`,
     }
   }
   const cp = d.contactpersoon_id
