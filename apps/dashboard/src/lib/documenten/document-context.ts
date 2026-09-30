@@ -32,6 +32,7 @@ import { KWALITEIT_FOTO_MAX, KWALITEIT_FOTO_KLEIN } from './kwaliteit-opties'
 import { BEZOEK_FOTO_MAX, BEZOEK_FOTO_KLEIN, BEZOEK_HANDTEKENING_MAX } from './bezoek-opties'
 import { LEEG_BEZOEK_BLOK } from './bezoek/contract'
 import { isBezoekSoort } from './types'
+import { werkomschrijvingUitTitel } from './werkomschrijving'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -220,7 +221,17 @@ export async function buildDocumentContext(
 
   const ctx: DocumentRenderContext = {
     bedrijf,
-    dossier,
+    dossier: {
+      ...dossier,
+      werkomschrijving: werkomschrijvingUitTitel({
+        titel: dossier.titel,
+        dossiernummer: dossier.dossiernummer,
+        straat: dossier.werkadres_straat,
+        huisnummer: dossierRow?.werkadres_huisnummer,
+        postcode: dossier.werkadres_postcode,
+        plaats: dossier.werkadres_plaats,
+      }),
+    },
     // Platte klant-/contactpersoonblokken, gelijk aan de offerte-conventie.
     klant: {
       naam: dossier.klant_naam,

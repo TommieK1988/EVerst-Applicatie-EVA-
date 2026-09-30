@@ -95,6 +95,8 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{bestelling.levering}',      label: 'Levering/start zoals afgesproken ("week 34" of de datum)' },
       { v: '{bestelling.levering_datum}',label: 'Lever-/startdatum (14 juli 2026)' },
       { v: '{bestelling.oplever_datum}', label: 'Verwachte opleverdatum' },
+      { v: '{bestelling.uiterlijk_gereed}', label: 'Uiterlijk gereed (14 juli 2026) — zelfde datum als de verwachte oplevering' },
+      { v: '{#bestelling.heeft_uiterlijk_gereed}…{/bestelling.heeft_uiterlijk_gereed}', label: 'Alleen tonen als er een uiterlijk-gereed-datum is' },
       { v: '{bestelling.betaalafspraak}',label: 'Betaalafspraak' },
       { v: '{bestelling.afspraken}',     label: 'Specifieke afspraken bij deze opdracht' },
       { v: '{bestelling.inhouding}',     label: 'Inhouding tot alle opleverpunten weg zijn ("5%")' },
@@ -112,6 +114,9 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{#bestelling.is_mandaat}…{/bestelling.is_mandaat}', label: 'Alleen bij een mandaatopdracht (in regie)' },
       { v: '{bestelling.mandaat}',       label: 'Mandaat excl. btw ("€ 600,00"); leeg bij vaste prijs' },
       { v: '{#bestelling.mandaat_regels}{tekst}{/bestelling.mandaat_regels}', label: 'De vaste mandaatteksten, één per regel (staan ook vooraan in {bestelling.afspraken})' },
+    ],
+    extraNamen: [
+      'bestelling.levering_datum_iso', 'bestelling.oplever_datum_iso', 'bestelling.uiterlijk_gereed_iso',
     ],
   },
   {
@@ -180,6 +185,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     items: [
       { v: '{dossier.dossiernummer}',       label: 'Dossiernummer' },
       { v: '{dossier.titel}',               label: 'Projectnaam' },
+      { v: '{dossier.werkomschrijving}',    label: 'Werkomschrijving: de projectnaam zonder dossiernummer en adres' },
       { v: '{dossier.referentie}',          label: 'Referentie' },
       { v: '{dossier.opdracht_referentie}', label: 'Inkoop-/opdrachtnummer' },
       { v: '{dossier.vve_code}',            label: 'VvE-code' },
@@ -187,6 +193,9 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{dossier.werkadres_straat}',    label: 'Werkadres — straat' },
       { v: '{dossier.werkadres_postcode}',  label: 'Werkadres — postcode' },
       { v: '{dossier.werkadres_plaats}',    label: 'Werkadres — plaats' },
+      { v: '{dossier.werkadres_naam}',      label: 'Werkadres — naam contact ter plaatse' },
+      { v: '{dossier.werkadres_telefoon}',  label: 'Werkadres — telefoon' },
+      { v: '{dossier.werkadres_email}',     label: 'Werkadres — e-mail' },
     ],
   },
   {

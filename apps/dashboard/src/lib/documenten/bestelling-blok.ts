@@ -63,6 +63,14 @@ export interface BestellingBlok {
   /** Verwachte oplevering; leeg wanneer er niets is afgesproken. */
   oplever_datum: string
   oplever_datum_iso: string
+  /**
+   * Dezelfde datum als `oplever_datum`, onder de naam die het opdrachtvenster gebruikt ("Uiterlijk
+   * gereed"). Eigen tag zodat een sjabloon hem als harde deadline los kan plaatsen, met een
+   * schakelaar om de regel weg te laten als er niets is afgesproken.
+   */
+  uiterlijk_gereed: string
+  uiterlijk_gereed_iso: string
+  heeft_uiterlijk_gereed: boolean
   betaalafspraak: string
   /** Specifieke afspraken voor deze opdracht — bedoeld om op het document te zetten. */
   afspraken: string
@@ -117,6 +125,7 @@ export interface LeverancierBlok {
 export const LEEG_BESTELLING_BLOK: BestellingBlok = {
   heeft: false, nummer: '', bonnummer: '', soort: '', soort_label: '', omschrijving: '',
   levering: '', levering_datum: '', levering_datum_iso: '', oplever_datum: '', oplever_datum_iso: '',
+  uiterlijk_gereed: '', uiterlijk_gereed_iso: '', heeft_uiterlijk_gereed: false,
   betaalafspraak: '', afspraken: '', inhouding: '', boete: '', werkadres: '', interne_notitie: '',
   offertenummer: '', aantal_regels: '0', totaal: fmtEur(0), totaal_getal: 0, regels: [],
   termijnen: [], is_oa: false, is_inkooporder: false,
@@ -291,6 +300,9 @@ export async function laadBestellingBlokken(
         levering_datum_iso: datumISO(rij.levering_datum),
         oplever_datum: datumNL(rij.oplever_datum),
         oplever_datum_iso: datumISO(rij.oplever_datum),
+        uiterlijk_gereed: datumNL(rij.oplever_datum),
+        uiterlijk_gereed_iso: datumISO(rij.oplever_datum),
+        heeft_uiterlijk_gereed: !!rij.oplever_datum,
         betaalafspraak: rij.betaalafspraak ?? '',
         // Mandaatteksten vooraan: zo staan ze ook op sjablonen die {bestelling.mandaat_regels}
         // (nog) niet kennen — en dat zijn alle sjablonen van vóór de mandaatopdracht.

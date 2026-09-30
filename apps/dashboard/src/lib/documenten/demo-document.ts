@@ -109,6 +109,7 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       heeft: true,
       dossiernummer: '20261.00598',
       titel: 'Groot onderhoud Galileïstraat 1-48',
+      werkomschrijving: 'Groot onderhoud',
       referentie: 'ION-2026-0451',
       opdracht_referentie: 'PO-88213',
       vve_code: 'VVE-0451',
