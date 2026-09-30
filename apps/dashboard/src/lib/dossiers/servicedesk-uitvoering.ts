@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { nlDelen, plusDagen } from '@/lib/planning/nl-tijd'
+import { NIET_INGETROKKEN } from './ingetrokken'
 
 /**
  * Wie er op een servicedeskbon aan het werk gaat, en wanneer — voor het middenblok van het
@@ -80,6 +81,8 @@ export async function getServicedeskUitvoering(dossierId: string): Promise<Uitvo
           .in('werkbegroting_id', begrotingIds)
           .eq('soort', 'oa_contract')
           .is('bouw7_verwijderd_op', null)
+          // Ingetrokken = niet meer opgedragen; zonder dit stond hij hier als "concept".
+          .or(NIET_INGETROKKEN)
       : Promise.resolve({ data: [] }),
   ])
   const bestellingen = (bestellingenRaw ?? []) as {

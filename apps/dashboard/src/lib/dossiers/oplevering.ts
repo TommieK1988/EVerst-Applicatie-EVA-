@@ -24,6 +24,7 @@ import { maakMeerwerkRegel } from './meerwerk'
 import { formatVeldwaardeTekst } from '@/components/formulieren/format'
 import { isInvoerVeld } from '@/components/formulieren/types'
 import type { AandachtspuntWaarde, FormField, FormSchema } from '@/components/formulieren/types'
+import { NIET_INGETROKKEN } from './ingetrokken'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -896,6 +897,8 @@ export async function getOpleverToewijsbaar(dossierId?: string): Promise<Oplever
         .select('relatie_id')
         .in('werkbegroting_id', wbIds)
         .not('relatie_id', 'is', null)
+        // Een ingetrokken opdracht maakt de partij niet meer tot besteld.
+        .or(NIET_INGETROKKEN)
       besteldeRelaties = new Set((best ?? []).map((b: any) => b.relatie_id as string))
     } else {
       // Dossier zonder werkbegroting = zeker geen bestellingen. Lege set i.p.v. "alles tonen",

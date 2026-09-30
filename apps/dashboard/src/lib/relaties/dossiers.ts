@@ -1,4 +1,5 @@
 import 'server-only'
+import { NIET_INGETROKKEN } from '@/lib/dossiers/ingetrokken'
 
 /**
  * Gekoppelde dossiers van een relatie of contactpersoon.
@@ -194,7 +195,8 @@ async function leesBetrokkenDossiers(
     // relatienaam geeft bij PostgREST een lege `data` zonder dat hier iets opvalt.
     supabase.from('werkbegroting_bestellingen')
       .select('werkbegroting_id')
-      .eq('relatie_id', relatieId),
+      .eq('relatie_id', relatieId)
+      .or(NIET_INGETROKKEN),
     supabase.from('dossier_uitvragen')
       .select('dossier_id')
       .eq('relatie_id', relatieId),
