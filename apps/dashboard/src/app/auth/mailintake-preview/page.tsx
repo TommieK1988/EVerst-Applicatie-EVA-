@@ -190,6 +190,59 @@ function aanvraagVariant() {
   }
 }
 
+
+/**
+ * Een opdracht op een offerte die EVA gevonden heeft: de route waarop het scherm
+ * vroeger een compleet ander formulier toonde. De sectie "Het dossier" bevat hier de
+ * offertekeuze; alle andere secties horen op dezelfde plek te blijven staan.
+ */
+function opdrachtOpOfferteVariant() {
+  return {
+    ...DETAIL,
+    bericht: {
+      ...DETAIL.bericht,
+      onderwerp: 'Opdracht op offerte OFT-2026-171 \u2014 Laan van Nieuw-Oost-Indi\u00eb 106 B',
+      soort: 'opdracht_op_offerte',
+      soort_vertrouwen: 0.9,
+    },
+    duplicaten: [
+      {
+        id: 'd1',
+        dossierId: 'voorbeeld-offerte',
+        dossiernummer: '20267.00682',
+        titel: 'Laan van Nieuw-Oost-Indi\u00eb 106B Den Haag, diverse onderhoudswerkzaamheden',
+        klantnaam: 'Van Herk Groep B.V.',
+        hoofdstatus: 'offerte',
+        score: 1,
+        redenen: ['Onze offerte OFT-2026-171 hoort bij dit dossier', 'Zelfde straat'],
+        soort: 'offerte_match',
+      },
+    ],
+    log: [{
+      ...DETAIL.log[0],
+      details: { redenen: ['Er past een offerte bij; controleer of het de juiste is.'] },
+    }],
+  }
+}
+
+/**
+ * Een lezing waarin vrijwel niets gelukt is. Alle verplichte velden staan rood, en
+ * ze staan op exact dezelfde plek als wanneer ze groen zijn -- dat is de variant die
+ * het verspringen het scherpst zou laten zien als het ooit terugkomt.
+ */
+function legeVariant() {
+  return {
+    ...DETAIL,
+    bericht: { ...DETAIL.bericht, soort: 'offerteaanvraag', soort_vertrouwen: 0.41, relatie: null },
+    extractie: { velden: {}, gekeurde_velden: {}, vertrouwen: {} },
+    duplicaten: [],
+    log: [{
+      ...DETAIL.log[0],
+      details: { redenen: ['EVA is onzeker over wat voor bericht dit is (41%).'] },
+    }],
+  }
+}
+
 /** Zoals `getAntwoordConcept` hem zou opleveren voor de opdrachtbon hierboven. */
 const ANTWOORD = {
   aan: 'bv@vvebeheer.nl',
@@ -202,7 +255,7 @@ const ANTWOORD = {
 }
 
 export default function Voorbeeld() {
-  const [aanvraag, setAanvraag] = React.useState(true)
+  const [scenario, setScenario] = React.useState<'aanvraag' | 'opdrachtbon' | 'offerte' | 'leeg'>('aanvraag')
   const [antwoord, setAntwoord] = React.useState(false)
   const knop = (actief: boolean) => ({
     padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
@@ -215,12 +268,16 @@ export default function Voorbeeld() {
   return (
     <div className="eva" style={{ background: 'var(--bg)', minHeight: '100vh', padding: '28px 32px' }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button type="button" style={knop(aanvraag)} onClick={() => setAanvraag(true)}>
-          A — aanvraag
-        </button>
-        <button type="button" style={knop(!aanvraag)} onClick={() => setAanvraag(false)}>
-          B — opdracht
-        </button>
+        {([
+          ['aanvraag', 'A — offerteaanvraag'],
+          ['opdrachtbon', 'B — opdrachtbon'],
+          ['offerte', 'C — opdracht op offerte'],
+          ['leeg', 'D — lege lezing'],
+        ] as const).map(([k, label]) => (
+          <button key={k} type="button" style={knop(scenario === k)} onClick={() => setScenario(k)}>
+            {label}
+          </button>
+        ))}
         <button type="button" style={knop(antwoord)} onClick={() => setAntwoord(true)}>
           Antwoordvenster
         </button>
@@ -244,9 +301,14 @@ export default function Voorbeeld() {
         hoort daarbij.
       </div>
 
-      <DialoogProvider key={aanvraag ? 'a' : 'b'}>
+      <DialoogProvider key={scenario}>
         <BerichtBehandelen
-          detail={(aanvraag ? aanvraagVariant() : DETAIL) as never}
+          detail={{
+            aanvraag: aanvraagVariant(),
+            opdrachtbon: DETAIL,
+            offerte: opdrachtOpOfferteVariant(),
+            leeg: legeVariant(),
+          }[scenario] as never}
           objectTreffer={null}
           werkmaatschappijen={WERKMAATSCHAPPIJEN}
           categorieen={CATEGORIEEN}

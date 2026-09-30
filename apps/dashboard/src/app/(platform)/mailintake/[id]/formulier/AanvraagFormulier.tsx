@@ -76,6 +76,18 @@ export interface AanvraagFormulierProps {
   zetProjectOmschrijving: (v: { scope: string; buitenScope: string; aandachtspunten: string }) => void
   rollen: Rolbezetting
   zetRol: (rol: RolSleutel, medewerkerId: string) => void
+  /**
+   * Wat er in de sectie "Het dossier" komt. Bij een opdracht op een offerte is dat
+   * de offertekeuze; bij een aanvraag een regel die zegt dat er een nieuw dossier
+   * komt. Dezelfde plek, andere inhoud -- dát was het hele punt.
+   */
+  dossierSectie?: React.ReactNode
+  /** Het gekozen offertedossier; de termijnen worden daarover berekend. */
+  offerteDossierId?: string | null
+  /** Speelt het termijnenblok bij deze afhandeling? */
+  termijnenActief?: boolean
+  /** De factuurkeuze staat bij de offerte; hier alleen verwijzen. */
+  verwijsFactuurkeuze?: boolean
 }
 
 export default function AanvraagFormulier(p: AanvraagFormulierProps) {
@@ -85,7 +97,8 @@ export default function AanvraagFormulier(p: AanvraagFormulierProps) {
     factuuradresVoorstel, factuuradresOvernemen, zetFactuuradresOvernemen,
     klantId, klantNaam, zetKlant, klantZoek, zetKlantZoek, klantOpties, wisOpties,
     contactpersonen, contactpersoonId, zetContactpersoon,
-    adres, projectOmschrijving, zetProjectOmschrijving, rollen, zetRol,
+    adres, projectOmschrijving, zetProjectOmschrijving, rollen, zetRol, dossierSectie,
+    offerteDossierId = null, termijnenActief = false, verwijsFactuurkeuze = false,
   } = p
 
   return (
@@ -196,14 +209,14 @@ export default function AanvraagFormulier(p: AanvraagFormulierProps) {
                 bewerkbaar={bewerkbaar}
               />
             }
-            dossier={
+            dossier={dossierSectie ?? (
               <FormSection title="Het dossier" description="Waar dit terechtkomt">
                 <span style={klein}>
                   EVA maakt hiervan een nieuw dossier. Hoort het t&oacute;ch bij een offerte van
                   ons, dan wijs je die hieronder aan.
                 </span>
               </FormSection>
-            }
+            )}
             rollen={
               <RollenSectie
                 waarden={rollen}
@@ -212,9 +225,13 @@ export default function AanvraagFormulier(p: AanvraagFormulierProps) {
                 bewerkbaar={bewerkbaar}
               />
             }
-            termijnen={<TermijnenSectie dossierId={null} actief={false} />}
+            termijnen={<TermijnenSectie dossierId={offerteDossierId} actief={termijnenActief} />}
             factuurkeuze={
-              factuuradresVoorstel ? (
+              verwijsFactuurkeuze ? (
+                <span style={klein}>
+                  Waar de factuur heen gaat, kies je hierboven bij de offerte.
+                </span>
+              ) : factuuradresVoorstel ? (
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
                   <input
                     type="checkbox" checked={factuuradresOvernemen} disabled={!bewerkbaar}

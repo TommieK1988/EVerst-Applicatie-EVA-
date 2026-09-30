@@ -611,26 +611,10 @@ export default function BerichtBehandelen({
             waardoor het scherm per bericht een ander scherm leek. */}
         <div style={kop}>Voorstel</div>
 
-        {route === 'offerte_winnen' && !forceerNieuw ? (
-          <OpdrachtPaneel
-            berichtId={b.id}
-            kandidaten={detail.duplicaten}
-            relatieId={klantId}
-            bewerkbaar={bewerkbaar}
-            herkend={herkendVoorOpdracht}
-            werkadres={{ straat, huisnummer }}
-            voorstel={{
-              opdrachtReferentie: velden.opdracht_referentie ?? null,
-              opdrachtdatum: velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || null),
-              klantOpmerkingen: velden.klant_opmerkingen ?? null,
-            }}
-            // Deze route wint een offerte; het dossier is daarna een opdracht.
-            onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
-          />
-        ) : null}
 
-        {(route !== 'offerte_winnen' || forceerNieuw) ? (
-          <AanvraagFormulier
+        {/* Eén formulier voor beide routes. Wat verschilt is de dossier-sectie
+            en de kleur van de velden, niet welke velden er staan. */}
+        <AanvraagFormulier
             oordelen={oordelen}
             bewerkbaar={bewerkbaar}
             categorieen={categorieen}
@@ -667,9 +651,35 @@ export default function BerichtBehandelen({
             projectOmschrijving={projectOmschrijving}
             zetProjectOmschrijving={setProjectOmschrijving}
             rollen={rollen}
-            zetRol={(rol: RolSleutel, id: string) => setRollen(x => ({ ...x, [rol]: id }))}
-          />
-        ) : null}
+          zetRol={(rol: RolSleutel, id: string) => setRollen(x => ({ ...x, [rol]: id }))}
+          // Bij een opdracht staat de keuze waar de factuur heen gaat in het
+          // dossierblok hierboven, want die hoort bij het bevestigen. Sectie
+          // Facturering toont dan alleen wat er in de mail stond, met een
+          // verwijzing: twee invoervelden voor hetzelfde gegeven is precies hoe de
+          // twee schermen uit elkaar gingen lopen.
+          verwijsFactuurkeuze={route === 'offerte_winnen' && !forceerNieuw}
+          offerteDossierId={gekozenOfferte}
+          termijnenActief={route === 'offerte_winnen' && !forceerNieuw}
+          dossierSectie={
+            route === 'offerte_winnen' && !forceerNieuw ? (
+              <OpdrachtPaneel
+                berichtId={b.id}
+                kandidaten={detail.duplicaten}
+                relatieId={klantId}
+                bewerkbaar={bewerkbaar}
+                herkend={herkendVoorOpdracht}
+                werkadres={{ straat, huisnummer }}
+                voorstel={{
+                  opdrachtReferentie, opdrachtdatum,
+                  klantOpmerkingen: klantOpmerkingen || null,
+                }}
+                voorgekozenDossierId={gekozenOfferte}
+                onKeuze={setGekozenOfferte}
+                onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
+              />
+            ) : null
+          }
+        />
 
         <AndereWeg
           bewerkbaar={bewerkbaar}
