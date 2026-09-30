@@ -366,8 +366,8 @@ export const RECHTEN_CATALOGUS = [
     omschrijving: 'Gereedschap en materieel: paspoorten, keuringen, toewijzingen en storingen.',
     niveaus: {
       lezen: 'Paspoorten en overzichten bekijken.',
-      schrijven: 'Dagelijks gebruik: scannen, de periodieke controle invullen, toewijzen, storing melden, materieel toevoegen en bestanden uploaden.',
-      beheren: 'Onomkeerbaar en administratief: archiveren, documenten en keuringen verwijderen, teams en instellingen beheren.',
+      schrijven: 'Dagelijks gebruik: scannen, toewijzen, storing melden, stickers koppelen en bestanden uploaden.',
+      beheren: 'Ook de periodieke controle invullen en materieel toevoegen, plus het onomkeerbare en administratieve: archiveren, documenten en keuringen verwijderen, teams en instellingen beheren.',
     },
     functies: [
       {

@@ -21,7 +21,8 @@ export default async function ScanPage({
 }) {
   const medewerker = await vereisMaterieelToegang('lezen', '/m')
   const rechten = await getEffectieveRechten(medewerker)
-  const magToevoegen = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
+  const magKoppelen = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
+  const magToevoegen = heeftModuleToegang(rechten, 'materieelbeheer', 'beheren')
 
   const { koppelAan } = await searchParams
   let koppelAanNaam: string | null = null
@@ -40,6 +41,7 @@ export default async function ScanPage({
         backHref={koppelAan ? `/m/materieel/${koppelAan}` : '/m/materieel'}
       />
       <ScanScherm
+        magKoppelen={magKoppelen}
         magToevoegen={magToevoegen}
         koppelAanId={koppelAan ?? null}
         koppelAanNaam={koppelAanNaam}

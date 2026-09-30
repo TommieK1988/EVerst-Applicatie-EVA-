@@ -32,15 +32,18 @@ export const dynamic = 'force-dynamic'
 export default async function MobielMaterieelPage() {
   const medewerker = await vereisMaterieelToegang('lezen', '/m')
   const rechten = await getEffectieveRechten(medewerker)
-  const magToevoegen = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
+  // Stickers koppelen is dagelijks werk ('schrijven'); nieuw materieel toevoegen
+  // is voorbehouden aan 'beheren'.
+  const magKoppelen = heeftModuleToegang(rechten, 'materieelbeheer', 'schrijven')
+  const magToevoegen = heeftModuleToegang(rechten, 'materieelbeheer', 'beheren')
   // App-gebruikers krijgen een kort scherm; de terugblik op eigen invoer is kantoorwerk.
   const toonRecent = magToevoegen && medewerker.gebruiker_type === 'platform_gebruiker'
 
   const [mijn, recent, teStickeren, teStickerenTotaal] = await Promise.all([
     getMijnMaterieel(medewerker.id),
     toonRecent ? getRecentToegevoegd(medewerker.id, 5) : Promise.resolve([]),
-    magToevoegen ? getZonderSticker(null, 8) : Promise.resolve([]),
-    magToevoegen ? telZonderSticker() : Promise.resolve(0),
+    magKoppelen ? getZonderSticker(null, 8) : Promise.resolve([]),
+    magKoppelen ? telZonderSticker() : Promise.resolve(0),
   ])
 
   // Recent toegevoegd dat al bij "mijn materieel" staat, niet dubbel tonen.

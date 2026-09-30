@@ -21,13 +21,16 @@ import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './
  *
  * Wie geen 'schrijven' heeft, kan wel scannen en kijken maar krijgt bij een
  * onbekende sticker een nette melding in plaats van de keuze — anders zou hij op
- * een doodlopend scherm belanden dat de server toch weigert.
+ * een doodlopend scherm belanden dat de server toch weigert. Koppelen mag met
+ * 'schrijven'; nieuw materieel aanmaken pas met 'beheren'.
  */
 export default function ScanScherm({
+  magKoppelen,
   magToevoegen,
   koppelAanId = null,
   koppelAanNaam = null,
 }: {
+  magKoppelen: boolean
   magToevoegen: boolean
   koppelAanId?: string | null
   koppelAanNaam?: string | null
@@ -59,7 +62,7 @@ export default function ScanScherm({
       router.push(`/m/materieel/${res.data.id}?scan=1`)
       return
     }
-    if (!magToevoegen) {
+    if (!magKoppelen) {
       setFout('Deze sticker hoort nog nergens bij. Je hebt geen recht om materieel toe te voegen — vraag een collega met dat recht.')
       setBezig(false)
       return
@@ -67,7 +70,7 @@ export default function ScanScherm({
     // Onbekende sticker: eerst vragen of het bij bestaand materieel hoort.
     setOnbekend(res.data.code)
     setBezig(false)
-  }, [koppelAanId, magToevoegen, router])
+  }, [koppelAanId, magKoppelen, router])
 
   // Gescand, niet gevonden: eerst kiezen. Camera weg, anders scant hij door de
   // keuze heen.
@@ -78,8 +81,9 @@ export default function ScanScherm({
           <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Onbekende sticker</div>
           <div style={{ fontSize: 17, fontWeight: 800 }}>{codeLabel(onbekend)}</div>
           <div style={{ fontSize: 13, color: GRIJS, marginTop: 6, lineHeight: 1.45 }}>
-            Deze code staat nog nergens in EVA. Hoort hij bij materieel dat er al in
-            staat, of is dit iets nieuws?
+            {magToevoegen
+              ? 'Deze code staat nog nergens in EVA. Hoort hij bij materieel dat er al in staat, of is dit iets nieuws?'
+              : 'Deze code staat nog nergens in EVA. Je kunt hem aan materieel koppelen dat er al in staat; nieuw materieel toevoegen doet kantoor.'}
           </div>
         </div>
 
@@ -91,13 +95,15 @@ export default function ScanScherm({
           >
             Koppelen aan bestaand materieel
           </button>
-          <button
-            type="button"
-            onClick={() => router.push(`/m/materieel/nieuw?code=${encodeURIComponent(onbekend)}`)}
-            style={secundaireKnop}
-          >
-            Nieuw materieel aanmaken
-          </button>
+          {magToevoegen && (
+            <button
+              type="button"
+              onClick={() => router.push(`/m/materieel/nieuw?code=${encodeURIComponent(onbekend)}`)}
+              style={secundaireKnop}
+            >
+              Nieuw materieel aanmaken
+            </button>
+          )}
           <button type="button" onClick={() => setOnbekend(null)} style={secundaireKnop}>
             Opnieuw scannen
           </button>

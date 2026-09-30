@@ -12,9 +12,10 @@ import type { ModuleRechten } from '@everts/database/platform-types'
  *
  * Niveaus (zie de seed-migratie 20260716d):
  *  - lezen     → paspoorten en overzichten bekijken
- *  - schrijven → dagelijks gebruik: scannen, controle invullen, toewijzen,
- *                storing melden, materieel toevoegen, bestanden uploaden
- *  - beheren   → onomkeerbaar/administratief: archiveren, documenten en
+ *  - schrijven → dagelijks gebruik: scannen, toewijzen, storing melden,
+ *                stickers koppelen, bestanden uploaden
+ *  - beheren   → periodieke controle invullen en materieel toevoegen, plus het
+ *                onomkeerbare/administratieve: archiveren, documenten en
  *                keuringen verwijderen, teams en instellingen beheren
  *
  * De splitsing schrijven/beheren is bewust: monteurs moeten kunnen scannen en

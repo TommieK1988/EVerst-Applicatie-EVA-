@@ -49,7 +49,7 @@ export interface AnalyseResultaat {
  * het opslaan aan elk object kunnen hangen zonder een tweede upload.
  */
 export async function analyseerFactuur(formData: FormData): Promise<ActieResultaat<AnalyseResultaat>> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
 
   const file = formData.get('bestand') as File | null
   if (!file || file.size === 0) return { ok: false, error: 'Kies eerst een factuur (PDF).' }
@@ -149,7 +149,7 @@ export interface BewaarResultaat {
  * de bijlage onder alle andere objecten vandaan trekken.
  */
 export async function bewaarVoorstel(ruw: unknown): Promise<ActieResultaat<BewaarResultaat>> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
 
   const parsed = bewaarSchema.safeParse(ruw)
   if (!parsed.success) {
@@ -243,7 +243,7 @@ export async function bewaarVoorstel(ruw: unknown): Promise<ActieResultaat<Bewaa
 
 /** De staging-PDF opruimen als de gebruiker het voorstel weggooit. */
 export async function verwerpVoorstel(staging: string): Promise<ActieResultaat> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   if (!staging.startsWith(`factuur-import/${g.medewerker.id}/`)) {
     return { ok: false, error: 'Deze factuur hoort niet bij jouw import.' }
   }

@@ -7,15 +7,15 @@ export const metadata = { title: 'Materieel toevoegen' }
 export const dynamic = 'force-dynamic'
 
 /**
- * Materieel toevoegen op de telefoon. Vereist 'schrijven' op materieelbeheer —
- * kijken mag met 'lezen', toevoegen niet.
+ * Materieel toevoegen op de telefoon. Vereist 'beheren' op materieelbeheer —
+ * kijken mag met 'lezen', stickers koppelen met 'schrijven', toevoegen niet.
  */
 export default async function NieuwMaterieelPage({
   searchParams,
 }: {
   searchParams: Promise<{ code?: string }>
 }) {
-  const medewerker = await vereisMaterieelToegang('schrijven', '/m')
+  const medewerker = await vereisMaterieelToegang('beheren', '/m')
   const [{ code }, medewerkers, teams] = await Promise.all([
     searchParams, getMedewerkerOpties(), getTeamOpties(),
   ])

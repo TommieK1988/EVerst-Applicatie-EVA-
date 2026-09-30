@@ -64,7 +64,7 @@ function leesbaarDbFout(error: { code?: string; message: string }): string {
  * zodat de aanroeper weet of hij naar het paspoort of naar de lijst moet.
  */
 export async function maakMaterieelObject(raw: unknown): Promise<ActieResultaat<{ id: string; aantal: number }>> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   const parsed = nieuwMaterieelSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message ?? 'Ongeldige invoer' }
 
@@ -264,7 +264,7 @@ export async function slaControleOp(
   id: string,
   input: { aanwezig: boolean; werkt_goed: boolean; status: 'ok' | 'beschadigd' | 'vermist'; opmerking?: string | null; foto_url?: string | null },
 ): Promise<ActieResultaat> {
-  const g = await gate(); if (!g.ok) return g
+  const g = await gate('beheren'); if (!g.ok) return g
   const client = db()
   const { error } = await client.from('materieel_controles').insert({
     object_id: id, uitgevoerd_door: g.medewerker.id,

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { createAdminClient } from '@everts/database/server'
-import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import type { MaterieelObject } from '@/lib/materieel/types'
 import ControleFlow from '@/components/materieel/ControleFlow'
 
@@ -8,7 +8,8 @@ export const metadata: Metadata = { title: 'Controle' }
 export const dynamic = 'force-dynamic'
 
 export default async function ControlePage() {
-  const medewerker = await getCurrentMedewerker()
+  // De periodieke controle invullen is voorbehouden aan 'beheren'.
+  const medewerker = await vereisMaterieelToegang('beheren')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 

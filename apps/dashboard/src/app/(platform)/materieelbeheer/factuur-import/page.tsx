@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function FactuurImportPage() {
   // Inlezen maakt objecten aan; dat is schrijfwerk, geen kijkwerk.
-  await vereisMaterieelToegang('schrijven')
+  await vereisMaterieelToegang('beheren')
   const medewerkerOpties = await getMedewerkerOpties()
   return <FactuurImport medewerkerOpties={medewerkerOpties} />
 }
