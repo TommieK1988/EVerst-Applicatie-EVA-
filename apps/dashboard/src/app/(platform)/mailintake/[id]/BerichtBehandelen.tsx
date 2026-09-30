@@ -42,6 +42,15 @@ import WerkadresBlok from './panelen/WerkadresBlok'
 import { useWeglegActies } from './panelen/wegleg-acties'
 import { klein, kop, veldStijl, Veld } from './panelen/velden'
 import { FormSection } from '@/components/ui/form-field'
+import AanvraagFormulier from './formulier/AanvraagFormulier'
+import { VELD_VAN_INVOER, type FormulierWaarden } from './formulier/IntakeFormulier'
+import RollenSectie, { type Rolbezetting, type RolSleutel } from './formulier/RollenSectie'
+import TermijnenSectie from './formulier/TermijnenSectie'
+import { waarnemingenUit } from './formulier/velden-uit-scherm'
+import { eisenVoor, type VeldSleutel } from '@/lib/mailintake/veld-eisen'
+import {
+  beoordeelAlleVelden, magAfhandelen, ontbrekendeVelden,
+} from '@/lib/mailintake/veld-status'
 
 type Detail = {
   bericht: any
@@ -125,6 +134,49 @@ export default function BerichtBehandelen({
   const [mandaat, setMandaat] = useState<string>(
     velden.mandaat_bedrag != null ? String(velden.mandaat_bedrag) : '',
   )
+
+  // Velden die eerder wél werden weggeschreven maar nergens op het scherm stonden.
+  // Je kon ze dus niet nakijken of corrigeren, terwijl ze op het dossier belandden.
+  const [opdrachtReferentie, setOpdrachtReferentie] = useState<string>(
+    velden.opdracht_referentie ?? '',
+  )
+  const [opdrachtdatum, setOpdrachtdatum] = useState<string>(
+    velden.opdrachtdatum ?? ((b.ontvangen_op ?? '').slice(0, 10) || ''),
+  )
+  const [klantOpmerkingen, setKlantOpmerkingen] = useState<string>(velden.klant_opmerkingen ?? '')
+
+  // De projectrollen, meteen invulbaar. Alleen de calculator kon hier eerder worden
+  // aangewezen; de rest moest achteraf op het dossier.
+  const [rollen, setRollen] = useState<Rolbezetting>({})
+
+  /**
+   * Welke velden de behandelaar zelf heeft aangeraakt.
+   *
+   * Wie een veld nakijkt of corrigeert, wil niet dat het oranje blijft staan alsof
+   * EVA er nog over twijfelt. Een aangeraakt veld telt daarom als vastgesteld.
+   */
+  const [aangeraakt, setAangeraakt] = useState<ReadonlySet<VeldSleutel>>(new Set())
+  const raakAan = React.useCallback((veld: VeldSleutel) => {
+    setAangeraakt(prev => (prev.has(veld) ? prev : new Set(prev).add(veld)))
+  }, [])
+
+  /** Eén ingang voor alle losse velden, zodat het formulier er niet twaalf nodig heeft. */
+  function zetWaarde<K extends keyof FormulierWaarden>(veld: K, waarde: FormulierWaarden[K]) {
+    switch (veld) {
+      case 'omschrijving': setOmschrijving(waarde as string); break
+      case 'categorieId': setCategorieId(waarde as number | ''); break
+      case 'werkmaatschappijId': setWerkmaatschappijId(waarde as string); break
+      case 'referentie': setReferentie(waarde as string); break
+      case 'opdrachtReferentie': setOpdrachtReferentie(waarde as string); break
+      case 'vveCode': setVveCode(waarde as string); break
+      case 'opdrachtdatum': setOpdrachtdatum(waarde as string); break
+      case 'deadline': setDeadline(waarde as string); break
+      case 'mandaat': setMandaat(waarde as string); break
+      case 'regie': setRegie(waarde as boolean); break
+      case 'opmerkingen': setOpmerkingen(waarde as string); break
+      case 'klantOpmerkingen': setKlantOpmerkingen(waarde as string); break
+    }
+  }
 
   // De projectomschrijving in de drie delen waarin hij ook in Bouw7 terechtkomt.
   const [projectOmschrijving, setProjectOmschrijving] = useState({
@@ -266,7 +318,53 @@ export default function BerichtBehandelen({
     factuuradres: factuuradresVoorstel,
   }
 
-  const compleet = Boolean(klantId && omschrijving.trim() && werkmaatschappijId && categorieId && straat && huisnummer && postcode && stad)
+  /**
+   * Het oordeel per veld: wat is ingevuld, waar moet je naar kijken, wat mist er.
+   *
+   * De regels staan in `veld-eisen.ts` en `veld-status.ts`, niet hier. Dat is het
+   * punt: de voorwaarde voor de knop en de uitleg eronder komen uit dezelfde bron.
+   * Eerder stond de voorwaarde in een losse `compleet`-expressie en de uitleg in een
+   * met de hand getypte zin, en die konden uit elkaar lopen.
+   */
+  const oordelen = useMemo(() => beoordeelAlleVelden(
+    waarnemingenUit({
+      klantId, contactpersoonId,
+      contactpersoonEmail: velden.contactpersoon_email ?? null,
+      contactpersoonTelefoon: velden.contactpersoon_telefoon ?? null,
+      omschrijving, categorieId, werkmaatschappijId, werkmaatschappijVia: wmVia,
+      aardVanHetWerk: (velden.aard_van_het_werk as string | null) ?? null,
+      straat, huisnummer, postcode, stad, adresBevestigd,
+      werkadresContactNaam: adres.contact.naam,
+      werkadresContactTelefoon: adres.contact.telefoon,
+      werkadresContactEmail: adres.contact.email,
+      referentie,
+      onzeOfferteReferentie: velden.onze_offerte_referentie ?? null,
+      opdrachtReferentie, vveCode,
+      aanvraagdatum: velden.aanvraagdatum ?? null,
+      opdrachtdatum, deadline,
+      gewensteStart: velden.gewenste_start ?? null,
+      bedragExclBtw: velden.bedrag_excl_btw ?? null,
+      mandaat, regie,
+      factuuradresNaam: velden.factuuradres_naam ?? null,
+      factuuradresStraat: velden.factuuradres_straat ?? null,
+      factuuradresPostcode: velden.factuuradres_postcode ?? null,
+      factuuradresPlaats: velden.factuuradres_plaats ?? null,
+      opmerkingen, klantOpmerkingen,
+      betrokkenen: (gekeurd?.betrokkenen ?? []) as unknown[],
+      offerteDossierId: gekozenOfferte,
+      aangeraakt, zekerheid,
+    }),
+    eisenVoor(route, b.soort as MailSoort | null),
+  ), [
+    klantId, contactpersoonId, omschrijving, categorieId, werkmaatschappijId, wmVia,
+    straat, huisnummer, postcode, stad, adresBevestigd, adres.contact,
+    referentie, opdrachtReferentie, vveCode, opdrachtdatum, deadline, mandaat, regie,
+    opmerkingen, klantOpmerkingen, gekozenOfferte, aangeraakt, zekerheid, velden, gekeurd,
+    route, b.soort,
+  ])
+
+  const compleet = magAfhandelen(oordelen)
+  const ontbreekt = ontbrekendeVelden(oordelen)
   const topDuplicaat = detail.duplicaten[0]
   const heeftDuplicaatWaarschuwing = (topDuplicaat?.score ?? 0) >= DUPLICAAT_TWIJFEL
 
@@ -532,188 +630,45 @@ export default function BerichtBehandelen({
         ) : null}
 
         {(route !== 'offerte_winnen' || forceerNieuw) ? (
-        <Card style={{ padding: 16 }}>
-        {/* Vaste secties in een vaste volgorde. Het waren losse velden achter
-            elkaar; waar iets stond hing af van welke velden er toevallig waren,
-            en dat is precies wat het scherm per bericht anders liet ogen.
-            FormSection komt uit het design system, dus de koppen zien eruit als
-            elk ander formulier in EVA. */}
-        <FormSection title="Opdrachtgever">
-          <Veld label="Opdrachtgever" score={zekerheid.klant_naam}>
-            {klantId ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{klantNaam}</span>
-                {bewerkbaar && (
-                  <Button variant="ghost" onClick={() => { setKlantId(null); setContactpersoonId(null) }}>
-                    wijzigen
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div>
-                <input
-                  style={veldStijl}
-                  placeholder="Zoek op naam, adres of e-mailadres…"
-                  value={klantZoek}
-                  onChange={e => setKlantZoek(e.target.value)}
-                  disabled={!bewerkbaar}
-                />
-                {klantOpties.length > 0 && (
-                  <div style={{ marginTop: 4, border: '1px solid var(--border)', borderRadius: 6, maxHeight: 180, overflowY: 'auto' }}>
-                    {klantOpties.map(o => (
-                      <button
-                        key={o.id}
-                        onClick={() => {
-                          setKlantId(o.id); setKlantNaam(o.naam)
-                          if (o.contactpersoon) setContactpersoonId(o.contactpersoon.id)
-                          setKlantZoek(''); setKlantOpties([])
-                        }}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left', padding: '6px 9px',
-                          fontSize: 13, background: 'none', border: 'none', cursor: 'pointer',
-                        }}
-                      >
-                        {o.naam}
-                        {o.contactpersoon && <span style={klein}> · {o.contactpersoon.naam}</span>}
-                        {o.viaFactuuradres && <span style={klein}> · factuuradres: {o.viaFactuuradres}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </Veld>
-
-          {klantId && contactpersonen.length > 0 && (
-            <Veld label="Contactpersoon" score={zekerheid.contactpersoon_naam}>
-              <select
-                style={veldStijl}
-                value={contactpersoonId ?? ''}
-                onChange={e => setContactpersoonId(e.target.value || null)}
-                disabled={!bewerkbaar}
-              >
-                <option value="">— geen —</option>
-                {contactpersonen.map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
-              </select>
-            </Veld>
-          )}
-
-        </FormSection>
-
-        <FormSection title="Het werk">
-          <WerkzaamhedenBlok
-            berichtId={b.id}
-            opgeslagen={{
-              scope: b.gevraagde_werkzaamheden ?? null,
-              buitenScope: b.buiten_scope ?? null,
-              aandachtspunten: b.aandachtspunten ?? null,
-            }}
-            bronnen={b.gevraagde_werkzaamheden_bronnen ?? null}
-            gemist={b.gevraagde_werkzaamheden_gemist ?? null}
-            waarden={projectOmschrijving}
-            opWijzig={setProjectOmschrijving}
+          <AanvraagFormulier
+            oordelen={oordelen}
             bewerkbaar={bewerkbaar}
+            categorieen={categorieen}
+            werkmaatschappijen={werkmaatschappijen}
+            medewerkers={medewerkers}
+            waarden={{
+              omschrijving, categorieId, werkmaatschappijId, referentie,
+              opdrachtReferentie, vveCode, opdrachtdatum, deadline, mandaat, regie,
+              opmerkingen, klantOpmerkingen,
+            }}
+            zetWaarde={zetWaarde}
+            raakAan={raakAan}
+            bericht={b}
+            velden={velden}
+            gekeurd={gekeurd}
+            zekerheid={zekerheid}
+            bijlagen={(detail.bijlagen ?? []).map((x: any) => ({
+              bestandsnaam: x.bestandsnaam, rol: x.rol ?? null,
+            }))}
+            factuuradresVoorstel={factuuradresVoorstel}
+            factuuradresOvernemen={factuuradresOvernemen}
+            zetFactuuradresOvernemen={setFactuuradresOvernemen}
+            klantId={klantId}
+            klantNaam={klantNaam}
+            zetKlant={(id: string | null, naam?: string) => { setKlantId(id); if (naam != null) setKlantNaam(naam) }}
+            klantZoek={klantZoek}
+            zetKlantZoek={setKlantZoek}
+            klantOpties={klantOpties}
+            wisOpties={() => setKlantOpties([])}
+            contactpersonen={contactpersonen}
+            contactpersoonId={contactpersoonId}
+            zetContactpersoon={setContactpersoonId}
+            adres={adres}
+            projectOmschrijving={projectOmschrijving}
+            zetProjectOmschrijving={setProjectOmschrijving}
+            rollen={rollen}
+            zetRol={(rol: RolSleutel, id: string) => setRollen(x => ({ ...x, [rol]: id }))}
           />
-
-          <Veld label="Omschrijving van het werk" score={zekerheid.omschrijving}>
-            <input style={veldStijl} value={omschrijving} onChange={e => setOmschrijving(e.target.value)} disabled={!bewerkbaar} />
-          </Veld>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {/* De zekerheid van het model telt hier niet. Volgt de werkmaatschappij
-                uit de categorie, dan is het een regel en geen gok -- en dan hoort er
-                geen 30% achter een veld dat gewoon klopt. Alleen bij "voorleggen"
-                (Bouwkundig Onderhoud zonder duidelijke aard) blijft het onzeker. */}
-            <Veld
-              label="Werkmaatschappij"
-              score={wmVia === 'categorie' || wmVia === 'aard' ? 1 : zekerheid.werkmaatschappij_voorstel}
-            >
-              <select style={veldStijl} value={werkmaatschappijId} onChange={e => setWerkmaatschappijId(e.target.value)} disabled={!bewerkbaar}>
-                <option value="">— kies —</option>
-                {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
-              </select>
-            </Veld>
-            <Veld label="Categorie" score={zekerheid.categorie_voorstel}>
-              <select style={veldStijl} value={categorieId} onChange={e => setCategorieId(e.target.value ? Number(e.target.value) : '')} disabled={!bewerkbaar}>
-                <option value="">— kies —</option>
-                {categorieen.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </Veld>
-          </div>
-
-        </FormSection>
-
-        <WerkadresBlok adres={adres} zekerheid={zekerheid} bewerkbaar={bewerkbaar} />
-
-        <FormSection title="Kenmerken">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <Veld label="Referentie klant" score={zekerheid.referentie}>
-              <input style={veldStijl} value={referentie} onChange={e => setReferentie(e.target.value)} disabled={!bewerkbaar} />
-            </Veld>
-            <Veld label="VvE-code" score={zekerheid.vve_code}>
-              <input style={veldStijl} value={vveCode} onChange={e => setVveCode(e.target.value)} disabled={!bewerkbaar} />
-            </Veld>
-            {isServicedesk && (
-            <Veld label="Mandaat (excl. btw)" score={zekerheid.mandaat_bedrag}>
-              <input
-                style={veldStijl} value={mandaat} disabled={!bewerkbaar}
-                onChange={e => setMandaat(e.target.value)}
-                placeholder="Bedrag waarbinnen we mogen werken"
-              />
-              <span style={klein}>
-                Alleen invullen als de bon een mandaat of budgetplafond noemt; een los bedrag is
-                meestal de geschatte prijs.
-              </span>
-            </Veld>
-          )}
-
-          <Veld label="Deadline" score={zekerheid.deadline}>
-              <input type="date" style={veldStijl} value={deadline ?? ''} onChange={e => setDeadline(e.target.value)} disabled={!bewerkbaar} />
-            </Veld>
-          </div>
-
-          <Veld label="Opmerkingen">
-            <textarea style={{ ...veldStijl, minHeight: 60 }} value={opmerkingen} onChange={e => setOpmerkingen(e.target.value)} disabled={!bewerkbaar} />
-          </Veld>
-
-          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
-            <input
-              type="checkbox" checked={regie} disabled={!bewerkbaar}
-              onChange={e => setRegie(e.target.checked)} style={{ marginTop: 3 }}
-            />
-            <span>
-              Regie — afrekenen op nacalculatie, geen aanneemsom
-              {velden.regie_aanwijzing && (
-                <span style={{ ...klein, display: 'block' }}>
-                  Uit de opdracht: “{velden.regie_aanwijzing}”
-                </span>
-              )}
-              {!velden.regie && (
-                <span style={{ ...klein, display: 'block' }}>
-                  EVA vond hier geen aanwijzing voor; zet het zelf aan als het toch regiewerk is.
-                </span>
-              )}
-            </span>
-          </label>
-
-          {factuuradresVoorstel && (
-            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
-              <input
-                type="checkbox" checked={factuuradresOvernemen} disabled={!bewerkbaar}
-                onChange={e => setFactuuradresOvernemen(e.target.checked)} style={{ marginTop: 3 }}
-              />
-              <span>
-                Factuuradres uit de opdracht vastleggen bij deze opdrachtgever
-                <span style={{ ...klein, display: 'block' }}>
-                  {[factuuradresVoorstel.naam, factuuradresVoorstel.straat,
-                    [factuuradresVoorstel.postcode, factuuradresVoorstel.plaats].filter(Boolean).join(' ')]
-                    .filter(Boolean).join(' · ')}
-                </span>
-              </span>
-            </label>
-          )}
-        </FormSection>
-        </Card>
         ) : null}
 
         <AndereWeg

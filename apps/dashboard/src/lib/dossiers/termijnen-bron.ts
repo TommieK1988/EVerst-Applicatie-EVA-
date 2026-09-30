@@ -204,14 +204,39 @@ export type TermijnUitOfferteResultaat =
       reden: 'geen_bouw7' | 'geen_schema' | 'bestaat_al' | 'geen_bedrag' | 'geen_debiteur' | 'fout'
     }
 
+/** Eén termijnregel zoals hij naar Bouw7 gaat. */
+export interface TermijnRegelVoorstel {
+  omschrijving: string
+  percentage: number
+  bedragExclBtw: number
+  vatTariffId: number
+}
+
+/** De weigering is dezelfde als bij het aanmaken: zelfde controles, zelfde redenen. */
+export type TermijnWeigering = Extract<TermijnUitOfferteResultaat, { ok: false }>
+
+export type TermijnVoorstel =
+  | {
+      ok: true
+      projectId: number
+      contactId: number
+      grondslag: number
+      conditie: string
+      termijnen: TermijnRegelVoorstel[]
+    }
+  | TermijnWeigering
+
 /**
- * Maakt de verkooptermijnen aan volgens de betalingsconditie van de offerte.
+ * Berekent welke verkooptermijnen er uit de offerte volgen, zónder ze aan te maken.
  *
- * Gooit niet: elke uitkomst komt als resultaat terug, zodat de aanroeper kan besluiten of er een
- * actie voor een mens bij hoort. Een mislukt termijnschema mag nooit een zojuist gewonnen
- * opdracht onderuithalen.
+ * Losgetrokken van het schrijven zodat het intakescherm kan tónen wat er gaat
+ * gebeuren. Tot nu toe bleek pas ná het winnen van een offerte dat er geen termijnen
+ * konden worden afgeleid, en kwam er achteraf een actie voor de projectleider.
+ *
+ * Gooit niet: elke uitkomst komt als resultaat terug, met een reden die zegt wat
+ * eraan mankeert.
  */
-export async function maakTermijnschemaUitOfferte(dossierId: string): Promise<TermijnUitOfferteResultaat> {
+export async function berekenTermijnschemaUitOfferte(dossierId: string): Promise<TermijnVoorstel> {
   try {
     const ctx = await bouw7VoorDossier(dossierId)
     if (!ctx) {
@@ -316,11 +341,27 @@ export async function maakTermijnschemaUitOfferte(dossierId: string): Promise<Te
       }
     }
 
-    const res = await schrijfBouw7Termijnstaat({ projectId, contactId, aanneemsom: grondslag, termijnen })
-    if (!res.ok) return { ok: false, reden: 'fout', error: res.error }
-
-    return { ok: true, aangemaakt: res.aangemaakt, grondslag, conditie: conditie.naam }
+    return { ok: true, projectId, contactId, grondslag, conditie: conditie.naam, termijnen }
   } catch (e) {
     return { ok: false, reden: 'fout', error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/**
+ * Maakt de verkooptermijnen werkelijk aan volgens de betalingsconditie van de offerte.
+ *
+ * Alleen de schrijfstap; het rekenwerk en alle controles staan hierboven. Gooit niet:
+ * elke uitkomst komt als resultaat terug, zodat de aanroeper kan besluiten of er een
+ * actie voor een mens bij hoort. Een mislukt termijnschema mag nooit een zojuist
+ * gewonnen opdracht onderuithalen.
+ */
+export async function maakTermijnschemaUitOfferte(dossierId: string): Promise<TermijnUitOfferteResultaat> {
+  const voorstel = await berekenTermijnschemaUitOfferte(dossierId)
+  if (!voorstel.ok) return voorstel
+
+  const { projectId, contactId, grondslag, conditie, termijnen } = voorstel
+  const res = await schrijfBouw7Termijnstaat({ projectId, contactId, aanneemsom: grondslag, termijnen })
+  if (!res.ok) return { ok: false, reden: 'fout', error: res.error }
+
+  return { ok: true, aangemaakt: res.aangemaakt, grondslag, conditie }
 }

@@ -19,6 +19,7 @@ import { createAdminClient } from '@everts/database/server'
 
 import { vereisRecht } from '@/lib/auth/rechten'
 import { toetsOfferteDossier } from './opdracht'
+import { berekenTermijnschemaUitOfferte } from '@/lib/dossiers/termijnen-bron'
 
 /**
  * De lopende offertes van deze opdrachtgever.
@@ -175,6 +176,25 @@ export async function toetsOfferteVoorOpdracht(dossierId: string): Promise<
 > {
   await vereisRecht('mailintake', 'lezen')
   return toetsOfferteDossier(dossierId)
+}
+
+/**
+ * Welke verkooptermijnen er uit de offerte zouden volgen — zonder ze aan te maken.
+ *
+ * Voedt het termijnenblok in het behandelscherm. Tot nu toe draaide het aanmaken
+ * blind ná de statuswissel, en bleek pas achteraf dat het niet kon; dan stond er al
+ * een gewonnen opdracht zonder termijnen en kwam er een actie voor de projectleider.
+ * Nu staat vóór de bevestiging op het scherm wat er gaat gebeuren, of in gewone taal
+ * waarom het niet lukt.
+ *
+ * Leest alleen: de schrijfstap zit in `maakTermijnschemaUitOfferte` en blijft lopen
+ * waar hij liep.
+ */
+export async function getTermijnvoorstelVoorIntake(
+  dossierId: string,
+): Promise<Awaited<ReturnType<typeof berekenTermijnschemaUitOfferte>>> {
+  await vereisRecht('mailintake', 'lezen')
+  return berekenTermijnschemaUitOfferte(dossierId)
 }
 
 /** Factuuradressen van een relatie, voor de controle bij een opdracht. */
