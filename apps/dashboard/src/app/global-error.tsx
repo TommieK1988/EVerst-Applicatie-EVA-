@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
+import { herlaadBijChunkFout } from '@/lib/fouten/chunk-herladen'
 
 /**
  * Laatste vangnet: fouten in de root-layout zelf. Vervangt de hele pagina, dus deze
@@ -20,6 +21,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     meldFoutVanuitBrowser(error, 'app/global-error')
+    herlaadBijChunkFout(error)
   }, [error])
 
   return (

@@ -77,10 +77,53 @@ const THEME_BOOTSTRAP = `(function(){try{
   if(t&&t!=='light')document.documentElement.setAttribute('data-theme',t);
 }catch(e){}})()`
 
+/**
+ * Vangnet voor een JS-chunk die niet laadt (ChunkLoadError), bijvoorbeeld in een tabblad
+ * dat openstond terwijl er een nieuwe versie live ging. Zo'n fout bereikt niet altijd
+ * een error-boundary — en als de chunk van de boundary zelf ook niet laadt, toont Next
+ * de kale "Application error: a client-side exception has occurred". Dit script staat
+ * inline in <head>, hangt dus van geen enkele chunk af, en herlaadt de pagina één keer.
+ * Zelfde regels en sessionStorage-sleutel als lib/fouten/chunk-herladen.ts.
+ *
+ * Het meldt daarnaast élke onafgevangen browserfout aan /api/fouten/melden (bron
+ * 'browser/onafgevangen'). Zulke fouten bereiken geen error-boundary, en als Next daarna
+ * zelf hard herlaadt was de fout nergens meer terug te vinden — ook niet in de console.
+ * Hoogstens 5 meldingen per pagina, zodat een fout in een lus het log niet volschrijft.
+ */
+const CHUNK_HERLAAD_BOOTSTRAP = `(function(){
+  var S='eva-chunk-herladen',V=30000,n=0;
+  function isChunk(e){if(!e)return false;if(e.name==='ChunkLoadError')return true;
+    var m=String(e.message||'');
+    return /Loading (CSS )?chunk [\\w-]+ failed/i.test(m)||/Failed to fetch dynamically imported module/i.test(m)||/Importing a module script failed/i.test(m);}
+  function meld(melding,type,stack){if(n++>=5)return;try{fetch('/api/fouten/melden',{method:'POST',keepalive:true,
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({bron:'browser/onafgevangen',
+    melding:String(melding||'Onbekende fout').slice(0,2000),fout_type:type||null,
+    stack:stack?String(stack).slice(0,8000):null,url:location.pathname})}).catch(function(){});}catch(x){}}
+  function herlaad(){try{var v=+(sessionStorage.getItem(S)||0);if(Date.now()-v<V)return;
+    sessionStorage.setItem(S,String(Date.now()));}catch(x){return}location.reload();}
+  window.addEventListener('error',function(ev){
+    var t=ev.target;
+    if(t&&t!==window&&(t.tagName==='SCRIPT'||t.tagName==='LINK')){
+      var u=t.src||t.href||'';
+      if(/\\/_next\\/static\\//.test(u)){meld('Bestand niet geladen: '+u,'ResourceLoadError',null);herlaad();}
+      return;
+    }
+    var e=ev.error;
+    meld(e&&e.message||ev.message,e&&e.name,e&&e.stack);
+    if(isChunk(e))herlaad();
+  },true);
+  window.addEventListener('unhandledrejection',function(ev){
+    var r=ev.reason;
+    meld(r&&r.message||String(r),r&&r.name,r&&r.stack);
+    if(isChunk(r))herlaad();
+  });
+})()`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="nl">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: CHUNK_HERLAAD_BOOTSTRAP }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body className={`${montserrat.variable} ${jetbrainsMono.variable} font-sans`}>

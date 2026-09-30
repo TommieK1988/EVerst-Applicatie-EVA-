@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
+import { herlaadBijChunkFout } from '@/lib/fouten/chunk-herladen'
 
 /**
  * Error-boundary voor het hele platform. Zonder deze viel elke sectie zonder eigen
@@ -22,6 +23,7 @@ export default function PlatformError({
 
   useEffect(() => {
     meldFoutVanuitBrowser(error, pathname ?? 'platform')
+    herlaadBijChunkFout(error)
   }, [error, pathname])
 
   return (

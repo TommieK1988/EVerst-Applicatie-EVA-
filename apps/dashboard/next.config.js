@@ -33,6 +33,22 @@ const nextConfig = {
       bodySizeLimit: '8mb',
     },
   },
+  /* Een dossier openen zonder tab (/opdrachten/<id>) gaat hier al naar de standaardtab, als
+     gewone HTTP-omleiding vóór er iets gerenderd wordt. Eerder deed [id]/page.tsx dat met
+     redirect(), maar [id]/loading.tsx maakt van die pagina een streamende respons: de
+     omleiding kwam dan midden in de stream binnen en bij een volledige paginalading klapte
+     de Next-router op React-fout #310 ("Rendered more hooks than during the previous
+     render"). De gebruiker zag even "Application error: a client-side exception" en daarna
+     herlaadde Next alsnog het dossier. De [id]/page.tsx-omleidingen blijven als vangnet. */
+  async redirects() {
+    const id = ':id([0-9a-fA-F-]{36})'
+    return [
+      { source: `/aanvragen/${id}`, destination: '/aanvragen/:id/informatie', permanent: false },
+      { source: `/offertes/${id}`, destination: '/offertes/:id/informatie', permanent: false },
+      { source: `/opdrachten/${id}`, destination: '/opdrachten/:id/informatie', permanent: false },
+      { source: `/servicedesk/${id}`, destination: '/servicedesk/:id/bon', permanent: false },
+    ]
+  },
   async headers() {
     return [
       {
