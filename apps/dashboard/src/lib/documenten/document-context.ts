@@ -33,6 +33,9 @@ import { BEZOEK_FOTO_MAX, BEZOEK_FOTO_KLEIN, BEZOEK_HANDTEKENING_MAX } from './b
 import { LEEG_BEZOEK_BLOK } from './bezoek/contract'
 import { isBezoekSoort } from './types'
 import { werkomschrijvingUitTitel } from './werkomschrijving'
+import { bouwProjectLijsten, LEEG_PROJECT_LIJSTEN, type ProjectLijstenBlok } from './dossier-lijsten'
+import { getTakenVoorDossier } from '@/lib/taken/services/taken'
+import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 
 export { ROLLEN, type RolNaam }
 // Re-export zodat bestaande importers van deze module niets hoeven te wijzigen.
@@ -160,6 +163,14 @@ export async function buildDocumentContext(
 
   const genormaliseerd = normaliseerInvoer(sjabloon.velden ?? [], invoer)
 
+  // Gevraagde werkzaamheden, taken en notities van het dossier — voor een voorblad als het
+  // calculatie-opnameblad. Voor elk document geladen: het zijn drie kleine, op het dossier
+  // gefilterde queries, en zo werkt een tag in élk sjabloon zonder dat de soort ertoe doet.
+  const [gevraagdeWerkzaamheden, projectLijsten] = await Promise.all([
+    laadGevraagdeWerkzaamheden(supabase, dossierId),
+    laadProjectLijsten(dossierId, genormaliseerd),
+  ])
+
   // Houtrot-rapportage — zelfde patroon als `opdracht` hierboven: alleen laden als
   // het sjabloon er om vraagt, zodat een brief geen registraties en foto's ophaalt.
   const houtrot = sjabloon.documentsoort === 'houtrot_rapportage'
@@ -231,6 +242,7 @@ export async function buildDocumentContext(
         postcode: dossier.werkadres_postcode,
         plaats: dossier.werkadres_plaats,
       }),
+      gevraagde_werkzaamheden: gevraagdeWerkzaamheden,
     },
     // Platte klant-/contactpersoonblokken, gelijk aan de offerte-conventie.
     klant: {
@@ -294,6 +306,8 @@ export async function buildDocumentContext(
       : false,
     bestelling: inkoop.bestelling,
     leverancier: inkoop.leverancier,
+    // {#projecttaken}…, {#projectnotities}… en hun tellers — plat, zoals het sjabloon ze noemt.
+    ...projectLijsten,
     document: {
       datum: datumNL(new Date().toISOString()),
       datum_iso: datumISO(new Date().toISOString()),
@@ -517,6 +531,41 @@ async function laadOpleverdatum(
   } catch {
     return null
   }
+}
+
+/**
+ * De tekst uit het blok "Gevraagde werkzaamheden" op het Informatie-tabblad. Alinea's en
+ * opsommingen blijven staan: de renderer zet regeleinden om (`linebreaks: true`).
+ * Best-effort — leeg of niet leesbaar → ''.
+ */
+async function laadGevraagdeWerkzaamheden(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  dossierId: string,
+): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from('dossiers')
+      .select('gevraagde_werkzaamheden')
+      .eq('id', dossierId)
+      .maybeSingle()
+    return String(data?.gevraagde_werkzaamheden ?? '').replace(/\r\n?/g, '\n').trim()
+  } catch {
+    return ''
+  }
+}
+
+/** Taken en notities van het dossier, begrensd volgens het sjabloon. Best-effort. */
+async function laadProjectLijsten(
+  dossierId: string,
+  invoer: Record<string, string>,
+): Promise<ProjectLijstenBlok> {
+  const [taken, notities] = await Promise.all([
+    getTakenVoorDossier(dossierId).catch(() => []),
+    getDossierNotities(dossierId).catch(() => []),
+  ])
+  if (taken.length === 0 && notities.length === 0) return LEEG_PROJECT_LIJSTEN
+  return bouwProjectLijsten(taken, notities, invoer)
 }
 
 /** Formatteert een bedrag als € 1.234,56 voor de opdrachtbevestiging. */

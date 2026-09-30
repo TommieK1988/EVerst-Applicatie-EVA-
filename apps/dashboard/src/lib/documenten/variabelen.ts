@@ -199,6 +199,43 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
   },
   {
+    groep: 'Gevraagde werkzaamheden, taken en notities',
+    uitleg: 'Voor een voorblad zoals het calculatie-opnameblad. Alles komt uit het gekozen dossier; wat leeg is, blijft leeg. '
+      + 'De lijsten zijn begrensd zodat het voorblad op één A4 past: standaard 10 taken en 5 notities (de nieuwste). '
+      + 'Wil je een andere grens, voeg dan een invoerveld toe met sleutel "max_taken" of "max_notities" en een standaardwaarde; 0 zet de lijst uit. '
+      + 'Afkappen gebeurt nooit stil: zet {projecttaken_meer} of {projectnotities_meer} onder de lijst, dan staat er bijvoorbeeld "En nog 4 taken in EVA." '
+      + 'Eén tabelrij per taak: zet {#projecttaken} in de eerste en {/projecttaken} in de laatste cel van de rij. '
+      + 'Eén regel per taak binnen één cel: zet {#projecttaken} en {/projecttaken} elk op een eigen regel, met de taakregel ertussen '
+      + '(let op: staat bij die rij "Rij niet splitsen" aan, dan springt de hele lijst naar de volgende pagina zodra hij niet past). '
+      + 'Staan ze samen op één regel, dan komen alle taken achter elkaar in één alinea. '
+      + 'Notities uit de Bouw7-sync kunnen lang zijn; gebruik {tekst_kort} voor een voorblad. Vervallen taken staan in geen van beide takenlijsten.',
+    items: [
+      { v: '{dossier.gevraagde_werkzaamheden}', label: 'De tekst uit het blok Gevraagde werkzaamheden, met alinea\'s en opsommingen' },
+      { v: '{#dossier.gevraagde_werkzaamheden}…{/dossier.gevraagde_werkzaamheden}', label: 'Alleen tonen als er gevraagde werkzaamheden zijn' },
+      { v: '{#projecttaken}…{/projecttaken}', label: 'Alle taken, openstaande eerst; binnenin: {afgevinkt} {titel} {status} {actiehouder} {deadline}' },
+      { v: '{#projecttaken_open}…{/projecttaken_open}', label: 'Alleen de openstaande taken; zelfde velden' },
+      { v: '{afgevinkt}',   label: 'Taak — vinkje als teken (☒ gedaan, ☐ open)' },
+      { v: '{#is_afgevinkt}…{/is_afgevinkt}', label: 'Taak — alleen tonen als hij gedaan is (andersom: {^is_afgevinkt})' },
+      { v: '{actiehouder}', label: 'Taak — aan wie hij is toegewezen' },
+      { v: '{deadline}',    label: 'Taak — deadline (14 juli 2026)' },
+      { v: '{projecttaken_totaal}', label: 'Aantal taken in totaal (ook de niet-getoonde)' },
+      { v: '{projecttaken_meer}',   label: '"En nog 4 taken in EVA." — leeg als alles past' },
+      { v: '{projecttaken_open_meer}', label: 'Idem voor de openstaande taken' },
+      { v: '{#projectnotities}…{/projectnotities}', label: 'Notities, nieuwste eerst; binnenin: {tekst} of {tekst_kort} {datum} {auteur}' },
+      { v: '{tekst_kort}', label: 'Notitie — op één regel, afgekapt op 220 tekens (met …)' },
+      { v: '{projectnotities_totaal}', label: 'Aantal notities in totaal' },
+      { v: '{projectnotities_meer}',   label: '"En nog 3 notities in EVA." — leeg als alles past' },
+    ],
+    binnenLoop: [
+      'titel', 'status', 'afgevinkt', 'is_afgevinkt', 'is_open', 'actiehouder', 'deadline', 'deadline_iso',
+      'tekst', 'tekst_kort', 'datum', 'datum_iso', 'auteur',
+    ],
+    extraNamen: [
+      'projecttaken_heeft_meer', 'projecttaken_open_totaal', 'projecttaken_open_heeft_meer',
+      'projectnotities_heeft_meer',
+    ],
+  },
+  {
     groep: 'Planning',
     items: [
       { v: '{planning.startdatum}',    label: 'Startdatum uit Bouw7 (14 juli 2026)' },

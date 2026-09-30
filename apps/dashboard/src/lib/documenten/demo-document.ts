@@ -21,6 +21,7 @@ import {
   type BezoekBlok, type BezoekBevinding, type BezoekDisciplineRij,
 } from './bezoek/contract'
 import { isInkoopSoort } from './types'
+import { bouwProjectLijsten, type TaakBron, type NotitieBron } from './dossier-lijsten'
 import type { DocumentSjabloon } from './types'
 
 /** Zelfde vorm als de echte render-context; los gehouden i.v.m. de server-only chain. */
@@ -36,6 +37,36 @@ const DEMO_OFFERTE = '2026-04-18'
 const DEMO_OPDRACHT = '2026-05-11'
 const DEMO_VOORLOPIG_START = '2026-08-24'
 const DEMO_VOORLOPIG_EIND = '2026-09-18'
+
+/** Twaalf taken en zeven notities: net boven de standaardgrens, zodat de "En nog …"-regel zichtbaar is. */
+const taak = (titel: string, status: string, deadline: string | null, assignee_naam: string | null): TaakBron =>
+  ({ titel, status, deadline, assignee_naam })
+const DEMO_TAKEN: TaakBron[] = [
+  taak('Opname plannen met de beheerder', 'gereed', '2026-04-08', 'Jan de Vries'),
+  taak('Opname uitvoeren en foto\'s maken', 'gereed', '2026-04-10', 'Jan de Vries'),
+  taak('Hoeveelheden kozijnen en boeidelen uitmeten', 'in_behandeling', '2026-04-14', 'Sanne Bakker'),
+  taak('Houtrot per gevel inschatten', 'open', '2026-04-14', 'Sanne Bakker'),
+  taak('Prijs steiger opvragen', 'wacht_op', '2026-04-15', 'Mark Jansen'),
+  taak('Kleurenschema opvragen bij de VvE', 'open', '2026-04-15', 'Petra Vos'),
+  taak('Balkonhekken: ontroesten of vervangen?', 'open', '2026-04-16', 'Mark Jansen'),
+  taak('Kitwerk offerte onderaannemer', 'open', '2026-04-16', 'Mark Jansen'),
+  taak('Asbestverdenking boeidelen navragen', 'open', '2026-04-17', null),
+  taak('Bereikbaarheid achtergevel controleren', 'open', null, 'Jan de Vries'),
+  taak('Werkbegroting opzetten', 'open', '2026-04-18', 'Sanne Bakker'),
+  taak('Calculatie laten controleren', 'open', '2026-04-19', 'Mark Jansen'),
+]
+
+const notitie = (inhoud: string, created_at: string, auteur_naam: string): NotitieBron =>
+  ({ inhoud, created_at, auteur_naam })
+const DEMO_NOTITIES: NotitieBron[] = [
+  notitie('Beheerder wil de kozijnen in dezelfde kleur, alleen de voordeuren donkergroen.', '2026-04-12T09:14:00Z', 'Jan de Vries'),
+  notitie('Achtergevel alleen bereikbaar via de tuinen van nr. 12 en 14, sleutel bij de beheerder.', '2026-04-10T14:02:00Z', 'Jan de Vries'),
+  notitie('Houtrot vooral onderdorpels begane grond, zie foto\'s in de map Opname.', '2026-04-10T13:40:00Z', 'Sanne Bakker'),
+  notitie('Balkonhekken zijn in 2014 al eens gecoat.', '2026-04-09T11:00:00Z', 'Mark Jansen'),
+  notitie('VvE-vergadering op 22 april; offerte liefst daarvoor.', '2026-04-08T08:30:00Z', 'Petra Vos'),
+  notitie('Parkeren alleen op de openbare weg, vergunning aanvragen.', '2026-04-07T15:20:00Z', 'Mark Jansen'),
+  notitie('Aanvraag binnengekomen via de beheerder.', '2026-04-02T10:05:00Z', 'Sanne Bakker'),
+]
 
 /** Voorbeeld-feedbacklink voor de preview. */
 const DEMO_FEEDBACK_URL = 'https://eva.everts.nl/p/feedback/VOORBEELD'
@@ -110,6 +141,11 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       dossiernummer: '20261.00598',
       titel: 'Groot onderhoud Galileïstraat 1-48',
       werkomschrijving: 'Groot onderhoud',
+      gevraagde_werkzaamheden:
+        'Buitenschilderwerk van alle kozijnen, deuren en boeidelen aan de voor- en achtergevel.\n\n'
+        + '- Houtrot herstellen waar nodig, per stuk verrekenen\n'
+        + '- Kitvoegen rondom de kozijnen vervangen\n'
+        + '- Balkonhekken ontroesten en in de verf zetten',
       referentie: 'ION-2026-0451',
       opdracht_referentie: 'PO-88213',
       vve_code: 'VVE-0451',
@@ -194,6 +230,9 @@ export function buildDemoDocumentContext(sjabloon: DocumentSjabloon): DemoRender
       behandelingen: invoer.behandelingen || 'Houtwerk: 1× grondlaag, 2× aflak (Sigma S2U Nova).',
     },
     ...demoInkoop(sjabloon.documentsoort),
+    // Taken en notities: meer dan de standaardgrens, zodat de preview ook de
+    // "En nog …"-regel laat zien.
+    ...bouwProjectLijsten(DEMO_TAKEN, DEMO_NOTITIES, invoer),
     document: {
       datum: datumNL('2026-08-14'),
       datum_iso: '2026-08-14',
