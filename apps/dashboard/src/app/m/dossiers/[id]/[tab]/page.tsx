@@ -68,6 +68,8 @@ export default async function MobielDossierTabPage(
    * Servicedesk hoort er nadrukkelijk wél bij: die dossiers staan op `hoofdstatus = 'aanvraag'`
    * (356 van de 415 aanvragen op productie) maar worden gewoon uitgevoerd. Gaten op `isOpdracht`
    * alleen en je haalt de planning weg bij juist de dossiers waar de buitendienst op zit.
+   * Alleen Projectbezoek niet: een bon is een klus van een paar uur, geen project om te bezoeken
+   * (zie ActiesBlok hieronder).
    */
   const isServicedesk = !!(res.data as { servicedesk_substatus?: string | null }).servicedesk_substatus
   const isUitvoering = isOpdracht || isServicedesk
@@ -128,7 +130,7 @@ export default async function MobielDossierTabPage(
             </Suspense>
           )}
           {/* Acties apart in Suspense: de takenquery mag de infokaarten niet ophouden. */}
-          <Suspense fallback={null}><ActiesBlok dossierId={id} magBezoekStarten={isUitvoering} /></Suspense>
+          <Suspense fallback={null}><ActiesBlok dossierId={id} magBezoekStarten={isUitvoering && !isServicedesk} /></Suspense>
         </>
       )}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
@@ -189,8 +191,14 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen }: {
   dossierId: string
   magStatusWijzigen: boolean
 }) {
+  // Huisnummer apart: Bouw7 zet het in de straat, maar een in EVA aangemaakt dossier bewaart het
+  // los — zonder dit ontbrak het nummer in de adresregel én in de Navigeren-link.
+  // Staat het nummer al in de straat (na een Bouw7-sync), dan niet nog eens erachter.
+  const straatTekst = String(d.werkadres_straat ?? '').trim()
+  const nr = String(d.werkadres_huisnummer ?? '').trim()
+  const straat = nr && !straatTekst.endsWith(nr) ? `${straatTekst} ${nr}`.trim() : straatTekst
   const werkadres = [
-    d.werkadres_straat,
+    straat,
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
 
@@ -219,6 +227,8 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen }: {
     contact_naam: d.contactpersoon_naam ?? null,
     contact_telefoon: d.contactpersoon_telefoon ?? null,
     werkadres,
+    werkadres_naam: d.werkadres_naam ?? null,
+    werkadres_telefoon: d.werkadres_telefoon ?? null,
     rollen,
   }
 

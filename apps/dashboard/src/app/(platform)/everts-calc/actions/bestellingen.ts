@@ -28,7 +28,7 @@ import { revalidatePath } from 'next/cache'
 import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import type { WerkbegrotingBestelling } from '@/lib/everts-calc/types'
 import {
-  schrijfBouw7Contract, verwijderBouw7Contract, verwijderBouw7ContractLeverbonnen,
+  schrijfBouw7Contract,
   zetBouw7ContractStatus, roepBouw7ContractAf, getAfroepStatusId,
   bestaatBouw7Contract, haalBestelregelKoppelingen, leesBouw7Contract, PURCHASE_TYPE,
   type ContractSoort, type ContractTermijn, type BestelregelKoppeling,
@@ -36,7 +36,9 @@ import {
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import type { Bouw7ListResponse } from '@/lib/bouw7/client'
-import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getCurrentMedewerker, vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
+import { trekContractInKern } from '@/lib/dossiers/inkoop-intrekken'
 import { heeftTemplate } from '@/lib/documenten/types'
 import {
   syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase,
@@ -865,67 +867,29 @@ export type TrekInResultaat = { ok: true } | { ok: false; error: string }
  * en een bon die blijft staan telt door als kosten op de bewakingscode.
  */
 export async function trekBestellingIn(dossierId: string, bestellingId: string): Promise<TrekInResultaat> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = createAdminClient() as any
-  const { data: rij } = await db
-    .from('werkbegroting_bestellingen')
-    .select('id, soort, bouw7_contract_id, bouw7_leverbon_id, relatie_id')
-    .eq('id', bestellingId)
-    .maybeSingle()
-  if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
-  if (rij.bouw7_contract_id == null) return { ok: false, error: 'Deze bestelling staat niet in Bouw7.' }
+  try {
+    const { medewerker } = await vereisRecht('dossiers', 'schrijven')
+    await assertDossierBewerkbaar(dossierId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = createAdminClient() as any
+    const { data: rij } = await db
+      .from('werkbegroting_bestellingen')
+      .select('id, soort, bouw7_contract_id')
+      .eq('id', bestellingId)
+      .maybeSingle()
+    if (!rij) return { ok: false, error: 'Bestelling niet gevonden.' }
+    if (rij.bouw7_contract_id == null) return { ok: false, error: 'Deze bestelling staat niet in Bouw7.' }
 
-  const { data: dossier } = await db.from('dossiers').select('bouw7_id').eq('id', dossierId).maybeSingle()
-  const projectId = dossier?.bouw7_id != null ? Number(dossier.bouw7_id) : NaN
-  const { data: relatie } = rij.relatie_id
-    ? await db.from('relaties').select('bouw7_id').eq('id', rij.relatie_id).maybeSingle()
-    : { data: null }
-  const relatieBouw7Id = relatie?.bouw7_id != null ? Number(relatie.bouw7_id) : NaN
-  if (!Number.isFinite(projectId) || !Number.isFinite(relatieBouw7Id)) {
-    return { ok: false, error: 'Kan het contract niet intrekken: project- of leveranciers-koppeling ontbreekt.' }
+    // Zelfde kern als het intrekken vanaf het Inkoop-tab — ook voor een al verstuurde opdracht.
+    const res = await trekContractInKern(
+      dossierId, (rij.soort ?? 'inkooporder') as ContractSoort, Number(rij.bouw7_contract_id), medewerker.id,
+    )
+    if (res.ok) revalidatePath(`/dossiers/${dossierId}`)
+    return res
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: e.message }
+    return { ok: false, error: e instanceof Error ? e.message : 'Intrekken mislukt' }
   }
-
-  const soort = (rij.soort ?? 'inkooporder') as ContractSoort
-
-  // Eerst de leverbon(nen): die dragen de kosten en zouden anders als losse post op de
-  // bewakingscode blijven staan zonder order erbij. Er kunnen er meerdere zijn (één per regel).
-  // Zit er al een inkoopfactuur op, dan weigert Bouw7 het verwijderen — dan stoppen we hier.
-  if (rij.bouw7_leverbon_id != null) {
-    const bonRes = await verwijderBouw7ContractLeverbonnen(soort, Number(rij.bouw7_contract_id))
-    if (!bonRes.ok) {
-      return {
-        ok: false,
-        error: `De leverbon(nen) kunnen niet verwijderd worden (${bonRes.error}).`,
-      }
-    }
-  }
-
-  const res = await verwijderBouw7Contract(
-    soort,
-    Number(rij.bouw7_contract_id),
-    { projectId, relatieBouw7Id, bedrag: '0.00' },
-  )
-  if (!res.ok) return { ok: false, error: res.error }
-
-  await db.from('werkbegroting_bestellingen')
-    .update({
-      status: 'concept', verzonden_op: null,
-      verstuurd_op: null, verstuurd_door: null, verstuurd_naar: null,
-      bouw7_contract_id: null, bouw7_nummer: null,
-      bouw7_leverbon_id: null, bouw7_bonnummer: null, bouw7_afroep_op: null,
-      bouw7_sync_status: null, bouw7_sync_fout: null, bouw7_verwijderd_op: null,
-      bouw7_gesynct_op: new Date().toISOString(),
-    })
-    .eq('id', bestellingId)
-
-  // Het contract is in Bouw7 verwijderd; zonder verversing blijft het op het Inkoop-tab staan.
-  await ververSnapshotsNaSchrijven(
-    dossierId,
-    ['inkooporders', 'oa_contracten'],
-    ['heimdall_inkoopfacturen', 'apollo_inkoopfacturen', 'athena_control'],
-  )
-  revalidatePath(`/dossiers/${dossierId}`)
-  return { ok: true }
 }
 
 // ─── Reconciliatie: wat in Bouw7 is weggegooid, mag EVA niet als besteld tonen ────────────────

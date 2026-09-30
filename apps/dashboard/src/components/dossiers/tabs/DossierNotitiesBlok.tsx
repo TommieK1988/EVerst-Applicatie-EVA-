@@ -88,6 +88,18 @@ export default function DossierNotitiesBlok({
                   <div className="whitespace-pre-wrap break-words text-[13px] leading-snug text-neutral-800">
                     {n.inhoud}
                   </div>
+                  {/* Foto's bij een opmerking van de buitendienst (vanaf de telefoon). */}
+                  {n.foto_urls?.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {n.foto_urls.map(u => (
+                        <a key={u} href={u} target="_blank" rel="noopener noreferrer" title="Foto openen">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={u} alt="Foto bij notitie"
+                            className="h-12 w-12 rounded border border-neutral-200 object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
           </div>

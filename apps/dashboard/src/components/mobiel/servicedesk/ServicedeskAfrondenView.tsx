@@ -1,4 +1,5 @@
 import { getServicedeskAfronding } from '@/lib/dossiers/servicedesk-afronden'
+import { getDossierNotities } from '@/lib/dossiers/notities-actions'
 import ServicedeskAfrondenBlok from './ServicedeskAfrondenBlok'
 
 /**
@@ -9,7 +10,14 @@ export default async function ServicedeskAfrondenView({ dossierId, magBewerken }
   dossierId: string
   magBewerken: boolean
 }) {
-  const afronding = await getServicedeskAfronding(dossierId).catch(() => null)
+  const [afronding, notities] = await Promise.all([
+    getServicedeskAfronding(dossierId).catch(() => null),
+    getDossierNotities(dossierId).catch(() => []),
+  ])
   if (!afronding) return null
-  return <ServicedeskAfrondenBlok dossierId={dossierId} afronding={afronding} magBewerken={magBewerken} />
+  return (
+    <ServicedeskAfrondenBlok
+      dossierId={dossierId} afronding={afronding} notities={notities} magBewerken={magBewerken}
+    />
+  )
 }

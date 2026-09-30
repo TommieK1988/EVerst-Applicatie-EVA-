@@ -2765,6 +2765,7 @@ export type Database = {
           bouw7_ref: string | null
           created_at: string
           dossier_id: string
+          foto_urls: string[]
           id: string
           inhoud: string
           medewerker_id: string | null
@@ -2774,6 +2775,7 @@ export type Database = {
           bouw7_ref?: string | null
           created_at?: string
           dossier_id: string
+          foto_urls?: string[]
           id?: string
           inhoud: string
           medewerker_id?: string | null
@@ -2783,6 +2785,7 @@ export type Database = {
           bouw7_ref?: string | null
           created_at?: string
           dossier_id?: string
+          foto_urls?: string[]
           id?: string
           inhoud?: string
           medewerker_id?: string | null
@@ -2835,7 +2838,7 @@ export type Database = {
       dossier_pakbonnen: {
         Row: {
           dossier_id: string
-          foto_url: string
+          foto_url: string | null
           geupload_door: string | null
           geupload_op: string
           id: string
@@ -2843,7 +2846,7 @@ export type Database = {
         }
         Insert: {
           dossier_id: string
-          foto_url: string
+          foto_url?: string | null
           geupload_door?: string | null
           geupload_op?: string
           id?: string
@@ -2851,7 +2854,7 @@ export type Database = {
         }
         Update: {
           dossier_id?: string
-          foto_url?: string
+          foto_url?: string | null
           geupload_door?: string | null
           geupload_op?: string
           id?: string
@@ -18258,6 +18261,8 @@ export type Database = {
           termijnschema: Json | null
           verstuurd_door: string | null
           verstuurd_naar: string | null
+          ingetrokken_door: string | null
+          ingetrokken_op: string | null
           verstuurd_op: string | null
           verzonden_op: string | null
           werkadres: string | null
@@ -18295,6 +18300,8 @@ export type Database = {
           termijnschema?: Json | null
           verstuurd_door?: string | null
           verstuurd_naar?: string | null
+          ingetrokken_door?: string | null
+          ingetrokken_op?: string | null
           verstuurd_op?: string | null
           verzonden_op?: string | null
           werkadres?: string | null
@@ -18332,6 +18339,8 @@ export type Database = {
           termijnschema?: Json | null
           verstuurd_door?: string | null
           verstuurd_naar?: string | null
+          ingetrokken_door?: string | null
+          ingetrokken_op?: string | null
           verstuurd_op?: string | null
           verzonden_op?: string | null
           werkadres?: string | null

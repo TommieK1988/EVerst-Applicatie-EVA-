@@ -1,7 +1,8 @@
 'use server'
 
 /**
- * Een servicedeskbon afronden vanaf de telefoon: pakbonfoto's toevoegen en de bon gereed melden
+ * Een servicedeskbon afronden vanaf de telefoon: gebruikt materiaal vastleggen (pakbonfoto of
+ * getypt) en de bon gereed melden
  * met de uitgevoerde werkzaamheden en eventueel een handtekening voor akkoord.
  *
  * LET OP — elke export hier moet `async function` zijn (zie `feedback_use_server_geen_sync_exports`).
@@ -19,7 +20,7 @@ import { vereisSessie, GeenToegangError, type CurrentMedewerker } from '@/lib/au
 import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
 import { updateServicedeskSubstatus } from '@/lib/dossiers/actions'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
-import { maakNotificatie } from '@/lib/notificaties/maak'
+import { meldAanProjectleider } from '@/lib/dossiers/meld-projectleider'
 import type { ServicedeskAfronding } from './servicedesk-afronden-types'
 
 const BUCKET = 'servicedesk-fotos'
@@ -60,30 +61,6 @@ function foutTekst(e: unknown): string {
 function revalideer(dossierId: string) {
   revalidatePath(`/m/dossiers/${dossierId}/informatie`)
   revalidatePath(`/servicedesk/${dossierId}`, 'layout')
-}
-
-/**
- * Laat de projectleider weten wat er op de bon gebeurde. Niet naar jezelf: meldt de
- * projectleider zelf gereed, dan is een melding in zijn eigen belletje alleen ruis.
- */
-async function meldAanProjectleider(
-  bon: { id: string; titel: string | null; dossiernummer: string | null; project_manager_id: string | null },
-  door: CurrentMedewerker,
-  melding: { type: string; titel: string; body: string; url: string },
-) {
-  if (!bon.project_manager_id || bon.project_manager_id === door.id) return
-  const { data: pl } = await createAdminClient()
-    .from('medewerkers')
-    .select('auth_user_id')
-    .eq('id', bon.project_manager_id)
-    .maybeSingle()
-  if (!pl?.auth_user_id) return
-  await maakNotificatie({
-    user_id: pl.auth_user_id,
-    ...melding,
-    dossier_id: bon.id,
-    dossier_naam: [bon.dossiernummer, bon.titel].filter(Boolean).join(' · ') || null,
-  })
 }
 
 /** Laatste gereedmelding + alle pakbonnen van de bon. */
@@ -157,10 +134,45 @@ export async function voegPakbonToe(dossierId: string, formData: FormData): Prom
       return { ok: false, error: error.message }
     }
 
-    await meldAanProjectleider(bon, medewerker, {
+    await meldAanProjectleider(bon, medewerker.id, {
       type: 'servicedesk_pakbon',
       titel: 'Pakbon toegevoegd',
       body: `${medewerkerNaam(medewerker) ?? 'Een collega'} voegde een pakbon toe${opmerking ? `: ${opmerking}` : ''}. Er komt dus nog een inkoopfactuur.`,
+      url: `/servicedesk/${dossierId}/inkoop`,
+    })
+
+    revalideer(dossierId)
+    return { ok: true }
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: e.message }
+    return { ok: false, error: foutTekst(e) }
+  }
+}
+
+/**
+ * Getypt materiaal aan de bon hangen — wat de monteur uit de bus pakte en waar geen pakbon bij
+ * hoort. Een rij in `dossier_pakbonnen` zonder foto, met de tekst in `opmerking`.
+ */
+export async function voegMateriaalToe(dossierId: string, tekst: string): Promise<Uitkomst> {
+  try {
+    const medewerker = await poort()
+    await assertDossierBewerkbaar(dossierId)
+    const bon = await haalBon(dossierId)
+    if (!bon) return { ok: false, error: 'Dit is geen servicedeskbon.' }
+
+    const materiaal = tekst.trim()
+    if (!materiaal) return { ok: false, error: 'Vul in welk materiaal je hebt gebruikt.' }
+    if (materiaal.length > 2000) return { ok: false, error: 'Dat is te lang voor één regel materiaal.' }
+
+    const { error } = await createAdminClient().from('dossier_pakbonnen').insert({
+      dossier_id: dossierId, foto_url: null, opmerking: materiaal, geupload_door: medewerker.id,
+    })
+    if (error) return { ok: false, error: error.message }
+
+    await meldAanProjectleider(bon, medewerker.id, {
+      type: 'servicedesk_materiaal',
+      titel: 'Gebruikt materiaal',
+      body: `${medewerkerNaam(medewerker) ?? 'Een collega'}: ${materiaal.slice(0, 140)}${materiaal.length > 140 ? '…' : ''}`,
       url: `/servicedesk/${dossierId}/inkoop`,
     })
 
@@ -182,16 +194,17 @@ export async function verwijderPakbon(pakbonId: string): Promise<Uitkomst> {
       .select('id, dossier_id, foto_url, geupload_door')
       .eq('id', pakbonId)
       .maybeSingle()
-    if (!pakbon) return { ok: false, error: 'Pakbon niet gevonden.' }
+    if (!pakbon) return { ok: false, error: 'Niet gevonden.' }
     if (pakbon.geupload_door !== medewerker.id) {
-      return { ok: false, error: 'Je kunt alleen je eigen pakbonnen verwijderen.' }
+      return { ok: false, error: 'Je kunt alleen je eigen regels verwijderen.' }
     }
     await assertDossierBewerkbaar(pakbon.dossier_id)
 
     const { error } = await supabase.from('dossier_pakbonnen').delete().eq('id', pakbonId)
     if (error) return { ok: false, error: error.message }
 
-    const pad = pakbon.foto_url.split(`/${BUCKET}/`)[1]
+    // Getypt materiaal heeft geen foto; dan valt er in de opslag niets op te ruimen.
+    const pad = pakbon.foto_url?.split(`/${BUCKET}/`)[1]
     if (pad) await supabase.storage.from(BUCKET).remove([decodeURIComponent(pad)]).catch(() => {})
 
     revalideer(pakbon.dossier_id)
@@ -252,7 +265,7 @@ export async function meldServicedeskGereed(
       if (!res.ok) waarschuwing = `Gereedmelding opgeslagen, maar de status bleef staan: ${res.error ?? 'onbekende fout'}`
     }
 
-    await meldAanProjectleider(bon, medewerker, {
+    await meldAanProjectleider(bon, medewerker.id, {
       type: 'servicedesk_gereed',
       titel: 'Bon gereed gemeld',
       body: `${medewerkerNaam(medewerker) ?? 'Een collega'}: ${werkzaamheden.slice(0, 140)}${werkzaamheden.length > 140 ? '…' : ''}`,

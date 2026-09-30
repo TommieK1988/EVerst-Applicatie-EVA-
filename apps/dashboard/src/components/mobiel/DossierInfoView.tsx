@@ -28,6 +28,9 @@ export type DossierInfo = {
   contact_naam: string | null
   contact_telefoon: string | null
   werkadres: string | null
+  /** Wie er op het werkadres zit (bewoner, beheerder ter plaatse) — niet de contactpersoon van de opdrachtgever. */
+  werkadres_naam: string | null
+  werkadres_telefoon: string | null
   /** Ingevulde rollen in de volgorde van het Rollen-blok op de desktop; lege rollen zitten er niet in. */
   rollen: { label: string; naam: string }[]
 }
@@ -67,7 +70,10 @@ export default function DossierInfoView({
    */
   statusKiezer?: React.ReactNode
 }) {
-  const telefoon = info.contact_telefoon?.replace(/\s/g, '') || null
+  // Bellen = het werkadres: in het veld bel je wie er ter plaatse is, niet de opdrachtgever.
+  // Zonder nummer blijft de knop bewust grijs; de contactpersoon staat hieronder zelf aantikbaar.
+  const telefoon = info.werkadres_telefoon?.replace(/\s/g, '') || null
+  const contactTel = info.contact_telefoon?.replace(/\s/g, '') || null
   const periode = [info.begindatum, info.einddatum].filter(Boolean).join(' – ') || null
 
   return (
@@ -78,6 +84,7 @@ export default function DossierInfoView({
           {info.titel}
         </div>
         {statusKiezer ?? <StatusBadge label={info.statusLabel} color={info.statusColor} lg />}
+        {periode && <Feit label="Periode" waarde={periode} />}
       </div>
 
       {/* De twee dingen die je in het veld daadwerkelijk doet */}
@@ -113,16 +120,22 @@ export default function DossierInfoView({
 
       <div style={kaart}>
         <Feit label="Werkadres" waarde={info.werkadres} />
-        <Feit label="Opdrachtgever" waarde={info.klant_naam} />
-        {periode && <Feit label="Periode" waarde={periode} />}
+        {info.werkadres_naam && <Feit label="Naam" waarde={info.werkadres_naam} />}
+        <Feit
+          label="Telefoon"
+          waarde={telefoon
+            ? <a href={`tel:${telefoon}`} style={{ color: '#009439', textDecoration: 'none' }}>{info.werkadres_telefoon}</a>
+            : null}
+        />
       </div>
 
       <div style={kaart}>
+        <Feit label="Opdrachtgever" waarde={info.klant_naam} />
         <Feit
           label="Contactpersoon"
           waarde={info.contact_naam
-            ? (telefoon
-                ? <a href={`tel:${telefoon}`} style={{ color: '#009439', textDecoration: 'none' }}>
+            ? (contactTel
+                ? <a href={`tel:${contactTel}`} style={{ color: '#009439', textDecoration: 'none' }}>
                     {info.contact_naam} · {info.contact_telefoon}
                   </a>
                 : info.contact_naam)

@@ -5,6 +5,7 @@ import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
 import { fmt, TH, TD, LegeRij, LegeNotitie, ROOD } from './tab-ui'
 import GeboekteKostenTabel from './GeboekteKostenTabel'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
+import InkoopContractOpenen from './InkoopContractOpenen'
 
 /** Eén regel in de tabel Inkooporders en onderaanneming — order en contract zijn hier gelijk. */
 type UitgezetRegel = {
@@ -17,6 +18,8 @@ type UitgezetRegel = {
   geboekt: number
   nogVerwacht: number
   uitEva: boolean
+  /** Bouw7-contract-id; zonder id valt er niets te openen. */
+  contractId: number | null
 }
 
 const SOORT_LABEL: Record<UitgezetRegel['soort'], string> = {
@@ -38,7 +41,8 @@ const SOORT_LABEL: Record<UitgezetRegel['soort'], string> = {
  * meer wist van wie het was. De soort staat als tag bij de partij, zodat je nog steeds kunt zien
  * of iets een order of een opdracht is.
  */
-function UitgezetTabel({ regels, subtotalen }: {
+function UitgezetTabel({ dossierId, regels, subtotalen }: {
+  dossierId: string
   regels: UitgezetRegel[]
   subtotalen: { label: string; aantal: number; bedrag: number; geboekt: number; nogVerwacht: number }[]
 }) {
@@ -72,7 +76,19 @@ function UitgezetTabel({ regels, subtotalen }: {
             {regels.map((r, i) => (
               <tr key={i}>
                 <TD wrap>
-                  <span style={{ color: 'var(--neutral-900)' }}>{r.partij ?? '—'}</span>
+                  {/* Klik op de partij: zien wat er precies besteld of opgedragen is, en intrekken. */}
+                  {r.contractId != null ? (
+                    <InkoopContractOpenen
+                      dossierId={dossierId}
+                      soort={r.soort === 'order' ? 'inkooporder' : 'oa_contract'}
+                      contractId={r.contractId}
+                      status={r.status}
+                    >
+                      {r.partij ?? '—'}
+                    </InkoopContractOpenen>
+                  ) : (
+                    <span style={{ color: 'var(--neutral-900)' }}>{r.partij ?? '—'}</span>
+                  )}
                   <span style={{
                     marginLeft: 6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em',
                     color: 'var(--neutral-500)',
@@ -252,12 +268,12 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
     ...data.inkooporders.map((r): UitgezetRegel => ({
       soort: 'order', nummer: r.nummer, partij: r.leverancier, omschrijving: r.omschrijving,
       status: r.status, bedrag: r.contractbedrag, geboekt: r.geboekt,
-      nogVerwacht: r.nogVerwacht, uitEva: r.uitEva,
+      nogVerwacht: r.nogVerwacht, uitEva: r.uitEva, contractId: r.orderId,
     })),
     ...data.onderaannemers.map((c): UitgezetRegel => ({
       soort: 'onderaanneming', nummer: c.nummer, partij: c.onderaannemer, omschrijving: c.omschrijving,
       status: c.status, bedrag: c.contractbedrag, geboekt: c.geboekt,
-      nogVerwacht: c.nogVerwacht, uitEva: c.uitEva,
+      nogVerwacht: c.nogVerwacht, uitEva: c.uitEva, contractId: c.contractId,
     })),
   ]
 
@@ -283,6 +299,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
 
       {/* Inkooporders en onderaanneming — één tabel; zie UitgezetTabel. */}
       <UitgezetTabel
+        dossierId={dossierId}
         regels={uitgezet}
         subtotalen={[
           { label: 'Inkooporders', aantal: data.inkooporders.length,
@@ -313,6 +330,7 @@ async function InkoopInhoud({ dossierId }: { dossierId: string }) {
         Live uit Bouw7. <strong>Geboekt</strong> = echte inkoopfacturen gekoppeld via het bonnummer of een handmatige EVA-toewijzing.
         Rood = overschrijding. Correcties zijn EVA-only en wijzigen niets in Bouw7.
         Het merkje <strong>EVA</strong> betekent: aangemaakt vanuit een bestelling in de werkbegroting.
+        Klik op een partij om te zien wat er besteld of opgedragen is, of om het in te trekken.
       </div>
     </div>
   )

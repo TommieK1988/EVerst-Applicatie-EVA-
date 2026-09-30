@@ -13,9 +13,10 @@ export type ServicedeskGereedmelding = {
   gemeldOp: string
 }
 
+/** Gebruikt materiaal: een pakbonfoto, of getypt materiaal (dan geen foto en de tekst in `opmerking`). */
 export type DossierPakbon = {
   id: string
-  fotoUrl: string
+  fotoUrl: string | null
   opmerking: string | null
   geuploadDoorNaam: string | null
   /** Van de ingelogde gebruiker zelf — alleen die mag hem op de telefoon weer weghalen. */

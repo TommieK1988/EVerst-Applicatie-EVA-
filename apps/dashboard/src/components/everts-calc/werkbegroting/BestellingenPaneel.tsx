@@ -28,6 +28,7 @@ import {
 } from '@/app/(platform)/everts-calc/actions/bestelling-document'
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
+import { useDialogen } from '@/components/ui'
 import OpdrachtVenster, { type OpdrachtGegevens } from './OpdrachtVenster'
 
 interface Props {
@@ -84,6 +85,7 @@ function SoortBadge({ soort }: { soort: Soort }) {
 }
 
 export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
+  const { bevestig } = useDialogen()
   const [tick, setTick] = useState(0)
   const [bezigId, setBezigId] = useState<string | null>(null)
   const [nieuw, setNieuw] = useState(false)
@@ -512,12 +514,27 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
 
   async function trekIn(b: WerkbegrotingBestelling) {
     if (!dossierId) return
+    // Een verstuurde opdracht ligt al bij de partij: dat moet de gebruiker weten vóór hij intrekt,
+    // want EVA stuurt zelf geen bericht.
+    if (b.verstuurd_op) {
+      const partij = b.soort === 'oa_contract' ? 'de onderaannemer' : 'de leverancier'
+      const ok = await bevestig({
+        titel: `${b.soort === 'oa_contract' ? 'Opdracht' : 'Bestelling'} intrekken?`,
+        omschrijving: `Deze is al verstuurd. Het contract en de leverbon worden in Bouw7 verwijderd en de bestelling gaat terug naar concept. EVA stuurt geen bericht — laat het ${partij} zelf weten.`,
+        bevestigLabel: 'Intrekken',
+        destructief: true,
+      })
+      if (!ok) return
+    }
     setBezigId(b.id)
     try {
       const res = await trekBestellingIn(dossierId, b.id)
       if (res.ok) {
-        slaBestellingOp({ ...b, status: 'concept', bouw7_contract_id: null, bouw7_nummer: null, bouw7_verwijderd_op: null })
-        toast.success('Concept ingetrokken in Bouw7')
+        slaBestellingOp({
+          ...b, status: 'concept', bouw7_contract_id: null, bouw7_nummer: null, bouw7_verwijderd_op: null,
+          bouw7_bonnummer: null, verstuurd_op: null,
+        })
+        toast.success(b.verstuurd_op ? 'Ingetrokken in Bouw7' : 'Concept ingetrokken in Bouw7')
       } else toast.error(res.error)
     } finally {
       setBezigId(null)
@@ -796,10 +813,18 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                           </button>
                         </>
                       ) : isVerstuurd ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Verstuurd
-                        </span>
-                      ) : inBouw7 && isReservering ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Verstuurd
+                          </span>
+                          {inBouw7 && (
+                            <button onClick={() => trekIn(b)} disabled={bezig} title="Verstuurde opdracht in Bouw7 intrekken"
+                              className="inline-flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                              {bezig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} Intrekken
+                            </button>
+                          )}
+                        </>
+                      ) :inBouw7 && isReservering ? (
                         <>
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded-lg"
                             title="Vastgelegd in Bouw7 met leverbon; er gaat niets naar de partij toe.">
