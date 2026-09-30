@@ -236,7 +236,7 @@ export default function Voorbeeld() {
 
       <div style={{
         marginBottom: 16, padding: '8px 12px', borderRadius: 8, fontSize: 12.5,
-        background: 'var(--wa-50, #fff6ec)', border: '1px solid var(--wa-200, #fde68a)',
+        background: 'rgb(var(--wa-50))', border: '1px solid rgb(var(--wa-300))',
         color: 'var(--wa-900, #78350f)',
       }}>
         Voorbeeldpagina met verzonnen gegevens. De knoppen en zoekvelden werken niet —

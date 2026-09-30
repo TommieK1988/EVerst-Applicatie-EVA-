@@ -473,7 +473,7 @@ export default function OpdrachtPaneel({
         )}
 
         {waarschuwing && (
-          <p style={{ ...klein, color: 'var(--da-700, #b42318)', marginTop: 8 }}>{waarschuwing}</p>
+          <p className="mt-2 text-[12px] text-error-700">{waarschuwing}</p>
         )}
       </FormSection>
 
