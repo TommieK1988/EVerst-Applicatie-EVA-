@@ -113,38 +113,76 @@ uitziet is gevaarlijker dan geen formulier.
 | `factuur_of_administratie` | Factuur, aanmaning, betaalherinnering, btw-vraag |
 | `overig_geen_werk` | Nieuwsbrief, leveranciersreclame, sollicitatie, spam, privé |
 
-Daarbij een **zekerheidspercentage**. Dat percentage stuurt de rest: onder 90 % handelt EVA
-nooit zelfstandig.
+Daarbij een **zekerheidspercentage**. Dat percentage stuurt de rest: onder 80 % handelt EVA
+niet zelfstandig. Voor een servicedeskbon en een offerteaanvraag ligt die grens op 70 %, omdat
+een verkeerd gekozen soort daar goedkoop te herstellen is — een bon te veel gooi je weg. Bij
+een opdracht op een offerte blijft het 80 %: die verschuift een dossier en duwt een aanneemsom
+naar Bouw7, en dat draai je niet terug.
 
-**De velden**
+### De velden
+
+**Waar het werk over gaat**
 
 | Veld | Waar het over gaat |
 |---|---|
 | Omschrijving | Het werk in een paar woorden, zoals het in een projectnaam zou staan |
+| Samenvatting | Eén of twee zinnen in gewone taal: wat vraagt of meldt deze mail |
+| Categorie | Soort werk (Schilderwerk, Dagelijks onderhoud, Mutatie, Renovatie, …) |
+| Aard van het werk | schilderwerk / bouwkundig / gemengd / onduidelijk — bepaalt mee welke werkmaatschappij het wordt |
+| Werkmaatschappij | Alleen als de mail die expliciet noemt — zie §3 voor de regel |
+| Bedrag excl. btw | Als de mail of de bon dat noemt |
+| Mandaat | Het bedrag waarbinnen we zonder nadere goedkeuring mogen werken. Alleen als de mail het ook zo benoemt; een los bedrag is meestal de geschatte prijs |
+| Regie | Wordt er op nacalculatie afgerekend in plaats van voor een vaste prijs |
+| Regie-aanwijzing | De zinsnede waaruit dat blijkt, zo letterlijk mogelijk |
+| Spoed | Wordt er om directe actie gevraagd |
+
+**Wie erbij hoort**
+
+| Veld | Waar het over gaat |
+|---|---|
 | Opdrachtgever | Naam van bedrijf, VvE of corporatie — als **tekst**; EVA kiest de klant zelf (§3) |
 | Contactpersoon | Naam, e-mailadres, telefoonnummer |
+| Contact ter plaatse | Naam, telefoon en e-mail van wie op locatie open moet doen — vaak een ander dan de contactpersoon |
+| Betrokkenen | Alle overige mensen die genoemd worden, met hun rol: technisch manager, opzichter, architect, melder. Eigen collega's worden weggelaten |
+
+**Waar het werk is**
+
+| Veld | Waar het over gaat |
+|---|---|
 | Werkadres | Straat, huisnummer, postcode, plaats — waar het werk is, **niet** het factuuradres |
-| Referentie opdrachtgever | Hún kenmerk: inkoopnummer, ordernummer, meldingsnummer |
-| Ons offerte-/dossiernummer | Een nummer van óns dat in hun mail staat |
-| **Opdrachtreferentie** | Het nummer dat zij aan déze opdracht geven (bon-, order-, contractnummer) |
-| **Opdrachtdatum** | De datum van de opdracht zelf, als die op de bon staat |
 | VvE-code | Complex- of VvE-code |
-| Categorie | Soort werk (Schilderwerk, Dagelijks onderhoud, Mutatie, Renovatie, …) |
-| Werkmaatschappij | Alleen als de mail die expliciet noemt — zie §3 voor de regel |
+| Meerdere werkadressen | Betreft dit een verzamelopdracht over verschillende stráten of plaatsen. Meerdere huisnummers in één straat telt niet mee |
+
+**Nummers en datums**
+
+| Veld | Waar het over gaat |
+|---|---|
+| Referentie opdrachtgever | Hún kenmerk: inkoopnummer, ordernummer, meldingsnummer |
+| Ons offerte-/dossiernummer | Een nummer van óns dat in hun mail staat. Dit is het sterkste signaal om het juiste dossier te vinden |
+| Opdrachtreferentie | Het nummer dat zij aan déze opdracht geven (bon-, order-, contractnummer); moet op de factuur terug |
+| Opdrachtdatum | De datum van de opdracht zelf, als die op de bon staat |
 | Datums | Aanvraagdatum, deadline, gewenste start |
-| Bedrag excl. btw | Als de mail of de bon dat noemt |
-| **Mandaat** | Het bedrag waarbinnen we zonder nadere goedkeuring mogen werken |
-| Spoed | Wordt er om directe actie gevraagd |
+
+**Facturering**
+
+| Veld | Waar het over gaat |
+|---|---|
+| Factuuradres — naam | Aan wie de factuur gericht moet worden, als de opdracht dat apart noemt. Bijvoorbeeld de VvE waarvoor de beheerder optreedt |
+| Factuuradres — adres | Straat of postbus, postcode, plaats. Vaak staat alleen de naam er, en dat is genoeg |
+
+**Bijzonderheden**
+
+| Veld | Waar het over gaat |
+|---|---|
 | Opmerkingen | Bijzonderheden voor de behandelaar: bereikbaarheid, sleutels, asbest, bewoners |
-| **Opmerkingen van de klant** | Wat de klant zelf bij de opdracht schrijft; wordt een notitie op het dossier |
-| Meerdere werkadressen | Betreft dit een verzamelopdracht over meerdere panden |
+| Opmerkingen van de klant | Wat de klant zelf bij de opdracht schrijft; wordt een notitie op het dossier |
 | Rol per bijlage | opdrachtbon / bestek / tekening / foto / offerte / overig |
+| Toelichting | Waar de AI de belangrijkste velden vandaan haalde, en waar hij over twijfelt |
 
 Per veld geeft de AI aan hoe zeker hij is. Dat percentage staat in het behandelscherm naast
-het veld.
+het veld. EVA rekent die zelfrapportage daarna na tegen wat hij kán controleren — zie §3.
 
-**Grenzen aan wat er gelezen wordt.** Bij de veldextractie: PDF's tot 10 MB, maximaal 5
-documenten en 3 foto's. Wat niet mee kon, wordt bij naam genoemd — en zo'n bericht gaat
+Een bericht waarbij een bijlage niet gelezen kon worden (zie de grenzen hierboven) gaat
 altijd naar een mens, want er kan informatie ontbreken.
 
 ---
