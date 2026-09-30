@@ -353,6 +353,59 @@ veldextractie — en ging op die halve lezing beslissen.
 
 ---
 
+## 3b. Het behandelscherm: altijd dezelfde opmaak
+
+Het scherm heeft **één vaste indeling**, ongeacht wat voor mail het is. Elf secties, altijd
+alle elf, altijd in deze volgorde:
+
+opdrachtgever · werkadres · het werk · het dossier · rollen · nummers · datums · geld ·
+termijnen · facturering · bijzonderheden
+
+Dat was niet zo. Een opdracht op een offerte kreeg een compleet ander formulier dan een
+aanvraag, en binnen het aanvraagformulier verschenen en verdwenen nog eens vier blokken — de
+contactpersoon pas als de lijst geladen was, het mandaat alleen bij een servicedeskbon. Wie
+twee mails achter elkaar behandelde, moest elke keer opnieuw zoeken waar iets stond.
+
+**Wat per bericht verschilt is nu alleen de kleur van een veld:**
+
+| Kleur | Betekenis |
+|---|---|
+| Groen | Ingevuld en er valt niets na te kijken |
+| Oranje | Ingevuld, maar kijk er even naar — of de mail zegt iets anders dan het dossier |
+| Rood | Leeg terwijl het nodig is om verder te kunnen |
+| Gedimd | Speelt bij deze afhandeling geen rol |
+
+Een veld wordt groen zodra jij het hebt aangeraakt: wie iets nakijkt, wil niet dat het oranje
+blijft staan alsof EVA er nog over twijfelt. Hetzelfde geldt voor een waarde die uit een regel
+komt (de werkmaatschappij volgt uit de categorie) of die de adresservice heeft bevestigd.
+
+**Gedimd betekent niet onbewerkbaar.** Bij een opdracht op een offerte staan omschrijving,
+categorie en werkadres al op het dossier, dus die zijn gedimd — maar corrigeren mag. Wat je
+daar wijzigt gaat niet terug naar het dossier; het dossier blijft leidend. Wijkt de mail af van
+wat er op het dossier staat, dan wordt het veld oranje met beide waarden in de hovertekst.
+
+Alleen de sectie **het dossier** verschilt van inhoud: bij een aanvraag staat er dat er een
+nieuw dossier komt, bij een opdracht de offertekeuze met de factuurbestemming eronder.
+
+De knop staat altijd op dezelfde plek links, maar het opschrift volgt de route: *Dossier
+aanmaken* of *Offerte op gewonnen zetten*. Eronder staat wat er nog mist, met de veldnamen
+erbij.
+
+### Rollen en termijnen
+
+De **zes projectrollen** — projectleider, teamleider, werkvoorbereider, calculator, uitvoerder,
+controller — zijn meteen invulbaar. Tot nu toe kon alleen de calculator hier worden aangewezen
+en moest de rest achteraf op het dossier. Geen van de rollen is verplicht: bij een verse
+aanvraag is de projectleider nog onbekend, en dat is normaal.
+
+Het **termijnenblok** laat vóór het bevestigen zien welke verkooptermijnen worden aangemaakt:
+de betalingsconditie, de grondslag en de regels. Kan dat niet — geen betalingsconditie op de
+offerte, geen aanneemsom, of al een termijnstaat in Bouw7 — dan staat daar in gewone taal
+waarom. Tot nu toe bleek dat pas ná het winnen van de offerte, en kwam er achteraf een actie
+voor de projectleider. Instellen doe je nog steeds op het dossier; dit blok toont alleen.
+
+---
+
 ## 4. Route A — een aanvraag wordt een nieuw dossier
 
 Dit gebeurt er, in deze volgorde, of een mens op de knop drukt of EVA het zelf doet:
@@ -400,9 +453,15 @@ Zijn er meerdere, dan staat er niets aangevinkt en verschijnt de waarschuwing da
 offertes passen. Is er geen enkele, dan staat er een zoekveld om zelf het dossier aan te
 wijzen. **EVA maakt voor een opdracht nooit zelf een dossier aan.**
 
-Boven de keuze staat wat EVA uit de mail heeft herkend — opdrachtgever, contactpersoon en
-werkadres — met daaronder wat er op het gekozen dossier staat. Zo zie je in één oogopslag of
-de opdracht bij een ander aanspreekpunt of een ander factuuradres hoort dan de offerte.
+Wat EVA uit de mail heeft herkend staat gewoon in het formulier eromheen, op dezelfde plek als
+bij een aanvraag (zie §3b). Wijkt de mail af van wat er op het gekozen dossier staat, dan wordt
+dat veld oranje met beide waarden erbij — zo zie je of de opdracht bij een ander aanspreekpunt
+of een ander factuuradres hoort dan de offerte.
+
+Het zoekveld zoekt op **ons offertenummer**, op het dossiernummer, op de titel en op de straat.
+Dat offertenummer is het punt: een opdrachtgever noemt in zijn mail vrijwel altijd het nummer
+dat op onze offerte stond (OFT-2026-171), niet ons dossiernummer (20267.00682) — dat zijn twee
+verschillende reeksen.
 
 Het gekozen dossier moet in de **offertefase** staan. Staat het nog op aanvraag of al op
 opdracht, dan weigert de knop met die reden erbij.
@@ -673,6 +732,12 @@ opgeslagen verwijzing niet meer en kost het een ronde extra.
   weigert EVA het, want daar is extra werk gewoon werk dat nog in de prijs hoort.
 - **Een afwijkende factuurpartij.** De controle gaat over het postadres. Moet een ándere
   relatie de factuur krijgen, dan regel je dat op de dossierpagina.
+- **Termijnen handmatig instellen.** Het termijnenblok laat zien wat er gaat gebeuren, maar je
+  kunt er geen schema kiezen. Staat er geen betalingsconditie op de offerte, dan komt er een
+  actie voor de projectleider en stel je het in op het tabblad Financieel.
+- **Velden van het dossier overschrijven.** Bij een opdracht op een offerte blijft het dossier
+  leidend: wijkt de mail af, dan zie je dat oranje, maar bevestigen verandert de dossierwaarde
+  niet. Het winnen van een offerte doet dus precies wat het altijd deed.
 - **Nog geen kwaliteitsscherm.** De cijfers over hoe vaak EVA het goed had, en wat de AI per
   dag kost, worden wel vastgelegd maar zijn nog niet in een scherm te zien.
 - **Nog niet getest tegen een echte mailbox.** Alles hierboven is de werking volgens de code;
