@@ -91,6 +91,13 @@ export async function runCronSync(
     offertebewaking = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  // Bordindeling nalopen: LB met een verkeerde categorie → melding aan de projectleider, en
+  // dossiers waarvan de EVA-status niet bij hun bord past → foutenlog. Ná de sync, want die zet
+  // de Bouw7-status en categorie waar `bord` uit volgt. Gooit niet.
+  log.stap('bordcontrole')
+  const { controleerBordindeling } = await import('@/lib/dossiers/bord-controle')
+  const bordcontrole = await controleerBordindeling()
+
   // Werkadres-coördinaten bijwerken voor "dossier openen op locatie" (mobiel).
   // Best-effort: Nominatim throttelt op ~1/s, dus per ronde begrensd — de
   // gesynchte dossiers stromen zo over meerdere cron-rondes vol. Een fout hier
@@ -136,6 +143,7 @@ export async function runCronSync(
       planning: full.planning,
       management,
       offertebewaking,
+      bordcontrole,
       geocode,
       dossiermappen,
       duur_ms: Date.now() - startedAt,

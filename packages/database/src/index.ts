@@ -103,6 +103,7 @@ export type {
   VastgoedObjectRelatie,
   VastgoedObjectSoort,
   VastgoedObjectRol,
+  DossierBord,
 } from './platform-types'
 export {
   logoSlotLabels,

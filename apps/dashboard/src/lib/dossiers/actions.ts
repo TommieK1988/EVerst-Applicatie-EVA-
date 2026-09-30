@@ -24,6 +24,7 @@ import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { isCorrectieCode, isMutatieDossier } from '@/components/dossiers/types'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, projectstatusCacheVelden, type Bouw7WriteResult } from './bouw7-status'
+import { SERVICEDESK_CATEGORIEEN, isServicedeskCategorie, isLopendeBonStatus } from '@/components/dossiers/fase-plaatsing'
 import { schrijfBouw7Substatus } from '@/lib/bouw7/substatus-attr'
 import { substatusSectie, type SubstatusSectie } from '@/lib/bouw7/substatus-map'
 import { schrijfBouw7Rollen, type Bouw7RollenInput } from './bouw7-rollen'
@@ -59,7 +60,6 @@ import {
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
-import { SERVICEDESK_CATEGORIEEN } from '@/components/dossiers/fase-plaatsing'
 
 type DossierResult =
   /** `totaal` = het aantal rijen dat aan het filter voldoet, ook als `data` door een limit is ingekort. */
@@ -123,6 +123,7 @@ const LIJST_KOLOMMEN = `
   werkadres_naam, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad,
   bouw7_id, bouw7_laatst_sync, bouw7_sync_status, bouw7_aanmaakdatum,
   bouw7_categorie, bouw7_categorie_naam, bouw7_projectstatus_naam, bouw7_quotation_status,
+  bord, categorie_conflict, substatus_gewijzigd_op, gewonnen_op,
   bouw7_bestelregels_afwijking, bouw7_uren_overschrijding, wb_ongeaccordeerde_wijzigingen,
   offerte_verstuurd_aantal, offerte_verstuurd_som_excl_btw,
   everts_calc_project_id
@@ -385,106 +386,87 @@ function nogNietVerlopenFinancieelGereed(kolom: 'opdracht_substatus' | 'serviced
 }
 
 /**
- * Servicedesk-dossiers uit een projectenlijst weren. Dit is de databasekant van
- * `isServicedeskDossier` (components/dossiers/types.ts): categorie Dagelijks onderhoud/Mutatie.
- * De Bouw7-projectstatus telt niet mee — ook 'LB.' niet (september 2026). Zonder deze grens
- * staat een onderhoudsbon op Servicedesk én op Opdrachten — op het bord valt hij nog weg omdat
- * hij geen `opdracht_substatus` heeft, maar de lijstweergave toont hem gewoon.
- *
- * De `is.null`-tak hoort erbij: `NOT IN` levert op een lege kolom NULL op, en dan zou elk
- * dossier zónder categorie juist uit de lijst vallen.
- */
-const NIET_SERVICEDESK = `bouw7_categorie_naam.is.null,bouw7_categorie_naam.not.in.(${SERVICEDESK_CATEGORIEEN.join(',')})`
-
-/**
  * Afgewezen bonnen ('08. Afgewezen') staan in het archief, niet op het bord. Als `.or()` met een
  * `is.null`-tak: een kale `.neq()` gooit ook elk dossier zónder Bouw7-status weg (NULL ≠ waar).
  */
 const NIET_AFGEWEZEN = 'bouw7_projectstatus_naam.is.null,bouw7_projectstatus_naam.neq."08. Afgewezen"'
 
-/**
- * Haal dossiers op voor het Opdrachten-bord: Bouw7-projectstatus 02 t/m 06, plus opdrachten
- * zonder Bouw7-koppeling. Servicedesk-dossiers vallen eraf (zie {@link NIET_SERVICEDESK}), net
- * als alles wat langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel
- * gereed is gemeld — die staan op Afgesloten.
+/*
+ * De vier borden filteren op de kolom `bord`, die de database zelf bijhoudt (trigger
+ * zz_dossier_bord, zie 20260930j_dossier_bord.sql en de TS-spiegel `bordVan`). Daardoor staat
+ * elk dossier op precies één bord: de oude losse filters per bord sloten elkaar niet sluitend uit,
+ * en een combinatie die in geen enkel filter paste viel stil van álle borden.
  *
- * De derde tak is een vangnet. `bouw7_projectstatus_naam` is een kopie van Bouw7 die alleen de
- * sync ververst; tussen een statuswissel in EVA en de eerstvolgende sync kan die kopie achterlopen
- * (een gewonnen offerte staat dan op hoofdstatus 'opdracht' naast een gecachete '01. Offerte').
- * Die combinatie matchte op geen van de vier borden — het dossier was dan alleen nog via de
- * zoekbalk te vinden. Een dossier dat in EVA een opdracht is hoort hier dus hoe dan ook thuis,
- * op drie uitzonderingen na: 07 is het archief ({@link getDossiersAfgesloten}), 08 en 09 staan
- * op Offertes. Die hebben een eigen bord en zouden anders dubbel verschijnen.
+ * Wat hier per bord nog bij komt is alleen het venster op de eindkolommen: een dossier dat langer
+ * dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen in een eindstatus staat, verhuist naar de
+ * Afgesloten-tab ({@link getDossiersAfgeslotenAlle}). Een leeg `substatus_gewijzigd_op` telt als
+ * "lang geleden" — die stempel bestaat pas sinds 30-09-2026.
+ */
+
+/** Filter (als losse `.or()`) dat een eindstatus van langer dan het venster geleden van het bord houdt. */
+function eindstatusBinnenVenster(kolom: 'aanvraag_substatus' | 'offerte_substatus', eind: string[]): string {
+  return `${kolom}.is.null,${kolom}.not.in.(${eind.join(',')}),substatus_gewijzigd_op.gte.${financieelGereedCutoff()}`
+}
+
+/**
+ * Haal dossiers op voor het Opdrachten-bord: Bouw7-projectstatus 02 t/m 06 (elke categorie behalve
+ * Dagelijks onderhoud/Mutatie, dus ook Overige), plus opdrachten zonder Bouw7-koppeling. Wat langer
+ * dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld, staat op
+ * Afgesloten.
  */
 export async function getDossiersVoorOpdrachten(): Promise<DossierResult> {
-  const prefixen = ['02.', '03.', '04.', '05.', '06.']
-    .map(p => `bouw7_projectstatus_naam.ilike.${p}%`)
-    .join(',')
-
-  const eigenBord = ['07.', '08.', '09.']
-    .map(p => `bouw7_projectstatus_naam.not.ilike.${p}%`)
-    .join(',')
-
   return haalDossierLijst(q => q
-    .or(`${prefixen},and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.opdracht),`
-      + `and(${eigenBord},hoofdstatus.eq.opdracht)`)
-    .or(NIET_SERVICEDESK)
+    .eq('bord', 'opdrachten')
     .or(nogNietVerlopenFinancieelGereed('opdracht_substatus'))
     .order('created_at', { ascending: false }))
 }
 
 /**
- * Haal dossiers op voor de Aanvragen-tab:
- * - Alle actieve '01.'-dossiers
- * - Handmatige aanvragen zonder Bouw7-koppeling
- * - Dossiers die de afgelopen 7 dagen zijn verzonden (ook op Offertes zichtbaar)
+ * Haal dossiers op voor de Aanvragen-tab: Bouw7 '01. Offerte' (en een afgewezen aanvraag op '08.'),
+ * plus handmatige aanvragen zonder Bouw7-koppeling. Afgewezen/Vervallen blijven
+ * {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen staan.
+ *
+ * Daarnaast de offertes die de afgelopen zeven dagen zijn verzonden: die staan bewust óók hier,
+ * als afsluiting van de aanvraagfase (op het Offertebord beginnen ze in Verzonden).
  */
 export async function getDossiersVoorAanvragen(): Promise<DossierResult> {
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
+  const cutoff = financieelGereedCutoff()
   return haalDossierLijst(q => q
     .or(
-      // 01-dossiers die via de Bouw7-offertestatus naar hoofdstatus 'offerte' zijn verhuisd
-      // (gewonnen/mondelinge toezegging) horen op de Offertes-tab, niet hier.
-      `and(bouw7_projectstatus_naam.ilike.01.%,hoofdstatus.eq.aanvraag),` +
-      `and(bouw7_projectstatus_naam.is.null,hoofdstatus.eq.aanvraag),` +
-      `and(offerte_substatus.eq.verzonden,verzonden_op.gte.${cutoff})`
+      `and(bord.eq.aanvragen,or(${eindstatusBinnenVenster('aanvraag_substatus', ['afgewezen', 'vervallen'])})),` +
+      `and(bord.in.(aanvragen,offertes),offerte_substatus.eq.verzonden,verzonden_op.gte.${cutoff})`
     )
-    // Servicedesk hoort hier niet. Een bon van Dagelijks onderhoud of Mutatie staat in Bouw7 op
-    // '01. Offerte' zolang hij nog niet in uitvoering is, en stond daardoor tegelijk op het
-    // servicedeskbord én tussen de commerciële aanvragen. Zelfde uitsluiting als bij Opdrachten.
-    .or(NIET_SERVICEDESK)
     .order('created_at', { ascending: false }))
 }
 
 /**
- * Haal dossiers op voor de Offertes-tab:
- * - Bouw7-dossiers met projectstatus 08/09
- * - Alle dossiers met hoofdstatus 'offerte' — vangt handmatige dossiers én 01-projecten
- *   die via de Bouw7-offertestatus (gewonnen/mondelinge toezegging) zijn doorgeschoven.
+ * Haal dossiers op voor de Offertes-tab: Bouw7 '09. Verzonden offertes' (en '08. Afgewezen' voor
+ * een verloren/vervallen offerte), plus offertes zonder Bouw7-koppeling (Gilde). Gewonnen, Verloren
+ * en Vervallen blijven {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen staan.
+ *
+ * Een gewonnen offerte is op dat moment al een opdracht (de DB-trigger promoveert hem, en Bouw7
+ * gaat naar 02). Hij staat die zeven dagen dus op béide borden: hier als terugblik in de kolom
+ * Gewonnen, op Opdrachten als Nieuwe opdracht — waar het werk gebeurt.
  */
 export async function getDossiersVoorOffertes(): Promise<DossierResult> {
+  const cutoff = financieelGereedCutoff()
   return haalDossierLijst(q => q
     .or(
-      'bouw7_projectstatus_naam.ilike.08.%,' +
-      'bouw7_projectstatus_naam.ilike.09.%,' +
-      'hoofdstatus.eq.offerte'
+      `and(bord.eq.offertes,or(${eindstatusBinnenVenster('offerte_substatus', ['verloren', 'vervallen'])})),` +
+      `and(bord.eq.opdrachten,gewonnen_op.gte.${cutoff})`
     )
-    // Ook hier geen servicedesk: een bon die geoffreerd wordt heeft daar zijn eigen kolom
-    // ("Offerte uitgebracht"), en hoort niet daarnaast in de commerciële trechter te staan.
-    .or(NIET_SERVICEDESK)
     .order('created_at', { ascending: false }))
 }
 
 /**
- * Haal servicedesk-dossiers op: categorie Dagelijks onderhoud/Mutatie, ongeacht de
- * Bouw7-projectstatus. Sluit '08. Afgewezen' uit (dat is het archief), en net als bij Opdrachten
- * ook alles wat langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel
- * gereed is gemeld.
+ * Haal servicedesk-dossiers op: categorie Dagelijks onderhoud/Mutatie of Bouw7 'LB.' — ook een
+ * lopende bon met een verkeerde categorie, die hier met een waarschuwing staat in plaats van
+ * nergens. Sluit '08. Afgewezen' uit (dat is het archief), en net als bij Opdrachten alles wat
+ * langer dan {@link FINANCIEEL_GEREED_VENSTER_DAGEN} dagen geleden financieel gereed is gemeld.
  */
 export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
   return metStatusSinds(await haalDossierLijst(q => q
-    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
+    .eq('bord', 'servicedesk')
     .or(NIET_AFGEWEZEN)
     .or(nogNietVerlopenFinancieelGereed('servicedesk_substatus'))
     .order('created_at', { ascending: false })))
@@ -493,7 +475,7 @@ export async function getDossiersVoorServicedesk(): Promise<DossierResult> {
 /** Haal afgewezen servicedesk-dossiers op (Bouw7 status 08. Afgewezen) voor het archief. */
 export async function getDossiersServicedeskArchief(): Promise<DossierResult> {
   return metStatusSinds(await haalDossierLijst(q => q
-    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
+    .eq('bord', 'servicedesk')
     .eq('bouw7_projectstatus_naam', '08. Afgewezen')
     .order('created_at', { ascending: false })))
 }
@@ -541,7 +523,7 @@ async function metStatusSinds(result: DossierResult): Promise<DossierResult> {
 /** Haal financieel afgesloten dossiers op (Bouw7 status 07). */
 export async function getDossiersAfgesloten(): Promise<DossierResult> {
   return haalDossierLijst(q => q
-    .or('bouw7_projectstatus_naam.ilike.07.%,and(bouw7_projectstatus_naam.is.null,opdracht_substatus.eq.financieel_afgesloten)')
+    .eq('bord', 'afgesloten')
     .order('created_at', { ascending: false }))
 }
 
@@ -550,7 +532,12 @@ export async function getDossiersAfgesloten(): Promise<DossierResult> {
  * - Opdrachten:  Financieel gereed of Financieel afgesloten (Bouw7 '07.' of opdracht_substatus)
  * - Servicedesk: Financieel gereed
  * - Offertes:    Verloren of Vervallen
- * - Aanvragen:   Vervallen
+ * - Aanvragen:   Afgewezen of Vervallen
+ *
+ * Dit is de ingang voor alles wat na zijn venster van een bord af gaat — elke eindkolom op de vier
+ * borden hoort hier dus een tegenhanger te hebben, anders is zo'n dossier na zeven dagen nergens
+ * meer te zien. (Afgewezen aanvragen ontbraken tot 30-09-2026.)
+ *
  * Hoofdstatus-gated zodat een oude substatus-waarde op een inmiddels doorgeschoven dossier geen
  * vals-positief oplevert.
  *
@@ -564,8 +551,8 @@ export async function getDossiersAfgeslotenAlle(): Promise<DossierResult> {
       'and(hoofdstatus.eq.opdracht,opdracht_substatus.in.(financieel_gereed,financieel_afgesloten)),' +
       'servicedesk_substatus.eq.financieel_gereed,' +
       'and(hoofdstatus.eq.offerte,offerte_substatus.in.(verloren,vervallen)),' +
-      'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.eq.vervallen),' +
-      'bouw7_projectstatus_naam.ilike.07.%'
+      'and(hoofdstatus.eq.aanvraag,aanvraag_substatus.in.(afgewezen,vervallen)),' +
+      'bord.eq.afgesloten'
     )
     .order('created_at', { ascending: false }))
 }
@@ -602,6 +589,7 @@ export async function updateServicedeskSubstatus(
   const eindstatus = nieuweSubstatus === 'financieel_gereed' || nieuweSubstatus === 'financieel_afgesloten'
   let bouw7Fout: string | null = null
   let bouw7Gelukt = false
+  let bouw7Cache: Record<string, unknown> = {}
 
   if (eindstatus && huidig?.bouw7_id) {
     const { opdrachtSubstatusNaarPrefix } = await import('@/lib/bouw7/status-map')
@@ -611,6 +599,7 @@ export async function updateServicedeskSubstatus(
       const res = await schrijfBouw7Projectstatusprefix(huidig.bouw7_id, prefix)
       bouw7Gelukt = res.ok
       bouw7Fout = res.ok ? null : res.error
+      bouw7Cache = projectstatusCacheVelden(res)
     }
   }
 
@@ -622,7 +611,7 @@ export async function updateServicedeskSubstatus(
 
   const { error } = await supabase
     .from('dossiers')
-    .update({ servicedesk_substatus: nieuweSubstatus, ...(handmatig ? { handmatige_velden: handmatig } : {}) })
+    .update({ servicedesk_substatus: nieuweSubstatus, ...bouw7Cache, ...(handmatig ? { handmatige_velden: handmatig } : {}) })
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
@@ -1002,7 +991,7 @@ export async function getMijnDossiers(
 /**
  * Haal servicedesk-dossiers op die aan een medewerker zijn gekoppeld als projectleider
  * of uitvoerder. Zelfde servicedesk-afbakening als `getDossiersVoorServicedesk`
- * (categorie Dagelijks onderhoud/Mutatie, excl. '08. Afgewezen').
+ * (`bord = servicedesk`, excl. '08. Afgewezen').
  */
 export async function getMijnServicedesk(
   medewerkerID: string,
@@ -1015,7 +1004,7 @@ export async function getMijnServicedesk(
   const { data, error, count } = await supabase
     .from('dossiers')
     .select(lean ? LEAN_SELECT : `*, ${ROL_SELECT}`, { count: 'exact' })
-    .in('bouw7_categorie_naam', SERVICEDESK_CATEGORIEEN)
+    .eq('bord', 'servicedesk')
     .or(`project_manager_id.eq.${medewerkerID},uitvoerder_id.eq.${medewerkerID}`)
     .or(NIET_AFGEWEZEN)
     .order(sorteer.kolom, { ascending: sorteer.ascending ?? true, nullsFirst: false })
@@ -3753,6 +3742,23 @@ export async function updateDossierInfo(
 ): Promise<{ ok: true; bouw7?: Bouw7WriteResult & { overgeslagen?: string[] } } | { ok: false; error: string }> {
   await assertDossierBewerkbaar(id)
   const supabase = createAdminClient() as any
+
+  // Een lopende bon (Bouw7 'LB. Lopende bonnen') hoort bij Dagelijks onderhoud of Mutatie. Een
+  // andere categorie daarop is de combinatie waardoor dossiers vroeger van alle borden vielen; nu
+  // staat hij met een rode waarschuwing op Servicedesk, maar in EVA laten we hem niet ontstaan.
+  if (velden.categorie !== undefined && !isServicedeskCategorie(velden.categorie)) {
+    const { data: huidig } = await supabase
+      .from('dossiers').select('bouw7_projectstatus_naam').eq('id', id).maybeSingle()
+    if (isLopendeBonStatus(huidig?.bouw7_projectstatus_naam)) {
+      return {
+        ok: false,
+        error: `Dit dossier staat in Bouw7 op "${huidig.bouw7_projectstatus_naam}". Een lopende bon hoort bij `
+          + `${SERVICEDESK_CATEGORIEEN.join(' of ')}. Verplaats het dossier eerst naar een andere fase `
+          + '(statusmenu → Verplaatsen naar) en wijzig daarna de categorie.',
+      }
+    }
+  }
+
   // Een lege projectnaam is in EVA en Bouw7 allebei ongeldig.
   if (velden.titel !== undefined && !String(velden.titel ?? '').trim()) delete velden.titel
   // Velden die ook uit/naar Bouw7 gaan markeren, zodat de lees-sync de EVA-invoer laat staan tot

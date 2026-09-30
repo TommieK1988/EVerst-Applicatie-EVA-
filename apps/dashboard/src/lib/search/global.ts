@@ -11,6 +11,7 @@
 import { createAdminClient } from '@everts/database/server'
 import type { Hoofdstatus } from '@everts/database'
 import { dossierHref } from '@/lib/dossiers/href'
+import { BORD_LABEL, type DossierBord } from '@/components/dossiers/fase-plaatsing'
 
 export type EntityType =
   | 'dossier'
@@ -91,7 +92,7 @@ export async function searchAllEntities(
     await Promise.all([
       supabase
         .from('dossiers')
-        .select('id, dossiernummer, titel, hoofdstatus, werkadres_straat, werkadres_stad, relaties!klant_id ( naam )')
+        .select('id, dossiernummer, titel, hoofdstatus, servicedesk_substatus, bord, werkadres_straat, werkadres_stad, relaties!klant_id ( naam )')
         .or(
           `titel.ilike.${orLike},dossiernummer.ilike.${orLike},` +
             `werkadres_straat.ilike.${orLike},werkadres_postcode.ilike.${orLike},werkadres_stad.ilike.${orLike}`,
@@ -154,8 +155,10 @@ export async function searchAllEntities(
       sublabel: [d.dossiernummer, d.relaties?.naam, [d.werkadres_straat, d.werkadres_stad].filter(Boolean).join(' ')]
         .filter(Boolean)
         .join(' · ') || null,
-      badge: d.hoofdstatus ?? null,
-      href: dossierHref(d.id, d.hoofdstatus),
+      // Het bord, niet de ruwe hoofdstatus: een servicedeskbon heeft hoofdstatus 'aanvraag' en
+      // stond daardoor als "AANVRAAG" in de zoekresultaten, met een link naar /aanvragen.
+      badge: (d.bord ? BORD_LABEL[d.bord as DossierBord] : null) ?? d.hoofdstatus ?? null,
+      href: dossierHref(d.id, d.hoofdstatus, d.bord === 'servicedesk' ? (d.servicedesk_substatus ?? 'nieuw') : d.servicedesk_substatus),
     })),
     contactpersoon: (contactRes.data ?? []).map((c: any) => ({
       type: 'contactpersoon' as const,

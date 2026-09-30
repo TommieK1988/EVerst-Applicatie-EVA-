@@ -3411,6 +3411,10 @@ export type Database = {
           regie_bouw7_security_code_id: number | null
           factuuradres_id: string | null
           financieel_gereed_op: string | null
+          bord: string
+          categorie_conflict: boolean
+          gewonnen_op: string | null
+          substatus_gewijzigd_op: string | null
           gearchiveerd: boolean
           geocode_op: string | null
           geocode_status: string | null
@@ -3519,6 +3523,10 @@ export type Database = {
           regie_bouw7_security_code_id?: number | null
           factuuradres_id?: string | null
           financieel_gereed_op?: string | null
+          bord?: string
+          categorie_conflict?: boolean
+          gewonnen_op?: string | null
+          substatus_gewijzigd_op?: string | null
           gearchiveerd?: boolean
           geocode_op?: string | null
           geocode_status?: string | null
@@ -3627,6 +3635,10 @@ export type Database = {
           regie_bouw7_security_code_id?: number | null
           factuuradres_id?: string | null
           financieel_gereed_op?: string | null
+          bord?: string
+          categorie_conflict?: boolean
+          gewonnen_op?: string | null
+          substatus_gewijzigd_op?: string | null
           gearchiveerd?: boolean
           geocode_op?: string | null
           geocode_status?: string | null

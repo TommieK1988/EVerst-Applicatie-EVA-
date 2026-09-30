@@ -49,26 +49,58 @@ function isOfferteAfgeketst(statusNaam: string | null | undefined): boolean {
   return n.includes('verloren') || n.includes('vervallen')
 }
 
+/** Offerteladder waarop het project in Bouw7 op '09. Verzonden offertes' hoort te staan. */
+const OFFERTE_LOPEND = new Set(['verzonden', 'nabellen', 'in_behandeling', 'mondelinge_toezegging'])
+/** Aanvraagladder vóór het verzenden: daar hoort het project op '01. Offerte'. */
+const AANVRAAG_LOPEND = new Set([
+  'nieuw', 'inlezen_aanvraag', 'werkopname', 'uitwerken_begroting', 'controle_begroting', 'offerte_gereed',
+])
+
 /**
  * Welke Bouw7-**projectstatus** hoort bij deze EVA-substatus? `null` = projectstatus ongemoeid laten.
  *
- * Twee gevallen (afgesproken met Tom, jul 2026):
- *  - **Gewonnen** → het project wordt een opdracht: projectstatus `02. Nieuwe opdracht`. In EVA doet
- *    de DB-trigger hetzelfde (offerte/gewonnen → opdracht/nieuwe_opdracht).
- *  - **Verloren / Vervallen** → projectstatus `08. Afgewezen`, maar **alleen als álle offertes van
- *    het project** verloren of vervallen zijn. Ligt er nog een levende offerte (nieuw, verstuurd,
- *    gewonnen, …), dan blijft het project gewoon open staan. Een project zónder offertes telt als
- *    "niets meer levend" en gaat dus wél naar Afgewezen.
+ * De Bouw7-projectstatus bepaalt op welk bord een dossier staat (zie `bordVan`), dus elke stap in
+ * de aanvraag-/offerteladder die van bord wisselt moet hem meetrekken (afgesproken met Tom,
+ * jul + sep 2026):
+ *
+ *  - **Verzonden** en de rest van de lopende offerteladder (Actie, Wachten, Mondelinge toezegging)
+ *    → `09. Verzonden offertes`. Tot 30-09-2026 bleef het project dan op 01 staan, waardoor een
+ *    verzonden offerte in Bouw7 nog als aanvraag te boek stond.
+ *  - **Gewonnen** → het project wordt een opdracht: `02. Nieuwe opdracht`. In EVA doet de DB-trigger
+ *    hetzelfde (offerte/gewonnen → opdracht/nieuwe_opdracht).
+ *  - **Verloren / Vervallen** (offerte) en **Afgewezen / Vervallen** (aanvraag) → `08. Afgewezen`,
+ *    maar **alleen als álle offertes van het project** verloren of vervallen zijn. Ligt er nog een
+ *    levende offerte (nieuw, verstuurd, gewonnen, …), dan blijft het project gewoon open staan. Een
+ *    project zónder offertes telt als "niets meer levend" en gaat dus wél naar Afgewezen.
+ *  - **Terug** naar een aanvraagstap vóór Verzonden terwijl het project op 08 of 09 staat → `01. Offerte`.
+ *
+ * Alleen vanuit de commerciële statussen 01, 08 en 09 (en Gewonnen). Een project dat al op 02–07,
+ * LB of 00 staat wordt hier nooit teruggezet: die status is dan door iets anders bepaald dan de
+ * offerteladder.
  */
 async function projectstatusPrefixVoor(
   client: Bouw7Client,
   bouw7Id: string | number,
   sectie: SubstatusSectie,
   substatus: string,
+  huidigeStatus: string | null,
 ): Promise<string | null> {
-  if (sectie !== 'offerte') return null
-  if (substatus === 'gewonnen') return '02.'
-  if (substatus !== 'verloren' && substatus !== 'vervallen') return null
+  if (sectie === 'offerte' && substatus === 'gewonnen') return '02.'
+
+  const huidig = (huidigeStatus ?? '').trim()
+  const commercieel = huidig === '' || /^0[189]\./.test(huidig)
+  if (!commercieel) return null
+  const zet = (prefix: string) => (huidig.startsWith(prefix) ? null : prefix)
+
+  if (OFFERTE_LOPEND.has(substatus)) return zet('09.')
+  if (sectie === 'aanvraag' && AANVRAAG_LOPEND.has(substatus)) {
+    return huidig.startsWith('08.') || huidig.startsWith('09.') ? '01.' : null
+  }
+
+  const afgeketst = sectie === 'offerte'
+    ? substatus === 'verloren' || substatus === 'vervallen'
+    : substatus === 'afgewezen' || substatus === 'vervallen'
+  if (!afgeketst || huidig.startsWith('08.')) return null
 
   // Offertes van dít project (HQL-filter op /list/quotations; geverifieerd tegen de live API).
   const res = await client.get<Bouw7ListResponse<Bouw7Quotation>>('/list/quotations', {
@@ -81,8 +113,8 @@ async function projectstatusPrefixVoor(
 
 export type SubstatusWriteResult =
   /**
-   * `projectstatus` = de projectstatus die deze write heeft meegetrokken (Gewonnen → 02.,
-   * Verloren/Vervallen → 08.). De aanroeper spiegelt hem in `bouw7_projectstatus_id`/`_naam`,
+   * `projectstatus` = de projectstatus die deze write heeft meegetrokken (Verzonden → 09.,
+   * Gewonnen → 02., Verloren/Vervallen → 08., terug naar de aanvraag → 01.). De aanroeper spiegelt hem in `bouw7_projectstatus_id`/`_naam`,
    * want die EVA-kolommen worden verder alleen door de sync ververst terwijl de dossierborden
    * er wél op filteren.
    */
@@ -154,10 +186,10 @@ export async function schrijfBouw7Substatus(
       }
     }
 
-    // Eindstatussen trekken de projectstatus mee: Gewonnen → 02. Nieuwe opdracht, Verloren/Vervallen
-    // → 08. Afgewezen (alleen als álle offertes van het project afgeketst zijn). In dezelfde POST als
-    // het maatwerkveld, zodat status en substatus niet uit elkaar kunnen lopen.
-    const prefix = await projectstatusPrefixVoor(client, bouw7Id, sectie, nieuweSubstatus)
+    // Een stap die van bord wisselt trekt de projectstatus mee (zie projectstatusPrefixVoor). In
+    // dezelfde POST als het maatwerkveld, zodat status en substatus niet uit elkaar kunnen lopen.
+    const prefix = await projectstatusPrefixVoor(
+      client, bouw7Id, sectie, nieuweSubstatus, project.status?.name ?? null)
     let nieuweStatus: Bouw7Projectstatus | null = null
     if (prefix) {
       const lijst = (await client.get<Bouw7ListResponse<Bouw7ProjectStatus>>('/list/project-statuses', { q: 'LIMIT 200' })).items ?? []

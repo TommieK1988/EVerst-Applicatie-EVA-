@@ -29,6 +29,15 @@ const STATUS_COLORS = [
  */
 export type KolomKeyModus = 'auto' | 'offerte_substatus' | 'servicedesk_substatus'
 
+/**
+ * Een gewonnen offerte die als terugblik op het offertebord staat: hij is al een opdracht en staat
+ * ook op Opdrachten (`bord`). Een opdracht met `bord = offertes` (Bouw7 zette hem op 08) is géén
+ * terugblik maar een afwijking — die hoort de waarschuwing te krijgen.
+ */
+function isGewonnenTerugblik(sectie: DossierSectie, d: DossierRij): boolean {
+  return sectie === 'offerte' && d.hoofdstatus === 'opdracht' && d.bord === 'opdrachten'
+}
+
 function resolveKolomKeyFn(modus: KolomKeyModus): (d: DossierRij) => string {
   if (modus === 'offerte_substatus')   return d => d.offerte_substatus   ?? 'concept'
   if (modus === 'servicedesk_substatus') return d => d.servicedesk_substatus ?? 'nieuw'
@@ -70,26 +79,41 @@ export function DossierKanban<K extends string>({
   /**
    * De kolomsleutel per dossier.
    *
-   * Op servicedesk wordt hij begrensd tot de getoonde ladder. Dagelijks onderhoud en mutatie delen
-   * één kolom in de database maar tonen een eigen reeks; een dossier waarvan de substatus niet in de
-   * actieve reeks voorkomt (bv. `uitgezet` nadat de categorie op Mutatie is gezet) zou anders van het
-   * bord verdwijnen — `filter(d => resolveKey(d) === s.key)` matcht dan nergens. Het valt in plaats
-   * daarvan terug op de eerste kolom; de eerstvolgende Bouw7-sync herschrijft de substatus volgens
-   * de nieuwe categorie.
+   * Welk dossier op dit bord staat bepaalt de server (kolom `bord`, uit Bouw7-status en categorie).
+   * De kolom komt uit de EVA-substatus. Die twee kunnen uit elkaar lopen — een mislukte write naar
+   * Bouw7, een wijziging die in Bouw7 zelf is gedaan — en dan past de key in geen enkele kolom.
+   * `filter(d => resolveKey(d) === s.key)` matchte dan nergens en de kaart verdween stil van het
+   * bord. Nu valt hij terug op de eerste kolom; buiten de servicedesk krijgt hij daar ook een
+   * waarschuwing (`status_afwijkend`), zodat iemand de status rechtzet.
    *
-   * Bewust niet generiek: op het opdrachtenbord ontbreekt `financieel_afgesloten` met opzet, en die
-   * dossiers horen niet alsnog in "Nieuwe opdracht" op te duiken.
+   * Op de servicedesk geen waarschuwing: daar is het normaal dat een substatus niet in de getoonde
+   * ladder valt (Dagelijks onderhoud en Mutatie delen één kolom in de database), en de eerstvolgende
+   * Bouw7-sync herschrijft hem volgens de categorie.
+   *
+   * Offertebord: een gewonnen offerte is al een opdracht (hoofdstatus `opdracht`) maar staat hier
+   * nog zeven dagen in Gewonnen, als terugblik.
    */
-  const resolveKey = React.useMemo(() => {
+  const { resolveKey, isAfwijkend } = React.useMemo(() => {
     const basis = resolveKolomKeyFn(kolomKeyModus)
-    if (kolomKeyModus !== 'servicedesk_substatus') return basis
     const geldig = new Set<string>(statussen.map(s => s.key))
     const eerste = statussen[0]?.key ?? ''
-    return (d: DossierRij) => {
-      const k = basis(d)
-      return geldig.has(k) ? k : eerste
+    const ruw = (d: DossierRij): string =>
+      isGewonnenTerugblik(sectie, d) && geldig.has('gewonnen') ? 'gewonnen' : basis(d)
+    return {
+      resolveKey: (d: DossierRij) => {
+        const k = ruw(d)
+        return geldig.has(k) ? k : eerste
+      },
+      isAfwijkend: (d: DossierRij) =>
+        kolomKeyModus !== 'servicedesk_substatus' && !geldig.has(ruw(d)),
     }
-  }, [kolomKeyModus, statussen])
+  }, [kolomKeyModus, statussen, sectie])
+
+  /** De kaarten met hun waarschuwingsvlag; alleen een nieuw object als er echt iets afwijkt (memo). */
+  const metAfwijking = React.useMemo(
+    () => dossiers.map(d => isAfwijkend(d) ? { ...d, status_afwijkend: true } : d),
+    [dossiers, isAfwijkend],
+  )
 
   /**
    * Openen van een kaart. Eén stabiele callback voor het hele bord in plaats van een
@@ -119,7 +143,7 @@ export function DossierKanban<K extends string>({
 
   const zoekQ = zoek.trim().toLowerCase()
   const gefilterd = zoekQ
-    ? dossiers.filter(d =>
+    ? metAfwijking.filter(d =>
         [
           d.titel, d.klant_naam, d.dossiernummer,
           d.contactpersoon_naam,
@@ -128,7 +152,7 @@ export function DossierKanban<K extends string>({
           d.factuuradres_tekst,
         ].some(v => v?.toLowerCase().includes(zoekQ))
       )
-    : dossiers
+    : metAfwijking
 
   /**
    * Voert de statuswijziging uit: optimistisch de kaart verplaatsen, dan de server-action (die de
@@ -162,6 +186,14 @@ export function DossierKanban<K extends string>({
 
   async function handleDrop(targetStatus: K) {
     if (!draggingId) return
+    // Een gewonnen offerte in de terugblik is al een opdracht: verslepen hoort op het opdrachtbord.
+    const gesleept = dossiers.find(d => d.id === draggingId)
+    if (gesleept && isGewonnenTerugblik(sectie, gesleept)) {
+      setDraggingId(null)
+      setDragOverCol(null)
+      if (targetStatus !== 'gewonnen') toast('Deze offerte is gewonnen en al een opdracht. Wijzig de status op het opdrachtbord.')
+      return
+    }
 
     if (onStatusChange) {
       // Servicedesk of andere custom update: optimistisch servicedesk_substatus bijwerken.

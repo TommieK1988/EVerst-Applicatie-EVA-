@@ -74,6 +74,12 @@ export type DossierRij = Dossier & {
   /** Moment van de laatste substatuswissel (dossier_substatus_historie); null = geen historie. */
   status_sinds?: string | null
   /**
+   * Gezet door het kanbanbord zelf: de EVA-substatus past niet in de kolommen van het bord waarop
+   * de Bouw7-status dit dossier zet. De kaart staat dan in de eerste kolom met een waarschuwing, in
+   * plaats van stil te verdwijnen.
+   */
+  status_afwijkend?: boolean
+  /**
    * Contracttotaal zoals de Verkoop-tab het toont (lib/dossiers/contracttotaal.ts). Het bord haalt
    * het na de eerste render op: `undefined` = nog aan het laden, `null` = niet te bepalen.
    */

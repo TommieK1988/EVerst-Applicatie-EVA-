@@ -10,10 +10,10 @@
  * -- nieuw, uitgezet, uitgevoerd, financieel gereed -- gebeurt alleen in EVA.
  *
  * Die twee bijten elkaar zonder bescherming. `BOUW7_NAAR_SERVICEDESK_SUBSTATUS`
- * vertaalt LB naar `loopt`, dus de lees-sync (2x per dag) zou een verse bon van de
- * kolom "Nieuw" naar "Onderhanden" schuiven zonder dat iemand iets deed. Vandaar dat
- * de aanmaakroute `servicedesk_substatus` meteen als handmatig markeert -- hetzelfde
- * mechanisme dat een met de hand versleepte bon al beschermde.
+ * vertaalt LB naar `nieuw` (sinds 30-09-2026; daarvoor `loopt`), dus de lees-sync
+ * (2x per dag) zou een bon die in EVA al verder staat terugzetten naar "Nieuw".
+ * Vandaar dat de aanmaakroute `servicedesk_substatus` meteen als handmatig markeert --
+ * hetzelfde mechanisme dat een met de hand versleepte bon al beschermde.
  *
  * Deze toets kijkt naar alle drie: de fasetabel, de afleiding, en de bescherming
  * zoals die in de database staat.
@@ -54,8 +54,8 @@ async function main() {
   console.log(`  LB. Lopende bonnen → ${uitLB}`)
   const afgeleid = mapBouw7NaarEvaStatus('LB. Lopende bonnen', 'Dagelijks onderhoud', null, null, null)
   console.log(`  afleiding          → ${afgeleid.servicedesk_substatus}`)
-  toets('de afleiding wijkt af van wat EVA neerzet', afgeleid.servicedesk_substatus !== 'nieuw',
-    'als dit gelijk is, is de bescherming niet nodig en klopt deze toets niet meer')
+  toets('een verse bon blijft ook volgens de afleiding in Nieuw', afgeleid.servicedesk_substatus === 'nieuw',
+    'LB hoort sinds 30-09-2026 op Nieuw uit te komen')
 
   console.log('\n── De bescherming ──────────────────────────────────────────')
   toets('servicedesk_substatus staat in de beschermbare velden',
@@ -107,8 +107,8 @@ async function main() {
   toets('de weg terug levert dezelfde stand op', terug === 'financieel_gereed', String(terug))
 
   const tussenstap = BOUW7_NAAR_SERVICEDESK_SUBSTATUS['LB. Lopende bonnen']
-  toets('een lopende bon is juist níét eenduidig', tussenstap !== 'nieuw',
-    'LB valt samen met 04; daarom blijft EVA daar leidend')
+  toets('een lopende bon komt zonder bescherming op Nieuw', tussenstap === 'nieuw',
+    'LB zegt niets over de voortgang; daarom blijft EVA leidend zodra de bon verder staat')
 
   console.log(fouten === 0 ? '\nAlles goed\n' : `\n${fouten} fout(en)\n`)
   process.exit(fouten === 0 ? 0 : 1)

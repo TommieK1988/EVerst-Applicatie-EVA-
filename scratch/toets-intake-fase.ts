@@ -62,14 +62,15 @@ for (const fase of Object.keys(FASE_PLAATSINGEN) as DossierFase[]) {
     `intake ${k.servicedesk_substatus}, sync ${na.servicedesk_substatus}`)
 }
 
-console.log('\n── Waarom een servicedeskbon niet op 01. Offerte mag ──')
-// De aanleiding voor de hele tabel: op 01 vertaalt de servicedeskladder naar
-// 'offerte_uitgebracht'. Dat is de stille fout die we niet willen.
-const opEen = mapBouw7NaarEvaStatus('01. Offerte', 'Dagelijks onderhoud', 'nieuw', null, null, null, null)
-toets('01. Offerte zou de bon op "offerte uitgebracht" zetten',
-  opEen.servicedesk_substatus === 'offerte_uitgebracht', String(opEen.servicedesk_substatus))
-toets('02. Nieuwe opdracht zet hem op "nieuw"',
-  FASE_PLAATSINGEN.servicedesk.bouw7Status === '02. Nieuwe opdracht')
+console.log('\n── Een verse servicedeskbon gaat naar LB ──')
+// Vroeger ging een bon naar 02. Nieuwe opdracht, omdat 01 in de servicedeskladder naar
+// 'offerte_uitgebracht' vertaalde. Sinds september 2026 staan bonnen in Bouw7 op
+// LB. Lopende bonnen, en LB vertaalt (sinds 30-09-2026) naar 'nieuw'.
+const opLB = mapBouw7NaarEvaStatus('LB. Lopende bonnen', 'Dagelijks onderhoud', 'nieuw', null, null, null, null)
+toets('LB. Lopende bonnen zet de bon op "nieuw"',
+  opLB.servicedesk_substatus === 'nieuw', String(opLB.servicedesk_substatus))
+toets('de plaatsing schrijft LB. Lopende bonnen',
+  FASE_PLAATSINGEN.servicedesk.bouw7Status === 'LB. Lopende bonnen', FASE_PLAATSINGEN.servicedesk.bouw7Status)
 
 console.log('\n── Precies één substatuskolom per fase ──')
 // De check-constraint op `dossiers` eist dat de kolom van de hoofdstatus gevuld is.

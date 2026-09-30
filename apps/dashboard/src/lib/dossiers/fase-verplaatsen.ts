@@ -97,17 +97,25 @@ export async function verplaatsDossierNaarFase(
   // volgende ochtend weer terug, zonder spoor van waarom.
   let bouw7Ok = true
   let bouw7Fout: string | null = null
-  const moetNaarBouw7 = plaatsing.bouw7Via != null || plaatsing.bouw7Prefix != null
+  let bouw7Cache: Record<string, unknown> = {}
+  // Terug naar de aanvraagfase: het project moet in Bouw7 weer op '01. Offerte'. Bij het aanmaken
+  // staat het daar al (daarom heeft de plaatsing geen `bouw7Prefix`), maar een bestaand dossier
+  // komt van 02+ of LB -- en de Bouw7-status bepaalt het bord (`bordVan`). Zonder deze write bleef
+  // het dossier op Opdrachten of Servicedesk staan met een aanvraagstatus.
+  const bouw7Prefix = plaatsing.bouw7Prefix ?? (doel === 'aanvraag' ? '01.' : undefined)
+  const moetNaarBouw7 = plaatsing.bouw7Via != null || bouw7Prefix != null
 
   if (moetNaarBouw7 && d.bouw7_id) {
-    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix } =
+    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix, projectstatusCacheVelden } =
       await import('@/lib/dossiers/bouw7-status')
     // Servicedesk gaat op zijn naam-prefix (LB.); daar hoort geen EVA-substatus bij.
-    const res = plaatsing.bouw7Prefix
-      ? await schrijfBouw7Projectstatusprefix(d.bouw7_id, plaatsing.bouw7Prefix)
+    const res = bouw7Prefix
+      ? await schrijfBouw7Projectstatusprefix(d.bouw7_id, bouw7Prefix)
       : await schrijfBouw7Projectstatus(d.bouw7_id, plaatsing.bouw7Via as string)
     bouw7Ok = res.ok
     bouw7Fout = res.ok ? null : res.error
+    // De EVA-kopie van de projectstatus meteen gelijkzetten: `bord` wordt eruit afgeleid.
+    bouw7Cache = projectstatusCacheVelden(res)
   } else if (moetNaarBouw7 && !d.bouw7_id) {
     bouw7Ok = false
     bouw7Fout = 'Dit dossier staat niet in Bouw7; daar is de projectstatus niet gewijzigd.'
@@ -128,6 +136,7 @@ export async function verplaatsDossierNaarFase(
       opdracht_substatus:    plaatsing.kolommen.opdracht_substatus,
       servicedesk_substatus: plaatsing.kolommen.servicedesk_substatus,
       ...(beschermd ? { handmatige_velden: beschermd } : {}),
+      ...bouw7Cache,
       ...(bouw7Ok ? {} : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7Fout }),
     } as never)
     .eq('id', dossierId)

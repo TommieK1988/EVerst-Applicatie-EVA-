@@ -55,8 +55,9 @@ export async function zetFaseNaAanmaken(
   let bouw7Fout: string | null = null
   const moetNaarBouw7 = plaatsing.bouw7Via != null || plaatsing.bouw7Prefix != null
 
+  let bouw7Cache: Record<string, unknown> = {}
   if (moetNaarBouw7 && bouw7Id) {
-    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix } =
+    const { schrijfBouw7Projectstatus, schrijfBouw7Projectstatusprefix, projectstatusCacheVelden } =
       await import('@/lib/dossiers/bouw7-status')
     // Servicedesk gaat op zijn naam-prefix (LB.); daar hoort geen EVA-substatus bij.
     const res = plaatsing.bouw7Prefix
@@ -64,6 +65,9 @@ export async function zetFaseNaAanmaken(
       : await schrijfBouw7Projectstatus(bouw7Id, plaatsing.bouw7Via as string)
     bouw7Ok = res.ok
     bouw7Fout = res.ok ? null : res.error
+    // De EVA-kopie van de projectstatus meteen gelijkzetten: `bord` wordt eruit afgeleid, en tot
+    // de volgende sync stond een verse bon anders op '01.' → Aanvragen in plaats van Servicedesk.
+    bouw7Cache = projectstatusCacheVelden(res)
   } else if (moetNaarBouw7 && !bouw7Id) {
     bouw7Ok = false
     bouw7Fout = 'Het dossier staat nog niet in Bouw7; de projectstatus is niet gezet.'
@@ -89,6 +93,7 @@ export async function zetFaseNaAanmaken(
       opdracht_substatus:    plaatsing.kolommen.opdracht_substatus,
       servicedesk_substatus: plaatsing.kolommen.servicedesk_substatus,
       ...(beschermd ? { handmatige_velden: beschermd } : {}),
+      ...bouw7Cache,
       ...(bouw7Ok ? {} : { bouw7_sync_status: 'error', bouw7_sync_fout: bouw7Fout }),
     } as never)
     .eq('id', dossierId)

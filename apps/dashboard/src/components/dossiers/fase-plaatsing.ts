@@ -27,9 +27,9 @@
  * alleen in EVA. Bouw7 kent die ladder niet en hoeft hem niet te volgen.
  *
  * Dat betekent wél dat de lees-sync van de bon af moet blijven. LB vertaalt in
- * BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar `loopt`, dus zonder bescherming zou een
- * verse bon binnen een halve dag van "Nieuw" naar "Onderhanden" springen zonder dat
- * iemand iets deed. Vandaar dat `zetFaseNaAanmaken` de substatus meteen als
+ * BOUW7_NAAR_SERVICEDESK_SUBSTATUS naar `nieuw` (sinds 30-09-2026; daarvoor `loopt`),
+ * dus zonder bescherming zou een bon die in EVA al verder is geschoven bij elke sync
+ * terugvallen naar "Nieuw". Vandaar dat `zetFaseNaAanmaken` de substatus meteen als
  * handmatig markeert -- hetzelfde mechanisme dat een met de hand versleepte bon al
  * beschermde (zie lib/bouw7/handmatige-velden.ts).
  *
@@ -41,6 +41,10 @@
  * Geen 'use client' en geen 'server-only': dit bestand wordt van beide kanten
  * gelezen en exporteert alleen constanten.
  */
+
+import type { DossierBord } from '@everts/database/platform-types'
+
+export type { DossierBord }
 
 export type DossierFase = 'aanvraag' | 'opdracht' | 'servicedesk'
 
@@ -124,6 +128,59 @@ export const SERVICEDESK_CATEGORIEEN = ['Dagelijks onderhoud', 'Mutatie']
 /** Hoort deze categorie bij de servicedesk? */
 export function isServicedeskCategorie(naam: string | null | undefined): boolean {
   return SERVICEDESK_CATEGORIEEN.includes((naam ?? '').trim())
+}
+
+/** Staat dit project in Bouw7 op LB. Lopende bonnen? */
+export function isLopendeBonStatus(statusNaam: string | null | undefined): boolean {
+  return (statusNaam ?? '').startsWith('LB.')
+}
+
+/**
+ * Op welk bord een dossier staat. TS-spiegel van de databasefunctie `dossier_bord`
+ * (supabase/migrations/20260930j_dossier_bord.sql) -- de borden filteren op de kolom `bord`
+ * die de database zelf bijhoudt; deze functie is er voor labels, tests en de controle dat
+ * beide kanten hetzelfde zeggen. Wijzig ze altijd samen.
+ *
+ * De eerste regel die past wint:
+ *  1. categorie Dagelijks onderhoud / Mutatie, of Bouw7 'LB.'  → servicedesk
+ *     (LB met een andere categorie hoort niet te bestaan, maar mag nooit van alle borden vallen)
+ *  2. '07.'       → afgesloten
+ *  3. '02.'–'06.' → opdrachten
+ *  4. '09.'       → offertes
+ *  5. '08.'       → aanvragen bij hoofdstatus aanvraag, anders offertes
+ *  6. '01.'       → aanvragen
+ *  7. '00.'       → intern (containers voor indirecte uren; geen werkbord)
+ *  8. geen/onbekende Bouw7-status → de hoofdstatus beslist
+ */
+export function bordVan(d: {
+  bouw7_categorie_naam?: string | null
+  bouw7_projectstatus_naam?: string | null
+  hoofdstatus: string | null
+  opdracht_substatus?: string | null
+}): DossierBord {
+  const status = d.bouw7_projectstatus_naam ?? ''
+  if (isServicedeskCategorie(d.bouw7_categorie_naam) || isLopendeBonStatus(status)) return 'servicedesk'
+  if (status.startsWith('07.')) return 'afgesloten'
+  if (/^0[2-6]\./.test(status)) return 'opdrachten'
+  if (status.startsWith('09.')) return 'offertes'
+  if (status.startsWith('08.')) return d.hoofdstatus === 'aanvraag' ? 'aanvragen' : 'offertes'
+  if (status.startsWith('01.')) return 'aanvragen'
+  if (status.startsWith('00.')) return 'intern'
+  if (d.hoofdstatus === 'offerte') return 'offertes'
+  if (d.hoofdstatus === 'opdracht') {
+    return d.opdracht_substatus === 'financieel_afgesloten' ? 'afgesloten' : 'opdrachten'
+  }
+  return 'aanvragen'
+}
+
+/** Zoek- en lijstlabel per bord. */
+export const BORD_LABEL: Record<DossierBord, string> = {
+  aanvragen:   'Aanvraag',
+  offertes:    'Offerte',
+  opdrachten:  'Opdracht',
+  servicedesk: 'Servicedesk',
+  afgesloten:  'Afgesloten',
+  intern:      'Intern',
 }
 
 /** In welke fase staat dit dossier nu? Null voor een offerte: die hoort hier niet. */

@@ -63,12 +63,14 @@ describe('mapBouw7NaarEvaStatus: een bon blijft een bon', () => {
   })
 
   /**
-   * Alleen de categorie maakt een dossier tot servicedeskbon (september 2026). Een lopende bon
-   * met een andere categorie is dus geen servicedesk meer — die moet in Bouw7 hercategoriseerd.
+   * Een lopende bon met een andere categorie hoort niet te bestaan, maar kan in Bouw7 ontstaan. Hij
+   * blijft dan een servicedeskbon (met `categorie_conflict` in de database) — anders viel hij op
+   * aanvraag/nieuw en stond hij op geen enkel bord (30-09-2026).
    */
-  it('maakt van een LB.-bon met een andere categorie geen servicedeskbon', () => {
+  it('houdt een LB.-bon met een andere categorie op de servicedesk', () => {
     const s = mapBouw7NaarEvaStatus('LB. Lopende bonnen', 'Bouwkundig Onderhoud', ...GEEN_BESTAANDE)
-    expect(s.servicedesk_substatus).toBeNull()
+    expect(s.hoofdstatus).toBe('aanvraag')
+    expect(s.servicedesk_substatus).toBe('nieuw')
   })
 
   it('zet een LB.-bon met categorie Dagelijks onderhoud op de servicedesk, in Nieuw', () => {

@@ -12,8 +12,16 @@ const HOOFDSTATUS_SEGMENT: Record<string, string> = {
   opdracht: 'opdrachten',
 }
 
-export function dossierHref(id: string, hoofdstatus: string | null): string {
-  const seg = HOOFDSTATUS_SEGMENT[hoofdstatus ?? ''] ?? 'opdrachten'
+export function dossierHref(
+  id: string,
+  hoofdstatus: string | null,
+  /**
+   * Geef dit mee waar het bekend is. Een servicedeskbon heeft hoofdstatus `aanvraag`, dus zonder
+   * deze waarde opent hij onder /aanvragen in plaats van /servicedesk.
+   */
+  servicedeskSubstatus?: string | null,
+): string {
+  const seg = dossierSegment(hoofdstatus, servicedeskSubstatus ?? null) ?? 'opdrachten'
   return `/${seg}/${id}`
 }
 

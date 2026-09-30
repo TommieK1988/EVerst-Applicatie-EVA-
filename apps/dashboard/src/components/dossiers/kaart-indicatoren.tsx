@@ -11,7 +11,7 @@ import type { KaartBedrag } from './kaart-bedrag'
  * en de uitleg niet uit elkaar lopen.
  */
 
-export type IndicatorSoort = 'uren' | 'begroting' | 'wb' | 'verstuurd' | 'deadline' | 'notitie' | 'taken'
+export type IndicatorSoort = 'bord' | 'uren' | 'begroting' | 'wb' | 'verstuurd' | 'deadline' | 'notitie' | 'taken'
 export type IndicatorTone = 'error' | 'warning' | 'info' | 'neutral'
 
 export type KaartIndicator = {
@@ -29,6 +29,7 @@ export type KaartIndicator = {
 }
 
 const ICONEN: Record<IndicatorSoort, (p: { size?: number }) => React.ReactElement> = {
+  bord:      IconWarn,
   uren:      IconClock,
   begroting: IconEuro,
   wb:        IconWarn,
@@ -78,6 +79,23 @@ function dagenTekst(n: number): string {
 /** Leidt de indicatoren af die voor dit dossier gelden, in volgorde van urgentie. */
 export function getKaartIndicatoren(d: DossierRij, sectie?: DossierSectie): KaartIndicator[] {
   const indicatoren: KaartIndicator[] = []
+
+  // Twee signalen dat het dossier niet klopt met de bordindeling. Ze staan vooraan: een kaart die
+  // hier niet hoort is belangrijker dan elk ander signaal erop. Zie `bordVan` in ./fase-plaatsing.
+  if (d.categorie_conflict) {
+    indicatoren.push({
+      soort: 'bord', tone: 'error', chip: 'LB',
+      uitleg: `Staat in Bouw7 op LB. Lopende bonnen met categorie ${d.bouw7_categorie_naam ?? '(leeg)'}. `
+        + 'Lopende bonnen horen bij Dagelijks onderhoud of Mutatie — zet de categorie in Bouw7 goed.',
+    })
+  }
+  if (d.status_afwijkend) {
+    indicatoren.push({
+      soort: 'bord', tone: 'warning',
+      uitleg: `De status in EVA past niet bij de Bouw7-status (${d.bouw7_projectstatus_naam ?? 'geen'}). `
+        + 'De kaart staat daarom in de eerste kolom; zet de status goed via het dossier.',
+    })
+  }
 
   if (d.bouw7_uren_overschrijding) {
     indicatoren.push({

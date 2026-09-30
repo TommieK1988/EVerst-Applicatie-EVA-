@@ -430,6 +430,13 @@ export type RelatieInkoopPrijsafspraak = {
 export type Hoofdstatus = 'aanvraag' | 'offerte' | 'opdracht'
 
 /**
+ * Het bord waarop een dossier staat. Afgeleid in de database (functie `dossier_bord`, trigger
+ * `zz_dossier_bord`) uit Bouw7-status, categorie en hoofdstatus; de TS-spiegel is `bordVan` in
+ * apps/dashboard/src/components/dossiers/fase-plaatsing.ts.
+ */
+export type DossierBord = 'aanvragen' | 'offertes' | 'opdrachten' | 'servicedesk' | 'afgesloten' | 'intern'
+
+/**
  * Eén reeks voor twee trajecten. Dagelijks onderhoud gebruikt `mandaat_verhoging`, `uitgezet` en
  * `ingepland`; mutatiewerk gebruikt `opgenomen` en `in_voorbereiding`. De rest is gedeeld. Welke
  * kolommen een dossier ziet, bepaalt de categorie — zie `SERVICEDESK_MUTATIE_STATUSSEN` in
@@ -872,6 +879,14 @@ export type Dossier = {
   opdrachtdatum: string | null
   /** Moment dat de opdracht-substatus financieel_gereed werd. Gezet door dezelfde DB-trigger. */
   financieel_gereed_op: string | null
+  /** Bord waarop het dossier staat (trigger zz_dossier_bord): aanvragen | offertes | opdrachten | servicedesk | afgesloten | intern. */
+  bord?: DossierBord
+  /** Bouw7 LB. Lopende bonnen met een categorie anders dan Dagelijks onderhoud/Mutatie. */
+  categorie_conflict?: boolean
+  /** Laatste echte wijziging van hoofdstatus of een substatus — voor het 7-dagenvenster op eindkolommen. */
+  substatus_gewijzigd_op?: string | null
+  /** Moment waarop de offerte een opdracht werd — houdt het dossier 7 dagen in Offertes → Gewonnen. */
+  gewonnen_op?: string | null
   /**
    * Voorlopige (indicatieve) start van de uitvoering — handmatig, EVA-eigen. Bewust niet
    * `verwacht_startdatum`: die wordt bij elke Bouw7-sync overschreven.
