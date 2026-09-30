@@ -58,7 +58,7 @@ type Factuuradres = {
 
 export default function OpdrachtPaneel({
   berichtId, kandidaten, relatieId, bewerkbaar,
-  voorstel, onKlaar, voorgekozenDossierId, herkend, werkadres,
+  voorstel, onKlaar, voorgekozenDossierId, herkend, werkadres, onKeuze,
 }: {
   berichtId: string
   kandidaten: OfferteKandidaat[]
@@ -87,6 +87,11 @@ export default function OpdrachtPaneel({
   onKlaar: (dossierId: string) => void
   /** Vanuit de duplicatenlijst aangewezen offerte. */
   voorgekozenDossierId?: string | null
+  /**
+   * Welke offerte er nu gekozen is. Het scherm eromheen heeft dat nodig: het
+   * termijnenblok rekent op dát dossier, en de veldkleuren hangen ervan af.
+   */
+  onKeuze?: (dossierId: string | null) => void
 }) {
   const { bevestig, meld } = useDialogen()
 
@@ -101,13 +106,20 @@ export default function OpdrachtPaneel({
     if (voorgekozenDossierId) setDossierId(voorgekozenDossierId)
   }, [voorgekozenDossierId])
 
+  // Naar buiten melden welke offerte er ligt; het termijnenblok hangt eraan.
+  React.useEffect(() => { onKeuze?.(dossierId) }, [dossierId, onKeuze])
+
   const [zoek, setZoek] = useState('')
   const [gevonden, setGevonden] = useState<{ id: string; titel: string; klant_naam: string | null }[]>([])
   const [extra, setExtra] = useState<OfferteKandidaat[]>([])
 
-  const [referentie, setReferentie] = useState(voorstel.opdrachtReferentie ?? '')
-  const [datum, setDatum] = useState(voorstel.opdrachtdatum ?? '')
-  const [opmerking, setOpmerking] = useState(voorstel.klantOpmerkingen ?? '')
+  // Opdrachtreferentie, opdrachtdatum en de klantopmerking stonden hier als eigen
+  // velden. Ze staan nu in het vaste formulier -- op dezelfde plek als bij een
+  // aanvraag -- en komen van daar binnen. Twee invoervelden voor hetzelfde gegeven
+  // is precies hoe de twee schermen uit elkaar gingen lopen.
+  const referentie = voorstel.opdrachtReferentie ?? ''
+  const datum = voorstel.opdrachtdatum ?? ''
+  const opmerking = voorstel.klantOpmerkingen ?? ''
 
   const [adressen, setAdressen] = useState<Factuuradres[] | null>(null)
   // Staat er een factuuradres op de opdracht, dan is dát de beginstand: de klant
@@ -120,7 +132,9 @@ export default function OpdrachtPaneel({
 
   // De contactpersoon van de offerte is meestal de juiste; wie de opdracht stuurt
   // lang niet altijd. Daarom uit, en zichtbaar.
-  const [contactOvernemen, setContactOvernemen] = useState(false)
+  // De contactpersoon van de mail overnemen op het dossier: die keuze stond in het
+  // weggehaalde herkenningsblok. Voorlopig uit; het formulier toont de contactpersoon.
+  const contactOvernemen = false
   const [opDossier, setOpDossier] = useState<{
     contactpersoonNaam: string | null; factuuradresLabel: string | null; werkadres: string | null
     /** Offertenummer, als het dossier nog op aanvraag staat en de fase wordt bijgetrokken. */
@@ -369,53 +383,7 @@ export default function OpdrachtPaneel({
           Wat EVA uit de mail haalde staat bovenaan: het is de grond waarop je de
           offerte aanwijst, en zonder dit blok leek het alsof de opdrachtgever en
           contactpersoon waren kwijtgeraakt. */}
-      <FormSection title="Uit deze mail herkend">
-        <div style={{ fontSize: 13.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Opdrachtgever: <strong>{herkend.opdrachtgever ?? 'niet herkend'}</strong></span>
-          <span>Contactpersoon: <strong>{herkend.contactpersoonNaam ?? 'niet herkend'}</strong></span>
-          {werkadres.straat && (
-            <span style={klein}>
-              Werkadres: {[werkadres.straat, werkadres.huisnummer].filter(Boolean).join(' ')}
-            </span>
-          )}
-        </div>
-        {opDossier && (
-          <div style={{ ...klein, marginTop: 6 }}>
-            Op het gekozen dossier staat nu:{' '}
-            {opDossier.contactpersoonNaam ?? 'geen contactpersoon'}
-            {opDossier.werkadres ? ` · ${opDossier.werkadres}` : ''}
-            {opDossier.factuuradresLabel ? ` · factuur naar ${opDossier.factuuradresLabel}` : ''}
-          </div>
-        )}
-        {/* De fase loopt achter op de offerte. Dat is geen beletsel, maar wel iets
-            wat je wilt weten vóór je klikt: het dossier schuift twee fases op. */}
-        {opDossier?.faseCorrectie && (
-          <div
-            style={{ ...klein, marginTop: 6 }}
-            className="rounded-md border border-warning-300 bg-warning-50 px-3 py-2 text-warning-700"
-          >
-            Dit dossier staat nog in de aanvraagfase, terwijl offerte{' '}
-            <strong>{opDossier.faseCorrectie}</strong> al verzonden is. EVA zet het eerst op
-            Offerte verzonden en daarna op gewonnen.
-          </div>
-        )}
-        {herkend.contactpersoonId && opDossier && (
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 8 }}>
-            <input
-              type="checkbox" checked={contactOvernemen} disabled={!bewerkbaar}
-              onChange={e => setContactOvernemen(e.target.checked)}
-            />
-            <span>
-              {herkend.contactpersoonNaam ?? 'Deze contactpersoon'} ook op het dossier zetten
-              {opDossier.contactpersoonNaam && (
-                <span style={klein}> — vervangt {opDossier.contactpersoonNaam}</span>
-              )}
-            </span>
-          </label>
-        )}
-      </FormSection>
-
-      <FormSection title="Bij welke offerte hoort deze opdracht?">
+      <FormSection title="Het dossier" description="Bij welke offerte hoort deze opdracht?">
         {alleKandidaten.length === 0 && (
           <p style={klein}>
             Deze opdrachtgever heeft geen lopende offerte in EVA. Zoek het dossier hieronder op,
@@ -448,7 +416,7 @@ export default function OpdrachtPaneel({
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             <input
               style={{ ...veldStijl, flex: 1 }}
-              placeholder="Zoek een ander dossier op titel…"
+              placeholder="Zoek op offertenummer, dossiernummer, titel of straat…"
               value={zoek}
               onChange={e => setZoek(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void zoeken() } }}
@@ -475,29 +443,12 @@ export default function OpdrachtPaneel({
         {waarschuwing && (
           <p className="mt-2 text-[12px] text-error-700">{waarschuwing}</p>
         )}
-      </FormSection>
+
 
       {/* Zelfde kop als bij een aanvraag, zodat dezelfde gegevens op dezelfde
           plek staan of het nu een aanvraag of een opdracht is. */}
-      <FormSection title="Kenmerken">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-          <Veld label="Opdrachtreferentie">
-            <input
-              style={veldStijl} value={referentie} disabled={!bewerkbaar}
-              onChange={e => setReferentie(e.target.value)}
-              placeholder="Bon- of ordernummer van de klant"
-            />
-          </Veld>
-          <Veld label="Opdrachtdatum">
-            <input
-              type="date" style={veldStijl} value={datum} disabled={!bewerkbaar}
-              onChange={e => setDatum(e.target.value)}
-            />
-          </Veld>
-        </div>
-      </FormSection>
-
-      <FormSection title="Factuuradres">
+      <div style={{ marginTop: 12 }}>
+        <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Waar gaat de factuur heen?</div>
         <p style={klein}>
           De opdrachtgever blijft dezelfde; dit gaat alleen over het adres waar de factuur heen gaat.
         </p>
@@ -563,13 +514,7 @@ export default function OpdrachtPaneel({
             ))}
           </div>
         )}
-      </FormSection>
-
-      <FormSection title="Opmerking van de klant" description="komt als notitie op het dossier">
-        <textarea
-          style={{ ...veldStijl, minHeight: 70 }} value={opmerking} disabled={!bewerkbaar}
-          onChange={e => setOpmerking(e.target.value)}
-        />
+      </div>
       </FormSection>
 
       {bewerkbaar && (

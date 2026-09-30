@@ -123,6 +123,8 @@ export async function zoekDossierVoorIntake(term: string): Promise<
     substatus: string | null
     klantnaam: string | null
     werkadres: string | null
+    /** Het offertenummer waarop dit dossier werd gevonden, als dat de treffer was. */
+    viaOfferte?: string | null
   }[]
 > {
   await vereisRecht('mailintake', 'lezen')
@@ -140,18 +142,50 @@ export async function zoekDossierVoorIntake(term: string): Promise<
   const veilig = zoek.replace(/[^A-Za-z0-9.\- ]/g, '').slice(0, 60)
   const cijfers = veilig.replace(/\D/g, '')
 
-  const [opNummer, opTekst] = await Promise.all([
-    cijfers.length >= 3
-      ? supabase.from('dossiers').select(SELECT).ilike('dossiernummer', `%${cijfers}%`).limit(15)
-      : Promise.resolve({ data: [] as unknown[] }),
+  // ONS OFFERTENUMMER STAAT NIET OP HET DOSSIER
+  // Een dossier heet 20267.00682, de offerte die eraan hangt heet OFT-2026-171.
+  // Dat zijn twee verschillende reeksen, en een opdrachtgever noemt in zijn mail
+  // vrijwel altijd het offertenummer. Zoeken op alleen `dossiernummer` levert dan
+  // niets op -- ook niet op de cijfers, want die komen niet overeen.
+  const viaOfferte = new Map<string, string>()
+  const offerteRijen = await supabase
+    .from('quotes')
+    .select('dossier_id, quote_nummer')
+    .not('dossier_id', 'is', null)
+    .or(`quote_nummer.ilike.%${veilig}%${cijfers.length >= 3 ? `,quote_nummer.ilike.%${cijfers}%` : ''}`)
+    .limit(20)
+  for (const q of offerteRijen.data ?? []) {
+    if (q.dossier_id && !viaOfferte.has(q.dossier_id)) {
+      viaOfferte.set(q.dossier_id, q.quote_nummer ?? '')
+    }
+  }
+
+  // Op de term zelf én op de kale cijfers. Alleen op cijfers zoeken vond het
+  // dossier juist níét als je het volledige nummer intikte: een dossiernummer is
+  // "20267.00682", en daar wordt "2026700682" van gemaakt -- dat matcht nergens op.
+  // Alleen op de term zoeken faalt andersom, als iemand "20267 00682" typt.
+  const nummerFilter = [
+    `dossiernummer.ilike.%${veilig}%`,
+    ...(cijfers.length >= 3 ? [`dossiernummer.ilike.%${cijfers}%`] : []),
+  ].join(',')
+
+  const [opNummer, opTekst, opOfferte] = await Promise.all([
+    supabase.from('dossiers').select(SELECT).or(nummerFilter).limit(15),
     supabase.from('dossiers').select(SELECT)
       .or(`titel.ilike.%${veilig}%,werkadres_straat.ilike.%${veilig}%`)
       .limit(15),
+    viaOfferte.size
+      ? supabase.from('dossiers').select(SELECT).in('id', [...viaOfferte.keys()]).limit(20)
+      : Promise.resolve({ data: [] as unknown[] }),
   ])
 
   const gezien = new Set<string>()
   const uit: Awaited<ReturnType<typeof zoekDossierVoorIntake>> = []
-  for (const rij of [...(opNummer.data ?? []), ...(opTekst.data ?? [])] as Record<string, unknown>[]) {
+  // De offertetreffers eerst: wie een offertenummer intikt, zoekt dát dossier.
+  const alle = [
+    ...(opOfferte.data ?? []), ...(opNummer.data ?? []), ...(opTekst.data ?? []),
+  ] as Record<string, unknown>[]
+  for (const rij of alle) {
     const id = String(rij.id)
     if (gezien.has(id)) continue
     gezien.add(id)
@@ -165,6 +199,7 @@ export async function zoekDossierVoorIntake(term: string): Promise<
       klantnaam: klant?.naam ?? null,
       werkadres: [rij.werkadres_straat, rij.werkadres_huisnummer, rij.werkadres_stad]
         .filter(Boolean).join(' ') || null,
+      viaOfferte: viaOfferte.get(id) ?? null,
     })
   }
   return uit.slice(0, 20)
