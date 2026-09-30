@@ -11,7 +11,7 @@
 import React from 'react'
 
 import { Badge } from '@/components/ui'
-import { FormField } from '@/components/ui/form-field'
+import { FormField, type VeldToon } from '@/components/ui/form-field'
 import { VELD_BETROUWBAAR } from '@/lib/mailintake/types'
 
 export const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
@@ -55,6 +55,23 @@ export function Zekerheid({ score }: { score: number | undefined }) {
 }
 
 /**
+ * De labelregel van een veld, op een vaste hoogte.
+ *
+ * `Zekerheid` rendert niets als het model over dit veld niets zei. Zonder vaste
+ * hoogte werd de labelregel daardoor per bericht een paar pixels hoger of lager, en
+ * schoof alles eronder mee -- een van de redenen dat het scherm leek te verspringen
+ * tussen twee mails. Met een vaste regelhoogte mag de badge gerust wegblijven.
+ */
+function Labelregel({ label, score }: { label: React.ReactNode; score?: number }) {
+  return (
+    <span className="inline-flex h-4 items-center gap-1.5">
+      {label}
+      <Zekerheid score={score} />
+    </span>
+  )
+}
+
+/**
  * Eén veld in het voorstel: label, zekerheid, invoer.
  *
  * Bouwt op `FormField` uit het design system, zodat labelgrootte, -kleur en
@@ -62,17 +79,18 @@ export function Zekerheid({ score }: { score: number | undefined }) {
  * nagemaakt en week daardoor net af.
  */
 export function Veld({
-  label, score, children,
-}: { label: string; score?: number; children: React.ReactNode }) {
+  label, score, toon, toonUitleg, children,
+}: {
+  label: string
+  score?: number
+  /** De toestand van dit veld als kleur; zie `FormField`. Standaard kleurloos. */
+  toon?: VeldToon
+  /** Waarom die kleur, in gewone taal. Komt in de hovertekst. */
+  toonUitleg?: string
+  children: React.ReactNode
+}) {
   return (
-    <FormField
-      upper
-      label={
-        <span className="inline-flex items-center gap-1.5">
-          {label}<Zekerheid score={score} />
-        </span>
-      }
-    >
+    <FormField upper tone={toon} toneTitle={toonUitleg} label={<Labelregel label={label} score={score} />}>
       {children}
     </FormField>
   )
