@@ -34,11 +34,19 @@ export interface TwijfelVeld {
   reden?: string | null
 }
 
-/** Kleur bij een score: groen boven de drempel, geel eronder, rood bij vrijwel niets. */
-function tint(score: number): { bg: string; fg: string } {
-  if (score >= VELD_BETROUWBAAR) return { bg: 'var(--su-100, #dcfce7)', fg: 'var(--su-800, #166534)' }
-  if (score >= 0.5) return { bg: 'var(--wa-100, #fef3c7)', fg: 'var(--wa-800, #92400e)' }
-  return { bg: 'var(--da-100, #fee2e2)', fg: 'var(--da-800, #991b1b)' }
+/**
+ * Kleur bij een score: groen boven de drempel, oranje eronder, rood bij vrijwel niets.
+ *
+ * Tailwind-klassen en geen inline `var()`, want die laatste vorm was hier stuk. Er
+ * stond `--su-800`, `--wa-800` en `--da-100`: de statusschaal kent alleen de stappen
+ * 50/100/300/500/700/900 (dus geen 800), en de rode reeks heet `--er-`, niet `--da-`.
+ * Alle drie de kleuren vielen daardoor altijd terug op de hardcoded lichte hex --
+ * ook in donkere modus, waar die tinten juist omkeren.
+ */
+function tint(score: number): string {
+  if (score >= VELD_BETROUWBAAR) return 'bg-success-100 text-success-700'
+  if (score >= 0.5) return 'bg-warning-100 text-warning-700'
+  return 'bg-error-100 text-error-700'
 }
 
 export interface AfhandelingProps {
@@ -167,11 +175,9 @@ export default function TwijfelPaneel({
     <Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* ── De zekerheid, groot ── */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <span style={{
-          fontSize: 40, fontWeight: 700, lineHeight: 1,
-          padding: '4px 12px', borderRadius: 10,
-          background: kleur.bg, color: kleur.fg,
-        }}>
+        <span
+          className={`rounded-[10px] px-3 py-1 text-[40px] font-bold leading-none ${kleur}`}
+        >
           {pct}%
         </span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -187,11 +193,7 @@ export default function TwijfelPaneel({
           Bovenaan en altijd op dezelfde plek: dit is waarom het bericht bij jou
           ligt, en het bepaalt wat je hieronder moet nalopen. */}
       {redenen.length > 0 && (
-        <div style={{
-          padding: '8px 10px', borderRadius: 6, fontSize: 12.5, lineHeight: 1.5,
-          background: 'var(--wa-50, #fffbeb)', border: '1px solid var(--wa-200, #fde68a)',
-          color: 'var(--wa-900, #78350f)',
-        }}>
+        <div className="rounded-md border border-warning-300 bg-warning-50 px-2.5 py-2 text-[12.5px] leading-normal text-warning-700">
           <div style={{ fontWeight: 600, marginBottom: redenen.length > 1 ? 4 : 0 }}>
             {redenen.length === 1 ? 'Voorgelegd omdat' : `Voorgelegd om ${redenen.length} redenen`}
           </div>
@@ -217,10 +219,7 @@ export default function TwijfelPaneel({
               <label key={v.sleutel} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <span style={{ ...klein, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {v.label}
-                  <span style={{
-                    fontSize: 11, padding: '1px 5px', borderRadius: 4,
-                    background: t.bg, color: t.fg,
-                  }}>
+                  <span className={`rounded-sm px-[5px] py-px text-[11px] ${t}`}>
                     {Math.round(v.score * 100)}%
                   </span>
                 </span>

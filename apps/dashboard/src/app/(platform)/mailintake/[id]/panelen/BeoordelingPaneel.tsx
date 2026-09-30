@@ -164,7 +164,7 @@ export default function BeoordelingPaneel({
               {b.herkenning_score != null && <span style={klein}> ({Math.round(Number(b.herkenning_score) * 100)}%)</span>}
             </p>
           ) : (
-            <p style={{ ...zacht, color: 'var(--wa-800, #92400e)' }}>
+            <p className="text-[13px] text-warning-700">
               De afzender is niet herkend als bestaande klant. Kies zelf de opdrachtgever, of maak er een nieuwe aan
               via Relaties.
             </p>
@@ -221,8 +221,8 @@ export default function BeoordelingPaneel({
               {duplicaten.map(d => (
                 <div key={d.id} style={{
                   padding: 8, borderRadius: 6,
-                  border: `1px solid ${d.score >= DUPLICAAT_HARD ? 'var(--da-300, #fca5a5)' : 'var(--border)'}`,
-                  background: d.score >= DUPLICAAT_HARD ? 'var(--da-50, #fef2f2)' : 'transparent',
+                  border: `1px solid ${d.score >= DUPLICAAT_HARD ? 'rgb(var(--er-300))' : 'var(--border)'}`,
+                  background: d.score >= DUPLICAAT_HARD ? 'rgb(var(--er-50))' : 'transparent',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
                     <strong style={{ fontSize: 13 }}>{d.dossiernummer ?? 'dossier'}</strong>

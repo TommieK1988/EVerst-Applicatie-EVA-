@@ -272,7 +272,7 @@ export default function MailintakeInstellingen({
                   ? `Laatst opgehaald: ${new Date(p.laatste_ophaal_op).toLocaleString('nl-NL')}`
                   : 'Nog nooit opgehaald.'}
                 {p.laatste_fout && (
-                  <span style={{ color: 'var(--da-700, #b91c1c)' }}> · Laatste fout: {p.laatste_fout}</span>
+                  <span className="text-error-700"> · Laatste fout: {p.laatste_fout}</span>
                 )}
               </div>
             )}
@@ -403,7 +403,7 @@ export default function MailintakeInstellingen({
           <div style={{
             marginTop: 12, padding: '8px 10px', borderRadius: 8, fontSize: 12.5,
             background: nabehandelAchterstand.opgegeven > 0 ? 'var(--wa-50, #fff6ec)' : 'var(--n-100, #f3f4f6)',
-            border: `1px solid ${nabehandelAchterstand.opgegeven > 0 ? 'var(--wa-200, #fde68a)' : 'var(--border)'}`,
+            border: `1px solid ${nabehandelAchterstand.opgegeven > 0 ? 'rgb(var(--wa-300))' : 'var(--border)'}`,
             color: 'var(--fg)',
           }}>
             <strong>

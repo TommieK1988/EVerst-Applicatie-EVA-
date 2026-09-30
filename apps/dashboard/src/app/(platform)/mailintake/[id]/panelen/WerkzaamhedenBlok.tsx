@@ -159,7 +159,7 @@ export default function WerkzaamhedenBlok({
         </span>
       )}
       {(gemist?.length ?? 0) > 0 && (
-        <span style={{ ...klein, color: 'var(--wa-800, #92400e)' }}>
+        <span className="text-[12px] text-warning-700">
           Niet meegelezen: {gemist!.join(', ')}.
         </span>
       )}

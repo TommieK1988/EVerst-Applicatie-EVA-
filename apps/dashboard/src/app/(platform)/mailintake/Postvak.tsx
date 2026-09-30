@@ -30,11 +30,14 @@ function datumTijd(iso: string): string {
 function Vertrouwen({ waarde }: { waarde: number | null }) {
   if (waarde == null) return <span style={klein}>—</span>
   const pct = Math.round(waarde * 100)
-  const kleur = waarde >= 0.8 ? 'var(--su-600, #16a34a)' : waarde >= 0.5 ? 'var(--wa-600, #d97706)' : 'var(--da-600, #dc2626)'
+  // Tailwind-klassen: de statusschaal kent geen stap 600, en de rode reeks heet
+  // `error`, niet `da`. Geen van beide verwijzingen bestond, dus alle drie de kleuren
+  // vielen terug op de lichte hex ernaast -- ook in donkere modus.
+  const kleur = waarde >= 0.8 ? 'bg-success-500' : waarde >= 0.5 ? 'bg-warning-500' : 'bg-error-500'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 42, height: 6, borderRadius: 3, background: 'var(--n-200, #e5e7eb)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: kleur }} />
+      <div className="h-1.5 w-[42px] overflow-hidden rounded-[3px] bg-neutral-200">
+        <div className={`h-full ${kleur}`} style={{ width: `${pct}%` }} />
       </div>
       <span style={{ ...klein, minWidth: 30 }}>{pct}%</span>
     </div>
@@ -295,11 +298,7 @@ export default function Postvak({
           doordat er niets meer binnenkomt -- of doordat er ineens een stapel mail
           op Te behandelen staat met een brok JSON erbij. */}
       {storing && (
-        <div style={{
-          padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10,
-          background: 'var(--da-50, #fef2f2)', border: '1px solid var(--da-200, #fecaca)',
-          color: 'var(--da-900, #7f1d1d)',
-        }}>
+        <div className="mb-2.5 rounded-lg border border-error-300 bg-error-50 px-3 py-2.5 text-[13px] text-error-700">
           <strong>De mailintake ligt stil.</strong> {storing.uitleg}
           {' '}
           {storing.aantal === 1
