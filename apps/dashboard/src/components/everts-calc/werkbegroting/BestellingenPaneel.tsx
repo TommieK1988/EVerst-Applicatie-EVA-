@@ -29,6 +29,7 @@ import {
 import type { Werkbegroting, WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 import OntvangerVeld, { useMailOntvangers } from '@/components/mail/OntvangerVeld'
 import { useDialogen } from '@/components/ui'
+import MailFotoBijlagen, { alsBijlagen, type MailFoto } from '@/components/mail/MailFotoBijlagen'
 import OpdrachtVenster, { type OpdrachtGegevens } from './OpdrachtVenster'
 
 interface Props {
@@ -102,6 +103,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
   /** Verzendvenster: welke bestelling wordt verstuurd + de (bewerkbare) mailvelden. */
   const [verstuurB, setVerstuurB] = useState<WerkbegrotingBestelling | null>(null)
   const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bericht: '' })
+  const [fotos, setFotos] = useState<MailFoto[]>([])
   const [mailLaden, setMailLaden] = useState(false)
   const [verstuurBezig, setVerstuurBezig] = useState(false)
   /** Sjabloon dat de opmaak van het te versturen document levert, plus de keuzelijst. */
@@ -484,6 +486,8 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     if (!dossierId) return
     setVerstuurB(b)
     setMail({ to: '', cc: '', onderwerp: '', bericht: '' })
+    fotos.forEach(f => URL.revokeObjectURL(f.url))
+    setFotos([])
     setVerstuurSjabloon(null)
     setVerstuurSjablonen([])
     await laadConcept(b, b.sjabloon_id ?? null)
@@ -494,7 +498,9 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
     if (!mail.to.trim()) { toast.error('Vul een e-mailadres van de leverancier in.'); return }
     setVerstuurBezig(true)
     try {
-      const res = await verstuurBestelling(dossierId, verstuurB.id, { ...mail, sjabloonId: verstuurSjabloon })
+      const res = await verstuurBestelling(dossierId, verstuurB.id, {
+        ...mail, sjabloonId: verstuurSjabloon, fotos: alsBijlagen(fotos),
+      })
       if (res.ok) {
         slaBestellingOp({ ...verstuurB, status: 'verzonden', verstuurd_op: new Date().toISOString(), bouw7_bonnummer: res.bonnummer })
         if (res.bonWaarschuwing) {
@@ -1068,6 +1074,7 @@ export default function BestellingenPaneel({ wb, dossierId, onSluit }: Props) {
                       leverdatum en bedrag. Je naam komt uit je Outlook-handtekening.
                     </span>
                   </label>
+                  <MailFotoBijlagen fotos={fotos} onChange={setFotos} disabled={verstuurBezig} />
                 </>
               )}
             </div>

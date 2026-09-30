@@ -39,6 +39,11 @@ export type InkoopContractDetail = {
   geboekteBonnen: string[]
   /** Bestaat er een EVA-bestelling bij (aangemaakt vanuit de werkbegroting)? */
   uitEva: boolean
+  /** De EVA-bestelling achter het contract; daarmee kan hij vanuit het venster worden verstuurd. */
+  bestellingId: string | null
+  /** Een reservering gaat nooit naar de partij: die is al vastgelegd en afgeroepen. */
+  isReservering: boolean
+  sjabloonId: string | null
   verstuurdOp: string | null
   verstuurdNaar: string | null
   /** Link naar het verstuurde document (SharePoint), als dat is gearchiveerd. */

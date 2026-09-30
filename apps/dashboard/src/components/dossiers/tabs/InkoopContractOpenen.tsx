@@ -3,13 +3,15 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ExternalLink, Undo2 } from 'lucide-react'
+import { ExternalLink, Send, Undo2 } from 'lucide-react'
 import {
-  Button, Spinner, useDialogen,
+  Button, Spinner, Input, Textarea, useDialogen,
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
 } from '@/components/ui'
 import { getInkoopContractDetail, trekInkoopContractIn } from '@/lib/dossiers/inkoop-contract-actions'
 import type { InkoopContractDetail, InkoopContractSoort } from '@/lib/dossiers/inkoop-contract-types'
+import { getBestellingMailConcept, verstuurBestelling } from '@/app/(platform)/everts-calc/actions/bestellingen'
+import MailFotoBijlagen, { alsBijlagen, type MailFoto } from '@/components/mail/MailFotoBijlagen'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import { fmt, fmtDatum } from './tab-ui'
 
@@ -67,6 +69,9 @@ function ContractVenster({ dossierId, soort, contractId, status, onSluit }: {
   const [detail, setDetail] = React.useState<InkoopContractDetail | null>(null)
   const [fout, setFout] = React.useState<string | null>(null)
   const [bezig, setBezig] = React.useState(false)
+  const [modus, setModus] = React.useState<'detail' | 'mail'>('detail')
+  const [mail, setMail] = React.useState({ to: '', cc: '', onderwerp: '', bericht: '' })
+  const [fotos, setFotos] = React.useState<MailFoto[]>([])
 
   React.useEffect(() => {
     let actief = true
@@ -109,6 +114,47 @@ function ContractVenster({ dossierId, soort, contractId, status, onSluit }: {
 
   const kanIntrekken = !!detail && !readOnly && detail.geboekteBonnen.length === 0
 
+  /**
+   * Versturen kan hier ook — op een servicedeskbon is er geen werkbegroting, dus zonder deze
+   * knop bleef een order die bij het aanmaken op "Later versturen" ging voorgoed op "To send".
+   * Alleen voor een EVA-bestelling (die heeft het document en de afroep) die nog niet verstuurd
+   * is; een reservering gaat nooit naar de partij.
+   */
+  const kanVersturen = !!detail && !readOnly && !!detail.bestellingId && !detail.verstuurdOp && !detail.isReservering
+
+  async function naarMail() {
+    if (!detail?.bestellingId) return
+    setBezig(true)
+    try {
+      const c = await getBestellingMailConcept(dossierId, detail.bestellingId, detail.sjabloonId)
+      setMail({ to: c.to, cc: '', onderwerp: c.onderwerp, bericht: c.bericht })
+    } catch {
+      setMail({ to: detail.partijEmail ?? '', cc: '', onderwerp: detail.nummer ?? '', bericht: '' })
+    } finally {
+      setBezig(false)
+    }
+    setModus('mail')
+  }
+
+  async function verstuur() {
+    if (!detail?.bestellingId || !mail.to.trim()) return
+    setBezig(true)
+    try {
+      const res = await verstuurBestelling(dossierId, detail.bestellingId, {
+        ...mail, sjabloonId: detail.sjabloonId, fotos: alsBijlagen(fotos),
+      })
+      if (!res.ok) { toast.error(res.error, { duration: 8000 }); return }
+      toast.success(res.bonWaarschuwing
+        ? `Verstuurd, maar de leverbon is niet aangemaakt: ${res.bonWaarschuwing}`
+        : 'Verstuurd')
+      fotos.forEach(f => URL.revokeObjectURL(f.url))
+      onSluit()
+      router.refresh()
+    } finally {
+      setBezig(false)
+    }
+  }
+
   return (
     <Dialog open onOpenChange={o => { if (!o && !bezig) onSluit() }}>
       <DialogContent size="xl">
@@ -131,7 +177,38 @@ function ContractVenster({ dossierId, soort, contractId, status, onSluit }: {
           )}
           {fout && <div className="rounded-lg bg-error-50 px-3 py-2 text-[13px] text-error-700">{fout}</div>}
 
-          {detail && (
+          {detail && modus === 'mail' && (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500">Aan</span>
+                  <Input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500">Cc</span>
+                  <Input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))} />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500">Onderwerp</span>
+                <Input value={mail.onderwerp} onChange={e => setMail(m => ({ ...m, onderwerp: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500">Bericht</span>
+                <Textarea
+                  rows={7} value={mail.bericht}
+                  onChange={e => setMail(m => ({ ...m, bericht: e.target.value }))}
+                  className="text-[13px]"
+                />
+              </label>
+              <MailFotoBijlagen fotos={fotos} onChange={setFotos} disabled={bezig} />
+              <div className="text-[11px] text-neutral-500">
+                De {isOa ? 'opdracht' : 'order'} gaat als PDF mee. Na versturen maakt EVA in Bouw7 de leverbon aan.
+              </div>
+            </div>
+          )}
+
+          {detail && modus === 'detail' && (
             <>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] md:grid-cols-3">
                 <Veld label="Omschrijving" waarde={detail.naam} />
@@ -218,8 +295,23 @@ function ContractVenster({ dossierId, soort, contractId, status, onSluit }: {
           )}
         </DialogBody>
 
+        {modus === 'mail' ? (
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setModus('detail')} disabled={bezig}>Terug</Button>
+          <Button variant="primary" onClick={verstuur} disabled={bezig || !mail.to.trim()}>
+            {bezig ? <Spinner size="sm" className="text-white" /> : <Send className="h-3.5 w-3.5" />}
+            Versturen
+          </Button>
+        </DialogFooter>
+        ) : (
         <DialogFooter split>
           <div className="flex items-center gap-2">
+            {kanVersturen && (
+              <Button variant="primary" onClick={naarMail} disabled={bezig}>
+                {bezig ? <Spinner size="sm" className="text-white" /> : <Send className="h-3.5 w-3.5" />}
+                Versturen
+              </Button>
+            )}
             {kanIntrekken && (
               <Button variant="outline" onClick={trekIn} disabled={bezig}>
                 {bezig ? <Spinner size="sm" /> : <Undo2 className="h-3.5 w-3.5" />}
@@ -237,6 +329,7 @@ function ContractVenster({ dossierId, soort, contractId, status, onSluit }: {
             <Button variant="outline" onClick={onSluit} disabled={bezig}>Sluiten</Button>
           </div>
         </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -1174,6 +1174,37 @@ type VerstuurInput = {
   to: string; cc?: string; onderwerp: string; bericht: string
   /** Sjabloon dat de opmaak levert; leeg = de eerder vastgelegde of de eerste bruikbare. */
   sjabloonId?: string | null
+  /** Foto's die als extra bijlage meegaan (op de client al verkleind), base64 zonder data:-prefix. */
+  fotos?: { naam: string; contentType: string; base64: string }[]
+}
+
+/**
+ * Grenzen voor foto's bij een ordermail. Outlook (Graph `sendMail`) neemt bijlagen in één verzoek
+ * van ongeveer 4 MB mee, en base64 maakt alles een derde groter — met de order-PDF erbij houdt
+ * 2,5 MB aan foto's ruimte over. Groter kan alleen via een upload-sessie, en die is er nog niet.
+ */
+const MAX_MAIL_FOTOS = 6
+const MAX_MAIL_FOTO_BYTES = 2.5 * 1024 * 1024
+
+function leesMailFotos(fotos: VerstuurInput['fotos']):
+  { ok: true; bijlagen: { naam: string; contentType: string; inhoud: Buffer }[] } | { ok: false; error: string } {
+  const lijst = fotos ?? []
+  if (lijst.length > MAX_MAIL_FOTOS) return { ok: false, error: `Maximaal ${MAX_MAIL_FOTOS} foto's per mail.` }
+  let totaal = 0
+  const bijlagen: { naam: string; contentType: string; inhoud: Buffer }[] = []
+  for (const [i, f] of lijst.entries()) {
+    if (!/^image\/(jpeg|png|webp|heic|heif|gif)$/.test(f.contentType)) {
+      return { ok: false, error: `${f.naam || `Foto ${i + 1}`} is geen foto.` }
+    }
+    const inhoud = Buffer.from(f.base64, 'base64')
+    totaal += inhoud.length
+    const naam = (f.naam || `foto-${i + 1}.jpg`).replace(/[\\/:*?"<>|]/g, '_').slice(0, 120)
+    bijlagen.push({ naam, contentType: f.contentType, inhoud })
+  }
+  if (totaal > MAX_MAIL_FOTO_BYTES) {
+    return { ok: false, error: `De foto's zijn samen te groot (${(totaal / 1024 / 1024).toFixed(1)} MB, maximaal 2,5 MB). Haal er een paar weg.` }
+  }
+  return { ok: true, bijlagen }
 }
 
 /**
@@ -1222,6 +1253,9 @@ export async function verstuurBestelling(
 
   const ontvangers = input.to.split(/[;,]/).map(s => s.trim()).filter(Boolean)
   if (ontvangers.length === 0) return { ok: false, error: 'Vul een e-mailadres van de leverancier in.' }
+  // Vóór het genereren en mailen: een te grote foto moet niets in gang zetten.
+  const fotoRes = leesMailFotos(input.fotos)
+  if (!fotoRes.ok) return { ok: false, error: fotoRes.error }
 
   // Wat er op het document komt, komt uit dezelfde bron als het voorbeeld in het
   // verzendvenster: `laadBestellingBlokken` over de bestelregels in Supabase. Zou dit
@@ -1291,7 +1325,7 @@ export async function verstuurBestelling(
       cc: (input.cc ?? '').split(/[;,]/).map(s => s.trim()).filter(Boolean),
       subject: input.onderwerp || bestandsnaam.replace(/\.pdf$/, ''),
       bodyHtml,
-      attachments: [{ naam: bestandsnaam, contentType: 'application/pdf', inhoud: pdf }],
+      attachments: [{ naam: bestandsnaam, contentType: 'application/pdf', inhoud: pdf }, ...fotoRes.bijlagen],
     })
   } catch (e) {
     return { ok: false, error: `Mail versturen mislukt: ${e instanceof Error ? e.message : 'onbekende fout'}` }

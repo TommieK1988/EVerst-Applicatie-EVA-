@@ -49,6 +49,7 @@ import {
   maakBestellingInBouw7, getBestellingMailConcept, verstuurBestelling,
 } from '@/app/(platform)/everts-calc/actions/bestellingen'
 import { getInkoopSjablonen, type SjabloonKeuze } from '@/app/(platform)/everts-calc/actions/bestelling-document'
+import MailFotoBijlagen, { alsBijlagen, type MailFoto } from '@/components/mail/MailFotoBijlagen'
 
 type Soort = 'oa_contract' | 'inkooporder'
 type Regel = { id: string; omschrijving: string; aantal: string; eenheid: string; prijs: string; mandaat: boolean }
@@ -108,6 +109,7 @@ export default function BestelVenster({
 
   const [bestelling, setBestelling] = useState<WerkbegrotingBestelling | null>(null)
   const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bericht: '' })
+  const [fotos, setFotos] = useState<MailFoto[]>([])
 
   const wbRef = useRef<{ wb: Werkbegroting; volgendeVolgorde: number } | null>(null)
   const concepten = useRef<Partial<Record<Groep['sleutel'], Concept>>>({})
@@ -366,11 +368,15 @@ export default function BestelVenster({
     if (!mail.to.trim()) { toast.error('Vul het e-mailadres van de partij in.'); return }
     setBezig(true)
     try {
-      const res = await verstuurBestelling(dossierId, bestelling.id, { ...mail, sjabloonId: bestelling.sjabloon_id ?? null })
+      const res = await verstuurBestelling(dossierId, bestelling.id, {
+        ...mail, sjabloonId: bestelling.sjabloon_id ?? null, fotos: alsBijlagen(fotos),
+      })
       if (!res.ok) { toast.error(res.error, { duration: 8000 }); return }
       toast.success(res.bonWaarschuwing
         ? `Verstuurd, maar de leverbon niet aangemaakt: ${res.bonWaarschuwing}`
         : 'Verstuurd')
+      fotos.forEach(f => URL.revokeObjectURL(f.url))
+      setFotos([])
       onKlaar()
       volgende()
     } finally {
@@ -567,6 +573,9 @@ export default function BestelVenster({
                 rows={6} className={veld}
               />
             </label>
+            <div className="mb-4">
+              <MailFotoBijlagen fotos={fotos} onChange={setFotos} disabled={bezig} />
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={volgende} disabled={bezig}>
                 {huidig + 1 < groepen.length ? 'Later versturen, door naar de volgende' : 'Later versturen'}

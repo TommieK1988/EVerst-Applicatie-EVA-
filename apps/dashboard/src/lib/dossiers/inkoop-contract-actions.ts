@@ -101,7 +101,7 @@ export async function getInkoopContractDetail(
 
     const { data: best } = await db
       .from('werkbegroting_bestellingen')
-      .select('id, verstuurd_op, verstuurd_naar')
+      .select('id, verstuurd_op, verstuurd_naar, is_reservering, sjabloon_id')
       .eq('bouw7_contract_id', contractId)
       .maybeSingle()
     let documentUrl: string | null = null
@@ -136,6 +136,9 @@ export async function getInkoopContractDetail(
         termijnen,
         geboekteBonnen,
         uitEva: !!best,
+        bestellingId: best?.id ?? null,
+        isReservering: !!best?.is_reservering,
+        sjabloonId: best?.sjabloon_id ?? null,
         verstuurdOp: best?.verstuurd_op ?? null,
         verstuurdNaar: best?.verstuurd_naar ?? null,
         documentUrl,
