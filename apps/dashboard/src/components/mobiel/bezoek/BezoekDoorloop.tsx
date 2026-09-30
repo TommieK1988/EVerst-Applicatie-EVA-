@@ -27,7 +27,9 @@ import {
   veld, label, primaireKnop, kaart,
 } from '@/components/mobiel/kwaliteit/stijl'
 import DisciplineKiezer from './DisciplineKiezer'
-import { SectieKop, TekstVeld, FotoStrip } from './velden'
+import {
+  SectieKop, TekstVeld, FotoStrip, FotoKiesKnoppen, FotoTegel, TegelRij, uploadFotoReeks,
+} from './velden'
 
 export default function BezoekDoorloop({
   context, herlaad,
@@ -232,6 +234,8 @@ function DisciplineBlok({
   const [open, setOpen] = useState(true)
   const [tekst, setTekst] = useState('')
   const [alsAandachtspunt, setAlsAandachtspunt] = useState(false)
+  // Foto's gekozen vóórdat het punt bestaat; ze gaan mee zodra "Punt toevoegen" slaagt.
+  const [wachtend, setWachtend] = useState<{ file: File; url: string }[]>([])
   const [bezig, setBezig] = useState(false)
 
   return (
@@ -280,6 +284,28 @@ function DisciplineBlok({
                   onChange={e => setTekst(e.target.value)}
                 />
               </div>
+              <div style={{ marginBottom: 10 }}>
+                {wachtend.length > 0 && (
+                  <TegelRij>
+                    {wachtend.map(w => (
+                      <FotoTegel
+                        key={w.url} url={w.url}
+                        onVerwijder={bezig ? undefined : () => {
+                          URL.revokeObjectURL(w.url)
+                          setWachtend(ws => ws.filter(x => x !== w))
+                        }}
+                      />
+                    ))}
+                  </TegelRij>
+                )}
+                <FotoKiesKnoppen
+                  bezig={bezig}
+                  bezigTekst={wachtend.length > 0 ? "Punt en foto's opslaan…" : 'Opslaan…'}
+                  onKies={files => setWachtend(ws => [
+                    ...ws, ...files.map(file => ({ file, url: URL.createObjectURL(file) })),
+                  ])}
+                />
+              </div>
               <AandachtspuntVinkje
                 aan={alsAandachtspunt}
                 lezen={false}
@@ -295,9 +321,26 @@ function DisciplineBlok({
                     tekst,
                     is_aandachtspunt: alsAandachtspunt,
                   })
+                  if (!r.ok) { setBezig(false); toast.error(r.error); return }
+                  // Foto's pas ná het punt: ze hangen aan zijn id. Een mislukte foto laat het
+                  // punt staan; die kan de gebruiker op de puntkaart opnieuw toevoegen.
+                  if (wachtend.length > 0) {
+                    const { mislukt, fout } = await uploadFotoReeks(
+                      wachtend.map(w => w.file),
+                      file => {
+                        const fd = new FormData()
+                        fd.set('foto', file)
+                        fd.set('punt_id', r.id)
+                        return uploadBezoekFoto(bezoekId, fd)
+                      },
+                    )
+                    if (mislukt > 0) {
+                      toast.error(`Punt opgeslagen, maar ${mislukt} foto('s) niet${fout ? `: ${fout}` : ''}`)
+                    }
+                    wachtend.forEach(w => URL.revokeObjectURL(w.url))
+                  }
                   setBezig(false)
-                  if (!r.ok) { toast.error(r.error); return }
-                  setTekst(''); setAlsAandachtspunt(false)
+                  setTekst(''); setAlsAandachtspunt(false); setWachtend([])
                   naWijziging()
                 }}
                 style={{
@@ -364,7 +407,6 @@ function PuntKaart({
 
       <FotoStrip
         titel=""
-        knop="Foto toevoegen"
         fotos={punt.fotos}
         lezen={lezen}
         uploaden={async file => {

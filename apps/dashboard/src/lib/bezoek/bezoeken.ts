@@ -548,7 +548,9 @@ export async function uploadBezoekFoto(
 
   const supabase = db()
   const ext = file.name.split('.').pop() ?? 'jpg'
-  const path = `${bezoekId}/${Date.now()}.${ext}`
+  // Willekeurig achtervoegsel: meerdere galerijfoto's kort na elkaar mogen niet op dezelfde
+  // milliseconde botsen (upsert staat uit, dus de tweede zou falen).
+  const path = `${bezoekId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
   const buffer = Buffer.from(await file.arrayBuffer())
 
   const { error: uploadErr } = await supabase.storage
