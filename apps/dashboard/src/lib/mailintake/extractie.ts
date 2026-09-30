@@ -421,6 +421,17 @@ export async function keurEnKalibreer(
   let stad = data.werkadres_stad
   let adresBevestigd = false
 
+  // Neemt een PDOK-treffer over, maar alleen als het huisnummer klopt. PDOK levert
+  // het basisnummer, de mail heeft soms een toevoeging -- dat nummer uit de mail
+  // winnen we nooit weg.
+  const neemOver = (t: { straat: string; huisnummer: string; postcode: string; stad: string }) => {
+    if (eersteHuisnummer(t.huisnummer) !== eersteHuisnummer(huisnummer ?? '')) return
+    straat = t.straat || straat
+    postcode = t.postcode || postcode
+    stad = t.stad || stad
+    adresBevestigd = true
+  }
+
   if ((postcode && huisnummer) || (straat && huisnummer && stad)) {
     try {
       const treffers = await zoekAdres({
@@ -430,17 +441,25 @@ export async function keurEnKalibreer(
         stad: stad ?? undefined,
         rows: 1,
       })
-      const t = treffers[0]
-      if (t) {
-        // Het huisnummer uit de mail winnen we niet weg: PDOK levert het
-        // basisnummer, de mail heeft soms een toevoeging ("12 A", "12-16").
-        const zelfdeNummer = eersteHuisnummer(t.huisnummer) === eersteHuisnummer(huisnummer ?? '')
-        if (zelfdeNummer) {
-          straat = t.straat || straat
-          postcode = t.postcode || postcode
-          stad = t.stad || stad
-          adresBevestigd = true
-        }
+      if (treffers[0]) neemOver(treffers[0])
+
+      // TERUGVAL BIJ EEN FOUTE POSTCODE
+      // `zoekAdres` klemt op de postcode zodra postcode én huisnummer er zijn, en
+      // dat is goed: het voorkomt dat een niet-bestaand huisnummer fuzzy naar de
+      // buren matcht. Maar één verkeerde letter levert dan nul treffers, ook als
+      // straat, nummer en plaats volstrekt eenduidig zijn. Dat is geen theorie:
+      // Kessler stuurt "Meerkoetlaan 73, 2623 NE Delft" terwijl het 2623 NG is,
+      // en die kamermutatiebon bleef daar precies op liggen.
+      //
+      // Dus opnieuw zoeken zonder postcode. De uitkomst telt alleen als straat én
+      // plaats overeenkomen met wat er in de mail stond -- anders koop je een
+      // ander adres in plaats van een verbeterde postcode.
+      if (!adresBevestigd && straat && huisnummer && stad) {
+        const zonderPostcode = await zoekAdres({ straat, huisnummer, stad, rows: 1 })
+        const t = zonderPostcode[0]
+        const zelfde = (a: string, b: string) =>
+          a.toLowerCase().replace(/\s+/g, '') === b.toLowerCase().replace(/\s+/g, '')
+        if (t && zelfde(t.straat, straat) && zelfde(t.stad, stad)) neemOver(t)
       }
     } catch {
       // PDOK onbereikbaar: dan is het adres niet bevestigd en gaat het bericht
@@ -448,7 +467,21 @@ export async function keurEnKalibreer(
     }
   }
 
-  const adresScore = adresBevestigd ? 1 : Math.min(modelScore('werkadres_straat'), 0.6)
+  // PDOK bevestigt of het adres bestáát, niet of wij het goed hebben overgenomen.
+  // Staan straat en plaats letterlijk in de mail, dan is het overtikken betrouwbaar
+  // ook zonder die bevestiging -- de normale toestand bij een bon die "Steenlaan te
+  // Rijswijk" zegt zonder postcode. `beslis` laat zo'n adres al bewust door; zonder
+  // deze regel nam de veldcontrole daar even verderop hetzelfde bericht weer terug.
+  //
+  // Straat en huisnummer samen, niet apart: `komtVoorInBron` eist acht tekens en
+  // slikt daarmee elke plaatsnaam ("Delft", "Gouda"). "Meerkoetlaan 73" haalt die
+  // grens ruim, en is bovendien het fragment dat ertoe doet.
+  const adresInTekst = komtVoorInBron(`${straat ?? ''} ${huisnummer ?? ''}`.trim(), brontekst)
+  const adresScore = adresBevestigd
+    ? 1
+    : adresInTekst
+      ? Math.max(modelScore('werkadres_straat'), 0.85)
+      : Math.min(modelScore('werkadres_straat'), 0.6)
   zet('werkadres_straat', straat, adresScore)
   zet('werkadres_huisnummer', huisnummer, adresScore)
   zet('werkadres_postcode', postcode, adresScore)

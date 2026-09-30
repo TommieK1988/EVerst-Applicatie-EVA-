@@ -169,6 +169,32 @@ export const SOORT_ZEKER = 0.80
 /** Onder deze score vullen we de soort niet eens voor. */
 export const SOORT_ONZEKER = 0.60
 
+/**
+ * Hoe zeker het model over de soort moet zijn, per soort.
+ *
+ * Eén drempel voor alles behandelt twee heel verschillende fouten als één. Een
+ * servicedeskbon die eigenlijk iets anders was, is een bon te veel op de
+ * servicedesk: weggooien en klaar. Een opdracht op een offerte die verkeerd wordt
+ * ingeschat, schuift een dossier naar Opdracht, neemt de werkbegroting over en
+ * duwt een aanneemsom naar Bouw7 -- daar is geen weg terug.
+ *
+ * Servicedeskbonnen scoren bovendien structureel lager. Ze zijn het minst formele
+ * bericht dat binnenkomt ("graag inplannen, kamer 73"), waar een offerteaanvraag
+ * of opdrachtbon zichzelf aankondigt. Over de post die tot nu toe binnenkwam
+ * haalden ze gemiddeld 0,77 tegen 0,85 voor de rest, met vier van de tien precies
+ * in de band 0,70--0,80. Die vier bleven liggen op de vorm van het bericht, niet
+ * op twijfel over de inhoud -- de kamermutatiebon van Kessler is er één van.
+ */
+const SOORT_DREMPELS: Partial<Record<MailSoort, number>> = {
+  servicedeskbon: 0.70,
+  offerteaanvraag: 0.70,
+}
+
+/** De drempel die voor deze soort geldt; `SOORT_ZEKER` als er geen eigen staat. */
+export function soortDrempel(soort: MailSoort): number {
+  return SOORT_DREMPELS[soort] ?? SOORT_ZEKER
+}
+
 /** Harde duplicaat-hit: nooit automatisch, altijd waarschuwen. */
 export const DUPLICAAT_HARD = 0.80
 /**

@@ -98,6 +98,20 @@ async function main() {
     //    is dat alleen verschillende stráten of plaatsen tellen; alle gevallen in
     //    deze set zijn één straat.
     const echtMeerdereAdressen = false
+
+    // 3. De adresscore werd op 0,6 geklemd zodra PDOK het adres niet bevestigde --
+    //    bij een ontbrekende postcode, maar ook bij één verkeerde letter erin.
+    //    Nieuw: staat straat + huisnummer letterlijk in de mail, dan is de overname
+    //    betrouwbaar, en valt PDOK bovendien terug op straat + plaats. Hier
+    //    benaderd met "straat en plaats zijn ingevuld"; de letterlijke controle en
+    //    de tweede PDOK-vraag kunnen in een terugblik niet worden overgedaan.
+    if (v.werkadresStraat && v.werkadresStad) {
+      const adresScore = v.adresBevestigd ? 1 : 0.85
+      for (const veld of ['werkadres_straat', 'werkadres_huisnummer',
+                          'werkadres_postcode', 'werkadres_stad']) {
+        vertrouwen[veld] = Math.max(vertrouwen[veld] ?? 0, adresScore)
+      }
+    }
     const route = bepaalRoute(soort, false, Boolean(v.regie))
 
     const besluit = beslis({

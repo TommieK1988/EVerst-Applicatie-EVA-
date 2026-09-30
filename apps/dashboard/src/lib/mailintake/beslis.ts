@@ -30,7 +30,7 @@
  */
 
 import {
-  AFZENDER_AUTOMATISCH, SOORT_ZEKER, SOORT_ONZEKER, DUPLICAAT_TWIJFEL,
+  AFZENDER_AUTOMATISCH, soortDrempel, SOORT_ONZEKER, DUPLICAAT_TWIJFEL,
   VELD_BETROUWBAAR, AUTOMATISCH_TOEGESTANE_SOORTEN, WERK_SOORTEN, bepaalRoute,
   type BerichtStatus, type MailSoort, type IntakeRoute,
 } from './types'
@@ -133,7 +133,7 @@ export function beslis(inv: BeslisInvoer): Besluit {
   // boven zijn formulier krijgt; samen vormen ze de reden dat hij ernaar kijkt.
   const bezwaren: string[] = []
 
-  if (inv.soortVertrouwen < SOORT_ZEKER) {
+  if (inv.soortVertrouwen < soortDrempel(inv.soort)) {
     bezwaren.push(inv.soortVertrouwen < SOORT_ONZEKER
       ? `EVA is onzeker over wat voor bericht dit is (${Math.round(inv.soortVertrouwen * 100)}%).`
       : `EVA denkt aan "${inv.soort}", maar niet zeker genoeg om zelf te handelen.`)
