@@ -21,6 +21,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import type {
   Opname,
   OpnameFoto,
@@ -608,8 +609,35 @@ export async function rondOpnameAf(
   // Een afgeronde opname verschuift de bon op het servicedeskbord niet meer: de kolom Opgenomen is
   // in oktober 2026 vervallen. De bon blijft op Nieuw tot er gewacht of voorbereid wordt.
 
+  // Het prijsloze opnamedocument: na het antwoord, zodat de opnemer op locatie niet wacht op de
+  // foto's en SharePoint. Mislukt het, dan staat dat op de opname en kan kantoor het opnieuw maken.
+  after(async () => {
+    const { maakEnArchiveerOpnameDocument } = await import('./opname-document')
+    await maakEnArchiveerOpnameDocument(opnameId, medewerker.id)
+  })
+
   revalidate(toegang.opname.dossier_id, opnameId)
   return { ok: true }
+}
+
+/**
+ * Maakt het opnamedocument (opnieuw), bijvoorbeeld omdat het bij afronden niet lukte of omdat de
+ * calculator iets heeft rechtgezet. Overschrijft hetzelfde bestand in de dossiermap.
+ */
+export async function maakOpnameDocumentOpnieuw(
+  opnameId: string,
+): Promise<{ ok: true; webUrl: string | null; inApp: boolean } | { ok: false; error: string }> {
+  const medewerker = await vereisSessie()
+  const toegang = await magOpnameOpenen(opnameId)
+  if (!toegang.ok) return { ok: false, error: 'Geen toegang tot deze opname' }
+  if (toegang.opname.status !== 'gereed' && toegang.opname.status !== 'omgezet') {
+    return { ok: false, error: 'Rond de opname eerst af' }
+  }
+
+  const { maakEnArchiveerOpnameDocument } = await import('./opname-document')
+  const res = await maakEnArchiveerOpnameDocument(opnameId, medewerker.id)
+  revalidate(toegang.opname.dossier_id, opnameId)
+  return res
 }
 
 

@@ -7,12 +7,13 @@
  * kostprijs en de marge — en de knop die de opname omzet naar een calculatie.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import {
   getOpnamesVoorDossier,
   getOpnameMetRegels,
   heropenOpname,
+  maakOpnameDocumentOpnieuw,
   startOpname,
   verwijderOpname,
   verwijderRegel,
@@ -54,6 +55,71 @@ function datumKort(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+/**
+ * Het prijsloze opnamedocument: ontstaat vanzelf bij afronden (na het antwoord aan de telefoon),
+ * staat in de SharePoint-dossiermap en is vrijgegeven in de app. Hier zie je of dat lukte.
+ */
+function OpnameDocumentRegel({
+  opname,
+  bezig,
+  onMaken,
+}: {
+  opname: Opname
+  bezig: boolean
+  onMaken: (() => void) | null
+}) {
+  // Net afgerond en nog niets terug: het document wordt op de achtergrond gemaakt.
+  const netAfgerond =
+    !!opname.gereed_op && Date.now() - new Date(opname.gereed_op).getTime() < 2 * 60 * 1000
+  const wordtGemaakt = !opname.document_gemaakt_op && !opname.document_fout && netAfgerond
+
+  let status: ReactNode
+  if (bezig || wordtGemaakt) {
+    status = <span className="text-neutral-500">Wordt gemaakt…</span>
+  } else if (opname.document_fout) {
+    status = <span className="text-amber-700">Niet gelukt: {opname.document_fout}</span>
+  } else if (opname.document_gemaakt_op) {
+    status = (
+      <span className="text-neutral-600">
+        In de dossiermap en de app sinds {datumKort(opname.document_gemaakt_op)}
+        {opname.document_web_url && (
+          <>
+            {' · '}
+            <a
+              href={opname.document_web_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[var(--brand-700,#007530)] hover:underline"
+            >
+              Openen
+            </a>
+          </>
+        )}
+      </span>
+    )
+  } else {
+    status = <span className="text-neutral-500">Nog niet gemaakt</span>
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px]">
+      <span className="font-semibold text-neutral-800">Opnamedocument</span>
+      <span className="text-[12px] text-neutral-500">zonder prijzen</span>
+      <span className="min-w-0 flex-1">{status}</span>
+      {onMaken && (
+        <button
+          type="button"
+          onClick={onMaken}
+          disabled={bezig}
+          className="rounded-md border border-neutral-300 bg-white px-3 py-1 text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+        >
+          {opname.document_gemaakt_op ? 'Opnieuw maken' : 'Nu maken'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 type Props = {
   dossierId: string
   /** Aan het dossier gekoppelde calculatie (dossiers.everts_calc_project_id), of null. */
@@ -76,6 +142,7 @@ export default function OpnameTab({
   const [open, setOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<OpnameMetRegels | null>(null)
   const [bezig, setBezig] = useState(false)
+  const [documentBezig, setDocumentBezig] = useState<string | null>(null)
 
   const laden = useCallback(async () => {
     try {
@@ -149,6 +216,16 @@ export default function OpnameTab({
     }
     await laden()
     await laadDetail(opnameId)
+  }
+
+  async function documentMaken(opnameId: string) {
+    setDocumentBezig(opnameId)
+    const res = await maakOpnameDocumentOpnieuw(opnameId)
+    setDocumentBezig(null)
+    if (!res.ok) toast.error(res.error)
+    else if (!res.inApp) toast.error('Document staat in SharePoint, maar kon niet in de app worden gezet')
+    else toast.success('Opnamedocument bijgewerkt — staat in de dossiermap en in de app')
+    await laden()
   }
 
   async function opnameWeg(opname: Opname) {
@@ -377,6 +454,14 @@ export default function OpnameTab({
                           </span>
                         </div>
                       </>
+                    )}
+
+                    {(opname.status === 'gereed' || opname.status === 'omgezet') && (
+                      <OpnameDocumentRegel
+                        opname={opname}
+                        bezig={documentBezig === opname.id}
+                        onMaken={readOnly ? null : () => documentMaken(opname.id)}
+                      />
                     )}
 
                     <div className="flex flex-wrap items-center gap-2">

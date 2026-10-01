@@ -33,6 +33,20 @@ export const documentsoortLabels: Record<Documentsoort, string> = {
 }
 
 /**
+ * Documenten met vaste opmaak in code: ze staan wél in `dossier_documenten`, maar hebben geen
+ * sjabloon en horen dus niet in de keuzelijst van het sjabloonbeheer (`DOCUMENTSOORTEN`).
+ */
+export const OPNAME_DOCUMENTSOORT = 'opname'
+const vasteDocumentsoortLabels: Record<string, string> = {
+  [OPNAME_DOCUMENTSOORT]: 'Opnamedocument',
+}
+
+/** Label voor elke documentsoort, ook die zonder sjabloon. */
+export function documentsoortLabel(soort: string): string {
+  return documentsoortLabels[soort as Documentsoort] ?? vasteDocumentsoortLabels[soort] ?? soort
+}
+
+/**
  * De twee inkoopsoorten. Ze verschillen van de brieven: de geadresseerde is de
  * leverancier (niet de bewoner/opdrachtgever) en de inhoud komt uit een bestelling.
  * De sleutels zijn gelijk aan `ContractSoort` in `lib/bouw7/contracten`, zodat de

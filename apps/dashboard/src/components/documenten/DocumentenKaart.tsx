@@ -13,7 +13,7 @@ import toast from 'react-hot-toast'
 import { Card, CardHeader, CardBody, useDialogen } from '@/components/ui'
 import { FilePlus2 } from 'lucide-react'
 import { getSjablonenVoorDossier, getDossierDocumenten, verwijderDossierDocument } from '@/app/(platform)/documenten/actions'
-import { documentsoortLabels, heeftTemplate, type DocumentSjabloon, type DossierDocument } from '@/lib/documenten/types'
+import { documentsoortLabel, heeftTemplate, type DocumentSjabloon, type DossierDocument } from '@/lib/documenten/types'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
 import DocumentGenereerModal from './DocumentGenereerModal'
 import SjabloonKiezerModal from './SjabloonKiezerModal'
@@ -100,7 +100,7 @@ export default function DocumentenKaart({ dossierId }: { dossierId: string }) {
                   {documenten.map(d => (
                     <tr key={d.id} className="border-b border-neutral-100 text-[12.5px]">
                       <td className="py-1.5 pl-4 pr-2 text-neutral-800">{d.bestandsnaam}</td>
-                      <td className="py-1.5 px-2 text-neutral-500">{documentsoortLabels[d.documentsoort as never] ?? d.documentsoort}</td>
+                      <td className="py-1.5 px-2 text-neutral-500">{documentsoortLabel(d.documentsoort)}</td>
                       <td className="py-1.5 px-2 text-neutral-500">{datum(d.gegenereerd_op)}</td>
                       <td className="py-1.5 px-2 text-neutral-500">{d.gegenereerd_door_naam ?? '—'}</td>
                       <td className="py-1.5 px-2 text-neutral-500">

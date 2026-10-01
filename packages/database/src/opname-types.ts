@@ -168,6 +168,12 @@ export type Opname = {
   omgezet_op: string | null
   omgezet_door: string | null
   opmerking: string | null
+  /** Het prijsloze opnamedocument in de SharePoint-dossiermap; gemaakt bij afronden. */
+  document_sharepoint_item_id: string | null
+  document_web_url: string | null
+  document_gemaakt_op: string | null
+  /** Laatste fout bij maken/archiveren; null = gelukt of nog niet geprobeerd. */
+  document_fout: string | null
   created_at: string
   updated_at: string
   created_by: string | null

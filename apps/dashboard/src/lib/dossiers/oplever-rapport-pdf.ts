@@ -3,7 +3,7 @@ import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/databas
 import { getOplevermomentRapport, type OpleverPuntView } from './oplevering'
 import { splitsFotos, bewijsOntbreekt } from './oplever-fotos'
 import { veilig, wikkel, type PdfFont as Font } from '@/lib/pdf/tekst'
-import { haalOp } from '@/lib/net/deadline'
+import { haalAfbeelding } from '@/lib/pdf/afbeelding'
 
 /**
  * Opleverrapportage als PDF, opgebouwd met pdf-lib (zelfde aanpak als de briefpapier-merge).
@@ -21,45 +21,9 @@ const KOLOM = A4.breedte - MARGE * 2
  * Drie thumbnails van 68pt passen naast elkaar in een halve tekstkolom.
  */
 const MAX_FOTOS_PER_KOLOM = 3
-/** Ruimhartig: de bron mag groot zijn, we verkleinen hem hierna zelf. */
-const MAX_FOTO_BYTES = 25 * 1024 * 1024
-/**
- * Foto's worden vóór het insluiten teruggeschaald. pdf-lib sluit afbeeldingsbytes ongewijzigd in,
- * dus zonder deze stap levert één telefoonfoto al megabytes op en overschrijdt de mailbijlage de
- * limiet van Graph sendMail (~4 MB per bericht).
- */
+/** Foto's worden vóór het insluiten teruggeschaald; zie `lib/pdf/afbeelding.ts`. */
 const FOTO_MAX_PX = 900
 const HANDTEKENING_MAX_PX = 600
-const JPEG_KWALITEIT = 72
-
-/**
- * Haalt een afbeelding op en maakt er een compacte JPEG van op maat.
- *
- * Alles gaat door sharp: dat verkleint (scheelt megabytes per foto), respecteert de EXIF-oriëntatie
- * (telefoonfoto's staan anders op hun kant), en accepteert ook webp/tiff die pdf-lib zelf niet kan
- * insluiten. `flatten` zet transparantie op wit — zonder dat wordt de achtergrond van een
- * handtekening-PNG zwart in JPEG.
- */
-async function haalAfbeelding(url: string, maxPx: number): Promise<{ bytes: Uint8Array } | null> {
-  try {
-    const res = await haalOp(url, { dienst: 'Fotobestand', timeoutMs: 20_000 })
-    if (!res.ok) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength === 0 || buf.byteLength > MAX_FOTO_BYTES) return null
-
-    const sharp = (await import('sharp')).default
-    const jpeg = await sharp(buf)
-      .rotate()
-      .resize({ width: maxPx, height: maxPx, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: JPEG_KWALITEIT, mozjpeg: true })
-      .toBuffer()
-    return { bytes: new Uint8Array(jpeg) }
-  } catch {
-    // Onleesbaar of niet-ondersteund formaat (bv. HEIC zonder libheif) → punt zonder foto tonen.
-    return null
-  }
-}
 
 const STATUS_RGB: Record<OpleverPuntStatus, [number, number, number]> = {
   nieuw:          [0.48, 0.35, 0.09],

@@ -17,7 +17,12 @@ export interface ArchiveerArgs {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
   dossierId: string
-  sjabloon: DocumentSjabloon
+  /**
+   * Het sjabloon waaruit het document komt. Null bij een document met vaste opmaak in code (zoals
+   * het opnamedocument); dan bepaalt `documentsoort` hoe het in de lijst staat.
+   */
+  sjabloon: Pick<DocumentSjabloon, 'id' | 'documentsoort'> | null
+  documentsoort?: string
   invoer: Record<string, unknown>
   bestandsnaam: string
   bytes: Uint8Array
@@ -76,8 +81,8 @@ export async function archiveerEnRegistreer(args: ArchiveerArgs): Promise<Archiv
       .from('dossier_documenten')
       .insert({
         dossier_id: dossierId,
-        sjabloon_id: sjabloon.id,
-        documentsoort: sjabloon.documentsoort,
+        sjabloon_id: sjabloon?.id ?? null,
+        documentsoort: sjabloon?.documentsoort ?? args.documentsoort ?? 'overig',
         bestandsnaam,
         invoer,
         sharepoint_drive_id: driveId,

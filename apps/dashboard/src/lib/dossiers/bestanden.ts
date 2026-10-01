@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { dossierBouw7Id, leesDossierBron } from '@/lib/bouw7/snapshot'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { zetAppZichtbaar } from './app-zichtbaar'
 import type { Bouw7ProjectFile } from '@/lib/bouw7/client'
 
 export type DossierBestand = {
@@ -95,20 +96,14 @@ export async function setBestandAppZichtbaar(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { error } = await supabase
-    .from('dossier_bestand_app_zichtbaar')
-    .upsert({
-      dossier_id: dossierId,
-      sleutel: bestand.sleutel,
-      // Verouderd, maar blijft gevuld zolang de kolom bestaat: de vorige build leest
-      // hem nog. Zie migratie 20260921a.
-      bouw7_bestand_id: bestand.bouw7Id,
-      zichtbaar,
-      gewijzigd_op: new Date().toISOString(),
-      gewijzigd_door: medewerker?.id ?? null,
-    }, { onConflict: 'dossier_id,sleutel' })
-
-  if (error) return { ok: false, error: error.message }
+  const res = await zetAppZichtbaar(supabase, {
+    dossierId,
+    sleutel: bestand.sleutel,
+    bouw7Id: bestand.bouw7Id,
+    zichtbaar,
+    medewerkerId: medewerker?.id ?? null,
+  })
+  if (!res.ok) return res
 
   revalidatePath(`/opdrachten/${dossierId}/bestanden`)
   return { ok: true }
