@@ -105,40 +105,49 @@ export async function bouwBezoekUitProjectbezoek(
   }
 
   // ── Foto's ─────────────────────────────────────────────────────────────
-  // Eerste foto per punt; de rest valt buiten het rapport. Het fotobudget is één vlakke
-  // array met drie blokken achter elkaar — let op de offsets hieronder.
-  const eersteFotoPerPunt = new Map<string, string>()
+  // Alle foto's per punt, in de volgorde waarin ze zijn gemaakt (sinds 30 sep 2026 kan een
+  // punt er meer hebben). Een aandachtspunt is óók een punt, dus dezelfde foto komt in
+  // "Bevindingen" én "Per onderdeel": elke URL wordt maar één keer opgehaald.
+  const fotosPerPunt = new Map<string, string[]>()
   for (const f of bezoekFotos) {
     const pid = f.punt_id ? String(f.punt_id) : ''
-    if (pid && !eersteFotoPerPunt.has(pid)) eersteFotoPerPunt.set(pid, String(f.url))
+    const url = veiligeFotoUrl(String(f.url ?? ''))
+    if (!pid || !url) continue
+    fotosPerPunt.set(pid, [...(fotosPerPunt.get(pid) ?? []), url])
   }
+  const urlsVan = (p: Record<string, unknown>) => fotosPerPunt.get(String(p.id)) ?? []
   const losseFotos = bezoekFotos.filter(f => !f.punt_id)
 
   const gekozenAandacht = opties.preview
     ? aandachtspunten.slice(0, keuze.per_pagina * 2)
     : aandachtspunten
 
+  // De volgorde is de voorrang onder het fotobudget: eerst de foto van elke bevinding, dan
+  // de rest van de punten, dan de overzichtsfoto's. 'laat_vallen' schrapt van achteren.
   const teHalen = keuze.toon_fotos
-    ? [
-        ...gekozenAandacht.map(p => veiligeFotoUrl(eersteFotoPerPunt.get(String(p.id)))),
-        ...punten.map(p => veiligeFotoUrl(eersteFotoPerPunt.get(String(p.id)))),
-        ...losseFotos.map(f => veiligeFotoUrl(String(f.url))),
-      ]
+    ? [...new Set([
+        ...gekozenAandacht.map(p => urlsVan(p)[0] ?? ''),
+        ...punten.flatMap(urlsVan),
+        ...losseFotos.map(f => veiligeFotoUrl(String(f.url ?? ''))),
+      ].filter(Boolean))]
     : []
   const opgehaald = await mapMetLimiet(
     teHalen, FOTO_GRENZEN.PARALLEL, url => haalRapportFoto(url, BEZOEK_FOTO_PX),
   )
   // 'laat_vallen': liever een rapport zonder de laatste foto's dan geen rapport.
   const dataUrls = pasFotoBudgetToe(opgehaald, 'laat_vallen')
-  const aandachtFoto = (i: number) => dataUrls[i] ?? ''
-  const puntFoto = (i: number) => dataUrls[gekozenAandacht.length + i] ?? ''
-  const losseFoto = (i: number) => dataUrls[gekozenAandacht.length + punten.length + i] ?? ''
+  const dataUrlPerUrl = new Map(teHalen.map((url, i) => [url, dataUrls[i] ?? '']))
+  const foto = (url: string | undefined) => (url && dataUrlPerUrl.get(url)) || ''
+  const puntFotos = (p: Record<string, unknown>) => urlsVan(p).map(foto).filter(Boolean)
+  const losseFoto = (i: number) => foto(veiligeFotoUrl(String(losseFotos[i]?.url ?? '')))
 
   // ── Bevindingen: de aandachtspunten ────────────────────────────────────
-  const bevindingen: BezoekBevinding[] = gekozenAandacht.map((p, i) => {
+  const bevindingen: BezoekBevinding[] = gekozenAandacht.map(p => {
     const o = opleverPerId.get(String(p.oplever_punt_id))!
     const status = String(o.status ?? 'open')
     const groep = naamPerCode.get(String(p.discipline_code)) ?? String(p.discipline_code)
+    const fotos = puntFotos(p)
+    const meer = fotos.length - 1
     return {
       ...LEGE_BEVINDING,
       nummer: `AP-${String(o.volgnummer).padStart(2, '0')}`,
@@ -154,19 +163,22 @@ export async function bouwBezoekUitProjectbezoek(
       is_opgelost: AFGEHANDELD.has(status),
       datum: o.created_at ? datumNL(String(o.created_at)) : '',
       hersteldatum: o.deadline ? datumNL(String(o.deadline)) : '',
-      foto: aandachtFoto(i),
-      heeft_foto: !!aandachtFoto(i),
+      foto: fotos[0] ?? '',
+      heeft_foto: fotos.length > 0,
+      // Eén foto per bevinding (vaste halve pagina); de rest staat bij het punt zelf.
+      meer_fotos_regel: meer > 0
+        ? `Nog ${meer === 1 ? '1 foto' : `${meer} foto's`} bij P-${String(p.volgnummer).padStart(2, '0')} onder Per onderdeel.`
+        : '',
+      heeft_meer_fotos: meer > 0,
     }
   })
 
   // ── Per onderdeel: alle punten, gegroepeerd per discipline ─────────────
-  const puntIndex = new Map(punten.map((p, i) => [String(p.id), i]))
   const disciplines: BezoekDisciplineRij[] = disciplineRijen.map(d => {
     const naam = naamPerCode.get(d.discipline_code) ?? d.discipline_code
     const eigen = punten.filter(p => String(p.discipline_code) === d.discipline_code)
     const regels: Rij[] = eigen.map(p => {
-      const i = puntIndex.get(String(p.id)) ?? -1
-      const foto = i >= 0 && keuze.toon_fotos ? puntFoto(i) : ''
+      const fotos = keuze.toon_fotos ? puntFotos(p) : []
       const o = opleverPerId.get(String(p.oplever_punt_id ?? ''))
       return {
         nummer: `P-${String(p.volgnummer).padStart(2, '0')}`,
@@ -181,8 +193,14 @@ export async function bouwBezoekUitProjectbezoek(
         status_label: o
           ? (opleverPuntStatusLabels[String(o.status) as keyof typeof opleverPuntStatusLabels] ?? String(o.status))
           : '',
-        disciplinefoto: foto,
-        heeft_foto: !!foto,
+        // Eerste foto los: een sjabloon van vóór 1 okt 2026 vraagt {%disciplinefoto} direct op
+        // het punt. Het huidige loopt over {#disciplinefotos}. Binnen die loop heet de tag
+        // óók `disciplinefoto`, zodat het max-kader uit documentImageMax() blijft gelden; de
+        // binnenste scope wint, dus elke rij toont zijn eigen foto.
+        disciplinefoto: fotos[0] ?? '',
+        disciplinefotos: fotos.map(f => ({ disciplinefoto: f })),
+        heeft_foto: fotos.length > 0,
+        aantal_fotos: fotos.length,
       }
     })
     const pct = d.voortgang_pct

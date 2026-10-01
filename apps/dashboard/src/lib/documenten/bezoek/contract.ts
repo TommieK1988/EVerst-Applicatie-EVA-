@@ -77,6 +77,13 @@ export interface BezoekBevinding extends Rij {
   foto_na: string
   heeft_foto: boolean
   heeft_foto_na: boolean
+  /**
+   * Een bevinding houdt één foto: het blok heeft een vaste halve pagina, en een tweede foto
+   * zou het over twee pagina's laten lopen. Heeft het punt er meer, dan staan ze allemaal
+   * onder "Per onderdeel" en verwijst deze regel ernaar. Leeg bij één foto of geen.
+   */
+  meer_fotos_regel: string
+  heeft_meer_fotos: boolean
   reacties: Rij[]
   heeft_reacties: boolean
 }
@@ -185,7 +192,8 @@ export const LEGE_BEVINDING: BezoekBevinding = {
   status: '', status_label: '', is_open: false, is_opgelost: false,
   eis: '', eis_kort: '', meting: '', actie: '', actie_kort: '',
   datum: '', hersteldatum: '', foto: '', foto_na: '',
-  heeft_foto: false, heeft_foto_na: false, reacties: [], heeft_reacties: false,
+  heeft_foto: false, heeft_foto_na: false, meer_fotos_regel: '', heeft_meer_fotos: false,
+  reacties: [], heeft_reacties: false,
 }
 
 /**
