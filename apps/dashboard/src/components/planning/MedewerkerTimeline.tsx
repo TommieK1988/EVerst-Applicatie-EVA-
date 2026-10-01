@@ -35,10 +35,10 @@ import {
 } from './layout/index'
 import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
-import { useDialogen } from '@/components/ui'
+import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import {
-  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, werkvensterOpDag,
+  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, roosterOpDag, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
 } from './conflict'
 
@@ -418,12 +418,33 @@ function ConflictDialog({
 
 // ─── NieuwPlanItemDialog ──────────────────────────────────────────────────────
 
+const tijdVan = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/**
+ * Start- en eindtijd plus uren volgens het werkrooster van de medewerker op `datum`.
+ * Uren = contracturen per week gedeeld door het aantal werkdagen: het werkvenster bevat
+ * de pauze (07:00–16:00 is 8 uur werk, niet 9). Zonder rooster: 07:00–16:00, 8 uur.
+ */
+function roosterTijden(medewerker_id: string, datum: string, roosters: MedewerkerRooster[]) {
+  const eigen  = roosters.filter(r => r.medewerker_id === medewerker_id)
+  const dag    = parseISO(datum)
+  const { van, tot } = werkvensterOpDag(dag, eigen)
+  const actief = roosterOpDag(dag, eigen)
+  const contract = Number(actief?.contracturen_per_week) || 0 // numeric-kolom kan als string binnenkomen
+  const perDag = actief?.werkdagen?.length && contract > 0
+    ? Math.round((contract / actief.werkdagen.length) * 2) / 2
+    : 8
+  return { start_tijd: tijdVan(van), eind_tijd: tijdVan(tot), uren: String(perDag) }
+}
+
 function NieuwPlanItemDialog({
-  medewerker_id, datum, medewerkers, dossierMap, uursoorten, onClose, onSaved,
+  medewerker_id, datum, medewerkers, roosters, dossierMap, uursoorten, onClose, onSaved,
 }: {
   medewerker_id: string
   datum:         string
   medewerkers:   Medewerker[]
+  roosters:      MedewerkerRooster[]
   dossierMap:    Record<string, string>
   uursoorten:    PlanningUursoort[]
   onClose:       () => void
@@ -431,18 +452,19 @@ function NieuwPlanItemDialog({
 }) {
   const [isPending, startTransition] = useTransition()
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     medewerker_id,
     dossier_id:    '',
     bewakingscode: '',
     titel:         '',
     uursoort_id:   '',
     start_datum:   datum,
-    start_tijd:    '07:00',
     eind_datum:    datum,
-    eind_tijd:     '16:00',
-    uren:          '8',
-  })
+    ...roosterTijden(medewerker_id, datum, roosters),
+  }))
+  // Zodra iemand zelf een tijd of uren intypt, overschrijft een andere startdatum dat niet meer.
+  // Een andere medewerker kiezen wél: dat is een bewuste keuze voor diens rooster.
+  const [tijdenHandmatig, setTijdenHandmatig] = useState(false)
 
   const [codes, setCodes]           = useState<PlanningBewakingscode[] | null>(null)
   const [codesLaden, setCodesLaden] = useState(false)
@@ -471,8 +493,10 @@ function NieuwPlanItemDialog({
     return () => { actief = false }
   }, [form.dossier_id])
 
-  const dossierOpties = useMemo(
-    () => Object.entries(dossierMap).sort((a, b) => a[1].localeCompare(b[1], 'nl')),
+  const dossierOpties = useMemo<ComboboxOption[]>(
+    () => Object.entries(dossierMap)
+      .sort((a, b) => a[1].localeCompare(b[1], 'nl'))
+      .map(([value, label]) => ({ value, label })),
     [dossierMap],
   )
 
@@ -548,7 +572,12 @@ function NieuwPlanItemDialog({
             <select
               className="eva-input"
               value={form.medewerker_id}
-              onChange={e => setForm(f => ({ ...f, medewerker_id: e.target.value }))}
+              onChange={e => {
+                const id = e.target.value
+                setTijdenHandmatig(false)
+                setOverschrijding(null)
+                setForm(f => ({ ...f, medewerker_id: id, ...roosterTijden(id, f.start_datum, roosters) }))
+              }}
               required
             >
               {medewerkers.map(m => (
@@ -560,17 +589,16 @@ function NieuwPlanItemDialog({
           {/* Dossier */}
           <div>
             <label style={dialogLabelStyle}>Dossier *</label>
-            <select
-              className="eva-input"
+            <Combobox
+              options={dossierOpties}
               value={form.dossier_id}
-              onChange={e => setForm(f => ({ ...f, dossier_id: e.target.value, bewakingscode: '' }))}
-              required
-            >
-              <option value="">— Kies dossier —</option>
-              {dossierOpties.map(([id, label]) => (
-                <option key={id} value={id}>{label}</option>
-              ))}
-            </select>
+              onChange={id => setForm(f => ({ ...f, dossier_id: id, bewakingscode: '' }))}
+              placeholder="Zoek dossier…"
+              searchPlaceholder="Dossiernummer of naam typen…"
+              emptyText="Geen dossier gevonden."
+              // De dialoog staat op z-index 1000; het popover-paneel standaard op z-50.
+              contentClassName="z-[1100]"
+            />
           </div>
 
           {/* Bewakingscode */}
@@ -638,12 +666,21 @@ function NieuwPlanItemDialog({
             <div>
               <label style={dialogLabelStyle}>Startdatum *</label>
               <input type="date" className="eva-input" value={form.start_datum}
-                onChange={e => setForm(f => ({ ...f, start_datum: e.target.value, eind_datum: f.eind_datum < e.target.value ? e.target.value : f.eind_datum }))} required />
+                onChange={e => {
+                  const d = e.target.value
+                  setForm(f => ({
+                    ...f,
+                    start_datum: d,
+                    eind_datum:  f.eind_datum < d ? d : f.eind_datum,
+                    // Het rooster kan per periode verschillen (geldig_vanaf/geldig_tot).
+                    ...(tijdenHandmatig || !d ? {} : roosterTijden(f.medewerker_id, d, roosters)),
+                  }))
+                }} required />
             </div>
             <div>
               <label style={dialogLabelStyle}>Starttijd *</label>
               <input type="time" className="eva-input" value={form.start_tijd}
-                onChange={e => setForm(f => ({ ...f, start_tijd: e.target.value }))} required />
+                onChange={e => { setTijdenHandmatig(true); setForm(f => ({ ...f, start_tijd: e.target.value })) }} required />
             </div>
           </div>
 
@@ -657,7 +694,7 @@ function NieuwPlanItemDialog({
             <div>
               <label style={dialogLabelStyle}>Eindtijd *</label>
               <input type="time" className="eva-input" value={form.eind_tijd}
-                onChange={e => setForm(f => ({ ...f, eind_tijd: e.target.value }))} required />
+                onChange={e => { setTijdenHandmatig(true); setForm(f => ({ ...f, eind_tijd: e.target.value })) }} required />
             </div>
           </div>
 
@@ -666,7 +703,7 @@ function NieuwPlanItemDialog({
             <label style={dialogLabelStyle}>Uren *</label>
             <input type="number" className="eva-input" value={form.uren}
               min="0" step="0.5"
-              onChange={e => { setOverschrijding(null); setForm(f => ({ ...f, uren: e.target.value })) }} required />
+              onChange={e => { setOverschrijding(null); setTijdenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
           </div>
 
           {overschrijding && (
@@ -1826,6 +1863,7 @@ export default function MedewerkerTimeline({
           medewerker_id={nieuwItem.medewerker_id}
           datum={nieuwItem.datum}
           medewerkers={medewerkers}
+          roosters={roosters}
           dossierMap={dossierMap}
           uursoorten={uursoorten}
           onClose={() => setNieuwItem(null)}
