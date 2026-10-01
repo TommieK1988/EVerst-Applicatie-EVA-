@@ -1,7 +1,7 @@
 {
   "budget": {
     "as_any": 754,
-    "ongegate_service_role_actions": 511,
+    "ongegate_service_role_actions": 510,
     "bestanden_boven_800_regels": 34
   },
   "per_bestand": {
@@ -315,7 +315,6 @@
       "apps/dashboard/src/app/(platform)/notificaties/actions.ts": 5,
       "apps/dashboard/src/app/(platform)/planning/actions.ts": 17,
       "apps/dashboard/src/app/(platform)/planning/bedrijfsagenda/actions.ts": 10,
-      "apps/dashboard/src/app/(platform)/planning/medewerker/actions.ts": 1,
       "apps/dashboard/src/app/(platform)/planning/werkbon/actions.ts": 3,
       "apps/dashboard/src/app/(platform)/taken/actions/deadlines.ts": 3,
       "apps/dashboard/src/app/(platform)/taken/actions/sjablonen.ts": 14,
@@ -389,7 +388,7 @@
       "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1892,
       "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 852,
       "apps/dashboard/src/lib/bouw7/client.ts": 1431,
-      "apps/dashboard/src/lib/bouw7/sync.ts": 3035,
+      "apps/dashboard/src/lib/bouw7/sync.ts": 3041,
       "apps/dashboard/src/lib/dossiers/actions.ts": 4586,
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 1010,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 1335,
@@ -400,7 +399,7 @@
       "apps/dashboard/src/lib/page-help.ts": 1710,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1089,
       "packages/database/src/platform-types.ts": 2019,
-      "packages/database/src/rechten-catalogus.ts": 812
+      "packages/database/src/rechten-catalogus.ts": 822
     }
   }
 }
