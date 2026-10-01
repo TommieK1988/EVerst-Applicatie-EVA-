@@ -52,7 +52,9 @@ export async function activeerAccount(
   const { data: medewerker } = await admin
     .from('medewerkers')
     .select('id, auth_user_id')
-    .eq('email', email)
+    // Hoofdletterongevoelig: in medewerkers staan adressen soms met hoofdletters. `ilike` met
+    // escapen, want `_` en `%` zijn jokertekens en `_` komt in e-mailadressen voor.
+    .ilike('email', email.replace(/([\\%_])/g, '\\$1'))
     .eq('actief', true)
     .neq('gebruiker_type', 'geen')
     .maybeSingle()
