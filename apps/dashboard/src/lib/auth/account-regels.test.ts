@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { logtInMetMicrosoft, normaliseerEmail, MICROSOFT_DOMEIN } from './account-regels'
+import { logtInMetMicrosoft, normaliseerEmail, emailPatroon, MICROSOFT_DOMEIN } from './account-regels'
 
 /**
  * De regel die hier wordt getest is geen stijlvoorkeur maar een storingsoorzaak: een medewerker
@@ -45,5 +45,17 @@ describe('normaliseerEmail', () => {
     expect(normaliseerEmail('')).toBeNull()
     expect(normaliseerEmail('  ')).toBeNull()
     expect(normaliseerEmail(null)).toBeNull()
+  })
+})
+
+describe('emailPatroon', () => {
+  it('laat een gewoon adres ongemoeid (ilike doet de hoofdletters)', () => {
+    expect(emailPatroon(' JariDeJong@ziggo.nl ')).toBe('JariDeJong@ziggo.nl')
+  })
+
+  it('escapet de jokertekens van ilike, want _ komt in adressen voor', () => {
+    expect(emailPatroon('jan_jansen@x.nl')).toBe('jan\\_jansen@x.nl')
+    expect(emailPatroon('a%b@x.nl')).toBe('a\\%b@x.nl')
+    expect(emailPatroon('a\\b@x.nl')).toBe('a\\\\b@x.nl')
   })
 })

@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
-import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
+import { logtInMetMicrosoft, emailPatroon } from '@/lib/auth/account-regels'
 import {
   controleerActivatielink, verbruikActivatielink, geefActivatielinkVrij,
 } from '@/lib/auth/activatielink'
@@ -52,9 +52,7 @@ export async function activeerAccount(
   const { data: medewerker } = await admin
     .from('medewerkers')
     .select('id, auth_user_id')
-    // Hoofdletterongevoelig: in medewerkers staan adressen soms met hoofdletters. `ilike` met
-    // escapen, want `_` en `%` zijn jokertekens en `_` komt in e-mailadressen voor.
-    .ilike('email', email.replace(/([\\%_])/g, '\\$1'))
+    .ilike('email', emailPatroon(email))
     .eq('actief', true)
     .neq('gebruiker_type', 'geen')
     .maybeSingle()

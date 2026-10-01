@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { COOKIE_SESSIE_VERLOOPT } from '@/lib/sessie'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
-import { logtInMetMicrosoft, MICROSOFT_UITLEG } from '@/lib/auth/account-regels'
+import { logtInMetMicrosoft, MICROSOFT_UITLEG, emailPatroon } from '@/lib/auth/account-regels'
 import { maakActivatielink } from '@/lib/auth/activatielink'
 import { bouwHerstelMail } from '@/lib/auth/uitnodiging-mail'
 import { verstuurMailViaGedeeldePostbus } from '@/lib/o365/mail'
@@ -56,7 +56,7 @@ export async function wachtwoordLogin(
   const { data: medewerker } = await admin
     .from('medewerkers')
     .select('id, auth_user_id')
-    .eq('email', data.user.email)
+    .ilike('email', emailPatroon(data.user.email))
     .eq('actief', true)
     .neq('gebruiker_type', 'geen')
     .maybeSingle()
@@ -105,11 +105,10 @@ export async function stuurHerstelLink(
 
   const email = parsed.data.email.trim().toLowerCase()
   const admin = createAdminClient()
-  // `ilike` met escapen: `_` en `%` zijn jokertekens en `_` komt in e-mailadressen voor.
   const { data: medewerker } = await admin
     .from('medewerkers')
     .select('id, voornaam, auth_user_id')
-    .ilike('email', email.replace(/([\\%_])/g, '\\$1'))
+    .ilike('email', emailPatroon(email))
     .eq('actief', true)
     .neq('gebruiker_type', 'geen')
     .limit(1)

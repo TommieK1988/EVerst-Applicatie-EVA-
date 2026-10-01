@@ -35,6 +35,20 @@ export function normaliseerEmail(email: string | null | undefined): string | nul
 }
 
 /**
+ * Patroon om een medewerker hoofdletterongevoelig op e-mailadres te vinden: `.ilike('email', …)`.
+ *
+ * Nodig omdat `medewerkers.email` uit Bouw7 komt zoals het daar is getypt (`JariDeJong@…`),
+ * terwijl Supabase Auth adressen in kleine letters bewaart. Met `.eq` viel zo iemand bij elke
+ * login door de medewerker-poort ("geen toegang"), ook met het juiste wachtwoord.
+ *
+ * `_` en `%` zijn jokertekens in `ilike` en `_` is een gewoon teken in e-mailadressen, dus die
+ * worden ge-escapet — anders matcht `jan_jansen@` ook `janXjansen@`.
+ */
+export function emailPatroon(email: string): string {
+  return email.trim().replace(/([\\%_])/g, '\\$1')
+}
+
+/**
  * Hoort bij dit adres een Microsoft-login? Zo ja, dan mag er géén wachtwoordaccount worden
  * aangemaakt en krijgt de medewerker de Microsoft-uitnodiging.
  */
