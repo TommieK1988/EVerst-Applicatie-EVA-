@@ -1,6 +1,6 @@
 import 'server-only'
 import { pgQuery } from '@/lib/wagenpark/db'
-import { geocodeAdres, geocodeQuery } from '@/lib/wagenpark/geocode'
+import { geocodeAdres, geocodeQuery, type GeoPunt } from '@/lib/wagenpark/geocode'
 
 /**
  * Geocoding voor dossier-werkadressen.
@@ -31,6 +31,28 @@ function postcodeQuery(postcode?: string | null, plaats?: string | null): string
   if (!PC6.test(pc)) return ''
   const base = [pc, (plaats ?? '').trim()].filter((p) => p).join(' ')
   return `${base}, Nederland`
+}
+
+/**
+ * Eén werkadres naar coördinaten: eerst het volledige adres, dan de PC6-postcode als vangnet.
+ * Gedeeld door het hoofdadres (`dossiers`) en de extra werkadressen (`dossier_werkadressen`).
+ */
+export async function geocodeWerkadres(
+  straat: string | null,
+  huisnummer: string | null,
+  postcode: string | null,
+  stad: string | null,
+): Promise<GeoPunt | null> {
+  // Bouw7 levert straat en huisnummer apart; Nominatim wil ze samen. Staat het nummer al in de
+  // straat, dan niet dubbel.
+  const st = (straat ?? '').trim()
+  const hn = (huisnummer ?? '').trim()
+  const volledig = hn && !st.endsWith(hn) ? `${st} ${hn}`.trim() : st
+  const punt = await geocodeAdres(volledig || null, postcode, stad)
+  if (punt) return punt
+  // Lukt het volledige adres niet, val terug op de (precieze) PC6-postcode.
+  const pq = postcodeQuery(postcode, stad)
+  return pq ? geocodeQuery(pq) : null
 }
 
 export type GeocodeDossiersResultaat = {
@@ -75,16 +97,7 @@ export async function geocodeDossiers(
   const res: GeocodeDossiersResultaat = { verwerkt: 0, ok: 0, geen_match: 0, resterend: 0 }
 
   for (const d of rows) {
-    // Bouw7 levert straat en huisnummer apart; Nominatim wil ze samen.
-    const straat = [d.werkadres_straat, d.werkadres_huisnummer]
-      .filter((s) => s && s.trim())
-      .join(' ')
-    let punt = await geocodeAdres(straat || null, d.werkadres_postcode, d.werkadres_stad)
-    // Lukt het volledige adres niet, val terug op de (precieze) PC6-postcode.
-    if (!punt) {
-      const pq = postcodeQuery(d.werkadres_postcode, d.werkadres_stad)
-      if (pq) punt = await geocodeQuery(pq)
-    }
+    const punt = await geocodeWerkadres(d.werkadres_straat, d.werkadres_huisnummer, d.werkadres_postcode, d.werkadres_stad)
     await pgQuery(
       `update public.dossiers
           set adres_lat = $2, adres_lng = $3, geocode_status = $4, geocode_op = now()
@@ -106,4 +119,38 @@ export async function geocodeDossiers(
   res.resterend = rest[0]?.n ?? 0
 
   return res
+}
+
+/**
+ * Vangnet voor de extra werkadressen: de server-action geocodeert direct na opslaan, maar als
+ * Nominatim dan niet bereikbaar was blijft `geocode_status` null en pakt de cron hem hier op.
+ */
+export async function geocodeExtraWerkadressen(opties: { max?: number } = {}): Promise<{ verwerkt: number; ok: number }> {
+  const rows = await pgQuery<{
+    id: string
+    straat: string | null
+    huisnummer: string | null
+    postcode: string | null
+    stad: string | null
+  }>(
+    `select id, straat, huisnummer, postcode, stad
+       from public.dossier_werkadressen
+      where geocode_status is null
+        and (straat is not null or postcode is not null or stad is not null)
+      order by bijgewerkt_op desc
+      limit $1`,
+    [opties.max ?? 20],
+  )
+  let ok = 0
+  for (const r of rows) {
+    const punt = await geocodeWerkadres(r.straat, r.huisnummer, r.postcode, r.stad)
+    await pgQuery(
+      `update public.dossier_werkadressen
+          set lat = $2, lng = $3, geocode_status = $4, geocode_op = now()
+        where id = $1`,
+      [r.id, punt?.lat ?? null, punt?.lng ?? null, punt ? 'ok' : 'geen_match'],
+    )
+    if (punt) ok++
+  }
+  return { verwerkt: rows.length, ok }
 }

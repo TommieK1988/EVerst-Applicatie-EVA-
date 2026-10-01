@@ -31,9 +31,21 @@ export type DossierInfo = {
   /** Wie er op het werkadres zit (bewoner, beheerder ter plaatse) — niet de contactpersoon van de opdrachtgever. */
   werkadres_naam: string | null
   werkadres_telefoon: string | null
+  /** Geclusterde opdracht: de overige werkadressen, elk met een eigen Navigeren-knop. */
+  extraWerkadressen?: ExtraWerkadresInfo[]
   /** Ingevulde rollen in de volgorde van het Rollen-blok op de desktop; lege rollen zitten er niet in. */
   rollen: { label: string; naam: string }[]
 }
+
+export type ExtraWerkadresInfo = {
+  id: string
+  naam: string | null
+  adres: string | null
+  contact_naam: string | null
+  contact_telefoon: string | null
+}
+
+const navigeerLink = (adres: string) => `https://maps.google.com/?q=${encodeURIComponent(adres)}`
 
 /** Groot, goed leesbaar feit. */
 function Feit({ label, waarde }: { label: string; waarde: React.ReactNode }) {
@@ -102,7 +114,7 @@ export default function DossierInfoView({
           Bellen
         </a>
         <a
-          href={info.werkadres ? `https://maps.google.com/?q=${encodeURIComponent(info.werkadres)}` : undefined}
+          href={info.werkadres ? navigeerLink(info.werkadres) : undefined}
           target="_blank"
           rel="noopener noreferrer"
           aria-disabled={!info.werkadres}
@@ -128,6 +140,35 @@ export default function DossierInfoView({
             : null}
         />
       </div>
+
+      {(info.extraWerkadressen ?? []).map((w, i) => {
+        const tel = w.contact_telefoon?.replace(/\s/g, '') || null
+        return (
+          <div key={w.id} style={kaart}>
+            <Feit label={w.naam ?? `Werkadres ${i + 2}`} waarde={w.adres} />
+            {(w.contact_naam || tel) && (
+              <Feit
+                label="Contact"
+                waarde={tel
+                  ? <a href={`tel:${tel}`} style={{ color: '#009439', textDecoration: 'none' }}>
+                      {[w.contact_naam, w.contact_telefoon].filter(Boolean).join(' · ')}
+                    </a>
+                  : w.contact_naam}
+              />
+            )}
+            {w.adres && (
+              <a
+                href={navigeerLink(w.adres)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...knop, minHeight: 48, background: '#fff', color: '#009439', border: '1px solid #009439' }}
+              >
+                Navigeren
+              </a>
+            )}
+          </div>
+        )
+      })}
 
       <div style={kaart}>
         <Feit label="Opdrachtgever" waarde={info.klant_naam} />

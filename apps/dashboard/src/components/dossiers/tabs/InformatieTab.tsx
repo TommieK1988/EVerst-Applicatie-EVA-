@@ -45,6 +45,7 @@ import DossierTogglesPaneel from '../DossierTogglesPaneel'
 import { KlantportaalBlok } from './KlantportaalBlok'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import ObjectKoppeling from '@/components/objecten/ObjectKoppeling'
+import ExtraWerkadressen from '@/components/dossiers/info/ExtraWerkadressen'
 import type { Relatie, RelatieFactuuradres } from '@everts/database'
 import type { DbTaskList, TaakMetDetails, TaskStatus, TaskPrioriteit } from '@/lib/taken/supabase/database.types'
 import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
@@ -2299,6 +2300,7 @@ export function InformatieTab({
                 onBewaar={v => bewaarInfo({ werkadres_stad: v })}
               />
             </div>
+            <ExtraWerkadressen dossierId={dossier.id} readOnly={readOnly} />
         </InklapbareCard>
 
         {/* Financiële totalen — niet voor servicedesk (regie/termijnen leeft op het Financieel-tab) */}

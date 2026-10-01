@@ -25,6 +25,8 @@ import OpnameView from '@/components/mobiel/dossier-tabs/OpnameView'
 import WerkplanView from '@/components/mobiel/dossier-tabs/WerkplanView'
 import ServicedeskAfrondenView from '@/components/mobiel/servicedesk/ServicedeskAfrondenView'
 import { metTerug, veiligTerugPad } from '@/lib/mobiel/terug'
+import { extraWerkadressenVan, type ExtraWerkadresRij } from '@/lib/dossiers/werkadressen-data'
+import { adresRegel } from '@/lib/dossiers/werkpunten'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
@@ -110,6 +112,11 @@ export default async function MobielDossierTabPage(
     !isDossierAfgesloten(res.data)
     && heeftFunctie(kiesKanaal(await getRechtenBundel(), 'mobiel'), 'dossiers.status_wijzigen')
 
+  // Geclusterde opdracht: de extra werkadressen, elk met een eigen Navigeren-knop.
+  const extraWerkadressen = actief === 'informatie'
+    ? (await extraWerkadressenVan([id]).catch(() => new Map<string, ExtraWerkadresRij[]>())).get(id) ?? []
+    : []
+
   return (
     <>
       <AppHeader title={kop} sub={d.titel ?? undefined} backHref={terug ?? '/m/dossiers'} />
@@ -122,6 +129,7 @@ export default async function MobielDossierTabPage(
         <>
           <InformatieTab
             d={d} statusLabel={label} dossierId={id} magStatusWijzigen={magStatusWijzigen}
+            extra={extraWerkadressen}
           />
           {/* Gereed melden + pakbonnen: alleen op een servicedeskbon. Eigen Suspense, zodat de
               infokaarten er al staan terwijl dit nog laadt. */}
@@ -188,12 +196,13 @@ async function ActiesBlok(
   )
 }
 
-function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen }: {
+function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   d: Record<string, any>
   statusLabel: string
   dossierId: string
   magStatusWijzigen: boolean
+  extra: ExtraWerkadresRij[]
 }) {
   // Huisnummer apart: Bouw7 zet het in de straat, maar een in EVA aangemaakt dossier bewaart het
   // los — zonder dit ontbrak het nummer in de adresregel én in de Navigeren-link.
@@ -233,6 +242,15 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen }: {
     werkadres,
     werkadres_naam: d.werkadres_naam ?? null,
     werkadres_telefoon: d.werkadres_telefoon ?? null,
+    extraWerkadressen: extra.map(e => ({
+      id: e.id,
+      naam: e.naam ?? null,
+      // Met postcode: die maakt de Navigeren-link eenduidig.
+      adres: [adresRegel(e.straat, e.huisnummer, null), [e.postcode, e.stad].filter(Boolean).join(' ')]
+        .filter(Boolean).join(', ') || null,
+      contact_naam: e.contact_naam,
+      contact_telefoon: e.contact_telefoon,
+    })),
     rollen,
   }
 

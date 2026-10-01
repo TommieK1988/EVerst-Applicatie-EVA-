@@ -3392,6 +3392,74 @@ export type Database = {
         }
         Relationships: []
       }
+      dossier_werkadressen: {
+        Row: {
+          aangemaakt_door: string | null
+          aangemaakt_op: string
+          bijgewerkt_op: string
+          contact_naam: string | null
+          contact_telefoon: string | null
+          dossier_id: string
+          geocode_op: string | null
+          geocode_status: string | null
+          huisnummer: string | null
+          id: string
+          lat: number | null
+          lng: number | null
+          naam: string | null
+          postcode: string | null
+          stad: string | null
+          straat: string | null
+          volgorde: number
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          contact_naam?: string | null
+          contact_telefoon?: string | null
+          dossier_id: string
+          geocode_op?: string | null
+          geocode_status?: string | null
+          huisnummer?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          naam?: string | null
+          postcode?: string | null
+          stad?: string | null
+          straat?: string | null
+          volgorde?: number
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string
+          bijgewerkt_op?: string
+          contact_naam?: string | null
+          contact_telefoon?: string | null
+          dossier_id?: string
+          geocode_op?: string | null
+          geocode_status?: string | null
+          huisnummer?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          naam?: string | null
+          postcode?: string | null
+          stad?: string | null
+          straat?: string | null
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_werkadressen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossier_werkplannen: {
         Row: {
           bijgewerkt_door: string | null
@@ -13233,6 +13301,7 @@ export type Database = {
           in_lat: number
           in_lng: number
           in_nauwkeurigheid_m: number | null
+          in_werkadres_id: string | null
           in_op: string
           medewerker_id: string
           opmerking: string | null
@@ -13259,6 +13328,7 @@ export type Database = {
           in_lat: number
           in_lng: number
           in_nauwkeurigheid_m?: number | null
+          in_werkadres_id?: string | null
           in_op?: string
           medewerker_id: string
           opmerking?: string | null
@@ -13285,6 +13355,7 @@ export type Database = {
           in_lat?: number
           in_lng?: number
           in_nauwkeurigheid_m?: number | null
+          in_werkadres_id?: string | null
           in_op?: string
           medewerker_id?: string
           opmerking?: string | null
