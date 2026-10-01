@@ -147,10 +147,10 @@ export default async function DossierInfoView({
         const tel = w.contact_telefoon?.replace(/\s/g, '') || null
         return (
           <div key={w.id} style={kaart}>
-            <Feit label={w.naam ?? `Werkadres ${i + 2}`} waarde={w.adres} />
+            <Feit label={w.naam ?? t('info.werkadresNummer', { nummer: String(i + 2) })} waarde={w.adres} />
             {(w.contact_naam || tel) && (
               <Feit
-                label="Contact"
+                label={t('info.contact')}
                 waarde={tel
                   ? <a href={`tel:${tel}`} style={{ color: '#009439', textDecoration: 'none' }}>
                       {[w.contact_naam, w.contact_telefoon].filter(Boolean).join(' · ')}
@@ -165,7 +165,7 @@ export default async function DossierInfoView({
                 rel="noopener noreferrer"
                 style={{ ...knop, minHeight: 48, background: '#fff', color: '#009439', border: '1px solid #009439' }}
               >
-                Navigeren
+                {t('info.navigeren')}
               </a>
             )}
           </div>

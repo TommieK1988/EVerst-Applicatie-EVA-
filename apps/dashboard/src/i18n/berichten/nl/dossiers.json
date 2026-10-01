@@ -33,7 +33,9 @@
     "naam": "Naam",
     "telefoon": "Telefoon",
     "opdrachtgever": "Opdrachtgever",
-    "contactpersoon": "Contactpersoon"
+    "contactpersoon": "Contactpersoon",
+    "werkadresNummer": "Werkadres {nummer}",
+    "contact": "Contact"
   },
   "rol": {
     "projectleider": "Projectleider",

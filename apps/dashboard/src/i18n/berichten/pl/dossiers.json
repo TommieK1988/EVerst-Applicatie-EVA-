@@ -33,7 +33,9 @@
     "naam": "Imię i nazwisko",
     "telefoon": "Telefon",
     "opdrachtgever": "Klient",
-    "contactpersoon": "Osoba kontaktowa"
+    "contactpersoon": "Osoba kontaktowa",
+    "werkadresNummer": "Adres pracy {nummer}",
+    "contact": "Kontakt"
   },
   "rol": {
     "projectleider": "Kierownik projektu",

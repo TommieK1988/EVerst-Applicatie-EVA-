@@ -33,7 +33,9 @@
     "naam": "பெயர்",
     "telefoon": "தொலைபேசி",
     "opdrachtgever": "வாடிக்கையாளர்",
-    "contactpersoon": "தொடர்பு நபர்"
+    "contactpersoon": "தொடர்பு நபர்",
+    "werkadresNummer": "பணி முகவரி {nummer}",
+    "contact": "தொடர்பு"
   },
   "rol": {
     "projectleider": "திட்டத் தலைவர்",

@@ -683,6 +683,7 @@ export async function getPrikklokWeek(datum?: string): Promise<PrikklokWeek> {
       .limit(200),
   ])
 
+  const geenDossier = await melding('geenDossier')
   const sessies = (sessieRijen ?? []).map(naarSessie)
   const berekend = new Map(berekenDagen(sessies, inst).map(d => [d.datum, d]))
 
