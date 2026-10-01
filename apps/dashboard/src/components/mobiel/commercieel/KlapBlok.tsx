@@ -22,11 +22,19 @@ import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
 
 const STANDAARD_ZICHTBAAR = 5
 
+const euro = (n: number): string =>
+  n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+
 export default function KlapBlok({
-  titel, aantal, id, leegTekst, openVerzoek = 0, children,
+  titel, aantal, totaal = null, id, leegTekst, openVerzoek = 0, children,
 }: {
   titel: string
   aantal: number
+  /**
+   * Opgeteld bedrag excl. btw, rechts in de kop — zichtbaar zonder open te klappen. Weg als
+   * er geen enkel bedrag is: "€ 0" zou suggereren dat het werk niets waard is.
+   */
+  totaal?: number | null
   /** Anker voor de signalenbalk, die hiernaartoe scrolt. */
   id?: string
   leegTekst?: string
@@ -77,6 +85,12 @@ export default function KlapBlok({
           aria-hidden
         />
         <span style={{ flex: 1, minWidth: 0 }}>{titel}</span>
+        {totaal != null && totaal !== 0 && (
+          <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEKST, whiteSpace: 'nowrap' }}>
+            {euro(totaal)}
+            <span style={{ fontSize: 11, fontWeight: 600, color: GRIJS }}> excl. btw</span>
+          </span>
+        )}
         <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: GRIJS }}>{aantal}</span>
       </button>
 

@@ -12,49 +12,12 @@
  */
 
 import { vereisRecht } from '@/lib/auth/rechten'
-import { getDossierVerkoop } from './actions'
-import { getDossierMeerwerk } from './meerwerk'
-import { getRegieFactuurvoorstel } from './servicedesk'
-import { berekenContracttotaalVerkoop } from './contractwaarde'
-
-export type ContracttotaalKaart = {
-  totaal: number
-  aanneemsom: number
-  /** Meerwerk tegen een vaste prijs. */
-  aangenomen: number
-  /** Regie/nacalculatie: geboekte verkoopwaarde, of het mandaat als dat hoger is. */
-  regie: number
-  /** Meerwerk volgens Bouw7 — alleen betekenisvol als `evaBron` false is. */
-  meerwerk: number
-  evaBron: boolean
-}
+import { berekenContracttotalen, type ContracttotaalKaart } from './contracttotaal-bereken'
 
 /** Hoeveel bonnen tegelijk: genoeg om snel te zijn zonder de database te overvragen. */
 const GELIJKTIJDIG = 8
 /** Bovengrens per aanroep; het bord toont er rond de 150. */
 const MAX_BONNEN = 600
-
-async function berekenContracttotaal(dossierId: string): Promise<ContracttotaalKaart | null> {
-  const [verkoop, meerwerk, voorstel] = await Promise.all([
-    getDossierVerkoop(dossierId),
-    getDossierMeerwerk(dossierId).catch(() => null),
-    getRegieFactuurvoorstel(dossierId).catch(() => null),
-  ])
-  const ct = berekenContracttotaalVerkoop({
-    basis: verkoop.totalen,
-    goedgekeurdAantal: meerwerk?.totalen.goedgekeurdAantal ?? 0,
-    meerwerk: meerwerk?.totalen ?? null,
-    nacalculatie: voorstel,
-  })
-  return {
-    totaal: ct.contractTotaal,
-    aanneemsom: ct.aanneemsom,
-    aangenomen: ct.waarde.aangenomen,
-    regie: ct.waarde.regie,
-    meerwerk: ct.meerwerk,
-    evaBron: ct.evaBron,
-  }
-}
 
 /**
  * Contracttotalen voor een lijst bonnen. Een bon die faalt krijgt `null` en laat de rest staan:
@@ -66,16 +29,5 @@ export async function laadContracttotalen(
   await vereisRecht('servicedesk', 'lezen')
 
   const ids = [...new Set(dossierIds)].slice(0, MAX_BONNEN)
-  const uit: Record<string, ContracttotaalKaart | null> = {}
-  let volgende = 0
-
-  async function werker(): Promise<void> {
-    for (;;) {
-      const i = volgende++
-      if (i >= ids.length) return
-      uit[ids[i]] = await berekenContracttotaal(ids[i]).catch(() => null)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(GELIJKTIJDIG, ids.length) }, werker))
-  return uit
+  return berekenContracttotalen(ids, GELIJKTIJDIG)
 }

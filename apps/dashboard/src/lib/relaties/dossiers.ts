@@ -134,7 +134,7 @@ function totalenVan(rijen: RelatieDossier[], zonderFacturatiegegevens = 0): Rela
  * bevat alleen opdrachten en servicedeskdossiers; een aanvraag of offerte hoort er niet in.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function gefactureerdPerDossier(supabase: any, ids: string[]): Promise<Map<string, number>> {
+export async function gefactureerdPerDossier(supabase: any, ids: string[]): Promise<Map<string, number>> {
   const per = new Map<string, number>()
   if (ids.length === 0) return per
   const { data } = await supabase
