@@ -1,6 +1,7 @@
 'use client'
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { format } from 'date-fns'
 
 /**
@@ -15,6 +16,7 @@ const DREMPEL = 70   // px trekken voordat verversen start
 const MAX_PULL = 96  // visuele begrenzing
 
 export default function MobielPullToRefresh() {
+  const t = useTranslations('algemeen')
   const router = useRouter()
   const rootRef = React.useRef<HTMLDivElement>(null)
   const [pull, setPull] = React.useState(0)
@@ -86,8 +88,8 @@ export default function MobielPullToRefresh() {
   const verversen = isPending
   const hoogte = verversen ? 40 : pull
   const label = verversen
-    ? 'Verversen…'
-    : pull >= DREMPEL ? 'Loslaten om te verversen' : 'Trek om te verversen'
+    ? t('verversen')
+    : pull >= DREMPEL ? t('loslaten') : t('trekken')
 
   return (
     <div ref={rootRef}>
@@ -122,7 +124,7 @@ export default function MobielPullToRefresh() {
         textAlign: 'center', fontSize: 11, color: '#9aa4ab', fontWeight: 500,
         padding: '2px 0 6px',
       }}>
-        {laatst ? `Laatst ververst om ${format(laatst, 'HH:mm')}` : ' '}
+        {laatst ? t('laatstVerversd', { tijd: format(laatst, 'HH:mm') }) : ' '}
       </div>
 
       <style>{`@keyframes m-spin { to { transform: rotate(360deg); } }`}</style>

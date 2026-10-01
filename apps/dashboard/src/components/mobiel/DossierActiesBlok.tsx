@@ -2,8 +2,11 @@
 
 import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { format, isPast, isToday, parseISO } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { isPast, isToday, parseISO } from 'date-fns'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertaling } from '@/components/vertalen/useVertaling'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { bepaalUitvoerActies } from '@/lib/taken/uitvoeracties'
 import TaakUitvoerKnop, { UitvoerBadge } from './TaakUitvoerKnop'
@@ -29,19 +32,23 @@ import type { DossierTaakRegel } from '@/lib/taken/services/taken'
 
 const TOP = 5
 
-const PRIO: Record<string, { label: string; c: string; bg: string }> = {
-  urgent:  { label: 'Urgent',  c: '#b42318', bg: '#fef3f2' },
-  hoog:    { label: 'Urgent',  c: '#b42318', bg: '#fef3f2' },
-  normaal: { label: 'Normaal', c: '#b85a00', bg: '#fff6ec' },
-  laag:    { label: 'Laag',    c: '#6b757c', bg: '#f1f4f5' },
+// `hoog` toont hier bewust als Urgent; vandaar een eigen sleutel naast de kleur.
+const PRIO: Record<string, { sleutel: 'urgent' | 'normaal' | 'laag'; c: string; bg: string }> = {
+  urgent:  { sleutel: 'urgent',  c: '#b42318', bg: '#fef3f2' },
+  hoog:    { sleutel: 'urgent',  c: '#b42318', bg: '#fef3f2' },
+  normaal: { sleutel: 'normaal', c: '#b85a00', bg: '#fff6ec' },
+  laag:    { sleutel: 'laag',    c: '#6b757c', bg: '#f1f4f5' },
 }
 
-function deadlineLabel(iso: string | null): { tekst: string; kleur: string } | null {
+function deadlineLabel(
+  iso: string | null, locale: string, vandaag: string,
+): { tekst: string; kleur: string } | null {
   if (!iso) return null
   try {
     const d = parseISO(iso)
+    if (isNaN(d.getTime())) return null
     const kleur = isPast(d) && !isToday(d) ? '#b42318' : isToday(d) ? '#b85a00' : '#6b757c'
-    const tekst = isToday(d) ? 'Vandaag' : format(d, 'd MMM', { locale: nl })
+    const tekst = isToday(d) ? vandaag : d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
     return { tekst, kleur }
   } catch { return null }
 }
@@ -51,6 +58,7 @@ function Vinkvakje({ afgerond, bezig, onClick }: {
   bezig: boolean
   onClick?: () => void
 }) {
+  const t = useTranslations('taken')
   const inhoud = afgerond ? (
     <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3}>
       <path d="M20 6 9 17l-5-5" />
@@ -72,7 +80,7 @@ function Vinkvakje({ afgerond, bezig, onClick }: {
       type="button"
       onClick={onClick}
       disabled={bezig}
-      aria-label="Actie afvinken"
+      aria-label={t('afvinkenLabel')}
       style={{ ...stijl, cursor: bezig ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent' }}
     >
       {inhoud}
@@ -86,8 +94,10 @@ function TaakRegel({ taak, bezig, onAfvinken, onOpenen }: {
   onAfvinken: () => void
   onOpenen: () => void
 }) {
+  const t = useTranslations('taken')
+  const locale = useDatumLocale()
   const prio = PRIO[taak.prioriteit] ?? PRIO.normaal
-  const dl = deadlineLabel(taak.deadline)
+  const dl = deadlineLabel(taak.deadline, locale, t('vandaag'))
   const acties = bepaalUitvoerActies(taak)
   const heeftDoorloop = acties.length > 0
 
@@ -116,13 +126,15 @@ function TaakRegel({ taak, bezig, onAfvinken, onOpenen }: {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-            <span style={{
-              flex: 1, minWidth: 0,
-              fontSize: 14, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.4,
-              textDecoration: taak.afgerond ? 'line-through' : 'none',
-            }}>
-              {taak.titel}
-            </span>
+            <VertaalbareTekst
+              tekst={taak.titel}
+              label={false}
+              style={{
+                flex: 1, minWidth: 0,
+                fontSize: 14, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.4,
+                textDecoration: taak.afgerond ? 'line-through' : 'none',
+              }}
+            />
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#9aa4ab" strokeWidth={2}
               style={{ flexShrink: 0, marginTop: 2 }}>
               <path d="m9 18 6-6-6-6" />
@@ -131,12 +143,12 @@ function TaakRegel({ taak, bezig, onAfvinken, onOpenen }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
             {!taak.afgerond && (
               <span style={{ fontSize: 10, fontWeight: 700, color: prio.c, background: prio.bg, padding: '2px 8px', borderRadius: 99 }}>
-                {prio.label}
+                {t(`prioriteit.${prio.sleutel}`)}
               </span>
             )}
             {taak.status === 'in_behandeling' && (
               <span style={{ fontSize: 10, fontWeight: 700, color: '#1f6feb', background: '#eef4ff', padding: '2px 8px', borderRadius: 99 }}>
-                Bezig
+                {t('dossierBlok.statusBezig')}
               </span>
             )}
             {dl && <span style={{ fontSize: 11, fontWeight: 700, color: taak.afgerond ? '#9aa4ab' : dl.kleur }}>{dl.tekst}</span>}
@@ -157,6 +169,8 @@ function TaakRegel({ taak, bezig, onAfvinken, onOpenen }: {
 }
 
 export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[] }) {
+  const t = useTranslations('taken')
+  const locale = useDatumLocale()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState<DossierTaakRegel | null>(null)
@@ -176,27 +190,31 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
         // in dezelfde lijst hoort terug te zien.
         router.refresh()
       } catch (e) {
-        setFout(e instanceof Error ? e.message : 'Bijwerken is niet gelukt.')
+        setFout(e instanceof Error ? e.message : t('dossierBlok.bijwerkenMislukt'))
       } finally {
         setBezig(null)
       }
     })
   }
 
-  const openstaand = taken.filter(t => !t.afgerond)
-  const afgerond = taken.filter(t => t.afgerond)
+  const openstaand = taken.filter(tk => !tk.afgerond)
+  const afgerond = taken.filter(tk => tk.afgerond)
   const eerste = openstaand.slice(0, TOP)
   const rest = [...openstaand.slice(TOP), ...afgerond]
 
   const detailActies = detail ? bepaalUitvoerActies(detail) : []
+  // De titel van het paneel is een string-prop; daarom hier de hook in plaats van <VertaalbareTekst>.
+  const detailTitel = useVertaling(detail?.titel ?? null)
+  const detailDeadline = detail ? deadlineLabel(detail.deadline, locale, t('vandaag')) : null
+  const detailPrio = detail ? (PRIO[detail.prioriteit] ?? PRIO.normaal) : PRIO.normaal
 
-  const regel = (t: DossierTaakRegel) => (
+  const regel = (tk: DossierTaakRegel) => (
     <TaakRegel
-      key={t.id}
-      taak={t}
-      bezig={bezig === t.id}
-      onAfvinken={() => zetStatus(t, 'gereed')}
-      onOpenen={() => { setFout(null); setDetail(t) }}
+      key={tk.id}
+      taak={tk}
+      bezig={bezig === tk.id}
+      onAfvinken={() => zetStatus(tk, 'gereed')}
+      onOpenen={() => { setFout(null); setDetail(tk) }}
     />
   )
 
@@ -206,10 +224,10 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
       padding: '14px 16px 4px',
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#6b757c' }}>Acties</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#6b757c' }}>{t('titel')}</span>
         {taken.length > 0 && (
           <span style={{ fontSize: 12, color: '#9aa4ab' }}>
-            {openstaand.length === 0 ? 'alles afgerond' : `${openstaand.length} open`}
+            {openstaand.length === 0 ? t('dossierBlok.allesAfgerond') : t('aantalOpen', { aantal: openstaand.length })}
           </span>
         )}
       </div>
@@ -225,13 +243,13 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
 
       {taken.length === 0 ? (
         <div style={{ fontSize: 14, color: '#9aa4ab', padding: '4px 0 14px' }}>
-          Geen acties voor dit dossier.
+          {t('dossierBlok.geenActies')}
         </div>
       ) : (
         <>
           {eerste.length === 0 && (
             <div style={{ fontSize: 14, color: '#9aa4ab', padding: '4px 0 6px', borderTop: '1px solid #f0f3f4' }}>
-              Alle acties zijn afgerond.
+              {t('dossierBlok.alleAfgerond')}
             </div>
           )}
           {eerste.map(regel)}
@@ -247,7 +265,7 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
                 fontSize: 14, fontWeight: 600, cursor: 'pointer',
               }}
             >
-              {open ? 'Minder tonen' : `Toon alle acties (${rest.length})`}
+              {open ? t('dossierBlok.minderTonen') : t('dossierBlok.toonAlle', { aantal: rest.length })}
             </button>
           )}
           {rest.length === 0 && <div style={{ height: 10 }} />}
@@ -255,27 +273,35 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
       )}
 
       {detail && (
-        <BottomSheet titel={detail.titel} sluitLabel="Sluiten" onSluit={() => setDetail(null)}>
+        <BottomSheet titel={detailTitel.tekst} sluitLabel={t('sluiten')} onSluit={() => setDetail(null)}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <span style={{
               fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '3px 9px',
-              color: (PRIO[detail.prioriteit] ?? PRIO.normaal).c,
-              background: (PRIO[detail.prioriteit] ?? PRIO.normaal).bg,
+              color: detailPrio.c,
+              background: detailPrio.bg,
             }}>
-              {(PRIO[detail.prioriteit] ?? PRIO.normaal).label}
+              {t(`prioriteit.${detailPrio.sleutel}`)}
             </span>
-            {deadlineLabel(detail.deadline) && (
-              <span style={{ fontSize: 12, fontWeight: 700, color: deadlineLabel(detail.deadline)!.kleur }}>
-                {deadlineLabel(detail.deadline)!.tekst}
+            {detailDeadline && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: detailDeadline.kleur }}>
+                {detailDeadline.tekst}
               </span>
             )}
             {detail.assignee_naam && <span style={{ fontSize: 12, color: '#6b757c' }}>{detail.assignee_naam}</span>}
             {detail.lijst_naam && <span style={{ fontSize: 12, color: '#9aa4ab' }}>{detail.lijst_naam}</span>}
           </div>
 
-          <div style={{ fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-            {detail.omschrijving ?? 'Geen omschrijving.'}
-          </div>
+          {detail.omschrijving != null ? (
+            <VertaalbareTekst
+              as="div"
+              tekst={detail.omschrijving}
+              style={{ fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}
+            />
+          ) : (
+            <div style={{ fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+              {t('dossierBlok.geenOmschrijving')}
+            </div>
+          )}
 
           {fout && (
             <div style={{
@@ -291,13 +317,13 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
 
           {detail.afgerond ? (
             <div style={{ fontSize: 13, color: '#6b757c' }}>
-              Deze actie is {detail.status === 'vervallen' ? 'vervallen' : 'afgerond'}.
+              {detail.status === 'vervallen' ? t('dossierBlok.isVervallen') : t('dossierBlok.isAfgerond')}
             </div>
           ) : detailActies.length > 0 ? (
             <div style={{ fontSize: 13, color: '#6b757c', lineHeight: 1.45 }}>
               {detail.mag_uitvoeren
-                ? `${detailActies[0].badgeUitleg}.`
-                : 'Deze actie staat op naam van iemand anders; alleen die persoon kan hem uitvoeren.'}
+                ? t('dossierBlok.uitlegZin', { uitleg: t(`uitvoer.${detailActies[0].soort}.uitleg`) })
+                : t('dossierBlok.vanIemandAnders')}
             </div>
           ) : (
             <>
@@ -313,7 +339,7 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
                   opacity: bezig === detail.id ? 0.6 : 1,
                 }}
               >
-                {bezig === detail.id ? 'Bezig…' : 'Afvinken'}
+                {bezig === detail.id ? t('bezig') : t('dossierBlok.afvinken')}
               </button>
               {/* Oppakken zonder af te ronden: zo ziet de binnendienst in het dossier dat er
                   aan gewerkt wordt. Alleen zolang de actie nog helemaal open staat. */}
@@ -331,7 +357,7 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
                     opacity: bezig === detail.id ? 0.6 : 1,
                   }}
                 >
-                  Ik ben ermee bezig
+                  {t('dossierBlok.ermeeBezig')}
                 </button>
               )}
             </>

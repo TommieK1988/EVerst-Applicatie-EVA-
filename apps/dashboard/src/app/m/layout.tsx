@@ -7,7 +7,8 @@ import MobielToasts from '@/components/mobiel/MobielToasts'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { Noto_Sans_Tamil } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
-import { getAppTaal } from '@/i18n/server'
+import { getAppTaal, getAppVertaler } from '@/i18n/server'
+import { DialoogProvider } from '@/components/ui/dialogen'
 import { laadBerichten } from '@/i18n/berichten'
 import { TIJDZONE } from '@/i18n/talen'
 import HtmlTaal from '@/i18n/HtmlTaal'
@@ -44,7 +45,8 @@ export default async function MobielLayout({ children }: { children: React.React
   // record (bijv. een wachtwoord-sessie die de poort omzeilde) mag /m niet zien.
   const medewerker = await getCurrentMedewerker()
   if (!medewerker || medewerker.gebruiker_type === 'geen') {
-    return <GeenMobieleToegang />
+    const t = await getAppVertaler('algemeen')
+    return <GeenMobieleToegang tekst={t('geenToegang')} />
   }
 
   // De taal van de medewerker bepaalt alle teksten in de app. Alle naamruimtes gaan mee:
@@ -83,7 +85,10 @@ export default async function MobielLayout({ children }: { children: React.React
           `toast.*` onder /m stilletjes verdween — zie MobielToasts. */}
       <MobielToasts />
       <div data-m-scroll style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {children}
+        {/* Tweede dialoogprovider, binnen de taalprovider van de app: `useDialogen()` pakt
+            de dichtstbijzijnde, dus de standaardknoppen (Annuleren/Bevestigen) staan hier
+            in de taal van de medewerker. De provider in de root-layout blijft voor kantoor. */}
+        <DialoogProvider>{children}</DialoogProvider>
       </div>
     </div>
     </NextIntlClientProvider>

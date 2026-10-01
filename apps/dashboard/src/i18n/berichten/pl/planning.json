@@ -1,1 +1,34 @@
-{}
+{
+  "titel": "Kalendarz",
+  "sub": "Mój grafik",
+  "geenKoppeling": "Nie znaleziono pracownika powiązanego z tym kontem.",
+  "vandaagMetDatum": "Dziś · {datum}",
+  "morgenMetDatum": "Jutro · {datum}",
+  "nietsGepland": "Na ten dzień nic nie zaplanowano.",
+  "vandaag": "Dziś",
+  "vorigeMaand": "Poprzedni miesiąc",
+  "volgendeMaand": "Następny miesiąc",
+  "sluiten": "Zamknij",
+  "dagHeleDag": "{dag} · Cały dzień",
+  "naarDossier": "Do projektu",
+  "naarMijnTaken": "Do moich zadań",
+  "type": {
+    "verlof": "Urlop",
+    "ziek": "Choroba",
+    "training": "Szkolenie",
+    "overig": "Inne",
+    "afwezig": "Nieobecny",
+    "vcaToolbox": "VCA Toolbox",
+    "audit": "Audyt",
+    "teamoverleg": "Narada zespołu",
+    "activiteit": "Wydarzenie",
+    "herinnering": "Przypomnienie",
+    "atvDag": "Dzień wolny ATV",
+    "agenda": "Kalendarz",
+    "feestdag": "Święto",
+    "jubileum": "Jubileusz",
+    "verjaardag": "Urodziny",
+    "werk": "Praca",
+    "deadline": "Termin"
+  }
+}

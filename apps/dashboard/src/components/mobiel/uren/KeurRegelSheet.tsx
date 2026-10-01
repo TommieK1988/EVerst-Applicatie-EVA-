@@ -2,8 +2,12 @@
 
 import React from 'react'
 import { format, parseISO } from 'date-fns'
-import { nl } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useDateFnsLocale } from './datumOpmaak'
 import { Minus, Plus } from 'lucide-react'
 import BottomSheet from '@/components/mobiel/BottomSheet'
 import { corrigeerUurregelMobiel } from '@/app/m/uren/keuren/actions'
@@ -27,8 +31,6 @@ const labelStijl: React.CSSProperties = {
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 }
 
-const uurTekst = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
-
 /**
  * De teamleider stelt één urenregel bij vóórdat hij hem goedkeurt.
  *
@@ -51,6 +53,10 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
   /** De regel is aangepast; het scherm haalt de lijst opnieuw op. */
   onKlaar: () => void
 }) {
+  const t = useTranslations('uren')
+  const locale = useDatumLocale()
+  const dfLocale = useDateFnsLocale()
+  const uurTekst = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
   const [uren, setUren] = React.useState(regel.uren)
   const [code, setCode] = React.useState(regel.bewakingscode ?? '')
   const [opmerking, setOpmerking] = React.useState(regel.opmerking ?? '')
@@ -79,7 +85,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
 
   async function bewaar() {
     if (!(uren > 0 && uren <= 24)) {
-      toast.error('Vul een aantal uren tussen 0 en 24 in.')
+      toast.error(t('keurRegel.urenTussen'))
       return
     }
     const gekozen = codes.find(c => c.code === code)
@@ -89,7 +95,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
     let pslId: number | null = gekozen?.pslId ?? null
     if (codeGewijzigd && gekozen && pslId == null && regel.dossierId) {
       const psl = await zorgUrenDoelPsl(regel.dossierId, { code: gekozen.code, hoofdstukId: gekozen.hoofdstukId }).catch(() => null)
-      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? 'Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? t('keuren.bouw7Onbereikbaar')); return }
       pslId = psl.pslId
     }
     const r = await corrigeerUurregelMobiel(regel.id, {
@@ -99,30 +105,33 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
     }).catch(() => null)
     setBezig(false)
 
-    if (!r) { toast.error('Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+    if (!r) { toast.error(t('keuren.bouw7Onbereikbaar')); return }
     if (!r.ok) { toast.error(r.error); return }
 
-    toast.success('Aangepast; de medewerker heeft bericht gekregen.')
+    toast.success(t('keurRegel.aangepast'))
     onKlaar()
     onSluit()
   }
 
   const datum = (() => {
-    try { return format(parseISO(regel.datum), 'EEEE d MMMM', { locale: nl }) } catch { return regel.datum }
+    try { return format(parseISO(regel.datum), 'EEEE d MMMM', { locale: dfLocale }) } catch { return regel.datum }
   })()
 
+  // Namen van codes komen uit de begroting (kantoor); in een <option> kan geen component.
+  const codeNamen = useVertalingen(codes.map(c => c.naam))
+
   return (
-    <BottomSheet titel="Uren bijstellen" onSluit={onSluit}>
+    <BottomSheet titel={t('keurRegel.titel')} onSluit={onSluit}>
       <div style={{ fontSize: 13, color: GRIJS, marginTop: -4 }}>
         {regel.medewerkerNaam} · {datum}
-        {regel.uursoort && ` · ${regel.uursoort}`}
+        {regel.uursoort && <>{' · '}<VertaalbareTekst tekst={regel.uursoort} label={false} /></>}
       </div>
 
       <div>
-        <span style={labelStijl}>Uren</span>
+        <span style={labelStijl}>{t('keurRegel.uren')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <StapKnop
-            aria-label="Een kwartier eraf"
+            aria-label={t('keurRegel.kwartierEraf')}
             onClick={() => setUren(u => Math.max(STAP, Math.round((u - STAP) * 100) / 100))}
             uit={uren <= STAP}
           >
@@ -134,11 +143,11 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
             color: 'var(--fg)', letterSpacing: '-0.02em',
           }}>
             {uurTekst(uren)}
-            <span style={{ fontSize: 14, fontWeight: 600, color: GRIJS, marginLeft: 6 }}>uur</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: GRIJS, marginLeft: 6 }}>{t('eenheid.uur')}</span>
           </div>
 
           <StapKnop
-            aria-label="Een kwartier erbij"
+            aria-label={t('keurRegel.kwartierErbij')}
             onClick={() => setUren(u => Math.min(24, Math.round((u + STAP) * 100) / 100))}
             uit={uren >= 24}
           >
@@ -147,29 +156,29 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
         </div>
         {uren !== regel.uren && (
           <div style={{ fontSize: 12, color: GRIJS, marginTop: 8, textAlign: 'center' }}>
-            Stond op {uurTekst(regel.uren)} uur
+            {t('keurRegel.stondOp', { uren: uurTekst(regel.uren) })}
           </div>
         )}
       </div>
 
       {regel.dossierId && (
         <div>
-          <span style={labelStijl}>Bewakingscode</span>
+          <span style={labelStijl}>{t('keurRegel.bewakingscode')}</span>
           <select
             value={code}
             onChange={e => setCode(e.target.value)}
             disabled={codesLaden}
             style={veld}
           >
-            <option value="">{codesLaden ? 'Codes laden…' : 'Geen code'}</option>
+            <option value="">{codesLaden ? t('keurRegel.codesLaden') : t('keurRegel.geenCode')}</option>
             {/* De huidige code staat er altijd tussen, ook als hij niet in de opgehaalde
                 lijst voorkomt — anders springt het veld stilletjes naar "Geen code". */}
             {!codesLaden && code && !codes.some(c => c.code === code) && (
               <option value={code}>{code}</option>
             )}
-            {codes.map(c => (
+            {codes.map((c, i) => (
               <option key={c.sleutel} value={c.code}>
-                {c.code}{c.naam ? ` · ${c.naam}` : ''}
+                {c.code}{c.naam ? ` · ${codeNamen[i]?.tekst ?? c.naam}` : ''}
               </option>
             ))}
           </select>
@@ -177,12 +186,12 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
       )}
 
       <div>
-        <span style={labelStijl}>Opmerking</span>
+        <span style={labelStijl}>{t('keurRegel.opmerking')}</span>
         <textarea
           value={opmerking}
           onChange={e => setOpmerking(e.target.value)}
           rows={2}
-          placeholder="Bijvoorbeeld: uitloop door regen"
+          placeholder={t('keurRegel.opmerkingVoorbeeld')}
           style={{ ...veld, resize: 'vertical' }}
         />
       </div>
@@ -198,7 +207,7 @@ export default function KeurRegelSheet({ regel, onSluit, onKlaar }: {
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        {bezig ? 'Bezig…' : nietsGewijzigd ? 'Niets gewijzigd' : 'Opslaan'}
+        {bezig ? t('knop.bezig') : nietsGewijzigd ? t('keurRegel.nietsGewijzigd') : t('knop.opslaan')}
       </button>
     </BottomSheet>
   )

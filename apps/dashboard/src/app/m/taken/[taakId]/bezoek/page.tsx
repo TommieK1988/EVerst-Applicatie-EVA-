@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { startBezoekVoorTaak } from '@/lib/bezoek/bezoeken'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Projectbezoek · EVA Mobiel' }
 
@@ -40,9 +41,10 @@ export default async function MobielTaakBezoekPage({
 
   const res = await startBezoekVoorTaak(taakId)
   if (!res.ok) {
+    const t = await getAppVertaler('taken')
     return (
       <div style={{ padding: 24, color: 'var(--fg-muted)', fontSize: 14, lineHeight: 1.5 }}>
-        Het projectbezoek kon niet worden gestart: {res.error}
+        {t('pagina.bezoekNietGestart', { fout: res.error })}
       </div>
     )
   }

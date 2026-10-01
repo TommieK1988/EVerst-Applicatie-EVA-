@@ -1,1 +1,33 @@
-{}
+{
+  "titel": "Meldingen",
+  "metOngelezen": "Meldingen ({aantal} ongelezen)",
+  "geen": "Je hebt geen meldingen.",
+  "allesGelezen": "Alles gelezen",
+  "push": {
+    "titel": "Pushmeldingen op dit apparaat",
+    "status": {
+      "laden": "Controleren…",
+      "aan": "Aan op dit apparaat",
+      "uit": "Nog niet aangezet",
+      "installeren": "App nog niet geïnstalleerd",
+      "geweigerd": "Geblokkeerd",
+      "geenSw": "Nog niet beschikbaar",
+      "nietOndersteund": "Niet ondersteund"
+    },
+    "uitleg": {
+      "installeren": "Op de iPhone kan alleen de geïnstalleerde app meldingen geven. Tik onderin op de deelknop en kies \"Zet op beginscherm\"; open EVA daarna via dat icoon en zet ze daar aan.",
+      "geweigerdIos": "Meldingen zijn voor EVA geblokkeerd. iOS onthoudt een weigering en vraagt het niet nog een keer: zet het aan via Instellingen → EVA → Berichtgeving. Staat EVA daar niet tussen, verwijder het icoon dan van je beginscherm en zet het er opnieuw op — daarna mag EVA het opnieuw vragen.",
+      "geweigerdAnders": "Meldingen zijn voor EVA geblokkeerd. Dat kan EVA niet zelf terugzetten. In Chrome: tik op het slotje of de instellingen naast het webadres → Meldingen → Toestaan. In de geïnstalleerde app: Instellingen → Apps → EVA → Meldingen.",
+      "geenSw": "Pushmeldingen werken in de gepubliceerde app. In een testomgeving op je eigen pc draait de achtergronddienst niet.",
+      "nietOndersteund": "Deze browser kan geen pushmeldingen ontvangen. Op de iPhone lukt het vanaf iOS 16.4, mits EVA op het beginscherm staat.",
+      "uit": "Eén keer aanzetten en het blijft aan staan — de browser wil daar één tik voor. Daarna houdt EVA het zelf bij, ook als je toestel het abonnement tussendoor opruimt.",
+      "aan": "Je krijgt meldingen op dit apparaat, ook als EVA dicht staat. Uitzetten kan bij de meldingsinstellingen van je telefoon."
+    },
+    "testVerstuurd": "Testmelding verstuurd",
+    "versturenMislukt": "Versturen mislukt",
+    "bezig": "Bezig…",
+    "aanzetten": "Meldingen aanzetten",
+    "testSturen": "Testmelding sturen",
+    "opnieuwControleren": "Opnieuw controleren"
+  }
+}

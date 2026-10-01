@@ -1,1 +1,102 @@
-{}
+{
+  "titel": "Moje dane",
+  "geenKoppeling": "To konto nie jest powiązane z żadnym pracownikiem.",
+  "onbekend": "Nieznany",
+  "instellingen": "Ustawienia",
+  "instellingenSub": "Uprawnienia, powiadomienia i lokalizacja",
+  "handleiding": "Instrukcja",
+  "handleidingSub": "Jak działa EVA na twoim telefonie",
+  "uitloggen": "Wyloguj się",
+  "instellingenGeenKoppeling": "Twoje konto nie jest powiązane z pracownikiem. Powyższe ustawienia działają; powiadomienia o zadaniach i projektach zaczną przychodzić dopiero po powiązaniu konta.",
+  "kloptNiet": "Coś się nie zgadza? Zgłoś to w administracji – oni to poprawią.",
+  "gegevens": {
+    "persoonlijk": "Dane osobowe",
+    "email": "E-mail",
+    "telefoon": "Telefon",
+    "geboortedatum": "Data urodzenia",
+    "adres": "Adres",
+    "werk": "Praca",
+    "functie": "Stanowisko",
+    "afdeling": "Dział",
+    "ploeg": "Ekipa",
+    "inDienstSinds": "Zatrudniony od",
+    "werkrooster": "Harmonogram pracy",
+    "contracturen": "Godziny umowne",
+    "urenPerWeek": "{uren} godz. tygodniowo",
+    "pauze": "{aantal, plural, one {Przerwa} few {Przerwy} many {Przerw} other {Przerwy}}",
+    "werkdagenReeks": "{van}–{tot}",
+    "bedrijfsmiddelen": "Wyposażenie służbowe",
+    "geenBedrijfsmiddelen": "Nie masz przypisanych kluczy, telefonów ani kart paliwowych.",
+    "uitgegeven": "Wydano {datum}",
+    "type": {
+      "sleutel": "Klucz",
+      "telefoon": "Telefon",
+      "tankpas": "Karta paliwowa",
+      "overig": "Inne"
+    },
+    "kenmerk": {
+      "sleutelnummer": "Numer klucza",
+      "kopienummer": "Numer kopii",
+      "toestel": "Urządzenie",
+      "imei": "IMEI",
+      "simkaart": "Karta SIM",
+      "kaartnummer": "Numer karty",
+      "maatschappij": "Dostawca",
+      "extraInfo": "Dodatkowe informacje"
+    },
+    "vca": {
+      "titel": "Certyfikat VCA",
+      "vernieuwen": "Wymaga odnowienia",
+      "verlooptOver": "{dagen, plural, one {Wygasa za # dzień} few {Wygasa za # dni} many {Wygasa za # dni} other {Wygasa za # dnia}}",
+      "geenEinddatum": "Brak daty ważności",
+      "geldig": "Ważny",
+      "einddatumOnbekend": "Data ważności nieznana",
+      "verlopenOp": "Wygasł {datum}",
+      "geldigTot": "Ważny do {datum}",
+      "soort": "Rodzaj",
+      "diplomanummer": "Numer certyfikatu",
+      "behaaldOp": "Uzyskano",
+      "geen": "Nie masz zarejestrowanego certyfikatu VCA. Masz go? Zgłoś to do działu KAM, a zostanie zapisany.",
+      "soorten": {
+        "b_vca": "B-VCA (podstawy bezpieczeństwa)",
+        "vol_vca": "VOL-VCA (kadra kierownicza)",
+        "vil_vca": "VIL-VCA (pośrednicy pracy)"
+      }
+    }
+  },
+  "toestemmingen": {
+    "titel": "Uprawnienia",
+    "locatie": "Lokalizacja",
+    "locatieUitleg": "Do pól GPS w formularzach i kartach pracy.",
+    "camera": "Aparat",
+    "cameraUitleg": "Do skanowania naklejek QR na sprzęcie.",
+    "toegestaan": "Zezwolono",
+    "geweigerd": "Odmówiono",
+    "nogNietGegeven": "Jeszcze nie udzielono",
+    "eerderGebruikt": "Używano wcześniej",
+    "bezig": "Chwileczkę…",
+    "geven": "Udziel zgody",
+    "tipIos": "Wskazówka: dodaj EVA do ekranu głównego (przycisk udostępniania → „Do ekranu początkowego”). W samym Safari zgody na lokalizację i aparat wygasają pod koniec dnia – dlatego skaner wtedy ciągle o nie pyta. W zainstalowanej aplikacji pozostają.",
+    "fotos": "Robienie zdjęć do formularza lub sprzętu odbywa się przez aplikację aparatu w telefonie i nie wymaga osobnej zgody w EVA.",
+    "locatieHerstel": {
+      "ios": "Włącz lokalizację w Ustawienia → Safari → Lokalizacja (lub Ustawienia → Prywatność → Usługi lokalizacji). Zainstaluj EVA na ekranie głównym – wtedy zrobisz to tylko raz.",
+      "android": "Stuknij kłódkę w pasku adresu → Uprawnienia → Lokalizacja i wybierz „Zezwól”.",
+      "anders": "Włącz ponownie lokalizację dla EVA w ustawieniach przeglądarki."
+    },
+    "cameraHerstel": {
+      "ios": "Aparat jest zablokowany dla EVA. Włącz go w Ustawienia → Safari → Aparat albo stuknij „aA” w pasku adresu → Ustawienia witryny → Aparat → Pozwól.",
+      "android": "Aparat jest zablokowany dla EVA. Stuknij kłódkę w pasku adresu → Uprawnienia → Aparat → Zezwól.",
+      "anders": "Aparat jest zablokowany dla EVA. Włącz go w ustawieniach witryny w przeglądarce."
+    },
+    "locatieFout": {
+      "geenGps": "Ta przeglądarka nie udostępnia lokalizacji.",
+      "geweigerd": "EVA nie może używać twojej lokalizacji.",
+      "teTraag": "Ustalanie lokalizacji trwało za długo. W razie potrzeby wyjdź na chwilę na zewnątrz.",
+      "geenFix": "Nie udało się ustalić lokalizacji."
+    }
+  },
+  "locatieAuto": {
+    "titel": "Otwieraj projekt na miejscu",
+    "uitleg": "Po uruchomieniu aplikacji automatycznie otwiera projekt przypisany do twojej lokalizacji."
+  }
+}

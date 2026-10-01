@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { AlertTriangle, ChevronRight, Clock, Stamp } from 'lucide-react'
 import { getUrenTeFiatterenAantal } from '@/lib/goedkeuren/widget'
 import type { UrenSignaal } from '@/lib/mobiel/home'
@@ -34,6 +35,7 @@ export default function HomeSignalen({ uren, magFiatteren }: {
   uren: UrenSignaal[]
   magFiatteren: boolean
 }) {
+  const t = useTranslations('home.signalen')
   const [fiatteren, setFiatteren] = React.useState<number | null>(null)
 
   React.useEffect(() => {
@@ -56,7 +58,7 @@ export default function HomeSignalen({ uren, magFiatteren }: {
         margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: GRIJS,
         letterSpacing: '-0.01em',
       }}>
-        Te doen
+        {t('titel')}
       </h2>
 
       <div style={{
@@ -93,8 +95,8 @@ export default function HomeSignalen({ uren, magFiatteren }: {
             {/* Zelfde formulering als de desktop-GoedkeurenWidget, zodat je hetzelfde
                 werk niet onder twee namen tegenkomt. */}
             <Tekst
-              titel={`${teFiatteren} urenregel${teFiatteren === 1 ? '' : 's'} te fiatteren`}
-              sub="Uren van je ploeg of project goedkeuren"
+              titel={t('teFiatteren', { aantal: teFiatteren })}
+              sub={t('teFiatterenSub')}
             />
             <ChevronRight size={16} strokeWidth={2.4} color={ZACHT} style={{ flexShrink: 0 }} />
           </Link>

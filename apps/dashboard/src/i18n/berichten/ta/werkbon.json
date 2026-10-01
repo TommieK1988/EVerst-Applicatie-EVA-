@@ -1,1 +1,23 @@
-{}
+{
+  "klant": "வாடிக்கையாளர்",
+  "activiteit": "செயல்பாடு",
+  "ookAanwezig": "உடன் இருப்பவர்கள்",
+  "evenGeduld": "சற்றுப் பொறுங்கள்…",
+  "startWerkbon": "பணிச் சீட்டைத் தொடங்கு",
+  "looptijd": "வேலை நேரம்",
+  "opmerking": "குறிப்பு",
+  "opmerkingPlaceholder": "கண்டறிந்தவை, விசேட விடயங்கள்…",
+  "fotos": "புகைப்படங்கள்",
+  "uploaden": "பதிவேற்றுகிறது…",
+  "fotoToevoegen": "📷 புகைப்படம் சேர்",
+  "afronden": "முடி →",
+  "gewerkteUren": "வேலை செய்த மணிநேரம்",
+  "urenKort": "{uren} மணிநேரம்",
+  "looptijdTimer": "டைமர் நேரம்: {tijd}",
+  "handtekeningOpdrachtgever": "வாடிக்கையாளர் கையொப்பம்",
+  "terug": "← பின்செல்",
+  "afrondenBezig": "முடிக்கிறது…",
+  "afsluiten": "பணிச் சீட்டை மூடு ✓",
+  "afgesloten": "பணிச் சீட்டு மூடப்பட்டது",
+  "opnieuwTekenen": "மீண்டும் கையொப்பமிடு"
+}

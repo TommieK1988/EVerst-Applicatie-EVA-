@@ -13,6 +13,7 @@ import { getCurrentMedewerker, getRechtenBundel, heeftFunctie, kiesKanaal } from
 import DossierTabStrip, { DOSSIER_TABS, type DossierTabKey } from '@/components/mobiel/DossierTabStrip'
 import {
   dossierStatusBadge, dossierSectie, actieveSubstatus, mobieleStatusopties, sluitDossierAf,
+  isSubstatusSleutel,
 } from '@/components/mobiel/dossier-status'
 import StatusKiezer from '@/components/mobiel/StatusKiezer'
 import { isDossierAfgesloten } from '@/components/dossiers/types'
@@ -27,14 +28,21 @@ import ServicedeskAfrondenView from '@/components/mobiel/servicedesk/Servicedesk
 import { metTerug, veiligTerugPad } from '@/lib/mobiel/terug'
 import { extraWerkadressenVan, type ExtraWerkadresRij } from '@/lib/dossiers/werkadressen-data'
 import { adresRegel } from '@/lib/dossiers/werkpunten'
+import { getAppVertaler, getAppLocale } from '@/i18n/server'
 
 export const metadata = { title: 'Dossier · EVA Mobiel' }
 
-const fmtDatum = (iso: string) =>
-  new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+type Vertaler = Awaited<ReturnType<typeof getAppVertaler<'dossiers'>>>
 
-const TabLaden = () => (
-  <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>Laden…</div>
+const fmtDatum = (iso: string, locale: string) =>
+  new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** Substatus in de taal van de app; een onbekende sleutel houdt het Nederlandse label. */
+const vertaalStatus = (t: Vertaler, sleutel: string, label: string) =>
+  isSubstatusSleutel(sleutel) ? t(`substatus.${sleutel}`) : label
+
+const TabLaden = ({ tekst }: { tekst: string }) => (
+  <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>{tekst}</div>
 )
 
 export default async function MobielDossierTabPage(
@@ -43,7 +51,9 @@ export default async function MobielDossierTabPage(
     searchParams: Promise<Record<string, string | string[] | undefined>>
   }
 ) {
-  const [{ id, tab }, sp] = await Promise.all([params, searchParams])
+  const [{ id, tab }, sp, t, locale] = await Promise.all([
+    params, searchParams, getAppVertaler('dossiers'), getAppLocale(),
+  ])
 
   /**
    * Waar je vandaan kwam. Leeg bij binnenkomst via de dossierlijst; dan blijft `/m/dossiers`
@@ -100,8 +110,9 @@ export default async function MobielDossierTabPage(
   // DossierRij bevat losjes-getypeerde Bouw7/werkadres-velden — zelfde aanpak als de desktop-tab.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = res.data as Record<string, any>
-  const { label } = dossierStatusBadge(res.data)
-  const kop = d.dossiernummer ? `${d.dossiernummer}` : (d.titel ?? 'Dossier')
+  const label = vertaalStatus(t, actieveSubstatus(res.data), dossierStatusBadge(res.data).label)
+  const kop = d.dossiernummer ? `${d.dossiernummer}` : (d.titel ?? t('dossier'))
+  const laden = <TabLaden tekst={t('laden')} />
 
   /**
    * Mag deze gebruiker de status vanaf zijn telefoon zetten? Standaard niet — de functie
@@ -130,6 +141,7 @@ export default async function MobielDossierTabPage(
           <InformatieTab
             d={d} statusLabel={label} dossierId={id} magStatusWijzigen={magStatusWijzigen}
             extra={extraWerkadressen}
+            t={t} locale={locale}
           />
           {/* Gereed melden + pakbonnen: alleen op een servicedeskbon. Eigen Suspense, zodat de
               infokaarten er al staan terwijl dit nog laadt. */}
@@ -144,25 +156,25 @@ export default async function MobielDossierTabPage(
       )}
       {actief === 'houtrot' && <HoutrotView dossierId={id} />}
       {actief === 'opname' && (
-        <Suspense fallback={<TabLaden />}><OpnameView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><OpnameView dossierId={id} /></Suspense>
       )}
       {/* Ook planning in Suspense: zonder dat blokkeert de query de hele render,
           waardoor kopbalk én tabstrip pas verschijnen als de data binnen is. */}
       {actief === 'planning' && (
-        <Suspense fallback={<TabLaden />}><DetailplanningView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><DetailplanningView dossierId={id} /></Suspense>
       )}
       {actief === 'werkplan' && (
-        <Suspense fallback={<TabLaden />}><WerkplanView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><WerkplanView dossierId={id} /></Suspense>
       )}
       {actief === 'voortgang' && (
-        <Suspense fallback={<TabLaden />}><VoortgangView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><VoortgangView dossierId={id} /></Suspense>
       )}
       {actief === 'oplevering' && (
-        <Suspense fallback={<TabLaden />}><OpleveringView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><OpleveringView dossierId={id} /></Suspense>
       )}
       {actief === 'formulieren' && <FormulierenView dossierId={id} />}
       {actief === 'bestanden' && (
-        <Suspense fallback={<TabLaden />}><BestandenView dossierId={id} /></Suspense>
+        <Suspense fallback={laden}><BestandenView dossierId={id} /></Suspense>
       )}
     </>
   )
@@ -196,13 +208,15 @@ async function ActiesBlok(
   )
 }
 
-function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra }: {
+function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra, t, locale }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   d: Record<string, any>
   statusLabel: string
   dossierId: string
   magStatusWijzigen: boolean
   extra: ExtraWerkadresRij[]
+  t: Vertaler
+  locale: string
 }) {
   // Huisnummer apart: Bouw7 zet het in de straat, maar een in EVA aangemaakt dossier bewaart het
   // los — zonder dit ontbrak het nummer in de adresregel én in de Navigeren-link.
@@ -219,11 +233,11 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra }: 
   // `werkvoorbereider_naam` staat er bewust niet bij: die kolom wordt gelijkgehouden aan
   // `calculator_id` (zie updateDossierRollen), dus hij zou de calculator dubbel tonen.
   const rollen = ([
-    ['Projectleider', d.projectleider_naam],
-    ['Calculator',    d.calculator_naam],
-    ['Uitvoerder',    d.uitvoerder_naam],
-    ['Teamleider',    d.teamleider_naam],
-    ['Controller',    d.controller_naam],
+    [t('rol.projectleider'), d.projectleider_naam],
+    [t('rol.calculator'),    d.calculator_naam],
+    [t('rol.uitvoerder'),    d.uitvoerder_naam],
+    [t('rol.teamleider'),    d.teamleider_naam],
+    [t('rol.controller'),    d.controller_naam],
   ] as const)
     .filter(([, naam]) => !!naam)
     .map(([label, naam]) => ({ label, naam: naam as string }))
@@ -235,8 +249,8 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra }: 
     statusLabel,
     statusColor: dossierStatusBadge(d as never).color,
     klant_naam: d.klant_naam ?? null,
-    begindatum: d.verwacht_startdatum ? fmtDatum(d.verwacht_startdatum) : null,
-    einddatum: d.verwacht_einddatum ? fmtDatum(d.verwacht_einddatum) : null,
+    begindatum: d.verwacht_startdatum ? fmtDatum(d.verwacht_startdatum, locale) : null,
+    einddatum: d.verwacht_einddatum ? fmtDatum(d.verwacht_einddatum, locale) : null,
     contact_naam: d.contactpersoon_naam ?? null,
     contact_telefoon: d.contactpersoon_telefoon ?? null,
     werkadres,
@@ -258,6 +272,7 @@ function InformatieTab({ d, statusLabel, dossierId, magStatusWijzigen, extra }: 
   // hier op de server berekend zodat het hele dossierobject niet naar de telefoon hoeft.
   const sectie = dossierSectie(d as never)
   const opties = mobieleStatusopties(d as never)
+    .map(o => ({ key: o.key, label: vertaalStatus(t, o.key, o.label) }))
 
   return (
     <DossierInfoView

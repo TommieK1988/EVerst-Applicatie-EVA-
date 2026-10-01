@@ -2,6 +2,7 @@ import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { haalTeKeuren } from '@/lib/mobiel/keuren'
 import AppHeader from '@/components/mobiel/AppHeader'
 import KeurenClient from '@/components/mobiel/uren/KeurenClient'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Fiatteren · EVA Mobiel' }
 
@@ -18,13 +19,14 @@ export const dynamic = 'force-dynamic'
  */
 export default async function MobielKeurenPage() {
   const medewerker = await getCurrentMedewerker()
+  const t = await getAppVertaler('uren')
 
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Fiatteren" backHref="/m/uren" />
+        <AppHeader title={t('keuren.titel')} backHref="/m/uren" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+          {t('geenKoppeling')}
         </div>
       </>
     )
@@ -37,7 +39,7 @@ export default async function MobielKeurenPage() {
 
   return (
     <>
-      <AppHeader title="Fiatteren" sub="Uren op jouw akkoord" backHref="/m/uren" />
+      <AppHeader title={t('keuren.titel')} sub={t('keuren.sub')} backHref="/m/uren" />
       <KeurenClient data={data} />
     </>
   )

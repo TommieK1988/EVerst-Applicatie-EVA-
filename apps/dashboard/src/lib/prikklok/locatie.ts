@@ -9,6 +9,7 @@ import { createAdminClient } from '@everts/database/server'
 import { isBoekbaarDossier } from '@/lib/uren/boekbaar'
 import { extraWerkadressenVan } from '@/lib/dossiers/werkadressen-data'
 import { adresRegel, dichtstbijzijnd, werkpuntenVan, type Werkpunt } from '@/lib/dossiers/werkpunten'
+import { melding } from './meldingen'
 import type { PogingReden, PositieInvoer, PrikklokFase, PrikklokInstellingen } from './types'
 
 export const db = () => createAdminClient()
@@ -83,15 +84,15 @@ export async function bepaalPositie(
   fase: PrikklokFase,
 ): Promise<BepaaldePositie | { fout: string }> {
   if (invoer.soort === 'test') {
-    if (fase !== 'schaduw') return { fout: 'Een testlocatie kan alleen in de testfase.' }
+    if (fase !== 'schaduw') return { fout: await melding('testAlleenSchaduw') }
     const { data } = await db().from('dossiers').select(DOSSIER_SELECT).eq('id', invoer.dossierId).maybeSingle()
     const punt = data ? (await werkpuntenVanDossier(data as DossierRij))[0] : undefined
-    if (!punt) return { fout: 'Dit dossier heeft geen locatie.' }
+    if (!punt) return { fout: await melding('dossierGeenLocatie') }
     return { lat: punt.lat, lng: punt.lng, nauwkeurigheid: 5, gesimuleerd: true }
   }
   const { lat, lng, nauwkeurigheid } = invoer.positie
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return { fout: 'Ongeldige locatie ontvangen.' }
+    return { fout: await melding('ongeldigeLocatie') }
   }
   return {
     lat, lng,

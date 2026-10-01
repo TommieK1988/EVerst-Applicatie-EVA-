@@ -17,6 +17,7 @@
 import { vereisFunctie, GeenToegangError } from '@/lib/auth/rechten'
 import { updateDossierSubstatus, updateServicedeskSubstatus } from '@/lib/dossiers/actions'
 import type { DossierSubstatus } from '@/components/dossiers/types'
+import { getAppVertaler } from '@/i18n/server'
 
 type Uitkomst =
   | { ok: true; bouw7?: { ok: boolean; error?: string } }
@@ -29,7 +30,8 @@ async function poort(): Promise<string | null> {
     return null
   } catch (e) {
     if (e instanceof GeenToegangError) {
-      return 'Je mag de status van een dossier niet wijzigen in de app.'
+      const t = await getAppVertaler('dossiers')
+      return t('status.geenRecht')
     }
     throw e
   }
@@ -89,7 +91,9 @@ export async function wijzigServicedeskSubstatusMobiel(
 
   try {
     const res = await updateServicedeskSubstatus(dossierId, substatus)
-    return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Bijwerken mislukt' }
+    if (res.ok) return { ok: true }
+    // Foutteksten van de gedeelde actie blijven Nederlands; alleen de terugval is van de app.
+    return { ok: false, error: res.error ?? (await getAppVertaler('dossiers'))('status.bijwerkenMislukt') }
   } catch (e) {
     if (e instanceof GeenToegangError) return { ok: false, error: e.message }
     throw e

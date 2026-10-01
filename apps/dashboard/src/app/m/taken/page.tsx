@@ -5,10 +5,12 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import MobielNieuweActie from '@/components/mobiel/MobielNieuweActie'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Acties · EVA Mobiel' }
 
 export default async function MobielTakenPage() {
+  const t = await getAppVertaler('taken')
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -50,7 +52,7 @@ export default async function MobielTakenPage() {
 
   return (
     <>
-      <AppHeader title="Acties" sub={`${items.length} open`} backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('aantalOpen', { aantal: items.length })} backHref="/m" />
       <MobielPullToRefresh />
       <MobielTakenLijst taken={items} />
       {user && <MobielNieuweActie userId={user.id} />}

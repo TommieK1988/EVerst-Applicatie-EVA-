@@ -1,1 +1,33 @@
-{}
+{
+  "titel": "Powiadomienia",
+  "metOngelezen": "Powiadomienia (nieprzeczytane: {aantal})",
+  "geen": "Nie masz powiadomień.",
+  "allesGelezen": "Oznacz wszystkie jako przeczytane",
+  "push": {
+    "titel": "Powiadomienia push na tym urządzeniu",
+    "status": {
+      "laden": "Sprawdzanie…",
+      "aan": "Włączone na tym urządzeniu",
+      "uit": "Jeszcze nie włączone",
+      "installeren": "Aplikacja jeszcze nie zainstalowana",
+      "geweigerd": "Zablokowane",
+      "geenSw": "Jeszcze niedostępne",
+      "nietOndersteund": "Nieobsługiwane"
+    },
+    "uitleg": {
+      "installeren": "Na iPhonie powiadomienia może wysyłać tylko zainstalowana aplikacja. Stuknij przycisk udostępniania na dole i wybierz „Do ekranu początkowego”; potem otwórz EVA z tej ikony i włącz je tam.",
+      "geweigerdIos": "Powiadomienia dla EVA są zablokowane. iOS zapamiętuje odmowę i nie zapyta ponownie: włącz je w Ustawienia → EVA → Powiadomienia. Jeśli nie ma tam EVA, usuń ikonę z ekranu głównego i dodaj ją ponownie – wtedy EVA może zapytać jeszcze raz.",
+      "geweigerdAnders": "Powiadomienia dla EVA są zablokowane. EVA nie może tego sama zmienić. W Chrome: stuknij kłódkę lub ustawienia obok adresu strony → Powiadomienia → Zezwól. W zainstalowanej aplikacji: Ustawienia → Aplikacje → EVA → Powiadomienia.",
+      "geenSw": "Powiadomienia push działają w opublikowanej aplikacji. W środowisku testowym na własnym komputerze usługa w tle nie działa.",
+      "nietOndersteund": "Ta przeglądarka nie obsługuje powiadomień push. Na iPhonie działa to od iOS 16.4, jeśli EVA jest na ekranie głównym.",
+      "uit": "Włącz raz i tak zostanie – przeglądarka potrzebuje do tego jednego stuknięcia. Potem EVA sama tego pilnuje, nawet jeśli telefon w międzyczasie usunie subskrypcję.",
+      "aan": "Dostajesz powiadomienia na tym urządzeniu, nawet gdy EVA jest zamknięta. Wyłączyć je możesz w ustawieniach powiadomień telefonu."
+    },
+    "testVerstuurd": "Wysłano powiadomienie testowe",
+    "versturenMislukt": "Nie udało się wysłać",
+    "bezig": "Chwileczkę…",
+    "aanzetten": "Włącz powiadomienia",
+    "testSturen": "Wyślij powiadomienie testowe",
+    "opnieuwControleren": "Sprawdź ponownie"
+  }
+}

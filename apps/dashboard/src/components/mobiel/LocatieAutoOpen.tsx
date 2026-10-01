@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import StatusBadge from './StatusBadge'
 import { dossierBijLocatie, type LocatieDossier, type LocatieResultaat } from '@/lib/dossiers/locatie'
 import { haalLocatie, leesStatus } from '@/lib/locatie/toestemming'
@@ -43,6 +44,7 @@ function isUitgeschakeld(): boolean {
 }
 
 export default function LocatieAutoOpen() {
+  const t = useTranslations()
   const router = useRouter()
   const [res, setRes] = useState<LocatieResultaat | null>(null)
   const [aftel, setAftel] = useState(AFTEL_S)
@@ -104,7 +106,7 @@ export default function LocatieAutoOpen() {
             <span style={pinBadge} aria-hidden>📍</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, color: '#6b757c', marginBottom: 2 }}>
-                Dossier bij jouw locatie · {d.afstand_m} m
+                {t('home.locatie.dossierBijLocatie', { afstand: d.afstand_m })}
               </div>
               <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {d.titel}
@@ -116,10 +118,10 @@ export default function LocatieAutoOpen() {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button onClick={() => setRes(null)} style={btnSecundair}>
-              Annuleren
+              {t('gedeeld.annuleren')}
             </button>
             <button onClick={() => open(d.id)} style={btnPrimair}>
-              Openen ({aftel})
+              {t('home.locatie.openen', { seconden: aftel })}
             </button>
           </div>
         </div>
@@ -134,11 +136,12 @@ export default function LocatieAutoOpen() {
     <div style={overlayWrap} onClick={() => setRes(null)}>
       <div style={overlaySheet} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--fg)' }}>Dossiers op deze locatie</div>
-          <button onClick={() => setRes(null)} style={sluitKnop} aria-label="Sluiten">✕</button>
+          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--fg)' }}>{t('home.locatie.meerdereTitel')}</div>
+          {/* eslint-disable-next-line i18next/no-literal-string -- sluitkruisje, geen tekst */}
+          <button onClick={() => setRes(null)} style={sluitKnop} aria-label={t('gedeeld.sluiten')}>✕</button>
         </div>
         <div style={{ fontSize: 12.5, color: '#6b757c', marginBottom: 12 }}>
-          Kies het dossier waar je aan werkt.
+          {t('home.locatie.kiesDossier')}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {res.dossiers.map((d: LocatieDossier) => (

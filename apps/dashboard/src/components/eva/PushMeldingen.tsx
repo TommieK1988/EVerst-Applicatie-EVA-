@@ -2,7 +2,10 @@
 
 import React, { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { NextIntlClientProvider, useTranslations } from 'next-intl'
 import { usePush, isIOS, isGeinstalleerd } from '@/lib/push/client'
+import { TIJDZONE } from '@/i18n/talen'
+import notificatiesNl from '@/i18n/berichten/nl/notificaties.json'
 
 /**
  * Stand van de pushmeldingen op dít apparaat.
@@ -22,8 +25,24 @@ import { usePush, isIOS, isGeinstalleerd } from '@/lib/push/client'
  *
  * De testknop is geen luxe — als push níét werkt merk je dat anders pas op het
  * moment dat je een melding mist.
+ *
+ * TAAL — de teksten staan in de naamruimte `notificaties`. In de app (weergave 'mobiel')
+ * komt die in de taal van de medewerker uit de provider van `/m`. Op kantoor geeft de
+ * root-layout alleen de gedeelde naamruimtes mee, dus daar zetten we hier een eigen
+ * provider omheen met het Nederlandse bestand: kantoor blijft Nederlands, zonder dat de
+ * hele naamruimte aan elke kantoorpagina wordt toegevoegd.
  */
 export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mobiel' | 'desktop' }) {
+  if (weergave === 'mobiel') return <PushMeldingenInhoud weergave="mobiel" />
+  return (
+    <NextIntlClientProvider locale="nl" messages={{ notificaties: notificatiesNl }} timeZone={TIJDZONE}>
+      <PushMeldingenInhoud weergave="desktop" />
+    </NextIntlClientProvider>
+  )
+}
+
+function PushMeldingenInhoud({ weergave }: { weergave: 'mobiel' | 'desktop' }) {
+  const t = useTranslations('notificaties.push')
   const { status, bezig, fout, aanzetten, testen, hercontroleer } = usePush()
   const [apparaat, setApparaat] = useState<'ios' | 'anders'>('anders')
 
@@ -42,13 +61,13 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
   const opTeLossen = status === 'geweigerd' || status === 'installeren'
 
   const statusTekst =
-    status === 'laden'            ? 'Controleren…'
-    : status === 'aan'            ? 'Aan op dit apparaat'
-    : status === 'uit'            ? 'Nog niet aangezet'
-    : status === 'installeren'    ? 'App nog niet geïnstalleerd'
-    : status === 'geweigerd'      ? 'Geblokkeerd'
-    : status === 'geen-sw'        ? 'Nog niet beschikbaar'
-    : 'Niet ondersteund'
+    status === 'laden'            ? t('status.laden')
+    : status === 'aan'            ? t('status.aan')
+    : status === 'uit'            ? t('status.uit')
+    : status === 'installeren'    ? t('status.installeren')
+    : status === 'geweigerd'      ? t('status.geweigerd')
+    : status === 'geen-sw'        ? t('status.geenSw')
+    : t('status.nietOndersteund')
 
   const statusKleur =
     status === 'aan'                                ? '#067647'
@@ -58,22 +77,22 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
 
   const uitleg =
     status === 'installeren'
-      ? 'Op de iPhone kan alleen de geïnstalleerde app meldingen geven. Tik onderin op de deelknop en kies "Zet op beginscherm"; open EVA daarna via dat icoon en zet ze daar aan.'
+      ? t('uitleg.installeren')
     : status === 'geweigerd'
       ? apparaat === 'ios'
-        ? 'Meldingen zijn voor EVA geblokkeerd. iOS onthoudt een weigering en vraagt het niet nog een keer: zet het aan via Instellingen → EVA → Berichtgeving. Staat EVA daar niet tussen, verwijder het icoon dan van je beginscherm en zet het er opnieuw op — daarna mag EVA het opnieuw vragen.'
-        : 'Meldingen zijn voor EVA geblokkeerd. Dat kan EVA niet zelf terugzetten. In Chrome: tik op het slotje of de instellingen naast het webadres → Meldingen → Toestaan. In de geïnstalleerde app: Instellingen → Apps → EVA → Meldingen.'
+        ? t('uitleg.geweigerdIos')
+        : t('uitleg.geweigerdAnders')
     : status === 'geen-sw'
-      ? 'Pushmeldingen werken in de gepubliceerde app. In een testomgeving op je eigen pc draait de achtergronddienst niet.'
+      ? t('uitleg.geenSw')
     : status === 'niet-ondersteund'
-      ? 'Deze browser kan geen pushmeldingen ontvangen. Op de iPhone lukt het vanaf iOS 16.4, mits EVA op het beginscherm staat.'
+      ? t('uitleg.nietOndersteund')
     : status === 'uit'
-      ? 'Eén keer aanzetten en het blijft aan staan — de browser wil daar één tik voor. Daarna houdt EVA het zelf bij, ook als je toestel het abonnement tussendoor opruimt.'
-    : 'Je krijgt meldingen op dit apparaat, ook als EVA dicht staat. Uitzetten kan bij de meldingsinstellingen van je telefoon.'
+      ? t('uitleg.uit')
+    : t('uitleg.aan')
 
   async function testMelding() {
-    if (await testen()) toast.success('Testmelding verstuurd')
-    else toast.error('Versturen mislukt')
+    if (await testen()) toast.success(t('testVerstuurd'))
+    else toast.error(t('versturenMislukt'))
   }
 
   const mobiel = weergave === 'mobiel'
@@ -98,7 +117,7 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
             fontWeight: mobiel ? 600 : 500,
             color: 'var(--fg)',
           }}>
-            Pushmeldingen op dit apparaat
+            {t('titel')}
           </div>
           <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 3, lineHeight: 1.45 }}>
             {uitleg}
@@ -133,7 +152,7 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {bezig ? 'Bezig…' : 'Meldingen aanzetten'}
+          {bezig ? t('bezig') : t('aanzetten')}
         </button>
       )}
 
@@ -153,7 +172,7 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {bezig ? 'Bezig…' : 'Testmelding sturen'}
+          {bezig ? t('bezig') : t('testSturen')}
         </button>
       )}
 
@@ -173,7 +192,7 @@ export default function PushMeldingen({ weergave = 'desktop' }: { weergave?: 'mo
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {bezig ? 'Bezig…' : 'Opnieuw controleren'}
+          {bezig ? t('bezig') : t('opnieuwControleren')}
         </button>
       )}
 

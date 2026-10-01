@@ -1,1 +1,17 @@
-{}
+{
+  "verversen": "Odświeżanie…",
+  "loslaten": "Puść, aby odświeżyć",
+  "trekken": "Pociągnij, aby odświeżyć",
+  "laatstVerversd": "Ostatnio odświeżono o {tijd}",
+  "geenToegang": "Brak dostępu – trwa wylogowywanie…",
+  "spraak": {
+    "geenMicrofoonToegang": "Brak dostępu do mikrofonu. Zezwól na to w ustawieniach przeglądarki.",
+    "geenVerbinding": "Dyktowanie wymaga internetu – brak połączenia.",
+    "geenMicrofoon": "Nie znaleziono mikrofonu.",
+    "konNietStarten": "Nie udało się uruchomić dyktowania.",
+    "mislukt": "Dyktowanie nie powiodło się. Spróbuj ponownie lub wpisz tekst.",
+    "stoppen": "Zatrzymaj dyktowanie",
+    "inspreken": "Dyktuj",
+    "luisteren": "Słucham… stuknij mikrofon, gdy skończysz."
+  }
+}

@@ -5,11 +5,15 @@ import { getEigenGegevens } from '@/lib/medewerker/eigen-gegevens'
 import { logout } from '@/app/(auth)/login/actions'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Profiel · EVA Mobiel' }
 
-function volledigeNaam(m: { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null }): string {
-  return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ') || 'Onbekend'
+function volledigeNaam(
+  m: { voornaam: string | null; tussenvoegsel: string | null; achternaam: string | null },
+  onbekend: string,
+): string {
+  return [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' ') || onbekend
 }
 
 function initialen(m: { voornaam: string | null; achternaam: string | null }): string {
@@ -20,6 +24,7 @@ function initialen(m: { voornaam: string | null; achternaam: string | null }): s
 
 export default async function MobielProfielPage() {
   const medewerker = await getCurrentMedewerker()
+  const t = await getAppVertaler('profiel')
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const email = user?.email ?? null
@@ -27,10 +32,10 @@ export default async function MobielProfielPage() {
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Mijn gegevens" backHref="/m" />
+        <AppHeader title={t('titel')} backHref="/m" />
         <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ textAlign: 'center', color: '#6b757c', padding: '32px 0 8px', fontSize: 14 }}>
-            Geen medewerker-koppeling gevonden voor dit account.
+            {t('geenKoppeling')}
           </div>
           {/* Ook zonder koppeling moet je bij de instellingen en bij uitloggen kunnen:
               dat zijn precies de twee dingen die je nodig hebt als er iets misgaat.
@@ -43,13 +48,13 @@ export default async function MobielProfielPage() {
     )
   }
 
-  const naam = volledigeNaam(medewerker)
+  const naam = volledigeNaam(medewerker, t('onbekend'))
   const functieAfdeling = [medewerker.functie, medewerker.afdeling].filter(Boolean).join(' · ')
   const gegevens = await getEigenGegevens(medewerker.id)
 
   return (
     <>
-      <AppHeader title="Mijn gegevens" backHref="/m" />
+      <AppHeader title={t('titel')} backHref="/m" />
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Identiteit */}
         <div style={{
@@ -101,7 +106,8 @@ export default async function MobielProfielPage() {
  * Staat onderaan, ná de gegevens: dit scherm gaat over wie je bent, de
  * instellingen regel je één keer en daarna niet meer.
  */
-function InstellingenKnop() {
+async function InstellingenKnop() {
+  const t = await getAppVertaler('profiel')
   return (
     <Link
       href="/m/profiel/instellingen"
@@ -118,9 +124,9 @@ function InstellingenKnop() {
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
       </svg>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Instellingen</div>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{t('instellingen')}</div>
         <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 2 }}>
-          Toestemmingen, meldingen en locatie
+          {t('instellingenSub')}
         </div>
       </div>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
@@ -138,7 +144,8 @@ function InstellingenKnop() {
  * de route levert een PDF en geen pagina, dus de client-router kan er niets mee, en
  * binnen de PWA openen zou je zonder terugknop achterlaten.
  */
-function HandleidingKnop() {
+async function HandleidingKnop() {
+  const t = await getAppVertaler('profiel')
   return (
     <a
       href="/api/handleiding/mobiel"
@@ -157,9 +164,9 @@ function HandleidingKnop() {
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
       </svg>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>Handleiding</div>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{t('handleiding')}</div>
         <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 2 }}>
-          Hoe EVA op je telefoon werkt
+          {t('handleidingSub')}
         </div>
       </div>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#6b757c' }}>
@@ -169,7 +176,8 @@ function HandleidingKnop() {
   )
 }
 
-function UitlogKnop() {
+async function UitlogKnop() {
+  const t = await getAppVertaler('profiel')
   return (
     <form action={logout}>
       <button
@@ -181,7 +189,7 @@ function UitlogKnop() {
           cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
         }}
       >
-        Uitloggen
+        {t('uitloggen')}
       </button>
     </form>
   )

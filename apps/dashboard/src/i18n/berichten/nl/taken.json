@@ -1,1 +1,78 @@
-{}
+{
+  "titel": "Acties",
+  "aantalOpen": "{aantal} open",
+  "geenOpenstaand": "Geen openstaande acties",
+  "afvinkenLabel": "Actie afvinken",
+  "sluiten": "Sluiten",
+  "vandaag": "Vandaag",
+  "prioriteit": {
+    "urgent": "Urgent",
+    "hoog": "Hoog",
+    "normaal": "Normaal",
+    "laag": "Laag"
+  },
+  "uitvoer": {
+    "bezoek": {
+      "label": "Projectbezoek starten",
+      "uitleg": "Deze actie sluit automatisch zodra het bezoek is afgerond"
+    },
+    "formulier": {
+      "label": "Formulier invullen",
+      "uitleg": "Deze actie sluit automatisch zodra je het formulier hebt ingediend"
+    },
+    "opname": {
+      "label": "Opname starten",
+      "uitleg": "Deze actie sluit automatisch zodra de opname is afgerond"
+    },
+    "toolbox": {
+      "label": "Toolbox openen",
+      "uitleg": "Deze actie sluit automatisch zodra je de toolbox hebt doorlopen"
+    },
+    "kwaliteit": {
+      "label": "Kwaliteitsronde starten",
+      "uitleg": "Deze actie sluit automatisch zodra de kwaliteitsronde is afgerond"
+    }
+  },
+  "pagina": {
+    "bezoekNietGestart": "Het projectbezoek kon niet worden gestart: {fout}",
+    "opnameNietGestart": "De opname kon niet worden gestart: {fout}",
+    "formulierNietGepubliceerd": "Dit formulier is nog niet gepubliceerd en kan niet ingevuld worden."
+  },
+  "bezoekStarten": "Projectbezoek starten",
+  "bezig": "Bezig…",
+  "dossierBlok": {
+    "statusBezig": "Bezig",
+    "allesAfgerond": "alles afgerond",
+    "geenActies": "Geen acties voor dit dossier.",
+    "alleAfgerond": "Alle acties zijn afgerond.",
+    "minderTonen": "Minder tonen",
+    "toonAlle": "Toon alle acties ({aantal})",
+    "geenOmschrijving": "Geen omschrijving.",
+    "isVervallen": "Deze actie is vervallen.",
+    "isAfgerond": "Deze actie is afgerond.",
+    "uitlegZin": "{uitleg}.",
+    "vanIemandAnders": "Deze actie staat op naam van iemand anders; alleen die persoon kan hem uitvoeren.",
+    "afvinken": "Afvinken",
+    "ermeeBezig": "Ik ben ermee bezig",
+    "bijwerkenMislukt": "Bijwerken is niet gelukt."
+  },
+  "nieuw": {
+    "knop": "Nieuwe actie",
+    "titel": "Nieuwe actie",
+    "veldActie": "Actie",
+    "actiePlaceholder": "Wat moet er gedaan worden?",
+    "veldDossier": "Dossier <zacht>(optioneel)</zacht>",
+    "dossierLoskoppelen": "Dossier loskoppelen",
+    "dossierPlaceholder": "Zoek op dossiertitel…",
+    "geenDossiersGevonden": "Geen dossiers gevonden.",
+    "veldToegewezen": "Toegewezen aan",
+    "jezelf": "Jezelf",
+    "naamJij": "{naam} (jij)",
+    "veldPrioriteit": "Prioriteit",
+    "veldDeadline": "Deadline <zacht>(optioneel)</zacht>",
+    "annuleren": "Annuleren",
+    "opslaan": "Opslaan…",
+    "aanmaken": "Actie aanmaken",
+    "aanmakenMislukt": "Aanmaken lukte niet. Probeer het opnieuw."
+  }
+}

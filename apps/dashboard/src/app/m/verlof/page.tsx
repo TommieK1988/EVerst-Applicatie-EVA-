@@ -4,6 +4,7 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import { getMijnVerlof, getVerlofSoorten } from '@/lib/uren/verlof'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Verlof · EVA Mobiel' }
 export const dynamic = 'force-dynamic'
@@ -15,12 +16,13 @@ export const dynamic = 'force-dynamic'
  */
 export default async function MobielVerlofPage() {
   const medewerker = await getCurrentMedewerker()
+  const t = await getAppVertaler('verlof')
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Verlof" backHref="/m" />
+        <AppHeader title={t('titel')} backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+          {t('geenKoppeling')}
         </div>
       </>
     )
@@ -37,7 +39,7 @@ export default async function MobielVerlofPage() {
 
   return (
     <>
-      <AppHeader title="Verlof" sub="Aanvragen en saldo" backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('sub')} backHref="/m" />
       <MobielPullToRefresh />
       <VerlofClient
         aanvragen={aanvragen}

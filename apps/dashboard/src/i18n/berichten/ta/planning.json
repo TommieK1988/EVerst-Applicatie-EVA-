@@ -1,1 +1,34 @@
-{}
+{
+  "titel": "நாட்காட்டி",
+  "sub": "எனது பணி அட்டவணை",
+  "geenKoppeling": "இந்தக் கணக்குடன் இணைக்கப்பட்ட பணியாளர் எவரும் இல்லை.",
+  "vandaagMetDatum": "இன்று · {datum}",
+  "morgenMetDatum": "நாளை · {datum}",
+  "nietsGepland": "இந்த நாளில் எதுவும் திட்டமிடப்படவில்லை.",
+  "vandaag": "இன்று",
+  "vorigeMaand": "முந்தைய மாதம்",
+  "volgendeMaand": "அடுத்த மாதம்",
+  "sluiten": "மூடு",
+  "dagHeleDag": "{dag} · முழு நாள்",
+  "naarDossier": "திட்டத்துக்குச் செல்",
+  "naarMijnTaken": "எனது பணிகளுக்குச் செல்",
+  "type": {
+    "verlof": "விடுப்பு",
+    "ziek": "சுகவீனம்",
+    "training": "பயிற்சி",
+    "overig": "மற்றவை",
+    "afwezig": "வரவில்லை",
+    "vcaToolbox": "VCA டூல்பாக்ஸ்",
+    "audit": "தணிக்கை",
+    "teamoverleg": "குழுக் கூட்டம்",
+    "activiteit": "நிகழ்வு",
+    "herinnering": "நினைவூட்டல்",
+    "atvDag": "ATV விடுமுறை நாள்",
+    "agenda": "நாட்காட்டி",
+    "feestdag": "விடுமுறை தினம்",
+    "jubileum": "ஆண்டு நிறைவு",
+    "verjaardag": "பிறந்தநாள்",
+    "werk": "வேலை",
+    "deadline": "இறுதித் தேதி"
+  }
+}

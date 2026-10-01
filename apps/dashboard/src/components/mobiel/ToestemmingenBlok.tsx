@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useLocatie, herstelUitleg, laatsteLocatie } from '@/lib/locatie/toestemming'
+import { useTranslations } from 'next-intl'
+import { useLocatie, laatsteLocatie, type LocatieFoutSoort } from '@/lib/locatie/toestemming'
 import {
-  herstelUitleg as cameraHerstelUitleg,
   leesStatus as leesCameraStatus,
   onthoudenStatus as onthoudenCameraStatus,
   vraagToestemming as vraagCamera,
@@ -23,7 +23,27 @@ import {
  * die EVA zelf niet kan herstellen, dus daar hoort uitleg bij in plaats van een
  * knop die het toch weer probeert.
  */
+/**
+ * Soort toestel voor de herstel-uitleg. Zelfde indeling als `herstelUitleg()` in
+ * `lib/locatie/toestemming` en `lib/materieel/camera`; die geven Nederlandse tekst
+ * (ze draaien ook op kantoor), hier staat dezelfde uitleg in de taal van de app.
+ */
+function toestelSoort(): 'ios' | 'android' | 'anders' {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  if (/Android/i.test(ua)) return 'android'
+  return 'anders'
+}
+
+const LOCATIE_FOUT: Record<LocatieFoutSoort, 'geenGps' | 'geweigerd' | 'geenFix' | 'teTraag'> = {
+  'geen-gps': 'geenGps',
+  geweigerd: 'geweigerd',
+  'geen-fix': 'geenFix',
+  'te-traag': 'teTraag',
+}
+
 export default function ToestemmingenBlok() {
+  const t = useTranslations('profiel.toestemmingen')
   const { status, bezig, fout, locatie, vraagLocatie } = useLocatie()
   const [bewaard, setBewaard] = useState<boolean>(false)
   const [geinstalleerd, setGeinstalleerd] = useState<boolean | null>(null)
@@ -50,10 +70,10 @@ export default function ToestemmingenBlok() {
   const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
 
   const locatieTekst =
-    status === 'toegestaan' ? 'Toegestaan'
-    : status === 'geweigerd' ? 'Geweigerd'
-    : status === 'vragen' ? 'Nog niet gegeven'
-    : bewaard ? 'Eerder gebruikt' : 'Nog niet gegeven'
+    status === 'toegestaan' ? t('toegestaan')
+    : status === 'geweigerd' ? t('geweigerd')
+    : status === 'vragen' ? t('nogNietGegeven')
+    : bewaard ? t('eerderGebruikt') : t('nogNietGegeven')
 
   async function regelCamera() {
     setCameraBezig(true)
@@ -67,62 +87,59 @@ export default function ToestemmingenBlok() {
       border: '1px solid var(--border)', borderRadius: 14,
       display: 'flex', flexDirection: 'column', gap: 12,
     }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg)' }}>Toestemmingen</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg)' }}>{t('titel')}</div>
 
       <Regel
-        naam="Locatie"
-        uitleg="Voor GPS-velden in formulieren en werkbonnen."
+        naam={t('locatie')}
+        uitleg={t('locatieUitleg')}
         status={status === 'toegestaan' ? 'toegestaan' : status === 'geweigerd' ? 'geweigerd' : 'vragen'}
         tekst={locatieTekst}
       />
 
       {status !== 'toegestaan' && status !== 'geweigerd' && (
-        <Knop bezig={bezig} onClick={() => vraagLocatie({ vernieuwen: true })} />
+        <Knop bezig={bezig} onClick={() => vraagLocatie({ vernieuwen: true })} bezigTekst={t('bezig')} tekst={t('geven')} />
       )}
 
       {status === 'geweigerd' && (
-        <p style={{ fontSize: 13, color: '#b42318', margin: 0, lineHeight: 1.5 }}>{herstelUitleg()}</p>
+        <p style={{ fontSize: 13, color: '#b42318', margin: 0, lineHeight: 1.5 }}>{t(`locatieHerstel.${toestelSoort()}`)}</p>
       )}
 
       {fout && status !== 'geweigerd' && (
-        <p style={{ fontSize: 13, color: '#b42318', margin: 0 }}>{fout.message}</p>
+        <p style={{ fontSize: 13, color: '#b42318', margin: 0 }}>{t(`locatieFout.${LOCATIE_FOUT[fout.soort]}`)}</p>
       )}
 
       <div style={{ height: 1, background: 'var(--border)' }} />
 
       <Regel
-        naam="Camera"
-        uitleg="Voor het scannen van QR-stickers op materieel."
+        naam={t('camera')}
+        uitleg={t('cameraUitleg')}
         status={cameraStatus === 'toegestaan' ? 'toegestaan' : cameraStatus === 'geweigerd' ? 'geweigerd' : 'vragen'}
         tekst={
-          cameraStatus === 'toegestaan' ? 'Toegestaan'
-          : cameraStatus === 'geweigerd' ? 'Geweigerd'
-          : 'Nog niet gegeven'
+          cameraStatus === 'toegestaan' ? t('toegestaan')
+          : cameraStatus === 'geweigerd' ? t('geweigerd')
+          : t('nogNietGegeven')
         }
       />
 
       {cameraStatus !== 'toegestaan' && cameraStatus !== 'geweigerd' && (
-        <Knop bezig={cameraBezig} onClick={regelCamera} />
+        <Knop bezig={cameraBezig} onClick={regelCamera} bezigTekst={t('bezig')} tekst={t('geven')} />
       )}
 
       {/* Ook tonen als de browser de stand niet kan uitlezen maar het de vorige
           keer wél mis ging: dan is dit precies de uitleg die iemand zoekt. De
           knop blijft er dan naast staan, want misschien is het al opgelost. */}
       {(cameraStatus === 'geweigerd' || (cameraStatus === 'onbekend' && cameraEerder === 'geweigerd')) && (
-        <p style={{ fontSize: 13, color: '#b42318', margin: 0, lineHeight: 1.5 }}>{cameraHerstelUitleg()}</p>
+        <p style={{ fontSize: 13, color: '#b42318', margin: 0, lineHeight: 1.5 }}>{t(`cameraHerstel.${toestelSoort()}`)}</p>
       )}
 
       {isIOS && geinstalleerd === false && (
         <p style={{ fontSize: 13, color: '#6b757c', margin: 0, lineHeight: 1.5 }}>
-          Tip: zet EVA op je beginscherm (deelknop → &quot;Zet op beginscherm&quot;). In Safari zelf
-          vervallen locatie- en cameratoestemming aan het eind van de dag — daarom vraagt de
-          scanner er dan steeds opnieuw om. In de geïnstalleerde app blijven ze staan.
+          {t('tipIos')}
         </p>
       )}
 
       <p style={{ fontSize: 12, color: '#6b757c', margin: 0, lineHeight: 1.5 }}>
-        Foto&apos;s maken bij een formulier of een stuk materieel loopt via de camera-app van de
-        telefoon en vraagt geen aparte toestemming in EVA.
+        {t('fotos')}
       </p>
     </div>
   )
@@ -148,7 +165,12 @@ function Regel({
   )
 }
 
-function Knop({ bezig, onClick }: { bezig: boolean; onClick: () => void }) {
+function Knop({ bezig, onClick, tekst, bezigTekst }: {
+  bezig: boolean
+  onClick: () => void
+  tekst: string
+  bezigTekst: string
+}) {
   return (
     <button
       type="button"
@@ -161,7 +183,7 @@ function Knop({ bezig, onClick }: { bezig: boolean; onClick: () => void }) {
         cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
       }}
     >
-      {bezig ? 'Bezig…' : 'Toestemming geven'}
+      {bezig ? bezigTekst : tekst}
     </button>
   )
 }

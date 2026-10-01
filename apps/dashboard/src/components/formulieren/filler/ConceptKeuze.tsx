@@ -3,7 +3,9 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { nl, pl, ta } from 'date-fns/locale'
+import { useTranslations } from 'next-intl'
+import { useTaal } from '@/i18n/client'
 import type { FormInzending } from '../types'
 
 type Props = {
@@ -21,6 +23,9 @@ type Props = {
  */
 export default function ConceptKeuze({ templateId, templateNaam, dossierId, concepten }: Props) {
   const router = useRouter()
+  const t = useTranslations('formulieren')
+  const taal = useTaal()
+  const dfLocale = taal === 'pl' ? pl : taal === 'ta' ? ta : nl
 
   function hervat(inzendingId: string) {
     router.push(`/formulieren/${templateId}/invullen?dossier_id=${dossierId}&inzending_id=${inzendingId}`)
@@ -31,7 +36,10 @@ export default function ConceptKeuze({ templateId, templateNaam, dossierId, conc
   }
 
   function formatDatum(iso: string) {
-    try { return format(new Date(iso), "d MMM yyyy 'om' HH:mm", { locale: nl }) } catch { return '—' }
+    try {
+      const d = new Date(iso)
+      return t('conceptKeuze.laatstOpgeslagen', { datum: format(d, 'd MMM yyyy', { locale: dfLocale }), tijd: format(d, 'HH:mm') })
+    } catch { return '—' }
   }
 
   return (
@@ -40,8 +48,7 @@ export default function ConceptKeuze({ templateId, templateNaam, dossierId, conc
         {templateNaam}
       </h1>
       <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 24px' }}>
-        Er {concepten.length === 1 ? 'staat 1 concept' : `staan ${concepten.length} concepten`} open voor
-        dit formulier op dit dossier. Hervat een bestaand concept of begin een nieuw exemplaar.
+        {t('conceptKeuze.uitleg', { aantal: concepten.length })}
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
@@ -58,9 +65,9 @@ export default function ConceptKeuze({ templateId, templateNaam, dossierId, conc
             }}
           >
             <span>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>Concept hervatten</span>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{t('conceptKeuze.hervatten')}</span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                Laatst opgeslagen {formatDatum(c.aangemaakt_op)}
+                {formatDatum(c.aangemaakt_op)}
               </span>
             </span>
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -83,7 +90,7 @@ export default function ConceptKeuze({ templateId, templateNaam, dossierId, conc
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
           <path d="M12 5v14M5 12h14"/>
         </svg>
-        Nieuw formulier toevoegen
+        {t('conceptKeuze.nieuw')}
       </button>
     </div>
   )
