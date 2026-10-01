@@ -57,14 +57,14 @@ function bouwDocument(html: string): string {
 </style></head><body>${html}</body></html>`
 }
 
-export default function MarkdownVenster({ rij, onClose }: { rij: BestandRij | null; onClose: () => void }) {
+/** Het opgemaakte document, los van het venster — ook gebruikt in het voorvertoningspaneel. */
+export function MarkdownInhoud({ rij, iframeKlasse = 'h-[64vh]' }: { rij: BestandRij; iframeKlasse?: string }) {
   const [document, setDocument] = useState<MarkdownDocument | null>(null)
   const [fout, setFout] = useState<string | null>(null)
 
-  const query = rij?.bronQuery ?? null
+  const query = rij.bronQuery
 
   useEffect(() => {
-    if (!query) return
     let afgebroken = false
     setDocument(null)
     setFout(null)
@@ -81,6 +81,34 @@ export default function MarkdownVenster({ rij, onClose }: { rij: BestandRij | nu
     return () => { afgebroken = true }
   }, [query])
 
+  return (
+    <>
+      {fout ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          {fout} Je kunt hem hieronder wel downloaden.
+        </div>
+      ) : !document ? (
+        <p className="text-[13px] text-neutral-500">Document openen…</p>
+      ) : document.tekens === 0 ? (
+        <p className="text-[13px] text-neutral-500">Dit bestand is leeg.</p>
+      ) : (
+        <div className="rounded-lg border border-neutral-200">
+          <iframe
+            title="Inhoud van het document"
+            // Geen allow-scripts en geen allow-same-origin: het document kan niets
+            // uitvoeren en komt niet bij EVA-gegevens. De popup-rechten laten
+            // alleen een link die je zelf aanklikt in een nieuw tabblad openen.
+            sandbox="allow-popups allow-popups-to-escape-sandbox"
+            srcDoc={bouwDocument(document.html)}
+            className={`${iframeKlasse} w-full rounded-lg bg-white`}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
+export default function MarkdownVenster({ rij, onClose }: { rij: BestandRij | null; onClose: () => void }) {
   if (!rij) return null
 
   return (
@@ -88,35 +116,13 @@ export default function MarkdownVenster({ rij, onClose }: { rij: BestandRij | nu
       <DialogContent size="xl" className="max-h-[92vh]">
         <DialogHeader>
           <div className="min-w-0 pr-8">
-            <DialogTitle className="truncate">{document?.titel || rij.naam}</DialogTitle>
-            <p className="mt-[3px] text-[12px] text-neutral-400">
-              {document?.titel ? `${rij.naam} — ` : ''}markdown-document uit {rij.bron}
-            </p>
+            <DialogTitle className="truncate">{rij.naam}</DialogTitle>
+            <p className="mt-[3px] text-[12px] text-neutral-400">Markdown-document uit {rij.bron}</p>
           </div>
         </DialogHeader>
 
         <DialogBody className="pt-4">
-          {fout ? (
-            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
-              {fout} Je kunt hem hieronder wel downloaden.
-            </div>
-          ) : !document ? (
-            <p className="text-[13px] text-neutral-500">Document openen…</p>
-          ) : document.tekens === 0 ? (
-            <p className="text-[13px] text-neutral-500">Dit bestand is leeg.</p>
-          ) : (
-            <div className="rounded-lg border border-neutral-200">
-              <iframe
-                title="Inhoud van het document"
-                // Geen allow-scripts en geen allow-same-origin: het document kan niets
-                // uitvoeren en komt niet bij EVA-gegevens. De popup-rechten laten
-                // alleen een link die je zelf aanklikt in een nieuw tabblad openen.
-                sandbox="allow-popups allow-popups-to-escape-sandbox"
-                srcDoc={bouwDocument(document.html)}
-                className="h-[64vh] w-full rounded-lg bg-white"
-              />
-            </div>
-          )}
+          <MarkdownInhoud rij={rij} />
         </DialogBody>
 
         <DialogFooter split>

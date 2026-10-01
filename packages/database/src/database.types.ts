@@ -565,6 +565,36 @@ export type Database = {
         }
         Relationships: []
       }
+      bestand_soorten: {
+        Row: {
+          aangemaakt_op: string
+          actief: boolean
+          extensies: string[]
+          id: string
+          naam: string
+          trefwoorden: string[]
+          volgorde: number
+        }
+        Insert: {
+          aangemaakt_op?: string
+          actief?: boolean
+          extensies?: string[]
+          id?: string
+          naam: string
+          trefwoorden?: string[]
+          volgorde?: number
+        }
+        Update: {
+          aangemaakt_op?: string
+          actief?: boolean
+          extensies?: string[]
+          id?: string
+          naam?: string
+          trefwoorden?: string[]
+          volgorde?: number
+        }
+        Relationships: []
+      }
       betalingscondities: {
         Row: {
           created_at: string | null
@@ -2581,6 +2611,55 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_bestuurders_overzicht"
             referencedColumns: ["medewerker_id"]
+          },
+        ]
+      }
+      dossier_bestand_meta: {
+        Row: {
+          bijgewerkt_door: string | null
+          bijgewerkt_op: string
+          dossier_id: string
+          sleutel: string
+          soort_id: string | null
+          weergavenaam: string | null
+        }
+        Insert: {
+          bijgewerkt_door?: string | null
+          bijgewerkt_op?: string
+          dossier_id: string
+          sleutel: string
+          soort_id?: string | null
+          weergavenaam?: string | null
+        }
+        Update: {
+          bijgewerkt_door?: string | null
+          bijgewerkt_op?: string
+          dossier_id?: string
+          sleutel?: string
+          soort_id?: string | null
+          weergavenaam?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_bestand_meta_bijgewerkt_door_fkey"
+            columns: ["bijgewerkt_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_bestand_meta_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_bestand_meta_soort_id_fkey"
+            columns: ["soort_id"]
+            isOneToOne: false
+            referencedRelation: "bestand_soorten"
+            referencedColumns: ["id"]
           },
         ]
       }

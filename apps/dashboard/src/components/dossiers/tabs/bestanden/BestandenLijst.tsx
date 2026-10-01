@@ -6,13 +6,18 @@
  * waardoor je twee keer moest zoeken naar iets waarvan je de bewaarplek niet weet.
  *
  * Afbeeldingen zitten hier niet in — die staan in de fotogalerij.
+ *
+ * Een klik op een regel toont het bestand in het voorvertoningspaneel ernaast;
+ * openen en downloaden zitten in de kop van dat paneel.
  */
 
 import React, { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, FileText, Mail, Search } from 'lucide-react'
-import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
+import { formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
+import { bepaalAutoSoort, type BestandSoortDef } from '@/lib/dossiers/bestand-soort'
+import SoortCel from './SoortCel'
 
-type SorteerVeld = 'naam' | 'extensie' | 'bron' | 'grootte' | 'datum' | 'door'
+type SorteerVeld = 'naam' | 'soort' | 'extensie' | 'bron' | 'grootte' | 'datum' | 'door'
 type Richting = 'op' | 'af'
 
 type Kolom = {
@@ -22,62 +27,43 @@ type Kolom = {
   rechts?: boolean
   /** Deze kolom rekt op; de rest krimpt tot de inhoud. */
   breed?: boolean
+  /**
+   * Alleen op een breed scherm. Grootte en maker staan ook in het voorvertoningspaneel;
+   * naast dat paneel is de ruimte beter besteed aan de bestandsnaam.
+   */
+  alleenBreed?: boolean
   titel?: string
 }
 
 const KOLOMMEN: Kolom[] = [
   { veld: 'naam', label: 'Naam', breed: true },
+  { veld: 'soort', label: 'Soort' },
   { veld: 'extensie', label: 'Type' },
   { veld: 'bron', label: 'Opgeslagen in' },
-  { veld: 'grootte', label: 'Grootte', rechts: true },
+  { veld: 'grootte', label: 'Grootte', rechts: true, alleenBreed: true },
   { veld: 'datum', label: 'Datum' },
-  { veld: 'door', label: 'Door' },
+  { veld: 'door', label: 'Door', alleenBreed: true },
 ]
 
 // Compacte cel- en kopklassen — de kolommen staan bewust dicht op elkaar.
-const CEL = 'px-1.5 py-[3px] align-middle whitespace-nowrap'
+// De naamcel krijgt CEL_BASIS zonder `whitespace-nowrap`: een `whitespace-normal` erachter
+// plakken werkt níét — in de gegenereerde CSS staat nowrap later en wint. Daardoor
+// braken lange bestandsnamen nooit af en liep de tabel buiten de kaart.
+const CEL_BASIS = 'px-1.5 py-[3px] align-middle'
+const CEL = `${CEL_BASIS} whitespace-nowrap`
+const BREED = 'hidden 2xl:table-cell'
 const KOP = 'px-1.5 py-1 text-[10px] font-bold uppercase tracking-[0.03em] text-neutral-400 whitespace-nowrap'
 
 function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
   switch (veld) {
     case 'grootte': return rij.grootte ?? -1
     case 'naam': return rij.naam.toLowerCase()
+    case 'soort': return (rij.soortNaam ?? '').toLowerCase()
     case 'extensie': return rij.extensie ?? ''
     case 'bron': return rij.bron
     case 'datum': return rij.datum ?? ''
     case 'door': return rij.door ?? ''
   }
-}
-
-/**
- * De bestandsnaam ís de actie. Een aparte actiekolom bood nooit een keuze — er stond
- * altijd precies één ding in — en kostte wel breedte, die in een halve kolom schaars is.
- *
- * Een mail of markdown-document opent in een leesvenster binnen EVA, de rest in de
- * bron (SharePoint/Office online) of, als die er niet is, als download.
- */
-function BestandsnaamActie({ rij, onOpenVenster }: { rij: BestandRij; onOpenVenster: (r: BestandRij) => void }) {
-  const stijl = 'block text-left text-neutral-800 hover:text-brand-700 hover:underline'
-
-  if (rij.soort === 'mail' || rij.soort === 'markdown') {
-    return (
-      <button onClick={() => onOpenVenster(rij)} title={`${rij.naam} — lezen`} className={stijl}>
-        {rij.naam}
-      </button>
-    )
-  }
-
-  return (
-    <a
-      href={rij.openUrl ?? bestandUrl(rij, { download: true })}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`${rij.naam} — ${rij.openUrl ? 'openen' : 'downloaden'}`}
-      className={stijl}
-    >
-      {rij.naam}
-    </a>
-  )
 }
 
 const BRON_STIJL: Record<BestandRij['bron'], string> = {
@@ -86,8 +72,8 @@ const BRON_STIJL: Record<BestandRij['bron'], string> = {
 }
 
 export default function BestandenLijst({
-  rijen, inApp, onToggleApp, onOpenVenster, voettekst, legeTekst,
-  inPortaal, onTogglePortaal,
+  rijen, inApp, onToggleApp, geselecteerd, onSelecteer, voettekst, legeTekst,
+  inPortaal, onTogglePortaal, soorten, onZetSoort,
 }: {
   rijen: BestandRij[]
   /**
@@ -97,8 +83,15 @@ export default function BestandenLijst({
    */
   inApp?: Set<string>
   onToggleApp?: (rij: BestandRij, zichtbaar: boolean) => void
-  /** Bestanden met een leesvenster in EVA (mail, markdown) melden zich hier. */
-  onOpenVenster: (rij: BestandRij) => void
+  /** Sleutel van de regel die in het voorvertoningspaneel staat. */
+  geselecteerd: string | null
+  onSelecteer: (rij: BestandRij) => void
+  /**
+   * Soorten uit Instellingen. Zonder `onZetSoort` is de kolom alleen-lezen
+   * (afgesloten dossier).
+   */
+  soorten: BestandSoortDef[]
+  onZetSoort?: (rij: BestandRij, soortId: string | null) => void
   voettekst: React.ReactNode
   /** Tekst als er niets te tonen valt — zoeken levert iets anders op dan een lege lijst. */
   legeTekst?: string
@@ -129,6 +122,7 @@ export default function BestandenLijst({
         r.naam.toLowerCase().includes(term) ||
         (r.omschrijving ?? '').toLowerCase().includes(term) ||
         (r.categorie ?? '').toLowerCase().includes(term) ||
+        (r.soortNaam ?? '').toLowerCase().includes(term) ||
         (r.door ?? '').toLowerCase().includes(term)
       )
     })
@@ -165,7 +159,7 @@ export default function BestandenLijst({
           <input
             value={zoek}
             onChange={e => setZoek(e.target.value)}
-            placeholder="Zoek op naam, categorie of persoon"
+            placeholder="Zoek op naam, soort of persoon"
             className="h-7 w-[264px] rounded border border-neutral-200 pl-7 pr-2 text-[12px] text-neutral-800 placeholder:text-neutral-400 focus:border-brand-400 focus:outline-none"
           />
         </div>
@@ -216,7 +210,7 @@ export default function BestandenLijst({
               {KOLOMMEN.map(k => (
                 <th
                   key={k.veld}
-                  className={`${KOP} ${k.rechts ? 'text-right' : ''} ${k.breed ? 'w-full' : ''}`}
+                  className={`${KOP} ${k.rechts ? 'text-right' : ''} ${k.breed ? 'w-full min-w-[200px]' : ''} ${k.alleenBreed ? BREED : ''}`}
                 >
                   <button
                     onClick={() => sorteerOp(k.veld)}
@@ -233,9 +227,16 @@ export default function BestandenLijst({
           </thead>
           <tbody>
             {zichtbaar.map(r => (
-              <tr key={r.sleutel} className="border-b border-neutral-100 hover:bg-neutral-50/70 [&>td:first-child]:pl-3">
+              <tr
+                key={r.sleutel}
+                onClick={() => onSelecteer(r)}
+                aria-selected={geselecteerd === r.sleutel}
+                className={`cursor-pointer border-b border-neutral-100 [&>td:first-child]:pl-3 ${
+                  geselecteerd === r.sleutel ? 'bg-brand-50' : 'hover:bg-neutral-50/70'
+                }`}
+              >
                 {toonAppKolom && (
-                  <td className={`${CEL} text-center`}>
+                  <td className={`${CEL} text-center`} onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={inApp!.has(r.sleutel)}
@@ -246,7 +247,7 @@ export default function BestandenLijst({
                   </td>
                 )}
                 {toonPortaalKolom && (
-                  <td className={`${CEL} text-center`}>
+                  <td className={`${CEL} text-center`} onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={inPortaal!.has(r.sleutel)}
@@ -256,7 +257,7 @@ export default function BestandenLijst({
                     />
                   </td>
                 )}
-                <td className={`${CEL} whitespace-normal`}>
+                <td className={`${CEL_BASIS} break-words`}>
                   {/* Vet = staat in het klantportaal. Zo zie je bij het scrollen
                       meteen wat er buiten de deur ligt, zonder de vinkkolom af
                       te speuren. */}
@@ -267,12 +268,28 @@ export default function BestandenLijst({
                     {r.soort === 'mail' && <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
                     {r.soort === 'markdown' && <FileText className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
                     <span className="min-w-0">
-                      <BestandsnaamActie rij={r} onOpenVenster={onOpenVenster} />
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); onSelecteer(r) }}
+                        title={r.oorspronkelijkeNaam ? `In Bouw7: ${r.oorspronkelijkeNaam}` : r.naam}
+                        className={`block text-left hover:underline ${geselecteerd === r.sleutel ? 'text-brand-700' : 'text-neutral-800 hover:text-brand-700'}`}
+                      >
+                        {r.naam}
+                      </button>
                       {r.omschrijving && (
                         <span className="block text-[10px] text-neutral-400">{r.omschrijving}</span>
                       )}
                     </span>
                   </span>
+                </td>
+                <td className={CEL} onClick={e => onZetSoort && e.stopPropagation()}>
+                  <SoortCel
+                    rij={r}
+                    soorten={soorten}
+                    autoNaam={r.soortHandmatig ? bepaalAutoSoort(r, soorten)?.naam ?? null : r.soortNaam ?? null}
+                    bewerkbaar={!!onZetSoort}
+                    onKies={(rij, id) => onZetSoort?.(rij, id)}
+                  />
                 </td>
                 <td className={`${CEL} uppercase text-neutral-500`}>{r.extensie ?? '—'}</td>
                 <td className={CEL}>
@@ -280,24 +297,25 @@ export default function BestandenLijst({
                     {r.bron}
                   </span>
                 </td>
-                <td className={`${CEL} text-right tabular-nums text-neutral-500`}>{formatteerGrootte(r.grootte)}</td>
+                <td className={`${CEL} ${BREED} text-right tabular-nums text-neutral-500`}>{formatteerGrootte(r.grootte)}</td>
                 <td className={`${CEL} tabular-nums text-neutral-500`}>{r.datum ?? '—'}</td>
-                <td className={`${CEL} text-neutral-500`}>{r.door ?? '—'}</td>
+                <td className={`${CEL} ${BREED} text-neutral-500`}>{r.door ?? '—'}</td>
               </tr>
             ))}
             {/* Nog geen bestanden: de kolommen blijven staan met een nulregel, zodat de lijst
                 dezelfde vorm houdt. Levert het zoekfilter niets op, dan is een melding over de
                 volle breedte juist duidelijker — dat is geen lege lijst maar een lege selectie. */}
             {zichtbaar.length === 0 && (rijen.length === 0 ? (
-              <tr className="border-b border-neutral-100 text-neutral-400">
-                <td className={`${CEL} pl-3`}>—</td>
-                <td className={CEL}>—</td>
-                <td className={CEL}>—</td>
-                <td className={`${CEL} text-right`}>—</td>
-                <td className={CEL}>—</td>
-                <td className={CEL}>—</td>
+              <tr className="border-b border-neutral-100 text-neutral-400 [&>td:first-child]:pl-3">
                 {toonAppKolom && <td className={`${CEL} text-center`}>—</td>}
                 {toonPortaalKolom && <td className={`${CEL} text-center`}>—</td>}
+                <td className={CEL}>—</td>
+                <td className={CEL}>—</td>
+                <td className={CEL}>—</td>
+                <td className={CEL}>—</td>
+                <td className={`${CEL} ${BREED} text-right`}>—</td>
+                <td className={CEL}>—</td>
+                <td className={`${CEL} ${BREED}`}>—</td>
               </tr>
             ) : (
               <tr>

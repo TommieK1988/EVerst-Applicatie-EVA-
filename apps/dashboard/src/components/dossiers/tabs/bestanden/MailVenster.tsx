@@ -68,15 +68,18 @@ function Regel({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function MailVenster({ rij, onClose }: { rij: BestandRij | null; onClose: () => void }) {
+/**
+ * De mail zelf: kopregels, bijlagen en de afgeschermde body. Los van het venster,
+ * zodat het voorvertoningspaneel naast de bestandenlijst dezelfde weergave gebruikt.
+ */
+export function MailInhoud({ rij, iframeKlasse = 'h-[46vh]' }: { rij: BestandRij; iframeKlasse?: string }) {
   const [bericht, setBericht] = useState<MailBericht | null>(null)
   const [fout, setFout] = useState<string | null>(null)
   const [externToestaan, setExternToestaan] = useState(false)
 
-  const query = rij?.bronQuery ?? null
+  const query = rij.bronQuery
 
   useEffect(() => {
-    if (!query) return
     let afgebroken = false
     setBericht(null)
     setFout(null)
@@ -94,82 +97,91 @@ export default function MailVenster({ rij, onClose }: { rij: BestandRij | null; 
     return () => { afgebroken = true }
   }, [query])
 
-  if (!rij) return null
-
   const datum = formatteerDatum(bericht?.datum ?? null)
   const bijlagen = (bericht?.bijlagen ?? []).filter(b => !b.inline)
+
+  return (
+    <>
+      {fout ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          {fout} Je kunt hem hieronder wel downloaden en in Outlook openen.
+        </div>
+      ) : !bericht ? (
+        <p className="text-[13px] text-neutral-500">Mail openen…</p>
+      ) : (
+        <>
+          <div className="space-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+            {bericht.onderwerp && <Regel label="Onderwerp">{bericht.onderwerp}</Regel>}
+            <Regel label="Van">{bericht.van ?? '—'}</Regel>
+            <Regel label="Aan">{bericht.aan.length ? bericht.aan.join('; ') : '—'}</Regel>
+            {!!bericht.cc.length && <Regel label="Cc">{bericht.cc.join('; ')}</Regel>}
+            {datum && <Regel label="Datum">{datum}</Regel>}
+          </div>
+
+          {!!bijlagen.length && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-neutral-400">
+                {bijlagen.length} bijlage{bijlagen.length === 1 ? '' : 'n'}
+              </span>
+              {bijlagen.map(b => (
+                <a
+                  key={b.index}
+                  href={`/api/dossier-bestand/mail?${rij.bronQuery}&bijlage=${b.index}`}
+                  className="inline-flex max-w-[240px] items-center gap-1.5 rounded border border-neutral-200 bg-white px-2 py-1 text-[11.5px] text-neutral-700 hover:border-brand-300 hover:text-brand-700"
+                >
+                  <span className="truncate">{b.naam}</span>
+                  <span className="shrink-0 text-neutral-400">{formatteerGrootte(b.grootte)}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {bericht.heeftExterneAfbeeldingen && !externToestaan && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11.5px] text-neutral-600">
+              <span>Afbeeldingen van buiten deze mail zijn geblokkeerd.</span>
+              <button onClick={() => setExternToestaan(true)} className="shrink-0 font-medium text-brand-600 hover:underline">
+                Toch tonen
+              </button>
+            </div>
+          )}
+
+          <div className="mt-3 rounded-lg border border-neutral-200">
+            {bericht.bodyHtml ? (
+              <iframe
+                title="Inhoud van het bericht"
+                // Geen allow-scripts en geen allow-same-origin: de mail kan niets
+                // uitvoeren en komt niet bij EVA-gegevens. De popup-rechten laten
+                // alleen een link die je zelf aanklikt in een nieuw tabblad openen —
+                // zonder scripts kan de mail dat niet uit zichzelf doen.
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                srcDoc={bouwDocument(bericht.bodyHtml, externToestaan)}
+                className={`${iframeKlasse} w-full rounded-lg bg-white`}
+              />
+            ) : (
+              <p className="px-3 py-4 text-[13px] text-neutral-500">Dit bericht heeft geen inhoud.</p>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+export default function MailVenster({ rij, onClose }: { rij: BestandRij | null; onClose: () => void }) {
+  if (!rij) return null
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
       <DialogContent size="xl" className="max-h-[88vh]">
         <DialogHeader>
           <div className="min-w-0 pr-8">
-            <DialogTitle className="truncate">{bericht?.onderwerp || rij.naam}</DialogTitle>
+            <DialogTitle className="truncate">{rij.naam}</DialogTitle>
             <p className="mt-[3px] text-[12px] text-neutral-400">Outlook-bericht uit {rij.bron}</p>
           </div>
         </DialogHeader>
 
         <DialogBody className="pt-4">
-          {fout ? (
-            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
-              {fout} Je kunt hem hieronder wel downloaden en in Outlook openen.
-            </div>
-          ) : !bericht ? (
-            <p className="text-[13px] text-neutral-500">Mail openen…</p>
-          ) : (
-            <>
-              <div className="space-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
-                <Regel label="Van">{bericht.van ?? '—'}</Regel>
-                <Regel label="Aan">{bericht.aan.length ? bericht.aan.join('; ') : '—'}</Regel>
-                {!!bericht.cc.length && <Regel label="Cc">{bericht.cc.join('; ')}</Regel>}
-                {datum && <Regel label="Datum">{datum}</Regel>}
-              </div>
-
-              {!!bijlagen.length && (
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-neutral-400">
-                    {bijlagen.length} bijlage{bijlagen.length === 1 ? '' : 'n'}
-                  </span>
-                  {bijlagen.map(b => (
-                    <a
-                      key={b.index}
-                      href={`/api/dossier-bestand/mail?${rij.bronQuery}&bijlage=${b.index}`}
-                      className="inline-flex max-w-[240px] items-center gap-1.5 rounded border border-neutral-200 bg-white px-2 py-1 text-[11.5px] text-neutral-700 hover:border-brand-300 hover:text-brand-700"
-                    >
-                      <span className="truncate">{b.naam}</span>
-                      <span className="shrink-0 text-neutral-400">{formatteerGrootte(b.grootte)}</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-
-              {bericht.heeftExterneAfbeeldingen && !externToestaan && (
-                <div className="mt-3 flex items-center justify-between gap-3 rounded border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11.5px] text-neutral-600">
-                  <span>Afbeeldingen van buiten deze mail zijn geblokkeerd.</span>
-                  <button onClick={() => setExternToestaan(true)} className="shrink-0 font-medium text-brand-600 hover:underline">
-                    Toch tonen
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-3 rounded-lg border border-neutral-200">
-                {bericht.bodyHtml ? (
-                  <iframe
-                    title="Inhoud van het bericht"
-                    // Geen allow-scripts en geen allow-same-origin: de mail kan niets
-                    // uitvoeren en komt niet bij EVA-gegevens. De popup-rechten laten
-                    // alleen een link die je zelf aanklikt in een nieuw tabblad openen —
-                    // zonder scripts kan de mail dat niet uit zichzelf doen.
-                    sandbox="allow-popups allow-popups-to-escape-sandbox"
-                    srcDoc={bouwDocument(bericht.bodyHtml, externToestaan)}
-                    className="h-[46vh] w-full rounded-lg bg-white"
-                  />
-                ) : (
-                  <p className="px-3 py-4 text-[13px] text-neutral-500">Dit bericht heeft geen inhoud.</p>
-                )}
-              </div>
-            </>
-          )}
+          <MailInhoud rij={rij} />
         </DialogBody>
 
         <DialogFooter split>

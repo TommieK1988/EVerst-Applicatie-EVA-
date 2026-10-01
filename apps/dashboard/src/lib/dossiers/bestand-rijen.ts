@@ -43,6 +43,12 @@ export type BestandRij = {
    * 6 MB is dat het verschil tussen wachten en meteen beeld. Bouw7 heeft dit niet.
    */
   previewUrl: string | null
+  /** Naam in Bouw7 als EVA er een eigen weergavenaam overheen legt (zie bestand-soort.ts). */
+  oorspronkelijkeNaam?: string
+  /** Soort uit Instellingen → Bestandssoorten; handmatig gekozen of automatisch herkend. */
+  soortId?: string | null
+  soortNaam?: string | null
+  soortHandmatig?: boolean
 }
 
 const AFBEELDING_EXT = new Set([
