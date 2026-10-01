@@ -4,9 +4,8 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Check } from 'lucide-react'
-import { useDatumLocale } from '@/i18n/client'
+import { useDatumLocale, useDateFnsLocale } from '@/i18n/client'
 import type { KeurOnkosten } from '@/lib/mobiel/keuren'
-import { useDateFnsLocale } from './datumOpmaak'
 
 /**
  * Losse onderdelen van het fiatteerscherm (`KeurenClient`): de kostenlijst, de lege/fout-
