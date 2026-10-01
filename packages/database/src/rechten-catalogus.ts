@@ -156,6 +156,16 @@ export const RECHTEN_CATALOGUS = [
         kanalen: ['mobiel'],
       },
       {
+        key: 'dossiers.alle_zien',
+        label: 'Alle dossiers in de app',
+        uitleg:
+          'De dossierlijst in de telefoon-app toont alle lopende dossiers, niet alleen die waar '
+          + 'je een projectrol hebt of op bent ingepland.',
+        // Geen `inbegrepenVanaf`: Projectbureau heeft op mobiel ook `dossiers: beheren`, maar
+        // hoort alleen zijn eigen dossiers te zien. Beheerders (Directie) krijgen hem vanzelf.
+        kanalen: ['mobiel'],
+      },
+      {
         key: 'dossiers.correcties',
         label: 'Correcties in de werkbegroting',
         uitleg:
