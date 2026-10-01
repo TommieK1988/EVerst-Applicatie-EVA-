@@ -1187,12 +1187,18 @@ export async function syncDaysOff(_opts?: { mode?: SyncMode }): Promise<SyncResu
       if (eindDatum < jaarStart) continue // geen oude historie importeren
       const bId = String(d.id)
       if (evaEigenAfwIds.has(bId)) continue // door EVA zelf in Bouw7 gezet — EVA-rij is leidend
+      // Een deel van één dag ("kort verzuim 08:00-11:00") komt met kloktijden en isAllDay=false.
+      // Zonder het venster toont de planning de monteur de hele dag afwezig. Over meerdere dagen
+      // (07:00-17:00 een week lang) zijn het in de praktijk hele werkdagen: dan geen venster.
+      const deelDag = d.isAllDay === false && startDatum === eindDatum
       afwIds.add(bId)
       afwRows.push({
         medewerker_id: medId,
         type: 'verlof', // Bouw7 kent geen verlof/ziek-onderscheid
         start_datum: startDatum,
         eind_datum: eindDatum,
+        start_tijd: deelDag ? d.startDate?.slice(11, 16) ?? null : null,
+        eind_tijd: deelDag ? d.endDate?.slice(11, 16) ?? null : null,
         opmerking: d.remark ?? null,
         bron: 'bouw7',
         bouw7_id: bId,

@@ -26,6 +26,7 @@ const afwezigheidSchema = z.object({
 export async function maakAfwezigheid(
   input: z.infer<typeof afwezigheidSchema>,
 ): Promise<{ ok: true; data: MedewerkerAfwezigheid } | { ok: false; error: string }> {
+  await vereisRecht('planning', 'schrijven')
   const parsed = afwezigheidSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
   if (parsed.data.eind_datum < parsed.data.start_datum)

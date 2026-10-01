@@ -27,6 +27,7 @@ import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
+import { naarBouw7DayOffDatum } from '@/lib/bouw7/verlof-write'
 import { getRooster, isoWeekdag, datumSleutel, minutenVanTijd } from './rooster'
 import { getUrenInstellingen } from './instellingen'
 import {
@@ -466,7 +467,7 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
   const supabase = db()
   const { data: a } = await supabase
     .from('verlof_aanvragen')
-    .select('id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, bouw7_day_off_id, afwezigheid_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
+    .select('id, medewerker_id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, bouw7_day_off_id, afwezigheid_id, planning_uursoorten(naam), medewerkers!verlof_aanvragen_medewerker_id_fkey(bouw7_id)')
     .eq('id', aanvraagId)
     .maybeSingle()
   if (!a) return false
@@ -480,18 +481,47 @@ export async function schrijfVerlofNaarBouw7(aanvraagId: string): Promise<boolea
     return false
   }
 
+  // Staat precies dit verlof al in Bouw7 (de medewerker zette het er zelf in, en de sync haalde
+  // het binnen), dan die day-off overnemen in plaats van een tweede aan te maken. Anders staat
+  // de vakantie dubbel in Bouw7 én telt hij in EVA twee keer (de EVA-rij plus de bron='bouw7'-rij).
+  // Alleen met een eigen afwezigheidsrij: anders zou het weghalen van de gesyncte rij het verlof
+  // uit EVA laten verdwijnen.
+  if (!a.bouw7_day_off_id && a.afwezigheid_id) {
+    const { data: alInBouw7 } = await supabase
+      .from('medewerker_afwezigheid')
+      .select('id, bouw7_id')
+      .eq('medewerker_id', a.medewerker_id)
+      .eq('bron', 'bouw7')
+      .eq('start_datum', a.start_datum)
+      .eq('eind_datum', a.eind_datum)
+      .not('bouw7_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    if (alInBouw7) {
+      // Eerst de gesyncte rij weg: bouw7_id is uniek, en de EVA-rij is voortaan de enige.
+      await supabase.from('medewerker_afwezigheid').delete().eq('id', alInBouw7.id)
+      await supabase.from('medewerker_afwezigheid')
+        .update({ bouw7_id: alInBouw7.bouw7_id })
+        .eq('id', a.afwezigheid_id)
+        .eq('bron', 'eva')
+      await supabase.from('verlof_aanvragen').update({
+        bouw7_day_off_id: alInBouw7.bouw7_id,
+        bouw7_status: 'verzonden',
+        bouw7_fout: null,
+      }).eq('id', aanvraagId)
+      return true
+    }
+  }
+
   try {
     const client = await getBouw7Client()
-    // Bouw7 leest startDate/endDate als datum óf datetime. Bij een deel van de dag zetten we het
-    // tijdvenster erin, zodat de kalender daar hetzelfde laat zien als EVA; bij hele dagen blijft
-    // het een kale datum, precies zoals de lees-sync het terugleest.
-    const metTijd = (datum: string, tijd: string | null) =>
-      !a.hele_dagen && tijd ? `${datum}T${String(tijd).slice(0, 5)}:00` : datum
+    // Bouw7 eist een datetime mét offset: middernacht bij hele dagen, het tijdvenster bij een deel
+    // van de dag (zodat de kalender daar hetzelfde laat zien als EVA). Zie naarBouw7DayOffDatum.
     const res = await client.post<{ id?: number }>('/organization/day-off-per-employee', {
       ...(a.bouw7_day_off_id ? { id: Number(a.bouw7_day_off_id) } : {}),
       employee: { id: employeeId },
-      startDate: metTijd(a.start_datum, a.start_tijd),
-      endDate: metTijd(a.eind_datum, a.eind_tijd),
+      startDate: naarBouw7DayOffDatum(a.start_datum, a.hele_dagen ? null : a.start_tijd),
+      endDate: naarBouw7DayOffDatum(a.eind_datum, a.hele_dagen ? null : a.eind_tijd),
       isAllDay: a.hele_dagen,
       hours: String(a.uren_totaal),
       remark: a.toelichting || a.planning_uursoorten?.naam || 'Verlof via EVA',
