@@ -1,8 +1,7 @@
 /**
- * Verlof (day-off per medewerker) bijwerken of verwijderen in Bouw7 vanuit EVA.
- *
- * Aanmaken gebeurt in `lib/uren/verlof.ts` (goedgekeurde aanvraag). Dit bestand dekt wat daarna
- * komt: een planner past in de medewerkersplanning een verlof aan dat al in Bouw7 staat.
+ * Verlof (day-off per medewerker) aanmaken, bijwerken of verwijderen in Bouw7 vanuit EVA, voor
+ * wat een planner in de medewerkersplanning doet. Goedgekeurde verlofaanvragen gaan via
+ * `lib/uren/verlof.ts`, dat fail-soft is en een herkansing via de cron kent.
  *
  * WAAROM EERST BOUW7, DAN EVA. Een rij met `bron='bouw7'` wordt bij elke sync uit Bouw7
  * overschreven, en een verwijderde rij komt terug zolang de day-off in Bouw7 bestaat. Alleen EVA
@@ -55,13 +54,27 @@ function offsetMinuten(ms: number): number {
   return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]))
 }
 
+/**
+ * Maak een nieuwe day-off aan — voor verlof dat een planner zelf in de medewerkersplanning zet.
+ * Geeft het Bouw7-id terug; dat moet op de EVA-rij, anders importeert de sync hem als tweede rij.
+ */
+export async function maakDayOffInBouw7(d: Omit<DayOffInvoer, 'bouw7Id'>): Promise<string> {
+  const res = await postDayOff(d)
+  if (res?.id == null) throw new Error('Bouw7 gaf geen id terug voor het nieuwe verlof.')
+  return String(res.id)
+}
+
 /** Werk een bestaande day-off bij. POST met `id` is in Bouw7 een update, geen nieuw record. */
 export async function werkDayOffBijInBouw7(d: DayOffInvoer): Promise<void> {
+  await postDayOff(d, d.bouw7Id)
+}
+
+async function postDayOff(d: Omit<DayOffInvoer, 'bouw7Id'>, bouw7Id?: string): Promise<{ id?: number }> {
   const client = await getBouw7ClientOfNull()
   if (!client) throw new Error('De Bouw7-koppeling is niet beschikbaar.')
   const heleDagen = !d.startTijd
-  await client.post(PAD, {
-    id: Number(d.bouw7Id),
+  return client.post<{ id?: number }>(PAD, {
+    ...(bouw7Id ? { id: Number(bouw7Id) } : {}),
     employee: { id: d.employeeId },
     startDate: naarBouw7DayOffDatum(d.startDatum, heleDagen ? null : d.startTijd),
     endDate: naarBouw7DayOffDatum(d.eindDatum, heleDagen ? null : d.eindTijd),

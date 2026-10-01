@@ -5,13 +5,15 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { MedewerkerAfwezigheid } from '@everts/database/platform-types'
 import { vereisRecht } from '@/lib/auth/rechten'
-import { werkDayOffBijInBouw7, verwijderDayOffInBouw7 } from '@/lib/bouw7/verlof-write'
+import { maakDayOffInBouw7, werkDayOffBijInBouw7, verwijderDayOffInBouw7 } from '@/lib/bouw7/verlof-write'
 import { berekenVerlofUren } from '@/lib/uren/verlof'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
 const tijdRegex = /^\d{2}:\d{2}$/
+
+const SOORT_LABEL = { verlof: 'Verlof', ziek: 'Ziek', training: 'Training', overig: 'Afwezig' } as const
 
 const afwezigheidSchema = z.object({
   medewerker_id: z.string().uuid(),
@@ -32,18 +34,53 @@ export async function maakAfwezigheid(
   if (parsed.data.eind_datum < parsed.data.start_datum)
     return { ok: false, error: 'Einddatum mag niet vóór startdatum liggen' }
 
+  const v = parsed.data
+  const startTijd = v.start_tijd ?? null
+  const eindTijd  = startTijd ? v.eind_tijd ?? null : null
+
+  // Eerst Bouw7, net als bij wijzigen: lukt dat niet, dan ook niets in EVA, zodat de planner het
+  // opnieuw probeert en de twee niet uiteenlopen. Een medewerker zonder Bouw7-koppeling (test-
+  // account, net aangenomen) krijgt het verlof alleen in EVA.
+  let bouw7Id: string | null = null
+  const { data: med } = await db()
+    .from('medewerkers').select('bouw7_id').eq('id', v.medewerker_id).maybeSingle()
+  const employeeId = Number(med?.bouw7_id)
+  if (employeeId) {
+    try {
+      bouw7Id = await maakDayOffInBouw7({
+        employeeId,
+        startDatum: v.start_datum, eindDatum: v.eind_datum,
+        startTijd, eindTijd,
+        uren: await verlofUren(v.medewerker_id, v.start_datum, v.eind_datum, startTijd, eindTijd),
+        // Bouw7 kent geen soort; zonder opmerking zet de soort er tenminste iets herkenbaars in.
+        opmerking: v.opmerking?.trim() || SOORT_LABEL[v.type],
+      })
+    } catch (e) {
+      console.error('[verlof] aanmaken in Bouw7 mislukt:', e)
+      return { ok: false, error: 'Bouw7 nam het verlof niet aan; er is niets opgeslagen. Probeer het later opnieuw.' }
+    }
+  }
+
   const { data, error } = await db()
     .from('medewerker_afwezigheid')
     .insert({
-      ...parsed.data,
-      start_tijd: parsed.data.start_tijd ?? null,
-      eind_tijd:  parsed.data.eind_tijd  ?? null,
-      opmerking:  parsed.data.opmerking  ?? null,
+      ...v,
+      start_tijd: startTijd,
+      eind_tijd:  eindTijd,
+      opmerking:  v.opmerking ?? null,
+      bron:       'eva',
+      // Hieraan herkent de sync dat deze day-off van EVA komt en importeert hem niet nog eens.
+      bouw7_id:   bouw7Id,
     })
     .select('*')
     .single()
 
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    // Bouw7 staat er al in; zonder EVA-rij zou de sync hem als bron='bouw7' terugzetten met een
+    // andere soort. Liever helemaal terug, zodat opnieuw proberen geen dubbel verlof oplevert.
+    if (bouw7Id) await verwijderDayOffInBouw7(bouw7Id).catch(e => console.error('[verlof] terugdraaien in Bouw7 mislukt:', e))
+    return { ok: false, error: error.message }
+  }
   revalidatePath('/planning/medewerker')
   return { ok: true, data }
 }

@@ -250,13 +250,9 @@ export default function BerichtBehandelen({
   }, [klantZoek])
 
   // Welke route hoort bij dit bericht? Een opdracht maakt geen nieuw dossier maar
-  // wint een bestaande offerte; het scherm toont dan een ander paneel.
-  //
-  // De route vraagt een offertetreffer die te geloven is (`heeftOfferteTreffer`),
-  // niet het enkele bestaan van een kandidaat. Een treffer op straat en huisnummer
-  // zette het scherm op de opdrachtroute, en daar bestaat de knop "Dossier aanmaken"
-  // niet -- een keurig gelezen opdrachtbon was dan niet in te schrijven. De zwakke
-  // kandidaten blijven wél in de lijst eronder staan.
+  // wint een bestaande offerte; het scherm toont dan een ander paneel. Dat vraagt een
+  // treffer die te geloven is -- waarom, staat bij `heeftOfferteTreffer`. De zwakke
+  // kandidaten blijven wél in de offertelijst eronder staan.
   const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
   const isRegie = gekeurd ? Boolean(gekeurd.regie) : Boolean(velden.regie)
   const route = bepaalRoute(b.soort, heeftOfferteTreffer(detail.duplicaten), isRegie)

@@ -138,10 +138,19 @@ export async function offerteBtwVerdeling(
     if (!Number.isFinite(bedrag) || bedrag === 0) continue
 
     const tariefId = regel.btw_tarief_id ?? quote.btw_tarief_id ?? null
-    const tarief = tariefId ? tarieven.find(t => t.id === tariefId) : undefined
-    const pct = tarief
-      ? heffingsPercentage(tarief)
-      : Number(regel.btw_pct ?? quote.btw_pct ?? 21)
+    const pctRegel = Number(regel.btw_pct ?? quote.btw_pct ?? 21)
+    /**
+     * Veel offerteregels dragen alleen een percentage, geen tarief: de calculatie zet standaard
+     * 21% (of 9% bij arbeid) zonder `btw_tarief_id`. Zonder tarief geen Bouw7-tarief, en dan
+     * weigerde het termijnschema de hele offerte. Past het percentage op precies één niet-verlegd
+     * tarief, dan ís dat het tarief waarmee de offerte is doorgerekend — geen gok. Verlegd valt
+     * hier buiten: dat is aan een percentage niet te zien.
+     */
+    const opPercentage = tarieven.filter(t => !t.verlegd && t.percentage === pctRegel)
+    const tarief = tariefId
+      ? tarieven.find(t => t.id === tariefId)
+      : opPercentage.length === 1 ? opPercentage[0] : undefined
+    const pct = tarief ? heffingsPercentage(tarief) : pctRegel
     const sleutel = tarief ? `t:${tarief.id}` : `p:${pct}`
 
     const bestaand = perTarief.get(sleutel)

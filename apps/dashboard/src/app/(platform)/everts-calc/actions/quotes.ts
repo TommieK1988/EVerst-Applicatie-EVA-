@@ -1218,10 +1218,14 @@ export async function getQuoteTotalenVoorProject(projectId: string): Promise<{
   // de nieuwste rij zijn en daarmee als aanneemsom van het hele dossier gaan gelden — een leeg
   // concept-meerwerk zette het Informatie-tab zo op € 0,00 bij een opdracht van bijna vijftig mille.
   // Zelfde selectie als `vindHoofdOfferte` in lib/dossiers/opdracht-onderdelen.ts.
+  //
+  // De kolom heet `totaal_inc_btw` (zonder l). Hier stond `totaal_incl_btw`: PostgREST weigerde
+  // dan de hele select, `quote` werd null en deze functie gaf altijd null terug. Daardoor nam
+  // "Offerte gewonnen" op een servicedeskbon nooit een aanneemsom over en bleef de prognose nul.
   const { data: quote } = await supabase
     .from('quotes')
     .select(`
-      id, subtotaal_ex_btw, stelposten_subtotaal, opties_subtotaal, btw_bedrag, totaal_incl_btw,
+      id, subtotaal_ex_btw, stelposten_subtotaal, opties_subtotaal, btw_bedrag, totaal_inc_btw,
       lines:quote_lines(kostprijs_pe, hoeveelheid, section_id),
       sections:quote_sections(id, is_optioneel)
     `)
@@ -1243,16 +1247,16 @@ export async function getQuoteTotalenVoorProject(projectId: string): Promise<{
     }, 0) * 100
   ) / 100
 
-  const vp       = quote.subtotaal_ex_btw ?? 0
+  const vp       = Number(quote.subtotaal_ex_btw ?? 0)
   const marge_euro = Math.round((vp - kostprijs) * 100) / 100
   const marge_pct  = vp > 0 ? Math.round((marge_euro / vp) * 1000) / 10 : 0
 
   return {
     subtotaal_ex_btw:     vp,
-    stelposten_subtotaal: quote.stelposten_subtotaal ?? 0,
-    opties_subtotaal:     quote.opties_subtotaal     ?? 0,
-    btw_bedrag:           quote.btw_bedrag           ?? 0,
-    totaal_incl_btw:      quote.totaal_incl_btw      ?? 0,
+    stelposten_subtotaal: Number(quote.stelposten_subtotaal ?? 0),
+    opties_subtotaal:     Number(quote.opties_subtotaal     ?? 0),
+    btw_bedrag:           Number(quote.btw_bedrag           ?? 0),
+    totaal_incl_btw:      Number(quote.totaal_inc_btw       ?? 0),
     kostprijs,
     marge_euro,
     marge_pct,
