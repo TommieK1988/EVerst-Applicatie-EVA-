@@ -465,10 +465,10 @@ export type CodeRegelView = {
    * Wat er van deze post al op een factuur staat, excl. btw. Opgeteld uit de afgeboekte boekingen
    * en de losse regels die hun eigen factuur onthouden.
    *
-   * Een benadering, en bewust: stond er op een afgeleide factuurregel een vast bedrag, dan is de
-   * som van de boekingen eronder niet precies wat er gefactureerd is. Exact worden zou vragen om
-   * het regelbedrag per groep bij het factureren vast te leggen; zolang dat er niet is, is dit het
-   * dichtstbijzijnde getal dat uit de bestaande gegevens volgt.
+   * Klopt met de factuur: bij het klaarzetten krijgt elke boeking het bedrag mee dat er werkelijk
+   * op de factuur kwam, ook als de regel een vast bedrag had (naar rato verdeeld over de boekingen
+   * eronder). Facturen van vóór oktober 2026 hadden dat nog niet en tonen daar de berekende som.
+   * Een regel die daarna in Bouw7 zelf is aangepast, ziet EVA niet.
    */
   alGefactureerdBedrag: number
   /** Bestaat de code ook in Bouw7? Zo niet, dan kan er niets op geboekt worden. */
@@ -1386,6 +1386,29 @@ export async function maakRegieFactuurInBouw7(
       .filter(b => !b.uitgesloten && !b.gefactureerd && opFactuur.has(`${c.bewakingscode}|${b.groepSleutel}`))
       .map(b => ({ boeking: b, bewakingscode: c.bewakingscode })))
 
+  // Wat er per boeking werkelijk op de factuur kwam. Zonder vast bedrag is dat gewoon de eigen
+  // verkoopwaarde; mét vast bedrag op de regel is het dat regelbedrag, naar rato over de boekingen
+  // eronder verdeeld (afrondingsrest op de laatste). Het vaste bedrag wordt hieronder gewist, dus
+  // dit is de enige plek waar het nog vast te leggen is — anders toont "Al gefactureerd" de som van
+  // de berekende bedragen en loopt hij uit de pas met de factuur zelf.
+  const gefactureerdBedrag = new Map<string, number>()
+  for (const r of regels) {
+    const inGroep = mee.filter(m =>
+      m.bewakingscode === r.bewakingscode && m.boeking.groepSleutel === r.groepSleutel)
+    if (inGroep.length === 0) continue
+    const basisSom = inGroep.reduce((s, m) => s + (m.boeking.verkoopBedrag || 0), 0)
+    let verdeeld = 0
+    inGroep.forEach((m, i) => {
+      const deel = i === inGroep.length - 1
+        ? rond(r.bedrag - verdeeld)
+        : rond(basisSom !== 0
+          ? r.bedrag * (m.boeking.verkoopBedrag || 0) / basisSom
+          : r.bedrag / inGroep.length)
+      verdeeld = rond(verdeeld + deel)
+      gefactureerdBedrag.set(m.boeking.sleutel, deel)
+    })
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
@@ -1430,7 +1453,7 @@ export async function maakRegieFactuurInBouw7(
       inkoop_bedrag: boeking.inkoopBedrag,
       opslag_pct: boeking.opslagPct,
       verkoop_tarief: boeking.verkoopTarief,
-      verkoop_bedrag: boeking.verkoopBedrag,
+      verkoop_bedrag: gefactureerdBedrag.get(boeking.sleutel) ?? boeking.verkoopBedrag,
       bewakingscode,
       groep_sleutel: boeking.handmatigToegewezen ? boeking.groepSleutel : null,
       status: 'gefactureerd',
