@@ -48,7 +48,18 @@
     "wissen": "Wyczyść",
     "locatieOphalen": "Pobieranie lokalizacji…",
     "huidigeLocatie": "Użyj obecnej lokalizacji",
-    "laatstBekendeLocatie": "Użyj ostatniej znanej lokalizacji"
+    "laatstBekendeLocatie": "Użyj ostatniej znanej lokalizacji",
+    "locatieFout": {
+      "geenGps": "Ta przeglądarka nie udostępnia lokalizacji.",
+      "geweigerd": "EVA nie może używać twojej lokalizacji.",
+      "teTraag": "Ustalanie lokalizacji trwało za długo. W razie potrzeby wyjdź na chwilę na zewnątrz.",
+      "geenFix": "Nie udało się ustalić lokalizacji."
+    },
+    "locatieHerstel": {
+      "ios": "Włącz lokalizację w Ustawienia → Safari → Lokalizacja (lub Ustawienia → Prywatność → Usługi lokalizacji). Zainstaluj EVA na ekranie głównym – wtedy zrobisz to tylko raz.",
+      "android": "Stuknij kłódkę w pasku adresu → Uprawnienia → Lokalizacja i wybierz „Zezwól”.",
+      "anders": "Włącz ponownie lokalizację dla EVA w ustawieniach przeglądarki."
+    }
   },
   "conceptKeuze": {
     "uitleg": "{aantal, plural, one {Dla tego formularza w tym projekcie jest # otwarta wersja robocza.} few {Dla tego formularza w tym projekcie są # otwarte wersje robocze.} many {Dla tego formularza w tym projekcie jest # otwartych wersji roboczych.} other {Dla tego formularza w tym projekcie jest # otwartej wersji roboczej.}} Wznów istniejącą wersję roboczą lub zacznij nowy egzemplarz.",

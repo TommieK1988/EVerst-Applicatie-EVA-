@@ -48,7 +48,18 @@
     "wissen": "Wissen",
     "locatieOphalen": "Locatie ophalen…",
     "huidigeLocatie": "Huidige locatie gebruiken",
-    "laatstBekendeLocatie": "Laatst bekende locatie gebruiken"
+    "laatstBekendeLocatie": "Laatst bekende locatie gebruiken",
+    "locatieFout": {
+      "geenGps": "Deze browser geeft geen locatie door.",
+      "geweigerd": "EVA mag je locatie niet gebruiken.",
+      "teTraag": "Locatie duurde te lang. Ga eventueel even naar buiten.",
+      "geenFix": "Locatie ophalen lukte niet."
+    },
+    "locatieHerstel": {
+      "ios": "Zet locatie aan via Instellingen → Safari → Locatie (of Instellingen → Privacy → Locatievoorzieningen). Installeer EVA op je beginscherm: dan hoef je het maar één keer te doen.",
+      "android": "Tik op het slotje in de adresbalk → Machtigingen → Locatie, en kies \"Toestaan\".",
+      "anders": "Zet locatie voor EVA weer aan in de instellingen van je browser."
+    }
   },
   "conceptKeuze": {
     "uitleg": "{aantal, plural, one {Er staat # concept open voor dit formulier op dit dossier.} other {Er staan # concepten open voor dit formulier op dit dossier.}} Hervat een bestaand concept of begin een nieuw exemplaar.",

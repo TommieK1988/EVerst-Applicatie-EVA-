@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useLocatie, herstelUitleg } from '@/lib/locatie/toestemming'
+import { useLocatie, toestelSoort, LOCATIE_FOUT_SLEUTEL } from '@/lib/locatie/toestemming'
 
 // Onderdelen van FieldRenderer (foto's bij een aandachtspunt, locatie, sterren, handtekening).
 // Losgehaald zodat FieldRenderer niet verder boven de 800 regels groeit.
@@ -176,8 +176,8 @@ export function LocatieVeld({ value, onChange }: { value: LocatieWaarde; onChang
 
       {fout && (
         <p style={{ fontSize: 12, color: '#e53e3e', margin: 0 }}>
-          {fout.message}
-          {status === 'geweigerd' && <> {herstelUitleg()}</>}
+          {t(`veld.locatieFout.${LOCATIE_FOUT_SLEUTEL[fout.soort]}`)}
+          {status === 'geweigerd' && <> {t(`veld.locatieHerstel.${toestelSoort()}`)}</>}
           {/* Geen fix maar wel iets bekends: aanbieden in plaats van de gebruiker laten hangen. */}
           {fout.laatstBekend && fout.soort !== 'geweigerd' && (
             <button
