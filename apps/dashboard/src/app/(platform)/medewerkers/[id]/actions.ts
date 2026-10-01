@@ -24,6 +24,7 @@ import {
 } from '@/lib/auth/rechten'
 import { schrijfPlatteDesktopSet } from '@/lib/auth/rechten-opslag'
 import { bouwUitnodigingsMail } from '@/lib/auth/uitnodiging-mail'
+import { maakActivatielink } from '@/lib/auth/activatielink'
 import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
 import { controleerEenAccount } from '@/lib/auth/account-controle'
 import { verstuurMailNamensMedewerker, type MailBijlage } from '@/lib/o365/mail'
@@ -614,42 +615,13 @@ export async function verstuurUitnodiging(
   let herhaling = false
 
   if (!viaMicrosoft) {
-    const supabase = createAdminClient()
-
-    // Bepaal redirect-URL voor de activatielink in de e-mail. Na het volgen van de
-    // link zet de callback de sessie (met medewerker-poort) en stuurt door naar de
-    // set-wachtwoord-pagina, zodat de uitgenodigde een wachtwoord kiest waarmee hij
-    // voortaan kan inloggen.
     const { headers } = await import('next/headers')
-    const headersList = await headers()
-    const host = headersList.get('host') ?? 'localhost:3000'
+    const host = (await headers()).get('host') ?? 'localhost:3000'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
-    const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
-
-    // `generateLink` maakt de gebruiker aan én levert de activatielink op, maar
-    // verstuurt zelf geen mail — precies wat we willen, want de mail gaat hieronder
-    // in EVA-huisstijl de deur uit. Bestaat het account al (type 'invite' weigert dat),
-    // dan valt hij terug op een herstel-link: dezelfde bestemming, ander token.
-    const admin = supabase.auth.admin
-    let { data: linkData, error: linkErr } = await admin.generateLink({
-      type: 'invite',
-      email: med.email,
-      options: { redirectTo, data: { full_name: volledigeNaam } },
-    })
-    if (linkErr && /already|exists|registered/i.test(linkErr.message ?? '')) {
-      herhaling = true
-      ;({ data: linkData, error: linkErr } = await admin.generateLink({
-        type: 'recovery',
-        email: med.email,
-        options: { redirectTo },
-      }))
-    }
-    if (linkErr) return { ok: false, error: linkErr.message }
-
-    actieLink = linkData?.properties?.action_link ?? null
-    if (!actieLink) return { ok: false, error: 'Geen activatielink ontvangen van Supabase' }
-
-    auth_user_id = linkData?.user?.id ?? null
+    const link = await maakActivatielink({ email: med.email, volledigeNaam, basisUrl: `${protocol}://${host}` })
+    if (!link.ok) return { ok: false, error: link.error }
+    ;({ actieLink, herhaling } = link)
+    auth_user_id = link.authUserId
     if (auth_user_id) {
       await db().from('medewerkers').update({ auth_user_id }).eq('id', medewerker_id)
     }
