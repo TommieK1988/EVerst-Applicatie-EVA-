@@ -17,7 +17,7 @@ import { formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen
 import { bepaalAutoSoort, type BestandSoortDef } from '@/lib/dossiers/bestand-soort'
 import SoortCel from './SoortCel'
 
-type SorteerVeld = 'naam' | 'soort' | 'extensie' | 'bron' | 'grootte' | 'datum' | 'door'
+type SorteerVeld = 'naam' | 'soort' | 'extensie' | 'bron' | 'grootte' | 'datum'
 type Richting = 'op' | 'af'
 
 type Kolom = {
@@ -28,7 +28,7 @@ type Kolom = {
   /** Deze kolom rekt op; de rest krimpt tot de inhoud. */
   breed?: boolean
   /**
-   * Alleen op een breed scherm. Grootte en maker staan ook in het voorvertoningspaneel;
+   * Alleen op een breed scherm. De grootte staat ook in het voorvertoningspaneel;
    * naast dat paneel is de ruimte beter besteed aan de bestandsnaam.
    */
   alleenBreed?: boolean
@@ -42,7 +42,6 @@ const KOLOMMEN: Kolom[] = [
   { veld: 'bron', label: 'Opgeslagen in' },
   { veld: 'grootte', label: 'Grootte', rechts: true, alleenBreed: true },
   { veld: 'datum', label: 'Datum' },
-  { veld: 'door', label: 'Door', alleenBreed: true },
 ]
 
 // Compacte cel- en kopklassen — de kolommen staan bewust dicht op elkaar.
@@ -62,7 +61,6 @@ function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
     case 'extensie': return rij.extensie ?? ''
     case 'bron': return rij.bron
     case 'datum': return rij.datum ?? ''
-    case 'door': return rij.door ?? ''
   }
 }
 
@@ -210,7 +208,7 @@ export default function BestandenLijst({
               {KOLOMMEN.map(k => (
                 <th
                   key={k.veld}
-                  className={`${KOP} ${k.rechts ? 'text-right' : ''} ${k.breed ? 'w-full min-w-[200px]' : ''} ${k.alleenBreed ? BREED : ''}`}
+                  className={`${KOP} ${k.rechts ? 'text-right' : ''} ${k.breed ? 'w-full min-w-[160px]' : ''} ${k.alleenBreed ? BREED : ''}`}
                 >
                   <button
                     onClick={() => sorteerOp(k.veld)}
@@ -299,7 +297,6 @@ export default function BestandenLijst({
                 </td>
                 <td className={`${CEL} ${BREED} text-right tabular-nums text-neutral-500`}>{formatteerGrootte(r.grootte)}</td>
                 <td className={`${CEL} tabular-nums text-neutral-500`}>{r.datum ?? '—'}</td>
-                <td className={`${CEL} ${BREED} text-neutral-500`}>{r.door ?? '—'}</td>
               </tr>
             ))}
             {/* Nog geen bestanden: de kolommen blijven staan met een nulregel, zodat de lijst
@@ -315,7 +312,6 @@ export default function BestandenLijst({
                 <td className={CEL}>—</td>
                 <td className={`${CEL} ${BREED} text-right`}>—</td>
                 <td className={CEL}>—</td>
-                <td className={`${CEL} ${BREED}`}>—</td>
               </tr>
             ) : (
               <tr>

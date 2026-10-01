@@ -424,7 +424,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
               </span>
             </div>
           )}
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,34%)]">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(380px,39%)]">
         <Card>
           <SharePointMapPicker
             dossierId={dossierId}
