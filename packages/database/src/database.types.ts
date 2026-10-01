@@ -9343,6 +9343,7 @@ export type Database = {
           rechten_override: Json
           relatie_id: string | null
           standaard_uursoort_id: string | null
+          taal: string
           telefoon: string | null
           tussenvoegsel: string | null
           uit_dienst_per: string | null
@@ -9400,6 +9401,7 @@ export type Database = {
           rechten_override?: Json
           relatie_id?: string | null
           standaard_uursoort_id?: string | null
+          taal?: string
           telefoon?: string | null
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
@@ -9457,6 +9459,7 @@ export type Database = {
           rechten_override?: Json
           relatie_id?: string | null
           standaard_uursoort_id?: string | null
+          taal?: string
           telefoon?: string | null
           tussenvoegsel?: string | null
           uit_dienst_per?: string | null
@@ -18235,6 +18238,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      vertaal_cache: {
+        Row: {
+          aangemaakt_op: string
+          doeltaal: string
+          laatst_gebruikt_op: string
+          model: string | null
+          sleutel: string
+          vastgezet: boolean
+          vertaling: string
+        }
+        Insert: {
+          aangemaakt_op?: string
+          doeltaal: string
+          laatst_gebruikt_op?: string
+          model?: string | null
+          sleutel: string
+          vastgezet?: boolean
+          vertaling: string
+        }
+        Update: {
+          aangemaakt_op?: string
+          doeltaal?: string
+          laatst_gebruikt_op?: string
+          model?: string | null
+          sleutel?: string
+          vastgezet?: boolean
+          vertaling?: string
+        }
+        Relationships: []
       }
       voertuig_bestuurders: {
         Row: {

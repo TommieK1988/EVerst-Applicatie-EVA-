@@ -3,6 +3,11 @@ import { Montserrat, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegister from '@/components/eva/ServiceWorkerRegister'
 import { DialoogProvider } from '@/components/ui/dialogen'
+import { NextIntlClientProvider } from 'next-intl'
+import nl from '@/i18n/berichten/nl'
+import { kiesNaamruimtes } from '@/i18n/berichten'
+import { GEDEELDE_NAAMRUIMTES } from '@/i18n/gedeeld'
+import { TIJDZONE } from '@/i18n/talen'
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -130,7 +135,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* EVA-eigen bevestig-/meld-/tekstdialogen i.p.v. de browser-popups
             (window.confirm/alert/prompt). Hier in de root zodat /(platform), /m
             en de publieke routes er alle drie bij kunnen. */}
-        <DialoogProvider>{children}</DialoogProvider>
+        {/* Nederlandse teksten voor componenten die ook buiten /m draaien. In /m legt
+            app/m/layout.tsx er een provider in de taal van de medewerker overheen. */}
+        <NextIntlClientProvider locale="nl" messages={kiesNaamruimtes(nl, GEDEELDE_NAAMRUIMTES)} timeZone={TIJDZONE}>
+          <DialoogProvider>{children}</DialoogProvider>
+        </NextIntlClientProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

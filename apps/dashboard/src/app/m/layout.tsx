@@ -5,6 +5,24 @@ import GeenMobieleToegang from '@/components/auth/GeenMobieleToegang'
 import DesktopRedirect from '@/components/mobiel/DesktopRedirect'
 import MobielToasts from '@/components/mobiel/MobielToasts'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { Noto_Sans_Tamil } from 'next/font/google'
+import { NextIntlClientProvider } from 'next-intl'
+import { getAppTaal } from '@/i18n/server'
+import { laadBerichten } from '@/i18n/berichten'
+import { TIJDZONE } from '@/i18n/talen'
+import HtmlTaal from '@/i18n/HtmlTaal'
+
+/**
+ * Montserrat heeft geen Tamil-tekens. Dit lettertype vult alleen die aan: de browser
+ * downloadt het pas als er werkelijk Tamil op het scherm staat (unicode-range), dus
+ * Nederlandse en Poolse gebruikers merken er niets van.
+ */
+const notoTamil = Noto_Sans_Tamil({
+  subsets: ['tamil'],
+  variable: '--font-noto-tamil',
+  display: 'swap',
+  preload: false,
+})
 
 /**
  * MobielShell — eigen mobiele omgeving (`/m`), los van de desktop-PlatformShell.
@@ -29,9 +47,16 @@ export default async function MobielLayout({ children }: { children: React.React
     return <GeenMobieleToegang />
   }
 
+  // De taal van de medewerker bepaalt alle teksten in de app. Alle naamruimtes gaan mee:
+  // de app is één geheel en navigeert client-side tussen schermen.
+  const taal = await getAppTaal()
+  const berichten = await laadBerichten(taal)
+
   return (
+    <NextIntlClientProvider locale={taal} messages={berichten} timeZone={TIJDZONE}>
+    <HtmlTaal />
     <div
-      className="eva"
+      className={`eva ${notoTamil.variable}`}
       // Mobiel doet bewust NIET mee met donkere modus. Zonder deze vergrendeling
       // zou /m meekleuren zodra op hetzelfde apparaat donkere modus aanstaat,
       // terwijl er op mobiel geen schakelaar is om terug te zetten.
@@ -42,7 +67,7 @@ export default async function MobielLayout({ children }: { children: React.React
         height: '100dvh',
         overflow: 'hidden',
         background: 'var(--bg)',
-        fontFamily: "'Montserrat', ui-sans-serif, system-ui, sans-serif",
+        fontFamily: "'Montserrat', var(--font-noto-tamil), ui-sans-serif, system-ui, sans-serif",
         WebkitFontSmoothing: 'antialiased',
       }}
     >
@@ -61,5 +86,6 @@ export default async function MobielLayout({ children }: { children: React.React
         {children}
       </div>
     </div>
+    </NextIntlClientProvider>
   )
 }

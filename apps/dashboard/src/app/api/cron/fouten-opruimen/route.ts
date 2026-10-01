@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic'
 /** Afgevinkte fouten mogen sneller weg dan openstaande. */
 const DAGEN_OPGELOST = 30
 const DAGEN_ALLES = 90
+/** Tijdelijke vertalingen (vertaal_cache) die zo lang niet gebruikt zijn. */
+const DAGEN_VERTALING = 30
 
 function dagenGeleden(dagen: number): string {
   return new Date(Date.now() - dagen * 24 * 60 * 60 * 1000).toISOString()
@@ -51,11 +53,22 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       .select('id')
     if (fout2) throw new Error(fout2.message)
 
-    log.klaar({ opgelost: opgeloste?.length ?? 0, verlopen: oude?.length ?? 0 })
+    // Tijdelijke vertalingen voor EVA Mobiel (lib/vertalen): weg na 30 dagen niet gebruikt,
+    // behalve wat bewust is vastgezet. Fail-soft: zonder tabel (migratie nog niet gedraaid)
+    // gaat het opruimen van het foutenlogboek gewoon door.
+    const { count: vertalingen } = await admin
+      .from('vertaal_cache')
+      .delete({ count: 'exact' })
+      .eq('vastgezet', false)
+      .lt('laatst_gebruikt_op', dagenGeleden(DAGEN_VERTALING))
+      .then((r: { count: number | null }) => r, () => ({ count: 0 }))
+
+    log.klaar({ opgelost: opgeloste?.length ?? 0, verlopen: oude?.length ?? 0, vertalingen: vertalingen ?? 0 })
     return NextResponse.json({
       ok: true,
       verwijderd_opgelost: opgeloste?.length ?? 0,
       verwijderd_verlopen: oude?.length ?? 0,
+      verwijderd_vertalingen: vertalingen ?? 0,
       duur_ms: Date.now() - startedAt,
     })
   } catch (err) {

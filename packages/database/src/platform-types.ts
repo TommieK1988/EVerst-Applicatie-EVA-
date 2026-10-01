@@ -1065,6 +1065,8 @@ export { RECHTEN_MODULES } from './rechten-catalogus'
 
 export type Medewerker = {
   id: string
+  /** Taal van EVA Mobiel: 'nl' | 'pl' | 'ta'. Optioneel tot de migratie overal gedraaid heeft. */
+  taal?: string | null
   voornaam: string
   tussenvoegsel: string | null
   achternaam: string

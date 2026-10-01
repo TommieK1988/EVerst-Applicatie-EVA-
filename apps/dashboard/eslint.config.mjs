@@ -1,6 +1,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FlatCompat } from '@eslint/eslintrc'
+import i18next from 'eslint-plugin-i18next'
 
 /**
  * ESLint-configuratie voor EVA.
@@ -50,6 +51,29 @@ export default [
        * maakt de bron slechter leesbaar zonder dat er iets mee opgelost wordt.
        */
       'react/no-unescaped-entities': 'off',
+    },
+  },
+
+  {
+    /**
+     * EVA Mobiel is meertalig (nl/pl/ta): elke zichtbare tekst hoort in de taalbestanden
+     * (src/i18n/berichten), niet als losse string in de JSX. Anders ziet een Poolse of Tamil
+     * monteur ineens Nederlands. Zie docs/plan-meertaligheid-app.md.
+     *
+     * Alleen JSX-tekst en de attributen die tekst tonen; `href`, `variant`, SVG-paden en
+     * dergelijke zijn geen tekst. Wat écht niet vertaald hoeft (een eenheid als "m²", een
+     * merknaam) mag met een `eslint-disable-next-line` en een korte reden.
+     */
+    files: ['src/app/m/**/*.tsx', 'src/components/mobiel/**/*.tsx'],
+    plugins: { i18next },
+    rules: {
+      'i18next/no-literal-string': ['warn', {
+        mode: 'jsx-only',
+        'jsx-attributes': {
+          include: ['placeholder', 'title', 'aria-label', 'alt', 'label', 'titel', 'subtitel', 'tekst', 'omschrijving', 'leegTekst'],
+        },
+        message: 'Losse tekst in EVA Mobiel: zet hem in src/i18n/berichten en gebruik t(…)',
+      }],
     },
   },
 
