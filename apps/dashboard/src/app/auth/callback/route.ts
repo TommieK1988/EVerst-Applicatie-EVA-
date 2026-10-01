@@ -13,16 +13,6 @@ import { controleerKoppeling, type KoppelingStatus } from '@/lib/o365/tokens'
  */
 const KOPPELING_CHECK_MS = 4_000
 
-/**
- * Linktypes die als `?token_hash=…&type=…` binnenkomen: de uitnodigings- en herstellinks
- * die EVA zelf mailt (medewerkers/[id]/actions.ts). Die gaan bewust níét via Supabase's
- * eigen `/verify`, want dat stuurt door met de tokens in het URL-fragment — en dat bereikt
- * deze route nooit.
- */
-const OTP_TYPES = ['invite', 'recovery', 'magiclink', 'email'] as const
-type OtpType = typeof OTP_TYPES[number]
-const isOtpType = (t: string | null): t is OtpType => OTP_TYPES.includes(t as OtpType)
-
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
@@ -36,25 +26,11 @@ export async function GET(request: Request) {
   // dit een open redirect. Zie lib/auth/next-pad.ts.
   const next = veiligNextPad(searchParams.get('next')) ?? (mobiel ? '/m' : '/')
 
-  const tokenHash = searchParams.get('token_hash')
-  const otpType = searchParams.get('type')
-
-  if (code || (tokenHash && isOtpType(otpType))) {
+  if (code) {
     // Mobiele login → auth-cookies meteen persistent schrijven (de markercookie
     // staat nog niet in de inkomende request, dus expliciet forceren).
     const supabase = await createClient({ persistentSessie: mobiel })
-    const resultaat = code
-      ? await supabase.auth.exchangeCodeForSession(code)
-      : await supabase.auth.verifyOtp({ type: otpType as OtpType, token_hash: tokenHash! })
-    let user = resultaat.data.user
-    let error = resultaat.error
-    // Een link werkt maar één keer, en mailprogramma's halen hem soms vooraf op voor
-    // een preview. Is er al een geldige sessie (eerste klik gelukt, nu ververst of
-    // teruggeknopt), dan met díé gebruiker verder in plaats van "geen toegang".
-    if (error && !code) {
-      const { data } = await supabase.auth.getUser()
-      if (data.user) { user = data.user; error = null }
-    }
+    const { data: { user }, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && user?.email) {
       const admin = createAdminClient()

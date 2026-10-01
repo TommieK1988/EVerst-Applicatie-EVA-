@@ -618,7 +618,9 @@ export async function verstuurUitnodiging(
     const { headers } = await import('next/headers')
     const host = (await headers()).get('host') ?? 'localhost:3000'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
-    const link = await maakActivatielink({ email: med.email, volledigeNaam, basisUrl: `${protocol}://${host}` })
+    const link = await maakActivatielink({
+      email: med.email, volledigeNaam, basisUrl: `${protocol}://${host}`, authUserId: med.auth_user_id,
+    })
     if (!link.ok) return { ok: false, error: link.error }
     ;({ actieLink, herhaling } = link)
     auth_user_id = link.authUserId

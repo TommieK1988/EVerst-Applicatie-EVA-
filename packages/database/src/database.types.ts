@@ -18135,6 +18135,39 @@ export type Database = {
         }
         Relationships: []
       }
+      wachtwoord_links: {
+        Row: {
+          aangemaakt_op: string
+          auth_user_id: string
+          doel: string
+          email: string
+          gebruikt_op: string | null
+          id: string
+          token_hash: string
+          verloopt_op: string
+        }
+        Insert: {
+          aangemaakt_op?: string
+          auth_user_id: string
+          doel: string
+          email: string
+          gebruikt_op?: string | null
+          id?: string
+          token_hash: string
+          verloopt_op: string
+        }
+        Update: {
+          aangemaakt_op?: string
+          auth_user_id?: string
+          doel?: string
+          email?: string
+          gebruikt_op?: string | null
+          id?: string
+          token_hash?: string
+          verloopt_op?: string
+        }
+        Relationships: []
+      }
       wagenpark_werktijd_maandrapport: {
         Row: {
           aangemaakt_op: string

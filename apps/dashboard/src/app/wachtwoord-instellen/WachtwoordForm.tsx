@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { stelWachtwoordIn } from './actions'
+import { activeerAccount } from '@/app/auth/activeren/actions'
 
 const veldStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', fontSize: 15,
@@ -11,10 +12,11 @@ const veldStyle: React.CSSProperties = {
 }
 
 /**
- * Wachtwoord kiezen na een uitnodiging. De sessie is al gezet door de callback;
- * na opslaan door naar de mobiele omgeving.
+ * Wachtwoord kiezen. Met `token` (vanaf /auth/activeren) zet de activatielink het
+ * wachtwoord en logt meteen in; zonder token is er al een sessie en wordt alleen het
+ * wachtwoord gezet. Daarna door naar de mobiele omgeving.
  */
-export default function WachtwoordForm() {
+export default function WachtwoordForm({ token }: { token?: string } = {}) {
   const [nieuw, setNieuw] = React.useState('')
   const [bevestig, setBevestig] = React.useState('')
   const [loading, setLoading] = React.useState(false)
@@ -24,7 +26,9 @@ export default function WachtwoordForm() {
     e.preventDefault()
     setFout(null)
     setLoading(true)
-    const res = await stelWachtwoordIn({ nieuw, bevestig })
+    const res = token
+      ? await activeerAccount({ token, nieuw, bevestig })
+      : await stelWachtwoordIn({ nieuw, bevestig })
     if (!res.ok) { setFout(res.error); setLoading(false); return }
     // Volledige navigatie zodat de middleware de sessie vers oppakt.
     window.location.assign('/m')

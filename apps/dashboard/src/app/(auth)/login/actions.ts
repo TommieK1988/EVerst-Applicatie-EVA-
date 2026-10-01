@@ -7,6 +7,9 @@ import { z } from 'zod'
 import { COOKIE_SESSIE_VERLOOPT } from '@/lib/sessie'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
 import { logtInMetMicrosoft, MICROSOFT_UITLEG } from '@/lib/auth/account-regels'
+import { maakActivatielink } from '@/lib/auth/activatielink'
+import { bouwHerstelMail } from '@/lib/auth/uitnodiging-mail'
+import { verstuurMailViaGedeeldePostbus } from '@/lib/o365/mail'
 
 const loginSchema = z.object({
   email: z.string().email('Ongeldig e-mailadres'),
@@ -75,10 +78,18 @@ export async function wachtwoordLogin(
   return { ok: true }
 }
 
+/** Zoveel herstelmails per account per uur; daarboven antwoorden we wel `ok` maar sturen niets. */
+const HERSTEL_PER_UUR = 3
+
 /**
- * Stuurt een herstel-link (wachtwoord vergeten). De link loopt via de callback
- * naar de set-wachtwoord-pagina. Antwoordt altijd `ok` — geen onderscheid tussen
- * bestaande en onbekende e-mail, zodat je niet kunt aftasten wie een account heeft.
+ * Stuurt een herstel-link (wachtwoord vergeten) naar /auth/activeren. Antwoordt altijd
+ * `ok` — geen onderscheid tussen bestaande en onbekende e-mail, zodat je niet kunt
+ * aftasten wie een account heeft.
+ *
+ * Niet meer via `resetPasswordForEmail`: die mail komt uit de Supabase-mailer (een paar
+ * mails per uur voor het hele project — op 1 oktober 2026 liep dat vol), de link verloopt
+ * na een uur en werkt alleen in de browser waarin hij is aangevraagd. Zie
+ * lib/auth/activatielink.ts.
  */
 export async function stuurHerstelLink(
   raw: unknown,
@@ -92,13 +103,50 @@ export async function stuurHerstelLink(
     return { ok: false, error: `Voor dit adres stel je geen wachtwoord in. ${MICROSOFT_UITLEG}` }
   }
 
-  const h = await headers()
-  const host = h.get('host') ?? 'localhost:3000'
-  const protocol = host.startsWith('localhost') ? 'http' : 'https'
-  const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
+  const email = parsed.data.email.trim().toLowerCase()
+  const admin = createAdminClient()
+  // `ilike` met escapen: `_` en `%` zijn jokertekens en `_` komt in e-mailadressen voor.
+  const { data: medewerker } = await admin
+    .from('medewerkers')
+    .select('id, voornaam, auth_user_id')
+    .ilike('email', email.replace(/([\\%_])/g, '\\$1'))
+    .eq('actief', true)
+    .neq('gebruiker_type', 'geen')
+    .limit(1)
+    .maybeSingle()
+  if (!medewerker) return { ok: true }
 
-  const supabase = await createClient()
-  await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo })
+  if (medewerker.auth_user_id) {
+    const { count } = await admin
+      .from('wachtwoord_links')
+      .select('id', { count: 'exact', head: true })
+      .eq('auth_user_id', medewerker.auth_user_id)
+      .eq('doel', 'herstel')
+      .gte('aangemaakt_op', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    if ((count ?? 0) >= HERSTEL_PER_UUR) return { ok: true }
+  }
+
+  const host = (await headers()).get('host') ?? 'localhost:3000'
+  const protocol = host.startsWith('localhost') ? 'http' : 'https'
+  const link = await maakActivatielink({
+    email, volledigeNaam: null, basisUrl: `${protocol}://${host}`,
+    authUserId: medewerker.auth_user_id, doel: 'herstel',
+  })
+  if (!link.ok) return { ok: false, error: 'Er ging iets mis. Probeer het over een paar minuten opnieuw.' }
+  if (!medewerker.auth_user_id) {
+    await admin.from('medewerkers').update({ auth_user_id: link.authUserId }).eq('id', medewerker.id)
+  }
+
+  const mail = bouwHerstelMail({ voornaam: medewerker.voornaam, actieLink: link.actieLink })
+  try {
+    await verstuurMailViaGedeeldePostbus({ to: [email], subject: mail.onderwerp, bodyHtml: mail.bodyHtml })
+  } catch {
+    // Gedeelde postbus niet ingesteld of onbereikbaar: dan liever de Supabase-mail dan niets.
+    // Die link loopt via /auth/callback naar /wachtwoord-instellen.
+    const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent('/wachtwoord-instellen')}`
+    const supabase = await createClient()
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  }
   return { ok: true }
 }
 
