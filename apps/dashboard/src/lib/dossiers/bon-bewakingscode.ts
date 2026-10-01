@@ -47,6 +47,7 @@ import {
 } from '@/components/dossiers/types'
 import { maakRegieBewakingscodeBouw7 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { SERVICEDESK_CATEGORIEEN } from '@/components/dossiers/fase-plaatsing'
+import { isRegieOpdrachtRij } from './regie-opdracht'
 
 // De codes en hun namen staan in `components/dossiers/types.ts` — leesbaar aan beide kanten van
 // de client/server-grens, zonder dit bestand (en daarmee de Bouw7-write) mee te slepen.
@@ -62,6 +63,8 @@ type DossierRij = {
   id: string
   bouw7_id: string | null
   facturatiemethode: string | null
+  facturatiemethode_handmatig: boolean | null
+  servicedesk_substatus: string | null
   bouw7_projectstatus_naam: string | null
   bouw7_categorie_naam: string | null
   regie_bewakingscode: string | null
@@ -69,7 +72,8 @@ type DossierRij = {
 }
 
 const DOSSIER_VELDEN =
-  'id, bouw7_id, facturatiemethode, bouw7_projectstatus_naam, bouw7_categorie_naam, ' +
+  'id, bouw7_id, facturatiemethode, facturatiemethode_handmatig, servicedesk_substatus, ' +
+  'bouw7_projectstatus_naam, bouw7_categorie_naam, ' +
   'regie_bewakingscode, regie_bouw7_chapter_id'
 
 export type BonCodeResultaat =
@@ -95,21 +99,34 @@ export type BonCodeResultaat =
  * dezelfde afweging als bij stelposten: de gebruiker ziet de code en de melding, in plaats van een
  * stille mislukking.
  */
-export async function zorgVoorBonBewakingscode(dossierId: string): Promise<BonCodeResultaat> {
+export async function zorgVoorBonBewakingscode(
+  dossierId: string,
+  opties?: { regieOpdracht?: boolean },
+): Promise<BonCodeResultaat> {
   const supabase = createAdminClient()
   const { data } = await supabase.from('dossiers').select(DOSSIER_VELDEN).eq('id', dossierId).maybeSingle()
   const d = data as DossierRij | null
   if (!d) return { ok: false, error: 'Dossier niet gevonden.' }
-  return zorgVoorCodeOpRij(supabase, d)
+  return zorgVoorCodeOpRij(supabase, d, opties)
 }
 
 /** De kern, gedeeld door de losse aanroep en de bulkronde; verwacht een al gelezen dossierrij. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function zorgVoorCodeOpRij(supabase: AdminClient, d: DossierRij): Promise<BonCodeResultaat> {
-  // Strikt afbakenen op servicedesk. `facturatiemethode` staat bedrijfsbreed standaard op 'regie'
-  // en wordt alleen op een servicedeskbon bewust gezet; op een opdracht is de waarde betekenisloos
-  // en zou dit honderden opdrachten een code geven die daar niets betekent.
-  if (!isServicedeskDossier(d)) {
+async function zorgVoorCodeOpRij(
+  supabase: AdminClient,
+  d: DossierRij,
+  opties?: { regieOpdracht?: boolean },
+): Promise<BonCodeResultaat> {
+  // Strikt afbakenen op servicedesk. `facturatiemethode` staat bedrijfsbreed standaard op 'regie';
+  // op een opdracht telt hij alleen als iemand hem bewust zette (`opRegie`), en zonder die grens
+  // kregen honderden opdrachten een code die daar niets betekent.
+  //
+  // Eén uitzondering, alleen op verzoek (`opties.regieOpdracht`, vanuit de schakelaar op de
+  // Verkoop-tab): een regieopdracht zónder eigen bewakingscodes krijgt RW01 als opvangcode, anders
+  // valt er nergens op te boeken. Nooit in de bulkronde, en nooit AW01: een aangenomen opdracht
+  // rekent af via zijn werkbegroting, niet via een opvanggroep.
+  const regieOpdracht = opties?.regieOpdracht === true && isRegieOpdrachtRij(d)
+  if (!isServicedeskDossier(d) && !regieOpdracht) {
     return { ok: true, code: null, nieuw: false, reden: 'Geen servicedeskbon.' }
   }
   if (!d.bouw7_id) {
@@ -224,7 +241,10 @@ export async function zorgVoorBonBewakingscodes(
   uit.meerTeDoen = !opties?.dossierId && rijen.length > MAX_PER_RUN
   for (const d of rijen.slice(0, opties?.dossierId ? rijen.length : MAX_PER_RUN)) {
     try {
-      const res = await zorgVoorCodeOpRij(supabase, d)
+      // Een regieopdracht alleen opnieuw proberen als hij eerder bewust RW01 kreeg; anders zou
+      // "Verversen" een opvangcode leggen naast een werkbegroting die zijn eigen codes heeft.
+      const opnieuw = opties?.dossierId && d.regie_bewakingscode ? { regieOpdracht: true } : undefined
+      const res = await zorgVoorCodeOpRij(supabase, d, opnieuw)
       if (!res.ok) { uit.fouten++; meldingen.push(`${d.id}: ${res.error}`); continue }
       if (res.code == null) continue // hoorde geen code te krijgen (geen servicedesk, geen Bouw7)
       // Alleen tellen wat er werkelijk in Bouw7 staat. Een code die alleen lokaal is vastgelegd

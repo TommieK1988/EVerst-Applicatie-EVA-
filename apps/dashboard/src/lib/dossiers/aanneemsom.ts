@@ -56,7 +56,13 @@ export function kiesAanneemsom(invoer: {
   bouw7ExclBtw: number | null
   /** Subtotaal excl. btw van de EVA-hoofdofferte (geen meerwerk-offerte). */
   evaOfferteExclBtw: number | null
+  /**
+   * Rekent het dossier af op regie (`opRegie()`)? Dan is er geen aanneemsom — ook niet uit een
+   * offerte die er nog naast ligt. Die zou anders als contractbedrag op kaart en tab verschijnen.
+   */
+  opRegie?: boolean
 }): AanneemsomKeuze {
+  if (invoer.opRegie) return { aanneemsom: null, bron: null, afwijkendeEvaOfferte: null }
   const { bouw7ExclBtw: bouw7, evaOfferteExclBtw: eva } = invoer
   const bouw7Leidend = invoer.hoofdstatus === 'opdracht'
 

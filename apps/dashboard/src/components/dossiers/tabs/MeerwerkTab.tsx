@@ -93,19 +93,24 @@ type MeerwerkTabProps = {
   naam?: string
   nummer?: string
   clientNaam?: string | null
+  /** Regieopdracht: nieuw meerwerk staat standaard op regie. */
+  standaardRegie?: boolean
 }
 
 /** Inline geopende meerwerk-calculatie (eigen calculatieproject van een regel). */
 type CalcOpen = { projectId: string; regelId: string; omschrijving: string; offerteId: string | null }
 
-export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '', clientNaam = null }: MeerwerkTabProps) {
+export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '', clientNaam = null, standaardRegie = false }: MeerwerkTabProps) {
+  // Op een regieopdracht is regie de vanzelfsprekende afrekenwijze van nieuw meerwerk; aangenomen
+  // blijft kiesbaar (een vaste prijs voor een afgebakend extraatje kan nog steeds).
+  const leegNieuw: NieuweMeerwerkData = standaardRegie ? { ...LEGE_NIEUW, afrekenwijze: 'regie' } : LEGE_NIEUW
   const router = useRouter()
   const readOnly = useDossierReadOnly()
   const [data, setData] = useState<DossierMeerwerkData | null>(null)
   const [bezig, setBezig] = useState(false)
   const { bevestig, vraagTekst } = useDialogen()
   const [formOpen, setFormOpen] = useState(false)
-  const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(LEGE_NIEUW)
+  const [nieuw, setNieuw] = useState<NieuweMeerwerkData>(leegNieuw)
   const [ruw, setRuw] = useState<RuweBedragen>(LEGE_RUW)
   const [calcOpen, setCalcOpen] = useState<CalcOpen | null>(null)
   /** Opdracht-samenstelling (aanneemsom + stelposten) voor de afrekenstand; null = niet beschikbaar. */
@@ -145,7 +150,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
     toast.success('Meerwerkregel toegevoegd')
-    setNieuw(LEGE_NIEUW); setRuw(LEGE_RUW); setFormOpen(false); herlaad()
+    setNieuw(leegNieuw); setRuw(LEGE_RUW); setFormOpen(false); herlaad()
   }
 
   /**

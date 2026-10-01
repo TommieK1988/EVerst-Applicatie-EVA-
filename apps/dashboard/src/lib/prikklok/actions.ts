@@ -32,7 +32,7 @@ const db = () => createAdminClient()
 const ZOEK_GRAAD = 0.05
 
 const DOSSIER_SELECT = `
-  id, dossiernummer, titel, hoofdstatus, opdracht_substatus, servicedesk_substatus, gearchiveerd, bouw7_id,
+  id, dossiernummer, titel, hoofdstatus, opdracht_substatus, servicedesk_substatus, regie_bewakingscode, gearchiveerd, bouw7_id,
   werkadres_straat, werkadres_huisnummer, werkadres_stad, adres_lat, adres_lng,
   relaties!klant_id ( naam )
 `
@@ -44,6 +44,7 @@ type DossierRij = {
   hoofdstatus: string | null
   opdracht_substatus: string | null
   servicedesk_substatus: string | null
+  regie_bewakingscode: string | null
   gearchiveerd: boolean | null
   bouw7_id: string | number | null
   werkadres_straat: string | null
@@ -405,8 +406,9 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
   const plan = ingepland.get(d.id) ?? null
   let bewakingscode = plan?.bewakingscode ?? null
   let psl = await pslVoorCode(d.id, bewakingscode)
-  // Een servicedeskbon heeft in de regel precies één code (RW01). Die hoeft niemand te kiezen.
-  if (!bewakingscode && d.servicedesk_substatus) {
+  // Een servicedeskbon heeft in de regel precies één code (RW01), net als een regieopdracht die
+  // RW01 als opvangcode kreeg. Die hoeft niemand te kiezen.
+  if (!bewakingscode && (d.servicedesk_substatus || d.regie_bewakingscode)) {
     const codes = await getBewakingscodesVoorUurlog(d.id).catch(() => [])
     if (codes.length === 1) {
       bewakingscode = codes[0].code

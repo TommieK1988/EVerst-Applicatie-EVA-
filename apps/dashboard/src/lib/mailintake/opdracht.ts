@@ -368,7 +368,11 @@ export async function zetOfferteGewonnenUitBericht(inv: OpdrachtInvoer): Promise
   nazorg.bijlagen = bijlagen.geuploaded
 
   // ── 7. Verkooptermijnen ───────────────────────────────────────────────────
-  const termijnen = await maakTermijnschemaUitOfferte(inv.dossierId)
+  // Een regieopdracht wordt op nacalculatie gefactureerd: een termijnstaat zou een aanneemsom
+  // in rekening brengen die niemand heeft afgesproken.
+  const termijnen = inv.regie
+    ? { ok: false as const, reden: 'bestaat_al' as const, error: 'Regieopdracht: geen termijnen, afrekenen op nacalculatie.' }
+    : await maakTermijnschemaUitOfferte(inv.dossierId)
   if (termijnen.ok) {
     nazorg.termijnen = 'aangemaakt'
   } else if (termijnen.reden === 'bestaat_al') {

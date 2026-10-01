@@ -3,6 +3,8 @@
 import { createAdminClient } from '@everts/database/server'
 import { getDossierVerkoop, getDossierInkoop } from './actions'
 import { getGoedgekeurdMeerwerk } from './meerwerk'
+import { getRegieFactuurvoorstel } from './servicedesk'
+import { isRegieOpdracht } from './regie-opdracht'
 import {
   CONTROLE_TITELS, CONTROLE_TOLERANTIE_EURO, CONTROLE_VOLGORDE, berekenContractTotaal,
   type ControleItem, type ControleSleutel, type ControleUitkomst,
@@ -82,6 +84,12 @@ async function controleerFacturatie(dossierId: string, dossierHref: string): Pro
     return onbekend('facturatie', 'bouw7_onbereikbaar', 'Bouw7 gaf geen antwoord')
   }
 
+  // Een regieopdracht heeft geen aanneemsom om tegen af te zetten: daar is de vraag of de
+  // nacalculatie leeg is — alles wat geboekt is, is gefactureerd.
+  if (await isRegieOpdracht(dossierId).catch(() => false)) {
+    return controleerRegieFacturatie(dossierId, dossierHref, verkoop.termijnen)
+  }
+
   const { contractTotaal } = berekenContractTotaal(
     verkoop.totalen.aanneemsom, verkoop.totalen.meerwerk, meerwerkEva,
   )
@@ -129,6 +137,43 @@ async function controleerFacturatie(dossierId: string, dossierHref: string): Pro
     `Volledig gefactureerd: ${euro(gefactureerdExcl)} excl. btw`,
     rest > CONTROLE_TOLERANTIE_EURO
       ? `${euro(rest)} nog te factureren`
+      : 'Er staan nog termijnen open',
+  )
+}
+
+/** Facturatie op een regieopdracht: staat er nog geboekt werk in het factuurvoorstel? */
+async function controleerRegieFacturatie(
+  dossierId: string,
+  dossierHref: string,
+  termijnen: Awaited<ReturnType<typeof getDossierVerkoop>>['termijnen'],
+): Promise<ControleUitkomst> {
+  const voorstel = await getRegieFactuurvoorstel(dossierId).catch(() => null)
+  if (!voorstel) return onbekend('facturatie', 'bouw7_onbereikbaar', 'Het regievoorstel kon niet worden opgebouwd')
+  const href = `${dossierHref}/verkoop`
+  const items: ControleItem[] = []
+  if (voorstel.totaal > CONTROLE_TOLERANTIE_EURO) {
+    items.push({
+      label: 'Regiewerk nog niet gefactureerd',
+      detail: `Gefactureerd ${euro(voorstel.alGefactureerdBedrag)} · nog in het voorstel ${euro(voorstel.totaal)}`,
+      bedrag: voorstel.totaal, ernst: 'blokkade', href,
+    })
+  }
+  for (const b of voorstel.buitenBeschouwing.filter(b => b.bewakingscode === '—')) {
+    items.push({ label: b.omschrijving, detail: b.reden, bedrag: null, ernst: 'signaal', href })
+  }
+  for (const t of termijnen) {
+    if (t.status !== 'nog_te_factureren' && t.status !== 'concept') continue
+    items.push({
+      label: `Termijn ${t.nummer}${t.omschrijving ? ` — ${t.omschrijving}` : ''}`,
+      detail: t.status === 'concept' ? 'Concept, nog niet verzonden' : 'Nog te factureren',
+      bedrag: t.bedrag, ernst: 'blokkade', href,
+    })
+  }
+  return uitkomst(
+    'facturatie', items,
+    `Regiewerk volledig gefactureerd: ${euro(voorstel.alGefactureerdBedrag)} excl. btw`,
+    voorstel.totaal > CONTROLE_TOLERANTIE_EURO
+      ? `${euro(voorstel.totaal)} regiewerk nog te factureren`
       : 'Er staan nog termijnen open',
   )
 }

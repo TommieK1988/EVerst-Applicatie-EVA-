@@ -8,7 +8,7 @@ import { assertDossierBewerkbaar } from './guards'
 import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk } from './meerwerk'
 import { getServicedeskRegie } from './servicedesk'
-import { isDossierAfgesloten } from '@/components/dossiers/types'
+import { isDossierAfgesloten, opRegie } from '@/components/dossiers/types'
 import {
   maakStelpostBewakingscodeBouw7,
   vindVrijeBewakingscode,
@@ -123,6 +123,8 @@ export type OpdrachtOverzicht = {
   aanneemsom: number | null
   /** Waar de aanneemsom vandaan komt — bepaalt of stelposten handmatig aangewezen mogen worden. */
   aanneemsomBron: 'offerte' | 'bouw7' | null
+  /** Regieopdracht: er is geen aanneemsom, er wordt afgerekend op nacalculatie. */
+  regieOpdracht: boolean
   /**
    * Bedrag van de EVA-offerte wanneer die de aanneemsom NIET levert en er materieel van afwijkt.
    * Zo blijft zichtbaar dat er een afwijkende offerte bij dit dossier hangt in plaats van dat het
@@ -194,10 +196,11 @@ async function bepaalAanneemsom(supabase: any, dossierId: string): Promise<{
   bron: 'offerte' | 'bouw7' | null
   afwijkendeEvaOfferte: number | null
   quote: { id: string; subtotaal_ex_btw: number | null; stelposten_in_totaal: boolean | null } | null
+  regieOpdracht: boolean
 }> {
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('everts_calc_project_id, bedrag_excl_btw, hoofdstatus')
+    .select('everts_calc_project_id, bedrag_excl_btw, hoofdstatus, facturatiemethode, facturatiemethode_handmatig, bouw7_categorie_naam, servicedesk_substatus')
     .eq('id', dossierId)
     .maybeSingle()
 
@@ -208,12 +211,14 @@ async function bepaalAanneemsom(supabase: any, dossierId: string): Promise<{
     hoofdstatus:       dossier?.hoofdstatus ?? null,
     bouw7ExclBtw:      numOfNull(dossier?.bedrag_excl_btw),
     evaOfferteExclBtw: numOfNull(quote?.subtotaal_ex_btw),
+    opRegie:           opRegie(dossier),
   })
   return {
     aanneemsom: keuze.aanneemsom,
     bron: keuze.bron === 'eva' ? 'offerte' : keuze.bron,
     afwijkendeEvaOfferte: keuze.afwijkendeEvaOfferte,
     quote,
+    regieOpdracht: opRegie(dossier),
   }
 }
 
@@ -306,7 +311,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   const supabase = createAdminClient() as any
 
   await seedOpdrachtOnderdelen(dossierId)
-  const { aanneemsom, bron: aanneemsomBron, afwijkendeEvaOfferte } = await bepaalAanneemsom(supabase, dossierId)
+  const { aanneemsom, bron: aanneemsomBron, afwijkendeEvaOfferte, regieOpdracht } = await bepaalAanneemsom(supabase, dossierId)
 
   const { data: onderdelen } = await supabase
     .from('opdracht_onderdelen')
@@ -433,7 +438,7 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   const meerwerkTotaal = rond(mw?.totalen.goedgekeurdExcl ?? 0)
 
   return {
-    aanneemsom, aanneemsomBron, afwijkendeEvaOfferte, aanneemsomInclStelposten, basis,
+    aanneemsom, aanneemsomBron, regieOpdracht, afwijkendeEvaOfferte, aanneemsomInclStelposten, basis,
     stelposten, opties,
     stelpostenTotaal, stelpostenInAanneemsomTotaal, stelpostenApartTotaal,
     optiesTotaal, gekozenOptiesTotaal,

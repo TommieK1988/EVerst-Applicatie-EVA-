@@ -1687,6 +1687,8 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
         [
           { title: 'Aangenomen: termijnen', body: 'Bij een vaste prijs factureer je via de termijnstaat: termijnen klaarzetten tijdens de uitvoering en de eindfactuur na oplevering. Wijkt het schema in Bouw7 af van de betalingsconditie op de offerte, dan krijg je daar een waarschuwing over.' },
           { title: 'Regie: nacalculatie', body: 'Bij regie bouw je de factuur op uit de werkelijk geboekte uren en kosten, per bewakingscode en met de ingestelde opslag. Op een dossier dat op regie afrekent staat dat blok er altijd; elders verschijnt het alleen wanneer er daadwerkelijk regiewerk op het dossier staat.' },
+          { title: 'Regieopdracht', body: 'Een opdracht die in regie is aangenomen zet je bovenaan met de schakelaar Regieopdracht op regie. De aanneemsom vervalt (ook in Bouw7) en alles wat op de opdracht geboekt wordt, op elke bewakingscode, wordt op nacalculatie gefactureerd via Regiewerkzaamheden. Een mandaat is optioneel en geldt als plafond. Zodra er gefactureerd is, staat de schakelaar op slot.' },
+          { title: 'Overzicht', body: 'Het overzicht toont alleen de regels die in gebruik zijn: geen meer- of minderwerkregels op nul. Op een regieopdracht staat Regiewerkzaamheden op de plek van de aanneemsom.' },
           { title: 'Facturen', body: 'De uitgaande facturen (termijnen, eindfactuur, creditnota\'s) komen rechtstreeks uit Bouw7 met status en bedrag. Het opvolgen van openstaande facturen doe je centraal op het Facturen-scherm (debiteurenbeheer).' },
         ])
 

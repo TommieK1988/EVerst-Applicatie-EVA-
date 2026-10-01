@@ -602,7 +602,10 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
     const stelpostenInOpdracht = ov.stelposten.filter(sp => sp.in_opdracht)
     const contractExcl = (ov.aanneemsomInclStelposten ?? ov.aanneemsom ?? 0) + ov.gekozenOptiesTotaal
     const onderdelen: OpdrachtOnderdeelRegel[] = []
-    if (ov.basis != null) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Aangenomen werk conform offerte', bedrag: fmtEur(ov.basis) })
+    // Een regieopdracht heeft geen aanneemsom: het werk wordt achteraf op werkelijke uren en
+    // kosten gefactureerd. Een bedrag hier zou de klant een vaste prijs voorspiegelen.
+    if (ov.regieOpdracht) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Regiewerkzaamheden, af te rekenen op nacalculatie', bedrag: 'op nacalculatie' })
+    else if (ov.basis != null) onderdelen.push({ soort: 'Basisopdracht', omschrijving: 'Aangenomen werk conform offerte', bedrag: fmtEur(ov.basis) })
     for (const sp of stelpostenInOpdracht) onderdelen.push({ soort: 'Stelpost', omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })
     for (const op of gekozenOpties) onderdelen.push({ soort: 'Optie', omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })
     return {
@@ -610,7 +613,7 @@ async function laadOpdrachtBlok(dossierId: string): Promise<OpdrachtBlok> {
       aanneemsom: fmtEur(ov.aanneemsom),
       stelposten_totaal: fmtEur(ov.stelpostenTotaal),
       gekozen_opties_totaal: fmtEur(ov.gekozenOptiesTotaal),
-      contracttotaal: fmtEur(contractExcl),
+      contracttotaal: ov.regieOpdracht ? 'op nacalculatie' : fmtEur(contractExcl),
       onderdelen,
       stelposten: stelpostenInOpdracht.map(sp => ({ omschrijving: sp.omschrijving, bedrag: fmtEur(sp.bedrag_excl_btw) })),
       opties: gekozenOpties.map(op => ({ omschrijving: op.omschrijving, bedrag: fmtEur(op.bedrag_excl_btw) })),

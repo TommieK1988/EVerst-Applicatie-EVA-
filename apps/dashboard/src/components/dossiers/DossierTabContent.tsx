@@ -41,7 +41,7 @@ import { DossierTabSkeleton } from './DossierTabSkeleton'
 import ServicedeskAfrondingKaart from './servicedesk/ServicedeskAfrondingKaart'
 import { BreadcrumbTitle } from './BreadcrumbTitle'
 import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
-import { isDossierAfgesloten } from './types'
+import { isDossierAfgesloten, opRegie } from './types'
 import { SECTIE_ROUTE } from './open-dossier'
 import type { DossierSectie, DossierRij } from './types'
 
@@ -163,6 +163,7 @@ async function InformatieTabInhoud({ id, dossier, sectie }: { id: string; dossie
       datums={datums}
       opdrachtOverzicht={opdrachtOverzicht}
       nacalculatieStelposten={voorstel?.waardePerBron.stelpost ?? null}
+      nacalculatieRegie={voorstel?.waardePerBron.regie ?? null}
     />
   )
 }
@@ -492,6 +493,7 @@ async function renderEnkeleTab(
             naam={dossier?.titel ?? 'Meerwerk'}
             nummer={dossier?.dossiernummer ?? ''}
             clientNaam={dossier?.klant_naam ?? ''}
+            standaardRegie={sectie === 'opdracht' && opRegie(dossier)}
           />
         </Suspense>
       </>

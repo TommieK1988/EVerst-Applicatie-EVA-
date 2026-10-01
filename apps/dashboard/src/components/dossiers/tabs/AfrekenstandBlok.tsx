@@ -161,10 +161,17 @@ export default function AfrekenstandBlok({ overzicht, meerwerkExcl, readOnly, be
             <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-neutral-500">
               Opbouw (excl. btw)
             </div>
+            {overzicht.regieOpdracht ? (
+              <p className="mb-2 text-[11.5px] leading-snug text-neutral-500">
+                Regieopdracht: er is geen aanneemsom. Het werk wordt op nacalculatie gefactureerd —
+                de opbouw daarvan staat op het Verkoop-tab.
+              </p>
+            ) : (
             <RekenRegel
               label={`Aanneemsom${overzicht.aanneemsomBron === 'bouw7' ? ' (Bouw7)' : overzicht.aanneemsomBron === 'offerte' ? ' (offerte)' : ''}`}
               bedrag={overzicht.aanneemsom}
             />
+            )}
             {overzicht.stelpostenInAanneemsomTotaal > 0 && (
               <RekenRegel
                 label={<span className="pl-3 text-neutral-400">waarvan stelposten</span>}
@@ -200,7 +207,7 @@ export default function AfrekenstandBlok({ overzicht, meerwerkExcl, readOnly, be
               bedrag={verwacht}
               titel="Contracttotaal plus de stelpostsaldi die nog verrekend moeten worden. Exclusief btw."
             />
-            {overzicht.aanneemsom == null && (
+            {overzicht.aanneemsom == null && !overzicht.regieOpdracht && (
               <p className="mt-3 text-[11px] text-neutral-500">
                 Er is nog geen aanneemsom bekend, dus de opbouw hierboven is onvolledig.
               </p>

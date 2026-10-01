@@ -22,6 +22,7 @@ import {
 import { geslachtUitAanhef, geslachtUitVoornaam } from '@/lib/relaties/geslacht'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { isRegieOpdrachtRij } from '@/lib/dossiers/regie-opdracht'
 
 export type SyncResult = {
   nieuw: number
@@ -1513,6 +1514,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       // teruggeschreven kunnen worden (metBehoudVanHandmatigeVelden); `bouw7_projectstatus_naam`
       // om een echte statuswissel in Bouw7 te herkennen voor de servicedesk-kolom.
       .select('id, bouw7_id, verzonden_op, bouw7_sync_hash, object_koppel_bron, object_gekoppeld_op, bouw7_projectstatus_naam, handmatige_velden, '
+        // Afrekenwijze (servicedesk_substatus zit al in BOUW7_DOSSIER_VELDEN): een regieopdracht
+        // krijgt geen bedrag uit de offerte.
+        + 'facturatiemethode, facturatiemethode_handmatig, bouw7_categorie_naam, '
         + BOUW7_DOSSIER_VELDEN.join(', '))
       .not('bouw7_id', 'is', null)
       .order('id')
@@ -1967,10 +1971,13 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         || (det?.regelsom != null && Math.abs(finPrijs - det.regelsom) < 0.01)
       )
       // Verkoopprijs excl. BTW = offerte "Totaal excl. BTW" (incl. AK/W&R), anders contractbedrag.
-      const verkoopExcl = quoteIsBron
+      // Een regieopdracht heeft geen aanneemsom: de offerte (of een vergeten vaste prijs in Bouw7)
+      // mag het bedrag op kaart en lijst niet terugzetten.
+      const geenAanneemsom = isRegieOpdrachtRij(existing)
+      const verkoopExcl = geenAanneemsom ? null : quoteIsBron
         ? quoteSubtotal
         : (finPrijs ?? extractFinNum(p.fixedPrice) ?? null)
-      const verkoopIncl = quoteIsBron ? extractFinNum(quote?.total) : null
+      const verkoopIncl = quoteIsBron && !geenAanneemsom ? extractFinNum(quote?.total) : null
       // Kostprijs en BTW-splitsing horen bij dezelfde offerte als de verkoopprijs.
       const kostprijs    = quoteIsBron ? (det?.kostprijs ?? null) : null
       const btwSplitsing = quoteIsBron ? (det?.btwSplitsing ?? null) : null

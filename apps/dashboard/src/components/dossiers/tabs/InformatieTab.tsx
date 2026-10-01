@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
-  bonBewakingscode,
+  bonBewakingscode, opRegie,
   getDossierSubstatus, isAfsluitendeSubstatus, isMutatieDossier, servicedeskLadder,
   type DossierSectie, type DossierRij, type ServicedeskSubstatus,
 } from '../types'
@@ -1253,6 +1253,11 @@ type Props = {
    * wat daarvan al gefactureerd is. Null = er is geen nacalculatie op dit dossier.
    */
   nacalculatieStelposten?: number | null
+  /**
+   * Waarde van de regiewerkzaamheden zelf (`waardePerBron.regie`) — op een regieopdracht de
+   * basis van de opdracht, in plaats van de aanneemsom.
+   */
+  nacalculatieRegie?: number | null
   /** Dossiernotities (nieuwste eerst), getoond in het Notities-blok rechts. */
   notities?: DossierNotitie[]
   /** Ingelogde medewerker — bepaalt welke notities verwijderbaar zijn. */
@@ -1267,7 +1272,7 @@ type Props = {
 
 export function InformatieTab({
   dossier, sectie, medewerkers = [], factuuradressen = [],
-  relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0, nacalculatieStelposten = null,
+  relatie = null, sjablonen = [], urgenteTaken = [], categorieen, meerwerk = 0, nacalculatieStelposten = null, nacalculatieRegie = null,
   notities = [], currentMedewerkerId = null, werkmaatschappijen = [],
   datums = LEGE_DOSSIER_DATUMS, opdrachtOverzicht = null,
 }: Props) {
@@ -1627,12 +1632,15 @@ export function InformatieTab({
      Verkoop- en Financieel-tab al toonden). Alles wat bij de aanneemsom hoort — btw, splitsing,
      stelpost- en optie-aggregaten — moet dan uit diezelfde bron komen; anders staan er getallen
      uit twee verschillende offertes onder elkaar in één kolom. */
+  // Een regieopdracht heeft geen aanneemsom: de basis is wat er aan regiewerk geboekt is.
+  const opRegieDossier        = sectie !== 'servicedesk' && opRegie(dossier)
   const aanneemsomKeuze       = kiesAanneemsom({
     hoofdstatus:       dossier.hoofdstatus,
     bouw7ExclBtw:      dossier.bedrag_excl_btw != null ? Number(dossier.bedrag_excl_btw) : null,
     evaOfferteExclBtw: T?.subtotaal_ex_btw ?? null,
+    opRegie:           opRegieDossier,
   })
-  const finAanneemsom         = aanneemsomKeuze.aanneemsom
+  const finAanneemsom         = opRegieDossier ? (nacalculatieRegie ?? 0) : aanneemsomKeuze.aanneemsom
   const finUitEva             = aanneemsomKeuze.bron === 'eva'
   // Kostprijs en marge staan bewust NIET in dit blok: het toont de opbouw van de opdracht en dus
   // alleen verkoopbedragen. De marge leeft op het Financieel-tab, bij de bewaking.
@@ -2300,8 +2308,11 @@ export function InformatieTab({
                 Klikken op stelposten/meerwerk/opties opent de specificatie in een venster. */}
             <div>
               <RekenRegel
-                label="Aanneemsom excl. BTW"
+                label={opRegieDossier ? 'Regiewerkzaamheden excl. BTW' : 'Aanneemsom excl. BTW'}
                 bedrag={finAanneemsom != null ? fmtBedrag(finAanneemsom) : '—'}
+                titel={opRegieDossier
+                  ? 'Regieopdracht: geen aanneemsom. Dit is de geboekte verkoopwaarde (incl. wat al gefactureerd is) — zie het Verkoop-tab.'
+                  : undefined}
               />
               {toonOpdrachtOpbouw && opdrachtOverzicht && (
                 <RekenRegel
