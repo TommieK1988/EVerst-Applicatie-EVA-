@@ -22,6 +22,7 @@ import FormulierenView from '@/components/mobiel/dossier-tabs/FormulierenView'
 import BestandenView from '@/components/mobiel/dossier-tabs/BestandenView'
 import OpleveringView from '@/components/mobiel/dossier-tabs/OpleveringView'
 import OpnameView from '@/components/mobiel/dossier-tabs/OpnameView'
+import WerkplanView from '@/components/mobiel/dossier-tabs/WerkplanView'
 import ServicedeskAfrondenView from '@/components/mobiel/servicedesk/ServicedeskAfrondenView'
 import { metTerug, veiligTerugPad } from '@/lib/mobiel/terug'
 
@@ -58,7 +59,7 @@ export default async function MobielDossierTabPage(
 
   // Oplevering (Fase 9) én Houtrot horen bij een opdracht, niet bij een aanvraag.
   const isOpdracht = (res.data as { hoofdstatus?: string }).hoofdstatus === 'opdracht'
-  if (actief === 'oplevering' && !isOpdracht) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
+  if ((actief === 'oplevering' || actief === 'werkplan') && !isOpdracht) redirect(metTerug(`/m/dossiers/${id}/informatie`, terug))
 
   /**
    * Is er werk om te plannen en te bewaken? Planning en Voortgang gaan allebei over uitvoering:
@@ -141,6 +142,9 @@ export default async function MobielDossierTabPage(
           waardoor kopbalk én tabstrip pas verschijnen als de data binnen is. */}
       {actief === 'planning' && (
         <Suspense fallback={<TabLaden />}><DetailplanningView dossierId={id} /></Suspense>
+      )}
+      {actief === 'werkplan' && (
+        <Suspense fallback={<TabLaden />}><WerkplanView dossierId={id} /></Suspense>
       )}
       {actief === 'voortgang' && (
         <Suspense fallback={<TabLaden />}><VoortgangView dossierId={id} /></Suspense>

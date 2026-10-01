@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@everts/database/server'
 import { APPARAAT_COOKIE, MOBIEL_MARKER_COOKIE, MOBIEL_SESSIE_MAXAGE } from '@everts/database/cookies'
 import { isMobielVerzoek } from '@/lib/isMobileUA'
 import { veiligNextPad } from '@/lib/auth/next-pad'
+import { emailPatroon } from '@/lib/auth/account-regels'
 import { controleerKoppeling, type KoppelingStatus } from '@/lib/o365/tokens'
 
 /**
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
       const { data: medewerker } = await admin
         .from('medewerkers')
         .select('id, actief, gebruiker_type, auth_user_id')
-        .eq('email', user.email)
+        .ilike('email', emailPatroon(user.email))
         .eq('actief', true)
         .neq('gebruiker_type', 'geen')
         .maybeSingle()

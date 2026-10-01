@@ -13,6 +13,8 @@ export const DOSSIER_TABS = [
   // servicedeskbon; op een aanvraag of offerte bestaan er nog geen activiteiten of
   // bewakingscodes en waren die tabs dus altijd leeg.
   { key: 'planning', label: 'Planning' },
+  // Werkplan hoort bij een opdracht, net als op de desktop (OPDRACHT_TABS).
+  { key: 'werkplan', label: 'Werkplan' },
   { key: 'voortgang', label: 'Voortgang' },
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
   // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
@@ -55,7 +57,7 @@ export default function DossierTabStrip({
     .filter(t => (t.key !== 'planning' && t.key !== 'voortgang') || isUitvoering)
     .filter(t => t.key !== 'houtrot' || houtrotAan)
     .filter(t => t.key !== 'opname' || opnameAan)
-    .filter(t => t.key !== 'oplevering' || isOpdracht)
+    .filter(t => (t.key !== 'oplevering' && t.key !== 'werkplan') || isOpdracht)
     .filter(t => !isServicedesk || (t.key !== 'voortgang' && t.key !== 'formulieren'))
 
   return (

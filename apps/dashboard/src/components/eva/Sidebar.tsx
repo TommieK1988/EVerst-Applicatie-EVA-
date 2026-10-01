@@ -241,6 +241,8 @@ const OPDRACHT_TABS: DossierTab[] = [
   { groep: 'Voorbereiding', slug: 'werkbegroting', label: 'Werkbegroting', d: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM3 9.3h18M3 14.6h18M9 4v16' },
   { groep: 'Voorbereiding', slug: 'planning',      label: 'Planning',      d: 'M4 4.5v15M7.3 6h4.4a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6ZM10.3 10.7h5.4a1.3 1.3 0 0 1 0 2.6h-5.4a1.3 1.3 0 0 1 0-2.6ZM7.3 15.4h2.9a1.3 1.3 0 0 1 0 2.6H7.3a1.3 1.3 0 0 1 0-2.6Z' },
 
+  // Werkplan: werkomschrijving, werkafspraken en kleuren/materialen voor de uitvoering.
+  { groep: 'Uitvoering', slug: 'werkplan', label: 'Werkplan', d: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6M8.5 11h7M8.5 14.5h7M8.5 18h4' },
   { groep: 'Uitvoering', slug: 'taken',   label: 'Acties',  d: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4' },
   // Alleen zichtbaar met de dossier-toggle `houtrot_registreren` (TAB_TOGGLE_GATES).
   { groep: 'Uitvoering', slug: 'houtrot', label: 'Houtrot', d: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z' },

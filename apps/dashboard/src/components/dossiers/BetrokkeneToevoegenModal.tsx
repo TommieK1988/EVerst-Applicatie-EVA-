@@ -7,13 +7,18 @@
  * voorzitter van de VvE — maar soms weet je alleen het bureau ("Architectenbureau X doet de
  * tekeningen") en komt de naam later. Een organisatie zonder persoon is dus een geldige keuze,
  * geen half ingevuld formulier.
+ *
+ * Staat de persoon nog niet in EVA, dan maak je hem hier aan (`NieuweBetrokkeneForm`) — los, bij
+ * een organisatie of bij een factuuradres.
  */
 
 import React, { useEffect, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
+import { Plus } from 'lucide-react'
 import { zoekContactpersonen } from '@/lib/relaties/contactpersonen-actions'
 import { zoekRelaties } from '@/lib/dossiers/actions'
 import { voegBetrokkeneToe } from '@/lib/dossiers/betrokkenen'
+import NieuweBetrokkeneForm from './NieuweBetrokkeneForm'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
   Button, Input, FormField, EmptyState, Spinner,
@@ -40,6 +45,7 @@ export default function BetrokkeneToevoegenModal({
   const [zoekt, setZoekt] = useState(false)
   const [gezocht, setGezocht] = useState(false)
   const [rol, setRol] = useState('')
+  const [nieuw, setNieuw] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   // De prop is elke render een nieuwe array; als sleutel zou dat de zoek-effect eindeloos
@@ -111,8 +117,17 @@ export default function BetrokkeneToevoegenModal({
     <Dialog open onOpenChange={open => !open && onSluit()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Betrokkene toevoegen</DialogTitle>
+          <DialogTitle>{nieuw ? 'Nieuwe contactpersoon' : 'Betrokkene toevoegen'}</DialogTitle>
         </DialogHeader>
+        {nieuw ? (
+          <NieuweBetrokkeneForm
+            dossierId={dossierId}
+            beginTerm={term}
+            beginRol={rol}
+            onTerug={() => setNieuw(false)}
+            onKlaar={() => { onKlaar(); onSluit() }}
+          />
+        ) : (<>
         <DialogBody>
           <div className="flex flex-col gap-3.5">
             {/* De dialoog hangt in een portal buiten `.eva`; daar bestaan de DS-variabelen niet
@@ -168,7 +183,7 @@ export default function BetrokkeneToevoegenModal({
                   tone="neutral"
                   title="Niets gevonden"
                   description={soort === 'persoon'
-                    ? 'Maak de contactpersoon eerst aan bij zijn organisatie in Relatiebeheer.'
+                    ? 'Staat deze persoon nog niet in EVA? Maak hem hieronder aan.'
                     : 'Staat de organisatie nog niet in EVA? Voeg hem toe in Relatiebeheer.'}
                 />
               )}
@@ -192,8 +207,15 @@ export default function BetrokkeneToevoegenModal({
           </div>
         </DialogBody>
         <DialogFooter>
+          {soort === 'persoon' && (
+            <Button type="button" variant="secondary" onClick={() => setNieuw(true)} disabled={isPending} className="mr-auto">
+              <Plus size={11} strokeWidth={2.5} />
+              Nieuwe contactpersoon
+            </Button>
+          )}
           <Button type="button" variant="ghost" onClick={onSluit} disabled={isPending}>Sluiten</Button>
         </DialogFooter>
+        </>)}
       </DialogContent>
     </Dialog>
   )

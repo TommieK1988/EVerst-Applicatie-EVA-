@@ -19,6 +19,8 @@ export default {
     alias: {
       // Spiegelt `paths` uit tsconfig.json: '@/*' -> './src/*'
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Next lost 'server-only' zelf op; buiten Next bestaat het pakket niet.
+      'server-only': fileURLToPath(new URL('./vitest.server-only.ts', import.meta.url)),
     },
   },
   test: {

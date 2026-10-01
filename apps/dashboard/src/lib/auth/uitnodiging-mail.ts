@@ -145,3 +145,24 @@ function bijlageRegel(bijlageNaam: string | null | undefined): string {
     hoe je inlogt, hoe je EVA op je beginscherm zet en wat je per onderdeel kunt doen.
   </p>`
 }
+
+/**
+ * De mail achter "Wachtwoord vergeten". Vaste tekst: dit is een systeemmail die iemand zelf
+ * aanvraagt, geen bericht van een collega, en heeft dus geen beheerd sjabloon nodig.
+ */
+export function bouwHerstelMail(input: { voornaam: string | null; actieLink: string }): {
+  onderwerp: string
+  bodyHtml: string
+} {
+  const aanhef = input.voornaam ? `Hallo ${esc(input.voornaam)},` : 'Hallo,'
+  const p = (t: string) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.55">${t}</p>`
+  return {
+    onderwerp: 'Nieuw wachtwoord voor EVA',
+    bodyHtml: wikkel('Nieuw wachtwoord',
+      p(aanhef)
+      + p('Je hebt gevraagd om een nieuw wachtwoord voor EVA. Tik op de knop en kies een nieuw wachtwoord; daarna ben je meteen ingelogd.')
+      + knop(input.actieLink, 'Nieuw wachtwoord kiezen')
+      + p('De knop werkt 24 uur. Heb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je huidige wachtwoord blijft gewoon werken.'),
+    ),
+  }
+}
