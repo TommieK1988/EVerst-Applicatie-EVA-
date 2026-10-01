@@ -65,6 +65,9 @@ export default [
      * merknaam) mag met een `eslint-disable-next-line` en een korte reden.
      */
     files: ['src/app/m/**/*.tsx', 'src/components/mobiel/**/*.tsx'],
+    // Commercieel is voor de verkoop (Directie/Projectbureau), niet voor de buitendienst:
+    // blijft Nederlands. Zie het plan.
+    ignores: ['src/app/m/commercieel/**', 'src/components/mobiel/commercieel/**'],
     plugins: { i18next },
     rules: {
       'i18next/no-literal-string': ['warn', {

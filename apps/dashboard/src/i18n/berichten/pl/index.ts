@@ -16,6 +16,7 @@ import uren from './uren.json'
 import verlof from './verlof.json'
 import taken from './taken.json'
 import dossiers from './dossiers.json'
+import dossiertabs from './dossiertabs.json'
 import servicedesk from './servicedesk.json'
 import houtrot from './houtrot.json'
 import opname from './opname.json'
@@ -43,6 +44,7 @@ const berichten = {
   verlof,
   taken,
   dossiers,
+  dossiertabs,
   servicedesk,
   houtrot,
   opname,
