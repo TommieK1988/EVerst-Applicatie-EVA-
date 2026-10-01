@@ -40,7 +40,7 @@ export function heeftTaal(tekst: string): boolean {
 let client: Anthropic | null = null
 function claude(): Anthropic | null {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  client ??= new Anthropic()
+  client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1 })
   return client
 }
 
@@ -62,24 +62,34 @@ async function vraagClaude(teksten: string[], doeltaal: Taal): Promise<string[] 
   // De SDK-versie in deze repo kent `output_config` en `fallbacks` nog niet als type; het
   // object gaat ongewijzigd mee naar de API. Via een variabele (geen letterlijke cast) zodat
   // er geen any-cast nodig is.
-  const verzoek = {
+  const basis = {
     model: MODEL,
     max_tokens: 16_000,
     output_config: {
       effort: 'low',
       format: { type: 'json_schema', schema: ANTWOORD_SCHEMA },
     },
-    // Bij een (onterechte) weigering het verzoek op een ander model laten afmaken.
-    fallbacks: 'default',
     system: [{ type: 'text', text: systeemPrompt(doeltaal), cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: JSON.stringify({ teksten }) }],
   }
+  const stuur = (metFallback: boolean) => api.messages.create(
+    (metFallback ? { ...basis, fallbacks: 'default' } : basis) as unknown as Anthropic.MessageCreateParamsNonStreaming,
+    {
+      timeout: 60_000,
+      // Bij een (onterechte) weigering laat de API het verzoek op een ander model afmaken.
+      ...(metFallback ? { headers: { 'anthropic-beta': 'server-side-fallback-2026-07-01' } } : {}),
+    },
+  )
 
   try {
-    const bericht = await api.messages.create(
-      verzoek as unknown as Anthropic.MessageCreateParamsNonStreaming,
-      { headers: { 'anthropic-beta': 'server-side-fallback-2026-07-01' }, timeout: 60_000 },
-    )
+    let bericht: Anthropic.Message
+    try {
+      bericht = await stuur(true)
+    } catch (fout) {
+      // Wordt de fallback-optie (nog) niet geaccepteerd, dan zonder: vertalen gaat voor.
+      if (!(fout instanceof Anthropic.BadRequestError)) throw fout
+      bericht = await stuur(false)
+    }
     if ((bericht.stop_reason as string) === 'refusal' || bericht.stop_reason === 'max_tokens') return null
     const tekst = bericht.content.find((b) => b.type === 'text')
     if (!tekst || tekst.type !== 'text') return null
