@@ -296,7 +296,8 @@ function demoBezoekBlok(keuze: BezoekOpties): BezoekBlok {
   const punt = (n: number, tekst: string, aandacht = false) => ({
     nummer: `P-${String(n).padStart(2, '0')}`, tekst, tekst_kort: tekst,
     is_aandachtspunt: aandacht, aandachtspunt_nummer: aandacht ? 'AP-01' : '',
-    status_label: aandacht ? 'Open' : '', disciplinefoto: '', heeft_foto: false,
+    status_label: aandacht ? 'Open' : '', disciplinefoto: '', disciplinefotos: [],
+    heeft_foto: false, aantal_fotos: 0,
   })
   const disciplines: BezoekDisciplineRij[] = [
     {
