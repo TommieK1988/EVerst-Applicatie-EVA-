@@ -35,7 +35,7 @@ import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 import { maakDossierUitBericht } from './aanmaken'
 import { faseVoorstelVoor } from '@/components/dossiers/fase-plaatsing'
 import {
-  DUPLICAAT_HARD, WERK_SOORTEN,
+  DUPLICAAT_HARD, WERK_SOORTEN, heeftOfferteTreffer,
   type PostbusRij, type MailSoort,
 } from './types'
 
@@ -486,9 +486,13 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     // score boven de duplicaatdrempel en maar een enkele kandidaat op dat niveau.
     // Bij 194 lopende offertes is de verkeerde aanwijzen duur: dan gaat de verkeerde
     // offerte op gewonnen, promoveert dat dossier en vertrekt er een aanneemsom.
-    const offertes = kandidaten.filter(k => k.soort === 'offerte_match')
-    const harde = offertes.filter(k => k.score >= DUPLICAAT_HARD)
-    const offerteMatchGevonden = offertes.length > 0
+    //
+    // "Gevonden" vraagt diezelfde drempel, en niet alleen het bestaan van een
+    // kandidaat: een treffer op straat en huisnummer krijgt op een pand met
+    // achtendertig units élk dossier van die beheerder even hoog, en dat is geen
+    // offerte die hierbij hoort. Zie `heeftOfferteTreffer`.
+    const harde = kandidaten.filter(k => k.soort === 'offerte_match' && k.score >= DUPLICAAT_HARD)
+    const offerteMatchGevonden = heeftOfferteTreffer(kandidaten)
     const offerteMatchHard = harde.length === 1
 
     // ── Scope-samenvatting ──────────────────────────────────

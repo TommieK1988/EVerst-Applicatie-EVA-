@@ -50,7 +50,11 @@ export interface BeslisInvoer {
   adresCompleet: boolean
   vertrouwen: Record<string, number>
   duplicaatTopscore: number
-  /** Is er een dossier in de offertefase gevonden dat hierbij hoort? */
+  /**
+   * Is er een dossier in de offertefase gevonden dat hierbij hoort -- sterk genoeg
+   * om te geloven? Een treffer op alleen het adres telt niet mee; zie
+   * `heeftOfferteTreffer` in ./types.
+   */
   offerteMatchGevonden: boolean
   /** De opdracht wordt op nacalculatie afgerekend; er hoort geen offerte bij. */
   regie: boolean
@@ -169,7 +173,9 @@ export function beslis(inv: BeslisInvoer): Besluit {
     if (!inv.offerteMatchGevonden) {
       bezwaren.push('Er is geen offerte gevonden die hierbij hoort — wijs zelf het juiste dossier aan.')
     } else if (!inv.offerteMatchHard) {
-      bezwaren.push('Er past wel een offerte bij, maar niet onmiskenbaar genoeg om die zelf op gewonnen te zetten.')
+      // Sinds `offerteMatchGevonden` dezelfde harde drempel vraagt, kan dit maar één
+      // ding meer betekenen: er passen er meerdere even goed.
+      bezwaren.push('Er passen meerdere offertes bij deze opdracht — wijs zelf de juiste aan.')
     }
   } else {
     if (!AUTOMATISCH_TOEGESTANE_SOORTEN.includes(inv.soort)) {

@@ -95,6 +95,7 @@ export const ROUTE_LABELS: Record<IntakeRoute, string> = {
  */
 export function bepaalRoute(
   soort: MailSoort | null,
+  /** Een offertetreffer die sterk genoeg is om te geloven; zie `heeftOfferteTreffer`. */
   offerteMatchGevonden: boolean,
   regie = false,
 ): IntakeRoute {
@@ -119,6 +120,38 @@ export function bepaalRoute(
     return 'nieuw_dossier'
   }
   return 'geen'
+}
+
+/**
+ * Hoort er een offerte van ons bij deze mail -- sterk genoeg om de route erop te
+ * baseren?
+ *
+ * WAAROM DIT EEN DREMPEL HEEFT
+ * Hier stond "is er een offertekandidaat", en dat is iets heel anders. De
+ * kandidatenlijst bevat ook omstandigheidstreffers: zelfde straat en huisnummer
+ * (0,40) plus zelfde opdrachtgever op dat adres (0,15) is 0,55 tot 0,65 -- en op een
+ * pand met achtendertig units krijgt élk dossier van die beheerder precies diezelfde
+ * score. In productie leverde dat negen kandidaten op met exact 0,65; dat een lijst
+ * geen enkel onderscheid maakt is het bewijs dat hij niets identificeert.
+ *
+ * Toch koos het scherm daarop de opdrachtroute. Gevolg: geen knop "Dossier
+ * aanmaken" -- die bestaat op die route niet, want daar win je een bestaande offerte
+ * -- en in plaats daarvan een lijst offertes waar de juiste niet tussen zat. Een
+ * keurig gelezen opdrachtbon was daardoor niet in te schrijven.
+ *
+ * De identificerende signalen zitten allemaal op 0,90 of hoger: dezelfde
+ * mailconversatie, een identieke bijlage, ons eigen nummer in de mail, ons
+ * offertenummer. `DUPLICAAT_HARD` (0,80) loopt daar precies tussen de twee soorten
+ * bewijs door, en is in deze module al de lijn tussen "hard" en "omstandigheden".
+ *
+ * Eén bron voor scherm en server: zou het behandelscherm een andere route kiezen dan
+ * `beslis` heeft gelopen, dan ziet de behandelaar een ander voorstel dan er is
+ * genomen.
+ */
+export function heeftOfferteTreffer(
+  kandidaten: { soort: DuplicaatSoort; score: number }[],
+): boolean {
+  return kandidaten.some(k => k.soort === 'offerte_match' && k.score >= DUPLICAAT_HARD)
 }
 
 export type HerkendVia =

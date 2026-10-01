@@ -22,7 +22,7 @@ import {
   maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier, getBijlageUrl,
 } from '@/lib/mailintake/actions'
 import {
-  DUPLICAAT_TWIJFEL, MAIL_SOORT_LABELS, bepaalRoute,
+  DUPLICAAT_TWIJFEL, MAIL_SOORT_LABELS, bepaalRoute, heeftOfferteTreffer,
   type MailSoort,
 } from '@/lib/mailintake/types'
 import { VELD_LABELS } from '@/lib/mailintake/schema'
@@ -251,9 +251,15 @@ export default function BerichtBehandelen({
 
   // Welke route hoort bij dit bericht? Een opdracht maakt geen nieuw dossier maar
   // wint een bestaande offerte; het scherm toont dan een ander paneel.
+  //
+  // De route vraagt een offertetreffer die te geloven is (`heeftOfferteTreffer`),
+  // niet het enkele bestaan van een kandidaat. Een treffer op straat en huisnummer
+  // zette het scherm op de opdrachtroute, en daar bestaat de knop "Dossier aanmaken"
+  // niet -- een keurig gelezen opdrachtbon was dan niet in te schrijven. De zwakke
+  // kandidaten blijven wél in de lijst eronder staan.
   const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
   const isRegie = gekeurd ? Boolean(gekeurd.regie) : Boolean(velden.regie)
-  const route = bepaalRoute(b.soort, offerteKandidaten.length > 0, isRegie)
+  const route = bepaalRoute(b.soort, heeftOfferteTreffer(detail.duplicaten), isRegie)
 
   const gekozenCategorieNaam = categorieen.find(c => c.id === categorieId)?.name ?? null
 
