@@ -243,6 +243,41 @@ function legeVariant() {
   }
 }
 
+
+/**
+ * Meerwerk op een lopende opdracht. Deze soort had als enige geen eigen plek in het
+ * scherm: de sectie "Het dossier" zei dat EVA er een nieuw dossier van zou maken, en
+ * de enige knop zat weggestopt rechts bij een duplicaatkandidaat.
+ */
+function meerwerkVariant() {
+  return {
+    ...DETAIL,
+    bericht: {
+      ...DETAIL.bericht,
+      onderwerp: 'Fwd: formele opdrachtbrief (achteraf) — meerwerk kleedkamers',
+      soort: 'meerwerk',
+      soort_vertrouwen: 0.88,
+    },
+    duplicaten: [
+      {
+        id: 'm1',
+        dossierId: 'voorbeeld-opdracht',
+        dossiernummer: '20267.00565',
+        titel: 'Rijswijks Lyceum (Karmozijnstraat 2), dichtzetten tussen balken in kleedkamers',
+        klantnaam: 'Stichting VO Haaglanden',
+        hoofdstatus: 'opdracht',
+        score: 0.9,
+        redenen: ['Onze offerte OFT-2026-080 hoort bij dit dossier', 'Zelfde referentie (P2P100754)'],
+        soort: 'meerwerk_kandidaat',
+      },
+    ],
+    log: [{
+      ...DETAIL.log[0],
+      details: { redenen: ['Dit lijkt meerwerk op een lopende opdracht; wijs het juiste dossier aan.'] },
+    }],
+  }
+}
+
 /** Zoals `getAntwoordConcept` hem zou opleveren voor de opdrachtbon hierboven. */
 const ANTWOORD = {
   aan: 'bv@vvebeheer.nl',
@@ -255,7 +290,7 @@ const ANTWOORD = {
 }
 
 export default function Voorbeeld() {
-  const [scenario, setScenario] = React.useState<'aanvraag' | 'opdrachtbon' | 'offerte' | 'leeg'>('aanvraag')
+  const [scenario, setScenario] = React.useState<'aanvraag' | 'opdrachtbon' | 'offerte' | 'meerwerk' | 'leeg'>('aanvraag')
   const [antwoord, setAntwoord] = React.useState(false)
   const knop = (actief: boolean) => ({
     padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
@@ -272,7 +307,8 @@ export default function Voorbeeld() {
           ['aanvraag', 'A — offerteaanvraag'],
           ['opdrachtbon', 'B — opdrachtbon'],
           ['offerte', 'C — opdracht op offerte'],
-          ['leeg', 'D — lege lezing'],
+          ['meerwerk', 'D — meerwerk'],
+          ['leeg', 'E — lege lezing'],
         ] as const).map(([k, label]) => (
           <button key={k} type="button" style={knop(scenario === k)} onClick={() => setScenario(k)}>
             {label}
@@ -307,6 +343,7 @@ export default function Voorbeeld() {
             aanvraag: aanvraagVariant(),
             opdrachtbon: DETAIL,
             offerte: opdrachtOpOfferteVariant(),
+            meerwerk: meerwerkVariant(),
             leeg: legeVariant(),
           }[scenario] as never}
           objectTreffer={null}

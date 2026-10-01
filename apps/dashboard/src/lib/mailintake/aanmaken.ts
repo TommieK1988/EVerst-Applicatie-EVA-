@@ -581,6 +581,22 @@ export async function onthoudAlias(opts: {
   const adres = (opts.adres ?? '').trim().toLowerCase()
   if (!adres.includes('@')) return
 
+  // NOOIT EEN EIGEN ADRES ONTHOUDEN
+  // Vrijwel alle post komt doorgestuurd binnen: een collega stuurt de klantmail naar
+  // de intakepostbus. Koppelt iemand zo'n bericht met de hand aan een klant, dan
+  // onthield EVA "bas@everts.chat = die klant" -- en stelde die klant daarna voor bij
+  // élke volgende mail die Bas doorstuurde, ongeacht de inhoud.
+  //
+  // Dat is geen theorie: er stonden drie van deze aliassen in, waaronder
+  // info@everts.chat (de postbus zelf) gekoppeld aan één opdrachtgever. Een
+  // meerwerkmail van Stichting VO Haaglanden kreeg daardoor VvE De Linde
+  // voorgesteld, terwijl het model de juiste klant gewoon had gelezen.
+  //
+  // Het leergeheugen moet leren van de klant, niet van onszelf.
+  const domein = adres.split('@')[1] ?? ''
+  const { eigenDomeinen } = await import('./triage')
+  if ((await eigenDomeinen()).has(domein)) return
+
   const supabase = createAdminClient()
   await supabase.from('mailintake_aliassen').upsert({
     patroon: adres,

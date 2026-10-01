@@ -54,6 +54,8 @@ export interface SchermToestand {
   betrokkenen: unknown[]
   /** Het gekozen offertedossier, als de route dat vraagt. */
   offerteDossierId: string | null
+  /** Het dossier waarop meerwerk wordt gezet. */
+  meerwerkDossierId?: string | null
   /** Velden die de behandelaar zelf heeft aangeraakt; die zijn daarmee nagekeken. */
   aangeraakt: ReadonlySet<VeldSleutel>
   /** Per veld de zelfrapportage van het model. */
@@ -155,6 +157,9 @@ export function waarnemingenUit(t: SchermToestand): Partial<Record<VeldSleutel, 
 
     offerte_dossier: w('offerte_dossier', t.offerteDossierId, {
       vast: t.offerteDossierId != null,
+    }),
+    meerwerk_dossier: w('meerwerk_dossier', t.meerwerkDossierId ?? null, {
+      vast: (t.meerwerkDossierId ?? null) != null,
     }),
   }
 }

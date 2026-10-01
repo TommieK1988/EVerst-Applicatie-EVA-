@@ -132,7 +132,12 @@ export async function herkenAfzender(opts: {
   const plafond = opts.doorgestuurd ? 0.8 : 1
 
   // ── 1. Alias uit eerdere handmatige koppelingen ────────────────────────────
-  if (adres) {
+  // Behalve op een eigen adres. Die aliassen horen er niet te staan en worden sinds
+  // deze wijziging ook niet meer aangemaakt, maar de bestaande moeten hier stuiten:
+  // één alias op `info@everts.chat` of op een collega koppelt élke doorgestuurde
+  // mail aan diezelfde klant, hoe duidelijk de inhoud ook iets anders zegt.
+  const eigenDomein = domein != null && (opts.eigenDomeinen?.has(domein) ?? false)
+  if (adres && !eigenDomein) {
     const patronen = domein ? [adres, '@' + domein] : [adres]
     const { data } = await supabase
       .from('mailintake_aliassen')
@@ -283,7 +288,6 @@ export async function herkenAfzender(opts: {
   // Dat die relatie een verdwaalde contactpersoon heeft is een datafout, maar de
   // ladder hoort daar sowieso niet op te matchen: een adres op ons eigen domein
   // zegt iets over ons, niet over de klant.
-  const eigenDomein = domein != null && (opts.eigenDomeinen?.has(domein) ?? false)
   if (domein && !isVrijMaildomein(domein) && !eigenDomein) {
     const { data } = await supabase
       .from('contactpersonen')

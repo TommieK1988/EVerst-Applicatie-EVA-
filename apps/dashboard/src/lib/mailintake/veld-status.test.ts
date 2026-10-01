@@ -136,4 +136,18 @@ describe('ontbrekendeVelden en magAfhandelen', () => {
     const eisen = eisenVoor('geen', 'meerwerk')
     expect(() => beoordeelAlleVelden(leeg([]), eisen)).not.toThrow()
   })
+
+  it('eist bij meerwerk het dossier waarop het meerwerk komt', () => {
+    // Meerwerk hoort bij een lopende opdracht. Het scherm stelde hier een nieuw
+    // dossier voor, wat nooit klopt, en noemde het ontbrekende dossier niet.
+    const eisen = eisenVoor('geen', 'meerwerk')
+    expect(eisen.meerwerk_dossier).toBe('verplicht')
+    expect(ontbrekendeVelden(beoordeelAlleVelden({}, eisen))).toEqual(['meerwerk_dossier'])
+  })
+
+  it('kent het meerwerkdossier niet bij de andere soorten', () => {
+    for (const soort of ['offerteaanvraag', 'opdrachtbon', 'servicedeskbon'] as const) {
+      expect(eisenVoor('nieuw_dossier', soort).meerwerk_dossier, soort).toBe('nvt')
+    }
+  })
 })

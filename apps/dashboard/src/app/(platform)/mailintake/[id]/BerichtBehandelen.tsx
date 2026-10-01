@@ -47,6 +47,7 @@ import AanvraagFormulier from './formulier/AanvraagFormulier'
 import { VELD_VAN_INVOER, type FormulierWaarden } from './formulier/IntakeFormulier'
 import RollenSectie, { type Rolbezetting, type RolSleutel } from './formulier/RollenSectie'
 import TermijnenSectie from './formulier/TermijnenSectie'
+import MeerwerkSectie from './formulier/MeerwerkSectie'
 import { waarnemingenUit } from './formulier/velden-uit-scherm'
 import { eisenVoor, type VeldSleutel } from '@/lib/mailintake/veld-eisen'
 import {
@@ -279,6 +280,21 @@ export default function BerichtBehandelen({
   // Geen offerte die past? Dan tóch een nieuw dossier. De route blijft wat hij is;
   // dit is de menselijke correctie erop, en met de link eronder draai je hem terug.
   const [forceerNieuw, setForceerNieuw] = useState(false)
+  /**
+   * Het dossier waarop dit meerwerk hoort.
+   *
+   * Voorgevuld met de sterkste kandidaat als die er duidelijk uitspringt. Is er niets
+   * of zijn er meerdere even sterk, dan staat er niets aangevinkt -- het verkeerde
+   * dossier aanwijzen zet een bewakingscode op de verkeerde opdracht.
+   */
+  const [gekozenMeerwerk, setGekozenMeerwerk] = useState<string | null>(() => {
+    const mw = detail.duplicaten
+      .filter((d: { soort: string }) => d.soort === 'meerwerk_kandidaat')
+      .sort((a: { score: number }, z: { score: number }) => z.score - a.score)
+    if (mw.length === 0) return null
+    const tweede = mw[1]?.score ?? 0
+    return mw[0].score >= 0.4 && mw[0].score - tweede >= 0.2 ? mw[0].dossierId : null
+  })
   const [gekozenOfferte, setGekozenOfferte] = useState<string | null>(null)
   const [offerteOpen, setOfferteOpen] = useState(false)
   const kiesOfferte = (dossierId: string) => {
@@ -353,6 +369,7 @@ export default function BerichtBehandelen({
       opmerkingen, klantOpmerkingen,
       betrokkenen: (gekeurd?.betrokkenen ?? []) as unknown[],
       offerteDossierId: gekozenOfferte,
+      meerwerkDossierId: gekozenMeerwerk,
       aangeraakt, zekerheid,
     }),
     eisenVoor(route, b.soort as MailSoort | null),
@@ -360,7 +377,7 @@ export default function BerichtBehandelen({
     klantId, contactpersoonId, omschrijving, categorieId, werkmaatschappijId, wmVia,
     straat, huisnummer, postcode, stad, adresBevestigd, adres.contact,
     referentie, opdrachtReferentie, vveCode, opdrachtdatum, deadline, mandaat, regie,
-    opmerkingen, klantOpmerkingen, gekozenOfferte, aangeraakt, zekerheid, velden, gekeurd,
+    opmerkingen, klantOpmerkingen, gekozenOfferte, gekozenMeerwerk, aangeraakt, zekerheid, velden, gekeurd,
     route, b.soort,
   ])
 
@@ -663,7 +680,28 @@ export default function BerichtBehandelen({
           offerteDossierId={gekozenOfferte}
           termijnenActief={route === 'offerte_winnen' && !forceerNieuw}
           dossierSectie={
-            route === 'offerte_winnen' && !forceerNieuw ? (
+            // Meerwerk hoort bij een lopende opdracht, niet bij een nieuw dossier.
+            // Dit blok stond er niet: de sectie zei dat EVA er een dossier van zou
+            // maken, en de enige knop zat weggestopt rechts bij een duplicaat.
+            b.soort === 'meerwerk' ? (
+              <MeerwerkSectie
+                kandidaten={detail.duplicaten
+                  .filter((d: { soort: string }) => d.soort === 'meerwerk_kandidaat')
+                  .map((d: Record<string, unknown>) => ({
+                    dossierId: String(d.dossierId),
+                    dossiernummer: (d.dossiernummer as string) ?? null,
+                    titel: (d.titel as string) ?? null,
+                    klantnaam: (d.klantnaam as string) ?? null,
+                    score: Number(d.score),
+                    redenen: (d.redenen as string[]) ?? [],
+                  }))}
+                bewerkbaar={bewerkbaar}
+                gekozen={gekozenMeerwerk}
+                onKies={setGekozenMeerwerk}
+                onKoppel={id => void koppelen(id, 'meerwerk', 'Meerwerk op dit dossier')}
+                bezig={inActie}
+              />
+            ) : route === 'offerte_winnen' && !forceerNieuw ? (
               <OpdrachtPaneel
                 berichtId={b.id}
                 kandidaten={detail.duplicaten}

@@ -43,7 +43,7 @@ export type VeldSleutel =
   | 'bedrag_excl_btw' | 'mandaat_bedrag' | 'regie'
   | 'factuuradres_naam' | 'factuuradres_straat' | 'factuuradres_postcode' | 'factuuradres_plaats'
   | 'opmerkingen' | 'klant_opmerkingen' | 'betrokkenen'
-  | 'offerte_dossier'
+  | 'offerte_dossier' | 'meerwerk_dossier'
 
 /** Alles wat niet in een tabel hieronder staat. */
 const STANDAARD: Relevantie = 'gewenst'
@@ -93,6 +93,7 @@ const PER_ROUTE: Record<IntakeRoute, Partial<Record<VeldSleutel, Relevantie>>> =
   geen: {
     klant_naam: 'gewenst',
     offerte_dossier: 'nvt',
+    meerwerk_dossier: 'gewenst',
     omschrijving: 'nvt',
     categorie_voorstel: 'nvt',
     werkmaatschappij_voorstel: 'nvt',
@@ -114,27 +115,36 @@ const PER_ROUTE: Record<IntakeRoute, Partial<Record<VeldSleutel, Relevantie>>> =
  */
 const PER_SOORT: Partial<Record<MailSoort, Partial<Record<VeldSleutel, Relevantie>>>> = {
   offerteaanvraag: {
+    meerwerk_dossier: 'nvt',
     opdracht_referentie: 'nvt',
     opdrachtdatum: 'nvt',
     bedrag_excl_btw: 'nvt',
     mandaat_bedrag: 'nvt',
   },
   opdrachtbon: {
+    meerwerk_dossier: 'nvt',
     opdracht_referentie: 'verplicht',
     opdrachtdatum: 'gewenst',
   },
   opdracht_op_offerte: {
+    meerwerk_dossier: 'nvt',
     opdracht_referentie: 'verplicht',
     onze_offerte_referentie: 'gewenst',
   },
   servicedeskbon: {
+    meerwerk_dossier: 'nvt',
     mandaat_bedrag: 'gewenst',
     opdracht_referentie: 'gewenst',
   },
   meerwerk: {
+    // Zonder dossier is er geen opdracht om meerwerk op te zetten; dat is de hele
+    // handeling. Stond eerder nergens, waardoor het scherm een nieuw dossier
+    // voorstelde -- wat voor meerwerk nooit klopt.
+    meerwerk_dossier: 'verplicht',
     opdracht_referentie: 'gewenst',
   },
   aanvullende_informatie: {
+    meerwerk_dossier: 'nvt',
     opdracht_referentie: 'nvt',
     opdrachtdatum: 'nvt',
     mandaat_bedrag: 'nvt',
@@ -152,7 +162,7 @@ export const ALLE_VELDEN: VeldSleutel[] = [
   'bedrag_excl_btw', 'mandaat_bedrag', 'regie',
   'factuuradres_naam', 'factuuradres_straat', 'factuuradres_postcode', 'factuuradres_plaats',
   'opmerkingen', 'klant_opmerkingen', 'betrokkenen',
-  'offerte_dossier',
+  'offerte_dossier', 'meerwerk_dossier',
 ]
 
 /**
