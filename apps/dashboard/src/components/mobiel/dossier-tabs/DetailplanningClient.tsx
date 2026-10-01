@@ -5,7 +5,10 @@ import {
   addDays, differenceInDays, endOfWeek, format, getISOWeek,
   isWeekend, parseISO, startOfDay, startOfWeek,
 } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import type { Locale } from 'date-fns'
+import { useTranslations } from 'next-intl'
+import { useDateFnsLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 
 /**
  * Mobiele dossierplanning — read-only.
@@ -61,6 +64,9 @@ const GROEN = '#009439'
 const RAND  = '#e3e8ea'
 const GRIJS = '#6b757c'
 
+/** date-fns-patroon voor een korte datum ("3 jun"); de maandnaam volgt de taal. */
+const KORTE_DATUM = 'd MMM'
+
 const kleurVan = (status: string | null) => STATUS_KLEUR[status ?? ''] ?? '#9aa4ab'
 
 /** Datum-only ISO (yyyy-MM-dd) uit een `date`-kolom (gewenste_start, deadline). */
@@ -85,14 +91,14 @@ function dagVanTijdstip(iso: string | null, eindExclusief = false): string | nul
   } catch { return null }
 }
 
-function datumLabel(iso: string | null): string | null {
+function datumLabel(iso: string | null, locale: Locale): string | null {
   const d = dagVan(iso)
   if (!d) return null
-  try { return format(parseISO(d), 'd MMM', { locale: nl }) } catch { return null }
+  try { return format(parseISO(d), KORTE_DATUM, { locale }) } catch { return null }
 }
 
-function periodeLabel(a: MobielActiviteit): string {
-  return [datumLabel(a.gewenste_start), datumLabel(a.deadline)].filter(Boolean).join(' – ')
+function periodeLabel(a: MobielActiviteit, locale: Locale): string {
+  return [datumLabel(a.gewenste_start, locale), datumLabel(a.deadline, locale)].filter(Boolean).join(' – ')
 }
 
 function mensenVan(a: MobielActiviteit): string {
@@ -138,6 +144,7 @@ function sorteerChronologisch(activiteiten: MobielActiviteit[]): MobielActivitei
 // ─── Hoofdcomponent ───────────────────────────────────────────────────────────
 
 export default function DetailplanningClient({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
+  const t = useTranslations('dossiertabs.planning')
   const [liggend, setLiggend] = useState(false)
 
   // Eerste render (SSR + hydratie) is altijd portret; pas daarna meten we.
@@ -157,7 +164,7 @@ export default function DetailplanningClient({ activiteiten }: { activiteiten: M
   if (gesorteerd.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: GRIJS, padding: '40px 16px', fontSize: 14 }}>
-        Geen planning voor dit dossier.
+        {t('geen')}
       </div>
     )
   }
@@ -170,6 +177,7 @@ export default function DetailplanningClient({ activiteiten }: { activiteiten: M
 // ─── Portret: kaartlijst ──────────────────────────────────────────────────────
 
 function PlanningLijst({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
+  const t = useTranslations('dossiertabs.planning')
   const [toonVerlopen, setToonVerlopen] = useState(false)
   const vandaag = format(new Date(), 'yyyy-MM-dd')
 
@@ -180,7 +188,7 @@ function PlanningLijst({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {actueel.length === 0 ? (
         <div style={{ textAlign: 'center', color: GRIJS, padding: '32px 8px', fontSize: 14 }}>
-          Alle planning voor dit dossier is afgerond.
+          {t('alleAfgerond')}
         </div>
       ) : (
         actueel.map(a => <ActiviteitKaart key={a.id} a={a} />)
@@ -197,13 +205,13 @@ function PlanningLijst({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
               width: '100%', textAlign: 'center',
             }}
           >
-            {toonVerlopen ? 'Verberg verlopen' : 'Toon verlopen'} ({verlopen.length})
+            {t(toonVerlopen ? 'verbergVerlopen' : 'toonVerlopen', { aantal: verlopen.length })}
           </button>
 
           {toonVerlopen && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: GRIJS, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Verlopen
+                {t('verlopen')}
               </div>
               {verlopen.map(a => <ActiviteitKaart key={a.id} a={a} gedimd />)}
             </div>
@@ -215,8 +223,9 @@ function PlanningLijst({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
 }
 
 function ActiviteitKaart({ a, gedimd }: { a: MobielActiviteit; gedimd?: boolean }) {
+  const locale = useDateFnsLocale()
   const kleur = kleurVan(a.status)
-  const periode = periodeLabel(a)
+  const periode = periodeLabel(a, locale)
   const mensen = mensenVan(a)
 
   return (
@@ -226,7 +235,7 @@ function ActiviteitKaart({ a, gedimd }: { a: MobielActiviteit; gedimd?: boolean 
       borderLeft: `4px solid ${kleur}`,
       opacity: gedimd ? 0.6 : 1,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{a.titel}</div>
+      <VertaalbareTekst tekst={a.titel} label={false} as="div" style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }} />
       <div style={{ fontSize: 12, color: GRIJS, marginTop: 3, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {periode && <span>📅 {periode}</span>}
         {mensen && <span>👤 {mensen}</span>}
@@ -267,6 +276,8 @@ type GanttRij =
   | { kind: 'planitem'; key: string; a: MobielActiviteit; naam: string; items: MobielPlanitem[] }
 
 function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] }) {
+  const t = useTranslations('dossiertabs.planning')
+  const locale = useDateFnsLocale()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<string | null>(null)
 
@@ -396,7 +407,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
             fontSize: 10, fontWeight: 700, color: GRIJS,
             textTransform: 'uppercase', letterSpacing: '0.06em',
           }}>
-            Planning
+            {t('kop')}
           </div>
           <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0 }}>
             {/* Weekbalk */}
@@ -408,10 +419,10 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 padding: '0 4px', overflow: 'hidden',
               }}>
                 <span style={{ fontSize: 9.5, fontWeight: 700, color: GRIJS, whiteSpace: 'nowrap' }}>
-                  wk {getISOWeek(w.datum)}
+                  {t('week', { nummer: getISOWeek(w.datum) })}
                 </span>
                 <span style={{ fontSize: 9.5, color: '#9aa4ab', whiteSpace: 'nowrap' }}>
-                  {format(w.datum, 'd MMM', { locale: nl })}
+                  {format(w.datum, KORTE_DATUM, { locale })}
                 </span>
               </div>
             ))}
@@ -502,7 +513,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                     color: isAct ? '#161b20' : GRIJS,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
-                    {isAct ? rij.a.titel : rij.naam}
+                    {isAct ? <VertaalbareTekst tekst={rij.a.titel} label={false} /> : rij.naam}
                   </span>
                 </div>
 
@@ -529,7 +540,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                     background: 'var(--bg)', borderRight: `1px solid ${RAND}`,
                   }} />
                   <div style={{ padding: '8px 10px', fontSize: 11, color: GRIJS, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    {periodeLabel(rij.a) && <span>📅 {periodeLabel(rij.a)}</span>}
+                    {periodeLabel(rij.a, locale) && <span>📅 {periodeLabel(rij.a, locale)}</span>}
                     {mensenVan(rij.a) && <span>👤 {mensenVan(rij.a)}</span>}
                     {rij.a.locatie_adres && (
                       <a

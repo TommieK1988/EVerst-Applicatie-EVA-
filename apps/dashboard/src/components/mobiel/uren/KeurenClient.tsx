@@ -479,12 +479,12 @@ function DagAanwezig({ datum, d }: { datum: string; d: DagVergelijking }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 8, alignItems: 'baseline' }}>
         <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{dagKort(datum, dfLocale)}</span>
         <span>
-          {/* eslint-disable-next-line i18next/no-literal-string -- t.rich is de vertaalfunctie */}
+          { }
           {t.rich('keuren.aanwezig', { waarde: aanwezig, b })}
           {d.aankomst && d.vertrek && ` (${d.aankomst}–${d.vertrek})`}
         </span>
         <span>
-          {/* eslint-disable-next-line i18next/no-literal-string -- t.rich is de vertaalfunctie */}
+          { }
           {t.rich('keuren.geboekt', { waarde: geboekt, b })}
         </span>
         {verschil && (

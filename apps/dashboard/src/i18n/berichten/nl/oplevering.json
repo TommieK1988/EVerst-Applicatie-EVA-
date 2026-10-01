@@ -1,1 +1,106 @@
-{}
+{
+  "kopSub": "{geaccepteerd} van {totaal} geaccepteerd",
+  "momentStatus": {
+    "concept": "Concept",
+    "in_uitvoering": "In uitvoering",
+    "gereed_voor_ondertekening": "Gereed voor ondertekening",
+    "ondertekend": "Ondertekend",
+    "afgerond": "Afgerond"
+  },
+  "puntStatus": {
+    "nieuw": "Nieuwe melding",
+    "open": "Open",
+    "in_behandeling": "In behandeling",
+    "opgelost": "Opgelost",
+    "geaccepteerd": "Geaccepteerd",
+    "geweigerd": "Geweigerd",
+    "afgewezen": "Afgewezen"
+  },
+  "rol": {
+    "opdrachtgever": "Opdrachtgever",
+    "opzichter": "Opzichter",
+    "uitvoerder": "Uitvoerder"
+  },
+  "doorloop": {
+    "alleGeaccepteerd": "Alle punten geaccepteerd — klaar om te laten tekenen.",
+    "handtekeningAlt": "handtekening",
+    "akkoord": "✓ akkoord",
+    "geenPunten": "Nog geen opleverpunten. Voeg het eerste punt toe.",
+    "knopPunt": "+ Opleverpunt",
+    "knopDelen": "Delen",
+    "knopRapport": "Rapport",
+    "knopOndertekenen": "Laten ondertekenen"
+  },
+  "nieuwPunt": {
+    "titel": "Opleverpunt toevoegen",
+    "foutLeeg": "Beschrijf wat er nog moet gebeuren.",
+    "omschrijving": "Wat moet er nog gebeuren?",
+    "omschrijvingPlaceholder": "Beschrijf of spreek het punt in",
+    "ruimte": "Ruimte / locatie",
+    "ruimtePlaceholder": "Bijv. hal, kozijn achtergevel",
+    "groepMedewerkers": "Medewerkers",
+    "groepRelaties": "Onderaannemers / leveranciers",
+    "opslaan": "Opslaan…",
+    "knopToevoegen": "Toevoegen"
+  },
+  "toewijzen": {
+    "label": "Toewijzen aan",
+    "nietToegewezen": "Niet toegewezen",
+    "relatieOA": "{naam} (OA)"
+  },
+  "ondertekenen": {
+    "titel": "Ondertekenen",
+    "foutGeenHandtekening": "Zet eerst een handtekening.",
+    "nogPuntenOpen": "Er staan nog punten open. Ondertekenen kan, maar dan tekent de klant onder voorbehoud.",
+    "wieTekent": "Wie tekent er?",
+    "naam": "Naam",
+    "naamPlaceholder": "Naam ondertekenaar",
+    "handtekening": "Handtekening",
+    "vastleggen": "Vastleggen…",
+    "knopVastleggen": "Handtekening vastleggen"
+  },
+  "delen": {
+    "titel": "Delen",
+    "partij": "Partij",
+    "linkGekopieerd": "Link gekopieerd — {titel}",
+    "titelAfmeldlink": "afmeldlink {naam}",
+    "titelAkkoord": "akkoord opdrachtgever",
+    "uitleg": "De ontvanger heeft geen EVA-account nodig; hij ziet alleen wat bij deze link hoort.",
+    "knopAkkoordlink": "Akkoordlink opdrachtgever",
+    "knopAfmeldlink": "Afmeldlink: {naam}",
+    "geenRelaties": "Wijs een punt toe aan een onderaannemer om daar een afmeldlink voor te maken."
+  },
+  "punt": {
+    "deadline": "deadline {datum}",
+    "geenFotoNa": "Nog geen foto na herstel",
+    "kopVoor": "Voor",
+    "kopNa": "Na",
+    "geenFoto": "geen foto",
+    "statusWijzigen": "Status wijzigen",
+    "groepEigen": "Eigen personeel",
+    "groepOnderaannemers": "Onderaannemers (besteld in dit dossier)",
+    "geenBesteldePartijen": "Nog geen bestelde partijen op dit dossier. Zodra er een bestelling naar een onderaannemer is gegaan, kun je die hier kiezen.",
+    "fotos": "Foto's",
+    "fotoVooraf": "Foto vooraf",
+    "fotoNaHerstel": "Foto na herstel",
+    "uitBibliotheek": "{label} uit bibliotheek kiezen",
+    "fotoVerwijderen": "Foto verwijderen",
+    "fotoSoort": {
+      "voor": "voor",
+      "na": "na",
+      "algemeen": "algemeen"
+    },
+    "onderaannemer": "Onderaannemer",
+    "afmelding": " · afmelding",
+    "opmerking": "Opmerking",
+    "opmerkingPlaceholder": "Korte notitie…",
+    "knopPlaats": "Plaats",
+    "afwijzen": {
+      "titelMelding": "Melding afwijzen",
+      "titelPunt": "Opleverpunt afwijzen",
+      "reden": "Reden van afwijzing (optioneel)",
+      "knop": "Afwijzen"
+    }
+  },
+  "sterren": "{score} van {max}"
+}

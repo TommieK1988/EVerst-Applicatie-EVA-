@@ -1,9 +1,13 @@
 import { notFound } from 'next/navigation'
 import { getDeelname } from '@/lib/toolbox/deelname'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getAppVertaler } from '@/i18n/server'
 import ToolboxDoorloop from '@/components/toolbox/doorloop/ToolboxDoorloop'
 
-export const metadata = { title: 'Toolbox · EVA Mobiel' }
+export async function generateMetadata() {
+  const t = await getAppVertaler('toolbox')
+  return { title: t('metaTitel') }
+}
 
 export default async function MobielToolboxPage({ params }: { params: Promise<{ toewijzingId: string }> }) {
   const { toewijzingId } = await params

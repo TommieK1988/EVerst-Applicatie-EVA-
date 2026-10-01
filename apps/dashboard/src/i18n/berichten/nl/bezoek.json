@@ -1,1 +1,65 @@
-{}
+{
+  "bezig": "Bezig…",
+  "optioneel": "Optioneel",
+  "fout": {
+    "algemeen": "Er ging iets mis"
+  },
+  "afgerondMelding": "Dit bezoek is afgerond. Er kan niets meer aan gewijzigd worden.",
+  "welkeDisciplines": "Welke disciplines worden uitgevoerd?",
+  "vorigeKeuze": "De keuze van het vorige bezoek staat voor je klaar zodra je er één hebt gedaan.",
+  "hetBezoek": "Het bezoek",
+  "veld": {
+    "weer": "Weer",
+    "weerVoorbeeld": "Droog, 18 °C",
+    "bekeken": "Wat heb je bekeken",
+    "bekekenVoorbeeld": "Blok A, noord- en oostgevel",
+    "werkzaamheden": "Werkzaamheden in uitvoering",
+    "werkzaamhedenVoorbeeld": "Schilderwerk en houtrotherstel",
+    "opmerkingen": "Algemene opmerkingen"
+  },
+  "voortgangPerDiscipline": "Voortgang per discipline",
+  "voortgangVan": "Voortgang {naam}",
+  "afronden": "Afronden",
+  "overzichtsfotos": "Overzichtsfoto's van dit bezoek",
+  "geenDiscipline": "Kies bovenaan minstens één discipline; zonder discipline kun je het bezoek niet afronden.",
+  "nogNietsIngevuld": "{naam}: nog geen punten en geen voortgang ingevuld.",
+  "bezoekAfgerond": "Bezoek afgerond",
+  "bezoekAfronden": "Bezoek afronden",
+  "daarnaRapportage": "Daarna kan de rapportage worden opgesteld.",
+  "punt": {
+    "watValtOp": "Wat valt je op?",
+    "watValtOpVoorbeeld": "Kras op de voordeur van nummer 24",
+    "puntEnFotosOpslaan": "Punt en foto's opslaan…",
+    "opslaan": "Opslaan…",
+    "fotosMislukt": "{aantal, plural, one {Punt opgeslagen, maar # foto niet} other {Punt opgeslagen, maar # foto's niet}}",
+    "fotosMisluktMetFout": "{aantal, plural, one {Punt opgeslagen, maar # foto niet: {fout}} other {Punt opgeslagen, maar # foto's niet: {fout}}}",
+    "toevoegen": "Punt toevoegen",
+    "geenBijzonderheden": "Geen bijzonderheden vastgelegd.",
+    "verwijderen": "Punt verwijderen",
+    "alInBehandeling": "Al in behandeling op het dossier — intrekken kan daar."
+  },
+  "aandachtspunt": {
+    "titel": "Ook als aandachtspunt op het dossier",
+    "uitleg": "Krijgt een nummer en opvolging"
+  },
+  "kiezer": {
+    "kiesDisciplines": "Kies de disciplines die worden uitgevoerd",
+    "zoeken": "Zoeken",
+    "heeftPuntenTitel": "Deze discipline heeft punten",
+    "heeftPunten": "heeft punten",
+    "nietsGevonden": "Niets gevonden.",
+    "klaar": "Klaar ({aantal})"
+  },
+  "foto": {
+    "titel": "Foto's",
+    "maken": "Foto maken",
+    "uitGalerij": "Uit galerij",
+    "verwijderen": "Foto verwijderen",
+    "verwijderenMislukt": "Verwijderen mislukt",
+    "uploaden": "Uploaden…",
+    "uploadenVoortgang": "Uploaden {nummer}/{totaal}…",
+    "uploadenMislukt": "Uploaden mislukt",
+    "deelsMislukt": "{mislukt} van {totaal} foto's mislukt",
+    "deelsMisluktMetFout": "{mislukt} van {totaal} foto's mislukt: {fout}"
+  }
+}

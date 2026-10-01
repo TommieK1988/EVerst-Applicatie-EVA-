@@ -22,6 +22,9 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type {
   OpnameFoto,
   OpnameMetRegels,
@@ -38,10 +41,11 @@ import {
   type Mutatie,
 } from '@/lib/opname/wachtrij'
 import { regelTotaal } from '@/lib/opname/prijs'
-import OnderdeelKiezer from './OnderdeelKiezer'
+import OnderdeelKiezer, { CodeEnGroep } from './OnderdeelKiezer'
+import RuimteStrook, { RuimteNaam } from './RuimteStrook'
 import FotoStrook, { type StrookFoto } from './FotoStrook'
 import {
-  AMBER, chip, euro, GRIJS, GROEN, kaart, label, primaireKnop, RAND, ROOD,
+  AMBER, euro, GRIJS, GROEN, kaart, label, primaireKnop, RAND, ROOD,
   secundaireKnop, TEKST, veld, ZACHT,
 } from './stijl'
 
@@ -68,6 +72,8 @@ export default function OpnameScherm({
   ruimtes: OpnameRuimte[]
   vaakGebruiktIds: string[]
 }) {
+  const t = useTranslations('opname')
+  const locale = useDatumLocale()
   const router = useRouter()
   const bewerkbaar = opname.status === 'concept'
 
@@ -110,7 +116,7 @@ export default function OpnameScherm({
       return res.ok ? { ok: true as const } : { ok: false as const, error: res.error }
     },
     async fotoUpload(m: Mutatie) {
-      if (!m.blob) return { ok: false as const, error: 'Foto ontbreekt in de wachtrij' }
+      if (!m.blob) return { ok: false as const, error: t('fout.fotoOntbreektInWachtrij') }
       const fd = new FormData()
       fd.append('foto', new File([m.blob], String(m.payload.bestandsnaam ?? 'foto.jpg'), { type: m.blob.type }))
       const res = await uploadOpnameFoto(
@@ -159,6 +165,9 @@ export default function OpnameScherm({
     }
     return uit
   }, [ruimtes, regels])
+
+  // Alleen ruimtes uit het sjabloon van kantoor worden vertaald getoond; zelf getypte niet.
+  const sjabloonRuimtes = React.useMemo(() => new Set(ruimtes.map(r => r.naam)), [ruimtes])
 
   function fotosVan(regelId: string): StrookFoto[] {
     return fotos
@@ -217,7 +226,7 @@ export default function OpnameScherm({
     const aantal = Number.isFinite(ingevuldAantal) && ingevuldAantal > 0 ? ingevuldAantal : 1
 
     if (!concept.onderdeel && !concept.vrijeOmschrijving.trim()) {
-      setFout('Vul een omschrijving in')
+      setFout(t('fout.omschrijvingVerplicht'))
       return false
     }
 
@@ -289,7 +298,7 @@ export default function OpnameScherm({
       })
     } catch (err) {
       setBezig(false)
-      setFout(err instanceof Error ? err.message : 'Opslaan mislukt')
+      setFout(err instanceof Error ? err.message : t('fout.opslaanMislukt'))
       return false
     }
     setBezig(false)
@@ -326,7 +335,7 @@ export default function OpnameScherm({
         payload: { regelId },
       })
     } catch (err) {
-      setFout(err instanceof Error ? err.message : 'Verwijderen mislukt')
+      setFout(err instanceof Error ? err.message : t('fout.verwijderenMislukt'))
       return
     }
     setRegels(huidig => huidig.filter(r => r.id !== regelId))
@@ -339,10 +348,7 @@ export default function OpnameScherm({
     // Harde regel: met een niet-lege wachtrij zou er een opname naar de calculator vertrekken
     // waar regels of foto's uit ontbreken. Liever wachten dan half opleveren.
     if (wachtend > 0) {
-      setFout(
-        `Nog ${wachtend} wijziging${wachtend !== 1 ? 'en' : ''} niet verstuurd. ` +
-          'Zodra er weer verbinding is gaan ze vanzelf mee; daarna kun je afronden.',
-      )
+      setFout(t('fout.nogNietVerstuurd', { aantal: wachtend }))
       return
     }
     setBezig(true)
@@ -366,6 +372,7 @@ export default function OpnameScherm({
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
         <RuimteStrook
           namen={ruimteNamen}
+          vertaalbaar={sjabloonRuimtes}
           actief={ruimte}
           onKies={setRuimte}
           eigen={eigenRuimte}
@@ -380,14 +387,14 @@ export default function OpnameScherm({
         </div>
         <MobielStickyFooter>
           <button type="button" style={{ ...secundaireKnop, flex: 1 }} onClick={() => setStap('overzicht')}>
-            Terug
+            {t('terug')}
           </button>
           <button
             type="button"
             style={{ ...secundaireKnop, flex: 1 }}
             onClick={() => startNieuweRegel(null)}
           >
-            + Los punt
+            {t('losPuntKnop')}
           </button>
         </MobielStickyFooter>
       </div>
@@ -408,37 +415,45 @@ export default function OpnameScherm({
           <div style={kaart}>
             {onderdeel ? (
               <>
-                <div style={{ fontSize: 16, fontWeight: 700, color: TEKST }}>{onderdeel.omschrijving}</div>
+                <VertaalbareTekst
+                  tekst={onderdeel.omschrijving}
+                  as="div"
+                  style={{ fontSize: 16, fontWeight: 700, color: TEKST }}
+                />
                 <div style={{ fontSize: 12, color: GRIJS, marginTop: 2 }}>
-                  {[onderdeel.code, onderdeel.hoofdgroep].filter(Boolean).join(' · ')}
+                  <CodeEnGroep code={onderdeel.code} hoofdgroep={onderdeel.hoofdgroep} />
                 </div>
                 {onderdeel.toelichting && (
-                  <p style={{ margin: '8px 0 0', fontSize: 13, color: GRIJS }}>{onderdeel.toelichting}</p>
+                  <VertaalbareTekst
+                    tekst={onderdeel.toelichting}
+                    as="p"
+                    style={{ margin: '8px 0 0', fontSize: 13, color: GRIJS }}
+                  />
                 )}
               </>
             ) : (
               <>
-                <span style={label}>Wat moet er gebeuren? (verplicht)</span>
+                <span style={label}>{t('regel.watMoetErGebeuren')}</span>
                 <input
                   type="text"
                   value={concept.vrijeOmschrijving}
                   onChange={e => setConcept({ ...concept, vrijeOmschrijving: e.target.value })}
-                  placeholder="Bijv. plint vervangen achter radiator"
+                  placeholder={t('regel.omschrijvingVoorbeeld')}
                   style={veld}
                   autoFocus={!concept.bestaand}
                 />
                 <p style={{ margin: '6px 0 0', fontSize: 11, color: ZACHT }}>
-                  Los punt. Locatie, aantal en foto mag je leeg laten; de prijs wordt op kantoor
-                  in de calculatie bepaald.
+                  {t('regel.losPuntUitleg')}
                 </p>
               </>
             )}
           </div>
 
           <div style={kaart}>
-            <span style={label}>Locatie{onderdeel ? '' : ' (optioneel)'}</span>
+            <span style={label}>{onderdeel ? t('regel.locatie') : t('regel.locatieOptioneel')}</span>
             <RuimteStrook
               namen={ruimteNamen}
+              vertaalbaar={sjabloonRuimtes}
               actief={ruimte}
               onKies={setRuimte}
               eigen={eigenRuimte}
@@ -449,12 +464,14 @@ export default function OpnameScherm({
 
           <div style={kaart}>
             <span style={label}>
-              Aantal{onderdeel ? ` (${onderdeel.eenheid})` : ' (optioneel, leeg telt als 1)'}
+              {onderdeel
+                ? t('regel.aantalMetEenheid', { eenheid: onderdeel.eenheid })
+                : t('regel.aantalOptioneel')}
             </span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button
                 type="button"
-                aria-label="Minder"
+                aria-label={t('regel.minder')}
                 style={{ ...secundaireKnop, width: 52, fontSize: 20, padding: '10px 0' }}
                 onClick={() => {
                   const stapGrootte = onderdeel?.aantal_stap ?? 1
@@ -474,7 +491,7 @@ export default function OpnameScherm({
               />
               <button
                 type="button"
-                aria-label="Meer"
+                aria-label={t('regel.meer')}
                 style={{ ...secundaireKnop, width: 52, fontSize: 20, padding: '10px 0' }}
                 onClick={() => {
                   const stapGrootte = onderdeel?.aantal_stap ?? 1
@@ -487,26 +504,26 @@ export default function OpnameScherm({
             </div>
             {regelTotaal != null && (
               <p style={{ margin: '10px 0 0', fontSize: 14, color: TEKST }}>
-                {euro(onderdeel?.verkoop_pe)} × {aantal} ={' '}
-                <strong style={{ color: GROEN }}>{euro(regelTotaal)}</strong>
+                {euro(onderdeel?.verkoop_pe, locale)} × {aantal.toLocaleString(locale)} ={' '}
+                <strong style={{ color: GROEN }}>{euro(regelTotaal, locale)}</strong>
               </p>
             )}
           </div>
 
           <div style={kaart}>
             <span style={label}>
-              Toelichting{onderdeel?.toelichting_verplicht ? ' (verplicht)' : ' (optioneel)'}
+              {onderdeel?.toelichting_verplicht ? t('regel.toelichtingVerplicht') : t('regel.toelichtingOptioneel')}
             </span>
             <SpraakTextarea
               value={concept.toelichting}
               onChange={waarde => setConcept({ ...concept, toelichting: waarde })}
-              placeholder="Wat de calculator moet weten"
+              placeholder={t('regel.toelichtingPlaatshouder')}
               rows={3}
             />
           </div>
 
           <div style={kaart}>
-            <span style={label}>Foto&apos;s</span>
+            <span style={label}>{t('regel.fotos')}</span>
             <FotoStrook
                 opnameId={opname.id}
                 regelId={concept.regelId}
@@ -558,7 +575,7 @@ export default function OpnameScherm({
               onClick={() => void regelWeg(concept.regelId)}
               style={{ ...secundaireKnop, width: '100%', color: ROOD, marginBottom: 10 }}
             >
-              Regel verwijderen
+              {t('regel.verwijderen')}
             </button>
           )}
         </div>
@@ -573,7 +590,7 @@ export default function OpnameScherm({
               setStap(concept.bestaand ? 'overzicht' : 'kiezen')
             }}
           >
-            Annuleren
+            {t('annuleren')}
           </button>
           <button
             type="button"
@@ -581,7 +598,7 @@ export default function OpnameScherm({
             onClick={() => void bewaarConcept()}
             disabled={bezig}
           >
-            {bezig ? 'Bezig…' : concept.bestaand ? 'Opslaan' : 'Toevoegen'}
+            {bezig ? t('bezig') : concept.bestaand ? t('opslaan') : t('toevoegen')}
           </button>
         </MobielStickyFooter>
       </div>
@@ -596,12 +613,12 @@ export default function OpnameScherm({
         {regels.length === 0 ? (
           <div style={{ ...kaart, textAlign: 'center', padding: '28px 16px' }}>
             <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: TEKST }}>
-              Nog niets opgenomen
+              {t('overzicht.nogNietsOpgenomen')}
             </p>
             <p style={{ margin: 0, fontSize: 13, color: GRIJS }}>
               {onderdelen.length > 0
-                ? 'Kies een locatie en voeg de eerste werkzaamheid toe.'
-                : 'Voeg je eerste punt toe. Een omschrijving is genoeg; de prijs komt later.'}
+                ? t('overzicht.legeUitlegBibliotheek')
+                : t('overzicht.legeUitlegLos')}
             </p>
           </div>
         ) : (
@@ -613,9 +630,14 @@ export default function OpnameScherm({
                   padding: '0 2px 6px', borderBottom: `1px solid ${RAND}`, marginBottom: 8,
                 }}
               >
-                <span style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>{groep.ruimte}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>
+                  {/* Zonder ruimte groepeert `groepeerPerRuimte` onder "Overig"; dat is onze eigen tekst. */}
+                  {groep.regels.every(r => !r.ruimte?.trim())
+                    ? t('overzicht.overig')
+                    : <RuimteNaam naam={groep.ruimte} vertaalbaar={sjabloonRuimtes} />}
+                </span>
                 {groep.verkoop_totaal > 0 && (
-                  <span style={{ fontSize: 13, color: GRIJS }}>{euro(groep.verkoop_totaal)}</span>
+                  <span style={{ fontSize: 13, color: GRIJS }}>{euro(groep.verkoop_totaal, locale)}</span>
                 )}
               </div>
               {groep.regels.map(regel => {
@@ -636,11 +658,21 @@ export default function OpnameScherm({
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: TEKST }}>{regel.omschrijving}</div>
+                        {/* Uit de bibliotheek: vertaald tonen. Een los punt typte de opnemer zelf: zoals het is. */}
+                        {regel.onderdeel_id ? (
+                          <VertaalbareTekst
+                            tekst={regel.omschrijving}
+                            label={false}
+                            as="div"
+                            style={{ fontSize: 15, fontWeight: 600, color: TEKST }}
+                          />
+                        ) : (
+                          <div style={{ fontSize: 15, fontWeight: 600, color: TEKST }}>{regel.omschrijving}</div>
+                        )}
                         <div style={{ fontSize: 12, color: GRIJS, marginTop: 2 }}>
-                          {regel.aantal} {regel.eenheid}
-                          {regel.verkoop_pe != null ? ` × ${euro(regel.verkoop_pe)}` : ''}
-                          {regelFotos.length > 0 ? ` · ${regelFotos.length} foto${regelFotos.length > 1 ? "'s" : ''}` : ''}
+                          {regel.aantal.toLocaleString(locale)} {regel.eenheid}
+                          {regel.verkoop_pe != null ? ` × ${euro(regel.verkoop_pe, locale)}` : ''}
+                          {regelFotos.length > 0 ? ` · ${t('overzicht.aantalFotos', { aantal: regelFotos.length })}` : ''}
                         </div>
                         {regel.toelichting_opnemer && (
                           <div style={{ fontSize: 12, color: GRIJS, fontStyle: 'italic', marginTop: 4 }}>
@@ -656,7 +688,7 @@ export default function OpnameScherm({
                           textAlign: 'right',
                         }}
                       >
-                        {regel.verkoop_pe == null ? 'nog te prijzen' : euro(regel.regel_verkoop_totaal)}
+                        {regel.verkoop_pe == null ? t('overzicht.nogTePrijzen') : euro(regel.regel_verkoop_totaal, locale)}
                       </div>
                     </div>
                     {mistFoto && (
@@ -684,16 +716,17 @@ export default function OpnameScherm({
           }}
         >
           <span>
-            {regels.length} punt{regels.length !== 1 ? 'en' : ''} · {groepen.length} locatie
-            {groepen.length !== 1 ? 's' : ''}
+            {t('overzicht.aantalPunten', { aantal: regels.length })}
+            {' · '}
+            {t('overzicht.aantalLocaties', { aantal: groepen.length })}
             {teePrijzen > 0 && (
-              <span style={{ color: GRIJS }}> · {teePrijzen} nog te prijzen</span>
+              <span style={{ color: GRIJS }}> · {t('overzicht.aantalNogTePrijzen', { aantal: teePrijzen })}</span>
             )}
             {wachtend > 0 && (
-              <span style={{ color: AMBER, fontWeight: 700 }}> · {wachtend} wacht op verbinding</span>
+              <span style={{ color: AMBER, fontWeight: 700 }}> · {t('overzicht.aantalWachtOpVerbinding', { aantal: wachtend })}</span>
             )}
           </span>
-          {totaal > 0 && <strong style={{ fontSize: 17, color: TEKST }}>{euro(totaal)}</strong>}
+          {totaal > 0 && <strong style={{ fontSize: 17, color: TEKST }}>{euro(totaal, locale)}</strong>}
         </div>
         {bewerkbaar ? (
           <div style={{ display: 'flex', gap: 8, width: '100%' }}>
@@ -704,7 +737,7 @@ export default function OpnameScherm({
               // punt, in plaats van een lege kieslijst.
               onClick={() => (onderdelen.length > 0 ? setStap('kiezen') : startNieuweRegel(null))}
             >
-              {onderdelen.length > 0 ? '+ Toevoegen' : '+ Punt toevoegen'}
+              {onderdelen.length > 0 ? t('overzicht.toevoegenKnop') : t('overzicht.puntToevoegenKnop')}
             </button>
             <button
               type="button"
@@ -712,58 +745,15 @@ export default function OpnameScherm({
               onClick={afronden}
               disabled={bezig || regels.length === 0 || wachtend > 0}
             >
-              {bezig ? 'Bezig…' : 'Afronden'}
+              {bezig ? t('bezig') : t('overzicht.afronden')}
             </button>
           </div>
         ) : (
           <p style={{ margin: 0, width: '100%', fontSize: 13, color: GRIJS, textAlign: 'center' }}>
-            Deze opname is afgerond.
+            {t('overzicht.isAfgerond')}
           </p>
         )}
       </MobielStickyFooter>
-    </div>
-  )
-}
-
-/** Ruimtekiezer: chips uit het sjabloon plus een veld voor een eigen naam. */
-function RuimteStrook({
-  namen,
-  actief,
-  onKies,
-  eigen,
-  onEigen,
-  compact = false,
-}: {
-  namen: string[]
-  actief: string
-  onKies: (naam: string) => void
-  eigen: string
-  onEigen: (waarde: string) => void
-  compact?: boolean
-}) {
-  const [eigenOpen, setEigenOpen] = React.useState(false)
-
-  return (
-    <div style={{ padding: compact ? 0 : '10px 14px 0' }}>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
-        {namen.map(naam => (
-          <button key={naam} type="button" style={chip(actief === naam && !eigen)} onClick={() => { onEigen(''); setEigenOpen(false); onKies(naam) }}>
-            {naam}
-          </button>
-        ))}
-        <button type="button" style={chip(eigenOpen || !!eigen)} onClick={() => setEigenOpen(v => !v)}>
-          Anders…
-        </button>
-      </div>
-      {(eigenOpen || eigen) && (
-        <input
-          type="text"
-          value={eigen}
-          onChange={e => onEigen(e.target.value)}
-          placeholder="Eigen ruimtenaam"
-          style={{ ...veld, marginBottom: 8 }}
-        />
-      )}
     </div>
   )
 }

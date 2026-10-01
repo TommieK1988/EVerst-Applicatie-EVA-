@@ -1,3 +1,4 @@
+import { getAppVertaler } from '@/i18n/server'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import { getMedewerkerOpties, getTeamOpties } from '@/lib/materieel/data'
 import AppHeader from '@/components/mobiel/AppHeader'
@@ -20,13 +21,14 @@ export default async function NieuwMaterieelPage({
     searchParams, getMedewerkerOpties(), getTeamOpties(),
   ])
 
+  const t = await getAppVertaler('materieel')
   const naam = [medewerker.voornaam, medewerker.achternaam].filter(Boolean).join(' ')
 
   return (
     <>
       <AppHeader
-        title="Nieuw materieel"
-        sub={code ? 'Sticker gescand' : 'Zonder sticker'}
+        title={t('nieuw.titel')}
+        sub={code ? t('nieuw.subGescand') : t('nieuw.subZonder')}
         backHref="/m/materieel"
       />
       <NieuwMaterieelForm

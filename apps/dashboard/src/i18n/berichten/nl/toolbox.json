@@ -1,1 +1,29 @@
-{}
+{
+  "metaTitel": "Toolbox · EVA Mobiel",
+  "vraagVan": "Vraag {nr}/{totaal}",
+  "slideVan": "Slide {nr}/{totaal}",
+  "vorige": "Vorige",
+  "volgende": "Volgende",
+  "naarVragen": "Naar de vragen",
+  "naarAftekenen": "Naar aftekenen",
+  "nietJuist": "Dat is niet juist — probeer het opnieuw.",
+  "aftekenen": "Aftekenen",
+  "aftekenenUitleg": "Je hebt de toolbox doorlopen en alle vragen goed beantwoord. Onderteken hieronder om te bevestigen dat je de instructie hebt begrepen.",
+  "naam": "Naam",
+  "handtekening": "Handtekening",
+  "bezig": "Bezig…",
+  "afronden": "Toolbox afronden",
+  "alAfgerond": "Al afgerond",
+  "afgerond": "Toolbox afgerond",
+  "eerderAfgetekend": "Je hebt \"{titel}\" eerder al afgetekend.",
+  "doorlopenAfgetekend": "Je hebt \"{titel}\" doorlopen en afgetekend. De actie is automatisch afgerond.",
+  "terugNaarActies": "Terug naar acties",
+  "fout": {
+    "geenToegang": "Geen toegang tot deze toolbox.",
+    "naamLeeg": "Vul je naam in.",
+    "geenHandtekening": "Zet eerst je handtekening.",
+    "inhoudNietGevonden": "Toolbox-inhoud niet gevonden.",
+    "vragenNietGoed": "Beantwoord eerst alle vragen goed voordat je aftekent.",
+    "handtekeningOpslaan": "Handtekening opslaan mislukt: {fout}"
+  }
+}

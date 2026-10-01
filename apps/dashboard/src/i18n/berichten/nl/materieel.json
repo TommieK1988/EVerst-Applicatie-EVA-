@@ -1,1 +1,153 @@
-{}
+{
+  "titel": "Materieel",
+  "algemeenGebruik": "Algemeen gebruik",
+  "categorie": {
+    "gereedschap": "Gereedschap",
+    "machine": "Machine",
+    "aanhanger": "Aanhanger",
+    "bouwplaatsvoorziening": "Bouwplaatsvoorzieningen",
+    "steigeronderdeel": "Steigeronderdeel",
+    "ladder": "Ladder of trap",
+    "meetapparatuur": "Meetapparatuur",
+    "pbm": "PBM"
+  },
+  "status": {
+    "in_gebruik": "In gebruik",
+    "beschikbaar": "Beschikbaar",
+    "gereserveerd": "Gereserveerd",
+    "onderhoud": "Onderhoud",
+    "defect": "Defect",
+    "vermist": "Vermist"
+  },
+  "start": {
+    "sub": "Zoeken en toevoegen",
+    "toegewezenAanMij": "Toegewezen aan mij",
+    "nietsOpNaam": "Er staat nog niets op jouw naam.",
+    "nogGeenSticker": "Nog geen sticker ({aantal})",
+    "recentToegevoegd": "Recent door mij toegevoegd"
+  },
+  "zoek": {
+    "plaatshouder": "Zoek op naam, merk, nummer of wie het heeft",
+    "wissen": "Zoekterm wissen",
+    "zoeken": "Zoeken…",
+    "gevonden": "Gevonden ({aantal})",
+    "gevondenMeer": "Gevonden ({aantal}+)",
+    "nietsGevonden": "Niets gevonden voor “{term}”."
+  },
+  "regel": {
+    "serienummer": "sn {nummer}",
+    "keuring": "keuring {nummer}",
+    "inventaris": "nr {nummer}"
+  },
+  "toevoegen": {
+    "knop": "Toevoegen",
+    "stickerScannen": "Sticker scannen",
+    "titel": "Materieel toevoegen",
+    "scanUitleg": "Scan de sticker die je erop plakt; de code hangt er dan meteen aan.",
+    "zonderSticker": "Toevoegen zonder sticker",
+    "zonderStickerUitleg": "Nog geen sticker bij de hand. Koppelen kan later op het paspoort."
+  },
+  "scanner": {
+    "hint": "Richt op de QR-code van de sticker",
+    "geenCamera": "Deze telefoon of browser geeft geen toegang tot de camera. Typ de code van de sticker over.",
+    "startNiet": "De camera start niet. Typ de code van de sticker over.",
+    "herstel": {
+      "ios": "De camera staat geblokkeerd voor EVA. Zet hem aan via Instellingen → Safari → Camera, of tik in de adresbalk op \"aA\" → Website-instellingen → Camera → Sta toe.",
+      "android": "De camera staat geblokkeerd voor EVA. Tik op het slotje in de adresbalk → Machtigingen → Camera → Toestaan.",
+      "anders": "De camera staat geblokkeerd voor EVA. Zet hem aan in de site-instellingen van je browser."
+    },
+    "lampAan": "Lamp aan",
+    "lampUit": "Lamp uit",
+    "evenZoeken": "Even zoeken…",
+    "opnieuwScannen": "Opnieuw scannen"
+  },
+  "scan": {
+    "titel": "Scannen",
+    "subKoppelen": "Sticker koppelen",
+    "subStandaard": "QR-sticker op materieel",
+    "geenRecht": "Deze sticker hoort nog nergens bij. Je hebt geen recht om materieel toe te voegen — vraag een collega met dat recht.",
+    "onbekendeSticker": "Onbekende sticker",
+    "onbekendUitlegToevoegen": "Deze code staat nog nergens in EVA. Hoort hij bij materieel dat er al in staat, of is dit iets nieuws?",
+    "onbekendUitlegKoppelen": "Deze code staat nog nergens in EVA. Je kunt hem aan materieel koppelen dat er al in staat; nieuw materieel toevoegen doet kantoor.",
+    "koppelenAanBestaand": "Koppelen aan bestaand materieel",
+    "nieuwAanmaken": "Nieuw materieel aanmaken",
+    "koppelenAan": "Sticker koppelen aan",
+    "hintKoppelen": "Scan de sticker die je op dit materieel plakt",
+    "handmatigLabel": "Lukt scannen niet? Typ de code van de sticker over",
+    "handmatigVoorbeeld": "Bijv. EV-00123",
+    "zoek": "Zoek"
+  },
+  "koppel": {
+    "titel": "Sticker koppelen",
+    "gescandeSticker": "Gescande sticker",
+    "kiesUitleg": "Kies waar deze sticker op zit.",
+    "nogZonder": "{aantal, plural, one {Nog # stuk zonder sticker.} other {Nog # stuks zonder sticker.}}",
+    "nietsMeerZonder": "Er staat niets meer zonder sticker.",
+    "nietsGevonden": "Niets gevonden dat nog zonder sticker staat.",
+    "allesHeeftSticker": "Al het materieel heeft een sticker.",
+    "koppelen": "Koppelen…",
+    "staatErNietBij": "Staat er niet bij — nieuw materieel aanmaken"
+  },
+  "kiezer": {
+    "kies": "Kies…",
+    "typOmTeZoeken": "Typ om te zoeken",
+    "sluit": "Sluit",
+    "nietsGevonden": "Niets gevonden.",
+    "werkplaatsEnBussen": "Werkplaats en bussen",
+    "collegas": "Collega's",
+    "typNaamOfWerkplaats": "Typ een naam of werkplaats"
+  },
+  "nieuw": {
+    "titel": "Nieuw materieel",
+    "subGescand": "Sticker gescand",
+    "subZonder": "Zonder sticker",
+    "sticker": "Sticker",
+    "geenSticker": "Nog geen sticker. Je kunt er later een koppelen vanaf het paspoort.",
+    "watIsHet": "Wat is het? *",
+    "watIsHetVoorbeeld": "Bijv. Accuboormachine",
+    "soort": "Soort",
+    "merk": "Merk",
+    "type": "Type",
+    "serienummer": "Serienummer",
+    "foto": "Foto",
+    "fotoOpnieuw": "Opnieuw",
+    "fotoMaken": "Foto maken",
+    "fotoKiezen": "Kiezen",
+    "waarHoortHet": "Waar hoort het?",
+    "mijzelf": "Mijzelf ({naam})",
+    "opmerking": "Opmerking",
+    "vulInWatHetIs": "Vul in wat het is",
+    "fotoMislukt": "Materieel is opgeslagen, maar de foto niet: {fout}",
+    "annuleren": "Annuleren",
+    "opslaan": "Opslaan",
+    "opslaanBezig": "Opslaan…"
+  },
+  "paspoort": {
+    "van": "Van",
+    "serienummer": "Serienummer",
+    "inventarisnummer": "Inventarisnummer",
+    "sticker": "Sticker",
+    "nogGeenSticker": "Nog geen sticker",
+    "opMijnNaam": "Op mijn naam zetten",
+    "opJouwNaamGezet": "Op jouw naam gezet",
+    "inleveren": "Inleveren",
+    "ingeleverd": "Ingeleverd",
+    "waarHoortHet": "Waar hoort het?",
+    "kiesPlaatshouder": "Kies een collega, werkplaats of bus…",
+    "opAlgemeenGezet": "Op algemeen gebruik gezet",
+    "uitgegeven": "Uitgegeven",
+    "toewijzen": "Toewijzen",
+    "storingMelden": "Storing of schade melden",
+    "watIsErAanDeHand": "Wat is er aan de hand?",
+    "annuleren": "Annuleren",
+    "melden": "Melden",
+    "storingGemeld": "Storing gemeld — het materieel staat nu op defect",
+    "stickerKoppelen": "Sticker koppelen"
+  },
+  "fout": {
+    "algemeen": "Er ging iets mis",
+    "legeCode": "Lege code",
+    "stickerHangtAl": "Deze sticker hangt al op \"{naam}\"",
+    "stickerInGebruik": "Deze sticker is al in gebruik"
+  }
+}

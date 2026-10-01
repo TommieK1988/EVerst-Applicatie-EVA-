@@ -12,4 +12,6 @@ import type { Naamruimte } from './berichten'
  */
 export const GEDEELDE_NAAMRUIMTES = [
   'gedeeld', 'dialogen', 'formulieren', 'werkbon', 'toolbox', 'handboek', 'vertalen',
+  // BezoekDoorloop draait ook op kantoor (dossier → KAM → BezoekVenster).
+  'bezoek',
 ] as const satisfies readonly Naamruimte[]

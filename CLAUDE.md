@@ -156,6 +156,14 @@ met verzonnen gegevens. Beide zijn bereikbaar zonder in te loggen, dus je kunt o
 zonder een sessie — en dat hoort erbij, want geen enkele type-check of build vangt een afgekapt
 label of een kolom die buiten beeld valt.
 
+### EVA Mobiel is meertalig (nl/pl/ta)
+De app onder `/m` draait in het Nederlands, Pools en Tamil (taal per medewerker); het
+kantoordeel blijft Nederlands. Elke zichtbare tekst in `/m` hoort in
+`src/i18n/berichten/{nl,pl,ta}` — de lintregel `i18next/no-literal-string` maakt losse tekst
+daar een fout, en de tests eisen dat pl/ta dezelfde sleutels hebben. Teksten van kantoor uit de
+database toon je met `<VertaalbareTekst>`. Lees `apps/dashboard/src/i18n/README.md` vóór je iets
+in `/m` toevoegt; `/auth/app-taal-preview?taal=ta` toont de opmaak zonder in te loggen.
+
 ### Forms & validation
 React Hook Form + Zod schemas. Zod schema's dienen ook als de TypeScript brontypes.
 

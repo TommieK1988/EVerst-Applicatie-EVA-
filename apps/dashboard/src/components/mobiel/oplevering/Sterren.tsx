@@ -1,4 +1,8 @@
+'use client'
+
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 
 /**
  * Sterrenrij met een gedeeltelijk gevulde laatste ster (4,2 van 5 = vier volle sterren plus een
@@ -24,6 +28,8 @@ export default function Sterren({ score, max, maat = 22 }: {
   max: number
   maat?: number
 }) {
+  const t = useTranslations('oplevering')
+  const locale = useDatumLocale()
   // Een schaal van 10 zou tien sterren geven en dat past niet op een telefoon; boven de 5 rekenen
   // we terug naar 5 sterren, zodat de verhouding klopt maar het beeld rustig blijft.
   const aantal = max > 5 ? 5 : Math.max(1, Math.round(max))
@@ -38,7 +44,7 @@ export default function Sterren({ score, max, maat = 22 }: {
     <div
       style={{ position: 'relative', display: 'inline-block' }}
       role="img"
-      aria-label={`${score.toLocaleString('nl-NL', { maximumFractionDigits: 1 })} van ${max}`}
+      aria-label={t('sterren', { score: score.toLocaleString(locale, { maximumFractionDigits: 1 }), max })}
     >
       {rij(LEEG)}
       <div style={{

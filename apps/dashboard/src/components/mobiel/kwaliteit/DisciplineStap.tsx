@@ -1,11 +1,18 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { InspectieContext } from '@/lib/kwaliteit/inspecties'
 import { updateInspectieHeader, zetDisciplines } from '@/lib/kwaliteit/inspecties'
 import type { KwaliteitDiscipline } from '@everts/database/kwaliteit-types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import { GRIJS, GROEN, label, primaireKnop, RAND, ROOD, TEKST, veld, ZACHT } from './stijl'
+
+const DATUM_OPMAAK: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' }
+/** Uitklappijltjes; geen tekst. */
+const PIJL = { open: '▴', dicht: '▾' }
 
 /**
  * Stap 1: waarop wordt deze ronde gecontroleerd.
@@ -26,6 +33,8 @@ export default function DisciplineStap({
   bewerkbaar: boolean
   onVerder: () => void
 }) {
+  const t = useTranslations('kwaliteit')
+  const locale = useDatumLocale()
   const [gekozen, setGekozen] = React.useState<Set<string>>(
     new Set(context.inspectie.discipline_codes ?? ['ALG']),
   )
@@ -55,6 +64,10 @@ export default function DisciplineStap({
     .filter(d => gekozen.has(d.code))
     .reduce((som, d) => som + d.aantal, 0)
 
+  const inDezeRonde = t.rich('disciplines.inDezeRonde', {
+    aantal: aantalPunten, b: (c) => <strong style={{ color: TEKST }}>{c}</strong>,
+  })
+
   async function verder() {
     if (!bewerkbaar) { onVerder(); return }
     setBezig(true); setFout(null)
@@ -77,11 +90,10 @@ export default function DisciplineStap({
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <div style={{ padding: '16px 14px 0', flex: 1 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: TEKST }}>
-          Wat controleer je deze ronde?
+          {t('disciplines.titel')}
         </h2>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: GRIJS, lineHeight: 1.4 }}>
-          Kies de onderdelen die nu zichtbaar en beoordeelbaar zijn. Je krijgt daarna alleen die
-          controlepunten te zien.
+          {t('disciplines.uitleg')}
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 18 }}>
@@ -103,14 +115,14 @@ export default function DisciplineStap({
                   opacity: !bewerkbaar && !actief ? 0.5 : 1,
                 }}
               >
-                <div style={{
+                <VertaalbareTekst as="div" label={false} tekst={d.naam} style={{
                   fontSize: 13.5, fontWeight: 700, lineHeight: 1.25,
                   color: actief ? GROEN : TEKST, marginBottom: 4,
-                }}>
-                  {d.naam}
-                </div>
+                }} />
                 <div style={{ fontSize: 11, color: ZACHT }}>
-                  {d.aantal} punten{vast ? ' · altijd' : ''}
+                  {vast
+                    ? t('disciplines.aantalPuntenAltijd', { aantal: d.aantal })
+                    : t('disciplines.aantalPunten', { aantal: d.aantal })}
                 </div>
               </button>
             )
@@ -118,7 +130,7 @@ export default function DisciplineStap({
         </div>
 
         <p style={{ fontSize: 13, color: GRIJS, textAlign: 'center', marginBottom: 16 }}>
-          <strong style={{ color: TEKST }}>{aantalPunten}</strong> controlepunten in deze ronde
+          {inDezeRonde}
         </p>
 
         {/* Gegevens van de ronde: ingeklapt, want alles staat al ingevuld. */}
@@ -131,7 +143,7 @@ export default function DisciplineStap({
             textAlign: 'left', cursor: 'pointer',
           }}
         >
-          {toonGegevens ? '▴' : '▾'} Gegevens van deze ronde
+          {toonGegevens ? PIJL.open : PIJL.dicht} {t('disciplines.gegevens')}
         </button>
 
         {toonGegevens && (
@@ -142,44 +154,44 @@ export default function DisciplineStap({
               {context.dossier.opdrachtgever && <div>{context.dossier.opdrachtgever}</div>}
               {context.dossier.werkadres && <div>{context.dossier.werkadres}</div>}
               <div>
-                {new Date(context.inspectie.datum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {new Date(context.inspectie.datum).toLocaleDateString(locale, DATUM_OPMAAK)}
                 {context.inspectie.tijd ? ` · ${context.inspectie.tijd.slice(0, 5)}` : ''}
               </div>
-              {context.inspecteurNaam && <div>Inspecteur: {context.inspecteurNaam}</div>}
+              {context.inspecteurNaam && <div>{t('disciplines.inspecteur', { naam: context.inspecteurNaam })}</div>}
             </dl>
 
             <div style={{ marginBottom: 10 }}>
-              <label style={label}>Weersomstandigheden (optioneel)</label>
+              <label style={label}>{t('disciplines.weer')}</label>
               <input value={weer} onChange={e => setWeer(e.target.value)} disabled={!bewerkbaar}
-                placeholder="Bijv. droog, 12 °C, matige wind" style={veld} />
+                placeholder={t('disciplines.weerPlaceholder')} style={veld} />
             </div>
 
             <div style={{ marginBottom: 10 }}>
-              <label style={label}>Aanwezige werkzaamheden (optioneel)</label>
+              <label style={label}>{t('disciplines.werkzaamheden')}</label>
               <input value={werk} onChange={e => setWerk(e.target.value)} disabled={!bewerkbaar}
-                placeholder="Bijv. schilderwerk voorgevel, kitwerk blok A" style={veld} />
+                placeholder={t('disciplines.werkzaamhedenPlaceholder')} style={veld} />
             </div>
 
             <div style={{ marginBottom: 10 }}>
-              <label style={label}>Gelopen gebied (optioneel)</label>
+              <label style={label}>{t('disciplines.gebied')}</label>
               <input value={gebied} onChange={e => setGebied(e.target.value)} disabled={!bewerkbaar}
-                placeholder="Bijv. voor- en achtergevel blok A" style={veld} />
+                placeholder={t('disciplines.gebiedPlaceholder')} style={veld} />
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
-                <label style={label}>Elementen bekeken</label>
+                <label style={label}>{t('disciplines.bekeken')}</label>
                 <input value={bekeken} onChange={e => setBekeken(e.target.value)} inputMode="numeric"
                   disabled={!bewerkbaar} placeholder="0" style={veld} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={label}>Daarvan afwijkend</label>
+                <label style={label}>{t('disciplines.afwijkend')}</label>
                 <input value={afwijkend} onChange={e => setAfwijkend(e.target.value)} inputMode="numeric"
                   disabled={!bewerkbaar} placeholder="0" style={veld} />
               </div>
             </div>
             <p style={{ margin: '6px 0 0', fontSize: 11, color: ZACHT, lineHeight: 1.4 }}>
-              Optioneel: legt de omvang van je steekproef vast. Je bepaalt zelf hoeveel je bekijkt.
+              {t('disciplines.steekproefUitleg')}
             </p>
           </div>
         )}
@@ -189,7 +201,7 @@ export default function DisciplineStap({
 
       <MobielStickyFooter>
         <button type="button" onClick={() => void verder()} disabled={bezig} style={{ ...primaireKnop, flex: 1 }}>
-          {bezig ? 'Bezig…' : `Verder met ${aantalPunten} controlepunten`}
+          {bezig ? t('bezig') : t('disciplines.verder', { aantal: aantalPunten })}
         </button>
       </MobielStickyFooter>
     </div>

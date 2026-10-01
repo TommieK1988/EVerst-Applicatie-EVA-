@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import {
-  opleverPuntStatusLabels,
-  type OpleverPuntStatus, type OpleverFotoSoort, type OpleverFoto, type OpleverToewijzingType,
+import { useTranslations } from 'next-intl'
+import type {
+  OpleverPuntStatus, OpleverFotoSoort, OpleverFoto, OpleverToewijzingType,
 } from '@everts/database'
 import {
   setPuntStatus, updateOpleverpunt, uploadOpleverFoto, verwijderOpleverFoto, voegPuntReactieToe,
@@ -14,6 +14,10 @@ import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, OPPERVLAK, PUNT_KLEUR, veld, secundaireKnop } from './stijl'
 import { useDialogen } from '@/components/ui/dialogen'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+
+/** Afzender van een interne reactie zonder naam; bedrijfsnaam, niet vertalen. */
+const BEDRIJF = 'Everts'
 
 /**
  * Eén opleverpunt op de telefoon: dichtgeklapt de stand, opengeklapt alles wat je op locatie doet
@@ -28,6 +32,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
   toewijsbaar: OpleverToewijsbaar | null
   onWijzig: () => void
 }) {
+  const t = useTranslations('oplevering')
   const [open, setOpen] = useState(false)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
@@ -66,10 +71,10 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
     let reden: string | null = null
     if (REDEN_STATUSSEN.includes(status)) {
       const antwoord = await vraagTekst({
-        titel: status === 'afgewezen' ? 'Melding afwijzen' : 'Opleverpunt afwijzen',
-        label: 'Reden van afwijzing (optioneel)',
+        titel: status === 'afgewezen' ? t('punt.afwijzen.titelMelding') : t('punt.afwijzen.titelPunt'),
+        label: t('punt.afwijzen.reden'),
         meerregelig: true,
-        bevestigLabel: 'Afwijzen',
+        bevestigLabel: t('punt.afwijzen.knop'),
       })
       if (antwoord === null) return
       reden = antwoord.trim() || null
@@ -133,26 +138,28 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
             fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
             color: PUNT_KLEUR[punt.status], flexShrink: 0, marginLeft: 'auto',
           }}>
-            {opleverPuntStatusLabels[punt.status]}
+            {t(`puntStatus.${punt.status}`)}
           </span>
         </div>
-        <div style={{ fontSize: 14.5, color: TEKST, lineHeight: 1.4, marginTop: 3 }}>{punt.omschrijving}</div>
+        {/* Geen label: de kop is zelf een knop, en het label bevat er ook een. */}
+        <VertaalbareTekst as="div" label={false} tekst={punt.omschrijving}
+          style={{ fontSize: 14.5, color: TEKST, lineHeight: 1.4, marginTop: 3 }} />
         <div style={{ fontSize: 12, color: GRIJS, marginTop: 3 }}>
-          {[punt.ruimte, punt.toegewezenNaam ? `→ ${punt.toegewezenNaam}` : null, punt.deadline ? `deadline ${punt.deadline}` : null]
+          {[punt.ruimte, punt.toegewezenNaam ? `→ ${punt.toegewezenNaam}` : null, punt.deadline ? t('punt.deadline', { datum: punt.deadline }) : null]
             .filter(Boolean).join(' · ')}
         </div>
 
         {mist && (
           <div style={{ fontSize: 12, fontWeight: 600, color: AMBER, marginTop: 5 }}>
-            Nog geen foto na herstel
+            {t('punt.geenFotoNa')}
           </div>
         )}
 
         {/* Voor/na naast elkaar — zelfde beeld als in het opleverrapport. */}
         {(punt.fotos.length > 0 || mist) && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-            <FotoKolom kop="Voor" fotos={voor} />
-            <FotoKolom kop="Na" fotos={na} />
+            <FotoKolom kop={t('punt.kopVoor')} fotos={voor} />
+            <FotoKolom kop={t('punt.kopNa')} fotos={na} />
           </div>
         )}
       </button>
@@ -167,7 +174,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
 
           {mogelijk.length > 0 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Status wijzigen</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>{t('punt.statusWijzigen')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {mogelijk.map(s => (
                   <button key={s} type="button" disabled={bezig} onClick={() => wijzigStatus(s)}
@@ -178,7 +185,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
                       background: s === 'geaccepteerd' ? GROEN : OPPERVLAK,
                       border: s === 'geaccepteerd' ? 'none' : `1px solid ${RAND}`,
                     }}>
-                    {opleverPuntStatusLabels[s]}
+                    {t(`puntStatus.${s}`)}
                   </button>
                 ))}
               </div>
@@ -186,45 +193,44 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
           )}
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Toewijzen aan</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>{t('toewijzen.label')}</div>
             <select
               style={veld}
               value={huidigeToewijzing}
               disabled={bezig}
               onChange={e => wijzigToewijzing(e.target.value)}
             >
-              <option value="">Niet toegewezen</option>
-              <optgroup label="Eigen personeel">
+              <option value="">{t('toewijzen.nietToegewezen')}</option>
+              <optgroup label={t('punt.groepEigen')}>
                 {(toewijsbaar?.medewerkers ?? []).map(m => (
                   <option key={m.id} value={`medewerker:${m.id}`}>{m.naam}</option>
                 ))}
               </optgroup>
-              <optgroup label="Onderaannemers (besteld in dit dossier)">
+              <optgroup label={t('punt.groepOnderaannemers')}>
                 {(toewijsbaar?.relaties ?? []).map(r => (
-                  <option key={r.id} value={`relatie:${r.id}`}>{r.naam}{r.onderaannemer ? ' (OA)' : ''}</option>
+                  <option key={r.id} value={`relatie:${r.id}`}>{r.onderaannemer ? t('toewijzen.relatieOA', { naam: r.naam }) : r.naam}</option>
                 ))}
               </optgroup>
             </select>
             {(toewijsbaar?.relaties.length ?? 0) === 0 && (
               <div style={{ fontSize: 11.5, color: ZACHT, marginTop: 5 }}>
-                Nog geen bestelde partijen op dit dossier. Zodra er een bestelling naar een
-                onderaannemer is gegaan, kun je die hier kiezen.
+                {t('punt.geenBesteldePartijen')}
               </div>
             )}
           </div>
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Foto&apos;s</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>{t('punt.fotos')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <FotoRij label="Foto vooraf" disabled={bezig} onKies={f => uploadFotos(f, 'voor')} />
-              <FotoRij label="Foto na herstel" disabled={bezig} accent={mist ? AMBER : null}
+              <FotoRij label={t('punt.fotoVooraf')} disabled={bezig} onKies={f => uploadFotos(f, 'voor')} />
+              <FotoRij label={t('punt.fotoNaHerstel')} disabled={bezig} accent={mist ? AMBER : null}
                 onKies={f => uploadFotos(f, 'na')} />
             </div>
           </div>
 
           {punt.fotos.length > 0 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Foto verwijderen</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>{t('punt.fotoVerwijderen')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {punt.fotos.map(f => (
                   <button key={f.id} type="button" disabled={bezig} onClick={() => verwijderFoto(f.id)}
@@ -233,7 +239,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
                       overflow: 'hidden', background: 'none', cursor: 'pointer', lineHeight: 0,
                     }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={f.url} alt={f.soort} style={{ width: 56, height: 56, objectFit: 'cover' }} />
+                    <img src={f.url} alt={t(`punt.fotoSoort.${f.soort}`)} style={{ width: 56, height: 56, objectFit: 'cover' }} />
                     <span style={{
                       position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,.55)', color: '#fff',
                       fontSize: 11, lineHeight: '16px', width: 16, height: 16, borderBottomLeftRadius: 6,
@@ -249,23 +255,25 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
               {punt.reacties.map(r => (
                 <div key={r.id} style={{ background: VLAK, borderRadius: 9, padding: '8px 10px' }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: TEKST }}>
-                    {r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Everts')}
-                    {r.soort === 'afmelding' && <span style={{ color: AMBER }}> · afmelding</span>}
+                    {r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? t('punt.onderaannemer') : BEDRIJF)}
+                    {r.soort === 'afmelding' && <span style={{ color: AMBER }}>{t('punt.afmelding')}</span>}
                   </div>
-                  {r.opmerking && <div style={{ fontSize: 13, color: GRIJS, marginTop: 2 }}>{r.opmerking}</div>}
+                  {r.opmerking && (
+                    <VertaalbareTekst as="div" tekst={r.opmerking} style={{ fontSize: 13, color: GRIJS, marginTop: 2 }} />
+                  )}
                 </div>
               ))}
             </div>
           )}
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>Opmerking</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: GRIJS, marginBottom: 6 }}>{t('punt.opmerking')}</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input style={{ ...veld, flex: 1 }} value={opmerking} onChange={e => setOpmerking(e.target.value)}
-                placeholder="Korte notitie…" />
+                placeholder={t('punt.opmerkingPlaceholder')} />
               <button type="button" disabled={bezig || !opmerking.trim()} onClick={plaatsOpmerking}
                 style={{ ...secundaireKnop, fontSize: 14 }}>
-                Plaats
+                {t('punt.knopPlaats')}
               </button>
             </div>
           </div>
@@ -289,6 +297,7 @@ function FotoRij({ label, disabled, accent, onKies }: {
   accent?: string | null
   onKies: (files: FileList | null) => void
 }) {
+  const t = useTranslations('oplevering')
   const cameraRef = useRef<HTMLInputElement>(null)
   const bibliotheekRef = useRef<HTMLInputElement>(null)
 
@@ -306,7 +315,7 @@ function FotoRij({ label, disabled, accent, onKies }: {
         📷 {label}
       </button>
       <button type="button" disabled={disabled} onClick={() => bibliotheekRef.current?.click()}
-        aria-label={`${label} uit bibliotheek kiezen`}
+        aria-label={t('punt.uitBibliotheek', { label })}
         style={{ ...secundaireKnop, width: 56, fontSize: 16, padding: '13px 0', flexShrink: 0 }}>
         🖼
       </button>
@@ -316,6 +325,7 @@ function FotoRij({ label, disabled, accent, onKies }: {
 
 /** Eén kolom van het voor/na-bewijs; een lege kant blijft zichtbaar als gestippeld vlak. */
 function FotoKolom({ kop, fotos }: { kop: string; fotos: OpleverFoto[] }) {
+  const t = useTranslations('oplevering')
   return (
     <div>
       <div style={{ fontSize: 9.5, fontWeight: 700, color: ZACHT, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>
@@ -327,7 +337,7 @@ function FotoKolom({ kop, fotos }: { kop: string; fotos: OpleverFoto[] }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 11, color: ZACHT,
         }}>
-          geen foto
+          {t('punt.geenFoto')}
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

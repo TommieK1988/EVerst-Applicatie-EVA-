@@ -1,1 +1,106 @@
-{}
+{
+  "kopSub": "Zaakceptowano {geaccepteerd} z {totaal}",
+  "momentStatus": {
+    "concept": "Szkic",
+    "in_uitvoering": "W realizacji",
+    "gereed_voor_ondertekening": "Gotowe do podpisu",
+    "ondertekend": "Podpisane",
+    "afgerond": "Zakończone"
+  },
+  "puntStatus": {
+    "nieuw": "Nowe zgłoszenie",
+    "open": "Otwarte",
+    "in_behandeling": "W trakcie",
+    "opgelost": "Usunięte",
+    "geaccepteerd": "Zaakceptowane",
+    "geweigerd": "Odrzucone",
+    "afgewezen": "Odrzucone (to nie usterka)"
+  },
+  "rol": {
+    "opdrachtgever": "Klient",
+    "opzichter": "Inspektor nadzoru",
+    "uitvoerder": "Kierownik robót"
+  },
+  "doorloop": {
+    "alleGeaccepteerd": "Wszystkie usterki zaakceptowane — można dać do podpisu.",
+    "handtekeningAlt": "podpis",
+    "akkoord": "✓ zatwierdzone",
+    "geenPunten": "Brak usterek do odbioru. Dodaj pierwszą.",
+    "knopPunt": "+ Usterka do odbioru",
+    "knopDelen": "Udostępnij",
+    "knopRapport": "Raport",
+    "knopOndertekenen": "Daj do podpisu"
+  },
+  "nieuwPunt": {
+    "titel": "Dodaj usterkę do odbioru",
+    "foutLeeg": "Opisz, co jeszcze trzeba zrobić.",
+    "omschrijving": "Co jeszcze trzeba zrobić?",
+    "omschrijvingPlaceholder": "Opisz lub nagraj usterkę",
+    "ruimte": "Pomieszczenie / lokalizacja",
+    "ruimtePlaceholder": "Np. korytarz, rama tylnej elewacji",
+    "groepMedewerkers": "Pracownicy",
+    "groepRelaties": "Podwykonawcy / dostawcy",
+    "opslaan": "Zapisywanie…",
+    "knopToevoegen": "Dodaj"
+  },
+  "toewijzen": {
+    "label": "Przypisz do",
+    "nietToegewezen": "Nieprzypisane",
+    "relatieOA": "{naam} (podwykonawca)"
+  },
+  "ondertekenen": {
+    "titel": "Podpis",
+    "foutGeenHandtekening": "Najpierw złóż podpis.",
+    "nogPuntenOpen": "Są jeszcze otwarte usterki. Można podpisać, ale klient podpisze z zastrzeżeniem.",
+    "wieTekent": "Kto podpisuje?",
+    "naam": "Imię i nazwisko",
+    "naamPlaceholder": "Imię i nazwisko podpisującego",
+    "handtekening": "Podpis",
+    "vastleggen": "Zapisywanie…",
+    "knopVastleggen": "Zapisz podpis"
+  },
+  "delen": {
+    "titel": "Udostępnij",
+    "partij": "Firma",
+    "linkGekopieerd": "Link skopiowany — {titel}",
+    "titelAfmeldlink": "link do zgłoszenia wykonania {naam}",
+    "titelAkkoord": "zatwierdzenie klienta",
+    "uitleg": "Odbiorca nie potrzebuje konta EVA; widzi tylko to, co dotyczy tego linku.",
+    "knopAkkoordlink": "Link do zatwierdzenia dla klienta",
+    "knopAfmeldlink": "Link do zgłoszenia wykonania: {naam}",
+    "geenRelaties": "Przypisz usterkę do podwykonawcy, aby utworzyć dla niego link do zgłoszenia wykonania."
+  },
+  "punt": {
+    "deadline": "termin {datum}",
+    "geenFotoNa": "Brak zdjęcia po naprawie",
+    "kopVoor": "Przed",
+    "kopNa": "Po",
+    "geenFoto": "brak zdjęcia",
+    "statusWijzigen": "Zmień status",
+    "groepEigen": "Własni pracownicy",
+    "groepOnderaannemers": "Podwykonawcy (zamówieni w tym projekcie)",
+    "geenBesteldePartijen": "W tym projekcie nie ma jeszcze zamówionych firm. Gdy zamówienie trafi do podwykonawcy, możesz go tu wybrać.",
+    "fotos": "Zdjęcia",
+    "fotoVooraf": "Zdjęcie przed",
+    "fotoNaHerstel": "Zdjęcie po naprawie",
+    "uitBibliotheek": "{label} — wybierz z galerii",
+    "fotoVerwijderen": "Usuń zdjęcie",
+    "fotoSoort": {
+      "voor": "przed",
+      "na": "po",
+      "algemeen": "ogólne"
+    },
+    "onderaannemer": "Podwykonawca",
+    "afmelding": " · zgłoszenie wykonania",
+    "opmerking": "Uwaga",
+    "opmerkingPlaceholder": "Krótka notatka…",
+    "knopPlaats": "Dodaj",
+    "afwijzen": {
+      "titelMelding": "Odrzuć zgłoszenie",
+      "titelPunt": "Odrzuć usterkę do odbioru",
+      "reden": "Powód odrzucenia (opcjonalnie)",
+      "knop": "Odrzuć"
+    }
+  },
+  "sterren": "{score} z {max}"
+}

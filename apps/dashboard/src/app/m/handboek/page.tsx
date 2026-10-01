@@ -1,9 +1,13 @@
 import { vereisHandboekLezer } from '@/lib/handboek/auth'
 import { haalBijlagen, haalHoofdstukken, haalSituaties, haalZoekIndex } from '@/lib/handboek/inhoud'
+import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import HandboekOverzicht from '@/components/handboek/mobiel/HandboekOverzicht'
 
-export const metadata = { title: 'Handboek' }
+export async function generateMetadata() {
+  const t = await getAppVertaler('handboek')
+  return { title: t('titel') }
+}
 
 /**
  * De inhoud hangt af van wie er kijkt (RLS leest `handboek_kenmerken()` van de
@@ -22,6 +26,7 @@ export const dynamic = 'force-dynamic'
  */
 export default async function MobielHandboekPage() {
   await vereisHandboekLezer()
+  const t = await getAppVertaler('handboek')
 
   const [hoofdstukken, situaties, bijlagen, index] = await Promise.all([
     haalHoofdstukken(),
@@ -39,7 +44,7 @@ export default async function MobielHandboekPage() {
 
   return (
     <>
-      <AppHeader title="Handboek" sub="Afspraken en wat te doen bij…" backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('ondertitel')} backHref="/m" />
       <HandboekOverzicht
         index={index}
         situaties={situaties.map(kort)}

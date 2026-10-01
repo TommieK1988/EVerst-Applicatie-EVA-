@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import BottomSheet from '../BottomSheet'
 import { GRIJS, GROEN, OPPERVLAK, RAND, TEKST } from './stijl'
 
@@ -20,6 +21,7 @@ import { GRIJS, GROEN, OPPERVLAK, RAND, TEKST } from './stijl'
  * De balk is `sticky`, nooit `fixed` — zie MobielStickyFooter voor het waarom.
  */
 export default function MaterieelToevoegKnop({ magToevoegen }: { magToevoegen: boolean }) {
+  const t = useTranslations('materieel')
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -34,29 +36,29 @@ export default function MaterieelToevoegKnop({ magToevoegen }: { magToevoegen: b
         {magToevoegen ? (
           <button type="button" onClick={() => setOpen(true)} style={balk}>
             <PlusIcoon />
-            Toevoegen
+            {t('toevoegen.knop')}
           </button>
         ) : (
           <Link href="/m/materieel/scan" style={{ ...balk, textDecoration: 'none' }}>
             <ScanIcoon />
-            Sticker scannen
+            {t('toevoegen.stickerScannen')}
           </Link>
         )}
       </div>
 
       {open && (
-        <BottomSheet titel="Materieel toevoegen" onSluit={() => setOpen(false)}>
+        <BottomSheet titel={t('toevoegen.titel')} onSluit={() => setOpen(false)}>
           <Keuze
             href="/m/materieel/scan"
             icoon={<ScanIcoon />}
-            titel="Sticker scannen"
-            uitleg="Scan de sticker die je erop plakt; de code hangt er dan meteen aan."
+            titel={t('toevoegen.stickerScannen')}
+            uitleg={t('toevoegen.scanUitleg')}
           />
           <Keuze
             href="/m/materieel/nieuw"
             icoon={<PlusIcoon />}
-            titel="Toevoegen zonder sticker"
-            uitleg="Nog geen sticker bij de hand. Koppelen kan later op het paspoort."
+            titel={t('toevoegen.zonderSticker')}
+            uitleg={t('toevoegen.zonderStickerUitleg')}
           />
         </BottomSheet>
       )}

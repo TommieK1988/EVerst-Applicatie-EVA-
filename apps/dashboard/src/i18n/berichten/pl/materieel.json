@@ -1,1 +1,153 @@
-{}
+{
+  "titel": "Sprzęt",
+  "algemeenGebruik": "Do użytku ogólnego",
+  "categorie": {
+    "gereedschap": "Narzędzia",
+    "machine": "Maszyna",
+    "aanhanger": "Przyczepa",
+    "bouwplaatsvoorziening": "Zaplecze budowy",
+    "steigeronderdeel": "Element rusztowania",
+    "ladder": "Drabina lub schody",
+    "meetapparatuur": "Przyrządy pomiarowe",
+    "pbm": "ŚOI"
+  },
+  "status": {
+    "in_gebruik": "W użyciu",
+    "beschikbaar": "Dostępny",
+    "gereserveerd": "Zarezerwowany",
+    "onderhoud": "W serwisie",
+    "defect": "Uszkodzony",
+    "vermist": "Zaginiony"
+  },
+  "start": {
+    "sub": "Szukaj i dodawaj",
+    "toegewezenAanMij": "Przypisane do mnie",
+    "nietsOpNaam": "Nic nie jest jeszcze przypisane do ciebie.",
+    "nogGeenSticker": "Bez naklejki ({aantal})",
+    "recentToegevoegd": "Ostatnio dodane przeze mnie"
+  },
+  "zoek": {
+    "plaatshouder": "Szukaj po nazwie, marce, numerze lub osobie",
+    "wissen": "Wyczyść wyszukiwanie",
+    "zoeken": "Szukam…",
+    "gevonden": "Znaleziono ({aantal})",
+    "gevondenMeer": "Znaleziono ({aantal}+)",
+    "nietsGevonden": "Nic nie znaleziono dla „{term}”."
+  },
+  "regel": {
+    "serienummer": "nr ser. {nummer}",
+    "keuring": "przegląd {nummer}",
+    "inventaris": "nr {nummer}"
+  },
+  "toevoegen": {
+    "knop": "Dodaj",
+    "stickerScannen": "Skanuj naklejkę",
+    "titel": "Dodaj sprzęt",
+    "scanUitleg": "Zeskanuj naklejkę, którą na nim przyklejasz; kod zostanie od razu przypisany.",
+    "zonderSticker": "Dodaj bez naklejki",
+    "zonderStickerUitleg": "Nie masz jeszcze naklejki. Możesz ją przypisać później w karcie sprzętu."
+  },
+  "scanner": {
+    "hint": "Skieruj aparat na kod QR naklejki",
+    "geenCamera": "Ten telefon lub przeglądarka nie daje dostępu do aparatu. Wpisz kod z naklejki ręcznie.",
+    "startNiet": "Aparat się nie uruchamia. Wpisz kod z naklejki ręcznie.",
+    "herstel": {
+      "ios": "Aparat jest zablokowany dla EVA. Włącz go w Ustawienia → Safari → Aparat albo stuknij „aA” w pasku adresu → Ustawienia witryny → Aparat → Pozwól.",
+      "android": "Aparat jest zablokowany dla EVA. Stuknij kłódkę w pasku adresu → Uprawnienia → Aparat → Zezwól.",
+      "anders": "Aparat jest zablokowany dla EVA. Włącz go w ustawieniach witryny w przeglądarce."
+    },
+    "lampAan": "Włącz latarkę",
+    "lampUit": "Wyłącz latarkę",
+    "evenZoeken": "Szukam…",
+    "opnieuwScannen": "Skanuj ponownie"
+  },
+  "scan": {
+    "titel": "Skanowanie",
+    "subKoppelen": "Przypisz naklejkę",
+    "subStandaard": "Naklejka QR na sprzęcie",
+    "geenRecht": "Ta naklejka nie jest jeszcze nigdzie przypisana. Nie masz uprawnień do dodawania sprzętu — poproś kolegę, który je ma.",
+    "onbekendeSticker": "Nieznana naklejka",
+    "onbekendUitlegToevoegen": "Tego kodu nie ma jeszcze w EVA. Czy należy do sprzętu, który już jest w systemie, czy to coś nowego?",
+    "onbekendUitlegKoppelen": "Tego kodu nie ma jeszcze w EVA. Możesz go przypisać do sprzętu, który już jest w systemie; nowy sprzęt dodaje biuro.",
+    "koppelenAanBestaand": "Przypisz do istniejącego sprzętu",
+    "nieuwAanmaken": "Utwórz nowy sprzęt",
+    "koppelenAan": "Przypisz naklejkę do",
+    "hintKoppelen": "Zeskanuj naklejkę, którą przyklejasz na ten sprzęt",
+    "handmatigLabel": "Skanowanie nie działa? Wpisz kod z naklejki",
+    "handmatigVoorbeeld": "Np. EV-00123",
+    "zoek": "Szukaj"
+  },
+  "koppel": {
+    "titel": "Przypisz naklejkę",
+    "gescandeSticker": "Zeskanowana naklejka",
+    "kiesUitleg": "Wybierz, na czym jest ta naklejka.",
+    "nogZonder": "{aantal, plural, one {Jeszcze # sztuka bez naklejki.} few {Jeszcze # sztuki bez naklejki.} many {Jeszcze # sztuk bez naklejki.} other {Jeszcze # sztuki bez naklejki.}}",
+    "nietsMeerZonder": "Nie ma już nic bez naklejki.",
+    "nietsGevonden": "Nie znaleziono nic, co nie ma jeszcze naklejki.",
+    "allesHeeftSticker": "Cały sprzęt ma już naklejkę.",
+    "koppelen": "Przypisuję…",
+    "staatErNietBij": "Nie ma na liście — utwórz nowy sprzęt"
+  },
+  "kiezer": {
+    "kies": "Wybierz…",
+    "typOmTeZoeken": "Wpisz, aby wyszukać",
+    "sluit": "Zamknij",
+    "nietsGevonden": "Nic nie znaleziono.",
+    "werkplaatsEnBussen": "Warsztat i busy",
+    "collegas": "Współpracownicy",
+    "typNaamOfWerkplaats": "Wpisz imię lub warsztat"
+  },
+  "nieuw": {
+    "titel": "Nowy sprzęt",
+    "subGescand": "Naklejka zeskanowana",
+    "subZonder": "Bez naklejki",
+    "sticker": "Naklejka",
+    "geenSticker": "Brak naklejki. Możesz ją przypisać później w karcie sprzętu.",
+    "watIsHet": "Co to jest? *",
+    "watIsHetVoorbeeld": "Np. wiertarka akumulatorowa",
+    "soort": "Rodzaj",
+    "merk": "Marka",
+    "type": "Typ",
+    "serienummer": "Numer seryjny",
+    "foto": "Zdjęcie",
+    "fotoOpnieuw": "Ponownie",
+    "fotoMaken": "Zrób zdjęcie",
+    "fotoKiezen": "Wybierz",
+    "waarHoortHet": "Gdzie to należy?",
+    "mijzelf": "Ja ({naam})",
+    "opmerking": "Uwaga",
+    "vulInWatHetIs": "Wpisz, co to jest",
+    "fotoMislukt": "Sprzęt został zapisany, ale zdjęcie nie: {fout}",
+    "annuleren": "Anuluj",
+    "opslaan": "Zapisz",
+    "opslaanBezig": "Zapisywanie…"
+  },
+  "paspoort": {
+    "van": "Należy do",
+    "serienummer": "Numer seryjny",
+    "inventarisnummer": "Numer inwentarzowy",
+    "sticker": "Naklejka",
+    "nogGeenSticker": "Brak naklejki",
+    "opMijnNaam": "Przypisz do mnie",
+    "opJouwNaamGezet": "Przypisano do ciebie",
+    "inleveren": "Zwróć",
+    "ingeleverd": "Zwrócono",
+    "waarHoortHet": "Gdzie to należy?",
+    "kiesPlaatshouder": "Wybierz współpracownika, warsztat lub busa…",
+    "opAlgemeenGezet": "Ustawiono do użytku ogólnego",
+    "uitgegeven": "Wydano",
+    "toewijzen": "Przypisz",
+    "storingMelden": "Zgłoś awarię lub uszkodzenie",
+    "watIsErAanDeHand": "Co się stało?",
+    "annuleren": "Anuluj",
+    "melden": "Zgłoś",
+    "storingGemeld": "Awaria zgłoszona — sprzęt ma teraz status uszkodzony",
+    "stickerKoppelen": "Przypisz naklejkę"
+  },
+  "fout": {
+    "algemeen": "Coś poszło nie tak",
+    "legeCode": "Pusty kod",
+    "stickerHangtAl": "Ta naklejka jest już na „{naam}”",
+    "stickerInGebruik": "Ta naklejka jest już używana"
+  }
+}

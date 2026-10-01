@@ -1,1 +1,14 @@
-{}
+{
+  "titel": "Podręcznik pracownika",
+  "ondertitel": "Zasady i co robić, gdy…",
+  "watTeDoenBij": "Co robić, gdy…",
+  "situatieMetaTitel": "Co robić: {titel}",
+  "zoekPlaceholder": "Szukaj tematu",
+  "zoekenInNederlands": "Wyszukiwanie działa po niderlandzku.",
+  "hoofdstukken": "Rozdziały",
+  "bijlagen": "Załączniki",
+  "bijlagenUitleg": "Załączniki otwierają się jako PDF. Ich treść nie jest uwzględniana w wyszukiwaniu.",
+  "nietsGevonden": "Nic nie znaleziono",
+  "nietsGevondenTip": "Spróbuj innego słowa albo przejrzyj rozdziały.",
+  "belNaam": "Zadzwoń: {naam}"
+}

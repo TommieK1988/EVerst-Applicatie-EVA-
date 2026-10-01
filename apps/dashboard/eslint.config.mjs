@@ -70,8 +70,10 @@ export default [
     ignores: ['src/app/m/commercieel/**', 'src/components/mobiel/commercieel/**'],
     plugins: { i18next },
     rules: {
-      'i18next/no-literal-string': ['warn', {
+      'i18next/no-literal-string': ['error', {
         mode: 'jsx-only',
+        // `t.rich(...)` en `t.markup(...)` zijn vertaalaanroepen, net als `t(...)`.
+        callees: { exclude: ['t', 't\\.rich', 't\\.markup', 'i18n(ext)?', 'require', 'addEventListener', 'removeEventListener', 'includes', 'indexOf', 'startsWith', 'endsWith'] },
         'jsx-attributes': {
           include: ['placeholder', 'title', 'aria-label', 'alt', 'label', 'titel', 'subtitel', 'tekst', 'omschrijving', 'leegTekst'],
         },

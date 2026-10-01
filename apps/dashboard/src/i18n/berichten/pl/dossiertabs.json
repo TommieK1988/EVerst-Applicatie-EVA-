@@ -1,1 +1,135 @@
-{}
+{
+  "bestanden": {
+    "geen": "Dla tego projektu nie udostępniono w aplikacji żadnych plików."
+  },
+  "formulieren": {
+    "geen": "Brak formularzy dla tego projektu.",
+    "formulier": "Formularz",
+    "status": {
+      "concept": "Szkic",
+      "ingediend": "Wysłany",
+      "goedgekeurd": "Zatwierdzony",
+      "afgekeurd": "Odrzucony"
+    }
+  },
+  "opname": {
+    "geen": "Dla tego projektu nie ma jeszcze oględzin.",
+    "status": {
+      "concept": "Szkic",
+      "gereed": "Gotowe",
+      "omgezet": "W kalkulacji",
+      "geannuleerd": "Anulowane"
+    }
+  },
+  "werkplan": {
+    "geen": "Dla tego projektu nie ma jeszcze planu pracy.",
+    "werkomschrijving": "Opis prac",
+    "overigeBetrokkenen": "Inne osoby zaangażowane",
+    "werkafspraken": "Ustalenia dotyczące pracy",
+    "kleurenMaterialen": "Kolory i materiały",
+    "afspraak": {
+      "werktijden": "Inne godziny pracy",
+      "reisuren": "Czas dojazdu",
+      "reiskosten": "Koszty dojazdu",
+      "parkeren": "Parkowanie"
+    }
+  },
+  "planning": {
+    "geen": "Brak grafiku dla tego projektu.",
+    "alleAfgerond": "Cały grafik tego projektu jest zakończony.",
+    "toonVerlopen": "Pokaż zakończone ({aantal})",
+    "verbergVerlopen": "Ukryj zakończone ({aantal})",
+    "verlopen": "Zakończone",
+    "kop": "Grafik",
+    "week": "tydz. {nummer}"
+  },
+  "voortgang": {
+    "geen": "Brak danych o postępie dla tego projektu.",
+    "geenUren": "Nie zaplanowano ani nie zapisano jeszcze godzin pracy.",
+    "gereed": "gotowe",
+    "uurGeboekt": "godz. zapisane",
+    "van": "z",
+    "uurPrognose": "godz. w prognozie",
+    "zonderCode": "Bez kodu",
+    "uren": "Godziny",
+    "bovenPrognose": "{uren} godz. ponad prognozę",
+    "oordeel": {
+      "teVeel": "Uwaga: zużyto więcej godzin, niż wykonano pracy",
+      "ietsVoor": "Godziny lekko wyprzedzają postęp",
+      "ruim": "Wyraźnie poniżej prognozy",
+      "opKoers": "Zgodnie z planem"
+    },
+    "werkGereed": "Praca wykonana",
+    "wijzig": "Zmień",
+    "vraag": "Jaka część prac jest gotowa?",
+    "percentageGereed": "Procent wykonania",
+    "ongeldig": "Podaj procent od 0 do 100.",
+    "annuleren": "Anuluj",
+    "opslaan": "Zapisz",
+    "bezig": "Trwa…",
+    "opslaanMislukt": "Nie udało się zapisać.",
+    "bijgewerkt": "Zaktualizowano wykonaną pracę.",
+    "opgeslagenInEva": "Zapisano w EVA.",
+    "totaalVoorCode": "Razem dla tego kodu: {pct}%."
+  },
+  "oplevering": {
+    "plusOplevering": "+ Odbiór",
+    "geenFeedback": "Brak jeszcze opinii mieszkańców.",
+    "reacties": "{aantal, plural, one {# opinia} few {# opinie} many {# opinii} other {# opinii}}",
+    "reactiesOntvangen": "{aantal, plural, one {Otrzymano # opinię} few {Otrzymano # opinie} many {Otrzymano # opinii} other {Otrzymano # opinii}}",
+    "nieuweMeldingen": "Nowe zgłoszenia ({aantal})",
+    "triageUitleg": "Zgłoszone przez formularz. Dodaj je do listy albo odrzuć.",
+    "anoniem": "Anonimowo",
+    "fotoBijMelding": "zdjęcie do zgłoszenia",
+    "opDeLijst": "Dodaj do listy",
+    "afwijzen": "Odrzuć",
+    "afwijzenTitel": "Odrzuć zgłoszenie",
+    "afwijzenLabel": "Dlaczego to nie jest usterka do odbioru? (opcjonalnie)",
+    "geenMoment": "W tym projekcie nie ma jeszcze odbioru.",
+    "maakEenAan": "Utwórz go poniżej.",
+    "opleveringen": "Odbiory",
+    "ondertekend": "Podpisano {aantal}×",
+    "momentStatus": {
+      "concept": "Szkic",
+      "in_uitvoering": "W trakcie",
+      "gereed_voor_ondertekening": "Gotowe do podpisu",
+      "ondertekend": "Podpisane",
+      "afgerond": "Zakończone"
+    },
+    "momentType": {
+      "vooroplevering": "Odbiór wstępny",
+      "eindoplevering": "Odbiór końcowy",
+      "tussenoplevering": "Odbiór częściowy",
+      "overig": "Inny"
+    },
+    "aandachtspunten": "Uwagi",
+    "aandachtspuntenOpen": "Uwagi ({aantal} otwarte)",
+    "geenAandachtspunten": "Brak osobnych uwag. Zgłoś tu, co zauważysz po drodze.",
+    "plusAandachtspunt": "+ Uwaga",
+    "afgewezenMeldingen": "{aantal, plural, one {# odrzucone zgłoszenie} few {# odrzucone zgłoszenia} many {# odrzuconych zgłoszeń} other {# odrzuconych zgłoszeń}}",
+    "verbergen": "Ukryj",
+    "tonen": "Pokaż",
+    "reden": "Powód: {reden}",
+    "geefTitel": "Podaj tytuł.",
+    "nieuweOplevering": "Nowy odbiór",
+    "titel": "Tytuł",
+    "titelPlaceholder": "Np. odbiór końcowy blok A",
+    "type": "Rodzaj",
+    "aanmaken": "Tworzenie…",
+    "aanmakenEnStarten": "Utwórz i rozpocznij",
+    "beschrijf": "Opisz, co się dzieje.",
+    "fotoMislukt": "Uwagę zapisano, ale jedno zdjęcie się nie udało: {fout}",
+    "aandachtspuntMelden": "Zgłoś uwagę",
+    "watIsEr": "Co się dzieje?",
+    "omschrijvingPlaceholder": "Opisz lub nagraj, co jeszcze trzeba zrobić",
+    "ruimte": "Pomieszczenie / lokalizacja",
+    "ruimtePlaceholder": "Np. korytarz, rama w tylnej elewacji",
+    "fotos": "Zdjęcia",
+    "fotoMaken": "📷 Zrób zdjęcie",
+    "uitBibliotheek": "🖼 Z galerii",
+    "fotosGekozen": "{aantal, plural, one {Wybrano # zdjęcie} few {Wybrano # zdjęcia} many {Wybrano # zdjęć} other {Wybrano # zdjęć}}",
+    "wissen": "wyczyść",
+    "opslaan": "Zapisz",
+    "opslaanBezig": "Zapisywanie…"
+  }
+}

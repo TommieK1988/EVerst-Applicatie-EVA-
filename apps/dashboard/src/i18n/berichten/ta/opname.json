@@ -1,1 +1,75 @@
-{}
+{
+  "paginaTitel": "ஆய்வு",
+  "bezig": "நடைபெறுகிறது…",
+  "nieuweOpnameStarten": "புதிய ஆய்வைத் தொடங்கு",
+  "terug": "பின்செல்",
+  "losPuntKnop": "+ தனிப் புள்ளி",
+  "annuleren": "ரத்துசெய்",
+  "opslaan": "சேமி",
+  "toevoegen": "சேர்",
+  "fout": {
+    "fotoOntbreektInWachtrij": "வரிசையில் புகைப்படம் இல்லை",
+    "omschrijvingVerplicht": "ஒரு விளக்கத்தை எழுதுங்கள்",
+    "opslaanMislukt": "சேமிக்க முடியவில்லை",
+    "verwijderenMislukt": "நீக்க முடியவில்லை",
+    "nogNietVerstuurd": "{aantal, plural, one {# மாற்றம் இன்னும் அனுப்பப்படவில்லை.} other {# மாற்றங்கள் இன்னும் அனுப்பப்படவில்லை.}} இணைப்பு மீண்டும் கிடைத்ததும் அவை தானாக அனுப்பப்படும்; அதன் பிறகு நீங்கள் முடிக்கலாம்."
+  },
+  "foto": {
+    "opslaanMislukt": "புகைப்படத்தைச் சேமிக்க முடியவில்லை",
+    "offerte": "விலைமனு",
+    "wachtOpVerbinding": "இணைப்புக்காகக் காத்திருக்கிறது",
+    "verwijderen": "புகைப்படத்தை நீக்கு",
+    "maken": "📷 புகைப்படம் எடு",
+    "kiezen": "தெரிவுசெய்",
+    "verplicht": "இந்தப் பகுதிக்குப் புகைப்படம் கட்டாயம்.",
+    "optioneel": "விருப்பத்தேர்வு",
+    "tikVoorOfferte": "விலைமனுவில் பயன்படுத்த ஒரு புகைப்படத்தைத் தொடுங்கள்."
+  },
+  "kiezer": {
+    "zoekPlaatshouder": "குறியீடு அல்லது விளக்கத்தால் தேடுங்கள்",
+    "alles": "அனைத்தும்",
+    "vaakGebruikt": "இந்த வாடிக்கையாளருக்கு அடிக்கடி பயன்படுத்தியவை",
+    "heleLijst": "முழுப் பட்டியல்",
+    "nietsGevonden": "எதுவும் கிடைக்கவில்லை. இதைத் தனிப் புள்ளியாகச் சேருங்கள்; கணக்காளர் பின்னர் விலையிடுவார்.",
+    "meerResultaten": "{aantal, plural, one {மேலும் # முடிவு — அதைப் பார்க்க மேலும் தேடுங்கள்.} other {மேலும் # முடிவுகள் — அவற்றைப் பார்க்க மேலும் தேடுங்கள்.}}",
+    "perEenheid": "ஒரு {eenheid}க்கு",
+    "fotoVerplicht": "புகைப்படம் கட்டாயம்",
+    "toelichtingVerplicht": "குறிப்பு கட்டாயம்"
+  },
+  "ruimte": {
+    "anders": "வேறு…",
+    "eigenNaam": "சொந்த அறைப் பெயர்"
+  },
+  "regel": {
+    "watMoetErGebeuren": "என்ன செய்ய வேண்டும்? (கட்டாயம்)",
+    "omschrijvingVoorbeeld": "உதா. ரேடியேட்டருக்குப் பின்னால் உள்ள அடிப்பலகையை மாற்றுதல்",
+    "losPuntUitleg": "தனிப் புள்ளி. இடம், எண்ணிக்கை, புகைப்படம் ஆகியவற்றை வெறுமையாக விடலாம்; விலையை அலுவலகம் கணக்கீட்டில் தீர்மானிக்கும்.",
+    "locatie": "இடம்",
+    "locatieOptioneel": "இடம் (விருப்பத்தேர்வு)",
+    "aantalMetEenheid": "எண்ணிக்கை ({eenheid})",
+    "aantalOptioneel": "எண்ணிக்கை (விருப்பத்தேர்வு, வெறுமை என்றால் 1)",
+    "minder": "குறை",
+    "meer": "கூட்டு",
+    "toelichtingVerplicht": "குறிப்பு (கட்டாயம்)",
+    "toelichtingOptioneel": "குறிப்பு (விருப்பத்தேர்வு)",
+    "toelichtingPlaatshouder": "கணக்காளர் அறிய வேண்டியவை",
+    "fotos": "புகைப்படங்கள்",
+    "verwijderen": "வரியை நீக்கு"
+  },
+  "overzicht": {
+    "nogNietsOpgenomen": "இன்னும் எதுவும் பதிவுசெய்யப்படவில்லை",
+    "legeUitlegBibliotheek": "ஒரு இடத்தைத் தெரிவுசெய்து முதல் வேலையைச் சேருங்கள்.",
+    "legeUitlegLos": "உங்கள் முதல் புள்ளியைச் சேருங்கள். ஒரு விளக்கம் போதும்; விலை பின்னர் வரும்.",
+    "overig": "ஏனையவை",
+    "aantalFotos": "{aantal, plural, one {# புகைப்படம்} other {# புகைப்படங்கள்}}",
+    "nogTePrijzen": "இன்னும் விலையிடப்படவில்லை",
+    "aantalPunten": "{aantal, plural, one {# புள்ளி} other {# புள்ளிகள்}}",
+    "aantalLocaties": "{aantal, plural, one {# இடம்} other {# இடங்கள்}}",
+    "aantalNogTePrijzen": "{aantal} இன்னும் விலையிடப்படவில்லை",
+    "aantalWachtOpVerbinding": "{aantal} இணைப்புக்காகக் காத்திருக்கின்றன",
+    "toevoegenKnop": "+ சேர்",
+    "puntToevoegenKnop": "+ புள்ளியைச் சேர்",
+    "afronden": "முடி",
+    "isAfgerond": "இந்த ஆய்வு முடிக்கப்பட்டது."
+  }
+}

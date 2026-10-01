@@ -2,6 +2,8 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { InspectieContext } from '@/lib/kwaliteit/inspecties'
 import { controleerAfronden, rondInspectieAf, type AfrondControle } from '@/lib/kwaliteit/inspecties'
 import type { KwaliteitSamenvatting } from '@/lib/kwaliteit/regels'
@@ -29,6 +31,7 @@ export default function AfrondStap({
   onTerug: () => void
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
   const router = useRouter()
   const [controle, setControle] = React.useState<AfrondControle | null>(null)
   const [bezig, setBezig] = React.useState(false)
@@ -45,7 +48,9 @@ export default function AfrondStap({
     const res = await rondInspectieAf(context.inspectie.id)
     setBezig(false)
     if (!res.ok) {
-      setFout(res.error)
+      // Onvolledig: de reden staat per punt in de lijst, in de eigen taal. Andere fouten komen
+      // van de server en blijven zoals ze zijn.
+      setFout(res.ontbreekt ? t('afronden.inspectieNietCompleet') : res.error)
       if (res.ontbreekt) setControle({ gereed: false, ontbreekt: res.ontbreekt })
       return
     }
@@ -54,21 +59,21 @@ export default function AfrondStap({
   }
 
   const regels: { label: string; waarde: number; kleur?: string }[] = [
-    { label: 'controlepunten beoordeeld', waarde: telling.beoordeeld },
-    { label: 'voldoen', waarde: telling.voldoet, kleur: GROEN },
-    { label: 'technische afwijkingen', waarde: telling.technisch },
-    { label: 'esthetische afwijkingen', waarde: telling.esthetisch },
-    { label: 'kritieke afwijkingen', waarde: telling.kritiek, kleur: telling.kritiek > 0 ? ROOD : undefined },
-    { label: 'niet beoordeeld', waarde: telling.niet_beoordeeld },
-    { label: 'nader onderzoek', waarde: telling.nader_onderzoek },
-    { label: 'positieve waarnemingen', waarde: context.waarnemingen.length, kleur: GROEN },
+    { label: t('afronden.telling.beoordeeld'), waarde: telling.beoordeeld },
+    { label: t('afronden.telling.voldoen'), waarde: telling.voldoet, kleur: GROEN },
+    { label: t('afronden.telling.technisch'), waarde: telling.technisch },
+    { label: t('afronden.telling.esthetisch'), waarde: telling.esthetisch },
+    { label: t('afronden.telling.kritiek'), waarde: telling.kritiek, kleur: telling.kritiek > 0 ? ROOD : undefined },
+    { label: t('afronden.telling.nietBeoordeeld'), waarde: telling.niet_beoordeeld },
+    { label: t('afronden.telling.naderOnderzoek'), waarde: telling.nader_onderzoek },
+    { label: t('afronden.telling.waarnemingen'), waarde: context.waarnemingen.length, kleur: GROEN },
   ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <div style={{ padding: '16px 14px 0', flex: 1 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: TEKST }}>
-          {klaar ? 'Inspectie afgerond' : 'Inspectie afronden'}
+          {klaar ? t('afronden.titelAfgerond') : t('afronden.titelAfronden')}
         </h2>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: GRIJS, lineHeight: 1.4 }}>
           {context.inspectie.inspectienummer} · {context.dossier.titel}
@@ -85,7 +90,7 @@ export default function AfrondStap({
             </div>
           ))}
           <p style={{ margin: '12px 0 0', fontSize: 11.5, color: ZACHT, lineHeight: 1.45 }}>
-            Niet beoordeelde onderdelen tellen niet als goedgekeurd. Dat staat ook zo in het rapport.
+            {t('afronden.nietBeoordeeldUitleg')}
           </p>
         </div>
 
@@ -95,11 +100,10 @@ export default function AfrondStap({
             border: `1px solid ${GROEN}`, marginBottom: 12,
           }}>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: GROEN }}>
-              ✓ De inspectie is definitief
+              {t('afronden.definitief')}
             </p>
             <p style={{ margin: '6px 0 0', fontSize: 12.5, color: GRIJS, lineHeight: 1.45 }}>
-              De actie is afgevinkt en de afwijkingen staan in het register. Het rapport voor de
-              opdrachtgever maak je op de computer, bij KAM → Kwaliteit.
+              {t('afronden.definitiefUitleg')}
             </p>
           </div>
         )}
@@ -110,12 +114,16 @@ export default function AfrondStap({
             border: '1px solid var(--warning-300)', marginBottom: 12,
           }}>
             <p style={{ margin: '0 0 8px', fontSize: 13.5, fontWeight: 700, color: 'var(--warning-700)' }}>
-              Nog niet compleet
+              {t('afronden.nietCompleet')}
             </p>
             <ul style={{ margin: 0, padding: '0 0 0 18px', fontSize: 12.5, color: 'var(--warning-700)', lineHeight: 1.55 }}>
               {controle.ontbreekt.map((o, i) => (
                 <li key={`${o.code}-${i}`}>
-                  {o.code ? <strong>{o.code}</strong> : null} {o.titel} — {o.reden}
+                  {o.code ? <strong>{o.code}</strong> : null}{' '}
+                  {o.soort === 'niets_beoordeeld'
+                    ? t('afronden.ontbreekt.nietsBeoordeeldTitel')
+                    : <VertaalbareTekst label={false} tekst={o.titel} />}
+                  {' — '}{t(`afronden.ontbreekt.${o.soort}`)}
                 </li>
               ))}
             </ul>
@@ -124,15 +132,14 @@ export default function AfrondStap({
               onClick={onTerug}
               style={{ ...secundaireKnop, marginTop: 10, width: '100%', padding: '10px', fontSize: 13.5 }}
             >
-              Terug naar de controlepunten
+              {t('afronden.terugNaarControlepunten')}
             </button>
           </div>
         )}
 
         {!klaar && controle?.gereed && (
           <p style={{ fontSize: 12.5, color: GRIJS, lineHeight: 1.5, marginBottom: 12 }}>
-            Na het definitief maken is de inspectie alleen-lezen. Corrigeren kan daarna nog via
-            &ldquo;Heropenen&rdquo; op de computer, met vermelding van de reden.
+            {t('afronden.naDefinitief')}
           </p>
         )}
 
@@ -146,11 +153,11 @@ export default function AfrondStap({
             onClick={() => router.push('/m/taken')}
             style={{ ...primaireKnop, flex: 1 }}
           >
-            Terug naar mijn acties
+            {t('afronden.terugNaarActies')}
           </button>
         ) : (
           <>
-            <button type="button" onClick={onTerug} style={{ ...secundaireKnop, flex: '0 0 auto' }}>Terug</button>
+            <button type="button" onClick={onTerug} style={{ ...secundaireKnop, flex: '0 0 auto' }}>{t('terug')}</button>
             <button
               type="button"
               onClick={() => void afronden()}
@@ -160,7 +167,7 @@ export default function AfrondStap({
                 background: controle && !controle.gereed ? ZACHT : GROEN,
               }}
             >
-              {bezig ? 'Bezig…' : 'Definitief maken'}
+              {bezig ? t('bezig') : t('afronden.definitiefMaken')}
             </button>
           </>
         )}

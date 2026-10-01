@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import StatusBadge from './StatusBadge'
+import { isSubstatusSleutel } from './dossier-status'
 import { dossierBijLocatie, type LocatieDossier, type LocatieResultaat } from '@/lib/dossiers/locatie'
 import { haalLocatie, leesStatus } from '@/lib/locatie/toestemming'
 
@@ -148,7 +149,7 @@ export default function LocatieAutoOpen() {
             <button key={d.id} onClick={() => open(d.id)} style={keuzeKaart}>
               <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                 <div style={{ marginBottom: 6 }}>
-                  <StatusBadge label={d.statusLabel} color={d.statusColor} />
+                  <StatusBadge label={isSubstatusSleutel(d.statusSleutel) ? t(`dossiers.substatus.${d.statusSleutel}`) : d.statusLabel} color={d.statusColor} />
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {d.titel}

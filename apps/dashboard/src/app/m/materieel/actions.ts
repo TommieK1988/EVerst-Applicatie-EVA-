@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
+import { getAppVertaler } from '@/i18n/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisMaterieelMutatie } from '@/lib/materieel/auth'
 import type { ScanBestemming } from '@/lib/materieel/qr'
@@ -40,7 +41,7 @@ export async function zoekScan(payload: string): Promise<Uitkomst<ScanBestemming
   const g = await gate('lezen'); if (!g.ok) return g
 
   const code = payload.trim()
-  if (!code) return { ok: false, error: 'Lege code' }
+  if (!code) return { ok: false, error: (await getAppVertaler('materieel'))('fout.legeCode') }
 
   const object = await zoekOpCode(code)
   if (object) {
@@ -88,17 +89,18 @@ export async function zoekAlMaterieel(term: string): Promise<Uitkomst<MaterieelT
 export async function koppelSticker(objectId: string, payload: string): Promise<Uitkomst<null>> {
   const g = await gate(); if (!g.ok) return g
 
+  const t = await getAppVertaler('materieel')
   const code = payload.trim()
-  if (!code) return { ok: false, error: 'Lege code' }
+  if (!code) return { ok: false, error: t('fout.legeCode') }
 
   const bestaand = await zoekOpCode(code)
   if (bestaand && bestaand.id !== objectId) {
-    return { ok: false, error: `Deze sticker hangt al op "${bestaand.omschrijving}"` }
+    return { ok: false, error: t('fout.stickerHangtAl', { naam: bestaand.omschrijving }) }
   }
 
   const { error } = await db().from('materieel_objecten').update({ qr_code: code }).eq('id', objectId)
   if (error) {
-    return { ok: false, error: error.code === '23505' ? 'Deze sticker is al in gebruik' : error.message }
+    return { ok: false, error: error.code === '23505' ? t('fout.stickerInGebruik') : error.message }
   }
 
   revalidatePath(`/m/materieel/${objectId}`)

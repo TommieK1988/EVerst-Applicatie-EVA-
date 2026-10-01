@@ -1,1 +1,75 @@
-{}
+{
+  "paginaTitel": "Opname",
+  "bezig": "Bezig…",
+  "nieuweOpnameStarten": "Nieuwe opname starten",
+  "terug": "Terug",
+  "losPuntKnop": "+ Los punt",
+  "annuleren": "Annuleren",
+  "opslaan": "Opslaan",
+  "toevoegen": "Toevoegen",
+  "fout": {
+    "fotoOntbreektInWachtrij": "Foto ontbreekt in de wachtrij",
+    "omschrijvingVerplicht": "Vul een omschrijving in",
+    "opslaanMislukt": "Opslaan mislukt",
+    "verwijderenMislukt": "Verwijderen mislukt",
+    "nogNietVerstuurd": "{aantal, plural, one {Nog # wijziging niet verstuurd.} other {Nog # wijzigingen niet verstuurd.}} Zodra er weer verbinding is gaan ze vanzelf mee; daarna kun je afronden."
+  },
+  "foto": {
+    "opslaanMislukt": "Foto opslaan mislukt",
+    "offerte": "OFFERTE",
+    "wachtOpVerbinding": "Wacht op verbinding",
+    "verwijderen": "Foto verwijderen",
+    "maken": "📷 Foto maken",
+    "kiezen": "Kiezen",
+    "verplicht": "Bij dit onderdeel is een foto verplicht.",
+    "optioneel": "Optioneel",
+    "tikVoorOfferte": "Tik een foto aan om hem in de offerte te gebruiken."
+  },
+  "kiezer": {
+    "zoekPlaatshouder": "Zoek op code of omschrijving",
+    "alles": "Alles",
+    "vaakGebruikt": "Vaak gebruikt bij deze opdrachtgever",
+    "heleLijst": "Hele lijst",
+    "nietsGevonden": "Niets gevonden. Voeg het toe als los punt, dan prijst de calculator het later.",
+    "meerResultaten": "{aantal, plural, one {# resultaat meer — zoek verder om het te zien.} other {# resultaten meer — zoek verder om ze te zien.}}",
+    "perEenheid": "per {eenheid}",
+    "fotoVerplicht": "foto verplicht",
+    "toelichtingVerplicht": "toelichting verplicht"
+  },
+  "ruimte": {
+    "anders": "Anders…",
+    "eigenNaam": "Eigen ruimtenaam"
+  },
+  "regel": {
+    "watMoetErGebeuren": "Wat moet er gebeuren? (verplicht)",
+    "omschrijvingVoorbeeld": "Bijv. plint vervangen achter radiator",
+    "losPuntUitleg": "Los punt. Locatie, aantal en foto mag je leeg laten; de prijs wordt op kantoor in de calculatie bepaald.",
+    "locatie": "Locatie",
+    "locatieOptioneel": "Locatie (optioneel)",
+    "aantalMetEenheid": "Aantal ({eenheid})",
+    "aantalOptioneel": "Aantal (optioneel, leeg telt als 1)",
+    "minder": "Minder",
+    "meer": "Meer",
+    "toelichtingVerplicht": "Toelichting (verplicht)",
+    "toelichtingOptioneel": "Toelichting (optioneel)",
+    "toelichtingPlaatshouder": "Wat de calculator moet weten",
+    "fotos": "Foto's",
+    "verwijderen": "Regel verwijderen"
+  },
+  "overzicht": {
+    "nogNietsOpgenomen": "Nog niets opgenomen",
+    "legeUitlegBibliotheek": "Kies een locatie en voeg de eerste werkzaamheid toe.",
+    "legeUitlegLos": "Voeg je eerste punt toe. Een omschrijving is genoeg; de prijs komt later.",
+    "overig": "Overig",
+    "aantalFotos": "{aantal, plural, one {# foto} other {# foto's}}",
+    "nogTePrijzen": "nog te prijzen",
+    "aantalPunten": "{aantal, plural, one {# punt} other {# punten}}",
+    "aantalLocaties": "{aantal, plural, one {# locatie} other {# locaties}}",
+    "aantalNogTePrijzen": "{aantal} nog te prijzen",
+    "aantalWachtOpVerbinding": "{aantal} wacht op verbinding",
+    "toevoegenKnop": "+ Toevoegen",
+    "puntToevoegenKnop": "+ Punt toevoegen",
+    "afronden": "Afronden",
+    "isAfgerond": "Deze opname is afgerond."
+  }
+}

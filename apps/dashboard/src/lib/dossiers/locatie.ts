@@ -3,7 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
-import { dossierStatusBadge } from '@/components/mobiel/dossier-status'
+import { dossierStatusBadge, actieveSubstatus } from '@/components/mobiel/dossier-status'
 import { afstandMeter } from '@/lib/geo/afstand'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { extraWerkadressenVan } from './werkadressen-data'
@@ -43,6 +43,8 @@ export type LocatieDossier = {
   dossiernummer: string | null
   klant_naam: string | null
   statusLabel: string
+  /** De substatus-sleutel achter `statusLabel`, zodat de app hem in de eigen taal kan tonen. */
+  statusSleutel: string
   statusColor: string
   afstand_m: number
 }
@@ -141,6 +143,7 @@ export async function dossierBijLocatie(lat: number, lng: number): Promise<Locat
       dossiernummer: rij.dossiernummer ?? null,
       klant_naam: rij.relaties?.naam ?? null,
       statusLabel: label,
+      statusSleutel: actieveSubstatus(rij as never),
       statusColor: color,
       afstand_m: Math.round(afstand),
     }

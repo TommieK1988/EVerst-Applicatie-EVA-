@@ -14,12 +14,15 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertaling } from '@/components/vertalen/useVertaling'
 import {
   zetBezoekDisciplines, zetVoortgang, updateBezoek, voegPuntToe, updatePunt,
   verwijderPunt, uploadBezoekFoto, verwijderBezoekFoto, rondBezoekAf,
 } from '@/lib/bezoek/bezoeken'
 import {
-  bezoekKenmerk, puntKenmerk, bezoekOnvolledig,
+  bezoekKenmerk, puntKenmerk,
   type BezoekContext, type BezoekDiscipline, type BezoekPunt,
 } from '@/lib/bezoek/types'
 import {
@@ -45,6 +48,7 @@ export default function BezoekDoorloop({
    */
   herlaad?: () => void | Promise<void>
 }) {
+  const t = useTranslations('bezoek')
   const router = useRouter()
   const [bezig, startOvergang] = useTransition()
   const { bezoek, dossier, disciplines, punten, fotos, beschikbareDisciplines } = context
@@ -54,7 +58,7 @@ export default function BezoekDoorloop({
 
   async function doe<T>(fn: () => Promise<{ ok: true } | { ok: false; error: string } | T>) {
     const r = (await fn()) as { ok: boolean; error?: string }
-    if (!r.ok) { toast.error(r.error ?? 'Er ging iets mis'); return false }
+    if (!r.ok) { toast.error(r.error ?? t('fout.algemeen')); return false }
     startOvergang(ververs)
     return true
   }
@@ -82,12 +86,12 @@ export default function BezoekDoorloop({
         <div style={{
           ...kaart, borderColor: GROEN, background: 'rgba(0,148,57,0.06)', fontSize: 13.5,
         }}>
-          Dit bezoek is afgerond. Er kan niets meer aan gewijzigd worden.
+          {t('afgerondMelding')}
         </div>
       )}
 
       {/* ── Disciplines ──────────────────────────────────────────────────── */}
-      <SectieKop>Welke disciplines worden uitgevoerd?</SectieKop>
+      <SectieKop>{t('welkeDisciplines')}</SectieKop>
       <div style={{ marginBottom: 16 }}>
         <DisciplineKiezer
           beschikbaar={beschikbareDisciplines}
@@ -103,27 +107,27 @@ export default function BezoekDoorloop({
         />
         {disciplines.length === 0 && (
           <p style={{ fontSize: 12.5, color: GRIJS, margin: '8px 0 0' }}>
-            De keuze van het vorige bezoek staat voor je klaar zodra je er één hebt gedaan.
+            {t('vorigeKeuze')}
           </p>
         )}
       </div>
 
       {/* ── Omstandigheden ───────────────────────────────────────────────── */}
-      <SectieKop>Het bezoek</SectieKop>
+      <SectieKop>{t('hetBezoek')}</SectieKop>
       <div style={{ ...kaart, marginBottom: 16 }}>
         <TekstVeld
-          titel="Weer" waarde={bezoek.weer ?? ''} lezen={definitief}
-          plaatshouder="Droog, 18 °C"
+          titel={t('veld.weer')} waarde={bezoek.weer ?? ''} lezen={definitief}
+          plaatshouder={t('veld.weerVoorbeeld')}
           opslaan={v => doe(() => updateBezoek(bezoek.id, { weer: v }))}
         />
         <TekstVeld
-          titel="Wat heb je bekeken" waarde={bezoek.locatie ?? ''} lezen={definitief}
-          plaatshouder="Blok A, noord- en oostgevel"
+          titel={t('veld.bekeken')} waarde={bezoek.locatie ?? ''} lezen={definitief}
+          plaatshouder={t('veld.bekekenVoorbeeld')}
           opslaan={v => doe(() => updateBezoek(bezoek.id, { locatie: v }))}
         />
         <TekstVeld
-          titel="Werkzaamheden in uitvoering" waarde={bezoek.werkzaamheden ?? ''} lezen={definitief}
-          plaatshouder="Schilderwerk en houtrotherstel"
+          titel={t('veld.werkzaamheden')} waarde={bezoek.werkzaamheden ?? ''} lezen={definitief}
+          plaatshouder={t('veld.werkzaamhedenVoorbeeld')}
           opslaan={v => doe(() => updateBezoek(bezoek.id, { werkzaamheden: v }))}
           laatste
         />
@@ -144,7 +148,7 @@ export default function BezoekDoorloop({
       {/* ── Voortgang ────────────────────────────────────────────────────── */}
       {disciplines.length > 0 && (
         <>
-          <SectieKop>Voortgang per discipline</SectieKop>
+          <SectieKop>{t('voortgangPerDiscipline')}</SectieKop>
           <div style={{ ...kaart, marginBottom: 16 }}>
             {disciplines.map((d, i) => (
               <VoortgangRegel
@@ -160,16 +164,16 @@ export default function BezoekDoorloop({
       )}
 
       {/* ── Afronden ─────────────────────────────────────────────────────── */}
-      <SectieKop>Afronden</SectieKop>
+      <SectieKop>{t('afronden')}</SectieKop>
       <div style={{ ...kaart }}>
         <TekstVeld
-          titel="Algemene opmerkingen" waarde={bezoek.algemene_opmerkingen ?? ''} lezen={definitief}
-          plaatshouder="Optioneel" regels={3}
+          titel={t('veld.opmerkingen')} waarde={bezoek.algemene_opmerkingen ?? ''} lezen={definitief}
+          plaatshouder={t('optioneel')} regels={3}
           opslaan={v => doe(() => updateBezoek(bezoek.id, { algemene_opmerkingen: v }))}
           laatste
         />
         <FotoStrip
-          titel="Overzichtsfoto's van dit bezoek"
+          titel={t('overzichtsfotos')}
           fotos={fotos}
           lezen={definitief}
           uploaden={async file => {
@@ -185,17 +189,18 @@ export default function BezoekDoorloop({
           <>
             {disciplines.length === 0 ? (
               <div style={{ fontSize: 12.5, color: ROOD, marginTop: 8, fontWeight: 600 }}>
-                Kies bovenaan minstens één discipline; zonder discipline kun je het bezoek niet
-                afronden.
+                {t('geenDiscipline')}
               </div>
-            ) : bezoekOnvolledig(context).map(m => (
-              <div key={m} style={{ fontSize: 12.5, color: AMBER, marginTop: 8 }}>• {m}</div>
-            ))}
+            ) : disciplines
+              // Zelfde regel als `bezoekOnvolledig()` in lib/bezoek/types, maar met de tekst in de
+              // taal van de app; die functie blijft Nederlands voor het kantoor.
+              .filter(d => d.voortgang_pct === null && !punten.some(p => p.discipline_code === d.code))
+              .map(d => <OnvolledigRegel key={d.code} naam={d.naam} />)}
             <button
               type="button" disabled={bezig || disciplines.length === 0}
               onClick={async () => {
                 if (await doe(() => rondBezoekAf(bezoek.id))) {
-                  toast.success('Bezoek afgerond')
+                  toast.success(t('bezoekAfgerond'))
                 }
               }}
               style={{
@@ -203,10 +208,10 @@ export default function BezoekDoorloop({
                 ...(disciplines.length === 0 ? { opacity: 0.45, cursor: 'not-allowed' } : {}),
               }}
             >
-              Bezoek afronden
+              {t('bezoekAfronden')}
             </button>
             <p style={{ fontSize: 11.5, color: GRIJS, margin: '8px 0 0', textAlign: 'center' }}>
-              Daarna kan de rapportage worden opgesteld.
+              {t('daarnaRapportage')}
             </p>
           </>
         )}
@@ -231,6 +236,7 @@ function DisciplineBlok({
   lezen: boolean
   naWijziging: () => void
 }) {
+  const t = useTranslations('bezoek')
   const [open, setOpen] = useState(true)
   const [tekst, setTekst] = useState('')
   const [alsAandachtspunt, setAlsAandachtspunt] = useState(false)
@@ -254,7 +260,7 @@ function DisciplineBlok({
           flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: GRIJS,
           textTransform: 'uppercase', letterSpacing: 0.4,
         }}>
-          {discipline.naam}
+          <VertaalbareTekst tekst={discipline.naam} label={false} />
           {punten.length > 0 && (
             <span style={{ textTransform: 'none', letterSpacing: 0 }}> · {punten.length}</span>
           )}
@@ -277,10 +283,10 @@ function DisciplineBlok({
           {!lezen && (
             <div style={{ ...kaart }}>
               <div style={{ marginBottom: 10 }}>
-                <span style={label}>Wat valt je op?</span>
+                <span style={label}>{t('punt.watValtOp')}</span>
                 <textarea
                   rows={2} style={{ ...veld, minHeight: 56 }} value={tekst}
-                  placeholder="Kras op de voordeur van nummer 24"
+                  placeholder={t('punt.watValtOpVoorbeeld')}
                   onChange={e => setTekst(e.target.value)}
                 />
               </div>
@@ -300,7 +306,7 @@ function DisciplineBlok({
                 )}
                 <FotoKiesKnoppen
                   bezig={bezig}
-                  bezigTekst={wachtend.length > 0 ? "Punt en foto's opslaan…" : 'Opslaan…'}
+                  bezigTekst={wachtend.length > 0 ? t('punt.puntEnFotosOpslaan') : t('punt.opslaan')}
                   onKies={files => setWachtend(ws => [
                     ...ws, ...files.map(file => ({ file, url: URL.createObjectURL(file) })),
                   ])}
@@ -335,7 +341,9 @@ function DisciplineBlok({
                       },
                     )
                     if (mislukt > 0) {
-                      toast.error(`Punt opgeslagen, maar ${mislukt} foto('s) niet${fout ? `: ${fout}` : ''}`)
+                      toast.error(fout
+                        ? t('punt.fotosMisluktMetFout', { aantal: mislukt, fout })
+                        : t('punt.fotosMislukt', { aantal: mislukt }))
                     }
                     wachtend.forEach(w => URL.revokeObjectURL(w.url))
                   }
@@ -348,14 +356,14 @@ function DisciplineBlok({
                   opacity: tekst.trim() ? 1 : 0.5,
                 }}
               >
-                Punt toevoegen
+                {t('punt.toevoegen')}
               </button>
             </div>
           )}
 
           {lezen && punten.length === 0 && (
             <p style={{ fontSize: 13, color: GRIJS, margin: '0 0 10px' }}>
-              Geen bijzonderheden vastgelegd.
+              {t('punt.geenBijzonderheden')}
             </p>
           )}
         </>
@@ -373,6 +381,7 @@ function PuntKaart({
   lezen: boolean
   naWijziging: () => void
 }) {
+  const t = useTranslations('bezoek')
   const [bezig, setBezig] = useState(false)
 
   return (
@@ -395,7 +404,7 @@ function PuntKaart({
               if (!r.ok) { toast.error(r.error); return }
               naWijziging()
             }}
-            aria-label="Punt verwijderen"
+            aria-label={t('punt.verwijderen')}
             style={{
               flexShrink: 0, width: 30, height: 30, borderRadius: 8, padding: 0,
               border: `1px solid ${RAND}`, background: OPPERVLAK, color: GRIJS,
@@ -431,7 +440,7 @@ function PuntKaart({
         />
         {punt.opgepakt && (
           <div style={{ fontSize: 11.5, color: GRIJS, marginTop: 4, paddingLeft: 30 }}>
-            Al in behandeling op het dossier — intrekken kan daar.
+            {t('punt.alInBehandeling')}
           </div>
         )}
       </div>
@@ -447,6 +456,7 @@ function AandachtspuntVinkje({
   lezen: boolean
   onWissel: () => void
 }) {
+  const t = useTranslations('bezoek')
   return (
     <button
       type="button"
@@ -465,13 +475,14 @@ function AandachtspuntVinkje({
         border: `2px solid ${aan ? GROEN : RAND}`,
         background: aan ? GROEN : 'transparent',
         color: '#fff', fontSize: 13, lineHeight: '17px', textAlign: 'center', fontWeight: 700,
+        // eslint-disable-next-line i18next/no-literal-string -- vinkje-symbool, geen tekst
       }}>{aan ? '✓' : ''}</span>
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: TEKST }}>
-          Ook als aandachtspunt op het dossier
+          {t('aandachtspunt.titel')}
         </span>
         <span style={{ display: 'block', fontSize: 11.5, color: GRIJS, marginTop: 1 }}>
-          Krijgt een nummer en opvolging
+          {t('aandachtspunt.uitleg')}
         </span>
       </span>
     </button>
@@ -493,6 +504,8 @@ function VoortgangRegel({
   laatste: boolean
   opslaan: (pct: number | null) => void | Promise<unknown>
 }) {
+  const t = useTranslations('bezoek')
+  const naam = useVertaling(discipline.naam)
   const [lokaal, setLokaal] = useState<number | null>(discipline.voortgang_pct)
 
   const bewaar = (v: number | null) => {
@@ -501,7 +514,7 @@ function VoortgangRegel({
 
   return (
     <div style={{ marginBottom: laatste ? 0 : 14 }}>
-      <span style={label}>{discipline.naam}</span>
+      <span style={label}>{naam.tekst}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <input
           type="range" min={0} max={100} step={5}
@@ -511,7 +524,7 @@ function VoortgangRegel({
           onPointerUp={() => bewaar(lokaal)}
           onKeyUp={() => bewaar(lokaal)}
           style={{ flex: 1, minWidth: 0, accentColor: GROEN }}
-          aria-label={'Voortgang ' + discipline.naam}
+          aria-label={t('voortgangVan', { naam: naam.tekst })}
         />
         <input
           type="number" inputMode="numeric" min={0} max={100}
@@ -524,6 +537,17 @@ function VoortgangRegel({
         />
         <span style={{ fontSize: 14, color: GRIJS, flexShrink: 0 }}>%</span>
       </div>
+    </div>
+  )
+}
+
+/** "Schilderwerk: nog geen punten en geen voortgang ingevuld." — met de disciplinenaam vertaald. */
+function OnvolledigRegel({ naam }: { naam: string }) {
+  const t = useTranslations('bezoek')
+  const vertaald = useVertaling(naam)
+  return (
+    <div style={{ fontSize: 12.5, color: AMBER, marginTop: 8 }}>
+      • {t('nogNietsIngevuld', { naam: vertaald.tekst })}
     </div>
   )
 }

@@ -1,6 +1,28 @@
 # Plan — EVA-app in het Pools en Tamil
 
-**Status:** plan, nog niets gebouwd · **Datum:** 1 oktober 2026
+**Status:** fase 1–5 gebouwd (branch `claude/app-multilanguage-exploration-ditk5l`), fase 6 nog niet · **Datum:** 1 oktober 2026
+
+## Stand van de bouw
+
+Gebouwd volgens dit plan, met de standaardkeuzes uit "Open beslissingen": automatisch
+vertalen met "Toon origineel", 30 dagen bewaren, taal kiezen door de medewerker én kantoor.
+
+- **Taal per medewerker:** `medewerkers.taal`; in de app onder Profiel → Instellingen, op
+  kantoor op de medewerkerkaart.
+- **Alle schermen van `/m`** in nl/pl/ta, behalve Commercieel (verkoop, blijft Nederlands).
+  Ook de onderdelen die ook op kantoor draaien (formulieren, werkbon, toolbox, handboek,
+  projectbezoek, dialogen) — op kantoor ongewijzigd Nederlands.
+- **Tijdelijk vertalen** van teksten van kantoor (`lib/vertalen`, `components/vertalen`) en
+  pushmeldingen in de taal van de ontvanger.
+- **Bewaking in CI:** pariteitstest nl/pl/ta, test op `'use client'`, test dat gedeelde
+  componenten alleen gedeelde naamruimtes gebruiken, en de lintregel tegen losse tekst in
+  `/m` (als fout).
+- **Bekijken zonder inloggen:** `/auth/app-taal-preview?taal=ta` (of `pl`, `nl`).
+- Technische uitleg en woordenlijst: `apps/dashboard/src/i18n/README.md`.
+
+**Bewust nog Nederlands:** foutmeldingen die uit gedeelde server-acties komen (dezelfde code
+draait op kantoor), zoeken in handboek en opnamebibliotheek (werkt op de Nederlandse tekst),
+de tabtitel van de browser, en alles wat naar klanten gaat (PDF's, rapporten).
 
 ## Doel
 

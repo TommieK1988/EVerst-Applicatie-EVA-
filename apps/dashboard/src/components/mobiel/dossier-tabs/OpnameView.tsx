@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getOpnamesVoorDossier } from '@/lib/opname/opnames'
-import { OPNAME_STATUS_LABELS } from '@everts/database/opname-types'
+import { getAppLocale, getAppVertaler } from '@/i18n/server'
 import NieuweOpnameKnop from '@/components/mobiel/opname/NieuweOpnameKnop'
 
 const GRIJS = 'var(--fg-muted)'
@@ -15,8 +15,12 @@ const STATUS_KLEUR: Record<string, string> = {
   geannuleerd: '#6b757c',
 }
 
-const datumKort = (iso: string) =>
-  new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+const datumKort = (iso: string, locale: string) =>
+  new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
+
+const STATUS_SLEUTELS = ['concept', 'gereed', 'omgezet', 'geannuleerd'] as const
+const isStatusSleutel = (s: string): s is (typeof STATUS_SLEUTELS)[number] =>
+  (STATUS_SLEUTELS as readonly string[]).includes(s)
 
 /**
  * De opnames van dit dossier op de telefoon: kiezen welke je opent, of een nieuwe starten.
@@ -25,13 +29,17 @@ const datumKort = (iso: string) =>
  * daar over het `[tab]`-segment.
  */
 export default async function OpnameView({ dossierId }: { dossierId: string }) {
-  const opnames = await getOpnamesVoorDossier(dossierId).catch(() => [])
+  const [opnames, t, locale] = await Promise.all([
+    getOpnamesVoorDossier(dossierId).catch(() => []),
+    getAppVertaler('dossiertabs'),
+    getAppLocale(),
+  ])
 
   return (
     <div style={{ padding: '14px 16px 24px' }}>
       {opnames.length === 0 ? (
         <p style={{ margin: '0 0 14px', fontSize: 14, color: GRIJS }}>
-          Er is nog geen opname voor dit dossier.
+          {t('opname.geen')}
         </p>
       ) : (
         opnames.map(opname => (
@@ -48,7 +56,7 @@ export default async function OpnameView({ dossierId }: { dossierId: string }) {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: TEKST }}>{opname.opnamenummer}</div>
                 <div style={{ fontSize: 12.5, color: GRIJS, marginTop: 2 }}>
-                  {datumKort(opname.datum)}
+                  {datumKort(opname.datum, locale)}
                   {opname.adres_vrij ? ` · ${opname.adres_vrij}` : ''}
                 </div>
               </div>
@@ -61,7 +69,7 @@ export default async function OpnameView({ dossierId }: { dossierId: string }) {
                   fontSize: 11, fontWeight: 700,
                 }}
               >
-                {OPNAME_STATUS_LABELS[opname.status] ?? opname.status}
+                {isStatusSleutel(opname.status) ? t(`opname.status.${opname.status}`) : opname.status}
               </span>
             </div>
           </Link>

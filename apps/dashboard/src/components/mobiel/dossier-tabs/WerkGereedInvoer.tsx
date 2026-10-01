@@ -3,8 +3,10 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import { bewaarVoortgang } from '@/lib/dossiers/voortgang'
 import BottomSheet from '@/components/mobiel/BottomSheet'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { GROEN, VLAK } from '@/components/mobiel/oplevering/stijl'
 
 /**
@@ -35,6 +37,7 @@ export default function WerkGereedInvoer({
   initial: number | null
   bewerkbaar: boolean
 }) {
+  const t = useTranslations('dossiertabs.voortgang')
   const router = useRouter()
   const [waarde, setWaarde] = useState<number | null>(initial)
   const [open, setOpen] = useState(false)
@@ -56,12 +59,13 @@ export default function WerkGereedInvoer({
     const res = await bewaarVoortgang({
       dossierId, bouw7Id, niveau: 'bewakingscode', bewakingscode: code, hoofdstukId, pctGereed: invoer,
       alleenArbeid: true,
-    }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Opslaan mislukt.' }))
+    }).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : t('opslaanMislukt') }))
     setBezig(false)
     if (!res.ok) { toast.error(res.error); return }
-    const totaalTekst = res.totaal != null ? ` Totaal voor deze code: ${Math.round(res.totaal)}%.` : ''
-    if (res.bouw7 === 'synced') toast.success(`Werk gereed bijgewerkt.${totaalTekst}`)
-    else toast(`${res.melding ?? 'Opgeslagen in EVA.'}${totaalTekst}`, { icon: '💾' })
+    // Twee losse zinnen achter elkaar; `melding` komt uit de gedeelde servercode en blijft Nederlands.
+    const totaalTekst = res.totaal != null ? ` ${t('totaalVoorCode', { pct: Math.round(res.totaal) })}` : ''
+    if (res.bouw7 === 'synced') toast.success(`${t('bijgewerkt')}${totaalTekst}`)
+    else toast(`${res.melding ?? t('opgeslagenInEva')}${totaalTekst}`, { icon: '💾' })
     setWaarde(invoer)
     setOpen(false)
     router.refresh()
@@ -70,13 +74,13 @@ export default function WerkGereedInvoer({
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: '#6b757c' }}>Werk gereed</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: '#6b757c' }}>{t('werkGereed')}</span>
         {kan ? (
           <button type="button" onClick={openen} style={{
             border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
             display: 'flex', alignItems: 'baseline', gap: 8,
           }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: GROEN }}>Wijzig</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: GROEN }}>{t('wijzig')}</span>
             <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--fg)' }}>{pctTekst(waarde)}</span>
           </button>
         ) : (
@@ -88,13 +92,13 @@ export default function WerkGereedInvoer({
       </div>
 
       {open && (
-        <BottomSheet titel="Werk gereed" onSluit={() => !bezig && setOpen(false)}>
+        <BottomSheet titel={t('werkGereed')} onSluit={() => !bezig && setOpen(false)}>
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>
-            {naam ?? code}
+            {naam ? <VertaalbareTekst tekst={naam} label={false} /> : code}
             {naam && code && <span style={{ fontSize: 13, fontWeight: 500, color: '#9aa4ab' }}> · {code}</span>}
           </div>
           <div style={{ fontSize: 14, color: '#6b757c', marginTop: -6 }}>
-            Hoeveel van het arbeidswerk is klaar?
+            {t('vraag')}
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -120,7 +124,7 @@ export default function WerkGereedInvoer({
               value={tekst}
               onChange={e => setTekst(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void bewaar() } }}
-              aria-label="Percentage gereed"
+              aria-label={t('percentageGereed')}
               style={{
                 flex: 1, padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)',
                 background: VLAK, fontFamily: 'inherit', fontSize: 20, fontWeight: 700, color: 'var(--fg)',
@@ -130,13 +134,13 @@ export default function WerkGereedInvoer({
             <span style={{ fontSize: 20, fontWeight: 700, color: '#6b757c' }}>%</span>
           </label>
           {tekst.trim() !== '' && !geldig && (
-            <p style={{ margin: 0, fontSize: 14, color: '#b42318' }}>Geef een percentage tussen 0 en 100.</p>
+            <p style={{ margin: 0, fontSize: 14, color: '#b42318' }}>{t('ongeldig')}</p>
           )}
 
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button type="button" onClick={() => setOpen(false)} disabled={bezig}
               style={{ ...actieKnop, background: 'transparent', color: '#6b757c', border: '1px solid var(--border)' }}>
-              Annuleren
+              {t('annuleren')}
             </button>
             <button type="button" onClick={bewaar} disabled={bezig || !geldig}
               style={{
@@ -146,7 +150,7 @@ export default function WerkGereedInvoer({
                 cursor: geldig ? 'pointer' : 'default',
                 opacity: bezig ? 0.6 : 1,
               }}>
-              {bezig ? 'Bezig…' : 'Opslaan'}
+              {bezig ? t('bezig') : t('opslaan')}
             </button>
           </div>
         </BottomSheet>

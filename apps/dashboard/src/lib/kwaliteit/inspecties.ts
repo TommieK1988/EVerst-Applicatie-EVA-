@@ -626,9 +626,12 @@ export async function verwijderKwaliteitFoto(id: string): Promise<{ ok: true } |
 
 /* ─────────────────────────────── Afronden ────────────────────────────────── */
 
+/** Wat er ontbreekt, als vaste code: de app toont de reden daarmee in de taal van de medewerker. */
+export type AfrondOntbreektSoort = 'niets_beoordeeld' | 'geen_bevinding' | 'locatie' | 'toelichting' | 'foto'
+
 export type AfrondControle = {
   gereed: boolean
-  ontbreekt: { controlepuntId: string; code: string; titel: string; reden: string }[]
+  ontbreekt: { controlepuntId: string; code: string; titel: string; reden: string; soort: AfrondOntbreektSoort }[]
 }
 
 /**
@@ -646,7 +649,7 @@ export async function controleerAfronden(inspectieId: string): Promise<AfrondCon
 
   const rijen = (resultaten ?? []) as (KwaliteitResultaat & { punt: KwaliteitControlepunt })[]
   if (rijen.length === 0) {
-    return { gereed: false, ontbreekt: [{ controlepuntId: '', code: '', titel: 'Nog niets beoordeeld', reden: 'Beoordeel ten minste één controlepunt voordat je afrondt.' }] }
+    return { gereed: false, ontbreekt: [{ controlepuntId: '', code: '', titel: 'Nog niets beoordeeld', reden: 'Beoordeel ten minste één controlepunt voordat je afrondt.', soort: 'niets_beoordeeld' }] }
   }
 
   const { data: afwijkingen } = await supabase
@@ -669,18 +672,18 @@ export async function controleerAfronden(inspectieId: string): Promise<AfrondCon
     if (!levertAfwijkingOp(r.status)) continue
     const bevindingen = perResultaat.get(r.id) ?? []
     if (bevindingen.length === 0) {
-      ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Voeg ten minste één bevinding met locatie toe.' })
+      ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Voeg ten minste één bevinding met locatie toe.', soort: 'geen_bevinding' })
       continue
     }
     for (const b of bevindingen) {
       if (!b.locatie?.trim()) {
-        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Locatie ontbreekt bij een bevinding.' })
+        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Locatie ontbreekt bij een bevinding.', soort: 'locatie' })
       }
       if (!b.omschrijving?.trim()) {
-        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Toelichting ontbreekt bij een bevinding.' })
+        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Toelichting ontbreekt bij een bevinding.', soort: 'toelichting' })
       }
       if (fotoVerplicht(r.punt, r.status) && !metFoto.has(b.id)) {
-        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Foto is verplicht bij deze afwijking.' })
+        ontbreekt.push({ controlepuntId: r.controlepunt_id, code: r.punt.code, titel: r.punt.titel, reden: 'Foto is verplicht bij deze afwijking.', soort: 'foto' })
       }
     }
   }

@@ -1,1 +1,65 @@
-{}
+{
+  "bezig": "Trwa…",
+  "optioneel": "Opcjonalnie",
+  "fout": {
+    "algemeen": "Coś poszło nie tak"
+  },
+  "afgerondMelding": "Ta wizyta jest zakończona. Nie można już nic w niej zmienić.",
+  "welkeDisciplines": "Jakie branże są wykonywane?",
+  "vorigeKeuze": "Wybór z poprzedniej wizyty będzie tu gotowy, gdy już jakąś przeprowadzisz.",
+  "hetBezoek": "Wizyta",
+  "veld": {
+    "weer": "Pogoda",
+    "weerVoorbeeld": "Sucho, 18 °C",
+    "bekeken": "Co sprawdziłeś",
+    "bekekenVoorbeeld": "Blok A, elewacja północna i wschodnia",
+    "werkzaamheden": "Prace w toku",
+    "werkzaamhedenVoorbeeld": "Malowanie i naprawa zgnilizny drewna",
+    "opmerkingen": "Uwagi ogólne"
+  },
+  "voortgangPerDiscipline": "Postęp według branży",
+  "voortgangVan": "Postęp: {naam}",
+  "afronden": "Zakończenie",
+  "overzichtsfotos": "Zdjęcia ogólne z tej wizyty",
+  "geenDiscipline": "Wybierz u góry co najmniej jedną branżę; bez branży nie możesz zakończyć wizyty.",
+  "nogNietsIngevuld": "{naam}: brak punktów i nie wpisano postępu.",
+  "bezoekAfgerond": "Wizyta zakończona",
+  "bezoekAfronden": "Zakończ wizytę",
+  "daarnaRapportage": "Potem można przygotować raport.",
+  "punt": {
+    "watValtOp": "Co zauważyłeś?",
+    "watValtOpVoorbeeld": "Rysa na drzwiach wejściowych pod numerem 24",
+    "puntEnFotosOpslaan": "Zapisywanie punktu i zdjęć…",
+    "opslaan": "Zapisywanie…",
+    "fotosMislukt": "{aantal, plural, one {Punkt zapisany, ale # zdjęcie nie} few {Punkt zapisany, ale # zdjęcia nie} many {Punkt zapisany, ale # zdjęć nie} other {Punkt zapisany, ale # zdjęcia nie}}",
+    "fotosMisluktMetFout": "{aantal, plural, one {Punkt zapisany, ale # zdjęcie nie: {fout}} few {Punkt zapisany, ale # zdjęcia nie: {fout}} many {Punkt zapisany, ale # zdjęć nie: {fout}} other {Punkt zapisany, ale # zdjęcia nie: {fout}}}",
+    "toevoegen": "Dodaj punkt",
+    "geenBijzonderheden": "Nie zapisano żadnych uwag.",
+    "verwijderen": "Usuń punkt",
+    "alInBehandeling": "Już w realizacji w projekcie — wycofać można tam."
+  },
+  "aandachtspunt": {
+    "titel": "Również jako punkt do uwagi w projekcie",
+    "uitleg": "Otrzyma numer i dalszą obsługę"
+  },
+  "kiezer": {
+    "kiesDisciplines": "Wybierz wykonywane branże",
+    "zoeken": "Szukaj",
+    "heeftPuntenTitel": "Ta branża ma punkty",
+    "heeftPunten": "ma punkty",
+    "nietsGevonden": "Nic nie znaleziono.",
+    "klaar": "Gotowe ({aantal})"
+  },
+  "foto": {
+    "titel": "Zdjęcia",
+    "maken": "Zrób zdjęcie",
+    "uitGalerij": "Z galerii",
+    "verwijderen": "Usuń zdjęcie",
+    "verwijderenMislukt": "Nie udało się usunąć",
+    "uploaden": "Wysyłanie…",
+    "uploadenVoortgang": "Wysyłanie {nummer}/{totaal}…",
+    "uploadenMislukt": "Nie udało się wysłać",
+    "deelsMislukt": "Nie udało się wysłać {mislukt} z {totaal} zdjęć",
+    "deelsMisluktMetFout": "Nie udało się wysłać {mislukt} z {totaal} zdjęć: {fout}"
+  }
+}

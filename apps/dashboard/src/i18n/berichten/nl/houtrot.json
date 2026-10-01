@@ -1,1 +1,53 @@
-{}
+{
+  "geenBoom": "De projectleider heeft voor dit dossier nog geen locaties ingesteld. Zodra dat gebeurd is, kun je hier registreren.",
+  "fotoSoort": {
+    "voor": "Voor",
+    "tijdens": "Tijdens",
+    "na": "Na"
+  },
+  "geenFoto": {
+    "voor": "Geen voor-foto",
+    "tijdens": "Geen tijdens-foto",
+    "na": "Geen na-foto"
+  },
+  "fotoVervangen": "{soort} (vervangen)",
+  "uren": "{uren} uur",
+  "locatie": "Locatie",
+  "fotos": "Foto's",
+  "fotoVerwijderen": "Foto verwijderen",
+  "laden": "Laden…",
+  "geenLocatieNog": "Deze registratie heeft nog geen locatie. Kies hieronder de juiste plek.",
+  "niveau": "Niveau {nummer}",
+  "kiesElkNiveau": "Kies elk niveau; zonder volledige locatie kun je niet opslaan.",
+  "werkzaamheden": "Werkzaamheden",
+  "werkzaamheidVerwijderen": "Werkzaamheid verwijderen",
+  "soort": "Soort",
+  "kiesSoort": "— kies een soort —",
+  "variant": "Variant",
+  "kies": "— kies —",
+  "aantal": "Aantal",
+  "toevoegen": "Toevoegen",
+  "notitie": "Notitie",
+  "status": "Status",
+  "afgerond": "Afgerond",
+  "geregistreerd": "Geregistreerd",
+  "aangemaaktDoor": "Aangemaakt door {naam} · {moment}",
+  "laatstBewerktDoor": "Laatst bewerkt door {naam} · {moment}",
+  "onbekend": "onbekend",
+  "annuleren": "Annuleren",
+  "opslaan": "Opslaan",
+  "opslaanBezig": "Opslaan…",
+  "geenRegistraties": "Nog geen houtrotregistraties voor dit dossier.",
+  "geenLocatie": "Geen locatie",
+  "tijdnorm": "Tijdnorm <b>{uren}</b>",
+  "nieuweRegistratie": "Nieuwe registratie",
+  "wachtOpLocaties": "Wacht op locaties",
+  "fout": {
+    "geenMedewerker": "Geen medewerker-koppeling gevonden voor dit account.",
+    "locatieLaadt": "De locatie wordt nog geladen. Probeer het over een moment opnieuw.",
+    "kiesLocatie": "Kies eerst de volledige locatie.",
+    "minstensEen": "Voeg minstens één werkzaamheid toe.",
+    "ladenMislukt": "Laden mislukt",
+    "opslaanMislukt": "Opslaan mislukt"
+  }
+}

@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { koppelSticker, zoekTeStickeren } from '@/app/m/materieel/actions'
 import { codeLabel } from '@/lib/materieel/qr'
 import type { MaterieelTreffer } from '@/lib/materieel/zoeken'
@@ -34,6 +35,7 @@ export default function KoppelLijst({
   /** Hoeveel objecten er in totaal nog op een sticker wachten. */
   totaal: number
 }) {
+  const t = useTranslations('materieel')
   const router = useRouter()
   const [term, setTerm] = React.useState('')
   const [lijst, setLijst] = React.useState(start)
@@ -68,19 +70,19 @@ export default function KoppelLijst({
   return (
     <div style={{ padding: 14 }}>
       <div style={kaart}>
-        <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Gescande sticker</div>
+        <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>{t('koppel.gescandeSticker')}</div>
         <div style={{ fontSize: 17, fontWeight: 800 }}>{codeLabel(code)}</div>
         <div style={{ fontSize: 13, color: GRIJS, marginTop: 6, lineHeight: 1.4 }}>
-          Kies waar deze sticker op zit. {totaal > 0
-            ? `Nog ${totaal} ${totaal === 1 ? 'stuk' : 'stuks'} zonder sticker.`
-            : 'Er staat niets meer zonder sticker.'}
+          {t('koppel.kiesUitleg')} {totaal > 0
+            ? t('koppel.nogZonder', { aantal: totaal })
+            : t('koppel.nietsMeerZonder')}
         </div>
       </div>
 
       <input
         value={term}
         onChange={(e) => setTerm(e.target.value)}
-        placeholder="Zoek op naam, merk, nummer of wie het heeft"
+        placeholder={t('zoek.plaatshouder')}
         type="search"
         autoCapitalize="none"
         autoCorrect="off"
@@ -94,9 +96,9 @@ export default function KoppelLijst({
 
       {lijst.length === 0 ? (
         <div style={{ fontSize: 14, color: GRIJS, padding: '8px 2px', lineHeight: 1.5 }}>
-          {zoekt ? 'Zoeken…' : term
-            ? 'Niets gevonden dat nog zonder sticker staat.'
-            : 'Al het materieel heeft een sticker.'}
+          {zoekt ? t('zoek.zoeken') : term
+            ? t('koppel.nietsGevonden')
+            : t('koppel.allesHeeftSticker')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -107,7 +109,7 @@ export default function KoppelLijst({
               fotoUrl={o.foto_url}
               onClick={() => koppel(o)}
               gedimd={bezig !== null && bezig !== o.id}
-              aanvulling={bezig === o.id ? 'Koppelen…' : undefined}
+              aanvulling={bezig === o.id ? t('koppel.koppelen') : undefined}
             />
           ))}
         </div>
@@ -118,7 +120,7 @@ export default function KoppelLijst({
         onClick={() => router.push(`/m/materieel/nieuw?code=${encodeURIComponent(code)}`)}
         style={{ ...secundaireKnop, width: '100%', marginTop: 18 }}
       >
-        Staat er niet bij — nieuw materieel aanmaken
+        {t('koppel.staatErNietBij')}
       </button>
     </div>
   )

@@ -1,6 +1,10 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertaling } from '@/components/vertalen/useVertaling'
 import type {
   KwaliteitAfwijking,
   KwaliteitControlepunt,
@@ -8,11 +12,6 @@ import type {
   KwaliteitFoto,
   KwaliteitResultaat,
   KwaliteitResultaatStatus,
-} from '@everts/database/kwaliteit-types'
-import {
-  kwaliteitBronTypeLabels,
-  kwaliteitErnstLabels,
-  kwaliteitResultaatStatusUitleg,
 } from '@everts/database/kwaliteit-types'
 import {
   bepaalEis, beoordeel, eenheidLabel, eisOmschrijving, fotoVerplicht,
@@ -23,9 +22,11 @@ import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
 import FotoStrook, { type StrookFoto } from './FotoStrook'
 import LocatieKiezer from './LocatieKiezer'
 import {
-  ERNST_KLEUR, GRIJS, GROEN, kaart, label, RAND, ROOD, STATUS_KLEUR, STATUS_KORT,
+  ERNST_KLEUR, GRIJS, GROEN, kaart, label, RAND, ROOD, STATUS_KLEUR,
   TEKST, veld, ZACHT,
 } from './stijl'
+
+const ERNSTEN: KwaliteitErnst[] = ['kritiek', 'technisch', 'esthetisch', 'observatie']
 
 /** De projecteis-vorm die `bepaalEis` verwacht; de tweede parameter is optioneel, vandaar NonNullable. */
 type ProjectEis = NonNullable<Parameters<typeof bepaalEis>[1]>[number]
@@ -59,6 +60,9 @@ export default function PuntKaart({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
+  const locale = useDatumLocale()
+  const meetmiddel = useVertaling(punt.meetmiddel)
   const eis = React.useMemo(() => bepaalEis(punt, projectEisen), [punt, projectEisen])
   const heeftMeting = punt.inspectie_type === 'meting' || punt.inspectie_type === 'gecombineerd'
     || punt.meting_verplicht || punt.meting_optioneel
@@ -117,6 +121,20 @@ export default function PuntKaart({
     onGewijzigd()
   }
 
+  // Buiten de JSX opgebouwd: zinnen met vetgedrukte delen via t.rich.
+  const vet = (c: React.ReactNode) => <strong style={{ color: TEKST }}>{c}</strong>
+  const gemetenTekst = gemeten === null || !metingGeldig ? null : t.rich(
+    eis.geen_waarde_bekend ? 'punt.gemeten' : 'punt.gemetenToegestaan',
+    {
+      waarde: `${gemeten.toLocaleString(locale, { maximumFractionDigits: 3 })}${eis.eenheid ? ' ' + eenheidLabel(eis.eenheid) : ''}`,
+      eis: eis.geen_waarde_bekend ? '' : eisOmschrijving(eis, locale),
+      b: vet,
+    },
+  )
+  const projecteisTekst = punt.project_eis_sleutel
+    ? t.rich('punt.projecteisNodig', { sleutel: punt.project_eis_sleutel, b: (c) => <strong>{c}</strong> })
+    : null
+
   const statussen = toegestaneStatussen(punt)
   const moetBevinden = status !== null && levertAfwijkingOp(status)
 
@@ -128,12 +146,12 @@ export default function PuntKaart({
           {punt.code}
         </span>
         {punt.kwaliteitsaspect === 'veiligheid' && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: ROOD }}>VEILIGHEID</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: ROOD }}>{t('punt.veiligheid')}</span>
         )}
       </div>
-      <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600, color: TEKST, lineHeight: 1.35 }}>
-        {punt.korte_vraag}
-      </p>
+      {/* De vraag komt uit de bibliotheek van kantoor: vertaald, met het origineel één tik weg. */}
+      <VertaalbareTekst as="div" tekst={punt.korte_vraag}
+        style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600, color: TEKST, lineHeight: 1.35 }} />
 
       {/* Statusknoppen — groot genoeg voor een duim met handschoen. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: moetBevinden || heeftMeting ? 12 : 0 }}>
@@ -155,7 +173,7 @@ export default function PuntKaart({
                 WebkitTapHighlightColor: 'transparent',
               }}
             >
-              {STATUS_KORT[s]}
+              {t(`resultaatStatus.${s}`)}
             </button>
           )
         })}
@@ -163,7 +181,7 @@ export default function PuntKaart({
 
       {status && (
         <p style={{ margin: '0 0 10px', fontSize: 11.5, color: GRIJS, lineHeight: 1.4 }}>
-          {kwaliteitResultaatStatusUitleg[status]}
+          {t(`statusUitleg.${status}`)}
         </p>
       )}
 
@@ -171,9 +189,10 @@ export default function PuntKaart({
       {heeftMeting && (
         <div style={{ marginBottom: 12 }}>
           <label style={label}>
-            Meetwaarde{punt.meting_verplicht ? ' *' : ' (optioneel)'}
-            {eis.eenheid ? ` in ${eenheidLabel(eis.eenheid)}` : ''}
-            {punt.meetmiddel ? ` · ${punt.meetmiddel}` : ''}
+            {eis.eenheid
+              ? t('punt.meetwaardeEenheid', { verplicht: punt.meting_verplicht ? 'ja' : 'nee', eenheid: eenheidLabel(eis.eenheid) })
+              : t('punt.meetwaarde', { verplicht: punt.meting_verplicht ? 'ja' : 'nee' })}
+            {punt.meetmiddel ? ` · ${meetmiddel.tekst}` : ''}
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -182,7 +201,7 @@ export default function PuntKaart({
               onBlur={() => void bewaarMeting()}
               inputMode="decimal"
               disabled={!bewerkbaar}
-              placeholder="0,0"
+              placeholder={t('punt.meetPlaceholder')}
               style={{ ...veld, flex: 1 }}
             />
             <input
@@ -190,13 +209,13 @@ export default function PuntKaart({
               onChange={e => setMeetlocatie(e.target.value)}
               onBlur={() => void bewaarMeting()}
               disabled={!bewerkbaar}
-              placeholder="Waar gemeten?"
+              placeholder={t('punt.waarGemeten')}
               style={{ ...veld, flex: 1.4 }}
             />
           </div>
 
           {!metingGeldig && (
-            <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD }}>Vul een getal in.</p>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD }}>{t('punt.vulGetal')}</p>
           )}
 
           {metingGeldig && gemeten !== null && (
@@ -211,27 +230,23 @@ export default function PuntKaart({
               }}
             >
               <div style={{ fontSize: 12, color: GRIJS, marginBottom: 2 }}>
-                Gemeten <strong style={{ color: TEKST }}>
-                  {meting.replace('.', ',')}{eis.eenheid ? ' ' + eenheidLabel(eis.eenheid) : ''}
-                </strong>
-                {!eis.geen_waarde_bekend && <> · Toegestaan <strong style={{ color: TEKST }}>{eisOmschrijving(eis)}</strong></>}
+                {gemetenTekst}
               </div>
               <div style={{
                 fontSize: 13, fontWeight: 800,
                 color: live?.berekend_voldoet === true ? GROEN
                   : live?.berekend_voldoet === false ? ROOD : GRIJS,
               }}>
-                {live?.berekend_voldoet === true ? 'VOLDOET'
-                  : live?.berekend_voldoet === false ? 'VOLDOET NIET'
-                  : 'Geen grenswaarde bekend — beoordeel zelf'}
+                {live?.berekend_voldoet === true ? t('punt.oordeelVoldoet')
+                  : live?.berekend_voldoet === false ? t('punt.oordeelVoldoetNiet')
+                  : t('punt.geenGrenswaarde')}
               </div>
             </div>
           )}
 
           {eis.geen_waarde_bekend && punt.project_eis_sleutel && (
             <p style={{ margin: '6px 0 0', fontSize: 11.5, color: GRIJS, lineHeight: 1.4 }}>
-              Voor dit onderdeel is geen generieke grenswaarde beschikbaar. Leg de projecteis
-              <strong> {punt.project_eis_sleutel}</strong> vast om dit automatisch te laten toetsen.
+              {projecteisTekst}
             </p>
           )}
         </div>
@@ -259,7 +274,7 @@ export default function PuntKaart({
             onChange={setOpmerking}
             onBlur={() => void bewaarMeting()}
             rows={2}
-            placeholder="Opmerking (optioneel)"
+            placeholder={t('punt.opmerkingPlaceholder')}
             disabled={!bewerkbaar}
             style={veld}
           />
@@ -275,19 +290,24 @@ export default function PuntKaart({
           color: GRIJS, fontSize: 12, fontWeight: 600, cursor: 'pointer',
         }}
       >
-        {toonEis ? '▴ Technische eis verbergen' : '▾ Technische eis bekijken'}
+        {toonEis ? t('punt.eisVerbergen') : t('punt.eisBekijken')}
       </button>
       {toonEis && (
         <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg)', borderRadius: 10, fontSize: 12.5, lineHeight: 1.5, color: GRIJS }}>
-          <p style={{ margin: '0 0 6px', fontWeight: 700, color: TEKST }}>{punt.titel}</p>
-          {punt.toelichting && <p style={{ margin: '0 0 6px' }}>{punt.toelichting}</p>}
-          {eis.eis_tekst && <p style={{ margin: '0 0 6px' }}>{eis.eis_tekst}</p>}
-          {punt.meetmethode && <p style={{ margin: '0 0 6px' }}><strong>Meetmethode:</strong> {punt.meetmethode}</p>}
+          <VertaalbareTekst as="p" label={false} tekst={punt.titel} style={{ margin: '0 0 6px', fontWeight: 700, color: TEKST }} />
+          {punt.toelichting && <VertaalbareTekst as="p" tekst={punt.toelichting} style={{ margin: '0 0 6px' }} />}
+          {eis.eis_tekst && <VertaalbareTekst as="p" tekst={eis.eis_tekst} style={{ margin: '0 0 6px' }} />}
+          {punt.meetmethode && (
+            <p style={{ margin: '0 0 6px' }}>
+              <strong>{t('punt.meetmethode')}</strong>{' '}
+              <VertaalbareTekst tekst={punt.meetmethode} />
+            </p>
+          )}
           <p style={{ margin: 0 }}>
-            <strong>Bron:</strong> {kwaliteitBronTypeLabels[eis.bron_type]}
+            <strong>{t('punt.bron')}</strong> {t(`bron.${eis.bron_type}`)}
             {eis.bron_document ? ` — ${eis.bron_document}` : ''}
             {punt.bron_paragraaf ? `, ${punt.bron_paragraaf}` : ''}
-            {eis.uit_projecteis && ' (projectwaarde, overschrijft de standaard)'}
+            {eis.uit_projecteis && <> {t('punt.projectwaarde')}</>}
           </p>
         </div>
       )}
@@ -311,6 +331,7 @@ function Bevindingen({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
   const [bezig, setBezig] = React.useState(false)
   const [fout, setFout] = React.useState<string | null>(null)
 
@@ -359,7 +380,7 @@ function Bevindingen({
             fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}
         >
-          + Nog een bevinding op dit punt
+          {t('bevinding.nogEen')}
         </button>
       )}
       {fout && <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD }}>{fout}</p>}
@@ -380,6 +401,7 @@ function BevindingBlok({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
   const [locatie, setLocatie] = React.useState(bevinding.locatie ?? '')
   const [omschrijving, setOmschrijving] = React.useState(bevinding.omschrijving ?? '')
   const [actie, setActie] = React.useState(bevinding.voorgestelde_actie ?? '')
@@ -403,7 +425,7 @@ function BevindingBlok({
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: ZACHT }}>
-          {bevinding.afwijkingsnummer}{totaal > 1 ? ` · bevinding ${index + 1} van ${totaal}` : ''}
+          {bevinding.afwijkingsnummer}{totaal > 1 ? ` · ${t('bevinding.vanTotaal', { nummer: index + 1, totaal })}` : ''}
         </span>
         {bewerkbaar && totaal > 1 && (
           <button
@@ -411,7 +433,7 @@ function BevindingBlok({
             onClick={async () => { await verwijderBevinding(bevinding.id); onGewijzigd() }}
             style={{ background: 'none', border: 'none', color: ROOD, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
           >
-            Verwijderen
+            {t('verwijderen')}
           </button>
         )}
       </div>
@@ -425,22 +447,22 @@ function BevindingBlok({
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <label style={label}>Toelichting *</label>
+        <label style={label}>{t('bevinding.toelichting')}</label>
         <SpraakTextarea
           value={omschrijving}
           onChange={setOmschrijving}
           onBlur={() => void bewaar({ omschrijving })}
           rows={3}
-          placeholder="Wat is er aan de hand?"
+          placeholder={t('bevinding.toelichtingPlaceholder')}
           disabled={!bewerkbaar}
           style={veld}
         />
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <label style={label}>Ernst</label>
+        <label style={label}>{t('bevinding.ernst')}</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(['kritiek', 'technisch', 'esthetisch', 'observatie'] as KwaliteitErnst[]).map(e => {
+          {ERNSTEN.map(e => {
             const actief = ernst === e
             return (
               <button
@@ -456,26 +478,26 @@ function BevindingBlok({
                   WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                {kwaliteitErnstLabels[e]}
+                {t(`ernst.${e}`)}
               </button>
             )
           })}
         </div>
         {ernst === 'kritiek' && (
           <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD, fontWeight: 600 }}>
-            Kritiek: veiligheid of waterdichtheid. Meld dit direct aan de uitvoerder.
+            {t('bevinding.kritiekMelding')}
           </p>
         )}
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <label style={label}>Voorgestelde herstelactie</label>
+        <label style={label}>{t('bevinding.herstelactie')}</label>
         <SpraakTextarea
           value={actie}
           onChange={setActie}
           onBlur={() => void bewaar({ voorgestelde_actie: actie })}
           rows={2}
-          placeholder="Wat moet er gebeuren?"
+          placeholder={t('bevinding.herstelactiePlaceholder')}
           disabled={!bewerkbaar}
           style={veld}
         />

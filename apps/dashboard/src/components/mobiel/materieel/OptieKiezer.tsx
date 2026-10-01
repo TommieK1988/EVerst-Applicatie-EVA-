@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import type { Optie } from '@/lib/materieel/types'
 import { GRIJS, OPPERVLAK, RAND, veld } from './stijl'
 
@@ -27,8 +28,8 @@ export default function OptieKiezer({
   groepen,
   /** Optie die bovenaan staat en niet in een groep hoort, bijv. "Algemeen gebruik". */
   vaste,
-  plaatshouder = 'Kies…',
-  zoekPlaatshouder = 'Typ om te zoeken',
+  plaatshouder,
+  zoekPlaatshouder,
   id,
 }: {
   /** Gekozen id, of '' als er (nog) niets gekozen is. */
@@ -40,6 +41,7 @@ export default function OptieKiezer({
   zoekPlaatshouder?: string
   id?: string
 }) {
+  const t = useTranslations('materieel')
   const [open, setOpen] = React.useState(false)
   const [term, setTerm] = React.useState('')
   const zoekRef = React.useRef<HTMLInputElement>(null)
@@ -84,8 +86,9 @@ export default function OptieKiezer({
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {gekozen ? gekozen.naam : plaatshouder}
+          {gekozen ? gekozen.naam : (plaatshouder ?? t('kiezer.kies'))}
         </span>
+        {/* eslint-disable-next-line i18next/no-literal-string -- pijltje, geen tekst */}
         <span aria-hidden style={{ color: GRIJS, flexShrink: 0 }}>▾</span>
       </button>
     )
@@ -98,7 +101,7 @@ export default function OptieKiezer({
           ref={zoekRef}
           value={term}
           onChange={(e) => setTerm(e.target.value)}
-          placeholder={zoekPlaatshouder}
+          placeholder={zoekPlaatshouder ?? t('kiezer.typOmTeZoeken')}
           type="search"
           autoCapitalize="none"
           autoCorrect="off"
@@ -114,7 +117,7 @@ export default function OptieKiezer({
             cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
           }}
         >
-          Sluit
+          {t('kiezer.sluit')}
         </button>
       </div>
 
@@ -136,7 +139,7 @@ export default function OptieKiezer({
           </div>
         ))}
         {leeg && (
-          <div style={{ padding: 14, fontSize: 14, color: GRIJS }}>Niets gevonden.</div>
+          <div style={{ padding: 14, fontSize: 14, color: GRIJS }}>{t('kiezer.nietsGevonden')}</div>
         )}
       </div>
     </div>
@@ -164,6 +167,7 @@ function Regel({
       }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{optie.naam}</span>
+      {/* eslint-disable-next-line i18next/no-literal-string -- vinkje, geen tekst */}
       {gekozen && <span aria-hidden style={{ color: '#009439', flexShrink: 0 }}>✓</span>}
     </button>
   )

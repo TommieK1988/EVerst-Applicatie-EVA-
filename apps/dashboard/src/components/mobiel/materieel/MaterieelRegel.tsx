@@ -2,7 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { CATEGORIE_LABELS, STATUS_META } from '@/lib/materieel/types'
+import { useTranslations } from 'next-intl'
+import { ALGEMEEN_GEBRUIK, STATUS_META } from '@/lib/materieel/types'
 import type { MaterieelTreffer } from '@/lib/materieel/zoeken'
 import { GRIJS, RAND } from './stijl'
 
@@ -31,15 +32,16 @@ export default function MaterieelRegel({
   href?: string
   gedimd?: boolean
 }) {
+  const t = useTranslations('materieel')
   const status = STATUS_META[object.status]
   const kenmerken = [
-    CATEGORIE_LABELS[object.categorie],
+    t(`categorie.${object.categorie}`),
     object.merk,
     object.type,
-    object.serienummer && `sn ${object.serienummer}`,
+    object.serienummer && t('regel.serienummer', { nummer: object.serienummer }),
     object.keuringsnummer
-      ? `keuring ${object.keuringsnummer}`
-      : object.inventarisnummer && `nr ${object.inventarisnummer}`,
+      ? t('regel.keuring', { nummer: object.keuringsnummer })
+      : object.inventarisnummer && t('regel.inventaris', { nummer: object.inventarisnummer }),
   ].filter(Boolean).join(' · ')
 
   const binnenkant = (
@@ -61,7 +63,8 @@ export default function MaterieelRegel({
         </span>
         <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 2 }}>{kenmerken}</span>
         <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 2 }}>
-          {object.toegewezen_naam}
+          {/* De zoekfunctie vult "Algemeen gebruik" in als het aan niemand hangt; dat vertalen we. */}
+          {object.toegewezen_naam === ALGEMEEN_GEBRUIK ? t('algemeenGebruik') : object.toegewezen_naam}
         </span>
         {aanvulling && (
           <span style={{ display: 'block', fontSize: 12, color: GRIJS, marginTop: 4 }}>{aanvulling}</span>
@@ -71,7 +74,7 @@ export default function MaterieelRegel({
         fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
         color: status.kleur, background: `${status.kleur}1a`, flexShrink: 0,
       }}>
-        {status.label}
+        {t(`status.${object.status}`)}
       </span>
     </>
   )
