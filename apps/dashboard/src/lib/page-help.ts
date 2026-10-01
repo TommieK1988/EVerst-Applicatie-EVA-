@@ -1483,7 +1483,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
 // (sectie, tab) i.p.v. één generieke tekst voor de hele detailpagina. Welke tabs
 // per sectie bestaan staat in Sidebar.tsx (AANVRAAG_TABS/OPDRACHT_TABS/SERVICEDESK_TABS):
 //   aanvragen & offertes → informatie · bestanden · calculatie · uitvraag · acties
-//   opdrachten           → + uitvraag · werkbegroting · planning · uren · inkoop · verkoop · meerwerk · financieel · kam
+//   opdrachten           → + uitvraag · werkbegroting · planning · werkplan · uren · inkoop · verkoop · meerwerk · financieel · kam
 //   servicedesk          → vijf gebundelde tabs (bon · voorbereiding · uitvoering · inkoop ·
 //                          facturatie). Een groep met meerdere onderdelen zet die achter
 //                          `?deel=`; Planning en Inkoop hebben er maar één en zijn dus één
@@ -1627,6 +1627,16 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
           { title: 'VCA-acties', body: 'Nog uit te voeren VCA-acties worden apart getoond, zodat je ziet welke veiligheidsacties nog open staan voordat het werk verdergaat. Ze komen uit de actielijst: taken met een KAM/VGM-formulier eraan.' },
           { title: "VCA-diploma's", body: "De medewerkers die op deze opdracht staan ingepland of er een rol op hebben, met de status van hun VCA-diploma. Verlopen of bijna verlopen diploma's springen eruit." },
           { title: 'VCA-toggle', body: "De VCA-acties en -diploma's verschijnen alleen als de VCA-toggle op de Informatie-tab aanstaat. Het tabblad zelf blijft altijd bereikbaar — oplevering en formulieren staan los van VCA." },
+        ])
+
+    case 'werkplan':
+      return T('Werkplan',
+        'Wat de uitvoering op dit werk moet weten: een korte werkomschrijving, wie er verder bij betrokken is, de werkafspraken en de kleuren en materialen. Uitvoerders en monteurs zien het werkplan ook op hun telefoon, onder de tab Werkplan bij het dossier.',
+        [
+          { title: 'Werkomschrijving', body: 'Eén tekstveld met de kopjes Werkzaamheden, Bereikbaarheid, Bouwplaats, Voorzieningen en Reclame. De werkomschrijving is verplicht: alleen de kopjes laten staan is niet genoeg.' },
+          { title: 'Betrokkenen', body: 'De lijst komt uit het blok Betrokkenen op het tabblad Informatie. Iemand toevoegen of weghalen doe je daar.' },
+          { title: 'Werkafspraken', body: 'Kies per onderdeel (werktijden, reisuren, reiskosten, parkeren) de afspraak die geldt. Waar de zin een waarde nodig heeft, zoals het aantal reisuren of het maximale parkeerbedrag, verschijnt een invulveld.' },
+          { title: 'Kleuren en materialen', body: 'Een tabel met twee kolommen: het onderdeel en de kleur of het materiaal. Voeg zoveel rijen toe als nodig; lege rijen worden bij het opslaan weggelaten.' },
         ])
 
     case 'uren':

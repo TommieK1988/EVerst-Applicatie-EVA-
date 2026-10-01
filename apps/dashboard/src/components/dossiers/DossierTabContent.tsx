@@ -24,6 +24,9 @@ import { getQuotesVoorDossier } from '@/lib/everts-calc/services/quotes'
 import { OpdrachtWerkbegrotingTab } from '@/components/everts-calc/werkbegroting/OpdrachtWerkbegrotingTab'
 import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import HoutrotTab from './tabs/HoutrotTab'
+import WerkplanTab from './tabs/WerkplanTab'
+import { getWerkplan } from '@/lib/dossiers/werkplan'
+import { getBetrokkenen } from '@/lib/dossiers/betrokkenen'
 import OpnameTab from './tabs/OpnameTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
 import { InkoopTab } from './tabs/InkoopTab'
@@ -49,6 +52,7 @@ const TAB_LABELS: Record<string, string> = {
   planning:      'Planning',
   kam:           'KAM/VGM',
   houtrot:       'Houtrot',
+  werkplan:      'Werkplan',
   opname:        'Opname',
   inkoop:        'Inkoop',
   verkoop:       'Verkoop',
@@ -331,6 +335,18 @@ async function renderEnkeleTab(
     )
   }
 
+  // Werkplan: wat de uitvoering op dit werk moet weten. Alleen op een opdracht.
+  if (tab === 'werkplan' && sectie === 'opdracht') {
+    return (
+      <>
+        {titleInjector}
+        <Suspense fallback={<DossierTabSkeleton />}>
+          <WerkplanTabInhoud id={id} />
+        </Suspense>
+      </>
+    )
+  }
+
   if (tab === 'houtrot' && sectie === 'opdracht') {
     // Alleen bij een opdracht-dossier én wanneer de houtrot-toggle aanstaat; anders
     // valt de render door naar de generieke "niet beschikbaar"-weergave hieronder.
@@ -554,5 +570,19 @@ async function renderEnkeleTab(
         </div>
       </div>
     </div>
+  )
+}
+
+/** Werkplan en betrokkenen samen ophalen, achter de Suspense van de tab. */
+async function WerkplanTabInhoud({ id }: { id: string }) {
+  const [werkplan, betrokkenen] = await Promise.all([
+    getWerkplan(id),
+    getBetrokkenen(id).catch(() => []),
+  ])
+  return (
+    <WerkplanTab
+      dossierId={id} werkplan={werkplan} betrokkenen={betrokkenen}
+      informatieHref={`/${SECTIE_ROUTE.opdracht}/${id}/informatie`}
+    />
   )
 }

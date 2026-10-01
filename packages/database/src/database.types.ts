@@ -3313,6 +3313,71 @@ export type Database = {
         }
         Relationships: []
       }
+      dossier_werkplannen: {
+        Row: {
+          bijgewerkt_door: string | null
+          bijgewerkt_op: string
+          dossier_id: string
+          kleuren_materialen: Json
+          parkeren_anders: string | null
+          parkeren_keuze: string
+          parkeren_max_per_dag: number | null
+          reiskosten_keuze: string
+          reiskosten_km: number | null
+          reisuren_anders: string | null
+          reisuren_keuze: string
+          reisuren_uren: number | null
+          reisuren_vertrektijd: string | null
+          werkomschrijving: string
+          werktijden_anders: string | null
+          werktijden_keuze: string
+        }
+        Insert: {
+          bijgewerkt_door?: string | null
+          bijgewerkt_op?: string
+          dossier_id: string
+          kleuren_materialen?: Json
+          parkeren_anders?: string | null
+          parkeren_keuze?: string
+          parkeren_max_per_dag?: number | null
+          reiskosten_keuze?: string
+          reiskosten_km?: number | null
+          reisuren_anders?: string | null
+          reisuren_keuze?: string
+          reisuren_uren?: number | null
+          reisuren_vertrektijd?: string | null
+          werkomschrijving: string
+          werktijden_anders?: string | null
+          werktijden_keuze?: string
+        }
+        Update: {
+          bijgewerkt_door?: string | null
+          bijgewerkt_op?: string
+          dossier_id?: string
+          kleuren_materialen?: Json
+          parkeren_anders?: string | null
+          parkeren_keuze?: string
+          parkeren_max_per_dag?: number | null
+          reiskosten_keuze?: string
+          reiskosten_km?: number | null
+          reisuren_anders?: string | null
+          reisuren_keuze?: string
+          reisuren_uren?: number | null
+          reisuren_vertrektijd?: string | null
+          werkomschrijving?: string
+          werktijden_anders?: string | null
+          werktijden_keuze?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_werkplannen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: true
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossiermap_standaardbestanden: {
         Row: {
           aangemaakt_door: string | null
