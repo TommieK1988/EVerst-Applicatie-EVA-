@@ -118,7 +118,17 @@ export default function IntakeFormulier(p: IntakeFormulierProps) {
 
   return (
     <Card style={{ padding: 16 }}>
-      {/* ── 1. Opdrachtgever ── */}
+      {/* ── 1. Het dossier ──
+          Bovenaan, want dit bepaalt alles eronder: hoort de mail bij een bestaand
+          dossier, dan komen opdrachtgever, adres en categorie daarvandaan en hoef je
+          ze niet meer te beoordelen. Stond halverwege, waardoor je eerst velden zat
+          na te lopen die het dossier al had kunnen invullen.
+
+          Bij een aanvraag of een servicedeskbon is er nog geen dossier; dan blijft de
+          sectie leeg staan in plaats van te verdwijnen. */}
+      {p.dossier}
+
+      {/* ── 2. Opdrachtgever ── */}
       <FormSection title="Opdrachtgever">
         {p.opdrachtgever}
         <Rij>
@@ -145,10 +155,10 @@ export default function IntakeFormulier(p: IntakeFormulierProps) {
         </StatusVeld>
       </FormSection>
 
-      {/* ── 2. Werkadres ── */}
+      {/* ── 3. Werkadres ── */}
       {p.werkadres}
 
-      {/* ── 3. Het werk ── */}
+      {/* ── 4. Het werk ── */}
       <FormSection title="Het werk">
         {p.werkzaamheden}
 
@@ -188,11 +198,6 @@ export default function IntakeFormulier(p: IntakeFormulierProps) {
           <Leeswaarde waarde={gelezen.aardVanHetWerk} />
         </StatusVeld>
       </FormSection>
-
-      {/* ── 4. Het dossier ──
-          De kern van de vaste opmaak: hier stond vroeger óf niets, óf een compleet
-          ander formulier. Nu is het één sectie op een vaste plek. */}
-      {p.dossier}
 
       {/* ── 5. Rollen ── */}
       {p.rollen}

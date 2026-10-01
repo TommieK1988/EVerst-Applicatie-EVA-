@@ -37,6 +37,7 @@ import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { Voorvertoning, Afwijkingen } from './panelen/voorvertoning'
 import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
 import { useFase } from './panelen/fase-keuze'
+import { useKoppelen } from './formulier/gebruik-koppelen'
 import { useWerkmaatschappij } from './panelen/gebruik-werkmaatschappij'
 import { useWerkadres } from './panelen/gebruik-werkadres'
 import WerkadresBlok from './panelen/WerkadresBlok'
@@ -48,11 +49,10 @@ import { VELD_VAN_INVOER, type FormulierWaarden } from './formulier/IntakeFormul
 import RollenSectie, { type Rolbezetting, type RolSleutel } from './formulier/RollenSectie'
 import TermijnenSectie from './formulier/TermijnenSectie'
 import MeerwerkSectie from './formulier/MeerwerkSectie'
-import { waarnemingenUit } from './formulier/velden-uit-scherm'
-import { eisenVoor, type VeldSleutel } from '@/lib/mailintake/veld-eisen'
-import {
-  beoordeelAlleVelden, magAfhandelen, ontbrekendeVelden,
-} from '@/lib/mailintake/veld-status'
+import type { VeldSleutel } from '@/lib/mailintake/veld-eisen'
+import { useOordelen } from './formulier/gebruik-oordelen'
+import { useDossierOvername } from './formulier/gebruik-dossier-overname'
+import { magAfhandelen, ontbrekendeVelden } from '@/lib/mailintake/veld-status'
 
 type Detail = {
   bericht: any
@@ -296,6 +296,33 @@ export default function BerichtBehandelen({
     return mw[0].score >= 0.4 && mw[0].score - tweede >= 0.2 ? mw[0].dossierId : null
   })
   const [gekozenOfferte, setGekozenOfferte] = useState<string | null>(null)
+
+  /**
+   * De gegevens van het gekozen dossier; zie `gebruik-dossier-overname.ts`.
+   *
+   * Vult de velden die het dossier al weet. Het dossier blijft leidend: bevestigen
+   * schrijft die waarden niet terug, en een afwijking met de mail kleurt oranje.
+   */
+  const gekozenDossier = gekozenMeerwerk ?? gekozenOfferte
+  const uitDossier = useDossierOvername(gekozenDossier, {
+    zetKlant: (id, naam) => { setKlantId(id); setKlantNaam(naam) },
+    zetContactpersoon: setContactpersoonId,
+    zetCategorie: setCategorieId,
+    zetWerkmaatschappij: setWerkmaatschappijId,
+    zetObject: setObjectId,
+    zetAdres: v => {
+      if (v.straat) adres.setStraat(v.straat)
+      if (v.huisnummer) adres.setHuisnummer(v.huisnummer)
+      if (v.postcode) adres.setPostcode(v.postcode)
+      if (v.stad) adres.setStad(v.stad)
+    },
+    zetOmschrijving: setOmschrijving,
+    zetVveCode: setVveCode,
+    zetReferentie: setReferentie,
+    zetDeadline: setDeadline,
+    zetRollen: bij => setRollen(r => ({ ...bij, ...r })),
+    huidig: { omschrijving, vveCode, referentie, deadline },
+  })
   const [offerteOpen, setOfferteOpen] = useState(false)
   const kiesOfferte = (dossierId: string) => {
     setGekozenOfferte(dossierId)
@@ -335,51 +362,45 @@ export default function BerichtBehandelen({
     factuuradres: factuuradresVoorstel,
   }
 
-  /**
-   * Het oordeel per veld: wat is ingevuld, waar moet je naar kijken, wat mist er.
-   *
-   * De regels staan in `veld-eisen.ts` en `veld-status.ts`, niet hier. Dat is het
-   * punt: de voorwaarde voor de knop en de uitleg eronder komen uit dezelfde bron.
-   * Eerder stond de voorwaarde in een losse `compleet`-expressie en de uitleg in een
-   * met de hand getypte zin, en die konden uit elkaar lopen.
-   */
-  const oordelen = useMemo(() => beoordeelAlleVelden(
-    waarnemingenUit({
-      klantId, contactpersoonId,
-      contactpersoonEmail: velden.contactpersoon_email ?? null,
-      contactpersoonTelefoon: velden.contactpersoon_telefoon ?? null,
-      omschrijving, categorieId, werkmaatschappijId, werkmaatschappijVia: wmVia,
-      aardVanHetWerk: (velden.aard_van_het_werk as string | null) ?? null,
-      straat, huisnummer, postcode, stad, adresBevestigd,
-      werkadresContactNaam: adres.contact.naam,
-      werkadresContactTelefoon: adres.contact.telefoon,
-      werkadresContactEmail: adres.contact.email,
-      referentie,
-      onzeOfferteReferentie: velden.onze_offerte_referentie ?? null,
-      opdrachtReferentie, vveCode,
-      aanvraagdatum: velden.aanvraagdatum ?? null,
-      opdrachtdatum, deadline,
-      gewensteStart: velden.gewenste_start ?? null,
-      bedragExclBtw: velden.bedrag_excl_btw ?? null,
-      mandaat, regie,
-      factuuradresNaam: velden.factuuradres_naam ?? null,
-      factuuradresStraat: velden.factuuradres_straat ?? null,
-      factuuradresPostcode: velden.factuuradres_postcode ?? null,
-      factuuradresPlaats: velden.factuuradres_plaats ?? null,
-      opmerkingen, klantOpmerkingen,
-      betrokkenen: (gekeurd?.betrokkenen ?? []) as unknown[],
-      offerteDossierId: gekozenOfferte,
-      meerwerkDossierId: gekozenMeerwerk,
-      aangeraakt, zekerheid,
-    }),
-    eisenVoor(route, b.soort as MailSoort | null),
-  ), [
-    klantId, contactpersoonId, omschrijving, categorieId, werkmaatschappijId, wmVia,
-    straat, huisnummer, postcode, stad, adresBevestigd, adres.contact,
-    referentie, opdrachtReferentie, vveCode, opdrachtdatum, deadline, mandaat, regie,
-    opmerkingen, klantOpmerkingen, gekozenOfferte, gekozenMeerwerk, aangeraakt, zekerheid, velden, gekeurd,
-    route, b.soort,
-  ])
+  const oordelen = useOordelen(route, b.soort as MailSoort | null, {
+    klantId, contactpersoonId,
+    contactpersoonEmail: velden.contactpersoon_email ?? null,
+    contactpersoonTelefoon: velden.contactpersoon_telefoon ?? null,
+    omschrijving, categorieId, werkmaatschappijId, werkmaatschappijVia: wmVia,
+    aardVanHetWerk: (velden.aard_van_het_werk as string | null) ?? null,
+    straat, huisnummer, postcode, stad, adresBevestigd,
+    werkadresContactNaam: adres.contact.naam,
+    werkadresContactTelefoon: adres.contact.telefoon,
+    werkadresContactEmail: adres.contact.email,
+    referentie,
+    onzeOfferteReferentie: velden.onze_offerte_referentie ?? null,
+    opdrachtReferentie, vveCode,
+    aanvraagdatum: velden.aanvraagdatum ?? null,
+    opdrachtdatum, deadline,
+    gewensteStart: velden.gewenste_start ?? null,
+    bedragExclBtw: velden.bedrag_excl_btw ?? null,
+    mandaat, regie,
+    factuuradresNaam: velden.factuuradres_naam ?? null,
+    factuuradresStraat: velden.factuuradres_straat ?? null,
+    factuuradresPostcode: velden.factuuradres_postcode ?? null,
+    factuuradresPlaats: velden.factuuradres_plaats ?? null,
+    opmerkingen, klantOpmerkingen,
+    betrokkenen: (gekeurd?.betrokkenen ?? []) as unknown[],
+    offerteDossierId: gekozenOfferte,
+    meerwerkDossierId: gekozenMeerwerk,
+    aangeraakt, zekerheid,
+    // Wat er op het gekozen dossier staat; wijkt de mail af, dan wordt dat veld
+    // oranje met beide waarden in de hovertekst.
+    dossier: uitDossier ? {
+      klant_naam: uitDossier.klantNaam,
+      werkadres_straat: uitDossier.werkadresStraat,
+      werkadres_huisnummer: uitDossier.werkadresHuisnummer,
+      werkadres_postcode: uitDossier.werkadresPostcode,
+      werkadres_stad: uitDossier.werkadresStad,
+      categorie_voorstel: uitDossier.categorieNaam,
+      vve_code: uitDossier.vveCode,
+    } : null,
+  })
 
   const compleet = magAfhandelen(oordelen)
   const ontbreekt = ontbrekendeVelden(oordelen)
@@ -497,36 +518,7 @@ export default function BerichtBehandelen({
     }
   }
 
-  async function koppelen(dossierId: string, soort: 'gekoppeld_bestaand' | 'meerwerk' | 'offerte_gewonnen', label: string) {
-    // Bij meerwerk verandert er iets op het dossier zelf; dat hoort in de
-    // bevestiging te staan en niet pas in de toast achteraf.
-    const ok = await bevestig({
-      titel: label,
-      omschrijving: soort === 'meerwerk' ? (
-        <span className="block">
-          <span className="block">
-            Het bericht wordt aan dit dossier gekoppeld en verdwijnt uit je postvak.
-          </span>
-          <span className="mt-2 block">
-            Staat er precies één meerwerkregel open, dan zet EVA die op akkoord — met een
-            bewakingscode naar Bouw7. Staat er geen of staan er meerdere, dan krijgt de
-            projectleider een actie; EVA maakt zelf nooit een meerwerkregel aan.
-          </span>
-        </span>
-      ) : 'Het bericht wordt aan dit dossier gekoppeld en verdwijnt uit je postvak.',
-      bevestigLabel: 'Koppelen',
-    })
-    if (!ok) return
-    setBezig(true)
-    try {
-      const res = await koppelBerichtAanDossier(b.id, dossierId, soort)
-      if (!res.ok) { toast.error(res.error ?? 'Koppelen mislukt'); return }
-      toast.success(res.melding ?? 'Gekoppeld')
-      router.push('/mailintake')
-    } finally {
-      setBezig(false)
-    }
-  }
+  const koppelen = useKoppelen(b.id, setBezig)
 
   // ── Weergave ───────────────────────────────────────────────────────────────
 
@@ -542,6 +534,7 @@ export default function BerichtBehandelen({
     const res = await getBijlageUrl(id)
     return res.ok && res.url ? res.url : null
   }
+
 
   // De zekerheid over het geheel: het gemiddelde van de velden die het dossier
   // dragen. Die drie bepalen of een aanvraag bruikbaar is; een perfect gelezen
