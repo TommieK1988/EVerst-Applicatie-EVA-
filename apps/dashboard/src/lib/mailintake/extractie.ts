@@ -492,6 +492,18 @@ export async function keurEnKalibreer(
   let cat = lijsten.categorieen.find(c => c.naam.toLowerCase() === catNaam)
     ?? lijsten.categorieen.find(c => catNaam.length >= 4 && c.naam.toLowerCase().includes(catNaam))
 
+  // ── Mandaat ───────────────────────────────────────────────────────────────
+  // Staat hier en niet bij de andere bedragen, omdat regie eronder ervan afhangt.
+  //
+  // Een los bedrag in een servicedeskbon is veel vaker de prijsindicatie dan het
+  // mandaat. Alleen overnemen als de stukken er ook een mandaatwoord bij zetten.
+  const mandaatGenoemd = noemtMandaat(brontekst)
+  const mandaat =
+    data.mandaat_bedrag != null && data.mandaat_bedrag >= 0 &&
+    data.mandaat_bedrag < 10_000_000 && mandaatGenoemd
+      ? data.mandaat_bedrag
+      : null
+
   // Regie alleen overnemen als het model kan aanwijzen wáár het staat, of als de
   // brontekst een van de bekende termen noemt. De onderbouwing weegt zwaarder dan de
   // woordenlijst: de eerste echte opdrachtbon zei "dit is op basis van uur werk en
@@ -511,7 +523,22 @@ export async function keurEnKalibreer(
     && (data.regie_aanwijzing ?? '').trim().length >= 12
     && (opties.bijlagenGelezen ?? 0) > 0
 
-  const regie = Boolean(data.regie) && (regieUitTekst || regieUitBijlage)
+  const regieUitStukken = Boolean(data.regie) && (regieUitTekst || regieUitBijlage)
+
+  /**
+   * Een mandaat betekent altijd regie.
+   *
+   * Een mandaat is een plafond: tot dit bedrag mogen we werken. Dat is precies de
+   * vorm van nacalculatie -- er is geen aanneemsom afgesproken, er wordt op uren en
+   * materiaal afgerekend tot het plafond. Wie een mandaat afgeeft, spreekt dus geen
+   * vaste prijs af.
+   *
+   * Het model leidde dat niet af, en de woordenlijst evenmin: van de 31
+   * servicedeskbonnen in productie hadden er negen een mandaat en géén daarvan stond
+   * op regie. Die gingen dus allemaal als aangenomen werk de deur uit, met een
+   * aanneemsom naar Bouw7 die nooit is afgesproken.
+   */
+  const regie = regieUitStukken || mandaat != null
 
   // Op de servicedesk-postbus is de categorie geen vrije keuze. Een servicedeskdossier
   // wordt herkend aan exact 'Dagelijks onderhoud' of 'Mutatie'; kiest het model iets
@@ -524,10 +551,19 @@ export async function keurEnKalibreer(
         ?? toegestaan[0]
     }
   }
-  // Regiewerk is geen servicedeskwerk. Kiest het model toch 'Dagelijks onderhoud' of
-  // 'Mutatie' bij een regie-opdracht, dan zou het dossier op het servicedeskbord
-  // belanden terwijl het daar niet hoort.
-  if (regie && cat && SERVICEDESK_CATEGORIEEN.includes(cat.naam)) {
+  // Regiewerk is geen servicedeskwerk -- behálve op de servicedeskpostbus zelf.
+  //
+  // Deze regel is er voor een regie-opdracht die per ongeluk 'Dagelijks onderhoud' of
+  // 'Mutatie' krijgt toegewezen: die zou op het servicedeskbord belanden terwijl hij
+  // daar niet hoort. Op de servicedeskpostbus is het omgekeerde waar. Daar is de
+  // categorie hierboven bewust naar een servicedeskcategorie gedwongen, en een bon
+  // mét mandaat is daar de normale gang van zaken -- negen van de eenendertig.
+  //
+  // De twee gegevens zeggen ook iets anders: de categorie zegt wat voor werk het is
+  // en bepaalt het bord, regie zegt hoe het wordt afgerekend. Die laten meebewegen
+  // met elkaar zou elke servicedeskbon met een mandaat van het bord halen, en dat
+  // merkt niemand tot de bon kwijt is.
+  if (regie && !opties.isServicedesk && cat && SERVICEDESK_CATEGORIEEN.includes(cat.naam)) {
     cat = lijsten.categorieen.find(c => c.naam === 'Bouwkundig Onderhoud')
       ?? lijsten.categorieen.find(c => !SERVICEDESK_CATEGORIEEN.includes(c.naam))
   }
@@ -596,16 +632,12 @@ export async function keurEnKalibreer(
       ? Math.max(modelScore('opdracht_referentie'), 0.85)
       : Math.min(modelScore('opdracht_referentie'), 0.4))
 
-  // Een los bedrag in een servicedeskbon is veel vaker de prijsindicatie dan het
-  // mandaat. Alleen overnemen als de stukken er ook een mandaatwoord bij zetten.
-  const mandaatGenoemd = noemtMandaat(brontekst)
-  const mandaat =
-    data.mandaat_bedrag != null && data.mandaat_bedrag >= 0 &&
-    data.mandaat_bedrag < 10_000_000 && mandaatGenoemd
-      ? data.mandaat_bedrag
-      : null
+  // Het mandaat zelf is hierboven bepaald, omdat regie ervan afhangt.
   zet('mandaat_bedrag', mandaat, mandaat != null ? modelScore('mandaat_bedrag') : 0)
-  zet('regie', regie || null, regie ? (regieUitTekst ? 1 : 0.6) : 0)
+  // Komt regie uit een mandaat, dan is het een regel en geen gok: score 1. Alleen de
+  // lezing uit een bijlage blijft onzeker, want die tekst kunnen wij niet nalezen.
+  zet('regie', regie || null,
+    regie ? (mandaat != null || regieUitTekst ? 1 : 0.6) : 0)
   zet('factuuradres_straat', data.factuuradres_straat,
     komtLetterlijkVoor(data.factuuradres_straat, brontekst) ? 1 : 0.4)
 
@@ -711,7 +743,13 @@ export async function keurEnKalibreer(
     opdrachtReferentie,
     mandaatBedrag: mandaat,
     regie,
-    regieAanwijzing: regie ? data.regie_aanwijzing : null,
+    // Waarom dit regie is, in de woorden van de bron. Komt het uit het mandaat, dan
+    // staat er geen citaat in de mail en noemen we de regel zelf -- anders staat er
+    // op het scherm "EVA vond hier geen aanwijzing voor" bij een vinkje dat EVA net
+    // zelf heeft aangezet.
+    regieAanwijzing: !regie ? null
+      : regieUitStukken ? data.regie_aanwijzing
+      : 'Er is een mandaat afgegeven; dat wordt altijd op nacalculatie afgerekend.',
     // EEN NAAM ZONDER ADRES IS GEEN LEEG FACTUURADRES
     // Dit stond op "alleen aanbieden als er een adres in staat", en dat gooide
     // juist het belangrijkste weg. Opdrachtgevers schrijven zelden een volledig

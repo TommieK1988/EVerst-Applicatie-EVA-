@@ -93,11 +93,16 @@ describe('eisenVoor: de gekozen fase stuurt de velden', () => {
       .toBe('nvt')
   })
 
-  it('vraagt een mandaat bij de servicedesk en niet bij een opdracht', () => {
+  it('zet het mandaat uit bij een aanvraag en laat het staan bij een opdracht', () => {
+    // Er is niets gegund, dus ook geen plafond om binnen te werken.
+    expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'aanvraag').mandaat_bedrag)
+      .toBe('nvt')
+    // Bij een opdracht wél: een mandaat betekent altijd regie, en dan is dit het
+    // veld dat de afrekenwijze verklaart. Gedimd zou het juist verbergen.
+    expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'opdracht').mandaat_bedrag)
+      .toBe('gewenst')
     expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'servicedesk').mandaat_bedrag)
       .toBe('gewenst')
-    expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'opdracht').mandaat_bedrag)
-      .toBe('nvt')
   })
 
   it('laat de route winnen van de fase', () => {

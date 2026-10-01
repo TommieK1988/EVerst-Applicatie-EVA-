@@ -46,6 +46,18 @@ export interface IntakeActieInvoer {
    * `task_lists.dossier_id`, niet via `tasks.dossier_id`. Dat regelt deze functie.
    */
   rollen?: string[]
+  /**
+   * Dit is de actie die vraagt om het bericht te beoordelen -- geen werk op een
+   * dossier. Hij gaat automatisch op gereed zodra het bericht is afgehandeld; de
+   * DB-trigger `tg_mailintake_sluit_beoordeeltaak` doet dat, en die zit in de
+   * database omdat een bericht op vijf plekken wordt afgerond.
+   *
+   * Bewust een eigen vlag en niet "deze actie heeft geen dossier". Dat zou vandaag
+   * hetzelfde uitpakken, maar een trigger die stil acties sluit mag niet gokken
+   * welke: de eerste actie op een nieuw dossier, de nacontrole en de meerwerkvragen
+   * hangen aan hetzelfde bericht en moeten juist blijven staan.
+   */
+  beoordeeltaak?: boolean
 }
 
 export interface IntakeActieResultaat {
@@ -165,6 +177,7 @@ export async function maakIntakeActie(inv: IntakeActieInvoer): Promise<IntakeAct
         dossier_id: inv.dossierId ?? null,
         lijst_id: lijstId,
         mailintake_bericht_id: inv.berichtId,
+        mailintake_beoordeeltaak: inv.beoordeeltaak === true,
         status: 'open',
         prioriteit: inv.prioriteit ?? 'normaal',
         deadline: deadline.toISOString().slice(0, 10),

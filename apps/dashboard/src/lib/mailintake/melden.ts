@@ -138,6 +138,10 @@ export async function voorleggen(
     titel: `Beoordeel ${watHetIs} van ${afzender}`.slice(0, 200),
     toelichting: regels.join('\n'),
     dagen: 2,
+    // Deze actie bestaat zolang het bericht op iemand wacht. Is het afgehandeld --
+    // ingeschreven, gekoppeld, genegeerd of als geen aanvraag weggezet -- dan is hij
+    // klaar en sluit de database hem; zie `tg_mailintake_sluit_beoordeeltaak`.
+    beoordeeltaak: true,
   })
 
   // Een behandelaar zonder EVA-account krijgt de actie niet te zien. Dat mag niet

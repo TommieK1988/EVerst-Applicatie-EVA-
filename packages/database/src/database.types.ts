@@ -15944,6 +15944,7 @@ export type Database = {
           id: string
           kwaliteit_ronde: boolean
           lijst_id: string | null
+          mailintake_beoordeeltaak: boolean
           mailintake_bericht_id: string | null
           max_doorlooptijd_dagen: number | null
           medewerker_id: string | null
@@ -15980,6 +15981,7 @@ export type Database = {
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
+          mailintake_beoordeeltaak?: boolean
           mailintake_bericht_id?: string | null
           max_doorlooptijd_dagen?: number | null
           medewerker_id?: string | null
@@ -16016,6 +16018,7 @@ export type Database = {
           id?: string
           kwaliteit_ronde?: boolean
           lijst_id?: string | null
+          mailintake_beoordeeltaak?: boolean
           mailintake_bericht_id?: string | null
           max_doorlooptijd_dagen?: number | null
           medewerker_id?: string | null

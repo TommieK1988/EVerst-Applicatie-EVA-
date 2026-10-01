@@ -187,7 +187,10 @@ const PER_FASE: Record<DossierFase, Partial<Record<VeldSleutel, Relevantie>>> = 
     opdrachtdatum: 'gewenst',
     bedrag_excl_btw: 'gewenst',
     termijnschema: 'gewenst',
-    mandaat_bedrag: 'nvt',
+    // Mandaat staat hier bewust niet op 'nvt'. Een mandaat betekent altijd regie, en
+    // dat kan ook bij een gewone opdracht: dan is er geen aanneemsom maar een plafond
+    // waarbinnen we werken. Gedimd zou dat juist het veld verbergen dat de
+    // afrekenwijze verklaart.
   },
   servicedesk: {
     // Een bon loopt op mandaat en wordt nagecalculeerd: geen aanneemsom, dus ook
