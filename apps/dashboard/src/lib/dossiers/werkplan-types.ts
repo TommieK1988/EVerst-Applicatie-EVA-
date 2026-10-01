@@ -182,3 +182,13 @@ export function werkafsprakenAlsZinnen(w: WerkplanGegevens): { titel: string; zi
     },
   ]
 }
+
+/**
+ * De "overige" betrokkenen voor het werkplan: zonder de contactpersoon van de opdrachtgever, die
+ * staat al op het dossier zelf. Komt dezelfde persoon ook via het factuuradres of handmatig binnen,
+ * dan heeft getBetrokkenen hem al samengevoegd tot één regel met herkomst 'opdrachtgever' — die
+ * valt dus ook weg.
+ */
+export function overigeBetrokkenen<T extends { herkomst: string }>(betrokkenen: T[]): T[] {
+  return betrokkenen.filter(b => b.herkomst !== 'opdrachtgever')
+}

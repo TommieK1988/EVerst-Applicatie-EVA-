@@ -26,6 +26,7 @@ import DossierPlanningTab from '@/components/planning/DossierPlanningTab'
 import HoutrotTab from './tabs/HoutrotTab'
 import WerkplanTab from './tabs/WerkplanTab'
 import { getWerkplan } from '@/lib/dossiers/werkplan'
+import { overigeBetrokkenen } from '@/lib/dossiers/werkplan-types'
 import { getBetrokkenen } from '@/lib/dossiers/betrokkenen'
 import OpnameTab from './tabs/OpnameTab'
 import { FinancieelTab } from './tabs/FinancieelTab'
@@ -577,7 +578,7 @@ async function renderEnkeleTab(
 async function WerkplanTabInhoud({ id }: { id: string }) {
   const [werkplan, betrokkenen] = await Promise.all([
     getWerkplan(id),
-    getBetrokkenen(id).catch(() => []),
+    getBetrokkenen(id).then(overigeBetrokkenen).catch(() => []),
   ])
   return (
     <WerkplanTab

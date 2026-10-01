@@ -14,7 +14,7 @@ export default function WerkplanBetrokkenen({ betrokkenen, informatieHref }: {
   return (
     <div className="flex flex-col gap-3">
       {betrokkenen.length === 0 ? (
-        <p className="text-[13px] text-neutral-500">Er staan nog geen betrokkenen bij dit dossier.</p>
+        <p className="text-[13px] text-neutral-500">Geen overige betrokkenen bij dit dossier.</p>
       ) : (
         <ul className="divide-y divide-neutral-200 rounded-md border border-neutral-200">
           {betrokkenen.map(b => (

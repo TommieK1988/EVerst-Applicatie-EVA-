@@ -1,5 +1,6 @@
 import { getWerkplan } from '@/lib/dossiers/werkplan'
 import { getBetrokkenen } from '@/lib/dossiers/betrokkenen'
+import { overigeBetrokkenen } from '@/lib/dossiers/werkplan-types'
 import WerkplanWeergave from './WerkplanWeergave'
 
 /**
@@ -9,7 +10,7 @@ import WerkplanWeergave from './WerkplanWeergave'
 export default async function WerkplanView({ dossierId }: { dossierId: string }) {
   const [werkplan, betrokkenen] = await Promise.all([
     getWerkplan(dossierId).catch(() => null),
-    getBetrokkenen(dossierId).catch(() => []),
+    getBetrokkenen(dossierId).then(overigeBetrokkenen).catch(() => []),
   ])
   return <WerkplanWeergave werkplan={werkplan} betrokkenen={betrokkenen} />
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LEEG_WERKPLAN, WERKOMSCHRIJVING_SJABLOON, heeftInhoud, werkafsprakenAlsZinnen, werkplanSchema,
+  LEEG_WERKPLAN, WERKOMSCHRIJVING_SJABLOON, heeftInhoud, overigeBetrokkenen, werkafsprakenAlsZinnen, werkplanSchema,
   type WerkplanInvoer,
 } from './werkplan-types'
 
@@ -48,5 +48,16 @@ describe('werkafsprakenAlsZinnen', () => {
     const w = werkplanSchema.parse({ ...geldig, reiskosten_keuze: 'vergoeding', reiskosten_km: 42 })
     const reiskosten = werkafsprakenAlsZinnen(w).find(z => z.titel === 'Reiskosten')
     expect(reiskosten?.zin).toContain('De rijafstand is 42 km')
+  })
+})
+
+describe('overigeBetrokkenen', () => {
+  it('laat de contactpersoon van de opdrachtgever weg', () => {
+    const lijst = [
+      { herkomst: 'opdrachtgever', naam: 'A' },
+      { herkomst: 'factuuradres', naam: 'B' },
+      { herkomst: 'handmatig', naam: 'C' },
+    ]
+    expect(overigeBetrokkenen(lijst).map(b => b.naam)).toEqual(['B', 'C'])
   })
 })
