@@ -19,6 +19,8 @@
  * synchroon kunnen lezen.
  */
 
+import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
+
 import type { IntakeRoute, MailSoort } from './types'
 
 /**
@@ -40,7 +42,7 @@ export type VeldSleutel =
   | 'omschrijving' | 'categorie_voorstel' | 'werkmaatschappij_voorstel' | 'aard_van_het_werk'
   | 'referentie' | 'onze_offerte_referentie' | 'opdracht_referentie' | 'vve_code'
   | 'aanvraagdatum' | 'opdrachtdatum' | 'deadline' | 'gewenste_start'
-  | 'bedrag_excl_btw' | 'mandaat_bedrag' | 'regie'
+  | 'bedrag_excl_btw' | 'mandaat_bedrag' | 'regie' | 'termijnschema'
   | 'factuuradres_naam' | 'factuuradres_straat' | 'factuuradres_postcode' | 'factuuradres_plaats'
   | 'opmerkingen' | 'klant_opmerkingen' | 'betrokkenen'
   | 'offerte_dossier' | 'meerwerk_dossier'
@@ -94,6 +96,9 @@ const PER_ROUTE: Record<IntakeRoute, Partial<Record<VeldSleutel, Relevantie>>> =
     klant_naam: 'gewenst',
     offerte_dossier: 'nvt',
     meerwerk_dossier: 'gewenst',
+    // Meerwerk gaat op een opdracht die al loopt; de termijnstaat daarvan staat er
+    // al en wordt hier niet opnieuw opgezet.
+    termijnschema: 'nvt',
     omschrijving: 'nvt',
     categorie_voorstel: 'nvt',
     werkmaatschappij_voorstel: 'nvt',
@@ -151,6 +156,50 @@ const PER_SOORT: Partial<Record<MailSoort, Partial<Record<VeldSleutel, Relevanti
   },
 }
 
+/**
+ * Per gekozen fase. Dit is de enige laag waar een mens aan het woord is.
+ *
+ * WAAROM DE FASE MEETELT
+ * De fase is de keuze die de behandelaar links maakt: komt dit als aanvraag, als
+ * opdracht of als servicedeskbon binnen. Die keuze bepaalt wat er daarna met het
+ * dossier gebeurt, en dus ook welke velden ervoor nodig zijn -- bij een aanvraag
+ * valt er niets over termijnen te zeggen, want er is nog geen aanneemsom. Toch
+ * stonden de eisen alleen op de route en de mailsoort: klikte je van Aanvraag naar
+ * Opdracht, dan bleven de opdrachtvelden gedimd staan en kwamen de termijnen niet
+ * in beeld. Het scherm volgde je keuze niet.
+ *
+ * Alleen de velden die werkelijk van de fase afhangen staan hier. Een werkadres is
+ * in alle drie de fases even nodig; dat hoort dus bij de route.
+ */
+const PER_FASE: Record<DossierFase, Partial<Record<VeldSleutel, Relevantie>>> = {
+  aanvraag: {
+    // Er is nog niets gegund: geen opdrachtnummer, geen opdrachtdatum, geen
+    // aanneemsom om termijnen over te verdelen en geen mandaat om binnen te werken.
+    opdracht_referentie: 'nvt',
+    opdrachtdatum: 'nvt',
+    mandaat_bedrag: 'nvt',
+    termijnschema: 'nvt',
+  },
+  opdracht: {
+    // Het werk is gegund. Het opdrachtnummer moet op de factuur terugkomen, het
+    // bedrag is de aanneemsom, en de termijnen worden daarover verdeeld.
+    opdracht_referentie: 'gewenst',
+    opdrachtdatum: 'gewenst',
+    bedrag_excl_btw: 'gewenst',
+    termijnschema: 'gewenst',
+    mandaat_bedrag: 'nvt',
+  },
+  servicedesk: {
+    // Een bon loopt op mandaat en wordt nagecalculeerd: geen aanneemsom, dus ook
+    // geen termijnstaat.
+    mandaat_bedrag: 'gewenst',
+    termijnschema: 'nvt',
+  },
+}
+
+/** Van los naar streng; nodig om te zien of de fase iets zwaarder maakt of lichter. */
+const RANG: Record<Relevantie, number> = { nvt: 0, gewenst: 1, verplicht: 2 }
+
 /** Alle sleutels, in de volgorde van het type hierboven. */
 export const ALLE_VELDEN: VeldSleutel[] = [
   'klant_naam', 'contactpersoon_naam', 'contactpersoon_email', 'contactpersoon_telefoon',
@@ -159,7 +208,7 @@ export const ALLE_VELDEN: VeldSleutel[] = [
   'omschrijving', 'categorie_voorstel', 'werkmaatschappij_voorstel', 'aard_van_het_werk',
   'referentie', 'onze_offerte_referentie', 'opdracht_referentie', 'vve_code',
   'aanvraagdatum', 'opdrachtdatum', 'deadline', 'gewenste_start',
-  'bedrag_excl_btw', 'mandaat_bedrag', 'regie',
+  'bedrag_excl_btw', 'mandaat_bedrag', 'regie', 'termijnschema',
   'factuuradres_naam', 'factuuradres_straat', 'factuuradres_postcode', 'factuuradres_plaats',
   'opmerkingen', 'klant_opmerkingen', 'betrokkenen',
   'offerte_dossier', 'meerwerk_dossier',
@@ -168,24 +217,38 @@ export const ALLE_VELDEN: VeldSleutel[] = [
 /**
  * Wat elk veld betekent voor deze afhandeling.
  *
- * Volgorde: standaard, dan de route, dan de soort eroverheen. De soort is het
- * fijnst en wint dus -- behalve wanneer de route iets `nvt` maakt omdat het dossier
- * het al draagt. Dat is geen smaakkwestie: bij een opdracht op een offerte is een
- * leeg werkadresveld op het scherm niet hetzelfde als een ontbrekend werkadres.
+ * Volgorde: standaard, dan de route, dan de soort eroverheen, dan de fase.
+ *
+ * De route mag een veld buiten beeld zetten en niemand haalt het terug: bij een
+ * opdracht op een offerte is een leeg werkadresveld op het scherm niet hetzelfde
+ * als een ontbrekend werkadres -- het staat al op het dossier.
+ *
+ * De fase komt daarna, want dat is de enige laag waar een mens iets zegt en geen
+ * model iets afleidt. Met één uitzondering: hij maakt een veld nooit mínder
+ * belangrijk dan de soort het al maakte. "Opdracht" zet de opdrachtvelden aan;
+ * of een opdrachtnummer daarbij verplicht is of alleen gewenst weet de soort beter.
+ * Omgekeerd mag de fase een veld wél helemaal uitzetten -- wie zegt dat dit tóch
+ * een aanvraag is, zegt daarmee dat er geen opdrachtnummer te verwachten valt.
  */
 export function eisenVoor(
   route: IntakeRoute,
   soort: MailSoort | null,
+  fase?: DossierFase | null,
 ): Record<VeldSleutel, Relevantie> {
   const uit = {} as Record<VeldSleutel, Relevantie>
   const route_ = PER_ROUTE[route] ?? {}
   const soort_ = soort ? PER_SOORT[soort] ?? {} : {}
+  const fase_ = fase ? PER_FASE[fase] ?? {} : {}
 
   for (const veld of ALLE_VELDEN) {
     const viaRoute = route_[veld]
-    const viaSoort = soort_[veld]
-    // De route mag een veld buiten beeld zetten; de soort haalt het er niet terug in.
-    uit[veld] = viaRoute === 'nvt' ? 'nvt' : viaSoort ?? viaRoute ?? STANDAARD
+    if (viaRoute === 'nvt') { uit[veld] = 'nvt'; continue }
+
+    const zonderFase = soort_[veld] ?? viaRoute ?? STANDAARD
+    const viaFase = fase_[veld]
+    uit[veld] = viaFase != null && (viaFase === 'nvt' || RANG[viaFase] > RANG[zonderFase])
+      ? viaFase
+      : zonderFase
   }
   return uit
 }

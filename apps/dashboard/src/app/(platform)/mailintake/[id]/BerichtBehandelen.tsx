@@ -27,7 +27,7 @@ import {
 } from '@/lib/mailintake/types'
 import { VELD_LABELS } from '@/lib/mailintake/schema'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
-import { FASE_PLAATSINGEN } from '@/components/dossiers/fase-plaatsing'
+import { FASE_PLAATSINGEN, type DossierFase } from '@/components/dossiers/fase-plaatsing'
 import MailPaneel from './panelen/MailPaneel'
 import AfgehandeldBalk from './panelen/AfgehandeldBalk'
 import AndereWeg from './panelen/AndereWeg'
@@ -254,7 +254,6 @@ export default function BerichtBehandelen({
   const offerteKandidaten = detail.duplicaten.filter(d => d.soort === 'offerte_match')
   const isRegie = gekeurd ? Boolean(gekeurd.regie) : Boolean(velden.regie)
   const route = bepaalRoute(b.soort, offerteKandidaten.length > 0, isRegie)
-  const isServicedesk = b.soort === 'servicedeskbon'
 
   const gekozenCategorieNaam = categorieen.find(c => c.id === categorieId)?.name ?? null
 
@@ -362,7 +361,14 @@ export default function BerichtBehandelen({
     factuuradres: factuuradresVoorstel,
   }
 
-  const oordelen = useOordelen(route, b.soort as MailSoort | null, {
+  // De fase waar de velden zich naar richten. De fasekiezer staat uit op de
+  // opdrachtroute -- daar bepaalt het gekozen dossier zelf waar het staat -- maar een
+  // gewonnen offerte ís een opdracht, met een opdrachtnummer en een termijnstaat.
+  // Zonder deze gelijkstelling bleven juist daar de opdrachtvelden gedimd staan.
+  const effectieveFase: DossierFase =
+    route === 'offerte_winnen' && !forceerNieuw ? 'opdracht' : fase
+
+  const oordelen = useOordelen(route, b.soort as MailSoort | null, effectieveFase, {
     klantId, contactpersoonId,
     contactpersoonEmail: velden.contactpersoon_email ?? null,
     contactpersoonTelefoon: velden.contactpersoon_telefoon ?? null,
@@ -671,7 +677,11 @@ export default function BerichtBehandelen({
           // twee schermen uit elkaar gingen lopen.
           verwijsFactuurkeuze={route === 'offerte_winnen' && !forceerNieuw}
           offerteDossierId={gekozenOfferte}
-          termijnenActief={route === 'offerte_winnen' && !forceerNieuw}
+          // De termijnen volgen de fasekeuze, niet de route: klik je van Aanvraag naar
+          // Opdracht, dan hoort meteen in beeld te staan wat er met de termijnstaat
+          // gebeurt. Dezelfde tabel beslist dat als de kleur van elk veld.
+          termijnenActief={oordelen.termijnschema.status !== 'gedimd'}
+          termijnenViaOfferte={route === 'offerte_winnen' && !forceerNieuw}
           dossierSectie={
             // Meerwerk hoort bij een lopende opdracht, niet bij een nieuw dossier.
             // Dit blok stond er niet: de sectie zei dat EVA er een dossier van zou

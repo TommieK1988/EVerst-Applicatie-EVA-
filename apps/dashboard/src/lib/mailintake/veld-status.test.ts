@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { faseVoorstelVoor } from '@/components/dossiers/fase-plaatsing'
 import { eisenVoor, ALLE_VELDEN, type VeldSleutel } from './veld-eisen'
 import {
   beoordeelVeld, beoordeelAlleVelden, ontbrekendeVelden, magAfhandelen,
@@ -54,6 +55,82 @@ describe('eisenVoor: wat betekent een veld voor déze afhandeling', () => {
   it('geeft voor elk bekend veld een uitspraak', () => {
     const e = eisenVoor('nieuw_dossier', 'offerteaanvraag')
     for (const veld of ALLE_VELDEN) expect(e[veld], veld).toBeDefined()
+  })
+})
+
+/**
+ * De fase is de keuze die de behandelaar links maakt. Dat die keuze de velden
+ * stuurt is het hele punt: eerder bleven de opdrachtvelden gedimd staan als je van
+ * Aanvraag naar Opdracht klikte, en kwamen de termijnen nooit in beeld.
+ */
+describe('eisenVoor: de gekozen fase stuurt de velden', () => {
+  it('laat bij een aanvraag de opdrachtvelden en de termijnen met rust', () => {
+    const e = eisenVoor('nieuw_dossier', 'offerteaanvraag', 'aanvraag')
+    expect(e.opdracht_referentie).toBe('nvt')
+    expect(e.opdrachtdatum).toBe('nvt')
+    expect(e.termijnschema).toBe('nvt')
+  })
+
+  it('zet ze aan zodra je naar Opdracht klikt', () => {
+    const e = eisenVoor('nieuw_dossier', 'offerteaanvraag', 'opdracht')
+    expect(e.opdracht_referentie).toBe('gewenst')
+    expect(e.opdrachtdatum).toBe('gewenst')
+    expect(e.termijnschema).toBe('gewenst')
+    expect(e.bedrag_excl_btw).toBe('gewenst')
+  })
+
+  it('maakt een veld nooit lichter dan de mailsoort het al maakte', () => {
+    // De fase zegt "gewenst", de opdrachtbon zegt "verplicht". Zou de fase domweg
+    // winnen, dan zou omklikken naar Opdracht de eis juist versoepelen.
+    expect(eisenVoor('nieuw_dossier', 'opdrachtbon', 'opdracht').opdracht_referentie)
+      .toBe('verplicht')
+  })
+
+  it('mag een veld wel helemaal uitzetten', () => {
+    // Wie van een opdrachtbon tóch een aanvraag maakt, zegt daarmee dat er geen
+    // opdrachtnummer te verwachten valt. Dan hoort dat veld niet rood te staan.
+    expect(eisenVoor('nieuw_dossier', 'opdrachtbon', 'aanvraag').opdracht_referentie)
+      .toBe('nvt')
+  })
+
+  it('vraagt een mandaat bij de servicedesk en niet bij een opdracht', () => {
+    expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'servicedesk').mandaat_bedrag)
+      .toBe('gewenst')
+    expect(eisenVoor('nieuw_dossier', 'servicedeskbon', 'opdracht').mandaat_bedrag)
+      .toBe('nvt')
+  })
+
+  it('laat de route winnen van de fase', () => {
+    // Meerwerk gaat op een opdracht die al loopt; de termijnstaat daarvan staat er
+    // al, ook al zegt de fase "opdracht".
+    expect(eisenVoor('geen', 'meerwerk', 'opdracht').termijnschema).toBe('nvt')
+  })
+
+  it('verandert niets als er geen fase bekend is', () => {
+    const zonder = eisenVoor('nieuw_dossier', 'opdrachtbon')
+    expect(zonder.opdracht_referentie).toBe('verplicht')
+    expect(zonder.mandaat_bedrag).toBe('gewenst')
+  })
+})
+
+describe('faseVoorstelVoor: wat EVA zelf voorklikt', () => {
+  it('zet de gegunde soorten op Opdracht', () => {
+    for (const soort of ['opdrachtbon', 'opdracht_op_offerte', 'meerwerk']) {
+      expect(faseVoorstelVoor(null, soort), soort).toBe('opdracht')
+    }
+  })
+
+  it('houdt een offerteaanvraag op Aanvraag', () => {
+    expect(faseVoorstelVoor(null, 'offerteaanvraag')).toBe('aanvraag')
+    expect(faseVoorstelVoor(null, null)).toBe('aanvraag')
+  })
+
+  it('laat de categorie winnen van de soort', () => {
+    // Servicedesk wordt in heel EVA uit de categorie afgeleid en de Bouw7-sync
+    // dwingt dat elke ronde terug; een opdrachtbon op Dagelijks onderhoud hoort
+    // dus op het servicedeskbord en niet in de opdrachtfase.
+    expect(faseVoorstelVoor('Dagelijks onderhoud', 'opdrachtbon')).toBe('servicedesk')
+    expect(faseVoorstelVoor('Mutatie', 'meerwerk')).toBe('servicedesk')
   })
 })
 

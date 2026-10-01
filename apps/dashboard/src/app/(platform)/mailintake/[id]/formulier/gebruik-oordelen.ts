@@ -14,18 +14,22 @@ import { useMemo } from 'react'
 import { eisenVoor, type VeldSleutel } from '@/lib/mailintake/veld-eisen'
 import { beoordeelAlleVelden } from '@/lib/mailintake/veld-status'
 import type { IntakeRoute, MailSoort } from '@/lib/mailintake/types'
+import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { waarnemingenUit, type SchermToestand } from './velden-uit-scherm'
 
 export function useOordelen(
   route: IntakeRoute,
   soort: MailSoort | null,
+  /** De gekozen fase: die bepaalt mee welke velden deze afhandeling nodig heeft. */
+  fase: DossierFase | null,
   toestand: SchermToestand,
 ) {
   // De toestand is elke render een nieuw object; de inhoud bepaalt of er iets
   // verandert. JSON is hier goed genoeg: het gaat om platte waarden.
-  const sleutel = JSON.stringify([route, soort, toestand, [...toestand.aangeraakt]])
+  const sleutel = JSON.stringify([route, soort, fase, toestand, [...toestand.aangeraakt]])
+  const eisen = eisenVoor(route, soort, fase)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => beoordeelAlleVelden(waarnemingenUit(toestand), eisenVoor(route, soort)), [sleutel])
+  return useMemo(() => beoordeelAlleVelden(waarnemingenUit(toestand), eisen), [sleutel])
 }
 
 export type { VeldSleutel }

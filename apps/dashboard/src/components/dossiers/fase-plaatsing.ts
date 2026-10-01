@@ -228,6 +228,19 @@ export function faseVoorstelVoor(
 ): DossierFase {
   if (isServicedeskCategorie(categorieNaam)) return 'servicedesk'
   if (mailSoort === 'servicedeskbon') return 'servicedesk'
-  if (mailSoort === 'opdrachtbon') return 'opdracht'
+  if (mailSoort != null && GEGUNDE_SOORTEN.includes(mailSoort)) return 'opdracht'
   return 'aanvraag'
 }
+
+/**
+ * De mailsoorten waarbij het werk al gegund is.
+ *
+ * Alle drie zeggen hetzelfde: er valt niets meer te offreren. Een opdrachtbon is
+ * nieuw werk dat rechtstreeks wordt opgedragen, een opdracht op onze offerte is het
+ * akkoord daarop, en meerwerk hangt per definitie aan een opdracht die al loopt.
+ *
+ * Hier stond alleen `opdrachtbon`. Juist bij de twee andere -- waar het minst te
+ * twijfelen valt -- opende het scherm dus op "Aanvraag", en moest de behandelaar
+ * elke keer met de hand omklikken naar wat EVA zelf al wist.
+ */
+const GEGUNDE_SOORTEN = ['opdrachtbon', 'opdracht_op_offerte', 'meerwerk']

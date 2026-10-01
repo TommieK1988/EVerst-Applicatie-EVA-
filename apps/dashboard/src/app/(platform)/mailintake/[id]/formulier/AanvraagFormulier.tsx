@@ -86,6 +86,8 @@ export interface AanvraagFormulierProps {
   offerteDossierId?: string | null
   /** Speelt het termijnenblok bij deze afhandeling? */
   termijnenActief?: boolean
+  /** Komt de grondslag van een offerte, of wordt dit een opdracht zonder offerte? */
+  termijnenViaOfferte?: boolean
   /** De factuurkeuze staat bij de offerte; hier alleen verwijzen. */
   verwijsFactuurkeuze?: boolean
 }
@@ -98,7 +100,8 @@ export default function AanvraagFormulier(p: AanvraagFormulierProps) {
     klantId, klantNaam, zetKlant, klantZoek, zetKlantZoek, klantOpties, wisOpties,
     contactpersonen, contactpersoonId, zetContactpersoon,
     adres, projectOmschrijving, zetProjectOmschrijving, rollen, zetRol, dossierSectie,
-    offerteDossierId = null, termijnenActief = false, verwijsFactuurkeuze = false,
+    offerteDossierId = null, termijnenActief = false, termijnenViaOfferte = false,
+    verwijsFactuurkeuze = false,
   } = p
 
   return (
@@ -225,7 +228,13 @@ export default function AanvraagFormulier(p: AanvraagFormulierProps) {
                 bewerkbaar={bewerkbaar}
               />
             }
-            termijnen={<TermijnenSectie dossierId={offerteDossierId} actief={termijnenActief} />}
+            termijnen={(
+              <TermijnenSectie
+                dossierId={offerteDossierId}
+                actief={termijnenActief}
+                viaOfferte={termijnenViaOfferte}
+              />
+            )}
             factuurkeuze={
               verwijsFactuurkeuze ? (
                 <span style={klein}>

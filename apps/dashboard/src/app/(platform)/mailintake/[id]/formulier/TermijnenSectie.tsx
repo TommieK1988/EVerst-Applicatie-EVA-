@@ -44,12 +44,25 @@ const UITLEG: Record<string, string> = {
 }
 
 export default function TermijnenSectie({
-  dossierId, actief,
+  dossierId, actief, viaOfferte = false,
 }: {
   /** Het gekozen offertedossier; zonder dossier valt er niets te berekenen. */
   dossierId: string | null
-  /** Speelt dit blok bij deze afhandeling? Zo niet, dan blijft het gedimd staan. */
+  /**
+   * Speelt dit blok bij deze afhandeling? Zo niet, dan blijft het gedimd staan.
+   * Volgt de fasekeuze: bij een aanvraag is er geen aanneemsom, bij een opdracht wel.
+   */
   actief: boolean
+  /**
+   * Hoort er een offerte bij deze opdracht?
+   *
+   * Zo ja, dan is een leeg dossier een stap die nog gezet moet worden. Zo nee -- een
+   * opdrachtbon, of een aanvraag die je zelf naar Opdracht klikt -- is er geen
+   * offerte om uit af te leiden, en dat is geen fout maar een feit. Zonder dit
+   * onderscheid stond er "kies eerst de offerte" op een scherm waar geen offerte te
+   * kiezen viel.
+   */
+  viaOfferte?: boolean
 }) {
   const [voorstel, setVoorstel] = React.useState<Voorstel | null>(null)
   const [laden, setLaden] = React.useState(false)
@@ -68,16 +81,23 @@ export default function TermijnenSectie({
   return (
     <FormSection
       title="Termijnen"
-      description={actief ? 'Wat er bij bevestigen wordt aangemaakt' : undefined}
+      description={!actief ? undefined
+        : viaOfferte ? 'Wat er bij bevestigen wordt aangemaakt'
+        : 'Wat er met de verkooptermijnen gebeurt'}
     >
       {/* Altijd dezelfde plek, ook als er niets te tonen valt: een blok dat
           verschijnt en verdwijnt laat de rest van het formulier verspringen. */}
       {!actief ? (
         <span style={{ ...klein, opacity: 0.6 }}>
-          Speelt pas bij een opdracht op een offerte — dan is er een aanneemsom om over te verdelen.
+          Speelt pas bij een opdracht — dan is er een aanneemsom om over te verdelen.
         </span>
       ) : !dossierId ? (
-        <span style={klein}>Kies eerst de offerte waar deze opdracht bij hoort.</span>
+        <span style={klein}>
+          {viaOfferte
+            ? 'Kies eerst de offerte waar deze opdracht bij hoort.'
+            : 'Er is geen offerte om dit uit af te leiden. Het termijnschema stel je op het '
+              + 'dossier in zodra de aanneemsom vaststaat.'}
+        </span>
       ) : laden ? (
         <span style={klein}>Termijnen berekenen…</span>
       ) : !voorstel ? (
