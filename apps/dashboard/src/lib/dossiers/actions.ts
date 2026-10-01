@@ -823,19 +823,24 @@ export async function koppelDossierAanProject(
  * dossier, schakelt naar termijn-facturatie (tenzij handmatig vastgezet) en zet de bon op
  * In voorbereiding. Het Calculatie-tab blijft zichtbaar.
  *
+ * Daarna gaat de aanneemsom als `fixedPrice` naar Bouw7 en wordt het termijnschema aangemaakt
+ * volgens de betalingsconditie van de offerte — hetzelfde als bij een gewonnen offerte buiten de
+ * servicedesk. Lukt een van die twee niet, dan blijft het akkoord staan en komt de reden terug als
+ * `waarschuwing`: de bon is gewonnen, alleen de administratie moet nog met de hand.
+ *
  * Zonder gekoppelde calculatie (de offerte is buiten EVA gemaakt, bijv. in Bouw7) verschuift
  * alleen de bon: er is dan geen bedrag om over te nemen.
  */
 export async function offerteAkkoordServicedesk(
   dossierId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; waarschuwing?: string } | { ok: false; error: string }> {
   await vereisRecht('servicedesk', 'schrijven')
   await assertDossierBewerkbaar(dossierId)
 
   const supabase = createAdminClient() as any
   const { data: dossier, error } = await supabase
     .from('dossiers')
-    .select('everts_calc_project_id, facturatiemethode_handmatig, servicedesk_substatus')
+    .select('everts_calc_project_id, facturatiemethode_handmatig, servicedesk_substatus, bouw7_id')
     .eq('id', dossierId)
     .single()
   if (error) return { ok: false, error: error.message }
@@ -887,9 +892,30 @@ export async function offerteAkkoordServicedesk(
   const { neemPrognoseOverStil } = await import('./servicedesk-prognose')
   await neemPrognoseOverStil(dossierId)
 
+  /**
+   * Aanneemsom en termijnen naar Bouw7. Zonder `fixedPrice` in Bouw7 haalt de eerstvolgende sync
+   * het EVA-bedrag weer weg, en zonder termijnstaat valt er niets te factureren. Eerst de
+   * aanneemsom: `maakTermijnschemaUitOfferte` rekent met wat Bouw7 als aanneemsom kent.
+   */
+  const meldingen: string[] = []
+  if (dossier.bouw7_id) {
+    const aanneemsom = await stuurAanneemsomNaarBouw7Intern(supabase, dossierId)
+      .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
+    if (!aanneemsom.ok) {
+      // De functie markeert 'aanneemsom' zelf als handmatig; de retry-cron probeert het opnieuw.
+      meldingen.push(`De aanneemsom kon niet naar Bouw7: ${aanneemsom.error}`)
+    }
+
+    const { maakTermijnschemaUitOfferte } = await import('./termijnen-bron')
+    const termijnen = await maakTermijnschemaUitOfferte(dossierId)
+    if (!termijnen.ok && termijnen.reden !== 'bestaat_al') {
+      meldingen.push(`Geen termijnen aangemaakt: ${termijnen.error} Stel ze in op het tabblad Financieel.`)
+    }
+  }
+
   await verwerkDossierTriggers(dossierId).catch(() => {})
   revalidatePath('/servicedesk')
-  return { ok: true }
+  return meldingen.length ? { ok: true, waarschuwing: meldingen.join(' ') } : { ok: true }
 }
 
 /**

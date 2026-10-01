@@ -75,7 +75,9 @@ export default function BonActies({
     const ok = await bevestig({
       titel: 'Offerte gewonnen?',
       omschrijving: heeftCalculatie
-        ? 'De bon gaat naar In voorbereiding. Het offertebedrag wordt de aanneemsom en de bon rekent af op aangenomen.'
+        ? 'De bon gaat naar In voorbereiding. Het offertebedrag wordt de aanneemsom (ook in Bouw7), '
+          + 'de termijnen worden aangemaakt volgens de betalingsconditie van de offerte en de bon '
+          + 'rekent af op aangenomen.'
         : 'De bon gaat naar In voorbereiding.',
       bevestigLabel: 'Offerte gewonnen',
     })
@@ -84,6 +86,8 @@ export default function BonActies({
       const r = await offerteAkkoordServicedesk(dossierId)
       if (!r.ok) { toast.error(r.error); return }
       toast.success('Offerte gewonnen — de bon staat op In voorbereiding')
+      // Het akkoord staat; dit is wat er nog met de hand moet (termijnen, aanneemsom in Bouw7).
+      if (r.waarschuwing) toast(r.waarschuwing, { icon: '⚠️', duration: 10000 })
       router.refresh()
     })
   }
