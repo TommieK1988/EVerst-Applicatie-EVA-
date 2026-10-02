@@ -119,6 +119,42 @@ function Heel({ children }: { children: React.ReactNode }) {
   return <span style={{ whiteSpace: 'nowrap' }}>{children}</span>
 }
 
+/**
+ * Een telefoonnummer in vrije tekst: minstens negen cijfers, eventueel met +, spaties,
+ * streepjes of haakjes ertussen ("06-12345678", "+31 6 1234 5678").
+ */
+const TELEFOONNUMMER = /\+?\d[\d\s()-]{7,}\d/g
+
+/**
+ * Het noodcontact komt als vrije tekst uit Bouw7 — naam, relatie en nummer door elkaar,
+ * soms over meerdere regels. Opsplitsen in losse velden zou bij de helft misgaan, dus
+ * de tekst blijft staan zoals de administratie hem invulde en alleen de nummers erin
+ * worden aantikbaar. In een noodgeval wil je bellen, niet overtypen.
+ */
+function NoodcontactTekst({ tekst }: { tekst: string }) {
+  const t = useTranslations('profiel.gegevens')
+  const delen: React.ReactNode[] = []
+  let vanaf = 0
+  for (const m of tekst.matchAll(TELEFOONNUMMER)) {
+    const start = m.index ?? 0
+    if (start > vanaf) delen.push(tekst.slice(vanaf, start))
+    const nummer = m[0].trim()
+    delen.push(
+      <a
+        key={start}
+        href={`tel:${nummer.replace(/[^\d+]/g, '')}`}
+        aria-label={t('noodcontactBellen', { nummer })}
+        style={{ color: 'var(--brand-600, #007530)', fontWeight: 600, whiteSpace: 'nowrap' }}
+      >
+        {nummer}
+      </a>,
+    )
+    vanaf = start + m[0].length
+  }
+  if (vanaf < tekst.length) delen.push(tekst.slice(vanaf))
+  return <span style={{ whiteSpace: 'pre-line' }}>{delen}</span>
+}
+
 function LegeStaat({ tekst }: { tekst: string }) {
   return <div style={{ fontSize: 13.5, color: '#6b757c', lineHeight: 1.45 }}>{tekst}</div>
 }
@@ -247,6 +283,15 @@ export default function MedewerkerGegevensBlok({ gegevens }: { gegevens: EigenGe
           <Regel label={t('gegevens.telefoon')} waarde={gegevens.telefoon} />
           <Regel label={t('gegevens.geboortedatum')} waarde={datum(gegevens.geboortedatum, locale)} />
           <Regel label={t('gegevens.adres')} waarde={adres || null} />
+        </div>
+      )}
+
+      {gegevens.noodcontact && (
+        <div style={kaartStijl}>
+          <div style={kopStijl}>{t('gegevens.noodcontact')}</div>
+          <div style={{ fontSize: 14, color: 'var(--fg)', fontWeight: 500, lineHeight: 1.5, wordBreak: 'break-word' }}>
+            <NoodcontactTekst tekst={gegevens.noodcontact} />
+          </div>
         </div>
       )}
 

@@ -26,6 +26,8 @@ export type EigenGegevens = {
   adres_straat: string | null
   adres_postcode: string | null
   adres_plaats: string | null
+  /** Vrije tekst uit Bouw7 (naam, relatie, nummer), soms over meerdere regels. */
+  noodcontact: string | null
   functie: string | null
   afdeling: string | null
   ploeg: string | null
@@ -103,7 +105,7 @@ export async function getEigenGegevens(medewerkerId: string): Promise<EigenGegev
   const [{ data: mw }, { data: roosterRij }, { data: middelen }, { data: diplomas }] = await Promise.all([
     admin
       .from('medewerkers')
-      .select('email, telefoon, geboortedatum, adres_straat, adres_postcode, adres_plaats, functie, afdeling, in_dienst_vanaf, ploeg_id')
+      .select('email, telefoon, geboortedatum, adres_straat, adres_postcode, adres_plaats, noodcontact, functie, afdeling, in_dienst_vanaf, ploeg_id')
       .eq('id', medewerkerId)
       .maybeSingle(),
     // Hetzelfde venster als `getRooster()`: het rooster dat vandaag geldt, bij
@@ -170,6 +172,7 @@ export async function getEigenGegevens(medewerkerId: string): Promise<EigenGegev
     adres_straat: mw.adres_straat ?? null,
     adres_postcode: mw.adres_postcode ?? null,
     adres_plaats: mw.adres_plaats ?? null,
+    noodcontact: mw.noodcontact ?? null,
     functie: mw.functie ?? null,
     afdeling: mw.afdeling ?? null,
     ploeg,

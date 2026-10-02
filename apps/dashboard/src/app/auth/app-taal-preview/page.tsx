@@ -8,9 +8,11 @@ import MobielTegel from '@/components/mobiel/MobielTegel'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
+import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
 import { laadBerichten } from '@/i18n/berichten'
 import { naarTaal, TALEN, TAAL_NAAM, TIJDZONE } from '@/i18n/talen'
 import type { VerlofAanvraag } from '@/lib/uren/verlof'
+import type { EigenGegevens } from '@/lib/medewerker/eigen-gegevens'
 
 /**
  * Voorbeeld van EVA Mobiel in elke taal, met verzonnen gegevens: `/auth/app-taal-preview?taal=ta`.
@@ -54,6 +56,20 @@ const VERLOF: VerlofAanvraag[] = [
   },
 ]
 
+const GEGEVENS: EigenGegevens = {
+  email: 'k.perera@voorbeeld.nl', telefoon: '06-12345678', geboortedatum: '1991-03-14',
+  adres_straat: 'Kerkstraat 12', adres_postcode: '8011 AB', adres_plaats: 'Zwolle',
+  // Zoals in Bouw7: vrije tekst, soms twee contacten over meerdere regels.
+  noodcontact: 'Nirmala Perera (echtgenote)\n06-98765432\nRavi Perera (broer) 06-11223344',
+  functie: 'Schilder', afdeling: 'Uitvoering', ploeg: 'Ploeg Noord', in_dienst_vanaf: '2019-09-01',
+  rooster: {
+    werkdagen: [1, 2, 3, 4, 5], dagstart: '07:30:00', dageind: '16:00:00', contracturen_per_week: 37.5,
+    pauzes: [{ start: '10:00:00', eind: '10:15:00' }, { start: '12:30:00', eind: '13:00:00' }],
+  },
+  bedrijfsmiddelen: [],
+  vca: null,
+}
+
 export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string }> }) {
   const taal = naarTaal((await searchParams).taal)
   const berichten = await laadBerichten(taal)
@@ -90,6 +106,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         </div>
         <MobielTakenLijst taken={TAKEN} />
         <VerlofClient aanvragen={VERLOF} soorten={[{ id: 'u1', naam: 'Vakantie' }, { id: 'u2', naam: 'Bijzonder verlof' }]} saldo={86.5} />
+        <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>
       </div>
     </NextIntlClientProvider>

@@ -13,6 +13,8 @@
     "persoonlijk": "Persoonlijk",
     "email": "E-mail",
     "telefoon": "Telefoon",
+    "noodcontact": "Noodcontact",
+    "noodcontactBellen": "Bel {nummer}",
     "geboortedatum": "Geboortedatum",
     "adres": "Adres",
     "werk": "Werk",

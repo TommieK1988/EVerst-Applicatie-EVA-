@@ -9335,6 +9335,7 @@ export type Database = {
           kleur: string | null
           mobiel: string | null
           notificatie_voorkeuren: Json
+          noodcontact: string | null
           o365_email: string | null
           o365_tenant_id: string | null
           o365_user_id: string | null
@@ -9393,6 +9394,7 @@ export type Database = {
           kleur?: string | null
           mobiel?: string | null
           notificatie_voorkeuren?: Json
+          noodcontact?: string | null
           o365_email?: string | null
           o365_tenant_id?: string | null
           o365_user_id?: string | null
@@ -9451,6 +9453,7 @@ export type Database = {
           kleur?: string | null
           mobiel?: string | null
           notificatie_voorkeuren?: Json
+          noodcontact?: string | null
           o365_email?: string | null
           o365_tenant_id?: string | null
           o365_user_id?: string | null

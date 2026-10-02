@@ -13,6 +13,8 @@
     "persoonlijk": "Dane osobowe",
     "email": "E-mail",
     "telefoon": "Telefon",
+    "noodcontact": "Kontakt alarmowy",
+    "noodcontactBellen": "Zadzwoń {nummer}",
     "geboortedatum": "Data urodzenia",
     "adres": "Adres",
     "werk": "Praca",

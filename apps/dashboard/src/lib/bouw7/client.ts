@@ -510,6 +510,11 @@ export type Bouw7Employee = {
   hourlyRate?: string | null
   /** Verkoop-uurtarief, als string bv. "125.0000". */
   sellingHourlyRate?: string | null
+  /**
+   * Maatwerkveld "Noodcontact + nummer": vrije tekst, meestal naam (relatie) en telefoonnummer,
+   * soms over meerdere regels. Bouw7 levert de `ca*`-velden plat mee in `/list/employees`.
+   */
+  'caNoodcontact+Nummer'?: string | null
 }
 
 /**
