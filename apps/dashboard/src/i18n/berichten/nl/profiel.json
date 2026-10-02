@@ -1,0 +1,102 @@
+{
+  "titel": "Mijn gegevens",
+  "geenKoppeling": "Geen medewerker-koppeling gevonden voor dit account.",
+  "onbekend": "Onbekend",
+  "instellingen": "Instellingen",
+  "instellingenSub": "Toestemmingen, meldingen en locatie",
+  "handleiding": "Handleiding",
+  "handleidingSub": "Hoe EVA op je telefoon werkt",
+  "uitloggen": "Uitloggen",
+  "instellingenGeenKoppeling": "Je account is niet aan een medewerker gekoppeld. De instellingen hierboven werken wel; meldingen over taken en dossiers komen pas binnen zodra de koppeling gelegd is.",
+  "kloptNiet": "Klopt er iets niet? Geef het door aan de administratie; zij passen het aan.",
+  "gegevens": {
+    "persoonlijk": "Persoonlijk",
+    "email": "E-mail",
+    "telefoon": "Telefoon",
+    "geboortedatum": "Geboortedatum",
+    "adres": "Adres",
+    "werk": "Werk",
+    "functie": "Functie",
+    "afdeling": "Afdeling",
+    "ploeg": "Ploeg",
+    "inDienstSinds": "In dienst sinds",
+    "werkrooster": "Werkrooster",
+    "contracturen": "Contracturen",
+    "urenPerWeek": "{uren} uur per week",
+    "pauze": "{aantal, plural, one {Pauze} other {Pauzes}}",
+    "werkdagenReeks": "{van} t/m {tot}",
+    "bedrijfsmiddelen": "Bedrijfsmiddelen",
+    "geenBedrijfsmiddelen": "Er staan geen sleutels, telefoons of tankpassen op jouw naam.",
+    "uitgegeven": "Uitgegeven {datum}",
+    "type": {
+      "sleutel": "Sleutel",
+      "telefoon": "Telefoon",
+      "tankpas": "Tankpas",
+      "overig": "Overig"
+    },
+    "kenmerk": {
+      "sleutelnummer": "Sleutelnummer",
+      "kopienummer": "Kopienummer",
+      "toestel": "Toestel",
+      "imei": "IMEI",
+      "simkaart": "Simkaart",
+      "kaartnummer": "Kaartnummer",
+      "maatschappij": "Maatschappij",
+      "extraInfo": "Extra info"
+    },
+    "vca": {
+      "titel": "VCA-diploma",
+      "vernieuwen": "Vernieuwen nodig",
+      "verlooptOver": "{dagen, plural, one {Verloopt over # dag} other {Verloopt over # dagen}}",
+      "geenEinddatum": "Geen einddatum bekend",
+      "geldig": "Geldig",
+      "einddatumOnbekend": "Einddatum onbekend",
+      "verlopenOp": "Verlopen op {datum}",
+      "geldigTot": "Geldig tot {datum}",
+      "soort": "Soort",
+      "diplomanummer": "Diplomanummer",
+      "behaaldOp": "Behaald op",
+      "geen": "Er is geen VCA-diploma geregistreerd. Heb je er wel een? Geef het door aan KAM, dan wordt het vastgelegd.",
+      "soorten": {
+        "b_vca": "B-VCA (Basisveiligheid)",
+        "vol_vca": "VOL-VCA (Leidinggevenden)",
+        "vil_vca": "VIL-VCA (Intercedenten)"
+      }
+    }
+  },
+  "toestemmingen": {
+    "titel": "Toestemmingen",
+    "locatie": "Locatie",
+    "locatieUitleg": "Voor GPS-velden in formulieren en werkbonnen.",
+    "camera": "Camera",
+    "cameraUitleg": "Voor het scannen van QR-stickers op materieel.",
+    "toegestaan": "Toegestaan",
+    "geweigerd": "Geweigerd",
+    "nogNietGegeven": "Nog niet gegeven",
+    "eerderGebruikt": "Eerder gebruikt",
+    "bezig": "Bezig…",
+    "geven": "Toestemming geven",
+    "tipIos": "Tip: zet EVA op je beginscherm (deelknop → \"Zet op beginscherm\"). In Safari zelf vervallen locatie- en cameratoestemming aan het eind van de dag — daarom vraagt de scanner er dan steeds opnieuw om. In de geïnstalleerde app blijven ze staan.",
+    "fotos": "Foto’s maken bij een formulier of een stuk materieel loopt via de camera-app van de telefoon en vraagt geen aparte toestemming in EVA.",
+    "locatieHerstel": {
+      "ios": "Zet locatie aan via Instellingen → Safari → Locatie (of Instellingen → Privacy → Locatievoorzieningen). Installeer EVA op je beginscherm: dan hoef je het maar één keer te doen.",
+      "android": "Tik op het slotje in de adresbalk → Machtigingen → Locatie, en kies \"Toestaan\".",
+      "anders": "Zet locatie voor EVA weer aan in de instellingen van je browser."
+    },
+    "cameraHerstel": {
+      "ios": "De camera staat geblokkeerd voor EVA. Zet hem aan via Instellingen → Safari → Camera, of tik in de adresbalk op \"aA\" → Website-instellingen → Camera → Sta toe.",
+      "android": "De camera staat geblokkeerd voor EVA. Tik op het slotje in de adresbalk → Machtigingen → Camera → Toestaan.",
+      "anders": "De camera staat geblokkeerd voor EVA. Zet hem aan in de site-instellingen van je browser."
+    },
+    "locatieFout": {
+      "geenGps": "Deze browser geeft geen locatie door.",
+      "geweigerd": "EVA mag je locatie niet gebruiken.",
+      "teTraag": "Locatie duurde te lang. Ga eventueel even naar buiten.",
+      "geenFix": "Locatie ophalen lukte niet."
+    }
+  },
+  "locatieAuto": {
+    "titel": "Dossier openen op locatie",
+    "uitleg": "Opent bij het starten van de app automatisch het dossier dat bij jouw locatie hoort."
+  }
+}

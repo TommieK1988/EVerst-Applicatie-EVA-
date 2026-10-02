@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { getAppVertaler } from '@/i18n/server'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import { codeLabel } from '@/lib/materieel/qr'
 import { getZonderSticker, telZonderSticker } from '@/lib/materieel/zoeken'
@@ -27,6 +28,7 @@ export default async function KoppelPage({
   const { code } = await searchParams
   if (!code?.trim()) redirect('/m/materieel/scan')
 
+  const t = await getAppVertaler('materieel')
   const [lijst, totaal] = await Promise.all([
     getZonderSticker(null, 50),
     telZonderSticker(),
@@ -34,7 +36,7 @@ export default async function KoppelPage({
 
   return (
     <>
-      <AppHeader title="Sticker koppelen" sub={codeLabel(code)} backHref="/m/materieel/scan" />
+      <AppHeader title={t('koppel.titel')} sub={codeLabel(code)} backHref="/m/materieel/scan" />
       <KoppelLijst code={code} start={lijst} totaal={totaal} />
     </>
   )

@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 
 /**
  * Tekstveld met inspreken. Bedoeld voor de buitendienst: op een steiger of een dak is typen op een
@@ -64,11 +66,12 @@ function maakHerkenner(): Herkenner | null {
  */
 const MAX_STILLE_RONDES = 3
 
-const FOUT_TEKST: Record<string, string> = {
-  'not-allowed': 'Geen toegang tot de microfoon. Sta dat toe in je browserinstellingen.',
-  'service-not-allowed': 'Geen toegang tot de microfoon. Sta dat toe in je browserinstellingen.',
-  network: 'Inspreken heeft internet nodig — geen verbinding.',
-  'audio-capture': 'Geen microfoon gevonden.',
+/** Foutcode van de herkenner → sleutel in `algemeen.spraak`. */
+const FOUT_SLEUTEL: Record<string, 'geenMicrofoonToegang' | 'geenVerbinding' | 'geenMicrofoon'> = {
+  'not-allowed': 'geenMicrofoonToegang',
+  'service-not-allowed': 'geenMicrofoonToegang',
+  network: 'geenVerbinding',
+  'audio-capture': 'geenMicrofoon',
 }
 
 export default function SpraakTextarea({
@@ -85,6 +88,9 @@ export default function SpraakTextarea({
   /** Alleen-lezen weergave; de inspreekknop verdwijnt dan ook. */
   disabled?: boolean
 }) {
+  const t = useTranslations('algemeen.spraak')
+  // Herkennen in de taal van de app: een Poolse monteur spreekt Pools in.
+  const taalcode = useDatumLocale()
   const [ondersteund, setOndersteund] = useState(false)
   const [luistert, setLuistert] = useState(false)
   const [tussentijds, setTussentijds] = useState('')
@@ -141,7 +147,7 @@ export default function SpraakTextarea({
 
     if (!luisterRonde()) {
       wilLuisterenRef.current = false
-      setFout('Inspreken kon niet starten.')
+      setFout(t('konNietStarten'))
       return
     }
     setLuistert(true)
@@ -152,7 +158,7 @@ export default function SpraakTextarea({
     const h = maakHerkenner()
     if (!h) return false
     herkennerRef.current = h
-    h.lang = 'nl-NL'
+    h.lang = taalcode
     h.continuous = true
     h.interimResults = true
 
@@ -179,7 +185,8 @@ export default function SpraakTextarea({
       // niets", en `onend` pakt de volgende ronde op. 'aborted' is "je tikte op stoppen".
       if (e.error === 'no-speech') return
       if (e.error !== 'aborted') {
-        setFout(FOUT_TEKST[e.error] ?? 'Inspreken lukte niet. Probeer het opnieuw of typ de tekst.')
+        const sleutel = FOUT_SLEUTEL[e.error]
+        setFout(sleutel ? t(sleutel) : t('mislukt'))
       }
       wilLuisterenRef.current = false
     }
@@ -227,7 +234,7 @@ export default function SpraakTextarea({
           <button
             type="button"
             onClick={() => (luistert ? stop() : start())}
-            aria-label={luistert ? 'Stoppen met inspreken' : 'Inspreken'}
+            aria-label={luistert ? t('stoppen') : t('inspreken')}
             aria-pressed={luistert}
             style={{
               position: 'absolute', top: 8, right: 8,
@@ -250,7 +257,8 @@ export default function SpraakTextarea({
             width: 8, height: 8, borderRadius: '50%', background: '#b42318',
             animation: 'eva-puls 1.2s ease-in-out infinite',
           }} />
-          Luisteren… tik op de microfoon als je klaar bent.
+          {t('luisteren')}
+          {/* eslint-disable-next-line i18next/no-literal-string -- CSS, geen tekst */}
           <style>{'@keyframes eva-puls{0%,100%{opacity:1}50%{opacity:.25}}'}</style>
         </div>
       )}

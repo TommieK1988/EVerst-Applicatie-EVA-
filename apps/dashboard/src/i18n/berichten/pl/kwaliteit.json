@@ -1,0 +1,202 @@
+{
+  "kopTitel": "Kontrola jakości",
+  "bezig": "Trwa…",
+  "terug": "Wstecz",
+  "verwijderen": "Usuń",
+  "resultaatStatus": {
+    "voldoet": "Zgodne",
+    "voldoet_niet": "Niezgodne",
+    "niet_beoordeeld": "Nie oceniono",
+    "nvt": "Nie dotyczy",
+    "nader_onderzoek": "Dalsze badanie"
+  },
+  "statusUitleg": {
+    "voldoet": "Kontrola lub wartość pomiaru spełnia kryterium jakości.",
+    "voldoet_niet": "Stwierdzono niezgodność. Zdjęcie, lokalizacja i opis są obowiązkowe.",
+    "niet_beoordeeld": "Element jest, ale teraz nie da się go wiarygodnie zobaczyć, dosięgnąć lub sprawdzić. To NIE jest akceptacja.",
+    "nvt": "Ten punkt kontrolny nie dotyczy zastanej pracy.",
+    "nader_onderzoek": "Potrzebna ocena specjalisty; nie oceniaj sam."
+  },
+  "ernst": {
+    "kritiek": "Krytyczna",
+    "technisch": "Techniczna",
+    "esthetisch": "Estetyczna",
+    "observatie": "Obserwacja"
+  },
+  "afwijkingStatus": {
+    "open": "Otwarta",
+    "gemeld": "Zgłoszona",
+    "herstel_gepland": "Naprawa zaplanowana",
+    "in_uitvoering": "W realizacji",
+    "gereed_voor_hercontrole": "Gotowa do ponownej kontroli",
+    "hersteld_akkoord": "Naprawiona i zaakceptowana",
+    "niet_akkoord": "Nie zaakceptowana po naprawie",
+    "nader_onderzoek": "Dalsze badanie",
+    "geaccepteerde_afwijking": "Zaakceptowana niezgodność"
+  },
+  "bron": {
+    "NORM": "Norma",
+    "FABRIKANT": "Producent",
+    "PROJECT": "Projekt",
+    "INTERN": "Wewnętrzna norma firmy"
+  },
+  "hercontrole": {
+    "niet_gecontroleerd": "Nie sprawdzono",
+    "nog_open": "Nadal otwarta",
+    "hersteld": "Naprawiona",
+    "onvoldoende_hersteld": "Naprawiona niewystarczająco",
+    "nader_onderzoek": "Potrzebne dalsze badanie"
+  },
+  "locatieSuggestie": {
+    "voorgevel": "Elewacja frontowa",
+    "achtergevel": "Elewacja tylna",
+    "zijgevelLinks": "Elewacja boczna lewa",
+    "zijgevelRechts": "Elewacja boczna prawa",
+    "kopgevel": "Ściana szczytowa",
+    "dak": "Dach",
+    "dakrand": "Krawędź dachu",
+    "balkon": "Balkon",
+    "entree": "Wejście",
+    "blokA": "Blok A",
+    "blokB": "Blok B",
+    "verdieping1": "Piętro 1",
+    "verdieping2": "Piętro 2",
+    "beganeGrond": "Parter"
+  },
+  "waarnemingSuggestie": {
+    "schilderwerk": "Równe malowanie",
+    "houtreparatie": "Dobra naprawa drewna",
+    "kitvoeg": "Staranna spoina silikonowa",
+    "voegwerk": "Staranne fugowanie",
+    "dakdetail": "Prawidłowy detal dachu",
+    "werkgebied": "Czysty teren pracy",
+    "aansluiting": "Staranne połączenie między branżami"
+  },
+  "ronde": {
+    "beoordeeld": "ocenione: <b>{aantal}</b>",
+    "voldoet": "zgodne: <b>{aantal}</b>",
+    "voldoetNiet": "niezgodne: <b>{aantal}</b>",
+    "nietBeoordeeld": "nieocenione: <b>{aantal}</b>",
+    "kritiek": "krytyczne: {aantal}",
+    "alleenLezen": "Ta inspekcja jest zakończona i tylko do odczytu.",
+    "openEerdere": "↩ {aantal, plural, one {# otwarta niezgodność} few {# otwarte niezgodności} many {# otwartych niezgodności} other {# otwartej niezgodności}} z wcześniejszych inspekcji",
+    "steekproefSignaal": "Niezgodne: {afwijkend} z {bekeken} sprawdzonych elementów ({pct}%). Rozważ rozszerzenie próby.",
+    "geenDisciplines": "Nie wybrano jeszcze branż.",
+    "disciplinesGekozen": "Wybrane branże: {lijst}",
+    "knopDisciplines": "Branże",
+    "knopAfronden": "Zakończ",
+    "knopOverzicht": "Podsumowanie"
+  },
+  "disciplines": {
+    "titel": "Co sprawdzasz w tej rundzie?",
+    "uitleg": "Wybierz elementy, które są teraz widoczne i da się je ocenić. Potem zobaczysz tylko te punkty kontrolne.",
+    "aantalPunten": "{aantal, plural, one {# punkt} few {# punkty} many {# punktów} other {# punktu}}",
+    "aantalPuntenAltijd": "{aantal, plural, one {# punkt} few {# punkty} many {# punktów} other {# punktu}} · zawsze",
+    "inDezeRonde": "{aantal, plural, one {<b>#</b> punkt kontrolny w tej rundzie} few {<b>#</b> punkty kontrolne w tej rundzie} many {<b>#</b> punktów kontrolnych w tej rundzie} other {<b>#</b> punktu kontrolnego w tej rundzie}}",
+    "gegevens": "Dane tej rundy",
+    "inspecteur": "Inspektor: {naam}",
+    "weer": "Warunki pogodowe (opcjonalnie)",
+    "weerPlaceholder": "Np. sucho, 12 °C, umiarkowany wiatr",
+    "werkzaamheden": "Prowadzone prace (opcjonalnie)",
+    "werkzaamhedenPlaceholder": "Np. malowanie elewacji frontowej, silikonowanie blok A",
+    "gebied": "Obchodzony obszar (opcjonalnie)",
+    "gebiedPlaceholder": "Np. elewacja frontowa i tylna blok A",
+    "bekeken": "Sprawdzone elementy",
+    "afwijkend": "W tym niezgodne",
+    "steekproefUitleg": "Opcjonalnie: zapisuje wielkość próby. Sam decydujesz, ile sprawdzasz.",
+    "verder": "{aantal, plural, one {Dalej z # punktem kontrolnym} few {Dalej z # punktami kontrolnymi} many {Dalej z # punktami kontrolnymi} other {Dalej z # punktu kontrolnego}}"
+  },
+  "punt": {
+    "veiligheid": "BEZPIECZEŃSTWO",
+    "meetwaarde": "{verplicht, select, ja {Wartość pomiaru *} other {Wartość pomiaru (opcjonalnie)}}",
+    "meetwaardeEenheid": "{verplicht, select, ja {Wartość pomiaru * w {eenheid}} other {Wartość pomiaru (opcjonalnie) w {eenheid}}}",
+    "meetPlaceholder": "0,0",
+    "waarGemeten": "Gdzie zmierzono?",
+    "vulGetal": "Wpisz liczbę.",
+    "gemeten": "Zmierzono <b>{waarde}</b>",
+    "gemetenToegestaan": "Zmierzono <b>{waarde}</b> · Dopuszczalne <b>{eis}</b>",
+    "oordeelVoldoet": "ZGODNE",
+    "oordeelVoldoetNiet": "NIEZGODNE",
+    "geenGrenswaarde": "Brak znanej wartości granicznej — oceń sam",
+    "projecteisNodig": "Dla tego elementu nie ma ogólnej wartości granicznej. Zapisz wymóg projektu <b>{sleutel}</b>, aby sprawdzać to automatycznie.",
+    "opmerkingPlaceholder": "Uwaga (opcjonalnie)",
+    "eisVerbergen": "▴ Ukryj wymóg techniczny",
+    "eisBekijken": "▾ Pokaż wymóg techniczny",
+    "meetmethode": "Metoda pomiaru:",
+    "bron": "Źródło:",
+    "projectwaarde": "(wartość projektu, zastępuje standardową)"
+  },
+  "bevinding": {
+    "nogEen": "+ Kolejne ustalenie w tym punkcie",
+    "vanTotaal": "ustalenie {nummer} z {totaal}",
+    "toelichting": "Opis *",
+    "toelichtingPlaceholder": "Co jest nie tak?",
+    "ernst": "Waga",
+    "kritiekMelding": "Krytyczna: bezpieczeństwo lub szczelność. Zgłoś to od razu kierownikowi robót.",
+    "herstelactie": "Proponowana naprawa",
+    "herstelactiePlaceholder": "Co trzeba zrobić?"
+  },
+  "locatie": {
+    "label": "Lokalizacja *",
+    "placeholder": "Lub wpisz lokalizację, np. Mieszkania 21–28"
+  },
+  "foto": {
+    "verwijderen": "Usuń zdjęcie",
+    "maken": "📷 Zrób zdjęcie",
+    "kiezen": "Wybierz",
+    "verplicht": "Przy tej niezgodności zdjęcie jest obowiązkowe.",
+    "optioneel": "Opcjonalnie",
+    "aantal": "{aantal, plural, one {# zdjęcie} few {# zdjęcia} many {# zdjęć} other {# zdjęcia}}"
+  },
+  "eerder": {
+    "titel": "Otwarte niezgodności",
+    "uitleg": "Z wcześniejszych inspekcji w tym projekcie. Sprawdź je, zanim zaczniesz nowe punkty kontrolne.",
+    "geen": "Brak otwartych niezgodności.",
+    "naarControlepunten": "Do punktów kontrolnych",
+    "fotoKritiek": "Dodaj zdjęcie naprawy; ta niezgodność była krytyczna.",
+    "geconstateerd": "{locatie} · stwierdzono {datum}",
+    "vastgelegd": "✓ Zapisano: {uitkomst}",
+    "toelichtingPlaceholder": "Opis (opcjonalnie)",
+    "vastleggen": "Zapisz"
+  },
+  "waarneming": {
+    "knop": "+ Pozytywna obserwacja jakości",
+    "watGaatGoed": "Co jest dobrze zrobione w zakresie: {discipline}?",
+    "foutLeeg": "Podaj krótki opis.",
+    "omschrijvingPlaceholder": "Lub wpisz sam krótki opis",
+    "annuleren": "Anuluj",
+    "opslaan": "Zapisz",
+    "fotoNaOpslaan": "Zdjęcie możesz dodać po zapisaniu obserwacji."
+  },
+  "afronden": {
+    "titelAfronden": "Zakończ inspekcję",
+    "titelAfgerond": "Inspekcja zakończona",
+    "telling": {
+      "beoordeeld": "ocenione punkty kontrolne",
+      "voldoen": "zgodne",
+      "technisch": "niezgodności techniczne",
+      "esthetisch": "niezgodności estetyczne",
+      "kritiek": "niezgodności krytyczne",
+      "nietBeoordeeld": "nie oceniono",
+      "naderOnderzoek": "dalsze badanie",
+      "waarnemingen": "pozytywne obserwacje"
+    },
+    "nietBeoordeeldUitleg": "Elementy nieocenione nie liczą się jako zaakceptowane. Tak też jest w raporcie.",
+    "definitief": "✓ Inspekcja jest ostateczna",
+    "definitiefUitleg": "Zadanie jest odhaczone, a niezgodności są w rejestrze. Raport dla klienta tworzysz na komputerze, w KAM → Jakość.",
+    "nietCompleet": "Jeszcze niekompletne",
+    "inspectieNietCompleet": "Inspekcja nie jest jeszcze kompletna.",
+    "ontbreekt": {
+      "nietsBeoordeeldTitel": "Nic jeszcze nie oceniono",
+      "niets_beoordeeld": "Oceń co najmniej jeden punkt kontrolny, zanim zakończysz.",
+      "geen_bevinding": "Dodaj co najmniej jedno ustalenie z lokalizacją.",
+      "locatie": "Brak lokalizacji przy ustaleniu.",
+      "toelichting": "Brak opisu przy ustaleniu.",
+      "foto": "Przy tej niezgodności zdjęcie jest obowiązkowe."
+    },
+    "terugNaarControlepunten": "Wróć do punktów kontrolnych",
+    "naDefinitief": "Po zatwierdzeniu inspekcja jest tylko do odczytu. Poprawić można ją potem przez „Otwórz ponownie” na komputerze, z podaniem powodu.",
+    "terugNaarActies": "Wróć do moich zadań",
+    "definitiefMaken": "Zatwierdź ostatecznie"
+  }
+}

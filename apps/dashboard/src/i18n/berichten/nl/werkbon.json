@@ -1,0 +1,23 @@
+{
+  "klant": "Klant",
+  "activiteit": "Activiteit",
+  "ookAanwezig": "Ook aanwezig",
+  "evenGeduld": "Even geduld…",
+  "startWerkbon": "Start werkbon",
+  "looptijd": "Looptijd",
+  "opmerking": "Opmerking",
+  "opmerkingPlaceholder": "Bevindingen, bijzonderheden…",
+  "fotos": "Foto's",
+  "uploaden": "Uploaden…",
+  "fotoToevoegen": "📷 Foto toevoegen",
+  "afronden": "Afronden →",
+  "gewerkteUren": "Gewerkte uren",
+  "urenKort": "{uren}u",
+  "looptijdTimer": "Looptijd timer: {tijd}",
+  "handtekeningOpdrachtgever": "Handtekening opdrachtgever",
+  "terug": "← Terug",
+  "afrondenBezig": "Afronden…",
+  "afsluiten": "Werkbon afsluiten ✓",
+  "afgesloten": "Werkbon afgesloten",
+  "opnieuwTekenen": "Opnieuw tekenen"
+}

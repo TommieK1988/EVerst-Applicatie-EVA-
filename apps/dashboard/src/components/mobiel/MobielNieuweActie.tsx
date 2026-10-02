@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { maakTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { zoekDossiers } from '@/lib/dossiers/actions'
@@ -23,12 +24,8 @@ import type { TaskPrioriteit } from '@/lib/taken/supabase/database.types'
  * `router.refresh()` zodat de nieuwe actie direct in de mobiele lijst verschijnt.
  */
 
-const PRIORITEITEN: { value: TaskPrioriteit; label: string }[] = [
-  { value: 'laag',    label: 'Laag' },
-  { value: 'normaal', label: 'Normaal' },
-  { value: 'hoog',    label: 'Hoog' },
-  { value: 'urgent',  label: 'Urgent' },
-]
+// Labels via `taken.prioriteit.<waarde>`.
+const PRIORITEITEN: TaskPrioriteit[] = ['laag', 'normaal', 'hoog', 'urgent']
 
 const PRIO_KLEUR: Record<string, { c: string; bg: string }> = {
   urgent:  { c: '#b42318', bg: '#fef3f2' },
@@ -50,9 +47,15 @@ const labelStijl: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#6b757c', marginBottom: 6,
 }
 
+/** Het "(optioneel)" achter een veldlabel. */
+const zacht = (chunks: React.ReactNode) => (
+  <span style={{ fontWeight: 500, color: '#9aa4ab' }}>{chunks}</span>
+)
+
 type DossierResultaat = { id: string; titel: string; klant_naam: string | null }
 
 export default function MobielNieuweActie({ userId }: { userId: string }) {
+  const t = useTranslations('taken')
   const router = useRouter()
   const [open, setOpen]           = useState(false)
   const [titel, setTitel]         = useState('')
@@ -79,11 +82,15 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
   // medewerkerslijst (geen gekoppeld account), dan tóch een eigen optie tonen.
   const heeftZelf = medewerkers.some(m => m.auth_user_id === userId)
   const toewijsOpties: { value: string; label: string }[] = [
-    ...(heeftZelf ? [] : [{ value: userId, label: 'Jezelf' }]),
+    ...(heeftZelf ? [] : [{ value: userId, label: t('nieuw.jezelf') }]),
     ...medewerkers
       .filter(m => m.auth_user_id)
-      .map(m => ({ value: m.auth_user_id!, label: m.auth_user_id === userId ? `${m.naam} (jij)` : m.naam })),
+      .map(m => ({ value: m.auth_user_id!, label: m.auth_user_id === userId ? t('nieuw.naamJij', { naam: m.naam }) : m.naam })),
   ]
+
+  // Buiten de JSX opgebouwd: de lintregel herkent `t.rich` niet als vertaalfunctie.
+  const labelDossier = t.rich('nieuw.veldDossier', { zacht })
+  const labelDeadline = t.rich('nieuw.veldDeadline', { zacht })
 
   function zoek(q: string) {
     setDossierQuery(q)
@@ -112,13 +119,13 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
 
   function verstuur(e: React.FormEvent) {
     e.preventDefault()
-    const t = titel.trim()
-    if (!t) return
+    const tekst = titel.trim()
+    if (!tekst) return
     setFout(null)
     startTransition(async () => {
       try {
         await maakTaak({
-          titel:      t,
+          titel:      tekst,
           prioriteit,
           deadline:   deadline || undefined,
           dossier_id: dossier?.id,
@@ -127,7 +134,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
         sluit()
         router.refresh()
       } catch (err) {
-        setFout(err instanceof Error ? err.message : 'Aanmaken lukte niet. Probeer het opnieuw.')
+        setFout(err instanceof Error ? err.message : t('nieuw.aanmakenMislukt'))
       }
     })
   }
@@ -155,7 +162,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Nieuwe actie
+          {t('nieuw.knop')}
         </button>
       </div>
 
@@ -182,19 +189,19 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
             {/* grijp-streepje */}
             <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 16px', flexShrink: 0 }} />
             <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', marginBottom: 16, flexShrink: 0 }}>
-              Nieuwe actie
+              {t('nieuw.titel')}
             </div>
 
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Titel */}
               <div>
-                <label style={labelStijl}>Actie</label>
+                <label style={labelStijl}>{t('nieuw.veldActie')}</label>
                 <input
                   autoFocus
                   type="text"
                   value={titel}
                   onChange={e => setTitel(e.target.value)}
-                  placeholder="Wat moet er gedaan worden?"
+                  placeholder={t('nieuw.actiePlaceholder')}
                   style={veld}
                 />
               </div>
@@ -202,7 +209,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
               {/* Dossier (optioneel) */}
               <div>
                 <label style={labelStijl}>
-                  Dossier <span style={{ fontWeight: 500, color: '#9aa4ab' }}>(optioneel)</span>
+                  {labelDossier}
                 </label>
                 {dossier ? (
                   <div style={{
@@ -216,7 +223,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                     <button
                       type="button"
                       onClick={() => setDossier(null)}
-                      aria-label="Dossier loskoppelen"
+                      aria-label={t('nieuw.dossierLoskoppelen')}
                       style={{
                         flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: 'none',
                         background: 'transparent', color: '#6b757c', cursor: 'pointer',
@@ -234,7 +241,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                       type="text"
                       value={dossierQuery}
                       onChange={e => zoek(e.target.value)}
-                      placeholder="Zoek op dossiertitel…"
+                      placeholder={t('nieuw.dossierPlaceholder')}
                       style={veld}
                     />
                     {resultaten.length > 0 && (
@@ -267,7 +274,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                       </div>
                     )}
                     {dossierQuery.trim() && resultaten.length === 0 && (
-                      <div style={{ fontSize: 13, color: '#9aa4ab', marginTop: 8 }}>Geen dossiers gevonden.</div>
+                      <div style={{ fontSize: 13, color: '#9aa4ab', marginTop: 8 }}>{t('nieuw.geenDossiersGevonden')}</div>
                     )}
                   </>
                 )}
@@ -275,7 +282,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
 
               {/* Toegewezen aan */}
               <div>
-                <label style={labelStijl}>Toegewezen aan</label>
+                <label style={labelStijl}>{t('nieuw.veldToegewezen')}</label>
                 <div style={{ position: 'relative' }}>
                   <select
                     value={assigneeId}
@@ -297,17 +304,20 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
 
               {/* Prioriteit */}
               <div>
-                <label style={labelStijl}>Prioriteit</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                <label style={labelStijl}>{t('nieuw.veldPrioriteit')}</label>
+                {/* Flex met wrap i.p.v. een vast raster van vier: een lang woord (Tamil) schuift naar een
+                    tweede rij in plaats van uit de knop te lopen. Gelijke basis = gelijke breedtes. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {PRIORITEITEN.map(p => {
-                    const actief = prioriteit === p.value
-                    const kleur = PRIO_KLEUR[p.value]
+                    const actief = prioriteit === p
+                    const kleur = PRIO_KLEUR[p]
                     return (
                       <button
-                        key={p.value}
+                        key={p}
                         type="button"
-                        onClick={() => setPrio(p.value)}
+                        onClick={() => setPrio(p)}
                         style={{
+                          flex: '1 1 64px',
                           padding: '11px 4px', borderRadius: 10, cursor: 'pointer',
                           fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
                           border: `1.5px solid ${actief ? kleur.c : 'var(--border)'}`,
@@ -316,7 +326,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                           WebkitTapHighlightColor: 'transparent',
                         }}
                       >
-                        {p.label}
+                        {t(`prioriteit.${p}`)}
                       </button>
                     )
                   })}
@@ -326,7 +336,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
               {/* Deadline */}
               <div>
                 <label style={labelStijl}>
-                  Deadline <span style={{ fontWeight: 500, color: '#9aa4ab' }}>(optioneel)</span>
+                  {labelDeadline}
                 </label>
                 <input
                   type="date"
@@ -352,7 +362,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                   WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                Annuleren
+                {t('nieuw.annuleren')}
               </button>
               <button
                 type="submit"
@@ -366,7 +376,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                   WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                {pending ? 'Opslaan…' : 'Actie aanmaken'}
+                {pending ? t('nieuw.opslaan') : t('nieuw.aanmaken')}
               </button>
             </div>
           </form>

@@ -2,6 +2,9 @@
 
 import React, { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import {
   markeerAlsGelezen,
   markeerAlleAlsGelezen,
@@ -31,14 +34,16 @@ const TYPE_ICOON: Record<string, string> = {
   algemeen:            '🔔',
 }
 
-function datumTijd(iso: string): string {
+function datumTijd(iso: string, locale: string): string {
   const d = new Date(iso)
-  const datum = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-  const tijd  = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+  const datum = d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+  const tijd  = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
   return `${datum} · ${tijd}`
 }
 
 export default function MobielNotificatieLijst({ initieel }: { initieel: Notificatie[] }) {
+  const t = useTranslations('notificaties')
+  const locale = useDatumLocale()
   const router = useRouter()
   const [items, setItems] = useState<Notificatie[]>(initieel)
   const [bezig, startTransition] = useTransition()
@@ -70,7 +75,7 @@ export default function MobielNotificatieLijst({ initieel }: { initieel: Notific
   if (items.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '56px 16px', fontSize: 14 }}>
-        Je hebt geen meldingen.
+        {t('geen')}
       </div>
     )
   }
@@ -92,7 +97,7 @@ export default function MobielNotificatieLijst({ initieel }: { initieel: Notific
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          Alles gelezen
+          {t('allesGelezen')}
         </button>
       )}
 
@@ -123,7 +128,8 @@ export default function MobielNotificatieLijst({ initieel }: { initieel: Notific
               fontSize: 14.5, fontWeight: n.gelezen ? 500 : 700,
               color: 'var(--fg)', lineHeight: 1.35,
             }}>
-              {n.titel}
+              {/* Titel en tekst van een melding komen van kantoor; in de lijst zonder label. */}
+              <VertaalbareTekst tekst={n.titel} label={false} />
             </div>
             {(n.dossier_naam ?? n.body) && (
               <div style={{
@@ -131,11 +137,12 @@ export default function MobielNotificatieLijst({ initieel }: { initieel: Notific
                 overflow: 'hidden', textOverflow: 'ellipsis',
                 display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
               }}>
-                {n.dossier_naam ?? n.body}
+                {/* Een dossiernaam is een naam en blijft staan; alleen de berichttekst vertalen. */}
+                {n.dossier_naam ?? <VertaalbareTekst tekst={n.body} label={false} />}
               </div>
             )}
             <div style={{ fontSize: 11.5, color: '#8b9499', marginTop: 6 }}>
-              {datumTijd(n.aangemaakt_op)}
+              {datumTijd(n.aangemaakt_op, locale)}
             </div>
           </div>
         </button>

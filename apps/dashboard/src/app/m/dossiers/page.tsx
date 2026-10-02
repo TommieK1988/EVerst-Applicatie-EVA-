@@ -3,7 +3,10 @@ import { getMobieleDossiers } from '@/lib/dossiers/mobiel-lijst'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielDossierLijst, { type MobielDossier } from '@/components/mobiel/MobielDossierLijst'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
-import { dossierStatusBadge, dossierSectie } from '@/components/mobiel/dossier-status'
+import {
+  dossierStatusBadge, dossierSectie, actieveSubstatus, isSubstatusSleutel,
+} from '@/components/mobiel/dossier-status'
+import { getAppVertaler } from '@/i18n/server'
 import { getIngeplandeDossiers } from '@/lib/dossiers/ingepland'
 import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief'
 import { isDossierAfgesloten, type DossierRij } from '@/components/dossiers/types'
@@ -26,14 +29,15 @@ const AFGEROND = new Set(['financieel_gereed', 'financieel_afgesloten'])
 const SERVICEDESK_AFGEROND = new Set(['uitgevoerd', 'kosten_compleet', 'financieel_gereed', 'vervallen'])
 
 export default async function MobielDossiersPage() {
+  const t = await getAppVertaler('dossiers')
   const medewerker = await getCurrentMedewerker()
 
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Dossiers" backHref="/m" />
+        <AppHeader title={t('titel')} backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+          {t('geenMedewerker')}
         </div>
       </>
     )
@@ -75,6 +79,8 @@ export default async function MobielDossiersPage() {
       if (SERVICEDESK_AFGEROND.has(d.servicedesk_substatus ?? '')) continue
       seen.add(d.id)
       const { label, color } = dossierStatusBadge(d)
+      // Het label voor kantoor blijft in dossierStatusBadge; de app vertaalt op de sleutel.
+      const sleutel = actieveSubstatus(d)
       rows.push({
         id: d.id,
         titel: d.titel,
@@ -82,7 +88,7 @@ export default async function MobielDossiersPage() {
         klant_naam: d.klant_naam ?? null,
         projectleider_naam: d.projectleider_naam ?? null,
         groep,
-        statusLabel: label,
+        statusLabel: isSubstatusSleutel(sleutel) ? t(`substatus.${sleutel}`) : label,
         statusColor: color,
       })
     }
@@ -92,7 +98,7 @@ export default async function MobielDossiersPage() {
 
   return (
     <>
-      <AppHeader title="Dossiers" sub={`${rows.length} dossiers`} backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('aantalDossiers', { aantal: rows.length })} backHref="/m" />
       <MobielPullToRefresh />
       <MobielDossierLijst dossiers={rows} />
     </>

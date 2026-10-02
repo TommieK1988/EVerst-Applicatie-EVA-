@@ -66,15 +66,6 @@ export const STATUS_KLEUR: Record<KwaliteitResultaatStatus, string> = {
   nvt:             ZACHT,
 }
 
-/** Korte knoplabels; de volledige labels staan in kwaliteitResultaatStatusLabels. */
-export const STATUS_KORT: Record<KwaliteitResultaatStatus, string> = {
-  voldoet:         'Voldoet',
-  voldoet_niet:    'Voldoet niet',
-  niet_beoordeeld: 'Niet beoordeeld',
-  nvt:             'N.v.t.',
-  nader_onderzoek: 'Nader onderzoek',
-}
-
 export const ERNST_KLEUR: Record<KwaliteitErnst, string> = {
   kritiek:    ROOD,
   technisch:  AMBER,

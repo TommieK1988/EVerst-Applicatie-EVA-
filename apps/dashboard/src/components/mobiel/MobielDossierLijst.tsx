@@ -1,6 +1,7 @@
 'use client'
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import StatusBadge from './StatusBadge'
 
 export type MobielDossier = {
@@ -20,14 +21,9 @@ export type MobielDossier = {
  * Er was ook een chip "Alle". Die is weg: hij voegde niets toe — je zoekt op de telefoon nooit
  * door aanvragen en opdrachten tegelijk, en hij stond wél altijd vooraan de rij te vullen.
  * Een chip zonder dossiers verdwijnt nu ook helemaal, in plaats van als lege knop te blijven
- * staan.
+ * staan. De namen staan in `dossiers.groep.<key>`.
  */
-const SLICER: { key: MobielDossier['groep']; label: string }[] = [
-  { key: 'aanvraag',    label: 'Aanvragen' },
-  { key: 'offerte',     label: 'Offertes' },
-  { key: 'opdracht',    label: 'Opdrachten' },
-  { key: 'servicedesk', label: 'Servicedesk' },
-]
+const SLICER: MobielDossier['groep'][] = ['aanvraag', 'offerte', 'opdracht', 'servicedesk']
 
 /**
  * Vanaf hoeveel dossiers het zoekveld verschijnt.
@@ -43,9 +39,10 @@ function normaliseer(v: string): string {
 }
 
 export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossier[] }) {
+  const t = useTranslations('dossiers')
   const zichtbareChips = useMemo(
     () => SLICER
-      .map(s => ({ ...s, aantal: dossiers.filter(d => d.groep === s.key).length }))
+      .map(key => ({ key, aantal: dossiers.filter(d => d.groep === key).length }))
       .filter(s => s.aantal > 0),
     [dossiers],
   )
@@ -97,7 +94,7 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
                   transition: 'all 120ms', whiteSpace: 'nowrap',
                 }}
               >
-                {s.label} {s.aantal}
+                {t('chipMetAantal', { groep: t(`groep.${s.key}`), aantal: s.aantal })}
               </button>
             )
           })}
@@ -110,7 +107,7 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
             type="search"
             value={term}
             onChange={e => setTerm(e.target.value)}
-            placeholder="Zoek op titel, nummer, klant of projectleider"
+            placeholder={t('zoekPlaceholder')}
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
@@ -127,7 +124,7 @@ export default function MobielDossierLijst({ dossiers }: { dossiers: MobielDossi
       <div style={{ padding: '10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {gefilterd.length === 0 && (
           <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 0', fontSize: 14 }}>
-            {schoon ? 'Geen dossier gevonden' : 'Geen dossiers'}
+            {schoon ? t('geenGevonden') : t('geenDossiers')}
           </div>
         )}
         {gefilterd.map(d => (

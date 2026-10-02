@@ -2,10 +2,8 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  opleverMomentStatusLabels,
-  type OpleverHandtekeningRol, type OpleverToewijzingType,
-} from '@everts/database'
+import { useTranslations } from 'next-intl'
+import type { OpleverHandtekeningRol, OpleverToewijzingType } from '@everts/database'
 import {
   maakOpleverpunt, maakToegangToken, voegHandtekeningToe,
   type OpleverMomentView, type OpleverToewijsbaar,
@@ -30,6 +28,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
   toewijsbaar: OpleverToewijsbaar
   standaardNaam: string
 }) {
+  const t = useTranslations('oplevering')
   const router = useRouter()
   const [puntOpen, setPuntOpen] = useState(false)
   const [tekenOpen, setTekenOpen] = useState(false)
@@ -46,7 +45,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
         <div style={{ background: 'var(--bg-elev)', border: `1px solid ${RAND}`, borderRadius: 14, padding: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: GRIJS }}>
-              {opleverMomentStatusLabels[moment.status]}
+              {t(`momentStatus.${moment.status}`)}
             </span>
             <span style={{ fontSize: 15, fontWeight: 800, color: alleKlaar ? GROEN : TEKST }}>
               {moment.aantalGeaccepteerd}/{moment.aantalTotaal}
@@ -57,7 +56,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
           </div>
           {alleKlaar && (
             <div style={{ fontSize: 13, fontWeight: 600, color: GROEN, marginTop: 9 }}>
-              Alle punten geaccepteerd — klaar om te laten tekenen.
+              {t('doorloop.alleGeaccepteerd')}
             </div>
           )}
           {moment.handtekeningen.length > 0 && (
@@ -66,10 +65,10 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
                 <div key={h.id} style={{ border: `1px solid ${RAND}`, borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 7 }}>
                   {h.handtekening_url
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={h.handtekening_url} alt="handtekening" style={{ height: 26, width: 60, objectFit: 'contain' }} />
-                    : <span style={{ fontSize: 12, color: GROEN }}>✓ akkoord</span>}
+                    ? <img src={h.handtekening_url} alt={t('doorloop.handtekeningAlt')} style={{ height: 26, width: 60, objectFit: 'contain' }} />
+                    : <span style={{ fontSize: 12, color: GROEN }}>{t('doorloop.akkoord')}</span>}
                   <div style={{ fontSize: 11, color: GRIJS }}>
-                    <div style={{ fontWeight: 600, color: TEKST }}>{h.rol}</div>
+                    <div style={{ fontWeight: 600, color: TEKST }}>{t(`rol.${h.rol}`)}</div>
                     {h.naam && <div>{h.naam}</div>}
                   </div>
                 </div>
@@ -81,7 +80,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
         {/* Punten */}
         {moment.punten.length === 0 ? (
           <div style={{ background: 'var(--bg-elev)', border: `1px solid ${RAND}`, borderRadius: 14, padding: 20, textAlign: 'center', fontSize: 14, color: GRIJS }}>
-            Nog geen opleverpunten. Voeg het eerste punt toe.
+            {t('doorloop.geenPunten')}
           </div>
         ) : (
           moment.punten.map(p => (
@@ -90,16 +89,16 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
         )}
 
         <button type="button" onClick={() => setPuntOpen(true)} style={{ ...secundaireKnop, width: '100%' }}>
-          + Opleverpunt
+          {t('doorloop.knopPunt')}
         </button>
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={() => setDeelOpen(true)} style={{ ...secundaireKnop, flex: 1 }}>
-            Delen
+            {t('doorloop.knopDelen')}
           </button>
           <a href={`/api/oplevering/rapport/${moment.id}`} target="_blank" rel="noreferrer"
             style={{ ...secundaireKnop, flex: 1, textAlign: 'center', textDecoration: 'none' }}>
-            Rapport
+            {t('doorloop.knopRapport')}
           </a>
         </div>
       </div>
@@ -107,7 +106,7 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
       <MobielStickyFooter>
         <button type="button" onClick={() => setTekenOpen(true)}
           style={{ ...primaireKnop, width: '100%', background: alleKlaar ? GROEN : '#5b6770' }}>
-          Laten ondertekenen
+          {t('doorloop.knopOndertekenen')}
         </button>
       </MobielStickyFooter>
 
@@ -143,6 +142,7 @@ function NieuwPuntSheet({ momentId, toewijsbaar, onSluit, onKlaar }: {
   onSluit: () => void
   onKlaar: () => void
 }) {
+  const t = useTranslations('oplevering')
   const [omschrijving, setOmschrijving] = useState('')
   const [ruimte, setRuimte] = useState('')
   const [toewijzing, setToewijzing] = useState('')
@@ -150,7 +150,7 @@ function NieuwPuntSheet({ momentId, toewijsbaar, onSluit, onKlaar }: {
   const [fout, setFout] = useState<string | null>(null)
 
   async function opslaan() {
-    if (!omschrijving.trim()) { setFout('Beschrijf wat er nog moet gebeuren.'); return }
+    if (!omschrijving.trim()) { setFout(t('nieuwPunt.foutLeeg')); return }
     setBezig(true); setFout(null)
 
     // De keuzelijst codeert type en id in één waarde, zodat er maar één select nodig is op een
@@ -169,38 +169,38 @@ function NieuwPuntSheet({ momentId, toewijsbaar, onSluit, onKlaar }: {
   }
 
   return (
-    <BottomSheet titel="Opleverpunt toevoegen" onSluit={onSluit}>
+    <BottomSheet titel={t('nieuwPunt.titel')} onSluit={onSluit}>
       {fout && <Fout tekst={fout} />}
       <div>
-        <label style={label} htmlFor="op-oms">Wat moet er nog gebeuren?</label>
+        <label style={label} htmlFor="op-oms">{t('nieuwPunt.omschrijving')}</label>
         {/* Inspreken scheelt op locatie veel tijd; typen op een telefoon met werkhandschoenen niet. */}
         <SpraakTextarea id="op-oms" style={{ ...veld, minHeight: 88, resize: 'vertical' }}
           value={omschrijving} onChange={setOmschrijving}
-          placeholder="Beschrijf of spreek het punt in" />
+          placeholder={t('nieuwPunt.omschrijvingPlaceholder')} />
       </div>
       <div>
-        <label style={label} htmlFor="op-ruimte">Ruimte / locatie</label>
+        <label style={label} htmlFor="op-ruimte">{t('nieuwPunt.ruimte')}</label>
         <input id="op-ruimte" style={veld} value={ruimte} onChange={e => setRuimte(e.target.value)}
-          placeholder="Bijv. hal, kozijn achtergevel" />
+          placeholder={t('nieuwPunt.ruimtePlaceholder')} />
       </div>
       <div>
-        <label style={label} htmlFor="op-toew">Toewijzen aan</label>
+        <label style={label} htmlFor="op-toew">{t('toewijzen.label')}</label>
         <select id="op-toew" style={veld} value={toewijzing} onChange={e => setToewijzing(e.target.value)}>
-          <option value="">Niet toegewezen</option>
-          <optgroup label="Medewerkers">
+          <option value="">{t('toewijzen.nietToegewezen')}</option>
+          <optgroup label={t('nieuwPunt.groepMedewerkers')}>
             {toewijsbaar.medewerkers.map(m => (
               <option key={m.id} value={`medewerker:${m.id}`}>{m.naam}</option>
             ))}
           </optgroup>
-          <optgroup label="Onderaannemers / leveranciers">
+          <optgroup label={t('nieuwPunt.groepRelaties')}>
             {toewijsbaar.relaties.map(r => (
-              <option key={r.id} value={`relatie:${r.id}`}>{r.naam}{r.onderaannemer ? ' (OA)' : ''}</option>
+              <option key={r.id} value={`relatie:${r.id}`}>{r.onderaannemer ? t('toewijzen.relatieOA', { naam: r.naam }) : r.naam}</option>
             ))}
           </optgroup>
         </select>
       </div>
       <button type="button" onClick={opslaan} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>
-        {bezig ? 'Opslaan…' : 'Toevoegen'}
+        {bezig ? t('nieuwPunt.opslaan') : t('nieuwPunt.knopToevoegen')}
       </button>
     </BottomSheet>
   )
@@ -208,11 +208,8 @@ function NieuwPuntSheet({ momentId, toewijsbaar, onSluit, onKlaar }: {
 
 /* ───────────────────────────── Ondertekenen ──────────────────────────────── */
 
-const ROLLEN: { waarde: OpleverHandtekeningRol; label: string }[] = [
-  { waarde: 'opdrachtgever', label: 'Opdrachtgever' },
-  { waarde: 'opzichter', label: 'Opzichter' },
-  { waarde: 'uitvoerder', label: 'Uitvoerder' },
-]
+/** Volgorde van de keuzelijst; de labels staan in `oplevering.rol`. */
+const ROLLEN: OpleverHandtekeningRol[] = ['opdrachtgever', 'opzichter', 'uitvoerder']
 
 function OndertekenSheet({ momentId, standaardNaam, alleKlaar, onSluit, onKlaar }: {
   momentId: string
@@ -221,6 +218,7 @@ function OndertekenSheet({ momentId, standaardNaam, alleKlaar, onSluit, onKlaar 
   onSluit: () => void
   onKlaar: () => void
 }) {
+  const t = useTranslations('oplevering')
   const [rol, setRol] = useState<OpleverHandtekeningRol>('opdrachtgever')
   const [naam, setNaam] = useState('')
   const [b64, setB64] = useState<string | null>(null)
@@ -228,7 +226,7 @@ function OndertekenSheet({ momentId, standaardNaam, alleKlaar, onSluit, onKlaar 
   const [fout, setFout] = useState<string | null>(null)
 
   async function vastleggen() {
-    if (!b64) { setFout('Zet eerst een handtekening.'); return }
+    if (!b64) { setFout(t('ondertekenen.foutGeenHandtekening')); return }
     setBezig(true); setFout(null)
     const r = await voegHandtekeningToe(momentId, {
       rol,
@@ -242,31 +240,31 @@ function OndertekenSheet({ momentId, standaardNaam, alleKlaar, onSluit, onKlaar 
   }
 
   return (
-    <BottomSheet titel="Ondertekenen" onSluit={onSluit}>
+    <BottomSheet titel={t('ondertekenen.titel')} onSluit={onSluit}>
       {fout && <Fout tekst={fout} />}
       {!alleKlaar && (
         <div style={{ background: '#fdf8ec', border: '1px solid #f0dfb8', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: AMBER }}>
-          Er staan nog punten open. Ondertekenen kan, maar dan tekent de klant onder voorbehoud.
+          {t('ondertekenen.nogPuntenOpen')}
         </div>
       )}
       <div>
-        <label style={label} htmlFor="ht-rol">Wie tekent er?</label>
+        <label style={label} htmlFor="ht-rol">{t('ondertekenen.wieTekent')}</label>
         <select id="ht-rol" style={veld} value={rol}
           onChange={e => setRol(e.target.value as OpleverHandtekeningRol)}>
-          {ROLLEN.map(r => <option key={r.waarde} value={r.waarde}>{r.label}</option>)}
+          {ROLLEN.map(r => <option key={r} value={r}>{t(`rol.${r}`)}</option>)}
         </select>
       </div>
       <div>
-        <label style={label} htmlFor="ht-naam">Naam</label>
+        <label style={label} htmlFor="ht-naam">{t('ondertekenen.naam')}</label>
         <input id="ht-naam" style={veld} value={naam} onChange={e => setNaam(e.target.value)}
-          placeholder={rol === 'uitvoerder' ? standaardNaam : 'Naam ondertekenaar'} />
+          placeholder={rol === 'uitvoerder' ? standaardNaam : t('ondertekenen.naamPlaceholder')} />
       </div>
       <div>
-        <span style={label}>Handtekening</span>
+        <span style={label}>{t('ondertekenen.handtekening')}</span>
         <HandtekeningPad onChange={setB64} hoogte={180} />
       </div>
       <button type="button" onClick={vastleggen} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>
-        {bezig ? 'Vastleggen…' : 'Handtekening vastleggen'}
+        {bezig ? t('ondertekenen.vastleggen') : t('ondertekenen.knopVastleggen')}
       </button>
     </BottomSheet>
   )
@@ -279,6 +277,7 @@ function DeelSheet({ moment, dossierId, onSluit }: {
   dossierId: string
   onSluit: () => void
 }) {
+  const t = useTranslations('oplevering')
   const [bezig, setBezig] = useState(false)
   const [melding, setMelding] = useState<string | null>(null)
   const [fout, setFout] = useState<string | null>(null)
@@ -287,7 +286,7 @@ function DeelSheet({ moment, dossierId, onSluit }: {
   const relaties = new Map<string, string>()
   for (const p of moment.punten) {
     if (p.toegewezen_type === 'relatie' && p.toegewezen_relatie_id) {
-      relaties.set(p.toegewezen_relatie_id, p.toegewezenNaam ?? 'Partij')
+      relaties.set(p.toegewezen_relatie_id, p.toegewezenNaam ?? t('delen.partij'))
     }
   }
 
@@ -303,7 +302,7 @@ function DeelSheet({ moment, dossierId, onSluit }: {
     }
     try {
       await navigator.clipboard.writeText(url)
-      setMelding(`Link gekopieerd — ${titel}`)
+      setMelding(t('delen.linkGekopieerd', { titel }))
     } catch {
       setFout(url)
     }
@@ -314,7 +313,7 @@ function DeelSheet({ moment, dossierId, onSluit }: {
     const r = await maakToegangToken('onderaannemer', { dossierId, relatieId, geldigDagen: 30, omschrijving: naam })
     setBezig(false)
     if (!r.ok) { setFout(r.error); return }
-    deel(r.url, `afmeldlink ${naam}`)
+    deel(r.url, t('delen.titelAfmeldlink', { naam }))
   }
 
   async function akkoordLink() {
@@ -322,11 +321,11 @@ function DeelSheet({ moment, dossierId, onSluit }: {
     const r = await maakToegangToken('ondertekening', { dossierId, momentId: moment.id, geldigDagen: 30 })
     setBezig(false)
     if (!r.ok) { setFout(r.error); return }
-    deel(r.url, 'akkoord opdrachtgever')
+    deel(r.url, t('delen.titelAkkoord'))
   }
 
   return (
-    <BottomSheet titel="Delen" onSluit={onSluit}>
+    <BottomSheet titel={t('delen.titel')} onSluit={onSluit}>
       {melding && (
         <div style={{ background: '#eef8f1', border: `1px solid ${GROEN}33`, color: GROEN, borderRadius: 10, padding: '10px 12px', fontSize: 13 }}>
           {melding}
@@ -335,22 +334,22 @@ function DeelSheet({ moment, dossierId, onSluit }: {
       {fout && <Fout tekst={fout} />}
 
       <div style={{ fontSize: 13, color: GRIJS }}>
-        De ontvanger heeft geen EVA-account nodig; hij ziet alleen wat bij deze link hoort.
+        {t('delen.uitleg')}
       </div>
 
       <button type="button" onClick={akkoordLink} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>
-        Akkoordlink opdrachtgever
+        {t('delen.knopAkkoordlink')}
       </button>
 
       {[...relaties.entries()].map(([id, naam]) => (
         <button key={id} type="button" onClick={() => afmeldLink(id, naam)} disabled={bezig}
           style={{ ...secundaireKnop, width: '100%' }}>
-          Afmeldlink: {naam}
+          {t('delen.knopAfmeldlink', { naam })}
         </button>
       ))}
       {relaties.size === 0 && (
         <div style={{ fontSize: 12.5, color: ZACHT }}>
-          Wijs een punt toe aan een onderaannemer om daar een afmeldlink voor te maken.
+          {t('delen.geenRelaties')}
         </div>
       )}
     </BottomSheet>

@@ -12,9 +12,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import { startBezoekVoorDossier } from '@/lib/bezoek/bezoeken'
 
 export default function BezoekStartKnop({ dossierId }: { dossierId: string }) {
+  const t = useTranslations('taken')
   const router = useRouter()
   const [bezig, setBezig] = useState(false)
 
@@ -41,7 +43,7 @@ export default function BezoekStartKnop({ dossierId }: { dossierId: string }) {
         <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" />
         <path d="M12 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
       </svg>
-      {bezig ? 'Bezig…' : 'Projectbezoek starten'}
+      {bezig ? t('bezig') : t('bezoekStarten')}
     </button>
   )
 }

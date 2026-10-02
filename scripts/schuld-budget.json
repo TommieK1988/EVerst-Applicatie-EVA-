@@ -2,7 +2,7 @@
   "budget": {
     "as_any": 754,
     "ongegate_service_role_actions": 511,
-    "bestanden_boven_800_regels": 34
+    "bestanden_boven_800_regels": 33
   },
   "per_bestand": {
     "as_any": {
@@ -368,7 +368,7 @@
     },
     "bestanden_boven_800_regels": {
       "apps/dashboard/src/app/(platform)/everts-calc/actions/bestellingen.ts": 1379,
-      "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 1261,
+      "apps/dashboard/src/app/(platform)/everts-calc/actions/quotes.ts": 1265,
       "apps/dashboard/src/app/(platform)/everts-calc/actions/werkbegroting.ts": 2362,
       "apps/dashboard/src/app/(platform)/instellingen/offerte-layout/[id]/LayoutEditorClient.tsx": 1087,
       "apps/dashboard/src/app/(platform)/planning/actions.ts": 1475,
@@ -383,23 +383,22 @@
       "apps/dashboard/src/components/everts-calc/werkbegroting/BestellingenPaneel.tsx": 1131,
       "apps/dashboard/src/components/everts-calc/werkbegroting/WerkbegrotingGrid.tsx": 1937,
       "apps/dashboard/src/components/formulieren/builder/FieldSettings.tsx": 1203,
-      "apps/dashboard/src/components/formulieren/filler/FieldRenderer.tsx": 1115,
       "apps/dashboard/src/components/overzicht/OverzichtTabel.tsx": 1527,
       "apps/dashboard/src/components/planning/ActiviteitGantt.tsx": 2513,
-      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1892,
+      "apps/dashboard/src/components/planning/MedewerkerTimeline.tsx": 1930,
       "apps/dashboard/src/components/taken/TaakDetailPanel.tsx": 852,
       "apps/dashboard/src/lib/bouw7/client.ts": 1431,
       "apps/dashboard/src/lib/bouw7/sync.ts": 3041,
-      "apps/dashboard/src/lib/dossiers/actions.ts": 4586,
+      "apps/dashboard/src/lib/dossiers/actions.ts": 4612,
       "apps/dashboard/src/lib/dossiers/opdracht-onderdelen.ts": 1010,
       "apps/dashboard/src/lib/dossiers/oplevering.ts": 1335,
-      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 1471,
+      "apps/dashboard/src/lib/dossiers/servicedesk.ts": 1494,
       "apps/dashboard/src/lib/everts-calc/local-store.ts": 932,
       "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 1409,
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 844,
-      "apps/dashboard/src/lib/page-help.ts": 1710,
+      "apps/dashboard/src/lib/page-help.ts": 1734,
       "apps/dashboard/src/lib/taken/services/taken.ts": 1089,
-      "packages/database/src/platform-types.ts": 2019,
+      "packages/database/src/platform-types.ts": 2021,
       "packages/database/src/rechten-catalogus.ts": 822
     }
   }

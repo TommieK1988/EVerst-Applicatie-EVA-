@@ -2,6 +2,9 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
 import type { InspectieContext } from '@/lib/kwaliteit/inspecties'
 import type { KwaliteitDiscipline } from '@everts/database/kwaliteit-types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
@@ -14,6 +17,9 @@ import AfrondStap from './AfrondStap'
 import { GRIJS, GROEN, primaireKnop, RAND, ROOD, secundaireKnop, TEKST, ZACHT } from './stijl'
 
 type Stap = 'disciplines' | 'eerder' | 'doorloop' | 'afronden'
+
+/** Uitklappijltjes; geen tekst. */
+const PIJL = { open: '▴', dicht: '▾' }
 
 /**
  * De mobiele kwaliteitsronde in vier stappen.
@@ -34,6 +40,7 @@ export default function KwaliteitRonde({
   context: InspectieContext
   disciplines: (KwaliteitDiscipline & { aantal: number })[]
 }) {
+  const t = useTranslations('kwaliteit')
   const router = useRouter()
   const [stap, setStap] = React.useState<Stap>(
     context.resultaten.length > 0 ? 'doorloop' : 'disciplines',
@@ -69,15 +76,20 @@ export default function KwaliteitRonde({
   }, [context.afwijkingen])
 
   const telling = samenvatting(context.resultaten, context.afwijkingen)
-  const signaal = steekproefSignaal(
-    context.inspectie.steekproef_bekeken, context.inspectie.steekproef_afwijkend,
-  )
+  const bekeken = context.inspectie.steekproef_bekeken
+  const afwijkend = context.inspectie.steekproef_afwijkend
+  // De regel (wanneer is het een signaal) blijft in regels.ts; alleen de zin komt uit de taalbestanden.
+  const signaal = steekproefSignaal(bekeken, afwijkend) && bekeken && afwijkend !== null
+    ? t('ronde.steekproefSignaal', { afwijkend, bekeken, pct: Math.round((afwijkend / bekeken) * 100) })
+    : null
 
   const gekozen = context.inspectie.discipline_codes ?? []
   const disciplineNaam = React.useMemo(
     () => new Map(disciplines.map(d => [d.code, d.naam])),
     [disciplines],
   )
+  // Namen van disciplines komen uit de bibliotheek van kantoor: vertalen als leeshulp.
+  const gekozenNamen = useVertalingen(gekozen.map(c => disciplineNaam.get(c) ?? c))
 
   // Controlepunten gegroepeerd per discipline, in de volgorde waarin de opzichter ze koos.
   const groepen = React.useMemo(() => {
@@ -127,6 +139,14 @@ export default function KwaliteitRonde({
   }
 
   /* ── Doorloop ──────────────────────────────────────────────────────────── */
+  const vet = (c: React.ReactNode) => <strong>{c}</strong>
+  const tellingTekst = {
+    beoordeeld: t.rich('ronde.beoordeeld', { aantal: telling.beoordeeld, b: (c) => <strong style={{ color: TEKST }}>{c}</strong> }),
+    voldoet: t.rich('ronde.voldoet', { aantal: telling.voldoet, b: vet }),
+    voldoetNiet: t.rich('ronde.voldoetNiet', { aantal: telling.voldoet_niet, b: vet }),
+    nietBeoordeeld: t.rich('ronde.nietBeoordeeld', { aantal: telling.niet_beoordeeld, b: vet }),
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       {/* Live samenvatting; blijft in beeld zodat de opzichter zijn ronde kan overzien. */}
@@ -135,12 +155,12 @@ export default function KwaliteitRonde({
         borderBottom: `1px solid ${RAND}`, padding: '10px 14px', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', gap: 12, fontSize: 12, color: GRIJS, flexWrap: 'wrap' }}>
-          <span><strong style={{ color: TEKST }}>{telling.beoordeeld}</strong> beoordeeld</span>
-          <span style={{ color: GROEN }}><strong>{telling.voldoet}</strong> voldoet</span>
-          <span style={{ color: ROOD }}><strong>{telling.voldoet_niet}</strong> voldoet niet</span>
-          {telling.niet_beoordeeld > 0 && <span><strong>{telling.niet_beoordeeld}</strong> niet beoordeeld</span>}
+          <span>{tellingTekst.beoordeeld}</span>
+          <span style={{ color: GROEN }}>{tellingTekst.voldoet}</span>
+          <span style={{ color: ROOD }}>{tellingTekst.voldoetNiet}</span>
+          {telling.niet_beoordeeld > 0 && <span>{tellingTekst.nietBeoordeeld}</span>}
           {telling.kritiek > 0 && (
-            <span style={{ color: ROOD, fontWeight: 700 }}>{telling.kritiek} kritiek</span>
+            <span style={{ color: ROOD, fontWeight: 700 }}>{t('ronde.kritiek', { aantal: telling.kritiek })}</span>
           )}
         </div>
       </div>
@@ -152,7 +172,7 @@ export default function KwaliteitRonde({
             border: '1px solid var(--warning-300)', color: 'var(--warning-700)',
             fontSize: 12.5, marginBottom: 12,
           }}>
-            Deze inspectie is definitief en alleen-lezen.
+            {t('ronde.alleenLezen')}
           </div>
         )}
 
@@ -166,8 +186,7 @@ export default function KwaliteitRonde({
               fontSize: 13, fontWeight: 600, textAlign: 'left', cursor: 'pointer',
             }}
           >
-            ↩ {context.openEerdere.length} openstaande afwijking
-            {context.openEerdere.length === 1 ? '' : 'en'} uit eerdere inspecties
+            {t('ronde.openEerdere', { aantal: context.openEerdere.length })}
           </button>
         )}
 
@@ -199,11 +218,10 @@ export default function KwaliteitRonde({
                   background: 'var(--bg-elev)', cursor: 'pointer', minHeight: 48,
                 }}
               >
-                <span style={{ fontSize: 14.5, fontWeight: 700, color: TEKST, textAlign: 'left' }}>
-                  {discipline.naam}
-                </span>
+                <VertaalbareTekst label={false} tekst={discipline.naam}
+                  style={{ fontSize: 14.5, fontWeight: 700, color: TEKST, textAlign: 'left' }} />
                 <span style={{ fontSize: 12, color: gedaan === punten.length ? GROEN : GRIJS, fontWeight: 600 }}>
-                  {gedaan}/{punten.length} {open ? '▴' : '▾'}
+                  {gedaan}/{punten.length} {open ? PIJL.open : PIJL.dicht}
                 </span>
               </button>
 
@@ -244,21 +262,21 @@ export default function KwaliteitRonde({
 
         {groepen.length === 0 && (
           <p style={{ fontSize: 13, color: ZACHT, textAlign: 'center', padding: '32px 0' }}>
-            Nog geen disciplines gekozen.
+            {t('ronde.geenDisciplines')}
           </p>
         )}
 
         <p style={{ fontSize: 11, color: ZACHT, textAlign: 'center', margin: '18px 0 0' }}>
-          Disciplines gekozen: {gekozen.map(c => disciplineNaam.get(c) ?? c).join(' · ')}
+          {t('ronde.disciplinesGekozen', { lijst: gekozenNamen.map(v => v.tekst).join(' · ') })}
         </p>
       </div>
 
       <MobielStickyFooter>
         <button type="button" onClick={() => setStap('disciplines')} style={{ ...secundaireKnop, flex: '0 0 auto' }}>
-          Disciplines
+          {t('ronde.knopDisciplines')}
         </button>
         <button type="button" onClick={() => setStap('afronden')} style={{ ...primaireKnop, flex: 1 }}>
-          {bewerkbaar ? 'Afronden' : 'Overzicht'}
+          {bewerkbaar ? t('ronde.knopAfronden') : t('ronde.knopOverzicht')}
         </button>
       </MobielStickyFooter>
     </div>

@@ -1,5 +1,8 @@
+'use client'
+
 import React from 'react'
 import { Phone } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import type { Contact } from '@/lib/handboek/types'
 
 /**
@@ -12,10 +15,14 @@ import type { Contact } from '@/lib/handboek/types'
  * `tel:` opent de kiezer met het nummer al ingevuld; bellen doet de gebruiker
  * zelf. De spaties en streepjes gaan eruit, want sommige Android-kiezers
  * struikelen daarover.
+ *
+ * De tekst mag over twee regels lopen: in het Pools en Tamil is "Bel …" een
+ * stuk langer, en een afgekapte belknop is erger dan een hogere.
  */
 export default function BelKnop({ contact, label }: { contact: Contact; label?: string }) {
+  const t = useTranslations('handboek')
   if (!contact.nummer) return null
-  const gekozen = label || (contact.naam ? `Bel ${contact.naam}` : `Bel ${contact.rol}`)
+  const gekozen = label || t('belNaam', { naam: contact.naam || contact.rol })
 
   return (
     <a
@@ -29,8 +36,8 @@ export default function BelKnop({ contact, label }: { contact: Contact; label?: 
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <Phone size={19} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <Phone size={19} style={{ flexShrink: 0 }} />
+      <span style={{ minWidth: 0, whiteSpace: 'normal', textAlign: 'center', overflowWrap: 'anywhere' }}>
         {gekozen}
       </span>
     </a>

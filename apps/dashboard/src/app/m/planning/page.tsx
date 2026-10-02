@@ -1,6 +1,7 @@
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { haalAgendaVenster, haalMijnTaakItems } from '@/lib/agenda/mijn-agenda'
 import { dagSleutel, maandSleutel, startVenster, vingerafdruk } from '@/lib/agenda/agenda-model'
+import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import AgendaClient from '@/components/mobiel/planning/AgendaClient'
@@ -23,14 +24,14 @@ export const dynamic = 'force-dynamic'
 export default async function MobielPlanningPage(
   { searchParams }: { searchParams: Promise<{ dag?: string }> },
 ) {
-  const medewerker = await getCurrentMedewerker()
+  const [medewerker, t] = await Promise.all([getCurrentMedewerker(), getAppVertaler('planning')])
 
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Agenda" backHref="/m" />
+        <AppHeader title={t('titel')} backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+          {t('geenKoppeling')}
         </div>
       </>
     )
@@ -50,7 +51,7 @@ export default async function MobielPlanningPage(
 
   return (
     <>
-      <AppHeader title="Agenda" sub="Mijn planning" backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('sub')} backHref="/m" />
       <MobielPullToRefresh />
       <AgendaClient
         items={items}

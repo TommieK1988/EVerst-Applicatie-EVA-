@@ -1,0 +1,135 @@
+{
+  "bestanden": {
+    "geen": "Er zijn voor dit dossier geen bestanden vrijgegeven voor de app."
+  },
+  "formulieren": {
+    "geen": "Nog geen formulieren voor dit dossier.",
+    "formulier": "Formulier",
+    "status": {
+      "concept": "Concept",
+      "ingediend": "Ingediend",
+      "goedgekeurd": "Goedgekeurd",
+      "afgekeurd": "Afgekeurd"
+    }
+  },
+  "opname": {
+    "geen": "Er is nog geen opname voor dit dossier.",
+    "status": {
+      "concept": "Concept",
+      "gereed": "Gereed",
+      "omgezet": "In calculatie",
+      "geannuleerd": "Geannuleerd"
+    }
+  },
+  "werkplan": {
+    "geen": "Er is nog geen werkplan voor dit dossier.",
+    "werkomschrijving": "Werkomschrijving",
+    "overigeBetrokkenen": "Overige betrokkenen",
+    "werkafspraken": "Werkafspraken",
+    "kleurenMaterialen": "Kleuren en materialen",
+    "afspraak": {
+      "werktijden": "Afwijkende werktijden",
+      "reisuren": "Reisuren",
+      "reiskosten": "Reiskosten",
+      "parkeren": "Parkeren"
+    }
+  },
+  "planning": {
+    "geen": "Geen planning voor dit dossier.",
+    "alleAfgerond": "Alle planning voor dit dossier is afgerond.",
+    "toonVerlopen": "Toon verlopen ({aantal})",
+    "verbergVerlopen": "Verberg verlopen ({aantal})",
+    "verlopen": "Verlopen",
+    "kop": "Planning",
+    "week": "wk {nummer}"
+  },
+  "voortgang": {
+    "geen": "Nog geen voortgangsgegevens voor dit dossier.",
+    "geenUren": "Er zijn nog geen arbeidsuren geprognosticeerd of geboekt.",
+    "gereed": "gereed",
+    "uurGeboekt": "uur geboekt",
+    "van": "van",
+    "uurPrognose": "uur prognose",
+    "zonderCode": "Zonder code",
+    "uren": "Uren",
+    "bovenPrognose": "{uren} uur boven de prognose",
+    "oordeel": {
+      "teVeel": "Let op: meer uren verbruikt dan werk gereed",
+      "ietsVoor": "Uren lopen iets voor op de voortgang",
+      "ruim": "Ruim binnen de prognose",
+      "opKoers": "Op koers"
+    },
+    "werkGereed": "Werk gereed",
+    "wijzig": "Wijzig",
+    "vraag": "Hoeveel van het arbeidswerk is klaar?",
+    "percentageGereed": "Percentage gereed",
+    "ongeldig": "Geef een percentage tussen 0 en 100.",
+    "annuleren": "Annuleren",
+    "opslaan": "Opslaan",
+    "bezig": "Bezig…",
+    "opslaanMislukt": "Opslaan mislukt.",
+    "bijgewerkt": "Werk gereed bijgewerkt.",
+    "opgeslagenInEva": "Opgeslagen in EVA.",
+    "totaalVoorCode": "Totaal voor deze code: {pct}%."
+  },
+  "oplevering": {
+    "plusOplevering": "+ Oplevering",
+    "geenFeedback": "Nog geen bewonersfeedback ontvangen.",
+    "reacties": "{aantal, plural, one {# reactie} other {# reacties}}",
+    "reactiesOntvangen": "{aantal, plural, one {# reactie ontvangen} other {# reacties ontvangen}}",
+    "nieuweMeldingen": "Nieuwe meldingen ({aantal})",
+    "triageUitleg": "Gemeld via een formulier. Zet ze op de lijst, of wijs ze af.",
+    "anoniem": "Anoniem",
+    "fotoBijMelding": "foto bij melding",
+    "opDeLijst": "Op de lijst",
+    "afwijzen": "Afwijzen",
+    "afwijzenTitel": "Melding afwijzen",
+    "afwijzenLabel": "Waarom is dit geen opleverpunt? (optioneel)",
+    "geenMoment": "Nog geen oplevermoment op dit dossier.",
+    "maakEenAan": "Maak er hieronder een aan.",
+    "opleveringen": "Opleveringen",
+    "ondertekend": "{aantal}× ondertekend",
+    "momentStatus": {
+      "concept": "Concept",
+      "in_uitvoering": "In uitvoering",
+      "gereed_voor_ondertekening": "Gereed voor ondertekening",
+      "ondertekend": "Ondertekend",
+      "afgerond": "Afgerond"
+    },
+    "momentType": {
+      "vooroplevering": "Vooroplevering",
+      "eindoplevering": "Eindoplevering",
+      "tussenoplevering": "Tussenoplevering",
+      "overig": "Overig"
+    },
+    "aandachtspunten": "Aandachtspunten",
+    "aandachtspuntenOpen": "Aandachtspunten ({aantal} open)",
+    "geenAandachtspunten": "Nog geen losse aandachtspunten. Meld hier wat je onderweg tegenkomt.",
+    "plusAandachtspunt": "+ Aandachtspunt",
+    "afgewezenMeldingen": "{aantal, plural, one {# afgewezen melding} other {# afgewezen meldingen}}",
+    "verbergen": "Verbergen",
+    "tonen": "Tonen",
+    "reden": "Reden: {reden}",
+    "geefTitel": "Geef een titel op.",
+    "nieuweOplevering": "Nieuwe oplevering",
+    "titel": "Titel",
+    "titelPlaceholder": "Bijv. Eindoplevering blok A",
+    "type": "Type",
+    "aanmaken": "Aanmaken…",
+    "aanmakenEnStarten": "Aanmaken en starten",
+    "beschrijf": "Beschrijf wat er aan de hand is.",
+    "fotoMislukt": "Punt opgeslagen, maar een foto mislukte: {fout}",
+    "aandachtspuntMelden": "Aandachtspunt melden",
+    "watIsEr": "Wat is er aan de hand?",
+    "omschrijvingPlaceholder": "Beschrijf of spreek in wat er nog moet gebeuren",
+    "ruimte": "Ruimte / locatie",
+    "ruimtePlaceholder": "Bijv. hal, kozijn achtergevel",
+    "fotos": "Foto's",
+    "fotoMaken": "📷 Foto maken",
+    "uitBibliotheek": "🖼 Uit bibliotheek",
+    "fotosGekozen": "{aantal, plural, one {# foto gekozen} other {# foto's gekozen}}",
+    "wissen": "wissen",
+    "opslaan": "Opslaan",
+    "opslaanBezig": "Opslaan…"
+  }
+}

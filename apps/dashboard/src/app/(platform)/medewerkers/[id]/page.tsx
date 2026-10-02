@@ -33,6 +33,7 @@ import GebruikerToegangBeheer from '@/components/medewerkers/GebruikerToegangBeh
 import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
 import SaldoBeheer from '@/components/medewerkers/SaldoBeheer'
 import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
+import AppTaalBeheer from '@/components/medewerkers/AppTaalBeheer'
 import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
 import { pgQuery } from '@/lib/wagenpark/db'
 import {
@@ -412,6 +413,17 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
               </CardBody>
             </Card>
           )}
+
+          {/* Taal van EVA Mobiel */}
+          <Card>
+            <CardBody>
+              <AppTaalBeheer
+                medewerker_id={params.id}
+                taal={medewerker.taal}
+                magWijzigen={heeftModuleToegang(eigenRechten, 'medewerkers', 'schrijven')}
+              />
+            </CardBody>
+          </Card>
 
           {/* Wagenpark-bestuurder */}
           <Card>

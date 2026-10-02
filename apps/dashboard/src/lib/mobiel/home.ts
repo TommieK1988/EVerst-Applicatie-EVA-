@@ -6,6 +6,7 @@ import { dagSleutel, sorteerDagItems, type AgendaItem } from '@/lib/agenda/agend
 import { getUrenInstellingen, indienDeadline } from '@/lib/uren/instellingen'
 import { weekStartVan } from '@/lib/uren/rooster'
 import { isFiatteerder } from './keuren'
+import { getAppVertaler } from '@/i18n/server'
 
 /**
  * Datalaag van het mobiele startscherm (`/m`).
@@ -96,7 +97,8 @@ async function haalUrenSignalen(medewerkerId: string): Promise<UrenSignaal[]> {
 
   type WeekRij = { id: string; week_start: string; week_nr: number; status: string }
 
-  const [{ data, error }, inst] = await Promise.all([
+  // Alleen voor het startscherm van de app: de regels in de taal van de medewerker.
+  const [{ data, error }, inst, t] = await Promise.all([
     createAdminClient()
       .from('uren_weken')
       .select('id, week_start, week_nr, status')
@@ -106,6 +108,7 @@ async function haalUrenSignalen(medewerkerId: string): Promise<UrenSignaal[]> {
       .order('week_start', { ascending: true })
       .overrideTypes<WeekRij[]>(),
     getUrenInstellingen(),
+    getAppVertaler('home'),
   ])
   if (error) return []
 
@@ -116,8 +119,8 @@ async function haalUrenSignalen(medewerkerId: string): Promise<UrenSignaal[]> {
     if (week.status === 'afgekeurd') {
       signalen.push({
         id: week.id,
-        titel: `Week ${week.week_nr} is afgekeurd`,
-        sub: 'Pas je uren aan en dien de week opnieuw in',
+        titel: t('signalen.weekAfgekeurd', { week: week.week_nr }),
+        sub: t('signalen.weekAfgekeurdSub'),
         href,
         urgent: true,
       })
@@ -133,10 +136,10 @@ async function haalUrenSignalen(medewerkerId: string): Promise<UrenSignaal[]> {
 
     signalen.push({
       id: week.id,
-      titel: `Week ${week.week_nr} nog niet ingediend`,
+      titel: t('signalen.weekNietIngediend', { week: week.week_nr }),
       sub: dagenTeLaat >= 7
-        ? `De deadline was ${dagenTeLaat} dagen geleden`
-        : 'Vul je uren aan en dien de week in',
+        ? t('signalen.deadlineVerstreken', { dagen: dagenTeLaat })
+        : t('signalen.vulAan'),
       href,
       urgent: dagenTeLaat >= 7,
     })

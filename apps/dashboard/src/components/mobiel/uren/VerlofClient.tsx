@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   vraagVerlofAan, trekVerlofIn, berekenMijnVerlofUren,
   type VerlofAanvraag,
@@ -32,11 +36,19 @@ const labelStijl: React.CSSProperties = {
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 }
 
-const STATUS: Record<string, { label: string; kleur: string; achtergrond: string }> = {
-  aangevraagd: { label: 'Wacht op akkoord', kleur: '#a15c00', achtergrond: '#fdf3e3' },
-  goedgekeurd: { label: 'Goedgekeurd', kleur: '#009439', achtergrond: '#e6f5ec' },
-  afgewezen: { label: 'Afgewezen', kleur: '#c0392b', achtergrond: '#fdecea' },
-  ingetrokken: { label: 'Ingetrokken', kleur: '#8a8c86', achtergrond: '#f1f3f4' },
+type StatusSleutel = 'aangevraagd' | 'goedgekeurd' | 'afgewezen' | 'ingetrokken'
+
+/** Kleuren per status; de tekst staat in `verlof.status.*`. */
+const STATUS: Record<StatusSleutel, { kleur: string; achtergrond: string }> = {
+  aangevraagd: { kleur: '#a15c00', achtergrond: '#fdf3e3' },
+  goedgekeurd: { kleur: '#009439', achtergrond: '#e6f5ec' },
+  afgewezen: { kleur: '#c0392b', achtergrond: '#fdecea' },
+  ingetrokken: { kleur: '#8a8c86', achtergrond: '#f1f3f4' },
+}
+
+/** Onbekende status valt terug op "aangevraagd", zoals voorheen. */
+function statusSleutel(status: string): StatusSleutel {
+  return status in STATUS ? status as StatusSleutel : 'aangevraagd'
 }
 
 /** "13:00-17:00" achter de periode, alleen bij een deel van een dag. */
@@ -44,10 +56,9 @@ function venster(a: VerlofAanvraag) {
   return a.startTijd && a.eindTijd ? ` · ${a.startTijd}-${a.eindTijd}` : ''
 }
 
-function periode(start: string, eind: string) {
-  const f = (d: string) => new Date(`${d}T12:00:00`)
-    .toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-  return start === eind ? f(start) : `${f(start)} t/m ${f(eind)}`
+/** Eén datum in de taal van de app, bijv. "8 sep". */
+function kortDatum(d: string, locale: string) {
+  return new Date(`${d}T12:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short' })
 }
 
 export default function VerlofClient({
@@ -57,6 +68,14 @@ export default function VerlofClient({
   soorten: Array<{ id: string; naam: string }>
   saldo: number
 }) {
+  const t = useTranslations('verlof')
+  const locale = useDatumLocale()
+  const getal = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
+  const periode = (start: string, eind: string) => start === eind
+    ? kortDatum(start, locale)
+    : t('periode', { van: kortDatum(start, locale), tot: kortDatum(eind, locale) })
+  // Namen van verlofsoorten stelt kantoor in; in een <option> kan geen component.
+  const soortNamen = useVertalingen(soorten.map(s => s.naam))
   const router = useRouter()
   const [, startT] = useTransition()
   const ververs = () => startT(() => router.refresh())
@@ -99,7 +118,7 @@ export default function VerlofClient({
   const kanVersturen = !!berekend && berekend.dagen > 0 && kosten > 0
 
   async function verstuur() {
-    if (!start || !tot) { toast.error(heleDagen ? 'Kies een periode.' : 'Kies een dag.'); return }
+    if (!start || !tot) { toast.error(heleDagen ? t('kiesPeriode') : t('kiesDag')); return }
     setBezig(true)
     const r = await vraagVerlofAan({
       uursoortId: soortId, startDatum: start, eindDatum: tot,
@@ -110,7 +129,7 @@ export default function VerlofClient({
     })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Aanvraag verstuurd.')
+    toast.success(t('verstuurd'))
     setOpen(false); setStart(''); setEind(''); setToelichting(''); setBerekend(null)
     setHeleDagen(true)
     ververs()
@@ -119,26 +138,27 @@ export default function VerlofClient({
   async function intrekken(a: VerlofAanvraag) {
     const r = await trekVerlofIn(a.id)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Aanvraag ingetrokken.')
+    toast.success(t('ingetrokkenMelding'))
     ververs()
   }
 
   return (
     <>
       <div style={{ padding: '14px 16px', background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 12, color: '#6b757c' }}>Tijd-voor-tijdsaldo</div>
+        <div style={{ fontSize: 12, color: '#6b757c' }}>{t('saldo')}</div>
         <div style={{ fontSize: 24, fontWeight: 800, color: saldo < 0 ? '#c0392b' : 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
-          {saldo > 0 ? '+' : ''}{saldo.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur
+          {t('aantalUur', { uren: `${saldo > 0 ? '+' : ''}${getal(saldo)}` })}
         </div>
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {aanvragen.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#6b757c', padding: '32px 0', fontSize: 14 }}>
-            Je hebt nog geen verlof aangevraagd.
+            {t('geenAanvragen')}
           </p>
         ) : aanvragen.map(a => {
-          const st = STATUS[a.status] ?? STATUS.aangevraagd
+          const sleutel = statusSleutel(a.status)
+          const st = STATUS[sleutel]
           return (
             <div key={a.id} style={{
               border: '1px solid var(--border)', borderRadius: 12,
@@ -150,14 +170,15 @@ export default function VerlofClient({
                     {periode(a.startDatum, a.eindDatum)}{venster(a)}
                   </div>
                   <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>
-                    {a.uursoortNaam} · {a.urenTotaal.toLocaleString('nl-NL')} uur
+                    <VertaalbareTekst tekst={a.uursoortNaam} label={false} />
+                    {' · '}{t('aantalUur', { uren: a.urenTotaal.toLocaleString(locale) })}
                   </div>
                 </div>
                 <span style={{
                   padding: '4px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                  color: st.kleur, background: st.achtergrond, whiteSpace: 'nowrap', height: 'fit-content',
+                  color: st.kleur, background: st.achtergrond, height: 'fit-content', maxWidth: '50%',
                 }}>
-                  {st.label}
+                  {t(`status.${sleutel}`)}
                 </span>
               </div>
 
@@ -166,19 +187,22 @@ export default function VerlofClient({
               )}
               {a.status === 'afgewezen' && a.afwijzingReden && (
                 <div style={{ fontSize: 12, color: '#c0392b', marginTop: 6 }}>
-                  <strong>Reden:</strong> {a.afwijzingReden}
+                  <strong>{t('reden')}</strong>{' '}
+                  <VertaalbareTekst tekst={a.afwijzingReden} />
                 </div>
               )}
               {/* Een hele afdeling kan beoordelen, dus de naam erbij: anders weet de aanvrager
                   niet bij wie hij moet zijn als hij er iets over wil vragen. */}
               {a.beoordelaarNaam && (a.status === 'goedgekeurd' || a.status === 'afgewezen') && (
                 <div style={{ fontSize: 11, color: '#8a949a', marginTop: 6 }}>
-                  {a.status === 'goedgekeurd' ? 'Goedgekeurd' : 'Afgewezen'} door {a.beoordelaarNaam}
+                  {a.status === 'goedgekeurd'
+                    ? t('goedgekeurdDoor', { naam: a.beoordelaarNaam })
+                    : t('afgewezenDoor', { naam: a.beoordelaarNaam })}
                 </div>
               )}
               {a.status === 'goedgekeurd' && a.bouw7Status === 'fout' && (
                 <div style={{ fontSize: 11, color: '#a15c00', marginTop: 6 }}>
-                  Je verlof staat vast, maar is nog niet in Bouw7 verwerkt. De administratie ziet dit.
+                  {t('nietInBouw7')}
                 </div>
               )}
               {a.status === 'aangevraagd' && (
@@ -187,7 +211,7 @@ export default function VerlofClient({
                     marginTop: 8, border: 'none', background: 'transparent', padding: 0,
                     fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: '#c0392b', cursor: 'pointer',
                   }}>
-                  Intrekken
+                  {t('intrekken')}
                 </button>
               )}
             </div>
@@ -206,7 +230,7 @@ export default function VerlofClient({
             fontFamily: 'inherit', fontSize: 16, fontWeight: 700,
             background: '#009439', color: '#fff', cursor: 'pointer',
           }}>
-          Verlof aanvragen
+          {t('verlofAanvragen')}
         </button>
       </div>
 
@@ -226,25 +250,25 @@ export default function VerlofClient({
             }}>
             <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 16px', flexShrink: 0 }} />
             <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', marginBottom: 16, flexShrink: 0 }}>
-              Verlof aanvragen
+              {t('verlofAanvragen')}
             </div>
 
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <label style={labelStijl}>Soort</label>
+                <label style={labelStijl}>{t('soort')}</label>
                 <select value={soortId} onChange={e => setSoortId(e.target.value)} style={veld}>
-                  {soorten.map(s => <option key={s.id} value={s.id}>{s.naam}</option>)}
+                  {soorten.map((s, i) => <option key={s.id} value={s.id}>{soortNamen[i]?.tekst ?? s.naam}</option>)}
                 </select>
               </div>
 
               <div>
-                <label style={labelStijl}>Hoe lang</label>
+                <label style={labelStijl}>{t('hoeLang')}</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="button" onClick={() => setHeleDagen(true)} style={keuze(heleDagen)}>
-                    Hele dag(en)
+                    {t('heleDagen')}
                   </button>
                   <button type="button" onClick={() => setHeleDagen(false)} style={keuze(!heleDagen)}>
-                    Deel van een dag
+                    {t('deelVanDag')}
                   </button>
                 </div>
               </div>
@@ -252,11 +276,11 @@ export default function VerlofClient({
               {heleDagen ? (
                 <div style={{ display: 'flex', gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStijl}>Van</label>
+                    <label style={labelStijl}>{t('van')}</label>
                     <input type="date" value={start} onChange={e => setStart(e.target.value)} style={veld} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStijl}>Tot en met</label>
+                    <label style={labelStijl}>{t('totEnMet')}</label>
                     <input type="date" value={eind} min={start || undefined}
                       onChange={e => setEind(e.target.value)} style={veld} />
                   </div>
@@ -264,17 +288,17 @@ export default function VerlofClient({
               ) : (
                 <>
                   <div>
-                    <label style={labelStijl}>Dag</label>
+                    <label style={labelStijl}>{t('dag')}</label>
                     <input type="date" value={start} onChange={e => setStart(e.target.value)} style={veld} />
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <div style={{ flex: 1 }}>
-                      <label style={labelStijl}>Vanaf</label>
+                      <label style={labelStijl}>{t('vanaf')}</label>
                       <input type="time" value={vanTijd} step={300}
                         onChange={e => setVanTijd(e.target.value)} style={veld} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={labelStijl}>Tot</label>
+                      <label style={labelStijl}>{t('tot')}</label>
                       <input type="time" value={totTijd} step={300} min={vanTijd}
                         onChange={e => setTotTijd(e.target.value)} style={veld} />
                     </div>
@@ -291,31 +315,27 @@ export default function VerlofClient({
                 }}>
                   {berekend.dagen === 0 ? (
                     heleDagen
-                      ? 'In deze periode vallen geen roosterdagen — er is dan geen verlof op te nemen.'
-                      : 'Op deze dag werk je volgens je rooster niet — er is dan geen verlof op te nemen.'
+                      ? t('geenRoosterdagenPeriode')
+                      : t('geenRoosterdagDag')
                   ) : !heleDagen ? (
                     vensterUren <= 0 ? (
-                      'De eindtijd moet ná de begintijd liggen.'
+                      t('eindNaBegin')
                     ) : (
                       <>
-                        <strong>{kosten.toLocaleString('nl-NL')} uur</strong>
+                        <strong>{t('aantalUur', { uren: kosten.toLocaleString(locale) })}</strong>
                         {vensterUren > berekend.uren && (
                           <div style={{ marginTop: 4 }}>
-                            Meer dan een hele werkdag kan niet — er gaat één roosterdag
-                            ({berekend.uren.toLocaleString('nl-NL')} uur) af.
+                            {t('meerDanWerkdag', { uren: berekend.uren.toLocaleString(locale) })}
                           </div>
                         )}
                       </>
                     )
                   ) : (
                     <>
-                      <strong>{berekend.dagen} roosterdag{berekend.dagen === 1 ? '' : 'en'} ·{' '}
-                      {berekend.uren.toLocaleString('nl-NL')} uur</strong>
+                      <strong>{t('roosterdagen', { dagen: berekend.dagen, uren: berekend.uren.toLocaleString(locale) })}</strong>
                       {berekend.overgeslagen.length > 0 && (
                         <div style={{ marginTop: 4 }}>
-                          {berekend.overgeslagen.length} feestdag
-                          {berekend.overgeslagen.length === 1 ? '' : 'en'} valt hierbuiten — daar
-                          hoef je geen verlof voor op te nemen.
+                          {t('feestdagen', { aantal: berekend.overgeslagen.length })}
                         </div>
                       )}
                     </>
@@ -324,16 +344,16 @@ export default function VerlofClient({
               )}
 
               <div>
-                <label style={labelStijl}>Toelichting (optioneel)</label>
+                <label style={labelStijl}>{t('toelichting')}</label>
                 <input type="text" value={toelichting} onChange={e => setToelichting(e.target.value)}
-                  placeholder="Bijvoorbeeld: zomervakantie" style={veld} />
+                  placeholder={t('toelichtingVoorbeeld')} style={veld} />
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 18, flexShrink: 0 }}>
               <button type="button" onClick={() => setOpen(false)}
                 style={{ ...actieKnop, background: 'transparent', color: '#6b757c', border: '1px solid var(--border)' }}>
-                Annuleren
+                {t('annuleren')}
               </button>
               <button type="button" onClick={verstuur}
                 disabled={bezig || !kanVersturen}
@@ -341,7 +361,7 @@ export default function VerlofClient({
                   ...actieKnop, background: '#009439', color: '#fff', border: 'none',
                   opacity: bezig || !kanVersturen ? 0.5 : 1,
                 }}>
-                {bezig ? 'Bezig…' : 'Aanvragen'}
+                {bezig ? t('bezig') : t('aanvragen')}
               </button>
             </div>
           </div>

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
 import type { UursoortOptie, WeekRegel, RegelInvoer } from '@/lib/uren/weekstaat'
 import { getDossierOpties } from '@/lib/uren/weekstaat'
 import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
@@ -25,12 +28,8 @@ const labelStijl: React.CSSProperties = {
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 }
 
-const CATEGORIE_KOP: Record<string, string> = {
-  werk: 'Gewerkt',
-  tijd_voor_tijd: 'Tijd voor tijd',
-  afwezig: 'Niet gewerkt',
-  feestdag: 'Feestdag',
-}
+/** De groepen in de keuzelijst; de koppen staan in `uren.regel.categorie.*`. */
+const CATEGORIEEN = ['werk', 'tijd_voor_tijd', 'afwezig', 'feestdag'] as const
 
 export default function RegelSheet({
   datum, uursoorten, regel, onSluit, onBewaar,
@@ -42,6 +41,8 @@ export default function RegelSheet({
   onSluit: () => void
   onBewaar: (invoer: RegelInvoer) => Promise<{ ok: boolean; error?: string }>
 }) {
+  const t = useTranslations('uren')
+  const locale = useDatumLocale()
   const [uursoortId, setUursoortId] = useState(regel?.uursoort_id ?? uursoorten[0]?.id ?? '')
   const [uren, setUren] = useState(regel?.uren ?? 8)
   const [dossierId, setDossierId] = useState(regel?.dossier_id ?? '')
@@ -92,14 +93,20 @@ export default function RegelSheet({
       opmerking: opmerking || null,
     })
     setBezig(false)
-    if (!r.ok) { toast.error(r.error ?? 'Opslaan mislukt.'); return }
+    if (!r.ok) { toast.error(r.error ?? t('regel.opslaanMislukt')); return }
     onSluit()
   }
 
   // Uursoorten gegroepeerd, zodat "Gewerkt" en "Niet gewerkt" visueel uit elkaar liggen.
-  const groepen = ['werk', 'tijd_voor_tijd', 'afwezig', 'feestdag']
+  const groepen = CATEGORIEEN
     .map(c => ({ categorie: c, opties: uursoorten.filter(u => u.categorie === c) }))
     .filter(g => g.opties.length > 0)
+
+  // Namen van uursoorten en codes stelt kantoor in; in een <option> kan geen component, dus
+  // hier de hook. In het Nederlands komt de tekst ongewijzigd terug.
+  const uursoortNamen = useVertalingen(uursoorten.map(u => u.naam))
+  const naamVanUursoort = new Map(uursoorten.map((u, i) => [u.id, uursoortNamen[i]?.tekst ?? u.naam]))
+  const codeNamen = useVertalingen(codes.map(c => c.naam))
 
   return (
     <div
@@ -121,17 +128,17 @@ export default function RegelSheet({
       >
         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 16px', flexShrink: 0 }} />
         <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', marginBottom: 16, flexShrink: 0 }}>
-          {regel ? 'Uren aanpassen' : 'Uren toevoegen'}
+          {regel ? t('regel.titelAanpassen') : t('regel.titelNieuw')}
         </div>
 
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Wat */}
           <div>
-            <label style={labelStijl}>Wat heb je gedaan?</label>
+            <label style={labelStijl}>{t('regel.watGedaan')}</label>
             <select value={uursoortId} onChange={e => { setUursoortId(e.target.value); setCode('') }} style={veld}>
               {groepen.map(g => (
-                <optgroup key={g.categorie} label={CATEGORIE_KOP[g.categorie] ?? g.categorie}>
-                  {g.opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
+                <optgroup key={g.categorie} label={t(`regel.categorie.${g.categorie}`)}>
+                  {g.opties.map(o => <option key={o.id} value={o.id}>{naamVanUursoort.get(o.id) ?? o.naam}</option>)}
                 </optgroup>
               ))}
             </select>
@@ -140,30 +147,30 @@ export default function RegelSheet({
           {isWerk && (
             <>
               <div>
-                <label style={labelStijl}>Project</label>
+                <label style={labelStijl}>{t('regel.project')}</label>
                 <select value={dossierId} onChange={e => { setDossierId(e.target.value); setCode('') }} style={veld}>
-                  <option value="">— kies een project —</option>
+                  <option value="">{t('regel.kiesProject')}</option>
                   {dossiers.some(d => d.gekoppeld) && (
-                    <optgroup label="Jouw projecten">
+                    <optgroup label={t('regel.jouwProjecten')}>
                       {dossiers.filter(d => d.gekoppeld).map(d => (
                         <option key={d.id} value={d.id}>{d.label}</option>
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Overige opdrachten">
+                  <optgroup label={t('regel.overigeOpdrachten')}>
                     {dossiers.filter(d => !d.gekoppeld && !d.indirect && !d.servicedesk).map(d => (
                       <option key={d.id} value={d.id}>{d.label}</option>
                     ))}
                   </optgroup>
                   {dossiers.some(d => !d.gekoppeld && !d.indirect && d.servicedesk) && (
-                    <optgroup label="Servicedeskbonnen">
+                    <optgroup label={t('regel.servicedeskbonnen')}>
                       {dossiers.filter(d => !d.gekoppeld && !d.indirect && d.servicedesk).map(d => (
                         <option key={d.id} value={d.id}>{d.label}</option>
                       ))}
                     </optgroup>
                   )}
                   {dossiers.some(d => d.indirect) && (
-                    <optgroup label="Indirecte uren">
+                    <optgroup label={t('regel.indirecteUren')}>
                       {dossiers.filter(d => d.indirect).map(d => (
                         <option key={d.id} value={d.id}>{d.label}</option>
                       ))}
@@ -174,34 +181,33 @@ export default function RegelSheet({
 
               {isIndirect ? (
                 <p style={{ fontSize: 12.5, color: '#6b757c', margin: '-6px 0 0', lineHeight: 1.45 }}>
-                  Indirecte uren worden niet bewaakt, dus een bewakingscode hoeft hier niet.
+                  {t('regel.indirectUitleg')}
                 </p>
               ) : (
                 <div>
-                  <label style={labelStijl}>Bewakingscode</label>
+                  <label style={labelStijl}>{t('regel.bewakingscode')}</label>
                   <select value={code} onChange={e => setCode(e.target.value)} style={veld}
                     disabled={!dossierId || codesLaden}>
                     <option value="">
-                      {!dossierId ? '— kies eerst een project —'
-                        : codesLaden ? 'Bezig met ophalen…'
-                        : codes.length === 0 ? (isBon ? '— nog geen code op deze bon —' : '— geen codes met begrote uren —')
-                        : '— kies een code —'}
+                      {!dossierId ? t('regel.kiesEerstProject')
+                        : codesLaden ? t('regel.codesOphalen')
+                        : codes.length === 0 ? (isBon ? t('regel.geenCodeOpBon') : t('regel.geenCodesBegroot'))
+                        : t('regel.kiesCode')}
                     </option>
-                    {codes.map(c => (
+                    {codes.map((c, i) => (
                       <option key={c.pslId} value={c.code}>
-                        {c.code}{c.naam ? ` · ${c.naam}` : ''}{c.prognoseUren > 0 ? ` (${c.prognoseUren}u begroot)` : ''}
+                        {c.code}{c.naam ? ` · ${codeNamen[i]?.tekst ?? c.naam}` : ''}
+                        {c.prognoseUren > 0 ? ` ${t('regel.begroot', { uren: c.prognoseUren.toLocaleString(locale) })}` : ''}
                       </option>
                     ))}
                   </select>
                   {dossierId && !codesLaden && codes.length === 0 && (isBon ? (
                     <p style={{ fontSize: 12, color: '#6b757c', margin: '6px 0 0' }}>
-                      Deze bon heeft nog geen bewakingscode. Je uren kunnen zonder code worden
-                      opgeslagen; je goedkeurder zet ze later op de juiste code.
+                      {t('regel.bonZonderCode')}
                     </p>
                   ) : (
                     <p style={{ fontSize: 12, color: '#a15c00', margin: '6px 0 0' }}>
-                      Op dit project staan geen begrote uren. Vraag je werkvoorbereider om een
-                      bewakingscode met uren, of kies een ander project.
+                      {t('regel.geenBegroteUren')}
                     </p>
                   ))}
                 </div>
@@ -211,7 +217,7 @@ export default function RegelSheet({
 
           {/* Hoeveel */}
           <div>
-            <label style={labelStijl}>Hoeveel uur?</label>
+            <label style={labelStijl}>{t('regel.hoeveelUur')}</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <button type="button" onClick={() => setUren(u => Math.max(0.25, Math.round((u - 0.25) * 100) / 100))}
                 style={stapKnop}>−</button>
@@ -219,7 +225,7 @@ export default function RegelSheet({
                 flex: 1, textAlign: 'center', fontSize: 30, fontWeight: 800,
                 fontVariantNumeric: 'tabular-nums', color: 'var(--fg)',
               }}>
-                {uren.toLocaleString('nl-NL')}<span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}> uur</span>
+                {uren.toLocaleString(locale)}<span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}> {t('eenheid.uur')}</span>
               </div>
               <button type="button" onClick={() => setUren(u => Math.min(24, Math.round((u + 0.25) * 100) / 100))}
                 style={stapKnop}>+</button>
@@ -234,26 +240,26 @@ export default function RegelSheet({
                     background: uren === v ? 'rgba(0,148,57,0.08)' : 'transparent',
                     color: uren === v ? '#009439' : '#6b757c',
                   }}>
-                  {v.toLocaleString('nl-NL')}
+                  {v.toLocaleString(locale)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label style={labelStijl}>Opmerking (optioneel)</label>
+            <label style={labelStijl}>{t('regel.opmerking')}</label>
             <input type="text" value={opmerking} onChange={e => setOpmerking(e.target.value)}
-              placeholder="Bijvoorbeeld: extra werk aan de kozijnen" style={veld} />
+              placeholder={t('regel.opmerkingVoorbeeld')} style={veld} />
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 18, flexShrink: 0 }}>
           <button type="button" onClick={onSluit} style={{ ...actieKnop, background: 'transparent', color: '#6b757c', border: '1px solid var(--border)' }}>
-            Annuleren
+            {t('knop.annuleren')}
           </button>
           <button type="button" onClick={bewaar} disabled={bezig}
             style={{ ...actieKnop, background: '#009439', color: '#fff', border: 'none', opacity: bezig ? 0.6 : 1 }}>
-            {bezig ? 'Bezig…' : 'Opslaan'}
+            {bezig ? t('knop.bezig') : t('knop.opslaan')}
           </button>
         </div>
       </div>

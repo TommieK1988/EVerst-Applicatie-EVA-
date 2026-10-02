@@ -1,5 +1,6 @@
 import React from 'react'
 import StatusBadge from './StatusBadge'
+import { getAppVertaler } from '@/i18n/server'
 
 /**
  * Dossier-informatie voor de buitendienst (mobiel).
@@ -72,7 +73,7 @@ const knop: React.CSSProperties = {
   WebkitTapHighlightColor: 'transparent',
 }
 
-export default function DossierInfoView({
+export default async function DossierInfoView({
   info, statusKiezer,
 }: {
   info: DossierInfo
@@ -82,6 +83,7 @@ export default function DossierInfoView({
    */
   statusKiezer?: React.ReactNode
 }) {
+  const t = await getAppVertaler('dossiers')
   // Bellen = het werkadres: in het veld bel je wie er ter plaatse is, niet de opdrachtgever.
   // Zonder nummer blijft de knop bewust grijs; de contactpersoon staat hieronder zelf aantikbaar.
   const telefoon = info.werkadres_telefoon?.replace(/\s/g, '') || null
@@ -96,7 +98,7 @@ export default function DossierInfoView({
           {info.titel}
         </div>
         {statusKiezer ?? <StatusBadge label={info.statusLabel} color={info.statusColor} lg />}
-        {periode && <Feit label="Periode" waarde={periode} />}
+        {periode && <Feit label={t('info.periode')} waarde={periode} />}
       </div>
 
       {/* De twee dingen die je in het veld daadwerkelijk doet */}
@@ -111,7 +113,7 @@ export default function DossierInfoView({
             pointerEvents: telefoon ? 'auto' : 'none',
           }}
         >
-          Bellen
+          {t('info.bellen')}
         </a>
         <a
           href={info.werkadres ? navigeerLink(info.werkadres) : undefined}
@@ -126,15 +128,15 @@ export default function DossierInfoView({
             pointerEvents: info.werkadres ? 'auto' : 'none',
           }}
         >
-          Navigeren
+          {t('info.navigeren')}
         </a>
       </div>
 
       <div style={kaart}>
-        <Feit label="Werkadres" waarde={info.werkadres} />
-        {info.werkadres_naam && <Feit label="Naam" waarde={info.werkadres_naam} />}
+        <Feit label={t('info.werkadres')} waarde={info.werkadres} />
+        {info.werkadres_naam && <Feit label={t('info.naam')} waarde={info.werkadres_naam} />}
         <Feit
-          label="Telefoon"
+          label={t('info.telefoon')}
           waarde={telefoon
             ? <a href={`tel:${telefoon}`} style={{ color: '#009439', textDecoration: 'none' }}>{info.werkadres_telefoon}</a>
             : null}
@@ -145,10 +147,10 @@ export default function DossierInfoView({
         const tel = w.contact_telefoon?.replace(/\s/g, '') || null
         return (
           <div key={w.id} style={kaart}>
-            <Feit label={w.naam ?? `Werkadres ${i + 2}`} waarde={w.adres} />
+            <Feit label={w.naam ?? t('info.werkadresNummer', { nummer: String(i + 2) })} waarde={w.adres} />
             {(w.contact_naam || tel) && (
               <Feit
-                label="Contact"
+                label={t('info.contact')}
                 waarde={tel
                   ? <a href={`tel:${tel}`} style={{ color: '#009439', textDecoration: 'none' }}>
                       {[w.contact_naam, w.contact_telefoon].filter(Boolean).join(' · ')}
@@ -163,7 +165,7 @@ export default function DossierInfoView({
                 rel="noopener noreferrer"
                 style={{ ...knop, minHeight: 48, background: '#fff', color: '#009439', border: '1px solid #009439' }}
               >
-                Navigeren
+                {t('info.navigeren')}
               </a>
             )}
           </div>
@@ -171,9 +173,9 @@ export default function DossierInfoView({
       })}
 
       <div style={kaart}>
-        <Feit label="Opdrachtgever" waarde={info.klant_naam} />
+        <Feit label={t('info.opdrachtgever')} waarde={info.klant_naam} />
         <Feit
-          label="Contactpersoon"
+          label={t('info.contactpersoon')}
           waarde={info.contact_naam
             ? (contactTel
                 ? <a href={`tel:${contactTel}`} style={{ color: '#009439', textDecoration: 'none' }}>

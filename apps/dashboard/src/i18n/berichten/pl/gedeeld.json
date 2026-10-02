@@ -1,0 +1,22 @@
+{
+  "laden": "Ładowanie…",
+  "opslaan": "Zapisz",
+  "annuleren": "Anuluj",
+  "sluiten": "Zamknij",
+  "terug": "Wstecz",
+  "verwijderen": "Usuń",
+  "bewerken": "Edytuj",
+  "toevoegen": "Dodaj",
+  "bevestigen": "Potwierdź",
+  "ok": "OK",
+  "ja": "Tak",
+  "nee": "Nie",
+  "zoeken": "Szukaj",
+  "opnieuwProberen": "Spróbuj ponownie",
+  "foutOnbekend": "Coś poszło nie tak. Spróbuj ponownie.",
+  "opgeslagen": "Zapisano",
+  "geenVerbinding": "Brak połączenia. Sprawdź internet i spróbuj ponownie.",
+  "vandaag": "Dzisiaj",
+  "gisteren": "Wczoraj",
+  "morgen": "Jutro"
+}

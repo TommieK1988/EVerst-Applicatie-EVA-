@@ -3,11 +3,12 @@
 import React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { legScanVast, zetOpMijnNaam } from '@/app/m/materieel/actions'
 import { neemTerug, voegOnderhoudToe, wijsToe, zetStatus } from '@/app/(platform)/materieelbeheer/actions'
 import { codeLabel, heeftSticker } from '@/lib/materieel/qr'
 import {
-  CATEGORIE_LABELS, STATUS_META,
+  STATUS_META,
   type MaterieelCategorie, type MaterieelStatus, type Optie,
 } from '@/lib/materieel/types'
 import OptieKiezer from './OptieKiezer'
@@ -62,6 +63,7 @@ export default function PaspoortMobiel({
   teams: Optie[]
   viaScan: boolean
 }) {
+  const t = useTranslations('materieel')
   const router = useRouter()
   const [bezig, setBezig] = React.useState(false)
   const [fout, setFout] = React.useState<string | null>(null)
@@ -88,7 +90,7 @@ export default function PaspoortMobiel({
   async function doe(actie: () => Promise<{ ok: boolean; error?: string }>, gelukt: string) {
     setBezig(true); setFout(null); setMelding(null)
     const res = await actie()
-    if (res.ok) { setMelding(gelukt); router.refresh() } else setFout(res.error ?? 'Er ging iets mis')
+    if (res.ok) { setMelding(gelukt); router.refresh() } else setFout(res.error ?? t('fout.algemeen'))
     setBezig(false)
   }
 
@@ -116,9 +118,9 @@ export default function PaspoortMobiel({
             padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
             color: status.kleur, background: `${status.kleur}1a`,
           }}>
-            {status.label}
+            {t(`status.${object.status}`)}
           </span>
-          <span style={{ fontSize: 12, color: GRIJS }}>{CATEGORIE_LABELS[object.categorie]}</span>
+          <span style={{ fontSize: 12, color: GRIJS }}>{t(`categorie.${object.categorie}`)}</span>
         </div>
         <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' }}>{object.omschrijving}</div>
         {(object.merk || object.type) && (
@@ -129,12 +131,12 @@ export default function PaspoortMobiel({
       </div>
 
       <div style={kaart}>
-        <Rij label="Van" waarde={toegewezenNaam} />
-        <Rij label="Serienummer" waarde={object.serienummer ?? '—'} />
-        <Rij label="Inventarisnummer" waarde={object.inventarisnummer ?? '—'} />
+        <Rij label={t('paspoort.van')} waarde={toegewezenNaam} />
+        <Rij label={t('paspoort.serienummer')} waarde={object.serienummer ?? '—'} />
+        <Rij label={t('paspoort.inventarisnummer')} waarde={object.inventarisnummer ?? '—'} />
         <Rij
-          label="Sticker"
-          waarde={heeftSticker(object) ? codeLabel(object.qr_code) : 'Nog geen sticker'}
+          label={t('paspoort.sticker')}
+          waarde={heeftSticker(object) ? codeLabel(object.qr_code) : t('paspoort.nogGeenSticker')}
           laatste
         />
       </div>
@@ -151,43 +153,43 @@ export default function PaspoortMobiel({
           {!isVanMij ? (
             <button
               type="button" disabled={bezig}
-              onClick={() => doe(() => zetOpMijnNaam(object.id), 'Op jouw naam gezet')}
+              onClick={() => doe(() => zetOpMijnNaam(object.id), t('paspoort.opJouwNaamGezet'))}
               style={{ ...primaireKnop, opacity: bezig ? 0.6 : 1 }}
             >
-              Op mijn naam zetten
+              {t('paspoort.opMijnNaam')}
             </button>
           ) : (
             <button
               type="button" disabled={bezig}
-              onClick={() => doe(() => neemTerug(object.id), 'Ingeleverd')}
+              onClick={() => doe(() => neemTerug(object.id), t('paspoort.ingeleverd'))}
               style={{ ...secundaireKnop, opacity: bezig ? 0.6 : 1 }}
             >
-              Inleveren
+              {t('paspoort.inleveren')}
             </button>
           )}
 
           {magBeheren && (medewerkers.length > 0 || teams.length > 0) && (
             <div style={kaart}>
               <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600, marginBottom: 6 }}>
-                Waar hoort het?
+                {t('paspoort.waarHoortHet')}
               </div>
               <div style={{ marginBottom: 8 }}>
                 <OptieKiezer
                   waarde={uitgifte}
                   onKies={setUitgifte}
-                  vaste={{ id: 'algemeen', naam: 'Algemeen gebruik' }}
+                  vaste={{ id: 'algemeen', naam: t('algemeenGebruik') }}
                   groepen={[
                     ...(teams.length > 0 ? [{
-                      label: 'Werkplaats en bussen',
-                      opties: teams.map((t) => ({ id: `t:${t.id}`, naam: t.naam })),
+                      label: t('kiezer.werkplaatsEnBussen'),
+                      opties: teams.map((tm) => ({ id: `t:${tm.id}`, naam: tm.naam })),
                     }] : []),
                     ...(medewerkers.length > 0 ? [{
-                      label: "Collega's",
+                      label: t('kiezer.collegas'),
                       opties: medewerkers.map((m) => ({ id: `m:${m.id}`, naam: m.naam })),
                     }] : []),
                   ]}
-                  plaatshouder="Kies een collega, werkplaats of bus…"
-                  zoekPlaatshouder="Typ een naam of werkplaats"
+                  plaatshouder={t('paspoort.kiesPlaatshouder')}
+                  zoekPlaatshouder={t('kiezer.typNaamOfWerkplaats')}
                 />
               </div>
               <button
@@ -197,25 +199,25 @@ export default function PaspoortMobiel({
                   const [soort, id] = uitgifte.split(':')
                   // Algemeen gebruik is geen toewijzing maar het ontbreken ervan;
                   // `neemTerug` sluit de lopende uitgifte netjes af.
-                  if (soort === 'algemeen') return doe(() => neemTerug(object.id), 'Op algemeen gebruik gezet')
+                  if (soort === 'algemeen') return doe(() => neemTerug(object.id), t('paspoort.opAlgemeenGezet'))
                   return doe(
                     () => wijsToe(object.id, soort === 't'
                       ? { niveau: 'team', team_id: id }
                       : { niveau: 'persoonlijk', medewerker_id: id },
                     ),
-                    'Uitgegeven',
+                    t('paspoort.uitgegeven'),
                   )
                 }}
                 style={{ ...primaireKnop, width: '100%', opacity: bezig || uitgifte === '' ? 0.5 : 1 }}
               >
-                Toewijzen
+                {t('paspoort.toewijzen')}
               </button>
             </div>
           )}
 
           {!storingOpen ? (
             <button type="button" onClick={() => setStoringOpen(true)} style={secundaireKnop}>
-              Storing of schade melden
+              {t('paspoort.storingMelden')}
             </button>
           ) : (
             <div style={kaart}>
@@ -223,7 +225,7 @@ export default function PaspoortMobiel({
                 value={storingTekst}
                 onChange={(e) => setStoringTekst(e.target.value)}
                 rows={3}
-                placeholder="Wat is er aan de hand?"
+                placeholder={t('paspoort.watIsErAanDeHand')}
                 style={{ ...veld, resize: 'vertical', marginBottom: 8 }}
               />
               <div style={{ display: 'flex', gap: 8 }}>
@@ -231,7 +233,7 @@ export default function PaspoortMobiel({
                   type="button" onClick={() => { setStoringOpen(false); setStoringTekst('') }}
                   style={{ ...secundaireKnop, flex: 1 }}
                 >
-                  Annuleren
+                  {t('paspoort.annuleren')}
                 </button>
                 <button
                   type="button"
@@ -246,10 +248,10 @@ export default function PaspoortMobiel({
                     const st = await zetStatus(object.id, 'defect')
                     if (st.ok) { setStoringOpen(false); setStoringTekst('') }
                     return st
-                  }, 'Storing gemeld — het materieel staat nu op defect')}
+                  }, t('paspoort.storingGemeld'))}
                   style={{ ...primaireKnop, flex: 2, opacity: bezig || !storingTekst.trim() ? 0.6 : 1 }}
                 >
-                  Melden
+                  {t('paspoort.melden')}
                 </button>
               </div>
             </div>
@@ -257,7 +259,7 @@ export default function PaspoortMobiel({
 
           {!heeftSticker(object) && (
             <Link href={`/m/materieel/scan?koppelAan=${object.id}`} style={{ ...secundaireKnop, textAlign: 'center', textDecoration: 'none' }}>
-              Sticker koppelen
+              {t('paspoort.stickerKoppelen')}
             </Link>
           )}
         </div>

@@ -1,0 +1,78 @@
+{
+  "titel": "Zadania",
+  "aantalOpen": "{aantal, plural, one {# otwarte} few {# otwarte} many {# otwartych} other {# otwartych}}",
+  "geenOpenstaand": "Brak otwartych zadań",
+  "afvinkenLabel": "Odhacz zadanie",
+  "sluiten": "Zamknij",
+  "vandaag": "Dzisiaj",
+  "prioriteit": {
+    "urgent": "Pilne",
+    "hoog": "Wysoki",
+    "normaal": "Normalny",
+    "laag": "Niski"
+  },
+  "uitvoer": {
+    "bezoek": {
+      "label": "Rozpocznij wizytę na budowie",
+      "uitleg": "To zadanie zamknie się automatycznie po zakończeniu wizyty"
+    },
+    "formulier": {
+      "label": "Wypełnij formularz",
+      "uitleg": "To zadanie zamknie się automatycznie po wysłaniu formularza"
+    },
+    "opname": {
+      "label": "Rozpocznij oględziny",
+      "uitleg": "To zadanie zamknie się automatycznie po zakończeniu oględzin"
+    },
+    "toolbox": {
+      "label": "Otwórz toolbox",
+      "uitleg": "To zadanie zamknie się automatycznie po przejściu toolboxa"
+    },
+    "kwaliteit": {
+      "label": "Rozpocznij kontrolę jakości",
+      "uitleg": "To zadanie zamknie się automatycznie po zakończeniu kontroli jakości"
+    }
+  },
+  "pagina": {
+    "bezoekNietGestart": "Nie udało się rozpocząć wizyty na budowie: {fout}",
+    "opnameNietGestart": "Nie udało się rozpocząć oględzin: {fout}",
+    "formulierNietGepubliceerd": "Ten formularz nie jest jeszcze opublikowany i nie można go wypełnić."
+  },
+  "bezoekStarten": "Rozpocznij wizytę na budowie",
+  "bezig": "Trwa…",
+  "dossierBlok": {
+    "statusBezig": "W toku",
+    "allesAfgerond": "wszystko zakończone",
+    "geenActies": "Brak zadań dla tego projektu.",
+    "alleAfgerond": "Wszystkie zadania są zakończone.",
+    "minderTonen": "Pokaż mniej",
+    "toonAlle": "Pokaż wszystkie zadania ({aantal})",
+    "geenOmschrijving": "Brak opisu.",
+    "isVervallen": "To zadanie wygasło.",
+    "isAfgerond": "To zadanie jest zakończone.",
+    "uitlegZin": "{uitleg}.",
+    "vanIemandAnders": "To zadanie jest przypisane do kogoś innego; tylko ta osoba może je wykonać.",
+    "afvinken": "Odhacz",
+    "ermeeBezig": "Pracuję nad tym",
+    "bijwerkenMislukt": "Nie udało się zaktualizować."
+  },
+  "nieuw": {
+    "knop": "Nowe zadanie",
+    "titel": "Nowe zadanie",
+    "veldActie": "Zadanie",
+    "actiePlaceholder": "Co trzeba zrobić?",
+    "veldDossier": "Projekt <zacht>(opcjonalnie)</zacht>",
+    "dossierLoskoppelen": "Odłącz projekt",
+    "dossierPlaceholder": "Szukaj po nazwie projektu…",
+    "geenDossiersGevonden": "Nie znaleziono projektów.",
+    "veldToegewezen": "Przypisane do",
+    "jezelf": "Ty",
+    "naamJij": "{naam} (ty)",
+    "veldPrioriteit": "Priorytet",
+    "veldDeadline": "Termin <zacht>(opcjonalnie)</zacht>",
+    "annuleren": "Anuluj",
+    "opslaan": "Zapisywanie…",
+    "aanmaken": "Utwórz zadanie",
+    "aanmakenMislukt": "Nie udało się utworzyć. Spróbuj ponownie."
+  }
+}

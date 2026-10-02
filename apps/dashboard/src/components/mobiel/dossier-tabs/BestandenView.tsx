@@ -6,6 +6,7 @@ import {
 } from '@/lib/dossiers/bestand-rijen'
 import { pasMetaToe } from '@/lib/dossiers/bestand-soort'
 import { getBestandMeta } from '@/lib/dossiers/bestand-meta'
+import { getAppVertaler } from '@/i18n/server'
 
 /**
  * Mobiele Bestanden-tab: de bestanden die op de Bestanden-tab in EVA zijn aangevinkt
@@ -21,6 +22,7 @@ import { getBestandMeta } from '@/lib/dossiers/bestand-meta'
  * Zware live-calls → in `<Suspense>` gewikkeld door de pagina.
  */
 export default async function BestandenView({ dossierId }: { dossierId: string }) {
+  const t = await getAppVertaler('dossiertabs')
   const [bouw7, sharepoint, sleutels, meta] = await Promise.all([
     getDossierBestanden(dossierId).catch(() => null),
     getDossierSharePointBestanden(dossierId).catch(() => null),
@@ -40,7 +42,7 @@ export default async function BestandenView({ dossierId }: { dossierId: string }
   if (bestanden.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>
-        Er zijn voor dit dossier geen bestanden vrijgegeven voor de app.
+        {t('bestanden.geen')}
       </div>
     )
   }

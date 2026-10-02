@@ -3,12 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { Weekstaat, WeekRegel, UursoortOptie, RegelInvoer } from '@/lib/uren/weekstaat'
 import { voegRegelToe, wijzigRegel, verwijderRegel, dienWeekIn } from '@/lib/uren/weekstaat'
 import { verwijderOnkosten } from '@/lib/uren/onkosten-acties'
 import RegelSheet from './RegelSheet'
 import OnkostenSheet from './OnkostenSheet'
-import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
 
 /**
  * De mobiele weekstaat: per dag een kaart met regels, een voortgangskop en één knop Indienen.
@@ -17,25 +19,21 @@ import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
  * medewerker scrollt door zijn week zoals hij hem beleefd heeft: dag voor dag.
  */
 
-const DAGNAMEN = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag']
-const MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december']
-
-function dagLabel(datum: string, vandaag: string) {
-  if (datum === vandaag) return 'Vandaag'
-  const d = new Date(`${datum}T12:00:00`)
-  const isoDag = d.getDay() === 0 ? 6 : d.getDay() - 1
-  return `${DAGNAMEN[isoDag]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`
+/** "maandag 8 september" in de taal van de app. */
+function dagLabel(datum: string, locale: string) {
+  return new Date(`${datum}T12:00:00`)
+    .toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
-const euro = (n: number) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+type StatusSleutel = 'concept' | 'ingediend' | 'teamleider_akkoord' | 'goedgekeurd' | 'afgekeurd'
 
-const STATUS_TEKST: Record<string, { label: string; kleur: string; achtergrond: string }> = {
-  concept: { label: 'Nog niet ingediend', kleur: '#6b757c', achtergrond: '#f1f3f4' },
-  ingediend: { label: 'Ingediend — wacht op je teamleider', kleur: '#0b6bcb', achtergrond: '#e8f1fc' },
-  teamleider_akkoord: { label: 'Teamleider akkoord — wacht op de projectleiders', kleur: '#0b6bcb', achtergrond: '#e8f1fc' },
-  goedgekeurd: { label: 'Goedgekeurd', kleur: '#009439', achtergrond: '#e6f5ec' },
-  afgekeurd: { label: 'Afgekeurd — pas je week aan en dien opnieuw in', kleur: '#c0392b', achtergrond: '#fdecea' },
+/** Kleuren per weekstatus; de tekst staat in `uren.weekstaat.status.*`. */
+const STATUS_KLEUR: Record<StatusSleutel, { kleur: string; achtergrond: string }> = {
+  concept: { kleur: '#6b757c', achtergrond: '#f1f3f4' },
+  ingediend: { kleur: '#0b6bcb', achtergrond: '#e8f1fc' },
+  teamleider_akkoord: { kleur: '#0b6bcb', achtergrond: '#e8f1fc' },
+  goedgekeurd: { kleur: '#009439', achtergrond: '#e6f5ec' },
+  afgekeurd: { kleur: '#c0392b', achtergrond: '#fdecea' },
 }
 
 export default function WeekstaatClient({
@@ -45,6 +43,10 @@ export default function WeekstaatClient({
   uursoorten: UursoortOptie[]
   vandaag: string
 }) {
+  const t = useTranslations('uren')
+  const locale = useDatumLocale()
+  const uur = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
+  const euro = (n: number) => `€ ${n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const router = useRouter()
   const [, startT] = useTransition()
   const ververs = () => startT(() => router.refresh())
@@ -53,7 +55,8 @@ export default function WeekstaatClient({
   const [kostenSheet, setKostenSheet] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
 
-  const status = STATUS_TEKST[staat.status] ?? STATUS_TEKST.concept
+  const statusSleutel: StatusSleutel = staat.status in STATUS_KLEUR ? staat.status as StatusSleutel : 'concept'
+  const status = STATUS_KLEUR[statusSleutel]
   const voortgang = staat.contracturen > 0
     ? Math.min(100, (staat.totaalUren / staat.contracturen) * 100)
     : 0
@@ -85,8 +88,8 @@ export default function WeekstaatClient({
     if (!r.ok) { toast.error(r.error); return }
     toast.success(
       staat.saldoMutatie > 0
-        ? `Week ingediend. ${uur(staat.saldoMutatie)} uur naar je tijd-voor-tijdsaldo.`
-        : 'Week ingediend.',
+        ? t('weekstaat.ingediendMetSaldo', { uren: uur(staat.saldoMutatie) })
+        : t('weekstaat.ingediend'),
     )
     ververs()
   }
@@ -98,12 +101,12 @@ export default function WeekstaatClient({
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
             {uur(staat.totaalUren)}
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}> / {uur(staat.contracturen)} uur</span>
+            <span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}>{t('weekstaat.vanNorm', { uren: uur(staat.contracturen) })}</span>
           </div>
           <div style={{ fontSize: 12, color: '#6b757c', textAlign: 'right' }}>
-            saldo<br />
+            {t('weekstaat.saldo')}<br />
             <strong style={{ fontSize: 15, color: staat.saldoNu < 0 ? '#c0392b' : 'var(--fg)' }}>
-              {staat.saldoNu > 0 ? '+' : ''}{uur(staat.saldoNu)} u
+              {t('eenheid.urenKort', { uren: `${staat.saldoNu > 0 ? '+' : ''}${uur(staat.saldoNu)}` })}
             </strong>
           </div>
         </div>
@@ -120,12 +123,13 @@ export default function WeekstaatClient({
           display: 'inline-block', padding: '4px 10px', borderRadius: 999,
           fontSize: 11, fontWeight: 700, color: status.kleur, background: status.achtergrond,
         }}>
-          {status.label}
+          {t(`weekstaat.status.${statusSleutel}`)}
         </div>
 
         {staat.status === 'afgekeurd' && staat.afkeurReden && (
           <p style={{ fontSize: 13, color: '#c0392b', margin: '10px 0 0', lineHeight: 1.45 }}>
-            <strong>Reden:</strong> {staat.afkeurReden}
+            <strong>{t('weekstaat.reden')}</strong>{' '}
+            <VertaalbareTekst tekst={staat.afkeurReden} />
           </p>
         )}
       </div>
@@ -152,13 +156,13 @@ export default function WeekstaatClient({
                 padding: '10px 14px', borderBottom: regels.length ? '1px solid var(--border)' : 'none',
               }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg)' }}>
-                  {dagLabel(datum, vandaag)}
+                  {isVandaag ? t('weekstaat.vandaag') : dagLabel(datum, locale)}
                 </span>
                 <span style={{
                   fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
                   color: dagTotaal > 0 ? 'var(--fg)' : '#b3bcc2',
                 }}>
-                  {dagTotaal > 0 ? `${uur(dagTotaal)} u` : '—'}
+                  {dagTotaal > 0 ? t('eenheid.urenKort', { uren: uur(dagTotaal) }) : '—'}
                 </span>
               </div>
 
@@ -169,16 +173,16 @@ export default function WeekstaatClient({
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-                      {r.uursoort_naam}
+                      <VertaalbareTekst tekst={r.uursoort_naam} label={false} />
                       {r.bron !== 'eva' && (
                         <span style={{ fontSize: 11, fontWeight: 600, color: '#0b6bcb', marginLeft: 6 }}>
-                          {r.afgeweken_van_bron ? 'aangepast' : 'automatisch'}
+                          {r.afgeweken_van_bron ? t('weekstaat.aangepast') : t('weekstaat.automatisch')}
                         </span>
                       )}
                     </div>
                     {r.categorie === 'werk' && (
                       <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.dossier_label ?? 'geen project'}{r.bewakingscode ? ` · ${r.bewakingscode}` : ''}
+                        {r.dossier_label ?? t('weekstaat.geenProject')}{r.bewakingscode ? ` · ${r.bewakingscode}` : ''}
                       </div>
                     )}
                     {r.opmerking && (
@@ -186,7 +190,7 @@ export default function WeekstaatClient({
                     )}
                     {r.gewijzigd_door_goedkeurder && (
                       <div style={{ fontSize: 11, color: '#a15c00', marginTop: 3 }}>
-                        Aangepast door je goedkeurder
+                        {t('weekstaat.aangepastDoorGoedkeurder')}
                       </div>
                     )}
                   </div>
@@ -198,9 +202,10 @@ export default function WeekstaatClient({
                   {staat.bewerkbaar && (
                     <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                       <button type="button" onClick={() => setSheet({ datum, regel: r })}
-                        aria-label="Aanpassen" style={rijKnop}>✎</button>
+                        // eslint-disable-next-line i18next/no-literal-string -- potlood-pictogram, geen tekst
+                        aria-label={t('weekstaat.aanpassen')} style={rijKnop}>✎</button>
                       <button type="button" onClick={() => verwijder(r)}
-                        aria-label="Verwijderen" style={{ ...rijKnop, color: '#c0392b' }}>×</button>
+                        aria-label={t('weekstaat.verwijderen')} style={{ ...rijKnop, color: '#c0392b' }}>×</button>
                     </div>
                   )}
                 </div>
@@ -215,16 +220,16 @@ export default function WeekstaatClient({
                   {k.bon_url && (
                     <a href={k.bon_url} target="_blank" rel="noreferrer" style={{ flexShrink: 0, lineHeight: 0 }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={k.bon_url} alt="Bonnetje" style={{
+                      <img src={k.bon_url} alt={t('weekstaat.bonnetje')} style={{
                         width: 30, height: 30, objectFit: 'cover',
                         borderRadius: 6, border: '1px solid var(--border)',
                       }} />
                     </a>
                   )}
                   <span style={{ fontSize: 13, color: 'var(--fg)', flex: 1, minWidth: 0 }}>
-                    {ONKOSTEN_LABEL[k.soort]}
-                    {k.vervoermiddel ? ` · ${VERVOERMIDDEL_LABEL[k.vervoermiddel]}` : ''}
-                    {k.km ? ` · ${k.km.toLocaleString('nl-NL')} km` : ''}
+                    {t(`onkosten.label.${k.soort}`)}
+                    {k.vervoermiddel ? ` · ${t(`onkosten.vervoer.${k.vervoermiddel}`)}` : ''}
+                    {k.km ? ` · ${t('weekstaat.km', { km: k.km.toLocaleString(locale) })}` : ''}
                     {k.omschrijving ? ` · ${k.omschrijving}` : ''}
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
@@ -232,7 +237,7 @@ export default function WeekstaatClient({
                   </span>
                   {staat.bewerkbaar && (
                     <button type="button" onClick={() => verwijderKosten(k.id)}
-                      aria-label="Kosten verwijderen" style={{ ...rijKnop, color: '#c0392b' }}>×</button>
+                      aria-label={t('weekstaat.kostenVerwijderen')} style={{ ...rijKnop, color: '#c0392b' }}>×</button>
                   )}
                 </div>
               ))}
@@ -245,7 +250,7 @@ export default function WeekstaatClient({
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#009439',
                       cursor: 'pointer', textAlign: 'left',
                     }}>
-                    + Uren toevoegen
+                    {t('weekstaat.urenToevoegen')}
                   </button>
                   <button type="button" onClick={() => setKostenSheet(datum)}
                     style={{
@@ -253,7 +258,7 @@ export default function WeekstaatClient({
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c',
                       cursor: 'pointer',
                     }}>
-                    + Kosten
+                    {t('weekstaat.kostenToevoegen')}
                   </button>
                 </div>
               )}
@@ -276,7 +281,7 @@ export default function WeekstaatClient({
           )}
           {!staat.blokkade && staat.saldoMutatie > 0 && (
             <p style={{ fontSize: 12, color: '#009439', margin: '0 0 8px', textAlign: 'center' }}>
-              +{uur(staat.saldoMutatie)} uur naar je tijd-voor-tijdsaldo
+              {t('weekstaat.naarSaldo', { uren: uur(staat.saldoMutatie) })}
             </p>
           )}
           <button type="button" onClick={indienen} disabled={!staat.magIndienen || bezig}
@@ -287,7 +292,7 @@ export default function WeekstaatClient({
               color: staat.magIndienen ? '#fff' : '#9aa4ab',
               opacity: bezig ? 0.6 : 1,
             }}>
-            {bezig ? 'Bezig…' : 'Week indienen'}
+            {bezig ? t('knop.bezig') : t('weekstaat.weekIndienen')}
           </button>
         </div>
       )}

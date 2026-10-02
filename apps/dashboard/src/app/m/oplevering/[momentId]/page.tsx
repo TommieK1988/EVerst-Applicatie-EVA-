@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getDossierOplevering, getOpleverToewijsbaar } from '@/lib/dossiers/oplevering'
 import { heeftProjectrol } from '@/lib/dossiers/guards'
+import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import OpleverDoorloop from '@/components/mobiel/oplevering/OpleverDoorloop'
 
@@ -43,13 +44,14 @@ export default async function MobielOpleverMomentPage(
   const view = data.momenten.find(m => m.id === momentId)
   if (!view) notFound()
 
+  const t = await getAppVertaler('oplevering')
   const naam = [medewerker?.voornaam, medewerker?.tussenvoegsel, medewerker?.achternaam].filter(Boolean).join(' ')
 
   return (
     <>
       <AppHeader
         title={view.titel}
-        sub={`${view.aantalGeaccepteerd} van ${view.aantalTotaal} geaccepteerd`}
+        sub={t('kopSub', { geaccepteerd: view.aantalGeaccepteerd, totaal: view.aantalTotaal })}
         backHref={`/m/dossiers/${moment.dossier_id}/oplevering`}
       />
       <OpleverDoorloop

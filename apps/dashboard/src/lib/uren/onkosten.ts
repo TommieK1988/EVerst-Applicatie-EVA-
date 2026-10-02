@@ -83,35 +83,56 @@ export function berekenKmBedrag(
   return Math.round(km * tarief * 100) / 100
 }
 
-/**
- * Wat er nog mist voordat deze kostenpost opgeslagen mag worden, of null als hij klaar is.
- *
- * Eén lijst met eisen voor de sheet én de server-action, zodat het scherm nooit iets toestaat
- * wat de server daarna afwijst — of andersom.
- */
-export function controleerOnkosten(invoer: {
+/** Waarom een kostenpost nog niet opgeslagen mag worden — als code, zodat de app hem kan vertalen. */
+export type OnkostenBezwaar =
+  | 'kiesVervoer' | 'vervoerAlleenReis' | 'vulKm' | 'vulBedrag' | 'fotoKaartje' | 'fotoBon'
+
+const BEZWAAR_TEKST: Record<OnkostenBezwaar, string> = {
+  kiesVervoer: 'Kies waarmee je gereisd hebt.',
+  vervoerAlleenReis: 'Een vervoermiddel hoort alleen bij reiskosten.',
+  vulKm: 'Vul het aantal kilometers in.',
+  vulBedrag: 'Vul een bedrag in.',
+  fotoKaartje: 'Voeg een foto van je kaartje of bonnetje toe.',
+  fotoBon: 'Voeg een foto van het bonnetje toe.',
+}
+
+type OnkostenInvoer = {
   soort: OnkostenSoort
   vervoermiddel: Vervoermiddel | null
   km: number | null
   bedrag: number | null
   heeftBon: boolean
-}): string | null {
+}
+
+/**
+ * Wat er nog mist voordat deze kostenpost opgeslagen mag worden, of null als hij klaar is.
+ *
+ * Eén lijst met eisen voor de sheet én de server-action, zodat het scherm nooit iets toestaat
+ * wat de server daarna afwijst — of andersom. Geeft een code terug; de tekst staat in de
+ * taalbestanden van de app (`uren.onkosten.bezwaar.*`) en, in het Nederlands, in
+ * `controleerOnkosten`.
+ */
+export function onkostenBezwaar(invoer: OnkostenInvoer): OnkostenBezwaar | null {
   const { soort, vervoermiddel, km, bedrag, heeftBon } = invoer
 
-  if (soort === 'reiskosten' && !vervoermiddel) return 'Kies waarmee je gereisd hebt.'
-  if (soort !== 'reiskosten' && vervoermiddel) return 'Een vervoermiddel hoort alleen bij reiskosten.'
+  if (soort === 'reiskosten' && !vervoermiddel) return 'kiesVervoer'
+  if (soort !== 'reiskosten' && vervoermiddel) return 'vervoerAlleenReis'
 
   if (rekentPerKm(vervoermiddel)) {
-    if (km == null || !(km > 0)) return 'Vul het aantal kilometers in.'
+    if (km == null || !(km > 0)) return 'vulKm'
   } else {
-    if (bedrag == null || !(bedrag > 0)) return 'Vul een bedrag in.'
+    if (bedrag == null || !(bedrag > 0)) return 'vulBedrag'
   }
 
   if (bonVerplicht(soort, vervoermiddel) && !heeftBon) {
-    return vervoermiddel === 'ov'
-      ? 'Voeg een foto van je kaartje of bonnetje toe.'
-      : 'Voeg een foto van het bonnetje toe.'
+    return vervoermiddel === 'ov' ? 'fotoKaartje' : 'fotoBon'
   }
 
   return null
+}
+
+/** Zelfde controle als `onkostenBezwaar`, met de Nederlandse tekst. */
+export function controleerOnkosten(invoer: OnkostenInvoer): string | null {
+  const bezwaar = onkostenBezwaar(invoer)
+  return bezwaar ? BEZWAAR_TEKST[bezwaar] : null
 }

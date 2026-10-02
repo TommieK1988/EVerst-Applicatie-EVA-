@@ -260,6 +260,22 @@ export async function haalLocatie(opties: HaalOpties = {}): Promise<Locatie> {
   })
 }
 
+/** Soort toestel, voor uitleg die per toestel verschilt (ook in de taalbestanden van de app). */
+export function toestelSoort(): 'ios' | 'android' | 'anders' {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  if (/Android/i.test(ua)) return 'android'
+  return 'anders'
+}
+
+/** Sleutel per foutsoort in de taalbestanden (`locatieFout.<sleutel>`). */
+export const LOCATIE_FOUT_SLEUTEL: Record<LocatieFoutSoort, 'geenGps' | 'geweigerd' | 'geenFix' | 'teTraag'> = {
+  'geen-gps': 'geenGps',
+  geweigerd: 'geweigerd',
+  'geen-fix': 'geenFix',
+  'te-traag': 'teTraag',
+}
+
 /** Uitleg bij een geweigerde toestemming, toegesneden op het toestel. */
 export function herstelUitleg(): string {
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent

@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@everts/database/server'
+import { getAppVertaler } from '@/i18n/server'
 import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
 import { signPad } from '@/lib/materieel/bestanden'
 import { getMedewerkerOpties, getTeamOpties, volledigeNaam } from '@/lib/materieel/data'
-import { ALGEMEEN_GEBRUIK, type MaterieelObject } from '@/lib/materieel/types'
+import type { MaterieelObject } from '@/lib/materieel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
 import PaspoortMobiel from '@/components/mobiel/materieel/PaspoortMobiel'
 
@@ -36,8 +37,9 @@ export default async function MobielPaspoortPage({
   const object = data as MaterieelObject | null
   if (!object || !object.actief) notFound()
 
+  const t = await getAppVertaler('materieel')
   // Toewijzing als naam: persoon, team, of algemeen gebruik.
-  let toegewezenNaam = ALGEMEEN_GEBRUIK
+  let toegewezenNaam = t('algemeenGebruik')
   if (object.toegewezen_medewerker_id) {
     const { data: mw } = await client
       .from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam')
@@ -57,7 +59,7 @@ export default async function MobielPaspoortPage({
 
   return (
     <>
-      <AppHeader title="Materieel" sub={object.omschrijving} backHref="/m/materieel" />
+      <AppHeader title={t('titel')} sub={object.omschrijving} backHref="/m/materieel" />
       <PaspoortMobiel
         object={object}
         fotoUrl={fotoUrl}

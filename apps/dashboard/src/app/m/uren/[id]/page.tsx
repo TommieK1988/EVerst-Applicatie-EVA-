@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import AppHeader from '@/components/mobiel/AppHeader'
 import WerkbonFlow from '@/components/planning/werkbon/WerkbonFlow'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Werkbon · EVA Mobiel' }
 
@@ -19,6 +20,7 @@ export default async function MobielWerkbonPage(props: { params: Promise<{ id: s
   if (!medewerker) notFound()
 
   const supabase = db()
+  const t = await getAppVertaler('uren')
 
   const { data: item, error } = await supabase
     .from('planning_items')
@@ -57,7 +59,7 @@ export default async function MobielWerkbonPage(props: { params: Promise<{ id: s
 
   return (
     <>
-      <AppHeader title={activiteit?.titel ?? 'Werkbon'} sub={klant} backHref="/m/uren" />
+      <AppHeader title={activiteit?.titel ?? t('week.werkbon')} sub={klant} backHref="/m/uren" />
       <WerkbonFlow
         planning_item_id={id}
         activiteitTitel={activiteit?.titel ?? '—'}

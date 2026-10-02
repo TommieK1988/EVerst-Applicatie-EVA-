@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import { zoekAlMaterieel } from '@/app/m/materieel/actions'
 import type { MaterieelTreffer } from '@/lib/materieel/zoeken'
 import MaterieelRegel from './MaterieelRegel'
@@ -29,6 +30,7 @@ export default function MaterieelZoek({ boven, children }: {
   boven?: React.ReactNode
   children?: React.ReactNode
 }) {
+  const t = useTranslations('materieel')
   const [term, setTerm] = React.useState('')
   const [treffers, setTreffers] = React.useState<MaterieelTreffer[] | null>(null)
   const [zoekt, setZoekt] = React.useState(false)
@@ -59,7 +61,7 @@ export default function MaterieelZoek({ boven, children }: {
         <input
           value={term}
           onChange={(e) => setTerm(e.target.value)}
-          placeholder="Zoek op naam, merk, nummer of wie het heeft"
+          placeholder={t('zoek.plaatshouder')}
           type="search"
           autoCapitalize="none"
           autoCorrect="off"
@@ -70,7 +72,7 @@ export default function MaterieelZoek({ boven, children }: {
           <button
             type="button"
             onClick={() => setTerm('')}
-            aria-label="Zoekterm wissen"
+            aria-label={t('zoek.wissen')}
             style={{
               position: 'absolute', right: 6, top: 6, bottom: 6, width: 36,
               border: 'none', background: 'transparent', color: GRIJS,
@@ -99,11 +101,13 @@ export default function MaterieelZoek({ boven, children }: {
             fontSize: 12, fontWeight: 700, color: GRIJS, textTransform: 'uppercase',
             letterSpacing: '.04em', marginBottom: 8,
           }}>
-            {zoekt ? 'Zoeken…' : `Gevonden (${treffers.length}${treffers.length === 50 ? '+' : ''})`}
+            {zoekt
+              ? t('zoek.zoeken')
+              : t(treffers.length === 50 ? 'zoek.gevondenMeer' : 'zoek.gevonden', { aantal: treffers.length })}
           </div>
           {treffers.length === 0 && !zoekt ? (
             <div style={{ fontSize: 14, color: GRIJS, lineHeight: 1.5 }}>
-              Niets gevonden voor &ldquo;{schoon}&rdquo;.
+              {t('zoek.nietsGevonden', { term: schoon })}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

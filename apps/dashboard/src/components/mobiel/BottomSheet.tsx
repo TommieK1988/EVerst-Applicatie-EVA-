@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { GRIJS, RAND, TEKST } from './oplevering/stijl'
 
 /**
@@ -11,13 +12,14 @@ import { GRIJS, RAND, TEKST } from './oplevering/stijl'
  * `MobielStickyFooter`. Die regel gaat over knoppen bínnen het scrollende content-gebied; een
  * overlay moet juist over de hele shell heen liggen, inclusief de kopbalk.
  */
-export default function BottomSheet({ titel, onSluit, sluitLabel = 'Annuleren', children }: {
+export default function BottomSheet({ titel, onSluit, sluitLabel, children }: {
   titel: string
   onSluit: () => void
   /** 'Annuleren' past bij een invoerpaneel; bij een alleen-lezen detail is 'Sluiten' juister. */
   sluitLabel?: string
   children: React.ReactNode
 }) {
+  const t = useTranslations('gedeeld')
   // Achtergrond niet mee laten scrollen zolang het paneel open staat.
   //
   // Alleen `document.body` vergrendelen is niet genoeg: de `/m`-shell zet `overflow: hidden`
@@ -62,13 +64,13 @@ export default function BottomSheet({ titel, onSluit, sluitLabel = 'Annuleren', 
           <button
             type="button"
             onClick={onSluit}
-            aria-label="Sluiten"
+            aria-label={t('sluiten')}
             style={{
               background: 'none', border: 'none', color: GRIJS, fontSize: 15,
               padding: '6px 4px', cursor: 'pointer', flexShrink: 0,
             }}
           >
-            {sluitLabel}
+            {sluitLabel ?? t('annuleren')}
           </button>
         </div>
 

@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import { GRIJS, RAND, veld, label, secundaireKnop } from '@/components/mobiel/kwaliteit/stijl'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 
@@ -85,12 +86,13 @@ export async function uploadFotoReeks(
  * een foto" een tik te veel is. De galerij-input staat `multiple` toe.
  */
 export function FotoKiesKnoppen({
-  onKies, bezig = false, bezigTekst = 'Bezig…',
+  onKies, bezig = false, bezigTekst,
 }: {
   onKies: (files: File[]) => void
   bezig?: boolean
   bezigTekst?: string
 }) {
+  const t = useTranslations('bezoek')
   const knopStijl: React.CSSProperties = {
     ...secundaireKnop, flex: 1, minWidth: 0, textAlign: 'center',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -103,7 +105,7 @@ export function FotoKiesKnoppen({
   }
 
   if (bezig) {
-    return <div style={{ ...secundaireKnop, textAlign: 'center', opacity: 0.7 }}>{bezigTekst}</div>
+    return <div style={{ ...secundaireKnop, textAlign: 'center', opacity: 0.7 }}>{bezigTekst ?? t('bezig')}</div>
   }
   return (
     <div style={{ display: 'flex', gap: 8 }}>
@@ -113,7 +115,7 @@ export function FotoKiesKnoppen({
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
           <circle cx="12" cy="13" r="4" />
         </svg>
-        Foto maken
+        {t('foto.maken')}
         <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                onChange={kies} />
       </label>
@@ -124,7 +126,7 @@ export function FotoKiesKnoppen({
           <circle cx="8.5" cy="8.5" r="1.5" />
           <path d="M21 15l-5-5L5 21" />
         </svg>
-        Uit galerij
+        {t('foto.uitGalerij')}
         <input type="file" accept="image/*" multiple style={{ display: 'none' }}
                onChange={kies} />
       </label>
@@ -134,6 +136,7 @@ export function FotoKiesKnoppen({
 
 /** Vierkante fototegel met optioneel een verwijderkruisje. */
 export function FotoTegel({ url, onVerwijder }: { url: string; onVerwijder?: () => void }) {
+  const t = useTranslations('bezoek')
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -150,7 +153,7 @@ export function FotoTegel({ url, onVerwijder }: { url: string; onVerwijder?: () 
             border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 14,
             lineHeight: '24px', cursor: 'pointer', padding: 0,
           }}
-          aria-label="Foto verwijderen"
+          aria-label={t('foto.verwijderen')}
         >×</button>
       )}
     </div>
@@ -174,20 +177,23 @@ export function TegelRij({ children }: { children: React.ReactNode }) {
  * de foto's bij een punt als die bij het bezoek als geheel.
  */
 export function FotoStrip({
-  fotos, lezen, uploaden, verwijderen, naWijziging, titel = "Foto's",
+  fotos, lezen, uploaden, verwijderen, naWijziging, titel,
 }: {
   fotos: { id: string; url: string }[]
   lezen: boolean
   uploaden: (file: File) => Promise<{ ok: boolean; error?: string }>
   verwijderen: (id: string) => Promise<{ ok: boolean; error?: string }>
   naWijziging: () => void
+  /** Leeg (`""`) = geen titel; weggelaten = "Foto's". */
   titel?: string
 }) {
+  const t = useTranslations('bezoek')
+  const kop = titel ?? t('foto.titel')
   const [bezig, setBezig] = useState<{ klaar: number; totaal: number } | null>(null)
 
   return (
     <div style={{ marginTop: 10 }}>
-      {titel && <span style={label}>{titel}</span>}
+      {kop && <span style={label}>{kop}</span>}
       {fotos.length > 0 && (
         <TegelRij>
           {fotos.map(f => (
@@ -196,7 +202,7 @@ export function FotoStrip({
               url={f.url}
               onVerwijder={lezen ? undefined : async () => {
                 const r = await verwijderen(f.id)
-                if (!r.ok) { toast.error(r.error ?? 'Verwijderen mislukt'); return }
+                if (!r.ok) { toast.error(r.error ?? t('foto.verwijderenMislukt')); return }
                 naWijziging()
               }}
             />
@@ -207,8 +213,8 @@ export function FotoStrip({
         <FotoKiesKnoppen
           bezig={bezig !== null}
           bezigTekst={bezig && bezig.totaal > 1
-            ? `Uploaden ${Math.min(bezig.klaar + 1, bezig.totaal)}/${bezig.totaal}…`
-            : 'Uploaden…'}
+            ? t('foto.uploadenVoortgang', { nummer: Math.min(bezig.klaar + 1, bezig.totaal), totaal: bezig.totaal })
+            : t('foto.uploaden')}
           onKies={async files => {
             setBezig({ klaar: 0, totaal: files.length })
             const { mislukt, fout } = await uploadFotoReeks(
@@ -217,8 +223,10 @@ export function FotoStrip({
             setBezig(null)
             if (mislukt > 0) {
               toast.error(mislukt === files.length
-                ? (fout ?? 'Uploaden mislukt')
-                : `${mislukt} van ${files.length} foto's mislukt${fout ? `: ${fout}` : ''}`)
+                ? (fout ?? t('foto.uploadenMislukt'))
+                : fout
+                  ? t('foto.deelsMisluktMetFout', { mislukt, totaal: files.length, fout })
+                  : t('foto.deelsMislukt', { mislukt, totaal: files.length }))
             }
             if (mislukt < files.length) naWijziging()
           }}

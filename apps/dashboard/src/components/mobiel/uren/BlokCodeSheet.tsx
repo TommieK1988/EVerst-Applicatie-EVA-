@@ -2,6 +2,9 @@
 
 import React from 'react'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import BottomSheet from '@/components/mobiel/BottomSheet'
 import { hercodeerBlokMobiel } from '@/app/m/uren/keuren/actions'
 import { getUrenDoelcodes, zorgUrenDoelPsl, type UrenDoelcode } from '@/lib/dossiers/actions'
@@ -33,6 +36,8 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
   /** De uren zijn verplaatst; het scherm haalt de lijst opnieuw op. */
   onKlaar: () => void
 }) {
+  const t = useTranslations('uren')
+  const locale = useDatumLocale()
   const [codes, setCodes] = React.useState<UrenDoelcode[]>([])
   const [laden, setLaden] = React.useState(true)
   const [keuze, setKeuze] = React.useState<string | null>(blok.code)
@@ -50,7 +55,7 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
 
   async function bewaar() {
     const gekozen = codes.find(c => c.code === keuze)
-    if (!gekozen) { toast.error('Kies eerst een bewakingscode.'); return }
+    if (!gekozen) { toast.error(t('blokCode.kiesEerst')); return }
 
     setBezig(true)
     // Een code die nog niet onder Arbeid staat krijgt die link pas bij het opslaan.
@@ -59,54 +64,57 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
       const psl = blok.dossierId
         ? await zorgUrenDoelPsl(blok.dossierId, { code: gekozen.code, hoofdstukId: gekozen.hoofdstukId }).catch(() => null)
         : null
-      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? 'Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+      if (!psl || !psl.ok) { setBezig(false); toast.error(psl?.error ?? t('keuren.bouw7Onbereikbaar')); return }
       pslId = psl.pslId
     }
     const r = await hercodeerBlokMobiel(blok.regelIds, pslId).catch(() => null)
     setBezig(false)
 
-    if (!r) { toast.error('Bouw7 is niet bereikbaar. Probeer het zo nog eens.'); return }
+    if (!r) { toast.error(t('keuren.bouw7Onbereikbaar')); return }
     if (!r.ok) { toast.error(r.error); return }
 
     // Eerlijk melden wat er niet lukte: half verplaatste uren die als "gelukt" op het scherm
     // komen zijn erger dan geen melding — dan denk je dat de week rond is.
     if (r.mislukt > 0) {
-      toast.error(`${r.mislukt} van de ${blok.regelIds.length} niet gelukt: ${r.eersteFout ?? 'onbekende fout'}`)
+      toast.error(t('blokCode.nietGelukt', {
+        aantal: r.mislukt, totaal: blok.regelIds.length, fout: r.eersteFout ?? t('keuren.onbekendeFout'),
+      }))
     } else {
-      toast.success(
-        r.gelukt === 1 ? '1 regel verplaatst.' : `${r.gelukt} regels verplaatst naar ${gekozen.code}.`,
-      )
+      toast.success(t('blokCode.verplaatst', { aantal: r.gelukt, code: gekozen.code }))
     }
     onKlaar()
     onSluit()
   }
 
-  const titel = [blok.projectNummer, blok.projectNaam].filter(Boolean).join(' ') || 'Zonder project'
   const aantal = blok.regelIds.length
+  const samenvatting = blok.code ? 'blokCode.staatOp' as const : 'blokCode.staatNergens' as const
 
   return (
-    <BottomSheet titel="Bewakingscode" onSluit={onSluit}>
+    <BottomSheet titel={t('blokCode.titel')} onSluit={onSluit}>
       <div style={{ fontSize: 13, color: GRIJS, lineHeight: 1.5, marginBottom: 14 }}>
-        {titel}
+        {blok.projectNummer || blok.projectNaam ? (
+          <>
+            {blok.projectNummer}{blok.projectNummer && blok.projectNaam ? ' ' : ''}
+            {blok.projectNaam && <VertaalbareTekst tekst={blok.projectNaam} label={false} />}
+          </>
+        ) : t('keuren.zonderProject')}
         <br />
-        <strong style={{ color: 'var(--fg)' }}>
-          {blok.uren.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur
-        </strong>
-        {' over '}
-        {aantal === 1 ? '1 regel' : `${aantal} regels`}
-        {blok.code
-          ? <> staat nu op <strong style={{ color: 'var(--fg)' }}>{blok.code}</strong>.</>
-          : <span style={{ color: ORANJE }}> staat nog op geen enkele code.</span>}
+        {t.rich(samenvatting, {
+          uren: blok.uren.toLocaleString(locale, { maximumFractionDigits: 2 }),
+          aantal,
+          code: blok.code ?? '',
+          b: (c) => <strong style={{ color: 'var(--fg)' }}>{c}</strong>,
+          let: (c) => <span style={{ color: ORANJE }}>{c}</span>,
+        })}
       </div>
 
       {laden ? (
         <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: GRIJS }}>
-          Codes ophalen…
+          {t('blokCode.codesOphalen')}
         </div>
       ) : codes.length === 0 ? (
         <div style={{ padding: '18px 0', fontSize: 13, color: GRIJS, lineHeight: 1.5 }}>
-          Voor dit project staan geen bewakingscodes in EVA. Dat moet eerst in Bouw7 geregeld
-          worden; daarna is het hier te kiezen.
+          {t('blokCode.geenCodes')}
         </div>
       ) : (
         <div style={{
@@ -146,7 +154,7 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
                       display: 'block', fontSize: 12, color: GRIJS, marginTop: 1,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
-                      {c.naam}
+                      <VertaalbareTekst tekst={c.naam} label={false} />
                     </span>
                   )}
                 </span>
@@ -168,10 +176,10 @@ export default function BlokCodeSheet({ blok, onSluit, onKlaar }: {
         }}
       >
         {bezig
-          ? 'Bezig…'
+          ? t('knop.bezig')
           : keuze && keuze !== blok.code
-            ? `Zet ${aantal === 1 ? 'de regel' : `alle ${aantal} regels`} op ${keuze}`
-            : 'Kies een andere code'}
+            ? t('blokCode.zetOp', { aantal, code: keuze })
+            : t('blokCode.kiesAndere')}
       </button>
     </BottomSheet>
   )

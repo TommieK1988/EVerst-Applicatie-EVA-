@@ -10,6 +10,7 @@ import FormFiller from '@/components/formulieren/filler/FormFiller'
 import { resolveDossierVariabelen } from '@/components/formulieren/dossier-variabelen'
 import { getDossierById } from '@/lib/dossiers/actions'
 import { getMedewerkersVoorToewijzing } from '@/app/(platform)/taken/actions/sjablonen'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Formulier · EVA Mobiel' }
 
@@ -66,9 +67,10 @@ export default async function MobielTaakFormulierPage({
 
   const template = templateResult.data
   if (template.status !== 'gepubliceerd') {
+    const t = await getAppVertaler('taken')
     return (
       <div style={{ padding: 24, color: '#6b757c', fontSize: 14 }}>
-        Dit formulier is nog niet gepubliceerd en kan niet ingevuld worden.
+        {t('pagina.formulierNietGepubliceerd')}
       </div>
     )
   }

@@ -1,6 +1,9 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { OpnameOnderdeelKeuze } from '@everts/database/opname-types'
 import { chip, euro, GRIJS, kaart, RAND, TEKST, veld, ZACHT } from './stijl'
 
@@ -58,6 +61,7 @@ export default function OnderdeelKiezer({
   toonPrijzen?: boolean
   onKies: (onderdeel: OpnameOnderdeelKeuze) => void
 }) {
+  const t = useTranslations('opname')
   const [zoek, setZoek] = React.useState('')
   const [hoofdgroep, setHoofdgroep] = React.useState<string | null>(null)
 
@@ -91,7 +95,7 @@ export default function OnderdeelKiezer({
         type="search"
         value={zoek}
         onChange={e => setZoek(e.target.value)}
-        placeholder="Zoek op code of omschrijving"
+        placeholder={t('kiezer.zoekPlaatshouder')}
         style={{ ...veld, marginBottom: 10 }}
         // inputMode text (niet search): het toetsenbord houdt dan de gewone lay-out.
         inputMode="text"
@@ -101,7 +105,7 @@ export default function OnderdeelKiezer({
       {hoofdgroepen.length > 1 && (
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>
           <button type="button" style={chip(hoofdgroep === null)} onClick={() => setHoofdgroep(null)}>
-            Alles
+            {t('kiezer.alles')}
           </button>
           {hoofdgroepen.map(g => (
             <button
@@ -110,7 +114,8 @@ export default function OnderdeelKiezer({
               style={chip(hoofdgroep === g)}
               onClick={() => setHoofdgroep(hoofdgroep === g ? null : g)}
             >
-              {g}
+              {/* Hoofdgroep uit de bibliotheek van kantoor: alleen de weergave vertalen, het filter blijft op de originele naam. */}
+              <VertaalbareTekst tekst={g} label={false} />
             </button>
           ))}
         </div>
@@ -119,20 +124,20 @@ export default function OnderdeelKiezer({
       {vaakGebruikt.length > 0 && (
         <>
           <p style={{ margin: '8px 0 6px', fontSize: 12, fontWeight: 700, color: GRIJS }}>
-            Vaak gebruikt bij deze opdrachtgever
+            {t('kiezer.vaakGebruikt')}
           </p>
           {vaakGebruikt.map(o => (
             <OnderdeelRij key={`vaak-${o.id}`} onderdeel={o} toonPrijzen={toonPrijzen} onKies={onKies} />
           ))}
           <p style={{ margin: '14px 0 6px', fontSize: 12, fontWeight: 700, color: GRIJS }}>
-            Hele lijst
+            {t('kiezer.heleLijst')}
           </p>
         </>
       )}
 
       {getoond.length === 0 ? (
         <p style={{ padding: '18px 4px', fontSize: 14, color: GRIJS }}>
-          Niets gevonden. Voeg het toe als los punt, dan prijst de calculator het later.
+          {t('kiezer.nietsGevonden')}
         </p>
       ) : (
         getoond.map(o => (
@@ -142,7 +147,7 @@ export default function OnderdeelKiezer({
 
       {gefilterd.length > MAX_GETOOND && (
         <p style={{ padding: '10px 4px 0', fontSize: 12, color: ZACHT }}>
-          {gefilterd.length - MAX_GETOOND} resultaten meer — zoek verder om ze te zien.
+          {t('kiezer.meerResultaten', { aantal: gefilterd.length - MAX_GETOOND })}
         </p>
       )}
     </div>
@@ -158,6 +163,8 @@ function OnderdeelRij({
   toonPrijzen: boolean
   onKies: (o: OpnameOnderdeelKeuze) => void
 }) {
+  const t = useTranslations('opname')
+  const locale = useDatumLocale()
   return (
     <button
       type="button"
@@ -174,27 +181,49 @@ function OnderdeelRij({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: TEKST }}>{onderdeel.omschrijving}</div>
+          <VertaalbareTekst
+            tekst={onderdeel.omschrijving}
+            label={false}
+            as="div"
+            style={{ fontSize: 15, fontWeight: 600, color: TEKST }}
+          />
           <div style={{ fontSize: 12, color: GRIJS, marginTop: 2 }}>
-            {[onderdeel.code, onderdeel.hoofdgroep].filter(Boolean).join(' · ')}
+            <CodeEnGroep code={onderdeel.code} hoofdgroep={onderdeel.hoofdgroep} />
           </div>
         </div>
         {toonPrijzen && (
           <div style={{ flexShrink: 0, textAlign: 'right' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>
-              {euro(onderdeel.verkoop_pe)}
+              {euro(onderdeel.verkoop_pe, locale)}
             </div>
-            <div style={{ fontSize: 11, color: ZACHT }}>per {onderdeel.eenheid}</div>
+            <div style={{ fontSize: 11, color: ZACHT }}>{t('kiezer.perEenheid', { eenheid: onderdeel.eenheid })}</div>
           </div>
         )}
       </div>
       {(onderdeel.foto_verplicht || onderdeel.toelichting_verplicht) && (
         <div style={{ marginTop: 8, fontSize: 11, color: GRIJS, borderTop: `1px solid ${RAND}`, paddingTop: 6 }}>
-          {[onderdeel.foto_verplicht && 'foto verplicht', onderdeel.toelichting_verplicht && 'toelichting verplicht']
+          {[
+            onderdeel.foto_verplicht && t('kiezer.fotoVerplicht'),
+            onderdeel.toelichting_verplicht && t('kiezer.toelichtingVerplicht'),
+          ]
             .filter(Boolean)
             .join(' · ')}
         </div>
       )}
     </button>
+  )
+}
+
+/**
+ * "CODE · Hoofdgroep". De code is een prijslijstcode en blijft zoals hij is; de hoofdgroep komt
+ * uit de bibliotheek van kantoor en wordt in de taal van de app getoond.
+ */
+export function CodeEnGroep({ code, hoofdgroep }: { code: string | null; hoofdgroep: string | null }) {
+  return (
+    <>
+      {code}
+      {code && hoofdgroep && ' · '}
+      {hoofdgroep && <VertaalbareTekst tekst={hoofdgroep} label={false} />}
+    </>
   )
 }

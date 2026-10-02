@@ -1,5 +1,7 @@
 'use server'
 
+import { getAppVertaler } from '@/i18n/server'
+
 /**
  * Server action van het mobiele fiatteerscherm.
  *
@@ -100,10 +102,8 @@ export async function corrigeerUurregelMobiel(
   const magBijstellen = [...mijn.alsTeamleider, ...mijn.alsVasteGoedkeurder]
     .some(r => r.id === hourLogId)
   if (!magBijstellen) {
-    return {
-      ok: false,
-      error: 'Deze uren kun je hier niet meer aanpassen. Ze staan al bij de projectleider.',
-    }
+    const t = await getAppVertaler('uren')
+    return { ok: false, error: t('fout.nietMeerAanpassen') }
   }
 
   return corrigeerUurregel(hourLogId, wijziging)
@@ -128,7 +128,8 @@ export async function hercodeerBlokMobiel(
   hourLogIds: number[],
   bewakingscodePslId: number | null,
 ): Promise<{ ok: true; gelukt: number; mislukt: number; eersteFout: string | null } | { ok: false; error: string }> {
-  if (!hourLogIds.length) return { ok: false, error: 'Geen uren om te hercoderen.' }
+  const t = await getAppVertaler('uren')
+  if (!hourLogIds.length) return { ok: false, error: t('fout.geenUrenHercoderen') }
 
   let gelukt = 0
   let mislukt = 0
@@ -136,7 +137,7 @@ export async function hercodeerBlokMobiel(
 
   for (const id of hourLogIds) {
     const r = await corrigeerUurregelMobiel(id, { bewakingscodePslId }).catch(() => ({
-      ok: false as const, error: 'Bouw7 is niet bereikbaar.',
+      ok: false as const, error: t('fout.bouw7Onbereikbaar'),
     }))
     if (r.ok) gelukt++
     else {

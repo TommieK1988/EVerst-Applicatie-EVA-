@@ -1,0 +1,38 @@
+{
+  "welkom": "Welkom, {naam}",
+  "buitendienst": "Buitendienst",
+  "tegel": {
+    "acties": "Acties",
+    "dossiers": "Dossiers",
+    "prikklok": "Prikklok",
+    "uren": "Uren",
+    "planning": "Planning",
+    "verlof": "Verlof",
+    "commercieel": "Commercieel",
+    "materieel": "Materieel",
+    "handboek": "Handboek",
+    "mijnGegevens": "Mijn gegevens"
+  },
+  "vandaag": {
+    "titel": "Planning voor vandaag",
+    "nietsGepland": "Niets gepland vandaag.",
+    "heleAgenda": "Hele agenda",
+    "nogMeer": "Nog {aantal} meer · hele agenda"
+  },
+  "signalen": {
+    "titel": "Te doen",
+    "teFiatteren": "{aantal, plural, one {# urenregel te fiatteren} other {# urenregels te fiatteren}}",
+    "teFiatterenSub": "Uren van je ploeg of project goedkeuren",
+    "weekAfgekeurd": "Week {week} is afgekeurd",
+    "weekAfgekeurdSub": "Pas je uren aan en dien de week opnieuw in",
+    "weekNietIngediend": "Week {week} nog niet ingediend",
+    "deadlineVerstreken": "{dagen, plural, one {De deadline was # dag geleden} other {De deadline was # dagen geleden}}",
+    "vulAan": "Vul je uren aan en dien de week in"
+  },
+  "locatie": {
+    "dossierBijLocatie": "Dossier bij jouw locatie · {afstand} m",
+    "openen": "Openen ({seconden})",
+    "meerdereTitel": "Dossiers op deze locatie",
+    "kiesDossier": "Kies het dossier waar je aan werkt."
+  }
+}

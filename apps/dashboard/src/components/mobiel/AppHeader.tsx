@@ -1,5 +1,8 @@
+'use client'
+
 import React from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 
 /**
  * Mobiele scherm-header (DS "AppHeader"): polygon-achtergrond + donkere scrim,
@@ -28,6 +31,7 @@ export default function AppHeader({
    */
   ongelezenMeldingen?: number
 }) {
+  const t = useTranslations()
   return (
     <div
       style={{
@@ -94,7 +98,9 @@ export default function AppHeader({
             </svg>
             <div style={{
               fontSize: backHref ? 17 : 19, fontWeight: 800, letterSpacing: '-0.02em',
-              lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              // Mag naar twee regels: in het Pools en Tamil is een titel al snel te lang
+              // voor één regel, en afgekapt leest hij niet meer.
+              lineHeight: 1.2, minWidth: 0, overflowWrap: 'break-word',
             }}>
               {title}
             </div>
@@ -112,7 +118,7 @@ export default function AppHeader({
         {ongelezenMeldingen !== undefined && (
           <Link
             href="/m/notificaties"
-            aria-label={ongelezenMeldingen > 0 ? `Meldingen (${ongelezenMeldingen} ongelezen)` : 'Meldingen'}
+            aria-label={ongelezenMeldingen > 0 ? t('notificaties.metOngelezen', { aantal: ongelezenMeldingen }) : t('notificaties.titel')}
             style={{
               flexShrink: 0, position: 'relative',
               width: 48, height: 48, borderRadius: 12,
@@ -148,7 +154,7 @@ export default function AppHeader({
         {backHref && (
           <Link
             href={backHref}
-            aria-label="Terug"
+            aria-label={t('gedeeld.terug')}
             style={{
               flexShrink: 0,
               width: 48, height: 48, borderRadius: 12,

@@ -1,3 +1,4 @@
+import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import PrikklokWeekClient from '@/components/mobiel/prikklok/PrikklokWeekClient'
@@ -15,10 +16,10 @@ export default async function PrikklokWeekPage({
 }) {
   await vereisPrikklok('/m')
   const { week } = await searchParams
-  const data = await getPrikklokWeek(week)
+  const [data, t] = await Promise.all([getPrikklokWeek(week), getAppVertaler('prikklok')])
   return (
     <>
-      <AppHeader title="Prikklok" sub={`Week ${data.weekNr} · ${data.jaar}`} backHref="/m/prikklok" />
+      <AppHeader title={t('titel')} sub={t('weekSub', { week: data.weekNr, jaar: String(data.jaar) })} backHref="/m/prikklok" />
       <MobielPullToRefresh />
       <PrikklokWeekClient week={data} />
     </>

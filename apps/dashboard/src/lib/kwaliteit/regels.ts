@@ -82,8 +82,13 @@ export function toegestaanBereik(eis: KwaliteitEis): { min: number | null; max: 
   return { min: eis.min_waarde ?? null, max: eis.max_waarde ?? null }
 }
 
-/** "≤ 18,0 %", "2 ± 1 mm", "5 – 30 °C" — de eis zoals hij naast de meetwaarde komt te staan. */
-export function eisOmschrijving(eis: KwaliteitEis): string {
+/**
+ * "≤ 18,0 %", "2 ± 1 mm", "5 – 30 °C" — de eis zoals hij naast de meetwaarde komt te staan.
+ * `locale` alleen voor de getallen in EVA Mobiel; kantoor en rapport blijven op 'nl-NL'. De tekst
+ * zonder grenswaarde blijft Nederlands — de app toont die niet (zie `geen_waarde_bekend`).
+ */
+export function eisOmschrijving(eis: KwaliteitEis, locale = 'nl-NL'): string {
+  const getal = (n: number) => getalOpmaak(n, locale)
   const e = eis.eenheid ? ` ${eenheidLabel(eis.eenheid)}` : ''
   if (eis.doel_waarde !== null && eis.doel_waarde !== undefined) {
     const tMin = eis.tolerantie_min ?? 0
@@ -109,11 +114,15 @@ export function eenheidLabel(eenheid: string): string {
 }
 
 function getal(n: number): string {
+  return getalOpmaak(n, 'nl-NL')
+}
+
+function getalOpmaak(n: number, locale: string): string {
   // Hele getallen zonder decimalen, de rest met maximaal één — meetwaarden op locatie zijn
   // nooit preciezer dan dat.
   return Number.isInteger(n)
     ? String(n)
-    : n.toLocaleString('nl-NL', { maximumFractionDigits: 1 })
+    : n.toLocaleString(locale, { maximumFractionDigits: 1 })
 }
 
 export function getalNL(n: number | null | undefined): string {

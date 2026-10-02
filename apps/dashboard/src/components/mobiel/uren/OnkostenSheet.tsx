@@ -2,11 +2,13 @@
 
 import { useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 import { voegOnkostenToe } from '@/lib/uren/onkosten-acties'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
   ONKOSTEN_SOORTEN, VERVOERMIDDELEN, bedragZelfInvullen, berekenKmBedrag, bonVerplicht,
-  controleerOnkosten, rekentPerKm, type KmTarieven, type OnkostenSoort, type Vervoermiddel,
+  onkostenBezwaar, rekentPerKm, type KmTarieven, type OnkostenSoort, type Vervoermiddel,
 } from '@/lib/uren/onkosten'
 
 /**
@@ -33,8 +35,6 @@ const labelStijl: React.CSSProperties = {
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 }
 
-const euro = (n: number) => n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' })
-
 function keuzeKnop(actief: boolean): React.CSSProperties {
   return {
     flex: 1, padding: '11px 0', borderRadius: 10, cursor: 'pointer',
@@ -54,6 +54,9 @@ export default function OnkostenSheet({
   onSluit: () => void
   onKlaar: () => void
 }) {
+  const t = useTranslations('uren')
+  const locale = useDatumLocale()
+  const euro = (n: number) => n.toLocaleString(locale, { style: 'currency', currency: 'EUR' })
   const [soort, setSoort] = useState<OnkostenSoort>('parkeren')
   const [vervoermiddel, setVervoermiddel] = useState<Vervoermiddel | null>(null)
   const [bedrag, setBedrag] = useState('')
@@ -74,13 +77,14 @@ export default function OnkostenSheet({
   const kmGetal = Number(km.replace(',', '.'))
   const bedragGetal = Number(bedrag.replace(',', '.'))
 
-  const bezwaar = useMemo(() => controleerOnkosten({
+  const bezwaarCode = useMemo(() => onkostenBezwaar({
     soort,
     vervoermiddel,
     km: km.trim() && Number.isFinite(kmGetal) ? kmGetal : null,
     bedrag: bedrag.trim() && Number.isFinite(bedragGetal) ? bedragGetal : null,
     heeftBon: Boolean(bon),
   }), [soort, vervoermiddel, km, kmGetal, bedrag, bedragGetal, bon])
+  const bezwaar = bezwaarCode ? t(`onkosten.bezwaar.${bezwaarCode}`) : null
 
   const kmBedrag = perKm && Number.isFinite(kmGetal) && kmGetal > 0
     ? berekenKmBedrag(kmGetal, vervoermiddel, kmTarieven)
@@ -113,7 +117,7 @@ export default function OnkostenSheet({
       wisBon()
       setBon({ bestand: klein, voorbeeld: URL.createObjectURL(klein) })
     } catch {
-      toast.error('Deze foto kon niet verwerkt worden.')
+      toast.error(t('onkosten.fotoMislukt'))
     }
     setBezig(false)
   }
@@ -155,17 +159,17 @@ export default function OnkostenSheet({
         }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 16px', flexShrink: 0 }} />
         <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--fg)', marginBottom: 16, flexShrink: 0 }}>
-          Kosten toevoegen
+          {t('onkosten.titel')}
         </div>
 
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
-            <label style={labelStijl}>Soort</label>
+            <label style={labelStijl}>{t('onkosten.soort')}</label>
             <div style={{ display: 'flex', gap: 8 }}>
               {ONKOSTEN_SOORTEN.map(s => (
                 <button key={s.waarde} type="button" onClick={() => kiesSoort(s.waarde)}
                   style={keuzeKnop(soort === s.waarde)}>
-                  {s.label}
+                  {t(`onkosten.soorten.${s.waarde}`)}
                 </button>
               ))}
             </div>
@@ -173,12 +177,12 @@ export default function OnkostenSheet({
 
           {soort === 'reiskosten' && (
             <div>
-              <label style={labelStijl}>Waarmee gereisd</label>
+              <label style={labelStijl}>{t('onkosten.waarmee')}</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {VERVOERMIDDELEN.map(v => (
                   <button key={v.waarde} type="button" onClick={() => kiesVervoermiddel(v.waarde)}
                     style={keuzeKnop(vervoermiddel === v.waarde)}>
-                    {v.label}
+                    {t(`onkosten.vervoer.${v.waarde}`)}
                   </button>
                 ))}
               </div>
@@ -187,29 +191,29 @@ export default function OnkostenSheet({
 
           {perKm && (
             <div>
-              <label style={labelStijl}>Kilometers</label>
+              <label style={labelStijl}>{t('onkosten.kilometers')}</label>
               <input type="text" inputMode="decimal" value={km}
                 onChange={e => setKm(e.target.value)} placeholder="0" style={veld} />
               <p style={{ margin: '6px 0 0', fontSize: 12.5, color: kmBedrag ? '#009439' : '#6b757c' }}>
                 {kmBedrag !== null
-                  ? `${kmGetal.toLocaleString('nl-NL')} km × ${euro(tarief)} = ${euro(kmBedrag)}`
-                  : `De vergoeding is ${euro(tarief)} per kilometer.`}
+                  ? t('onkosten.kmBerekening', { km: kmGetal.toLocaleString(locale), tarief: euro(tarief), bedrag: euro(kmBedrag) })
+                  : t('onkosten.vergoeding', { tarief: euro(tarief) })}
               </p>
             </div>
           )}
 
           {vraagtBedrag && (
             <div>
-              <label style={labelStijl}>Bedrag</label>
+              <label style={labelStijl}>{t('onkosten.bedrag')}</label>
               <input type="text" inputMode="decimal" value={bedrag}
-                onChange={e => setBedrag(e.target.value)} placeholder="0,00" style={veld} />
+                onChange={e => setBedrag(e.target.value)} placeholder={(0).toLocaleString(locale, { minimumFractionDigits: 2 })} style={veld} />
             </div>
           )}
 
           {vraagtBon && (
             <div>
               <label style={labelStijl}>
-                {vervoermiddel === 'ov' ? 'Foto van je kaartje' : 'Foto van het bonnetje'}
+                {vervoermiddel === 'ov' ? t('onkosten.fotoKaartje') : t('onkosten.fotoBon')}
               </label>
               {bon ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -224,7 +228,7 @@ export default function OnkostenSheet({
                       border: '1px solid var(--border)', background: 'transparent',
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#c0392b',
                     }}>
-                    Vervangen
+                    {t('onkosten.vervangen')}
                   </button>
                 </div>
               ) : (
@@ -235,7 +239,7 @@ export default function OnkostenSheet({
                       border: '1px solid var(--border)', background: 'transparent',
                       fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: '#6b757c',
                     }}>
-                    {bezig ? 'Bezig…' : 'Foto maken'}
+                    {bezig ? t('knop.bezig') : t('onkosten.fotoMaken')}
                   </button>
                   <button type="button" onClick={() => bibliotheekRef.current?.click()} disabled={bezig}
                     style={{
@@ -243,7 +247,7 @@ export default function OnkostenSheet({
                       border: '1px solid var(--border)', background: 'transparent',
                       fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: '#6b757c',
                     }}>
-                    Kiezen
+                    {t('onkosten.kiezen')}
                   </button>
                 </div>
               )}
@@ -257,9 +261,9 @@ export default function OnkostenSheet({
           )}
 
           <div>
-            <label style={labelStijl}>Omschrijving (optioneel)</label>
+            <label style={labelStijl}>{t('onkosten.omschrijving')}</label>
             <input type="text" value={omschrijving} onChange={e => setOmschrijving(e.target.value)}
-              placeholder="Bijvoorbeeld: parkeergarage centrum" style={veld} />
+              placeholder={t('onkosten.omschrijvingVoorbeeld')} style={veld} />
           </div>
         </div>
 
@@ -272,7 +276,7 @@ export default function OnkostenSheet({
         <div style={{ display: 'flex', gap: 10, marginTop: bezwaar ? 10 : 18, flexShrink: 0 }}>
           <button type="button" onClick={onSluit}
             style={{ ...actieKnop, background: 'transparent', color: '#6b757c', border: '1px solid var(--border)' }}>
-            Annuleren
+            {t('knop.annuleren')}
           </button>
           <button type="button" onClick={bewaar} disabled={bezig || Boolean(bezwaar)}
             style={{
@@ -282,7 +286,7 @@ export default function OnkostenSheet({
               cursor: bezwaar ? 'default' : 'pointer',
               opacity: bezig ? 0.6 : 1,
             }}>
-            {bezig ? 'Bezig…' : 'Opslaan'}
+            {bezig ? t('knop.bezig') : t('knop.opslaan')}
           </button>
         </div>
       </div>

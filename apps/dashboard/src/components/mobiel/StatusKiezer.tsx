@@ -3,6 +3,7 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import BottomSheet from './BottomSheet'
 import StatusBadge from './StatusBadge'
 import { substatusKleur } from './dossier-status'
@@ -36,12 +37,13 @@ export default function StatusKiezer({
   sectie: DossierSectie
   /** Sleutel van de huidige substatus. */
   huidig: string
-  /** De kiesbare statussen, met de labels uit de ladder van dít dossier. */
+  /** De kiesbare statussen, met de labels uit de ladder van dít dossier (al vertaald door de pagina). */
   opties: StatusDef<string>[]
   /** Sleutels die het dossier definitief afsluiten; daar wordt eerst op doorgevraagd. */
   afsluitend: string[]
   magWijzigen: boolean
 }) {
+  const t = useTranslations('dossiers')
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [stand, setStand] = React.useState<Stand>({ soort: 'kies' })
@@ -73,9 +75,9 @@ export default function StatusKiezer({
 
     if (res.ok) {
       if (res.bouw7 && !res.bouw7.ok) {
-        toast.error(`Bijgewerkt in EVA, maar niet in Bouw7: ${res.bouw7.error}`)
+        toast.error(t('status.nietInBouw7', { fout: res.bouw7.error ?? '' }))
       } else {
-        toast.success(`Status is nu ${keuze.label}.`)
+        toast.success(t('status.isNu', { status: keuze.label }))
       }
       sluit()
       router.refresh()
@@ -98,7 +100,7 @@ export default function StatusKiezer({
     const res = await volgBouw7SubstatusMobiel(dossierId, sectie)
     setBezig(false)
     toast[res.ok ? 'success' : 'error'](
-      res.ok ? 'Stand uit Bouw7 overgenomen.' : `Ophalen uit Bouw7 mislukt: ${res.error}`,
+      res.ok ? t('status.bouw7Overgenomen') : t('status.bouw7OphalenMislukt', { fout: res.error ?? '' }),
     )
     sluit()
     router.refresh()
@@ -116,13 +118,13 @@ export default function StatusKiezer({
         }}
       >
         <StatusBadge label={huidigLabel} color={kleur} lg />
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#6b757c' }}>Wijzigen</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#6b757c' }}>{t('status.wijzigen')}</span>
       </button>
 
       {open && (
         <BottomSheet
-          titel={stand.soort === 'kies' ? 'Status wijzigen' : 'Weet je het zeker?'}
-          sluitLabel={stand.soort === 'kies' ? 'Sluiten' : 'Annuleren'}
+          titel={stand.soort === 'kies' ? t('status.kopKiezen') : t('status.kopZeker')}
+          sluitLabel={stand.soort === 'kies' ? t('status.sluiten') : t('status.annuleren')}
           onSluit={() => { if (!bezig) sluit() }}
         >
           {stand.soort === 'kies' && (
@@ -153,7 +155,7 @@ export default function StatusKiezer({
                   }} />
                   {o.label}
                   {o.key === gekozen && (
-                    <span style={{ marginLeft: 'auto', fontSize: 13, color: '#009439' }}>Nu</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 13, color: '#009439' }}>{t('status.nu')}</span>
                   )}
                 </button>
               ))}
@@ -162,11 +164,10 @@ export default function StatusKiezer({
 
           {stand.soort === 'afsluiten' && (
             <Doorvragen
-              tekst={
-                `Het dossier gaat naar "${stand.keuze.label}". Daarna is het overal alleen-lezen `
-                + 'en kun je dat in de app niet meer terugdraaien.'
-              }
-              knop={`Ja, ${stand.keuze.label.toLowerCase()}`}
+              tekst={t('status.afsluitenVraag', { status: stand.keuze.label })}
+              knop={t('status.jaKeuze', { status: stand.keuze.label.toLowerCase() })}
+              tweedeKnop={t('status.terug')}
+              bezigLabel={t('status.bezig')}
               rood
               bezig={bezig}
               onTerug={() => setStand({ soort: 'kies' })}
@@ -176,13 +177,10 @@ export default function StatusKiezer({
 
           {stand.soort === 'conflict' && (
             <Doorvragen
-              tekst={
-                `In Bouw7 staat nu "${stand.bouw7Label}". Dat kan betekenen dat iemand daar zojuist `
-                + 'iets wijzigde, of dat EVA eerder is vooruitgelopen. Neem de stand uit Bouw7 over, '
-                + 'of overschrijf hem met jouw keuze.'
-              }
-              knop="Toch overschrijven"
-              tweedeKnop="Bouw7 volgen"
+              tekst={t('status.conflictVraag', { bouw7: stand.bouw7Label })}
+              knop={t('status.tochOverschrijven')}
+              tweedeKnop={t('status.bouw7Volgen')}
+              bezigLabel={t('status.bezig')}
               bezig={bezig}
               onTerug={() => void volgBouw7()}
               onDoor={() => void voerUit(stand.keuze, true)}
@@ -196,11 +194,12 @@ export default function StatusKiezer({
 
 /** Tweede stand van het paneel: één vraag, twee uitwegen, allebei even groot als doelwit. */
 function Doorvragen({
-  tekst, knop, tweedeKnop = 'Terug', rood = false, bezig, onTerug, onDoor,
+  tekst, knop, tweedeKnop, bezigLabel, rood = false, bezig, onTerug, onDoor,
 }: {
   tekst: string
   knop: string
-  tweedeKnop?: string
+  tweedeKnop: string
+  bezigLabel: string
   rood?: boolean
   bezig: boolean
   onTerug: () => void
@@ -217,7 +216,7 @@ function Doorvragen({
         type="button" disabled={bezig} onClick={onDoor}
         style={{ ...basis, background: rood ? '#e8453b' : '#009439', color: '#fff', border: 'none' }}
       >
-        {bezig ? 'Bezig…' : knop}
+        {bezig ? bezigLabel : knop}
       </button>
       <button
         type="button" disabled={bezig} onClick={onTerug}

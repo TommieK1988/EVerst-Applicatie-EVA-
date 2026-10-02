@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { startOpnameVoorTaak } from '@/lib/opname/opnames'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Opname · EVA Mobiel' }
 
@@ -40,9 +41,10 @@ export default async function MobielTaakOpnamePage({
 
   const res = await startOpnameVoorTaak(taakId)
   if (!res.ok) {
+    const t = await getAppVertaler('taken')
     return (
       <div style={{ padding: 24, color: 'var(--fg-muted)', fontSize: 14, lineHeight: 1.5 }}>
-        De opname kon niet worden gestart: {res.error}
+        {t('pagina.opnameNietGestart', { fout: res.error })}
       </div>
     )
   }

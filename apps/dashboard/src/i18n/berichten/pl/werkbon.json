@@ -1,0 +1,23 @@
+{
+  "klant": "Klient",
+  "activiteit": "Czynność",
+  "ookAanwezig": "Obecni również",
+  "evenGeduld": "Chwileczkę…",
+  "startWerkbon": "Rozpocznij kartę pracy",
+  "looptijd": "Czas pracy",
+  "opmerking": "Uwagi",
+  "opmerkingPlaceholder": "Ustalenia, szczegóły…",
+  "fotos": "Zdjęcia",
+  "uploaden": "Przesyłanie…",
+  "fotoToevoegen": "📷 Dodaj zdjęcie",
+  "afronden": "Zakończ →",
+  "gewerkteUren": "Przepracowane godziny",
+  "urenKort": "{uren} h",
+  "looptijdTimer": "Czas z licznika: {tijd}",
+  "handtekeningOpdrachtgever": "Podpis klienta",
+  "terug": "← Wstecz",
+  "afrondenBezig": "Zamykanie…",
+  "afsluiten": "Zamknij kartę pracy ✓",
+  "afgesloten": "Karta pracy zamknięta",
+  "opnieuwTekenen": "Podpisz ponownie"
+}

@@ -1,0 +1,14 @@
+{
+  "titel": "Handboek",
+  "ondertitel": "Afspraken en wat te doen bij…",
+  "watTeDoenBij": "Wat te doen bij…",
+  "situatieMetaTitel": "Wat te doen bij {titel}",
+  "zoekPlaceholder": "Zoek op onderwerp",
+  "zoekenInNederlands": "Zoeken werkt met Nederlandse woorden.",
+  "hoofdstukken": "Hoofdstukken",
+  "bijlagen": "Bijlagen",
+  "bijlagenUitleg": "Bijlagen open je als pdf. De tekst erin doet niet mee in het zoeken.",
+  "nietsGevonden": "Niets gevonden",
+  "nietsGevondenTip": "Probeer een ander woord, of blader door de hoofdstukken.",
+  "belNaam": "Bel {naam}"
+}

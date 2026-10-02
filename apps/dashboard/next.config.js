@@ -1,3 +1,8 @@
+// Meertaligheid van EVA Mobiel (/m): next-intl leest zijn configuratie uit src/i18n/request.ts.
+// Zie docs/plan-meertaligheid-app.md.
+const createNextIntlPlugin = require('next-intl/plugin')
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -70,4 +75,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withNextIntl(nextConfig)
