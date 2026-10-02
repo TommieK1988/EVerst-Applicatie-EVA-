@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   regelVanHandmatig, handmatigVanRegel, regelVanLijn, valideerHandmatigeRegel, verkoopMateriaal,
-  kiesUurtarief, telRegels, type HandmatigeRegel,
+  kiesUurtarief, telRegels, tariefVoorFunctie, type HandmatigeRegel,
 } from './handmatige-regel'
 import { registratieVerkoop, registratieArbeid, registratieMateriaal, registratieUren,
   registratieVerkoopHandmatig, registratieVerkoopMeerwerk, werkzaamhedenTekst } from './bedragen'
@@ -121,6 +121,16 @@ describe('standaard uurtarief', () => {
       .toEqual({ verkoop: 60, kostprijs: 48, bron: 'kostprijs_opslag' })
     expect(kiesUurtarief({ ...basis, functieKostprijs: 40, bedrijfstarief: 48 }))
       .toEqual({ verkoop: 50, kostprijs: 40, bron: 'kostprijs_opslag' })
+  })
+
+  it('in de app (tarief niet zichtbaar): standaard van de functie, of het tarief van kantoor', () => {
+    const std = [{ naam: 'Timmerman', verkoop: 60, kostprijs: 48 }, { naam: 'Schilder', verkoop: 55, kostprijs: 44 }]
+    expect(tariefVoorFunctie('Schilder', std)).toEqual({ uurtarief: 55, kostprijs_per_uur: 44 })
+    // Kantoor zette 58 op deze timmermansregel: bewerken in het veld laat dat staan…
+    expect(tariefVoorFunctie('Timmerman', std, arbeid)).toEqual({ uurtarief: 58, kostprijs_per_uur: 48 })
+    // …maar een andere functie krijgt het standaardtarief van die functie.
+    expect(tariefVoorFunctie('Schilder', std, arbeid)).toEqual({ uurtarief: 55, kostprijs_per_uur: 44 })
+    expect(tariefVoorFunctie('Metselaar', std)).toEqual({ uurtarief: 0, kostprijs_per_uur: 0 })
   })
 
   it('niets bekend: nul, zodat de gebruiker het zelf invult', () => {

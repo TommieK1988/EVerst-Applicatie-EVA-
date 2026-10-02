@@ -7,8 +7,10 @@ import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
-  regelVanRecept,
+  regelVanRecept, uploadRegelFoto,
 } from '@/services/houtrotherstel/registraties'
+import { getHandmatigeStandaarden, type HandmatigeStandaarden } from '@/services/houtrotherstel/handmatig'
+import { HandmatigeRegelFormulier, WerkzaamheidRij } from './HoutrotHandmatigMobiel'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
@@ -26,13 +28,21 @@ import { registratieUren } from '@/lib/houtrotherstel/bedragen'
 import { regelVanLijn } from '@/lib/houtrotherstel/handmatige-regel'
 import { formatDateTime } from '@/lib/houtrotherstel/utils'
 
-/** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
 /**
- * `opgeslagen` is de regel zoals hij in de database staat. Opslaan vervangt alle
- * regels; zonder dit veld zou een handmatige regel van kantoor (arbeid/materiaal
- * buiten de bibliotheek) bij elke bewerking in het veld zijn bron en categorie kwijtraken.
+ * Eén werkzaamheid in het formulier: gekozen recept + aantal. `opgeslagen` is de
+ * volledige regel (uit de database, of een nieuwe handmatige regel). Opslaan vervangt
+ * alle regels; zonder dit veld zou een handmatige regel bij elke bewerking zijn bron en
+ * categorie kwijtraken. `foto` is een nog te uploaden foto bij een handmatige regel.
  */
-type Werkzaamheid = { recept: Recept; aantal: number; opgeslagen?: RegistratieRegelForm }
+type Werkzaamheid = { recept: Recept; aantal: number; opgeslagen?: RegistratieRegelForm; foto?: File | null }
+
+/** Recept-vorm van een handmatige regel: alleen naam en aantal worden ervan gebruikt. */
+function receptVanRegel(r: RegistratieRegelForm): Recept {
+  return {
+    id: '', code: '', naam: r.repair_name_snapshot ?? '', omschrijving: null, eenheid: r.unit_snapshot ?? null,
+    groep: null, uren: 0, uurtarief: 0, arbeidskosten: 0, materiaalkosten: 0, kostprijs: 0, margePct: null, verkoopprijs: 0,
+  }
+}
 
 const fotoUrl = fotoPubliekeUrl
 
@@ -184,6 +194,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [keuzeRecept, setKeuzeRecept] = useState('')
   const [keuzeAantal, setKeuzeAantal] = useState('1')
   const [notitie, setNotitie] = useState('')
+  // Handmatige regel: formulier open (nieuw of bewerken) en de standaardtarieven.
+  const [handmatigOpen, setHandmatigOpen] = useState(false)
+  const [bewerkIndex, setBewerkIndex] = useState<number | null>(null)
+  const [standaarden, setStandaarden] = useState<HandmatigeStandaarden | null>(null)
+  // Gefactureerd op kantoor: de werkzaamheden liggen vast (de server dwingt dat ook af).
+  const [vast, setVast] = useState(false)
 
   // Status: eenvoudige tweestand. false = Geregistreerd (oranje), true = Afgerond (groen).
   const [afgerond, setAfgerond] = useState(false)
@@ -203,6 +219,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   useEffect(() => {
     getRecepten().then(setRecepten).catch(() => setRecepten([]))
     getLocatieBoom(dossierId).then(setBoom).catch(() => setBoom({ labels: [], nodes: [] }))
+    getHandmatigeStandaarden(dossierId).then(setStandaarden)
+      .catch(() => setStandaarden({ functies: [], opslagPct: 0, eenheden: ['st', 'uur'] }))
   }, [dossierId])
 
   const boomLaadt = boom === null
@@ -254,6 +272,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setGekozen([]); setZelfGekozen(false); setBewerkLocatie([])
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
+    setHandmatigOpen(false); setBewerkIndex(null); setVast(false)
     setAfgerond(false)
     setVoorFoto(null); setNaFoto(null); setBestaandeFotos([]); setVerwijderdeFotos(new Set())
   }
@@ -284,6 +303,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal), opgeslagen: regelVanLijn(l) })),
     )
     setNotitie(r.notes ?? '')
+    setHandmatigOpen(false); setBewerkIndex(null); setVast(!!r.gefactureerd_op)
     setAfgerond(r.status === 'afgerond')
     setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setBestaandeFotos(r.photos ?? [])
@@ -307,6 +327,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       return [...prev, { recept, aantal }]
     })
     setKeuzeRecept(''); setKeuzeAantal('1')
+  }
+
+  function bewaarHandmatig(regel: RegistratieRegelForm, foto: File | null, fotoWeg: boolean) {
+    const nieuw = (vorige?: Werkzaamheid): Werkzaamheid => ({
+      recept: receptVanRegel(regel), aantal: regel.aantal, opgeslagen: regel,
+      foto: foto ?? (fotoWeg ? null : vorige?.foto),
+    })
+    setWerkzaamheden(prev => {
+      if (bewerkIndex == null) return [...prev, nieuw()]
+      const kopie = [...prev]; kopie[bewerkIndex] = nieuw(kopie[bewerkIndex]); return kopie
+    })
+    setHandmatigOpen(false); setBewerkIndex(null)
   }
 
   function werkzaamheidVerwijderen(index: number) {
@@ -333,9 +365,17 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (!locatieCompleet) throw new Error(t('fout.kiesLocatie'))
       if (werkzaamheden.length === 0) throw new Error(t('fout.minstensEen'))
 
-      const regels = werkzaamheden.map((w, i) => w.opgeslagen
-        ? { ...w.opgeslagen, aantal: w.aantal, volgorde: i }
-        : regelVanRecept(w.recept, w.aantal, i))
+      if (handmatigOpen) throw new Error(t('handmatig.fout.afronden'))
+
+      // Nieuwe regelfoto's eerst uploaden: hun pad gaat in de regel mee de database in.
+      const regels: RegistratieRegelForm[] = []
+      for (const [i, w] of werkzaamheden.entries()) {
+        const basis = w.opgeslagen
+          ? { ...w.opgeslagen, aantal: w.aantal, volgorde: i }
+          : regelVanRecept(w.recept, w.aantal, i)
+        const foto_pad = w.foto ? await uploadRegelFoto(dossierId, await verkleinFoto(w.foto)) : basis.foto_pad
+        regels.push({ ...basis, foto_pad })
+      }
 
       // Een vastgezette locatie gaat er letterlijk weer in — niet opnieuw uit de boom
       // opbouwen, anders verliest een registratie zijn plek zodra de projectleider de
@@ -501,32 +541,28 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             {werkzaamheden.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {werkzaamheden.map((w, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
-                    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {w.aantal}× <VertaalbareTekst tekst={w.recept.naam} label={false} />
-                      </div>
-                      {w.recept.code && <div style={{ fontSize: 11.5, color: '#6b757c' }}>{w.recept.code}</div>}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => werkzaamheidVerwijderen(i)}
-                      aria-label={t('werkzaamheidVerwijderen')}
-                      style={{
-                        flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
-                        background: 'var(--bg-elev)', color: '#b42318', fontSize: 16, lineHeight: 1, cursor: 'pointer',
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <WerkzaamheidRij key={i} regel={w.opgeslagen} naam={w.recept.naam} code={w.recept.code}
+                    aantal={w.aantal} vast={vast}
+                    onBewerk={() => { setBewerkIndex(i); setHandmatigOpen(true) }}
+                    onVerwijder={() => werkzaamheidVerwijderen(i)} />
                 ))}
               </div>
             )}
+            {vast && <div style={{ fontSize: 13, color: '#6b757c' }}>{t('handmatig.gefactureerd')}</div>}
 
+            {!vast && handmatigOpen && (
+              <HandmatigeRegelFormulier
+                key={bewerkIndex ?? 'nieuw'}
+                standaarden={standaarden}
+                start={bewerkIndex != null ? werkzaamheden[bewerkIndex]?.opgeslagen : undefined}
+                startFotoUrl={bewerkIndex != null && werkzaamheden[bewerkIndex]?.opgeslagen?.foto_pad
+                  ? fotoUrl(werkzaamheden[bewerkIndex].opgeslagen!.foto_pad!) : undefined}
+                onOpslaan={bewaarHandmatig}
+                onAnnuleer={() => { setHandmatigOpen(false); setBewerkIndex(null) }}
+              />
+            )}
+
+            {!vast && !handmatigOpen && (<>
             {/* Stap 1: soort. Stap 2: variant binnen die soort. */}
             <div>
               <label style={label} htmlFor="hr-groep">{t('soort')}</label>
@@ -571,6 +607,15 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 {t('toevoegen')}
               </button>
             </div>
+            <button type="button" onClick={() => { setBewerkIndex(null); setHandmatigOpen(true) }}
+              style={{
+                padding: '11px 12px', borderRadius: 10, border: '1px dashed var(--border)',
+                background: 'var(--bg-elev)', color: 'var(--fg)', fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', whiteSpace: 'normal',
+              }}>
+              {t('handmatig.knop')}
+            </button>
+            </>)}
 
             <div>
               <label style={label} htmlFor="hr-notitie">{t('notitie')}</label>

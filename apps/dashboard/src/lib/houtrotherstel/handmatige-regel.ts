@@ -260,3 +260,21 @@ export function kiesUurtarief(opties: {
   }
   return { verkoop: 0, kostprijs: 0, bron: 'geen' }
 }
+
+/**
+ * Het tarief dat een handmatige arbeidsregel krijgt als de invoerder het tarief niet
+ * ziet (EVA Mobiel). Een bestaande regel houdt zijn tarief — kantoor kan het hebben
+ * bijgesteld — zolang de functie gelijk blijft. Anders het standaardtarief van de
+ * functie, en zonder standaard nul (kantoor vult aan).
+ */
+export function tariefVoorFunctie(
+  functie: string,
+  standaarden: { naam: string; verkoop: number; kostprijs: number }[],
+  bestaand?: HandmatigeRegel,
+): { uurtarief: number; kostprijs_per_uur: number } {
+  if (bestaand?.type === 'arbeid' && bestaand.functie === functie) {
+    return { uurtarief: bestaand.uurtarief, kostprijs_per_uur: bestaand.kostprijs_per_uur }
+  }
+  const std = standaarden.find(f => f.naam === functie)
+  return { uurtarief: std?.verkoop ?? 0, kostprijs_per_uur: std?.kostprijs ?? 0 }
+}
