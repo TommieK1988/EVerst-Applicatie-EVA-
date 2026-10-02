@@ -41,7 +41,11 @@
     "verbergVerlopen": "Verberg verlopen ({aantal})",
     "verlopen": "Verlopen",
     "kop": "Planning",
-    "week": "wk {nummer}"
+    "week": "wk {nummer}",
+    "bewakingscode": "Bewakingscode — vul deze in op je weekstaat",
+    "code": "Code",
+    "allesInklappen": "Alle medewerkers verbergen",
+    "allesUitklappen": "Alle medewerkers tonen"
   },
   "voortgang": {
     "geen": "Nog geen voortgangsgegevens voor dit dossier.",

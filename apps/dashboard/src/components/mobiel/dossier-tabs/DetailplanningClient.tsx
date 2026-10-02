@@ -9,12 +9,16 @@ import type { Locale } from 'date-fns'
 import { useTranslations } from 'next-intl'
 import { useDateFnsLocale } from '@/i18n/client'
 import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import BewakingscodeLabel from './BewakingscodeLabel'
 
 /**
  * Mobiele dossierplanning — read-only.
  *
  * Portret : chronologische kaartlijst; verlopen werk staat achter een knop.
- * Liggend : versimpelde Gantt (altijd álle activiteiten, ook verlopen).
+ * Liggend : versimpelde Gantt (altijd álle activiteiten, ook verlopen). Tik op de naam
+ *           van een activiteit klapt de medewerkers eronder in; tik op de balk toont details.
+ *
+ * In beide staat de bewakingscode van de activiteit: die vult de medewerker in zijn weekstaat in.
  *
  * Bewust géén hergebruik van de desktop-Gantt (`components/planning/ActiviteitGantt`
  * + `components/planning/layout`): die leunt op drag-controllers en desktop-CSS-vars,
@@ -51,6 +55,10 @@ export type MobielActiviteit = {
   fase_id: string | null
   fase_naam: string | null
   fase_volgorde: number | null
+  /** Kale code ("BU.A") zoals op `planning_activiteiten`; de fase heeft hem bij schrijven al doorgezet. */
+  bewakingscode: string | null
+  /** Omschrijving uit de codelijst van het dossier; null als die niet te vinden is. */
+  bewakingscode_naam: string | null
   items: MobielPlanitem[]
 }
 
@@ -249,6 +257,7 @@ function ActiviteitKaart({ a, gedimd }: { a: MobielActiviteit; gedimd?: boolean 
           📍 {a.locatie_adres}
         </a>
       )}
+      {a.bewakingscode && <BewakingscodeLabel code={a.bewakingscode} naam={a.bewakingscode_naam} />}
     </div>
   )
 }
@@ -280,6 +289,20 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
   const locale = useDateFnsLocale()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<string | null>(null)
+  /** Activiteiten waarvan de medewerkerrijen verborgen zijn. Standaard alles uitgeklapt. */
+  const [ingeklapt, setIngeklapt] = useState<Set<string>>(() => new Set())
+  const klapIn = (id: string) => setIngeklapt(huidig => {
+    const nieuw = new Set(huidig)
+    if (nieuw.has(id)) nieuw.delete(id); else nieuw.add(id)
+    return nieuw
+  })
+  /** Activiteiten die überhaupt medewerkers op de tijdlijn hebben — alleen die zijn in te klappen. */
+  const metMensen = useMemo(
+    () => new Set(activiteiten.filter(a => a.items.some(i => i.start_dt || i.eind_dt)).map(a => a.id)),
+    [activiteiten],
+  )
+  const allesIngeklapt = metMensen.size > 0 && [...metMensen].every(id => ingeklapt.has(id))
+  const klapAllesIn = () => setIngeklapt(allesIngeklapt ? new Set() : new Set(metMensen))
 
   const ppd = PPD
   const headerH = WEEK_H + DAG_H
@@ -342,6 +365,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
       if (groep.naam) out.push({ kind: 'fase', key: `fase-${groep.id}`, naam: groep.naam })
       for (const a of groep.activiteiten) {
         out.push({ kind: 'activiteit', key: `act-${a.id}`, a })
+        if (ingeklapt.has(a.id)) continue
 
         // Alle blokken van dezelfde medewerker binnen deze activiteit op ÉÉN rij,
         // anders krijg je dezelfde naam vijf keer onder elkaar. Sleutel op
@@ -361,7 +385,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
       }
     }
     return out
-  }, [activiteiten])
+  }, [activiteiten, ingeklapt])
 
   const weken = useMemo(() => {
     const uit: { i: number; datum: Date }[] = []
@@ -400,15 +424,24 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           display: 'flex', position: 'sticky', top: 0, zIndex: 5,
           background: 'var(--bg-elev)', borderBottom: `1px solid ${LIJN_WEEK}`, height: headerH,
         }}>
-          <div style={{
-            width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
-            background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
-            display: 'flex', alignItems: 'center', padding: '0 8px',
-            fontSize: 10, fontWeight: 700, color: GRIJS,
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-          }}>
+          {/* Kopcel: alles in- of uitklappen in één tik. */}
+          <button
+            type="button"
+            onClick={klapAllesIn}
+            disabled={metMensen.size === 0}
+            aria-label={t(allesIngeklapt ? 'allesUitklappen' : 'allesInklappen')}
+            style={{
+              width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
+              background: 'var(--bg-elev)', border: 'none', borderRight: `1px solid ${RAND}`,
+              display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px',
+              fontSize: 10, fontWeight: 700, color: GRIJS, fontFamily: 'inherit',
+              textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left',
+              cursor: metMensen.size > 0 ? 'pointer' : 'default',
+            }}
+          >
+            {metMensen.size > 0 && <Chevron open={!allesIngeklapt} />}
             {t('kop')}
-          </div>
+          </button>
           <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0 }}>
             {/* Weekbalk */}
             {weken.map(w => (
@@ -465,6 +498,8 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           }
 
           const isAct = rij.kind === 'activiteit'
+          const kanKlappen = isAct && metMensen.has(rij.a.id)
+          const isIngeklapt = isAct && ingeklapt.has(rij.a.id)
           const hoogte = isAct ? RIJ_H : SUBRIJ_H
           const kleur = kleurVan(rij.a.status)
 
@@ -493,31 +528,50 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           return (
             <div key={rij.key}>
               <div
-                onClick={isAct ? () => setOpen(o => (o === rij.a.id ? null : rij.a.id)) : undefined}
                 style={{
                   display: 'flex', height: hoogte,
                   borderBottom: `1px solid ${isAct ? RAND : '#f0f3f4'}`,
-                  cursor: isAct ? 'pointer' : 'default',
                 }}
               >
-                <div style={{
-                  width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                  background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: isAct ? '0 8px' : '0 8px 0 18px',
-                }}>
+                {/* Labelkolom: een tik klapt de medewerkers onder deze activiteit in of uit. */}
+                <div
+                  onClick={kanKlappen ? () => klapIn(rij.a.id) : undefined}
+                  role={kanKlappen ? 'button' : undefined}
+                  aria-expanded={kanKlappen ? !isIngeklapt : undefined}
+                  style={{
+                    width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                    background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: isAct ? '0 6px' : '0 8px 0 18px',
+                    cursor: kanKlappen ? 'pointer' : 'default',
+                  }}
+                >
+                  {isAct && (kanKlappen
+                    ? <Chevron open={!isIngeklapt} />
+                    : <span style={{ width: 10, flexShrink: 0 }} />)}
                   {isAct && <div style={{ width: 3, height: 14, borderRadius: 2, background: kleur, flexShrink: 0 }} />}
-                  <span style={{
-                    fontSize: isAct ? 12 : 10.5,
-                    fontWeight: isAct ? 600 : 400,
-                    color: isAct ? '#161b20' : GRIJS,
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {isAct ? <VertaalbareTekst tekst={rij.a.titel} label={false} /> : rij.naam}
-                  </span>
+                  <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{
+                      fontSize: isAct ? 12 : 10.5,
+                      fontWeight: isAct ? 600 : 400,
+                      color: isAct ? '#161b20' : GRIJS,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {isAct ? <VertaalbareTekst tekst={rij.a.titel} label={false} /> : rij.naam}
+                    </span>
+                    {isAct && rij.a.bewakingscode && (
+                      <span style={{ display: 'flex', lineHeight: 1.2, overflow: 'hidden' }}>
+                        <BewakingscodeLabel code={rij.a.bewakingscode} naam={null} compact />
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0, ...raster }}>
+                {/* Tijdlijn: een tik op de activiteitrij toont de detailregel. */}
+                <div
+                  onClick={isAct ? () => setOpen(o => (o === rij.a.id ? null : rij.a.id)) : undefined}
+                  style={{ position: 'relative', width: tijdlijnW, flexShrink: 0, cursor: isAct ? 'pointer' : 'default', ...raster }}
+                >
                   {balken.map(balk => (
                     <div key={balk.sleutel} style={{
                       position: 'absolute', left: balk.left, width: balk.width,
@@ -542,6 +596,11 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                   <div style={{ padding: '8px 10px', fontSize: 11, color: GRIJS, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {periodeLabel(rij.a, locale) && <span>📅 {periodeLabel(rij.a, locale)}</span>}
                     {mensenVan(rij.a) && <span>👤 {mensenVan(rij.a)}</span>}
+                    {rij.a.bewakingscode && (
+                      <span style={{ marginTop: -6 }}>
+                        <BewakingscodeLabel code={rij.a.bewakingscode} naam={rij.a.bewakingscode_naam} />
+                      </span>
+                    )}
                     {rij.a.locatie_adres && (
                       <a
                         href={`https://maps.google.com/?q=${encodeURIComponent(rij.a.locatie_adres)}`}
@@ -560,5 +619,17 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
         </div>
       </div>
     </div>
+  )
+}
+
+/** Klein pijltje bij een in te klappen rij: open wijst omlaag, dicht naar rechts. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10" height="10" viewBox="0 0 10 10" aria-hidden
+      style={{ flexShrink: 0, transition: 'transform 120ms', transform: open ? 'rotate(90deg)' : 'none' }}
+    >
+      <path d="M3.5 2 L7 5 L3.5 8" fill="none" stroke={GRIJS} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

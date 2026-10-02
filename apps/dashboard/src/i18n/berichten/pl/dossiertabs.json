@@ -41,7 +41,11 @@
     "verbergVerlopen": "Ukryj zakończone ({aantal})",
     "verlopen": "Zakończone",
     "kop": "Grafik",
-    "week": "tydz. {nummer}"
+    "week": "tydz. {nummer}",
+    "bewakingscode": "Kod kontrolny — wpisz go w tygodniowej karcie godzin",
+    "code": "Kod",
+    "allesInklappen": "Ukryj wszystkich pracowników",
+    "allesUitklappen": "Pokaż wszystkich pracowników"
   },
   "voortgang": {
     "geen": "Brak danych o postępie dla tego projektu.",
