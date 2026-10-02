@@ -1,0 +1,4 @@
+-- Toegepast op productie via de Supabase MCP op 2026-10-02, direct na livegang op main.
+insert into public.changelog (datum, categorie, module, titel, omschrijving) values
+  ('2026-10-02','nieuw','Houtrot','Eigen arbeid en materiaal bij een houtrotreparatie',
+   'Staat een reparatie niet in de bibliotheek, of blijkt er op locatie extra werk nodig? Kies bij Soort voor "Handmatig" en voeg zelf arbeid (functie en uren) of materiaal (aantal, eenheid en inkoopprijs) toe, als reparatie of als meerwerk, met een notitie of foto erbij. Dat kan in de app en op kantoor. Het uurtarief en de opslag worden vanzelf ingevuld; op kantoor pas je ze aan, en een reparatie die je op gefactureerd zet ligt daarna vast. Handmatige regels tellen gewoon mee in de totalen en de rapportage, met het label "handmatig".');
