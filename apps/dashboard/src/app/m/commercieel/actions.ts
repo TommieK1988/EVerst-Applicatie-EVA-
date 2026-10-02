@@ -13,6 +13,8 @@
  */
 
 import { zoekKlanten, type KlantTreffer } from '@/lib/commercie/klanten-zoeken'
+import { berekenServicedeskBedragen } from '@/lib/commercie/dossier-bedragen'
+import { vereisCommercieelMutatie } from '@/lib/commercie/mobiel-auth'
 
 type Uitkomst<T> = { ok: true; data: T } | { ok: false; error: string }
 
@@ -29,5 +31,24 @@ export async function zoekKlantenActie(term: string): Promise<Uitkomst<KlantTref
     return { ok: true, data }
   } catch {
     return { ok: false, error: 'Zoeken lukte niet. Probeer het zo nog eens.' }
+  }
+}
+
+/**
+ * Bedragen van de lopende servicedeskbonnen, na de eerste weergave opgehaald — te duur om de
+ * pagina op te laten wachten (zie `lib/commercie/dossier-bedragen.ts`).
+ *
+ * Zelfde gate als de pagina: `relaties` lezen. De bedragen staan voor diezelfde mensen al op
+ * het klantbeeld; deze action zet er niets nieuws mee open, en rekent hooguit
+ * `MAX_LOPENDE_BONNEN` bonnen per aanroep door.
+ */
+export async function laadServicedeskBedragenActie(
+  dossierIds: string[],
+): Promise<Uitkomst<Record<string, number | null>>> {
+  try {
+    await vereisCommercieelMutatie('lezen')
+    return { ok: true, data: await berekenServicedeskBedragen(dossierIds) }
+  } catch {
+    return { ok: false, error: 'Bedragen ophalen lukte niet.' }
   }
 }

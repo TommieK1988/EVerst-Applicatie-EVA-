@@ -4,6 +4,9 @@ import { getDossierSharePointBestanden } from '@/lib/dossiers/sharepoint-bestand
 import {
   bouw7Rij, sharePointRij, bestandUrl, formatteerGrootte, naamMetExtensie, type BestandRij,
 } from '@/lib/dossiers/bestand-rijen'
+import { pasMetaToe } from '@/lib/dossiers/bestand-soort'
+import { getBestandMeta } from '@/lib/dossiers/bestand-meta'
+import { getAppVertaler } from '@/i18n/server'
 
 /**
  * Mobiele Bestanden-tab: de bestanden die op de Bestanden-tab in EVA zijn aangevinkt
@@ -13,30 +16,33 @@ import {
  * gefilterd op de vrijgegeven sleutels. Bewust dezelfde opbouw en niet een eigen
  * lijstje: zo kan een naam of datum op de telefoon nooit uit de pas gaan lopen met
  * wat de collega op kantoor aanvinkte. Openen gaat via `/api/dossier-bestand`, dat
- * voor allebei de bronnen het servertoken toevoegt.
+ * voor allebei de bronnen het servertoken toevoegt. Ook de soort en een in EVA
+ * aangepaste naam komen mee, zodat de telefoon dezelfde naam toont als de desktop.
  *
  * Zware live-calls → in `<Suspense>` gewikkeld door de pagina.
  */
 export default async function BestandenView({ dossierId }: { dossierId: string }) {
-  const [bouw7, sharepoint, sleutels] = await Promise.all([
+  const t = await getAppVertaler('dossiertabs')
+  const [bouw7, sharepoint, sleutels, meta] = await Promise.all([
     getDossierBestanden(dossierId).catch(() => null),
     getDossierSharePointBestanden(dossierId).catch(() => null),
     getAppZichtbareBestandSleutels(dossierId).catch(() => [] as string[]),
+    getBestandMeta(dossierId).catch(() => ({ meta: [], soorten: [] })),
   ])
 
   // Opt-in: alleen wat in EVA is aangevinkt komt op de telefoon.
   const vrijgegeven = new Set(sleutels)
-  const bestanden: BestandRij[] = [
+  const bestanden: BestandRij[] = pasMetaToe([
     ...(bouw7?.bestanden ?? []).map(bouw7Rij),
     ...(sharepoint?.status === 'gematcht' ? sharepoint.bestanden.map(sharePointRij) : []),
-  ]
+  ], meta.meta, meta.soorten)
     .filter(r => vrijgegeven.has(r.sleutel))
     .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '') || a.naam.localeCompare(b.naam))
 
   if (bestanden.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>
-        Er zijn voor dit dossier geen bestanden vrijgegeven voor de app.
+        {t('bestanden.geen')}
       </div>
     )
   }
@@ -45,7 +51,7 @@ export default async function BestandenView({ dossierId }: { dossierId: string }
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {bestanden.map((b) => {
         const meta = [
-          b.categorie,
+          b.soortNaam ?? b.categorie,
           b.bron,
           b.grootte == null ? null : formatteerGrootte(b.grootte),
           b.datum,

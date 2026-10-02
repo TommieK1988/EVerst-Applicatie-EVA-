@@ -1,5 +1,6 @@
 import React from 'react'
 import { createAdminClient } from '@everts/database/server'
+import { getPlanningBewakingscodes } from '@/lib/planning/bewakingscodes'
 import DetailplanningClient, { type MobielActiviteit } from './DetailplanningClient'
 
 /**
@@ -13,11 +14,11 @@ const db = () => createAdminClient() as any
 
 export default async function DetailplanningView({ dossierId }: { dossierId: string }) {
   const supabase = db()
-  const { data } = await supabase
+  const [{ data }, codes] = await Promise.all([supabase
     .from('planning_activiteiten')
     .select(`
       id, titel, status, gewenste_start, deadline, locatie_adres, volgorde,
-      fase_id,
+      fase_id, bewakingscode,
       planning_fasen ( naam, volgorde ),
       planning_items (
         id, medewerker_id, start_dt, eind_dt,
@@ -25,7 +26,18 @@ export default async function DetailplanningView({ dossierId }: { dossierId: str
       )
     `)
     .eq('dossier_id', dossierId)
-    .order('volgorde', { ascending: true })
+    .order('volgorde', { ascending: true }),
+    // Alleen voor de omschrijving naast de code. Lukt dat niet, dan staat de kale code er
+    // nog steeds — en dat is wat de medewerker in zijn weekstaat moet invullen.
+    getPlanningBewakingscodes(dossierId).catch(() => []),
+  ])
+
+  /** Kale code → omschrijving. Codes zijn niet uniek op nummer; de eerste met een naam wint. */
+  const naamVanCode = new Map<string, string>()
+  for (const c of codes) {
+    const sleutel = c.code.toLowerCase()
+    if (c.naam && !naamVanCode.has(sleutel)) naamVanCode.set(sleutel, c.naam)
+  }
 
   // Supabase-typegeneratie kent deze geneste select niet; normaliseren naar een
   // expliciet type zodat er geen `any` de client in gaat.
@@ -43,6 +55,8 @@ export default async function DetailplanningView({ dossierId }: { dossierId: str
     fase_id: a.fase_id ? String(a.fase_id) : null,
     fase_naam: a.planning_fasen?.naam ?? null,
     fase_volgorde: a.planning_fasen?.volgorde ?? null,
+    bewakingscode: a.bewakingscode ?? null,
+    bewakingscode_naam: a.bewakingscode ? (naamVanCode.get(String(a.bewakingscode).toLowerCase()) ?? null) : null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: (a.planning_items ?? []).map((pi: any) => ({
       id: String(pi.id),

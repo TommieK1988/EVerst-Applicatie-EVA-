@@ -23,6 +23,12 @@ export type MeerwerkTotalenInvoer = {
 export type NacalculatieInvoer = {
   totaal: number
   alGefactureerdBedrag: number
+  /**
+   * Het deel van `totaal + alGefactureerdBedrag` dat uit de regiecodes van het dossier zelf komt
+   * (`RegieVoorstel.waardePerBron.regie`): op een regiebon of regieopdracht is dat het werk zélf,
+   * geen meerwerk. Telt in het totaal precies hetzelfde mee; het verschil zit alleen in het label.
+   */
+  waardePerBron?: { regie: number }
 }
 
 export type Contractwaarde = {
@@ -37,6 +43,11 @@ export type Contractwaarde = {
   eigenBedrag: number
   /** Uit het nacalculatie-blok, inclusief wat daarvan al gefactureerd is. */
   nacalculatie: number
+  /**
+   * Het deel van `nacalculatie` dat de regiewerkzaamheden zelf zijn (geen meerwerk): de regiecodes
+   * van een regiebon of regieopdracht. Zit al in `nacalculatie`; staat apart voor het label.
+   */
+  regiewerk: number
   /** `eigenBedrag` + `nacalculatie`: alles wat buiten de termijnstaat afrekent. */
   regie: number
   /** `aangenomen` + `regie`. */
@@ -71,6 +82,7 @@ export function berekenContractwaarde({ aanneemsom, meerwerk, nacalculatie }: {
     aangenomen,
     eigenBedrag,
     nacalculatie: uitBlok,
+    regiewerk: rond(nacalculatie?.waardePerBron?.regie ?? 0),
     regie,
     meerwerk: meerwerkTotaal,
     contractTotaal: rond(aanneemsom + meerwerkTotaal),
@@ -96,26 +108,35 @@ export type ContracttotaalVerkoop = {
  * Die komt deels uit stelposten die geen meerwerkregel zijn, en dan is er geen Bouw7-getal om op
  * terug te vallen.
  */
-export function berekenContracttotaalVerkoop({ basis, goedgekeurdAantal, meerwerk, nacalculatie }: {
+export function berekenContracttotaalVerkoop({ basis, goedgekeurdAantal, meerwerk, nacalculatie, opRegie = false }: {
   basis: { aanneemsom: number; meerwerk: number; contractTotaal: number }
   goedgekeurdAantal: number
   meerwerk: MeerwerkTotalenInvoer | null
   nacalculatie: NacalculatieInvoer | null
+  /**
+   * Rekent het dossier af op regie (`opRegie()`)? Dan is er geen aanneemsom, ook niet als Bouw7
+   * nog een vaste prijs teruggeeft — die zou anders bovenop de nacalculatie geteld worden.
+   */
+  opRegie?: boolean
 }): ContracttotaalVerkoop {
-  const waarde = berekenContractwaarde({ aanneemsom: basis.aanneemsom, meerwerk, nacalculatie })
-  const evaBron = goedgekeurdAantal > 0 || Math.abs(waarde.nacalculatie) > 0.005
-  const evaMeerwerk = evaBron && Math.abs(waarde.meerwerk - basis.meerwerk) > 0.005
+  const aanneemsom = opRegie ? 0 : basis.aanneemsom
+  const waarde = berekenContractwaarde({ aanneemsom, meerwerk, nacalculatie })
+  // Op regie is EVA altijd de bron: het Bouw7-aggregaat kent de nacalculatie niet.
+  const evaBron = opRegie || goedgekeurdAantal > 0 || Math.abs(waarde.nacalculatie) > 0.005
+  const evaMeerwerk = opRegie || (evaBron && Math.abs(waarde.meerwerk - basis.meerwerk) > 0.005)
   return {
     waarde,
     evaBron,
-    aanneemsom: basis.aanneemsom,
+    aanneemsom,
     meerwerk: evaMeerwerk ? waarde.meerwerk : basis.meerwerk,
-    contractTotaal: evaMeerwerk ? rond(basis.aanneemsom + waarde.meerwerk) : basis.contractTotaal,
+    contractTotaal: evaMeerwerk ? rond(aanneemsom + waarde.meerwerk) : basis.contractTotaal,
   }
 }
 
-/** De vier regels onder "Contractwaarde" op de Verkoop-tab. Samen precies `aangenomen + regie`. */
+/** De regels onder "Contractwaarde" op de Verkoop-tab. Samen precies `aangenomen + regie`. */
 export type MeerwerkSplitsing = {
+  /** De regiewerkzaamheden zelf (regiecodes van het dossier); geen meerwerk. */
+  regiewerk: number
   minderwerkAangenomen: number
   meerwerkAangenomen: number
   minderwerkRegie: number
@@ -133,7 +154,7 @@ export type MeerwerkSplitsing = {
  */
 export function splitsMeerwerk(
   regels: { effectiefExcl: number; werkelijkExcl?: number; opTermijn: boolean; opNacalculatie: boolean }[],
-  waarde: Pick<Contractwaarde, 'nacalculatie'>,
+  waarde: Pick<Contractwaarde, 'nacalculatie'> & { regiewerk?: number },
 ): MeerwerkSplitsing {
   const s = { minderwerkAangenomen: 0, meerwerkAangenomen: 0, minderwerkRegie: 0, meerwerkRegie: 0 }
   for (const r of regels) {
@@ -148,12 +169,73 @@ export function splitsMeerwerk(
       s.meerwerkRegie += Math.max(0, r.effectiefExcl - (r.werkelijkExcl ?? r.effectiefExcl))
     }
   }
-  if (waarde.nacalculatie < 0) s.minderwerkRegie += waarde.nacalculatie
-  else s.meerwerkRegie += waarde.nacalculatie
+  // De regiewerkzaamheden zelf staan op een eigen regel; alleen de rest van het blok is meerwerk.
+  const regiewerk = waarde.regiewerk ?? 0
+  const restBlok = waarde.nacalculatie - regiewerk
+  if (restBlok < 0) s.minderwerkRegie += restBlok
+  else s.meerwerkRegie += restBlok
   return {
+    regiewerk: rond(regiewerk),
     minderwerkAangenomen: rond(s.minderwerkAangenomen),
     meerwerkAangenomen: rond(s.meerwerkAangenomen),
     minderwerkRegie: rond(s.minderwerkRegie),
     meerwerkRegie: rond(s.meerwerkRegie),
   }
+}
+
+export type OverzichtRegel = {
+  sleutel: string
+  label: string
+  /** Kleine toelichting achter het label: langs welke route het bedrag gefactureerd wordt. */
+  route?: string
+  bedrag: number
+}
+
+/**
+ * De regels onder "Contractwaarde" in het Overzicht van de Verkoop-tab — alleen wat in gebruik is.
+ *
+ * Een regel op nul verdwijnt: vier lege meer-/minderwerkregels onder een opdracht zonder meerwerk
+ * zeiden niets. De basisregel volgt de afrekenwijze: op regie heet hij Regiewerkzaamheden (via
+ * nacalculatie), anders Aanneemsom. Op regie blijft hij ook op nul staan — dat is de hoofdpost, en
+ * zo zie je dat er nog niets geboekt is.
+ */
+export function overzichtRegels(invoer: {
+  opRegie: boolean
+  aanneemsom: number
+  splitsing: MeerwerkSplitsing
+  /** Leidt EVA het meerwerk? Zo niet, dan staat er alleen het Bouw7-aggregaat. */
+  evaBron: boolean
+  bouw7Meerwerk: number
+}): OverzichtRegel[] {
+  const { opRegie, aanneemsom, splitsing, evaBron, bouw7Meerwerk } = invoer
+  const inGebruik = (n: number) => Math.abs(n) > 0.005
+  const regels: OverzichtRegel[] = []
+
+  const regiewerk: OverzichtRegel = {
+    sleutel: 'regiewerk', label: 'Regiewerkzaamheden', route: 'via nacalculatie', bedrag: splitsing.regiewerk,
+  }
+  if (opRegie) regels.push(regiewerk)
+  else {
+    if (inGebruik(aanneemsom)) regels.push({ sleutel: 'aanneemsom', label: 'Aanneemsom', bedrag: aanneemsom })
+    // Hoort op aangenomen werk niet voor te komen; valt er toch iets binnen, dan wel zichtbaar.
+    if (inGebruik(splitsing.regiewerk)) regels.push(regiewerk)
+  }
+
+  const meerwerk: [string, string, string, number][] = [
+    ['minderwerkAangenomen', 'Goedgekeurd minderwerk — aangenomen', 'via termijnen', splitsing.minderwerkAangenomen],
+    ['meerwerkAangenomen', 'Goedgekeurd meerwerk — aangenomen', 'via termijnen', splitsing.meerwerkAangenomen],
+    ['minderwerkRegie', 'Goedgekeurd minderwerk — regie en stelposten', 'via nacalculatie', splitsing.minderwerkRegie],
+    ['meerwerkRegie', 'Goedgekeurd meerwerk — regie en stelposten', 'via nacalculatie', splitsing.meerwerkRegie],
+  ]
+  for (const [sleutel, label, route, bedrag] of meerwerk) {
+    if (inGebruik(bedrag)) regels.push({ sleutel, label, route, bedrag })
+  }
+  // Zonder EVA-regels is er alleen het Bouw7-aggregaat: dat valt niet te splitsen.
+  if (!evaBron && inGebruik(bouw7Meerwerk)) {
+    regels.push({
+      sleutel: 'bouw7Meerwerk', label: 'Goedgekeurd meer-/minderwerk',
+      route: 'uit Bouw7, niet uitgesplitst', bedrag: bouw7Meerwerk,
+    })
+  }
+  return regels
 }

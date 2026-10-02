@@ -1,6 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   getRegistraties, createRegistratie, updateRegistratie, uploadPhoto, deletePhoto,
   regelVanRecept,
@@ -17,7 +21,7 @@ import {
   type LocatieBoom, type LocatieWaarde, type FotoType,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
-import { fotoPubliekeUrl, FOTO_VOLGORDE, FOTO_LABELS } from '@/lib/houtrotherstel/fotos'
+import { fotoPubliekeUrl, FOTO_VOLGORDE } from '@/lib/houtrotherstel/fotos'
 import { registratieUren } from '@/lib/houtrotherstel/bedragen'
 import { formatDateTime } from '@/lib/houtrotherstel/utils'
 
@@ -72,18 +76,19 @@ const label: React.CSSProperties = {
   fontSize: 12, fontWeight: 600, color: '#6b757c', marginBottom: 5, display: 'block',
 }
 
-const GEEN_BOOM =
-  'De projectleider heeft voor dit dossier nog geen locaties ingesteld. ' +
-  'Zodra dat gebeurd is, kun je hier registreren.'
+const vet: React.CSSProperties = { color: 'var(--fg)', fontWeight: 600 }
+const KLEUR_AFGEROND = '#009439'
+const KLEUR_GEREGISTREERD = '#e08600'
 
 /** Uitleg waarom er (nog) niet geregistreerd kan worden. */
 function GeenBoomMelding() {
+  const t = useTranslations('houtrot')
   return (
     <div style={{
       background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a5b00',
       borderRadius: 12, padding: '11px 13px', fontSize: 13, lineHeight: 1.5,
     }}>
-      {GEEN_BOOM}
+      {t('geenBoom')}
     </div>
   )
 }
@@ -94,7 +99,8 @@ function GeenBoomMelding() {
  * van de voor-foto en zie je in één oogopslag niet meer wat wat is.
  */
 function FotoTegel({ foto, soort }: { foto?: RepairPhoto; soort: FotoType }) {
-  const etiket = FOTO_LABELS[soort]
+  const t = useTranslations('houtrot')
+  const etiket = t(`fotoSoort.${soort}`)
   return (
     <div style={{
       position: 'relative', aspectRatio: '1 / 1', borderRadius: 10, overflow: 'hidden',
@@ -107,7 +113,7 @@ function FotoTegel({ foto, soort }: { foto?: RepairPhoto; soort: FotoType }) {
         <img src={fotoUrl(foto.storage_path)} alt={etiket}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
-        <span style={{ fontSize: 11.5, color: '#9aa4ab' }}>Geen {etiket.toLowerCase()}-foto</span>
+        <span style={{ fontSize: 11.5, color: '#9aa4ab' }}>{t(`geenFoto.${soort}`)}</span>
       )}
       <span style={{
         position: 'absolute', left: 0, right: 0, bottom: 0, padding: '3px 0',
@@ -122,9 +128,9 @@ function FotoTegel({ foto, soort }: { foto?: RepairPhoto; soort: FotoType }) {
   )
 }
 
-/** "1,75 uur" — het opgetelde tijdnorm-totaal van een registratie. */
-function urenTekst(uren: number): string {
-  return `${uren.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} uur`
+/** "1,75" — het opgetelde tijdnorm-totaal van een registratie; "uur" erachter via de vertaling. */
+function urenGetal(uren: number, locale: string): string {
+  return uren.toLocaleString(locale, { maximumFractionDigits: 2 })
 }
 
 function Blok({ titel, children }: { titel: string; children: React.ReactNode }) {
@@ -139,6 +145,8 @@ function Blok({ titel, children }: { titel: string; children: React.ReactNode })
 }
 
 export default function HoutrotView({ dossierId }: { dossierId: string }) {
+  const t = useTranslations('houtrot')
+  const locale = useDatumLocale()
   const [registraties, setRegistraties] = useState<RepairRegistration[] | null>(null)
   const [recepten, setRecepten] = useState<Recept[]>([])
   const [boom, setBoom] = useState<LocatieBoom | null>(null)
@@ -182,8 +190,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const laad = useCallback(() => {
     getRegistraties({ dossier_id: dossierId })
       .then(setRegistraties)
-      .catch(e => setFout(e instanceof Error ? e.message : 'Laden mislukt'))
-  }, [dossierId])
+      .catch(e => setFout(e instanceof Error ? e.message : t('fout.ladenMislukt')))
+  }, [dossierId, t])
 
   useEffect(() => { laad() }, [laad])
   useEffect(() => {
@@ -222,6 +230,18 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   // Alleen houtrot-recepten (die met een groep) verschijnen in de keuze.
   const groepen = Array.from(new Set(recepten.filter(r => r.groep).map(r => r.groep as string)))
   const receptenInGroep = recepten.filter(r => r.groep === keuzeGroep)
+
+  // Namen uit de reparatiebibliotheek en de locatieboom komen van kantoor. In een <option>
+  // kan geen component, dus hier in één keer vertalen en per tekst opzoeken.
+  const cascade = boom && heeftBoom ? cascadeRijen(boom.nodes, gekozen) : []
+  const bibliotheekTeksten = [
+    ...groepen, ...receptenInGroep.map(variantLabel),
+    ...cascade.flatMap(c => c.opties.map(o => o.naam)),
+    ...(boom?.labels ?? []).map(l => l?.trim() ?? ''),
+  ]
+  const vertalingen = useVertalingen(bibliotheekTeksten)
+  const vertaald = new Map(bibliotheekTeksten.map((tekst, i) => [tekst, vertalingen[i]?.tekst ?? tekst]))
+  const vt = (tekst: string) => vertaald.get(tekst) ?? tekst
 
   function leegmaken() {
     setBewerkId(null); setHerkomst(null)
@@ -300,12 +320,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setFout(null)
     try {
       const medewerker = await getHuidigeMedewerker()
-      if (!medewerker) throw new Error('Geen medewerker-koppeling gevonden voor dit account.')
+      if (!medewerker) throw new Error(t('fout.geenMedewerker'))
       // Zolang de boom niet binnen is, weten we niet of er een locatie-indeling is;
       // opslaan zou de bestaande locatie met een leeg pad overschrijven.
-      if (boomLaadt) throw new Error('De locatie wordt nog geladen. Probeer het over een moment opnieuw.')
-      if (!locatieCompleet) throw new Error('Kies eerst de volledige locatie.')
-      if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
+      if (boomLaadt) throw new Error(t('fout.locatieLaadt'))
+      if (!locatieCompleet) throw new Error(t('fout.kiesLocatie'))
+      if (werkzaamheden.length === 0) throw new Error(t('fout.minstensEen'))
 
       const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
 
@@ -315,7 +335,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       let locatie: LocatieWaarde[]
       if (locatieVast) locatie = bewerkLocatie
       else if (heeftBoom && boom) locatie = bouwLocatiePad(boom, gekozen)
-      else throw new Error(GEEN_BOOM)
+      else throw new Error(t('geenBoom'))
 
       const teVerwijderen = new Set(verwijderdeFotos)
       if (voorFoto) bestaandeFotos.filter(p => p.photo_type === 'voor').forEach(p => teVerwijderen.add(p.id))
@@ -349,7 +369,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
       terugNaarLijst()
     } catch (e) {
-      setFout(e instanceof Error ? e.message : 'Opslaan mislukt')
+      setFout(e instanceof Error ? e.message : t('fout.opslaanMislukt'))
     } finally {
       setBezig(false)
     }
@@ -383,13 +403,13 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 fontSize: 11, fontWeight: 700, color: '#6b757c', textTransform: 'uppercase',
                 letterSpacing: '0.08em', marginBottom: 3,
               }}>
-                Locatie
+                {t('locatie')}
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>{gekozenLocatie}</div>
+              <VertaalbareTekst tekst={gekozenLocatie} as="div" style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)' }} />
             </div>
           )}
 
-          <Blok titel="Foto's">
+          <Blok titel={t('fotos')}>
             {/* Groot en over de volle breedte: in het veld wil je de schade zien, niet
                 een duimnagel. `contain` in plaats van `cover` zodat er niets wegvalt. */}
             {zichtbareFotos.length > 0 && (
@@ -399,7 +419,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                     <a href={fotoUrl(p.storage_path)} target="_blank" rel="noopener noreferrer"
                       style={{ display: 'block' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotoUrl(p.storage_path)} alt={FOTO_LABELS[p.photo_type] ?? p.photo_type}
+                      <img src={fotoUrl(p.storage_path)} alt={t(`fotoSoort.${p.photo_type}`)}
                         style={{
                           display: 'block', width: '100%', maxHeight: '50vh', objectFit: 'contain',
                           background: '#0e1114', borderRadius: 12, border: '1px solid var(--border)',
@@ -410,9 +430,9 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                       background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
                       textTransform: 'uppercase', letterSpacing: '0.06em',
                     }}>
-                      {FOTO_LABELS[p.photo_type] ?? p.photo_type}
+                      {t(`fotoSoort.${p.photo_type}`)}
                     </span>
-                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label="Foto verwijderen"
+                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label={t('fotoVerwijderen')}
                       style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, border: 'none', background: 'rgba(180,35,24,0.92)', color: '#fff', fontSize: 15, lineHeight: 1, cursor: 'pointer' }}>
                       ×
                     </button>
@@ -421,12 +441,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               </div>
             )}
             <div>
-              <label style={label} htmlFor="hr-voor">Voor{heeftVoorBestaand && !voorFoto ? ' (vervangen)' : ''}</label>
+              <label style={label} htmlFor="hr-voor">{heeftVoorBestaand && !voorFoto ? t('fotoVervangen', { soort: t('fotoSoort.voor') }) : t('fotoSoort.voor')}</label>
               <input id="hr-voor" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
                 onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
             </div>
             <div>
-              <label style={label} htmlFor="hr-na">Na{heeftNaBestaand && !naFoto ? ' (vervangen)' : ''}</label>
+              <label style={label} htmlFor="hr-na">{heeftNaBestaand && !naFoto ? t('fotoVervangen', { soort: t('fotoSoort.na') }) : t('fotoSoort.na')}</label>
               <input id="hr-na" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
                 onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
             </div>
@@ -435,19 +455,19 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           {/* Alleen te kiezen zolang de locatie nog niet vaststaat; anders staat hij
               als tekstregel bovenaan. */}
           {!locatieVast && (
-          <Blok titel="Locatie">
+          <Blok titel={t('locatie')}>
             {boom === null ? (
-              <div style={{ fontSize: 13, color: '#6b757c' }}>Laden…</div>
+              <div style={{ fontSize: 13, color: '#6b757c' }}>{t('laden')}</div>
             ) : heeftBoom ? (
               <>
               {oudNietOpBoom && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a5b00', borderRadius: 10, padding: '9px 11px', fontSize: 12.5 }}>
-                  Deze registratie heeft nog geen locatie. Kies hieronder de juiste plek.
+                  {t('geenLocatieNog')}
                 </div>
               )}
-              {cascadeRijen(boom.nodes, gekozen).map(({ diepte, opties }) => (
+              {cascade.map(({ diepte, opties }) => (
                 <div key={diepte}>
-                  <label style={label} htmlFor={`hr-niv-${diepte}`}>{boom.labels[diepte]?.trim() || `Niveau ${diepte + 1}`}</label>
+                  <label style={label} htmlFor={`hr-niv-${diepte}`}>{boom.labels[diepte]?.trim() ? vt(boom.labels[diepte].trim()) : t('niveau', { nummer: diepte + 1 })}</label>
                   <select
                     id={`hr-niv-${diepte}`}
                     style={veld}
@@ -455,12 +475,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                     onChange={e => kiesNiveau(diepte, e.target.value)}
                   >
                     <option value="">—</option>
-                    {opties.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
+                    {opties.map(o => <option key={o.id} value={o.id}>{vt(o.naam)}</option>)}
                   </select>
                 </div>
               ))}
               {!locatieCompleet && (
-                <div style={{ fontSize: 12, color: '#6b757c' }}>Kies elk niveau; zonder volledige locatie kun je niet opslaan.</div>
+                <div style={{ fontSize: 12, color: '#6b757c' }}>{t('kiesElkNiveau')}</div>
               )}
               </>
             ) : (
@@ -469,7 +489,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           </Blok>
           )}
 
-          <Blok titel="Werkzaamheden">
+          <Blok titel={t('werkzaamheden')}>
             {werkzaamheden.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {werkzaamheden.map((w, i) => (
@@ -479,14 +499,14 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {w.aantal}× {w.recept.naam}
+                        {w.aantal}× <VertaalbareTekst tekst={w.recept.naam} label={false} />
                       </div>
                       {w.recept.code && <div style={{ fontSize: 11.5, color: '#6b757c' }}>{w.recept.code}</div>}
                     </div>
                     <button
                       type="button"
                       onClick={() => werkzaamheidVerwijderen(i)}
-                      aria-label="Werkzaamheid verwijderen"
+                      aria-label={t('werkzaamheidVerwijderen')}
                       style={{
                         flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
                         background: 'var(--bg-elev)', color: '#b42318', fontSize: 16, lineHeight: 1, cursor: 'pointer',
@@ -501,28 +521,28 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
 
             {/* Stap 1: soort. Stap 2: variant binnen die soort. */}
             <div>
-              <label style={label} htmlFor="hr-groep">Soort</label>
+              <label style={label} htmlFor="hr-groep">{t('soort')}</label>
               <select id="hr-groep" style={veld} value={keuzeGroep}
                 onChange={e => { setKeuzeGroep(e.target.value); setKeuzeRecept('') }}>
-                <option value="">— kies een soort —</option>
-                {groepen.map(g => <option key={g} value={g}>{g}</option>)}
+                <option value="">{t('kiesSoort')}</option>
+                {groepen.map(g => <option key={g} value={g}>{vt(g)}</option>)}
               </select>
             </div>
             {keuzeGroep && (
               <div>
-                <label style={label} htmlFor="hr-variant">Variant</label>
+                <label style={label} htmlFor="hr-variant">{t('variant')}</label>
                 <select id="hr-variant" style={veld} value={keuzeRecept}
                   onChange={e => setKeuzeRecept(e.target.value)}>
-                  <option value="">— kies —</option>
+                  <option value="">{t('kies')}</option>
                   {receptenInGroep.map(r => (
-                    <option key={r.id} value={r.id}>{variantLabel(r)}</option>
+                    <option key={r.id} value={r.id}>{vt(variantLabel(r))}</option>
                   ))}
                 </select>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
               <div style={{ width: 96 }}>
-                <label style={label} htmlFor="hr-aantal">Aantal</label>
+                <label style={label} htmlFor="hr-aantal">{t('aantal')}</label>
                 <input
                   id="hr-aantal" type="number" inputMode="numeric" min={1} step={1}
                   style={veld} value={keuzeAantal}
@@ -540,23 +560,23 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                   fontSize: 14, fontWeight: 700, cursor: keuzeRecept ? 'pointer' : 'default',
                 }}
               >
-                Toevoegen
+                {t('toevoegen')}
               </button>
             </div>
 
             <div>
-              <label style={label} htmlFor="hr-notitie">Notitie</label>
+              <label style={label} htmlFor="hr-notitie">{t('notitie')}</label>
               <textarea id="hr-notitie" style={{ ...veld, minHeight: 60, resize: 'vertical' }} value={notitie} onChange={e => setNotitie(e.target.value)} />
             </div>
           </Blok>
 
-          <Blok titel="Status">
+          <Blok titel={t('status')}>
             {/* Eenvoudige tweestand: oranje = Geregistreerd, groen = Afgerond. */}
             <div style={{ display: 'flex', gap: 8 }}>
               {([false, true] as const).map(waarde => {
                 const actief = afgerond === waarde
                 const groen = waarde === true
-                const kleur = groen ? '#009439' : '#e08600'
+                const kleur = groen ? KLEUR_AFGEROND : KLEUR_GEREGISTREERD
                 return (
                   <button
                     key={String(waarde)}
@@ -570,7 +590,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                       color: actief ? '#fff' : '#6b757c',
                     }}
                   >
-                    {groen ? 'Afgerond' : 'Geregistreerd'}
+                    {groen ? t('afgerond') : t('geregistreerd')}
                   </button>
                 )
               })}
@@ -582,10 +602,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               in EVA op de desktop — in het veld is dat geen taak. */}
           {herkomst && (
             <div style={{ fontSize: 11.5, color: '#8b949a', lineHeight: 1.6, padding: '2px 2px 4px' }}>
-              <div>Aangemaakt door {herkomst.maker || 'onbekend'} · {formatDateTime(herkomst.gemaaktOp)}</div>
+              <div>{t('aangemaaktDoor', { naam: herkomst.maker || t('onbekend'), moment: formatDateTime(herkomst.gemaaktOp) })}</div>
               <div>
-                Laatst bewerkt door {herkomst.bewerker || herkomst.maker || 'onbekend'}
-                {' · '}{formatDateTime(herkomst.bewerktOp)}
+                {t('laatstBewerktDoor', {
+                  naam: herkomst.bewerker || herkomst.maker || t('onbekend'),
+                  moment: formatDateTime(herkomst.bewerktOp),
+                })}
               </div>
             </div>
           )}
@@ -601,7 +623,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               border: '1px solid var(--border)', fontSize: 15, fontWeight: 600, cursor: 'pointer',
             }}
           >
-            Annuleren
+            {t('annuleren')}
           </button>
           <button
             type="button"
@@ -614,7 +636,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               cursor: bezig || boomLaadt || !locatieCompleet ? 'default' : 'pointer',
             }}
           >
-            {bezig ? 'Opslaan…' : 'Opslaan'}
+            {bezig ? t('opslaanBezig') : t('opslaan')}
           </button>
         </MobielStickyFooter>
       </div>
@@ -629,16 +651,16 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           <div style={{ color: '#b42318', fontSize: 14, textAlign: 'center', padding: 24 }}>{fout}</div>
         )}
         {!fout && registraties === null && (
-          <div style={{ color: '#6b757c', fontSize: 14, textAlign: 'center', padding: 24 }}>Laden…</div>
+          <div style={{ color: '#6b757c', fontSize: 14, textAlign: 'center', padding: 24 }}>{t('laden')}</div>
         )}
         {!fout && !boomLaadt && !heeftBoom && <GeenBoomMelding />}
         {!fout && registraties?.length === 0 && heeftBoom && (
           <div style={{ color: '#6b757c', fontSize: 14, textAlign: 'center', padding: 32 }}>
-            Nog geen houtrotregistraties voor dit dossier.
+            {t('geenRegistraties')}
           </div>
         )}
         {registraties?.map(r => {
-          const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ') || 'Geen locatie'
+          const plaats = (r.locatie ?? []).map(l => l.waarde).filter(Boolean).join(' · ')
           const fotos = r.photos ?? []
           const voor = fotos.find(p => p.photo_type === 'voor')
           const na = fotos.find(p => p.photo_type === 'na')
@@ -647,6 +669,11 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             .sort((a, b) => (FOTO_VOLGORDE[a.photo_type] ?? 9) - (FOTO_VOLGORDE[b.photo_type] ?? 9))
           const afg = r.status === 'afgerond'
           const uren = registratieUren(r)
+           
+          const tijdnorm = t.rich('tijdnorm', {
+            uren: t('uren', { uren: urenGetal(uren, locale) }),
+            b: (stuk) => <strong style={vet}>{stuk}</strong>,
+          })
           return (
             <button
               key={r.id}
@@ -659,23 +686,25 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>{plaats}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)', minWidth: 0 }}>
+                  {plaats ? <VertaalbareTekst tekst={plaats} label={false} /> : t('geenLocatie')}
+                </div>
                 <span style={{
                   fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
                   flexShrink: 0, padding: '2px 8px', borderRadius: 999,
                   color: afg ? '#0a7a33' : '#9a5b00',
                   background: afg ? '#e6f4ea' : '#fde7cf',
                 }}>
-                  {afg ? 'Afgerond' : 'Geregistreerd'}
+                  {afg ? t('afgerond') : t('geregistreerd')}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: '#6b757c', marginTop: 3 }}>
                 {r.registration_date}
-                {r.repair_name_snapshot ? ` · ${r.repair_name_snapshot}` : ''}
+                {r.repair_name_snapshot && <> · <VertaalbareTekst tekst={r.repair_name_snapshot} label={false} /></>}
               </div>
               {uren > 0 && (
                 <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>
-                  Tijdnorm <strong style={{ color: 'var(--fg)', fontWeight: 600 }}>{urenTekst(uren)}</strong>
+                  {tijdnorm}
                 </div>
               )}
               <div style={{
@@ -701,7 +730,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             cursor: heeftBoom ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent',
           }}
         >
-          {boomLaadt ? 'Laden…' : heeftBoom ? 'Nieuwe registratie' : 'Wacht op locaties'}
+          {boomLaadt ? t('laden') : heeftBoom ? t('nieuweRegistratie') : t('wachtOpLocaties')}
         </button>
       </MobielStickyFooter>
     </div>

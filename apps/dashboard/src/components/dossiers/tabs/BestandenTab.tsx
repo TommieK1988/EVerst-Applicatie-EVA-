@@ -8,6 +8,10 @@
  * opgeslagen om het te vinden. Afbeeldingen worden uit die lijst gehaald en in een
  * fotogalerij getoond; een regel met een bestandsnaam als `IMG_20260714.jpg` zegt
  * niets, de foto zelf wel.
+ *
+ * Indeling: de lijst met rechts een voorvertoningspaneel voor wat je aanklikt, en de
+ * fotogalerij daaronder over de volle breedte. Eerder stonden lijst en galerij elk op
+ * een halve breedte en waren lange bestandsnamen nauwelijks te lezen.
  */
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
@@ -28,6 +32,9 @@ import {
   type DossierSharePointData,
 } from '@/lib/dossiers/sharepoint-bestanden'
 import { bouw7Rij, sharePointRij, type BestandRij } from '@/lib/dossiers/bestand-rijen'
+import { pasMetaToe } from '@/lib/dossiers/bestand-soort'
+import { getBestandMeta, zetBestandSoort, type BestandMetaData } from '@/lib/dossiers/bestand-meta'
+import BestandVoorvertoning, { type Hernoemd } from './bestanden/BestandVoorvertoning'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import DocumentenKaart from '@/components/documenten/DocumentenKaart'
 import SharePointMapPicker from './SharePointMapPicker'
@@ -37,7 +44,7 @@ import BestandenLijst from './bestanden/BestandenLijst'
 import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
 import MarkdownVenster from './bestanden/MarkdownVenster'
-import OpenInVerkenner from './OpenInVerkenner'
+import SharePointKoppeling from './bestanden/SharePointKoppeling'
 import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
 
 /**
@@ -84,10 +91,14 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   const [bouw7, setBouw7] = useState<DossierBestandenData | null>(null)
   const [sharepoint, setSharepoint] = useState<DossierSharePointData | null>(null)
   const [inApp, setInApp] = useState<Set<string>>(new Set())
+  // Soort en (Bouw7) eigen naam. Lukt het ophalen niet, dan werkt de lijst gewoon
+  // zonder: geen soorten, de namen uit de bron.
+  const [meta, setMeta] = useState<BestandMetaData>({ meta: [], soorten: [] })
+  const [geselecteerd, setGeselecteerd] = useState<string | null>(null)
   // null = deze gebruiker heeft geen recht op het klantportaal; dan verdwijnt
   // de kolom in plaats van uitgegrijsd te blijven staan.
   const [inPortaal, setInPortaal] = useState<Set<string> | null>(null)
-  // Eén geopend leesvenster tegelijk; de soort van de rij bepaalt welk venster dat is.
+  // Groot leesvenster voor mail/markdown, vanuit het voorvertoningspaneel.
   const [venster, setVenster] = useState<BestandRij | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [bezig, start] = useTransition()
@@ -105,6 +116,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
     getDossierSharePointBestanden(dossierId)
       .then(setSharepoint)
       .catch(e => setSharepoint(fallbackFout(e)))
+    getBestandMeta(dossierId)
+      .then(setMeta)
+      .catch(() => setMeta({ meta: [], soorten: [] }))
   }, [dossierId])
 
   // Optimistisch omzetten: de lijst hoeft niet opnieuw geladen te worden voor een
@@ -182,10 +196,10 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   }
 
   const { documenten, fotos } = useMemo(() => {
-    const alle: BestandRij[] = [
+    const alle: BestandRij[] = pasMetaToe([
       ...(bouw7?.bestanden ?? []).map(bouw7Rij),
       ...(sharepoint?.status === 'gematcht' ? sharepoint.bestanden.map(sharePointRij) : []),
-    ]
+    ], meta.meta, meta.soorten)
     return {
       documenten: alle.filter(r => r.soort !== 'afbeelding'),
       // Nieuwste foto's bovenaan: bij een lopend project is de laatste opname het interessantst.
@@ -193,7 +207,32 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
         .filter(r => r.soort === 'afbeelding')
         .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '') || a.naam.localeCompare(b.naam)),
     }
-  }, [bouw7, sharepoint])
+  }, [bouw7, sharepoint, meta])
+
+  const geselecteerdeRij = documenten.find(r => r.sleutel === geselecteerd) ?? null
+
+  /** Optimistisch, net als de vinkjes: bij een fout gaat de oude keuze terug. */
+  function zetSoort(rij: BestandRij, soortId: string | null) {
+    const vorige = meta
+    setMeta(m => ({ ...m, meta: zetInMeta(m.meta, rij.sleutel, { soortId }) }))
+    zetBestandSoort(dossierId, rij.sleutel, soortId)
+      .then(res => { if (!res.ok) { setMeta(vorige); toast.error(res.error) } })
+      .catch(() => { setMeta(vorige); toast.error('Soort opslaan mislukt.') })
+  }
+
+  // De nieuwe naam lokaal doorvoeren in plaats van alles opnieuw op te halen. Bij
+  // SharePoint verandert ook de webUrl (die bevat de bestandsnaam).
+  function opHernoemd(h: Hernoemd) {
+    if (h.bron === 'SharePoint') {
+      const id = h.sleutel.replace(/^sharepoint:/, '')
+      setSharepoint(sp => sp && {
+        ...sp,
+        bestanden: sp.bestanden.map(b => b.id === id ? { ...b, naam: h.naam, webUrl: h.webUrl ?? b.webUrl } : b),
+      })
+    } else {
+      setMeta(m => ({ ...m, meta: zetInMeta(m.meta, h.sleutel, { weergavenaam: h.naam || null }) }))
+    }
+  }
 
   const laadt = bouw7 == null || sharepoint == null
 
@@ -364,12 +403,12 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           daardoor vanzelf in de lijst hieronder. */}
       <DocumentenKaart dossierId={dossierId} />
 
-      {/* Lijst links, foto's rechts — elk de helft. Het fotoblok blijft ook staan als
-          er geen foto's zijn, zodat de indeling niet verspringt. Onder lg stapelen ze. */}
-      {/* De hele lijst-plus-foto's is één dropzone: waar je iets loslaat, lijst of galerij,
-          maakt niet uit — het landt toch in dezelfde SharePoint-map. */}
+      {/* Lijst links, voorvertoning rechts; de foto's daaronder over de volle breedte.
+          Het paneel blijft ook zonder selectie staan, zodat de indeling niet verspringt.
+          Onder lg stapelt alles. Het geheel is één dropzone: waar je iets loslaat maakt
+          niet uit — het landt toch in dezelfde SharePoint-map. */}
       <div
-        className="relative grid items-start gap-5 lg:grid-cols-2"
+        className="relative space-y-5"
         onDragEnter={opDragEnter}
         onDragOver={opDragOver}
         onDragLeave={opDragLeave}
@@ -385,6 +424,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
               </span>
             </div>
           )}
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(380px,39%)]">
         <Card>
           <SharePointMapPicker
             dossierId={dossierId}
@@ -395,7 +435,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
             zoekterm={sharepoint?.voorstelNaam?.split(' - ')[0] ?? null}
           />
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex w-full items-center justify-between">
               <span>Bestanden</span>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-normal text-neutral-400">
@@ -430,7 +470,10 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 onToggleApp={toggleApp}
                 inPortaal={inPortaal ?? undefined}
                 onTogglePortaal={inPortaal ? togglePortaal : undefined}
-                onOpenVenster={setVenster}
+                geselecteerd={geselecteerd}
+                onSelecteer={r => setGeselecteerd(r.sleutel)}
+                soorten={meta.soorten}
+                onZetSoort={readOnly ? undefined : zetSoort}
                 legeTekst={fotos.length > 0
                   ? 'Alle bestanden bij dit dossier zijn afbeeldingen — die staan in de fotogalerij.'
                   : 'Nog geen bestanden bij dit dossier.'}
@@ -453,6 +496,17 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
           </CardBody>
         </Card>
 
+        <div className="lg:sticky lg:top-4">
+          <BestandVoorvertoning
+            dossierId={dossierId}
+            rij={geselecteerdeRij}
+            readOnly={readOnly}
+            onHernoemd={opHernoemd}
+            onVergroot={setVenster}
+          />
+        </div>
+        </div>
+
         <Fotogalerij
           fotos={fotos}
           inPortaal={inPortaal ?? undefined}
@@ -466,132 +520,14 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   )
 }
 
-/* ─── SharePoint-koppeling ──────────────────────────────────────────────────── */
-
-/** Acties bij een gekoppelde map. Ontkoppelen raakt SharePoint niet aan — alleen de koppeling in EVA. */
-function MapActies({ onKies, onOntkoppel, bezig }: { onKies: () => void; onOntkoppel: () => void; bezig: boolean }) {
-  const [bevestig, setBevestig] = useState(false)
-
-  if (bevestig) {
-    return (
-      <span className="flex items-center gap-2 text-[11px]">
-        <span className="text-neutral-600">Koppeling weghalen? De map blijft in SharePoint staan.</span>
-        <button onClick={() => { setBevestig(false); onOntkoppel() }} disabled={bezig}
-          className="font-medium text-red-600 hover:underline disabled:opacity-60">
-          Ontkoppelen
-        </button>
-        <button onClick={() => setBevestig(false)} className="text-neutral-500 hover:underline">Annuleren</button>
-      </span>
-    )
-  }
-
-  return (
-    <span className="flex items-center gap-3 text-[11px]">
-      <button onClick={onKies} disabled={bezig} className="font-medium text-brand-600 hover:underline disabled:opacity-60">
-        Andere map kiezen
-      </button>
-      <button onClick={() => setBevestig(true)} disabled={bezig} className="text-neutral-500 hover:underline disabled:opacity-60">
-        Ontkoppelen
-      </button>
-    </span>
-  )
-}
-
-/**
- * Herkomst van de lijst plus de acties op de SharePoint-map. Dit stond eerder in een
- * eigen kaart; nu de bestanden in één lijst staan hoort het bij de voetregel.
- */
-function SharePointKoppeling({
-  data, dossierId, bouw7Beschikbaar, readOnly, bezig, onKies, onOntkoppel, onOpnieuw, onKiesKandidaat,
-}: {
-  data: DossierSharePointData | null
-  dossierId: string
-  bouw7Beschikbaar?: boolean
-  readOnly: boolean
-  bezig: boolean
-  onKies: () => void
-  onOntkoppel: () => void
-  onOpnieuw: () => void
-  onKiesKandidaat: (itemId: string) => void
-}) {
-  // Niet geconfigureerd → alleen over Bouw7 iets zeggen.
-  if (!data || !data.geconfigureerd) {
-    return <span className="text-[11px] text-neutral-500">Live uit Bouw7 — openen via een beveiligde EVA-proxy.</span>
-  }
-
-  if (data.status === 'gematcht') {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-        <span className="text-[11px] text-neutral-500">
-          Live uit {bouw7Beschikbaar === false ? '' : 'Bouw7 en '}SharePoint
-          ({data.handmatig ? 'handmatig' : 'automatisch'} gekoppelde dossiermap).
-        </span>
-        <span className="flex items-center gap-3">
-          {!readOnly && <MapActies onKies={onKies} onOntkoppel={onOntkoppel} bezig={bezig} />}
-          {data.mapUrl && <OpenInVerkenner dossierId={dossierId} mapUrl={data.mapUrl} />}
-          {data.mapUrl && (
-            <a href={data.mapUrl} target="_blank" rel="noopener noreferrer"
-              className="text-[11px] font-medium text-brand-600 hover:underline">
-              Open map in SharePoint
-            </a>
-          )}
-        </span>
-      </div>
-    )
-  }
-
-  // niet_gevonden / meerdere / fout → zelf een map kiezen of aanmaken.
-  return (
-    <div className="space-y-2">
-      {data.melding && <p className="text-[11.5px] text-neutral-600">{data.melding}</p>}
-      <p className="text-[11.5px] text-neutral-500">
-        {data.status === 'meerdere'
-          ? 'Meerdere SharePoint-mappen komen in aanmerking — kies de juiste.'
-          : data.status === 'niet_gevonden'
-            ? 'Geen SharePoint-map gekoppeld. Nieuwe aanvragen krijgen die automatisch; ' +
-              'voor oudere dossiers kies je de juiste map, of maak je hem aan.'
-            : 'SharePoint is nu niet bereikbaar.'}
-      </p>
-
-      {data.fout && (
-        <p className="rounded border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700 break-words">
-          {data.fout}
-        </p>
-      )}
-
-      {/* Bij 'meerdere' de kandidaten direct tonen: één klik i.p.v. de picker openen. */}
-      {!readOnly && !!data.kandidaten?.length && (
-        <ul className="divide-y divide-neutral-100 rounded border border-neutral-200">
-          {data.kandidaten.map(m => (
-            <li key={m.id} className="flex items-center justify-between gap-3 px-2.5 py-1.5">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-neutral-800">{m.naam}</span>
-                <span className="block text-[10.5px] text-neutral-500">
-                  {m.aantalItems ?? 0} item{m.aantalItems === 1 ? '' : 's'}
-                  {m.gewijzigd ? ` · gewijzigd ${m.gewijzigd}` : ''}
-                </span>
-              </span>
-              <button onClick={() => onKiesKandidaat(m.id)} disabled={bezig}
-                className="shrink-0 rounded border border-neutral-300 px-2 py-[3px] text-[11px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60">
-                Koppelen
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {!readOnly && (
-        <div className="flex items-center gap-2">
-          <button onClick={onKies} disabled={bezig}
-            className="rounded bg-brand-600 px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-brand-700 disabled:opacity-60">
-            Map kiezen of aanmaken
-          </button>
-          <button onClick={onOpnieuw} disabled={bezig}
-            className="rounded border border-neutral-300 px-2.5 py-1 text-[11.5px] text-neutral-600 hover:bg-neutral-50 disabled:opacity-60">
-            Opnieuw zoeken
-          </button>
-        </div>
-      )}
-    </div>
-  )
+/** Eén veld in de meta van een bestand bijwerken; de rij bestaat misschien nog niet. */
+function zetInMeta(
+  lijst: BestandMetaData['meta'],
+  sleutel: string,
+  wijziging: Partial<Omit<BestandMetaData['meta'][number], 'sleutel'>>,
+): BestandMetaData['meta'] {
+  const bestaat = lijst.some(m => m.sleutel === sleutel)
+  return bestaat
+    ? lijst.map(m => (m.sleutel === sleutel ? { ...m, ...wijziging } : m))
+    : [...lijst, { sleutel, weergavenaam: null, soortId: null, ...wijziging }]
 }

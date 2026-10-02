@@ -1,12 +1,16 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import type { FormField, FormVersie, FormTemplate, FormInzending } from '../types'
 import { evaluateConditions, isInvoerVeld, isVeldLeeg, resolveAccent } from '../types'
 import FieldRenderer from './FieldRenderer'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
+import { VertaalLabel } from '@/components/vertalen/VertaalbareTekst'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
+import { FormulierVertaling, formulierTeksten } from './formulier-vertaling'
 import {
   saveFormInzending,
   submitFormInzending,
@@ -46,6 +50,7 @@ const DRAFT_KEY = (scope: string) => `form_draft_${scope}`
 
 export default function FormFiller({ template, versie, bestaandeInzending, vooringevuld, taskId, dossierId, draftScope, mobiel = false, terugHref, medewerkers, dossierWaarden }: Props) {
   const router = useRouter()
+  const t = useTranslations('formulieren')
   // Cache-sleutel per exemplaar: voorkomt dat verschillende invullingen van
   // hetzelfde sjabloon dezelfde draft delen.
   const scope = draftScope ?? template.id
@@ -92,6 +97,25 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   const [currentStep, setCurrentStep] = useState(0)
 
   const accent = resolveAccent(versie.schema)
+
+  // Formulierinhoud van kantoor in de taal van de app (alleen weergave, nooit de opgeslagen
+  // waarden). Eén verzoek voor het hele formulier; één label bovenaan wisselt alles terug.
+  const kantoorTeksten = useMemo(
+    () => [template.naam, template.omschrijving ?? '', ...formulierTeksten(versie.schema.fields ?? [])],
+    [template.naam, template.omschrijving, versie.schema.fields],
+  )
+  const vertalingen = useVertalingen(kantoorTeksten)
+  const [origineel, setOrigineel] = useState(false)
+  const vertaald = vertalingen.some(v => v.vertaald)
+  const vertaalMap = new Map(vertalingen.map(v => [v.origineel, v.tekst]))
+  const toon = (tekst: string) => (origineel ? tekst : vertaalMap.get(tekst) ?? tekst)
+
+  /** Foutmeldingen bij ontbrekende verplichte velden (in de taal van de app). */
+  function meldOntbrekend(missing: FormField[]) {
+    setErrors(Object.fromEntries(missing.map(f => [f.id, t('veldVerplicht', { veld: toon(f.label) })])))
+    const namen = missing.slice(0, 3).map(f => toon(f.label)).join(', ') + (missing.length > 3 ? '…' : '')
+    toast.error(t('nogVerplicht', { aantal: missing.length, namen }))
+  }
 
   // Hervat een gedeeld concept uit Supabase (meereist over apparaten). Alleen als er
   // geen bestaande inzending en geen vooringevulde waarden zijn — die gaan vóór het
@@ -186,11 +210,11 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         dossier_id: dossierId,
       })
       if (!result.ok) {
-        toast.error('Opslaan mislukt: ' + result.error)
+        toast.error(t('opslaanMislukt', { fout: result.error }))
         return
       }
       if (!inzendingId) setInzendingId(result.data.id)
-      toast.success('Concept opgeslagen')
+      toast.success(t('conceptOpgeslagen'))
     } finally {
       setIsSaving(false)
     }
@@ -201,13 +225,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
     if (missing.length > 0) {
       // Markeer de ontbrekende velden, benoem ze concreet en scroll naar de eerste,
       // zodat duidelijk is wélke vraag nog open staat (niet de koppen/tekstblokken).
-      setErrors(Object.fromEntries(missing.map(f => [f.id, `${f.label} is verplicht.`])))
-      const namen = missing.slice(0, 3).map(f => f.label).join(', ')
-      toast.error(
-        missing.length === 1
-          ? `Nog 1 verplicht veld in te vullen: ${namen}.`
-          : `Nog ${missing.length} verplichte velden in te vullen: ${namen}${missing.length > 3 ? '…' : ''}.`
-      )
+      meldOntbrekend(missing)
       // In een wizard: spring eerst naar de stap met het eerste ontbrekende veld.
       const doelStap = paginas.findIndex(p => p.some(f => f.id === missing[0].id))
       if (doelStap >= 0 && doelStap !== stap) setCurrentStep(doelStap)
@@ -231,14 +249,14 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         dossier_id: dossierId,
       })
       if (!saveResult.ok) {
-        toast.error('Opslaan mislukt: ' + saveResult.error)
+        toast.error(t('opslaanMislukt', { fout: saveResult.error }))
         return
       }
 
       const id = saveResult.data.id
       const submitResult = await submitFormInzending(id)
       if (!submitResult.ok) {
-        toast.error('Indienen mislukt: ' + submitResult.error)
+        toast.error(t('indienenMislukt', { fout: submitResult.error }))
         return
       }
 
@@ -246,7 +264,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       verwijderFormulierConcept(scope).catch(() => { /* stil */ })
 
-      toast.success(taskId ? 'Formulier ingediend — actie voltooid!' : 'Formulier ingediend!')
+      toast.success(taskId ? t('ingediendActieVoltooid') : t('ingediend'))
       router.push(terugHref ?? (mobiel ? '/m/taken' : `/formulieren/${template.id}/inzendingen`))
     } finally {
       setIsSubmitting(false)
@@ -270,13 +288,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
   function volgende() {
     const missing = missendeInVelden(stapVelden)
     if (missing.length > 0) {
-      setErrors(Object.fromEntries(missing.map(f => [f.id, `${f.label} is verplicht.`])))
-      const namen = missing.slice(0, 3).map(f => f.label).join(', ')
-      toast.error(
-        missing.length === 1
-          ? `Nog 1 verplicht veld in te vullen: ${namen}.`
-          : `Nog ${missing.length} verplichte velden in te vullen: ${namen}${missing.length > 3 ? '…' : ''}.`
-      )
+      meldOntbrekend(missing)
       document.getElementById(`veld-${missing[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
@@ -315,14 +327,15 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
-          {terugHref || mobiel ? 'Terug' : 'Formulieren'}
+          {terugHref || mobiel ? t('terug') : t('formulieren')}
         </button>
         <h1 style={{ fontSize: mobiel ? 19 : 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-          {template.naam}
+          {toon(template.naam)}
         </h1>
         {template.omschrijving && (
-          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>{template.omschrijving}</p>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>{toon(template.omschrijving)}</p>
         )}
+        {vertaald && <VertaalLabel origineel={origineel} wissel={() => setOrigineel(o => !o)} />}
       </div>
 
       <div id="form-top" style={{ scrollMarginTop: 80 }} />
@@ -331,7 +344,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       {isWizard && (
         <div style={{ marginBottom: mobiel ? 18 : 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Stap {stap + 1} van {paginas.length}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{t('stapVan', { stap: stap + 1, totaal: paginas.length })}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{Math.round(((stap + 1) / paginas.length) * 100)}%</span>
           </div>
           <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
@@ -341,6 +354,7 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
       )}
 
       {/* Fields */}
+      <FormulierVertaling origineel={origineel}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: mobiel ? 18 : 20 }}>
         {stapVelden.map(field => (
           <div key={field.id} id={`veld-${field.id}`} style={{ scrollMarginTop: 80 }}>
@@ -358,9 +372,10 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
         ))}
 
         {visibleFields.length === 0 && (
-          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Dit formulier heeft geen velden.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{t('geenVelden')}</p>
         )}
       </div>
+      </FormulierVertaling>
 
       {/* Actions — sticky onderbalk op mobiel (binnen de scroll-container, dus
           nooit achter de bottom-nav), inline onderaan op desktop. */}
@@ -378,19 +393,19 @@ export default function FormFiller({ template, versie, bestaandeInzending, voori
 
         // Linkerknop: in een wizard vanaf stap 2 is dat "Vorige"; anders "Concept".
         const linkerKnop = isWizard && stap > 0 ? (
-          <button type="button" onClick={vorige} style={secundairStijl}>Vorige</button>
+          <button type="button" onClick={vorige} style={secundairStijl}>{t('vorige')}</button>
         ) : (
           <button type="button" onClick={handleSaveDraft} disabled={isSaving} style={secundairStijl}>
-            {isSaving ? 'Opslaan...' : (mobiel ? 'Concept' : 'Opslaan als concept')}
+            {isSaving ? t('opslaanBezig') : (mobiel ? t('concept') : t('opslaanAlsConcept'))}
           </button>
         )
 
         // Rechterknop: "Volgende" tot de laatste stap, daarna "Indienen".
         const rechterKnop = isWizard && !laatsteStap ? (
-          <button type="button" onClick={volgende} style={primairStijl}>Volgende</button>
+          <button type="button" onClick={volgende} style={primairStijl}>{t('volgende')}</button>
         ) : (
           <button type="button" onClick={handleSubmit} disabled={isSubmitting} style={primairStijl}>
-            {isSubmitting ? 'Indienen...' : 'Indienen'}
+            {isSubmitting ? t('indienenBezig') : t('indienen')}
           </button>
         )
 

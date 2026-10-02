@@ -1,0 +1,17 @@
+{
+  "verversen": "Verversen…",
+  "loslaten": "Loslaten om te verversen",
+  "trekken": "Trek om te verversen",
+  "laatstVerversd": "Laatst ververst om {tijd}",
+  "geenToegang": "Geen toegang — je wordt uitgelogd…",
+  "spraak": {
+    "geenMicrofoonToegang": "Geen toegang tot de microfoon. Sta dat toe in je browserinstellingen.",
+    "geenVerbinding": "Inspreken heeft internet nodig — geen verbinding.",
+    "geenMicrofoon": "Geen microfoon gevonden.",
+    "konNietStarten": "Inspreken kon niet starten.",
+    "mislukt": "Inspreken lukte niet. Probeer het opnieuw of typ de tekst.",
+    "stoppen": "Stoppen met inspreken",
+    "inspreken": "Inspreken",
+    "luisteren": "Luisteren… tik op de microfoon als je klaar bent."
+  }
+}

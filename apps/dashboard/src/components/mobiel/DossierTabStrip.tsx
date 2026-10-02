@@ -1,37 +1,39 @@
 import React from 'react'
 import Link from 'next/link'
 import { metTerug } from '@/lib/mobiel/terug'
+import { getAppVertaler } from '@/i18n/server'
 
 /**
  * Horizontaal scrollbare sub-tab-strip binnen een mobiel dossier. Vijf tabs;
  * de actieve krijgt de merk-onderstreping. Server-component: de actieve tab
- * wordt als prop meegegeven (uit de route-`[tab]`).
+ * wordt als prop meegegeven (uit de route-`[tab]`). De tabnamen staan in
+ * `dossiers.tab.<key>`.
  */
 export const DOSSIER_TABS = [
-  { key: 'informatie', label: 'Info' },
+  { key: 'informatie' },
   // Planning en Voortgang gaan over uitvoering en verschijnen alleen bij een opdracht of een
   // servicedeskbon; op een aanvraag of offerte bestaan er nog geen activiteiten of
   // bewakingscodes en waren die tabs dus altijd leeg.
-  { key: 'planning', label: 'Planning' },
+  { key: 'planning' },
   // Werkplan hoort bij een opdracht, net als op de desktop (OPDRACHT_TABS).
-  { key: 'werkplan', label: 'Werkplan' },
-  { key: 'voortgang', label: 'Voortgang' },
+  { key: 'werkplan' },
+  { key: 'voortgang' },
   // Houtrot verschijnt alleen als de dossier-toggle `houtrot_registreren` aanstaat
   // (zelfde patroon als VCA op de desktop, zie TAB_TOGGLE_GATES).
-  { key: 'houtrot', label: 'Houtrot' },
+  { key: 'houtrot' },
   // Opname verschijnt alleen met de dossier-toggle `mutatie_opname`. Anders dan Houtrot óók bij
   // een aanvraag: de mutatie-opname gaat juist vooraf aan de offerte.
-  { key: 'opname', label: 'Opname' },
+  { key: 'opname' },
   // Oplevering is Fase 9 en hoort dus bij een opdracht; op de desktop staat hij daarom in
   // OPDRACHT_TABS en niet bij aanvragen of servicedesk. Zelfde regel hier.
-  { key: 'oplevering', label: 'Oplevering' },
-  { key: 'formulieren', label: 'Formulieren' },
-  { key: 'bestanden', label: 'Bestanden' },
+  { key: 'oplevering' },
+  { key: 'formulieren' },
+  { key: 'bestanden' },
 ] as const
 
 export type DossierTabKey = (typeof DOSSIER_TABS)[number]['key']
 
-export default function DossierTabStrip({
+export default async function DossierTabStrip({
   id, active, houtrotAan = false, opnameAan = false, isOpdracht = false,
   isUitvoering = false, isServicedesk = false, terug = null,
 }: {
@@ -53,6 +55,7 @@ export default function DossierTabStrip({
    */
   terug?: string | null
 }) {
+  const t = await getAppVertaler('dossiers')
   const tabs = DOSSIER_TABS
     .filter(t => (t.key !== 'planning' && t.key !== 'voortgang') || isUitvoering)
     .filter(t => t.key !== 'houtrot' || houtrotAan)
@@ -75,7 +78,7 @@ export default function DossierTabStrip({
         flexShrink: 0,
       }}
     >
-      {tabs.map(({ key, label }) => {
+      {tabs.map(({ key }) => {
         const isActief = key === active
         return (
           <Link
@@ -93,7 +96,7 @@ export default function DossierTabStrip({
               WebkitTapHighlightColor: 'transparent',
             }}
           >
-            {label}
+            {t(`tab.${key}`)}
           </Link>
         )
       })}

@@ -3,6 +3,8 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
 import ToestemmingenBlok from '@/components/mobiel/ToestemmingenBlok'
 import PushMeldingen from '@/components/eva/PushMeldingen'
+import TaalKeuze from '@/components/mobiel/TaalKeuze'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Instellingen · EVA Mobiel' }
 
@@ -16,20 +18,21 @@ export const metadata = { title: 'Instellingen · EVA Mobiel' }
  */
 export default async function MobielInstellingenPage() {
   const medewerker = await getCurrentMedewerker()
+  const t = await getAppVertaler('profiel')
 
   return (
     <>
-      <AppHeader title="Instellingen" backHref="/m/profiel" />
+      <AppHeader title={t('instellingen')} backHref="/m/profiel" />
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Taal bovenaan: wie de app niet kan lezen, moet dit als eerste kunnen vinden. */}
+        <TaalKeuze />
         {/* Toestemmingen bewust bóven de toggle: zonder toestemming doet die niets. */}
         <ToestemmingenBlok />
         <PushMeldingen weergave="mobiel" />
         <LocatieAutoToggle />
         {!medewerker && (
           <div style={{ fontSize: 13, color: '#6b757c', lineHeight: 1.5 }}>
-            Je account is niet aan een medewerker gekoppeld. De instellingen hierboven
-            werken wel; meldingen over taken en dossiers komen pas binnen zodra de
-            koppeling gelegd is.
+            {t('instellingenGeenKoppeling')}
           </div>
         )}
       </div>

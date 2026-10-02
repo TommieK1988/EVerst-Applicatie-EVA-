@@ -35,9 +35,17 @@ import KlapBlok from './KlapBlok'
 import DossierRegel from './DossierRegel'
 import FactuurRegel, { factuurTotaal } from './FactuurRegel'
 import ContactLijst from './ContactLijst'
+import { totaalExclBtw } from '@/lib/commercie/contactpersoon-groepen'
+import { useServicedeskBedragen } from './servicedesk-bedragen'
 import NotitieLijst from './NotitieLijst'
 import VastleggenSheet from './VastleggenSheet'
 import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
+
+/** Som van het gefactureerde bedrag; `null` als er bij geen enkel dossier iets bekend is. */
+function gefactureerdTotaal(lijst: { bedrag: number | null }[]): number | null {
+  const bedragen = lijst.map(d => d.bedrag).filter((b): b is number => b != null)
+  return bedragen.length > 0 ? bedragen.reduce((s, b) => s + b, 0) : null
+}
 
 export default function KlantbeeldView({
   beeld, notities, currentMedewerkerId, magSchrijven, magVerkoopkans, medewerkers,
@@ -53,6 +61,7 @@ export default function KlantbeeldView({
   medewerkers: { id: string; naam: string; authUserId: string | null }[]
 }) {
   const { relatie, kengetallen, score, signalen } = beeld
+  const servicedesk = useServicedeskBedragen(beeld.servicedesk)
 
   // Waar de terugknop van een geopend dossier heen moet: hierheen, niet naar de dossierlijst.
   const terugNaar = `/m/commercieel/${relatie.id}`
@@ -85,10 +94,11 @@ export default function KlantbeeldView({
       <div style={{ padding: '18px 16px 16px' }}>
         <KlapBlok
           id="blok-offertes-open"
-          // De btw-basis staat één keer in de kop; achter elk bedrag zou hij de titel van de
-          // offerte wegdrukken, en dat is juist wat je op de regel wilt lezen.
-          titel="Openstaande offertes · excl. btw"
+          titel="Openstaande offertes"
           aantal={beeld.offertesOpen.length}
+          // De btw-basis staat één keer in de kop, bij het totaal; achter elk bedrag zou hij de
+          // titel van de offerte wegdrukken, en dat is juist wat je op de regel wilt lezen.
+          totaal={totaalExclBtw(beeld.offertesOpen)}
           openVerzoek={verzoek.offertesOpen}
           leegTekst="Er staat nu niets open bij deze klant."
         >
@@ -112,9 +122,10 @@ export default function KlantbeeldView({
         <KlapBlok
           titel="Offertes in de maak"
           aantal={beeld.offertesInDeMaak.length}
+          totaal={totaalExclBtw(beeld.offertesInDeMaak)}
           leegTekst="We zijn nu niets aan het uitwerken."
         >
-          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
+          {beeld.offertesInDeMaak.map(d => <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         {/* Eerder één blok "Lopend werk". Bij een vastgoedbeheerder zijn dat er al gauw
@@ -124,17 +135,19 @@ export default function KlantbeeldView({
         <KlapBlok
           titel="Opdrachten"
           aantal={beeld.opdrachten.length}
+          totaal={totaalExclBtw(beeld.opdrachten)}
           leegTekst="Er loopt op dit moment geen opdracht."
         >
-          {beeld.opdrachten.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
+          {beeld.opdrachten.map(d => <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         <KlapBlok
           titel="Servicedesk"
           aantal={beeld.servicedesk.length}
+          totaal={servicedesk.klaar ? totaalExclBtw(servicedesk.dossiers) : null}
           leegTekst="Er staat geen servicedeskwerk open."
         >
-          {beeld.servicedesk.map(d => <DossierRegel key={d.id} dossier={d} terugNaar={terugNaar} toonContactpersoon />)}
+          {servicedesk.dossiers.map(d => <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} terugNaar={terugNaar} toonContactpersoon />)}
         </KlapBlok>
 
         {/* Zonder het recht `financieel` verschijnt dit blok niet — geen lege kaart die
@@ -156,8 +169,11 @@ export default function KlantbeeldView({
         )}
 
         <KlapBlok
-          titel={`Uitgevoerd werk ${beeld.uitgevoerdVanafJaar}–${kengetallen.ditJaar}`}
+          // "werk" is uit de kop: met het totaal erachter brak hij anders over twee regels.
+          titel={`Uitgevoerd ${beeld.uitgevoerdVanafJaar}–${kengetallen.ditJaar}`}
           aantal={beeld.uitgevoerd.length}
+          // Gefactureerd excl. btw — hetzelfde getal dat op de regels staat.
+          totaal={gefactureerdTotaal(beeld.uitgevoerd)}
           leegTekst="Geen afgerond werk in deze periode."
         >
           {beeld.uitgevoerd.map(d => (

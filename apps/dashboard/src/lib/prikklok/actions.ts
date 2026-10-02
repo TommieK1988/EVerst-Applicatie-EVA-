@@ -12,68 +12,24 @@
 // AUTORISATIE. Admin-client (monteurs zijn app-gebruikers en zien via RLS niets), dus elke actie
 // begint met `vereisPrikklokActie()` en filtert op de eigen medewerker-id.
 
-import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
-import { afstandMeter } from '@/lib/geo/afstand'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 import { isoWeek, weekDagen, weekStartVan } from '@/lib/uren/rooster'
-import { BOEKBAAR_FILTER, isBoekbaarDossier } from '@/lib/uren/boekbaar'
+import { BOEKBAAR_FILTER } from '@/lib/uren/boekbaar'
+import { extraWerkadressenInVak, extraWerkadressenVan } from '@/lib/dossiers/werkadressen-data'
+import { dichtstbijzijnd, puntLabel, werkpuntenVan, type Werkpunt } from '@/lib/dossiers/werkpunten'
 import { vereisPrikklokActie } from './auth'
+import { melding } from './meldingen'
+import {
+  DOSSIER_SELECT, adresVan, afstandTotDossier, bepaalPositie, db, dossierLabel, isLopend, logPoging, meter,
+  teOnnauwkeurig, type BepaaldePositie, type DossierRij,
+} from './locatie'
 import { amsterdamDatum, amsterdamMoment, amsterdamTijd } from './tijd'
 import { berekenDagen, type PrikklokDag } from './bereken'
-import type {
-  PositieInvoer, PogingReden, PrikklokFase, PrikklokInstellingen, PrikklokSessie, UitWijze, Werklocatie,
-} from './types'
-
-const db = () => createAdminClient()
-
+import type { PositieInvoer, PogingReden, PrikklokFase, PrikklokSessie, UitWijze, Werklocatie } from './types'
 
 /** Zoekvak rond de positie: ~5,5 km. Houdt de select begrensd (zie de 1000-rijenregel). */
 const ZOEK_GRAAD = 0.05
-
-const DOSSIER_SELECT = `
-  id, dossiernummer, titel, hoofdstatus, opdracht_substatus, servicedesk_substatus, gearchiveerd, bouw7_id,
-  werkadres_straat, werkadres_huisnummer, werkadres_stad, adres_lat, adres_lng,
-  relaties!klant_id ( naam )
-`
-
-type DossierRij = {
-  id: string
-  dossiernummer: string | null
-  titel: string | null
-  hoofdstatus: string | null
-  opdracht_substatus: string | null
-  servicedesk_substatus: string | null
-  gearchiveerd: boolean | null
-  bouw7_id: string | number | null
-  werkadres_straat: string | null
-  werkadres_huisnummer: string | null
-  werkadres_stad: string | null
-  adres_lat: number | null
-  adres_lng: number | null
-  relaties?: { naam?: string | null } | null
-}
-
-const dossierLabel = (d: Pick<DossierRij, 'dossiernummer' | 'titel'>) =>
-  [d.dossiernummer, d.titel].filter(Boolean).join(' · ') || 'Dossier'
-
-const adresVan = (d: DossierRij) => {
-  // Het huisnummer staat soms al in het straatveld (Bouw7-invoer); dan niet nog eens erachter.
-  const st = (d.werkadres_straat ?? '').trim()
-  const hn = (d.werkadres_huisnummer ?? '').trim()
-  const straat = hn && !st.endsWith(hn) ? `${st} ${hn}`.trim() : st
-  return [straat, d.werkadres_stad].filter(Boolean).join(', ') || null
-}
-
-/**
- * Waarop uren geschreven mogen worden: lopende opdrachten én open servicedeskbonnen. Dezelfde
- * regel als de weekstaat (lib/uren/boekbaar.ts) — wie hier inklokt, moet straks ook een geldige
- * weekstaatregel opleveren.
- */
-const isLopend = (d: DossierRij) => isBoekbaarDossier(d)
-
-const meter = (m: number) =>
-  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} km`
 
 /* ── Resultaattypes ───────────────────────────────────────────────── */
 
@@ -84,65 +40,6 @@ export type ZoekResultaat =
 export type ActieResultaat =
   | { ok: true; melding: string }
   | { ok: false; melding: string; reden?: PogingReden; afstand_m?: number }
-
-/* ── Positie ──────────────────────────────────────────────────────── */
-
-type BepaaldePositie = { lat: number; lng: number; nauwkeurigheid: number | null; gesimuleerd: boolean }
-
-/**
- * Zet de invoer om in een positie. Een testlocatie mag alleen in de schaduwfase en neemt de
- * coördinaten van het gekozen dossier over — dat is om aan het bureau de schermen te kunnen
- * doorlopen, niet om de straal te omzeilen.
- */
-async function bepaalPositie(
-  invoer: PositieInvoer,
-  fase: PrikklokFase,
-): Promise<BepaaldePositie | { fout: string }> {
-  if (invoer.soort === 'test') {
-    if (fase !== 'schaduw') return { fout: 'Een testlocatie kan alleen in de testfase.' }
-    const { data } = await db().from('dossiers').select('adres_lat, adres_lng').eq('id', invoer.dossierId).maybeSingle()
-    if (data?.adres_lat == null || data?.adres_lng == null) return { fout: 'Dit dossier heeft geen locatie.' }
-    return { lat: data.adres_lat, lng: data.adres_lng, nauwkeurigheid: 5, gesimuleerd: true }
-  }
-  const { lat, lng, nauwkeurigheid } = invoer.positie
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return { fout: 'Ongeldige locatie ontvangen.' }
-  }
-  return {
-    lat, lng,
-    nauwkeurigheid: nauwkeurigheid != null && Number.isFinite(nauwkeurigheid) ? nauwkeurigheid : null,
-    gesimuleerd: false,
-  }
-}
-
-/** Een fix met een te grote onzekerheid telt niet: bij 300 m marge zegt "binnen 250 m" niets. */
-function teOnnauwkeurig(pos: BepaaldePositie, inst: PrikklokInstellingen): boolean {
-  return !pos.gesimuleerd && pos.nauwkeurigheid != null && pos.nauwkeurigheid > inst.max_nauwkeurigheid_m
-}
-
-async function logPoging(p: {
-  medewerkerId: string
-  actie: 'in' | 'uit'
-  reden: PogingReden
-  pos?: BepaaldePositie | null
-  dichtstbij?: { id: string; afstand: number } | null
-}) {
-  try {
-    await db().from('prikklok_pogingen').insert({
-      medewerker_id: p.medewerkerId,
-      actie: p.actie,
-      reden: p.reden,
-      lat: p.pos?.lat ?? null,
-      lng: p.pos?.lng ?? null,
-      nauwkeurigheid_m: p.pos?.nauwkeurigheid ?? null,
-      dichtstbij_dossier_id: p.dichtstbij?.id ?? null,
-      dichtstbij_afstand_m: p.dichtstbij ? Math.round(p.dichtstbij.afstand) : null,
-      gesimuleerd: p.pos?.gesimuleerd ?? false,
-    })
-  } catch {
-    // Het logboek mag het inklokken nooit laten mislukken.
-  }
-}
 
 /* ── Planning en standaardwaarden ─────────────────────────────────── */
 
@@ -219,13 +116,14 @@ type OpenSessie = {
   datum: string
   dossier_id: string
   in_op: string
+  in_werkadres_id: string | null
   dossiers: DossierRij | null
 }
 
 async function haalOpenSessie(medewerkerId: string): Promise<OpenSessie | null> {
   const { data } = await db()
     .from('prikklok_sessies')
-    .select(`id, datum, dossier_id, in_op, dossiers ( ${DOSSIER_SELECT} )`)
+    .select(`id, datum, dossier_id, in_op, in_werkadres_id, dossiers ( ${DOSSIER_SELECT} )`)
     .eq('medewerker_id', medewerkerId)
     .is('uit_op', null)
     .maybeSingle()
@@ -255,12 +153,12 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
     return {
       ok: false,
       reden: 'slechte_nauwkeurigheid',
-      melding: `Je locatie is nog te onnauwkeurig (± ${meter(pos.nauwkeurigheid ?? 0)}). Wacht even of ga naar buiten, en probeer opnieuw.`,
+      melding: await melding('teOnnauwkeurigWacht', { afstand: meter(pos.nauwkeurigheid ?? 0) }),
     }
   }
 
   const graadLng = ZOEK_GRAAD / Math.max(0.2, Math.cos((pos.lat * Math.PI) / 180))
-  const [{ data }, ingepland] = await Promise.all([
+  const [{ data }, extraInVak, ingepland] = await Promise.all([
     db()
       .from('dossiers')
       .select(DOSSIER_SELECT)
@@ -270,21 +168,35 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
       .gte('adres_lng', pos.lng - graadLng)
       .lte('adres_lng', pos.lng + graadLng)
       .limit(1000),
+    // Geclusterde opdrachten: een extra werkadres in de buurt telt net zo goed.
+    extraWerkadressenInVak(pos.lat, pos.lng, ZOEK_GRAAD, graadLng),
     ingeplandOp(medewerker.id, amsterdamDatum(new Date())),
   ])
 
-  const metAfstand = ((data ?? []) as DossierRij[])
-    .filter(d => d.adres_lat != null && d.adres_lng != null)
-    .map(d => ({ d, afstand: afstandMeter(pos.lat, pos.lng, d.adres_lat!, d.adres_lng!) }))
+  const dossiers = new Map(((data ?? []) as DossierRij[]).map(d => [d.id, d]))
+  const ontbrekend = [...new Set(extraInVak.map(e => e.dossier_id))].filter(id => !dossiers.has(id))
+  if (ontbrekend.length) {
+    const { data: viaExtra } = await db()
+      .from('dossiers')
+      .select(DOSSIER_SELECT)
+      .eq('gearchiveerd', false)
+      .in('id', ontbrekend.slice(0, 500))
+    for (const d of (viaExtra ?? []) as DossierRij[]) dossiers.set(d.id, d)
+  }
+
+  const metAfstand = [...dossiers.values()]
+    .map(d => ({ d, best: dichtstbijzijnd(pos, werkpuntenVan(d, extraInVak.filter(e => e.dossier_id === d.id))) }))
+    .filter((x): x is { d: DossierRij; best: { punt: Werkpunt; afstand: number } } => x.best != null)
+    .map(({ d, best }) => ({ d, punt: best.punt, afstand: best.afstand }))
     .sort((a, b) => a.afstand - b.afstand)
 
   const binnen = metAfstand.filter(x => x.afstand <= inst.straal_m && isLopend(x.d))
   if (binnen.length) {
     const locaties: Werklocatie[] = binnen
-      .map(({ d, afstand }) => ({
+      .map(({ d, punt, afstand }) => ({
         id: d.id,
         label: dossierLabel(d),
-        adres: adresVan(d),
+        adres: puntLabel(punt),
         klant: d.relaties?.naam ?? null,
         afstand_m: Math.round(afstand),
         ingepland: ingepland.has(d.id),
@@ -306,13 +218,16 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
       .in('id', ingeplandIds)
       .or('adres_lat.is.null,adres_lng.is.null')
       .limit(20)
-    const eerste = (zonder ?? [])[0] as Pick<DossierRij, 'dossiernummer' | 'titel'> | undefined
+    // Een extra werkadres mét locatie telt ook: dan is het dossier wel te vinden, alleen niet hier.
+    const extra = await extraWerkadressenVan((zonder ?? []).map(z => z.id))
+    const eerste = (zonder ?? []).find(z => !(extra.get(z.id) ?? []).some(e => e.lat != null && e.lng != null)) as
+      Pick<DossierRij, 'dossiernummer' | 'titel'> | undefined
     if (eerste) {
       await logPoging({ medewerkerId: medewerker.id, actie: 'in', reden: 'geen_coordinaten', pos, dichtstbij: dichtbij })
       return {
         ok: false,
         reden: 'geen_coordinaten',
-        melding: `Je staat vandaag ingepland op ${dossierLabel(eerste)}, maar van dat werkadres is geen locatie bekend. Inklokken kan daar pas als het adres klopt — meld dit bij de werkvoorbereiding.`,
+        melding: await melding('ingeplandZonderLocatie', { dossier: dossierLabel(eerste) }),
       }
     }
   }
@@ -324,7 +239,7 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
     return {
       ok: false,
       reden: 'te_ver',
-      melding: `Hier ligt ${dossierLabel(nietLopend.d)}, maar dat dossier staat niet open voor uren. Inklokken kan alleen op een lopende opdracht of een open servicedeskbon.`,
+      melding: await melding('nietOpenVoorUren', { dossier: dossierLabel(nietLopend.d) }),
     }
   }
 
@@ -333,8 +248,10 @@ export async function zoekWerklocaties(invoer: PositieInvoer): Promise<ZoekResul
     ok: false,
     reden: 'te_ver',
     melding: dichtstLopend
-      ? `Geen werklocatie binnen ${inst.straal_m} m. Dichtstbij is ${dossierLabel(dichtstLopend.d)} op ${meter(dichtstLopend.afstand)}.`
-      : `Geen werklocatie binnen ${inst.straal_m} m.`,
+      ? await melding('geenWerklocatieDichtstbij', {
+        straal: String(inst.straal_m), dossier: dossierLabel(dichtstLopend.d), afstand: meter(dichtstLopend.afstand),
+      })
+      : await melding('geenWerklocatie', { straal: String(inst.straal_m) }),
   }
 }
 
@@ -347,39 +264,40 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
 
   const open = await haalOpenSessie(medewerker.id)
   if (open && open.datum < vandaag) {
-    return { ok: false, melding: `Vul eerst in hoe laat je vertrok bij ${dossierLabel(open.dossiers ?? { dossiernummer: null, titel: null })}.` }
+    return { ok: false, melding: await melding('eerstVertrektijd', { dossier: dossierLabel(open.dossiers ?? { dossiernummer: null, titel: null }) }) }
   }
   if (open && open.dossier_id === dossierId) {
-    return { ok: false, melding: 'Je bent hier al ingeklokt.' }
+    return { ok: false, melding: await melding('alHierIngeklokt') }
   }
 
   const pos = await bepaalPositie(invoer, inst.fase)
   if ('fout' in pos) return { ok: false, melding: pos.fout }
   if (teOnnauwkeurig(pos, inst)) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'in', reden: 'slechte_nauwkeurigheid', pos })
-    return { ok: false, reden: 'slechte_nauwkeurigheid', melding: 'Je locatie is nog te onnauwkeurig. Probeer het zo opnieuw.' }
+    return { ok: false, reden: 'slechte_nauwkeurigheid', melding: await melding('teOnnauwkeurig') }
   }
 
   const { data: dossier } = await db().from('dossiers').select(DOSSIER_SELECT).eq('id', dossierId).maybeSingle()
   const d = dossier as DossierRij | null
-  if (!d || !isLopend(d)) return { ok: false, melding: 'Op dit dossier kun je geen uren schrijven.' }
-  if (d.adres_lat == null || d.adres_lng == null) {
+  if (!d || !isLopend(d)) return { ok: false, melding: await melding('geenUrenOpDossier') }
+  const best = await afstandTotDossier(pos, d)
+  if (!best) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'in', reden: 'geen_coordinaten', pos })
-    return { ok: false, reden: 'geen_coordinaten', melding: 'Van dit werkadres is geen locatie bekend.' }
+    return { ok: false, reden: 'geen_coordinaten', melding: await melding('werkadresGeenLocatie') }
   }
-  const afstand = afstandMeter(pos.lat, pos.lng, d.adres_lat, d.adres_lng)
+  const afstand = best.afstand
   if (afstand > inst.straal_m) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'in', reden: 'te_ver', pos, dichtstbij: { id: d.id, afstand } })
     return {
       ok: false, reden: 'te_ver', afstand_m: Math.round(afstand),
-      melding: `Je bent ${meter(afstand)} van ${dossierLabel(d)}. Inklokken kan binnen ${inst.straal_m} m.`,
+      melding: await melding('teVerIn', { afstand: meter(afstand), dossier: dossierLabel(d), straal: String(inst.straal_m) }),
     }
   }
 
   // Wisselen: de lopende sessie sluit op dit moment. De reistijd valt daarmee onder het vorige
   // werk — dat is waar je vandaan kwam.
   if (open) {
-    const oud = open.dossiers
+    const oud = open.dossiers ? await afstandTotDossier(pos, open.dossiers) : null
     const { error } = await db()
       .from('prikklok_sessies')
       .update({
@@ -388,14 +306,12 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
         uit_lat: pos.lat,
         uit_lng: pos.lng,
         uit_nauwkeurigheid_m: pos.nauwkeurigheid,
-        uit_afstand_m: oud?.adres_lat != null && oud?.adres_lng != null
-          ? Math.round(afstandMeter(pos.lat, pos.lng, oud.adres_lat, oud.adres_lng))
-          : null,
+        uit_afstand_m: oud ? Math.round(oud.afstand) : null,
         updated_at: nu.toISOString(),
       })
       .eq('id', open.id)
       .is('uit_op', null)
-    if (error) return { ok: false, melding: 'Het vorige werkadres kon niet worden afgesloten.' }
+    if (error) return { ok: false, melding: await melding('vorigeNietAfgesloten') }
   }
 
   const [ingepland, uursoortId] = await Promise.all([
@@ -405,8 +321,9 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
   const plan = ingepland.get(d.id) ?? null
   let bewakingscode = plan?.bewakingscode ?? null
   let psl = await pslVoorCode(d.id, bewakingscode)
-  // Een servicedeskbon heeft in de regel precies één code (RW01). Die hoeft niemand te kiezen.
-  if (!bewakingscode && d.servicedesk_substatus) {
+  // Een servicedeskbon heeft in de regel precies één code (RW01), net als een regieopdracht die
+  // RW01 als opvangcode kreeg. Die hoeft niemand te kiezen.
+  if (!bewakingscode && (d.servicedesk_substatus || d.regie_bewakingscode)) {
     const codes = await getBewakingscodesVoorUurlog(d.id).catch(() => [])
     if (codes.length === 1) {
       bewakingscode = codes[0].code
@@ -423,6 +340,7 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
     in_lng: pos.lng,
     in_nauwkeurigheid_m: pos.nauwkeurigheid,
     in_afstand_m: Math.round(afstand),
+    in_werkadres_id: best.punt.werkadresId,
     uursoort_id: uursoortId,
     bewakingscode,
     bouw7_psl_id: psl,
@@ -430,16 +348,16 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
     gesimuleerd: pos.gesimuleerd,
   })
   if (error) {
-    if (error.code === '23505') return { ok: false, melding: 'Je bent al ingeklokt.' }
-    return { ok: false, melding: 'Inklokken is niet gelukt. Probeer het opnieuw.' }
+    if (error.code === '23505') return { ok: false, melding: await melding('alIngeklokt') }
+    return { ok: false, melding: await melding('inklokkenMislukt') }
   }
 
   vernieuw()
   return {
     ok: true,
     melding: open
-      ? `Gewisseld naar ${dossierLabel(d)} om ${amsterdamTijd(nu)}.`
-      : `Ingeklokt bij ${dossierLabel(d)} om ${amsterdamTijd(nu)}.`,
+      ? await melding('gewisseld', { dossier: dossierLabel(d), tijd: amsterdamTijd(nu) })
+      : await melding('ingeklokt', { dossier: dossierLabel(d), tijd: amsterdamTijd(nu) }),
   }
 }
 
@@ -449,30 +367,31 @@ export async function klokIn(dossierId: string, invoer: PositieInvoer): Promise<
 export async function klokUit(invoer: PositieInvoer): Promise<ActieResultaat> {
   const { medewerker, instellingen: inst } = await vereisPrikklokActie()
   const open = await haalOpenSessie(medewerker.id)
-  if (!open) return { ok: false, melding: 'Je bent niet ingeklokt.' }
+  if (!open) return { ok: false, melding: await melding('nietIngeklokt') }
   const nu = new Date()
   if (open.datum < amsterdamDatum(nu)) {
-    return { ok: false, melding: 'Deze dag is voorbij. Vul in hoe laat je vertrok.' }
+    return { ok: false, melding: await melding('dagVoorbij') }
   }
 
   const pos = await bepaalPositie(invoer, inst.fase)
   if ('fout' in pos) return { ok: false, melding: pos.fout }
   if (teOnnauwkeurig(pos, inst)) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'uit', reden: 'slechte_nauwkeurigheid', pos })
-    return { ok: false, reden: 'slechte_nauwkeurigheid', melding: 'Je locatie is nog te onnauwkeurig. Probeer het zo opnieuw.' }
+    return { ok: false, reden: 'slechte_nauwkeurigheid', melding: await melding('teOnnauwkeurig') }
   }
 
   const d = open.dossiers
-  if (d?.adres_lat == null || d?.adres_lng == null) {
+  const best = d ? await afstandTotDossier(pos, d) : null
+  if (!d || !best) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'uit', reden: 'geen_coordinaten', pos })
-    return { ok: false, reden: 'geen_coordinaten', melding: 'Van dit werkadres is geen locatie meer bekend. Gebruik "Ik ben al vertrokken".' }
+    return { ok: false, reden: 'geen_coordinaten', melding: await melding('werkadresGeenLocatieMeer') }
   }
-  const afstand = afstandMeter(pos.lat, pos.lng, d.adres_lat, d.adres_lng)
+  const afstand = best.afstand
   if (afstand > inst.straal_m) {
     await logPoging({ medewerkerId: medewerker.id, actie: 'uit', reden: 'te_ver', pos, dichtstbij: { id: d.id, afstand } })
     return {
       ok: false, reden: 'te_ver', afstand_m: Math.round(afstand),
-      melding: `Je bent ${meter(afstand)} van het werkadres. Uitklokken kan binnen ${inst.straal_m} m — al weg? Kies "Ik ben al vertrokken".`,
+      melding: await melding('teVerUit', { afstand: meter(afstand), straal: String(inst.straal_m) }),
     }
   }
 
@@ -490,10 +409,10 @@ export async function klokUit(invoer: PositieInvoer): Promise<ActieResultaat> {
     })
     .eq('id', open.id)
     .is('uit_op', null)
-  if (error) return { ok: false, melding: 'Uitklokken is niet gelukt. Probeer het opnieuw.' }
+  if (error) return { ok: false, melding: await melding('uitklokkenMislukt') }
 
   vernieuw()
-  return { ok: true, melding: `Uitgeklokt om ${amsterdamTijd(nu)}.` }
+  return { ok: true, melding: await melding('uitgeklokt', { tijd: amsterdamTijd(nu) }) }
 }
 
 /**
@@ -505,15 +424,15 @@ export async function klokUit(invoer: PositieInvoer): Promise<ActieResultaat> {
 export async function meldVertrokken(tijd: string, invoer: PositieInvoer | null): Promise<ActieResultaat> {
   const { medewerker, instellingen: inst } = await vereisPrikklokActie()
   const open = await haalOpenSessie(medewerker.id)
-  if (!open) return { ok: false, melding: 'Je bent niet ingeklokt.' }
-  if (!/^\d{2}:\d{2}$/.test(tijd)) return { ok: false, melding: 'Kies een geldige tijd.' }
+  if (!open) return { ok: false, melding: await melding('nietIngeklokt') }
+  if (!/^\d{2}:\d{2}$/.test(tijd)) return { ok: false, melding: await melding('geldigeTijd') }
 
   const uit = amsterdamMoment(open.datum, tijd)
   const nu = new Date()
   if (uit.getTime() <= new Date(open.in_op).getTime()) {
-    return { ok: false, melding: `Je vertrektijd ligt vóór je inkloktijd (${amsterdamTijd(open.in_op)}).` }
+    return { ok: false, melding: await melding('voorInkloktijd', { tijd: amsterdamTijd(open.in_op) }) }
   }
-  if (uit.getTime() > nu.getTime()) return { ok: false, melding: 'Die tijd ligt nog in de toekomst.' }
+  if (uit.getTime() > nu.getTime()) return { ok: false, melding: await melding('inToekomst') }
 
   // De positie is een bijzaak: lukt GPS niet, dan kan de opgave toch door.
   let pos: BepaaldePositie | null = null
@@ -521,10 +440,8 @@ export async function meldVertrokken(tijd: string, invoer: PositieInvoer | null)
     const p = await bepaalPositie(invoer, inst.fase)
     if (!('fout' in p)) pos = p
   }
-  const d = open.dossiers
-  const afstand = pos && d?.adres_lat != null && d?.adres_lng != null
-    ? Math.round(afstandMeter(pos.lat, pos.lng, d.adres_lat, d.adres_lng))
-    : null
+  const best = pos && open.dossiers ? await afstandTotDossier(pos, open.dossiers) : null
+  const afstand = best ? Math.round(best.afstand) : null
 
   const { error } = await db()
     .from('prikklok_sessies')
@@ -539,10 +456,10 @@ export async function meldVertrokken(tijd: string, invoer: PositieInvoer | null)
     })
     .eq('id', open.id)
     .is('uit_op', null)
-  if (error) return { ok: false, melding: 'Opslaan is niet gelukt. Probeer het opnieuw.' }
+  if (error) return { ok: false, melding: await melding('opslaanMisluktOpnieuw') }
 
   vernieuw()
-  return { ok: true, melding: `Vertrektijd ${tijd} vastgelegd.` }
+  return { ok: true, melding: await melding('vertrektijdVastgelegd', { tijd }) }
 }
 
 /** Een GPS-fout aan de telefoonkant (geweigerd, geen GPS) — alleen voor het testlogboek. */
@@ -558,15 +475,15 @@ export async function zetBewakingscode(
   pslId: number | null,
 ): Promise<ActieResultaat> {
   const { medewerker } = await vereisPrikklokActie()
-  if (!sessieIds.length || !code) return { ok: false, melding: 'Kies een code.' }
+  if (!sessieIds.length || !code) return { ok: false, melding: await melding('kiesCode') }
   const { error } = await db()
     .from('prikklok_sessies')
     .update({ bewakingscode: code, bouw7_psl_id: pslId, updated_at: new Date().toISOString() })
     .in('id', sessieIds.slice(0, 50))
     .eq('medewerker_id', medewerker.id)
-  if (error) return { ok: false, melding: 'Opslaan is niet gelukt.' }
+  if (error) return { ok: false, melding: await melding('opslaanMislukt') }
   vernieuw()
-  return { ok: true, melding: `Bewakingscode ${code} gekozen.` }
+  return { ok: true, melding: await melding('codeGekozen', { code }) }
 }
 
 /* ── Lezen ────────────────────────────────────────────────────────── */
@@ -676,7 +593,7 @@ export async function getPrikklokStatus(): Promise<PrikklokStatus> {
       ? {
           id: open.id,
           dossier_label: dossierLabel(open.dossiers ?? { dossiernummer: null, titel: null }),
-          adres: open.dossiers ? adresVan(open.dossiers) : null,
+          adres: await openAdres(open),
           datum: open.datum,
           in_op: open.in_op,
           in_tijd: amsterdamTijd(open.in_op),
@@ -687,6 +604,16 @@ export async function getPrikklokStatus(): Promise<PrikklokStatus> {
     sessiesVandaag: sessies.map(naarWeergave),
     testDossiers,
   }
+}
+
+/** Het adres waarop is ingeklokt: het extra werkadres als dat het dichtstbij was, anders het hoofdadres. */
+async function openAdres(open: OpenSessie): Promise<string | null> {
+  if (open.in_werkadres_id) {
+    const extra = (await extraWerkadressenVan([open.dossier_id])).get(open.dossier_id) ?? []
+    const punt = werkpuntenVan(null, extra).find(p => p.werkadresId === open.in_werkadres_id)
+    if (punt) return puntLabel(punt)
+  }
+  return open.dossiers ? adresVan(open.dossiers) : null
 }
 
 /** Boekbare dossiers mét locatie, om in de schaduwfase als testlocatie te kiezen. */
@@ -756,6 +683,7 @@ export async function getPrikklokWeek(datum?: string): Promise<PrikklokWeek> {
       .limit(200),
   ])
 
+  const geenDossier = await melding('geenDossier')
   const sessies = (sessieRijen ?? []).map(naarSessie)
   const berekend = new Map(berekenDagen(sessies, inst).map(d => [d.datum, d]))
 
@@ -763,7 +691,7 @@ export async function getPrikklokWeek(datum?: string): Promise<PrikklokWeek> {
     const urenstaat: UrenstaatRegel[] = (urenRijen ?? [])
       .filter(r => r.datum === dag)
       .map(r => ({
-        label: r.dossiers ? dossierLabel(r.dossiers) : 'Geen dossier',
+        label: r.dossiers ? dossierLabel(r.dossiers) : geenDossier,
         bewakingscode: r.bewakingscode ?? null,
         uursoort: r.planning_uursoorten?.naam ?? '',
         uren: Number(r.uren),

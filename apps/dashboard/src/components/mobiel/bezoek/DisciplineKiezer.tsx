@@ -17,6 +17,8 @@
  */
 
 import { useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useVertalingen } from '@/components/vertalen/useVertaling'
 import type { DisciplineKeuze } from '@/lib/bezoek/types'
 import {
   GRIJS, GROEN, RAND, TEKST, OPPERVLAK, veld, primaireKnop,
@@ -32,25 +34,31 @@ export default function DisciplineKiezer({
   metPunten: Set<string>
   opslaan: (codes: string[]) => Promise<{ ok: boolean; error?: string }>
 }) {
+  const t = useTranslations('bezoek')
   const [open, setOpen] = useState(false)
   const [selectie, setSelectie] = useState<string[]>(gekozen)
   const [zoek, setZoek] = useState('')
   const [bezig, setBezig] = useState(false)
 
+  // Disciplinenamen komen van kantoor: in de taal van de app tonen. Opgeslagen worden de codes.
+  const vertalingen = useVertalingen(beschikbaar.map(d => d.naam))
   const naamPerCode = useMemo(
-    () => new Map(beschikbaar.map(d => [d.code, d.naam])),
-    [beschikbaar],
+    () => new Map(beschikbaar.map((d, i) => [d.code, vertalingen[i]?.tekst ?? d.naam])),
+    [beschikbaar, vertalingen],
   )
 
   const zichtbaar = useMemo(() => {
-    const t = zoek.trim().toLowerCase()
-    if (!t) return beschikbaar
-    return beschikbaar.filter(d => d.naam.toLowerCase().includes(t))
-  }, [beschikbaar, zoek])
+    const term = zoek.trim().toLowerCase()
+    if (!term) return beschikbaar
+    // Zoeken op de getoonde (vertaalde) naam én op het Nederlandse origineel.
+    return beschikbaar.filter(d =>
+      d.naam.toLowerCase().includes(term)
+      || (naamPerCode.get(d.code) ?? '').toLowerCase().includes(term))
+  }, [beschikbaar, zoek, naamPerCode])
 
   const samenvatting = gekozen.length
     ? gekozen.map(c => naamPerCode.get(c) ?? c).join(', ')
-    : 'Kies de disciplines die worden uitgevoerd'
+    : t('kiezer.kiesDisciplines')
 
   function wissel(code: string) {
     setSelectie(prev => (
@@ -106,10 +114,10 @@ export default function DisciplineKiezer({
           }}>
             <div style={{ padding: '14px 14px 10px', borderBottom: `1px solid ${RAND}` }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: TEKST, marginBottom: 10 }}>
-                Welke disciplines worden uitgevoerd?
+                {t('welkeDisciplines')}
               </div>
               <input
-                type="search" value={zoek} placeholder="Zoeken"
+                type="search" value={zoek} placeholder={t('kiezer.zoeken')}
                 autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 onChange={e => setZoek(e.target.value)}
                 style={veld}
@@ -126,7 +134,7 @@ export default function DisciplineKiezer({
                     type="button"
                     disabled={vast}
                     onClick={() => wissel(d.code)}
-                    title={vast ? 'Deze discipline heeft punten' : undefined}
+                    title={vast ? t('kiezer.heeftPuntenTitel') : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12, width: '100%',
                       minHeight: 48, padding: '10px 14px', border: 'none', background: 'none',
@@ -142,17 +150,18 @@ export default function DisciplineKiezer({
                       background: aan ? GROEN : 'transparent',
                       color: '#fff', fontSize: 14, lineHeight: '19px',
                       textAlign: 'center', fontWeight: 700,
+                      // eslint-disable-next-line i18next/no-literal-string -- vinkje-symbool, geen tekst
                     }}>{aan ? '✓' : ''}</span>
-                    <span style={{ flex: 1, minWidth: 0 }}>{d.naam}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{naamPerCode.get(d.code) ?? d.naam}</span>
                     {vast && (
-                      <span style={{ fontSize: 11, color: GRIJS, flexShrink: 0 }}>heeft punten</span>
+                      <span style={{ fontSize: 11, color: GRIJS, flexShrink: 0 }}>{t('kiezer.heeftPunten')}</span>
                     )}
                   </button>
                 )
               })}
               {zichtbaar.length === 0 && (
                 <p style={{ fontSize: 13, color: GRIJS, textAlign: 'center', padding: '24px 0' }}>
-                  Niets gevonden.
+                  {t('kiezer.nietsGevonden')}
                 </p>
               )}
             </div>
@@ -162,7 +171,7 @@ export default function DisciplineKiezer({
                 type="button" disabled={bezig} onClick={sluitEnBewaar}
                 style={{ ...primaireKnop, width: '100%', opacity: bezig ? 0.6 : 1 }}
               >
-                {bezig ? 'Bezig…' : `Klaar (${selectie.length})`}
+                {bezig ? t('bezig') : t('kiezer.klaar', { aantal: selectie.length })}
               </button>
             </div>
           </div>

@@ -1,0 +1,53 @@
+{
+  "geenBoom": "Kierownik projektu nie ustawił jeszcze lokalizacji dla tego projektu. Gdy to zrobi, możesz tu rejestrować.",
+  "fotoSoort": {
+    "voor": "Przed",
+    "tijdens": "W trakcie",
+    "na": "Po"
+  },
+  "geenFoto": {
+    "voor": "Brak zdjęcia przed",
+    "tijdens": "Brak zdjęcia w trakcie",
+    "na": "Brak zdjęcia po"
+  },
+  "fotoVervangen": "{soort} (zastąp)",
+  "uren": "{uren} godz.",
+  "locatie": "Lokalizacja",
+  "fotos": "Zdjęcia",
+  "fotoVerwijderen": "Usuń zdjęcie",
+  "laden": "Ładowanie…",
+  "geenLocatieNog": "Ta rejestracja nie ma jeszcze lokalizacji. Wybierz poniżej właściwe miejsce.",
+  "niveau": "Poziom {nummer}",
+  "kiesElkNiveau": "Wybierz każdy poziom; bez pełnej lokalizacji nie możesz zapisać.",
+  "werkzaamheden": "Prace",
+  "werkzaamheidVerwijderen": "Usuń pracę",
+  "soort": "Rodzaj",
+  "kiesSoort": "— wybierz rodzaj —",
+  "variant": "Wariant",
+  "kies": "— wybierz —",
+  "aantal": "Ilość",
+  "toevoegen": "Dodaj",
+  "notitie": "Notatka",
+  "status": "Status",
+  "afgerond": "Zakończone",
+  "geregistreerd": "Zarejestrowane",
+  "aangemaaktDoor": "Utworzył(a): {naam} · {moment}",
+  "laatstBewerktDoor": "Ostatnio edytował(a): {naam} · {moment}",
+  "onbekend": "nieznany",
+  "annuleren": "Anuluj",
+  "opslaan": "Zapisz",
+  "opslaanBezig": "Zapisywanie…",
+  "geenRegistraties": "Brak rejestracji zgnilizny drewna dla tego projektu.",
+  "geenLocatie": "Brak lokalizacji",
+  "tijdnorm": "Norma czasu <b>{uren}</b>",
+  "nieuweRegistratie": "Nowa rejestracja",
+  "wachtOpLocaties": "Czekamy na lokalizacje",
+  "fout": {
+    "geenMedewerker": "Nie znaleziono pracownika powiązanego z tym kontem.",
+    "locatieLaadt": "Lokalizacja jeszcze się ładuje. Spróbuj ponownie za chwilę.",
+    "kiesLocatie": "Najpierw wybierz pełną lokalizację.",
+    "minstensEen": "Dodaj co najmniej jedną pracę.",
+    "ladenMislukt": "Nie udało się załadować",
+    "opslaanMislukt": "Nie udało się zapisać"
+  }
+}

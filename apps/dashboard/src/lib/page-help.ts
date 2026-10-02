@@ -450,6 +450,17 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  [/^\/instellingen\/bestandssoorten$/, {
+    title: 'Bestandssoorten',
+    description: 'De soorten die je in de Bestanden-tab van een dossier aan een bestand kunt geven, zoals offerte, tekening of factuur, en de trefwoorden waarmee EVA ze zelf herkent.',
+    sections: [
+      { title: 'Herkennen', body: 'EVA kijkt naar de bestandsnaam, de omschrijving en de Bouw7-categorie. Staat daar een van de trefwoorden in, of heeft het bestand een van de extensies, dan krijgt het die soort.' },
+      { title: 'Volgorde', body: 'De eerste soort van boven die past wint. Zet daarom de meest specifieke soort bovenaan: "Opdrachtbevestiging offerte.pdf" moet een opdrachtbevestiging worden, geen offerte.' },
+      { title: 'Handmatig gaat voor', body: 'Kiest iemand in een dossier zelf een soort, dan blijft die staan, ook als de trefwoorden hier later veranderen.' },
+      { title: 'Uitzetten', body: 'Een uitgezette soort wordt niet meer herkend en is niet meer te kiezen. Bestanden waarop hij al handmatig stond, houden hem.' },
+    ],
+  }],
+
   // ── Klantportaal ───────────────────────────────────────────────────────
   [/^\/instellingen\/klantportaal$/, {
     title: 'Klantportaal',
@@ -1559,7 +1570,10 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
           { title: 'Document opstellen', body: 'Met "Document opstellen" maak je een bewonersbrief, garantiecertificaat of informatiebrief op basis van een sjabloon. De gegevens van het dossier (opdrachtgever, werkadres, projectrollen met telefoonnummers, planning) worden automatisch ingevuld; alleen wat níet in het dossier staat — zoals de omschrijving van de werkzaamheden of een garantietermijn — vul je zelf in. Je krijgt eerst een voorbeeld te zien. Daarna kun je de PDF downloaden, het document mailen vanaf je eigen Outlook, of met "Bewerken in Word" openen in Word Online om er nog iets aan te veranderen. Dat laatste zet het document meteen in de dossiermap — Word Online kan alleen bewerken wat in SharePoint staat.' },
           { title: 'Waar het document blijft', body: 'Een opgesteld document wordt bewaard in de SharePoint-dossiermap en verschijnt daardoor ook in de SharePoint-lijst hieronder. In de lijst "Documenten" zie je wie wat wanneer heeft opgesteld en of het gemaild is. Met "Opnieuw" maak je een nieuwe versie met dezelfde ingevulde gegevens.' },
           { title: 'Bronnen', body: 'De lijst toont de projectbestanden uit Bouw7 en, als de koppeling actief is, de bestanden uit de SharePoint-map van het dossier — samengevoegd in één overzicht.' },
-          { title: 'Downloaden', body: 'Klik op een bestand om het te downloaden. Downloads lopen via een beveiligde EVA-proxy, dus je hebt geen aparte Bouw7- of SharePoint-login nodig.' },
+          { title: 'Voorvertoning', body: 'Klik op een bestand in de lijst en je ziet het in het paneel ernaast: PDF\'s, Word-, Excel- en PowerPoint-bestanden uit SharePoint, mails en markdown. Met de knoppen bovenin het paneel open je het bestand in een nieuw tabblad of download je het. Bestanden lopen via een beveiligde EVA-proxy, dus je hebt geen aparte Bouw7- of SharePoint-login nodig.' },
+          { title: 'Hernoemen', body: 'Met het potloodje in het paneel geef je een bestand een andere naam. Een SharePoint-bestand wordt echt hernoemd in SharePoint. Bouw7 laat hernoemen niet toe; daar onthoudt EVA de nieuwe naam en blijft in Bouw7 de oude staan. Maak je die naam leeg, dan geldt de Bouw7-naam weer.' },
+          { title: 'Soort', body: 'De kolom Soort vertelt wat voor stuk het is: offerte, tekening, factuur… Grijs is wat EVA zelf herkent aan de naam; kies je zelf een soort, dan wordt hij zwart en blijft hij staan. De soorten en trefwoorden beheer je in Instellingen → Bestandssoorten.' },
+          { title: 'Foto\'s', body: 'Afbeeldingen staan niet in de lijst maar in de fotogalerij eronder.' },
         ])
 
     case 'calculatie':
@@ -1673,6 +1687,8 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
         [
           { title: 'Aangenomen: termijnen', body: 'Bij een vaste prijs factureer je via de termijnstaat: termijnen klaarzetten tijdens de uitvoering en de eindfactuur na oplevering. Wijkt het schema in Bouw7 af van de betalingsconditie op de offerte, dan krijg je daar een waarschuwing over.' },
           { title: 'Regie: nacalculatie', body: 'Bij regie bouw je de factuur op uit de werkelijk geboekte uren en kosten, per bewakingscode en met de ingestelde opslag. Op een dossier dat op regie afrekent staat dat blok er altijd; elders verschijnt het alleen wanneer er daadwerkelijk regiewerk op het dossier staat.' },
+          { title: 'Regieopdracht', body: 'Een opdracht die in regie is aangenomen zet je bovenaan met de schakelaar Regieopdracht op regie. De aanneemsom vervalt (ook in Bouw7) en alles wat op de opdracht geboekt wordt, op elke bewakingscode, wordt op nacalculatie gefactureerd via Regiewerkzaamheden. Een mandaat is optioneel en geldt als plafond. Zodra er gefactureerd is, staat de schakelaar op slot.' },
+          { title: 'Overzicht', body: 'Het overzicht toont alleen de regels die in gebruik zijn: geen meer- of minderwerkregels op nul. Op een regieopdracht staat Regiewerkzaamheden op de plek van de aanneemsom.' },
           { title: 'Facturen', body: 'De uitgaande facturen (termijnen, eindfactuur, creditnota\'s) komen rechtstreeks uit Bouw7 met status en bedrag. Het opvolgen van openstaande facturen doe je centraal op het Facturen-scherm (debiteurenbeheer).' },
         ])
 

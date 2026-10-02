@@ -1,5 +1,8 @@
+'use client'
+
 import React from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import type { UitvoerActie, UitvoerActieSoort } from '@/lib/taken/uitvoeracties'
 
 /**
@@ -10,6 +13,9 @@ import type { UitvoerActie, UitvoerActieSoort } from '@/lib/taken/uitvoeracties'
  * een toolbox -- het is werk dat je op locatie doet, en de ingang ernaartoe mag je niet over het
  * hoofd zien. Eén kleur voor alle drie, zodat groen leest als "hier tikken om het werk te doen";
  * het icoon en het label zeggen wélk werk.
+ *
+ * Label en uitleg komen uit de taalbestanden (`taken.uitvoer.<soort>`), niet uit
+ * `actie.label`: die Nederlandse tekst blijft voor het taakdetail op kantoor.
  */
 
 const ICOON_PAD: Record<UitvoerActieSoort, string> = {
@@ -30,6 +36,7 @@ function Icoon({ soort, maat, dikte }: { soort: UitvoerActieSoort; maat: number;
 }
 
 export default function TaakUitvoerKnop({ actie }: { actie: UitvoerActie }) {
+  const t = useTranslations('taken')
   return (
     <Link
       href={actie.href}
@@ -42,7 +49,7 @@ export default function TaakUitvoerKnop({ actie }: { actie: UitvoerActie }) {
       }}
     >
       <Icoon soort={actie.soort} maat={17} dikte={2.2} />
-      {actie.label}
+      {t(`uitvoer.${actie.soort}.label`)}
     </Link>
   )
 }
@@ -52,10 +59,12 @@ export default function TaakUitvoerKnop({ actie }: { actie: UitvoerActie }) {
  * zichzelf zodra de doorloop af is, en handmatig afvinken wordt serverzijdig geweigerd.
  */
 export function UitvoerBadge({ actie }: { actie: UitvoerActie }) {
+  const t = useTranslations('taken')
+  const uitleg = t(`uitvoer.${actie.soort}.uitleg`)
   return (
     <div
-      aria-label={actie.badgeUitleg}
-      title={actie.badgeUitleg}
+      aria-label={uitleg}
+      title={uitleg}
       style={{
         width: 22, height: 22, flexShrink: 0, marginTop: 1,
         borderRadius: 6, border: '2px solid var(--border)', background: '#f7f9fa',

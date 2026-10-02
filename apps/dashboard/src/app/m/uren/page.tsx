@@ -6,6 +6,7 @@ import WeekstaatClient from '@/components/mobiel/uren/WeekstaatClient'
 import { getWeekstaat, getUursoortOpties } from '@/lib/uren/weekstaat'
 import { datumSleutel, weekStartVan } from '@/lib/uren/rooster'
 import { isFiatteerder } from '@/lib/mobiel/keuren'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Uren · EVA Mobiel' }
 export const dynamic = 'force-dynamic'
@@ -22,12 +23,13 @@ export default async function MobielUrenPage({
   searchParams: Promise<{ week?: string }>
 }) {
   const medewerker = await getCurrentMedewerker()
+  const t = await getAppVertaler('uren')
   if (!medewerker) {
     return (
       <>
-        <AppHeader title="Uren" backHref="/m" />
+        <AppHeader title={t('titel')} backHref="/m" />
         <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-          Geen medewerker-koppeling gevonden voor dit account.
+          {t('geenKoppeling')}
         </div>
       </>
     )
@@ -56,7 +58,7 @@ export default async function MobielUrenPage({
 
   return (
     <>
-      <AppHeader title="Uren" sub={`Week ${staat.weekNr} · ${staat.jaar}`} backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('week.sub', { week: staat.weekNr, jaar: staat.jaar })} backHref="/m" />
       <MobielPullToRefresh />
 
       {/* Weeknavigatie. flexShrink 0 is hier geen detail: zonder dat knijpt de strook zich in een
@@ -66,16 +68,16 @@ export default async function MobielUrenPage({
         gap: 8, padding: '10px 12px', flexShrink: 0,
         background: 'var(--bg-elev)', borderBottom: '1px solid var(--border)',
       }}>
-        <Link href={`/m/uren?week=${verschuif(-7)}`} style={navKnop} aria-label="Vorige week">←</Link>
+        <Link href={`/m/uren?week=${verschuif(-7)}`} style={navKnop} aria-label={t('week.vorige')}>←</Link>
         <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>Week {staat.weekNr}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>{t('week.kop', { week: staat.weekNr })}</div>
           {staat.weekStart !== dezeWeek && (
             <Link href="/m/uren" style={{ fontSize: 11, color: '#009439', textDecoration: 'none' }}>
-              naar deze week
+              {t('week.naarDezeWeek')}
             </Link>
           )}
         </div>
-        <Link href={`/m/uren?week=${verschuif(7)}`} style={navKnop} aria-label="Volgende week">→</Link>
+        <Link href={`/m/uren?week=${verschuif(7)}`} style={navKnop} aria-label={t('week.volgende')}>→</Link>
       </div>
 
       {magFiatteren && (
@@ -89,7 +91,7 @@ export default async function MobielUrenPage({
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          <span>Uren fiatteren</span>
+          <span>{t('week.urenFiatteren')}</span>
           <span aria-hidden style={{ fontSize: 15 }}>›</span>
         </Link>
       )}

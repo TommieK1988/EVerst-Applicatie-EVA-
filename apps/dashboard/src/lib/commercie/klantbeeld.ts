@@ -35,6 +35,7 @@ import type { DossierRij } from '@/components/dossiers/types'
 import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
 import { bewakingsStatus, stapOmschrijving } from './types'
 import { berekenScore } from './klantbeeld-score'
+import { metBedragen } from './dossier-bedragen'
 import {
   FACTUUR_TE_LAAT_DAGEN, LANGLIGGEND_DAGEN, dagenSindsDatum, isBruikbareOpmerking,
   isNietDoorgegaan, isWerkGereed, jaarVoorKlantbeeld,
@@ -349,13 +350,19 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
   // De facturen zaten eerder in de eerste leesronde, maar hebben nu de dossier-ids nodig: een
   // factuur staat lang niet altijd op naam van de opdrachtgever (zie `getDebiteurenVoorRelatie`).
   // Ze schuiven mee in deze tweede ronde, dus het kost geen extra wachttijd.
-  const [objecten, offerteWijAanZet, offertesOpenVerrijkt, facturen] = await Promise.all([
+  const [objecten, offerteWijAanZet, offertesOpenVerrijkt, facturen, lopendMetBedrag] = await Promise.all([
     leesObjecten(supabase, dossiers),
     telWijAanZet(supabase, relatieId, dossiers.map(d => d.id), afgerondPerDossier),
     verrijkOffertes(supabase, offertesOpen),
     // Geeft zelf een lege lijst terug zonder het recht `financieel`.
     getDebiteurenVoorRelatie(relatieId, dossiers.map(d => d.id)),
+    // Bedrag per regel voor de lopende blokken; het uitgevoerde werk draagt al zijn
+    // gefactureerde bedrag, de openstaande offertes krijgen het hierboven.
+    metBedragen([...offertesInDeMaak, ...opdrachten, ...servicedesk]),
   ])
+  const bedragPer = new Map(lopendMetBedrag.map(d => [d.id, d.bedragExclBtw]))
+  const metBedrag = (lijst: RelatieDossier[]) =>
+    lijst.map(d => ({ ...d, bedragExclBtw: bedragPer.get(d.id) ?? null }))
 
   const vandaagMs = Date.parse(`${vandaagNL()}T00:00:00Z`)
 
@@ -416,9 +423,9 @@ export async function getKlantbeeld(relatieId: string): Promise<Klantbeeld | nul
     score: berekenScore(dossiers),
     signalen,
     offertesOpen: offertesOpenVerrijkt,
-    offertesInDeMaak,
-    opdrachten,
-    servicedesk,
+    offertesInDeMaak: metBedrag(offertesInDeMaak),
+    opdrachten: metBedrag(opdrachten),
+    servicedesk: metBedrag(servicedesk),
     uitgevoerd,
     nietDoorgegaan,
     facturen: klantFacturen,

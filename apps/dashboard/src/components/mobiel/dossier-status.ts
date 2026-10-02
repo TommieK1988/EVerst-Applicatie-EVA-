@@ -97,3 +97,23 @@ export function mobieleStatusopties(dossier: Dossier): StatusDef<string>[] {
 export function sluitDossierAf(dossier: Dossier, substatus: string): boolean {
   return isAfsluitendeSubstatus(dossierSectie(dossier), substatus)
 }
+
+/**
+ * Substatussen met een vertaling in de app (`dossiers.substatus.<sleutel>`). De labels
+ * hierboven blijven voor het kantoor; de app vertaalt op de sleutel en valt bij een
+ * onbekende sleutel terug op dat Nederlandse label.
+ */
+export const SUBSTATUS_SLEUTELS = [
+  'nieuw', 'inlezen_aanvraag', 'werkopname', 'uitwerken_begroting', 'controle_begroting',
+  'offerte_gereed', 'verzonden', 'afgewezen', 'vervallen', 'nabellen', 'in_behandeling',
+  'mondelinge_toezegging', 'gewonnen', 'verloren', 'nieuwe_opdracht', 'werkvoorbereiding',
+  'onderhanden', 'uitvoering_gereed', 'financieel_gereed', 'financieel_afgesloten',
+  'wacht_op_opdrachtgever', 'in_voorbereiding', 'loopt', 'uitgevoerd', 'kosten_compleet',
+  'mandaat_verhoging', 'offerte_uitgebracht', 'opgenomen', 'uitgezet', 'ingepland',
+] as const
+
+export type SubstatusSleutel = (typeof SUBSTATUS_SLEUTELS)[number]
+
+export function isSubstatusSleutel(s: string): s is SubstatusSleutel {
+  return (SUBSTATUS_SLEUTELS as readonly string[]).includes(s)
+}

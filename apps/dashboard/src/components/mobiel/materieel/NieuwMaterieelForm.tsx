@@ -2,11 +2,12 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { maakMaterieelObject } from '@/app/(platform)/materieelbeheer/actions'
 import { uploadDocument } from '@/app/(platform)/materieelbeheer/bestand-actions'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
-  CATEGORIE_LABELS, MATERIEEL_CATEGORIEEN,
+  MATERIEEL_CATEGORIEEN,
   type MaterieelCategorie, type Optie,
 } from '@/lib/materieel/types'
 import { codeLabel } from '@/lib/materieel/qr'
@@ -54,6 +55,7 @@ export default function NieuwMaterieelForm({
   /** Servicebussen en werkplaatsen — materieel kan ook daaraan hangen. */
   teams: Optie[]
 }) {
+  const t = useTranslations('materieel')
   const router = useRouter()
   const cameraRef = React.useRef<HTMLInputElement>(null)
   const bibliotheekRef = React.useRef<HTMLInputElement>(null)
@@ -86,7 +88,7 @@ export default function NieuwMaterieelForm({
   }, [foto])
 
   async function opslaan() {
-    if (omschrijving.trim().length < 2) { setFout('Vul in wat het is'); return }
+    if (omschrijving.trim().length < 2) { setFout(t('nieuw.vulInWatHetIs')); return }
     setBezig(true)
     setFout(null)
 
@@ -114,7 +116,7 @@ export default function NieuwMaterieelForm({
       fd.append('type', 'foto')
       const fotoRes = await uploadDocument(id, fd)
       if (!fotoRes.ok) {
-        setFout(`Materieel is opgeslagen, maar de foto niet: ${fotoRes.error}`)
+        setFout(t('nieuw.fotoMislukt', { fout: fotoRes.error }))
         setBezig(false)
         // Wel doorsturen: het paspoort bestaat en daar kan de foto opnieuw.
         setTimeout(() => router.replace(`/m/materieel/${id}`), 1800)
@@ -129,31 +131,31 @@ export default function NieuwMaterieelForm({
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <div style={{ padding: 14, flex: 1 }}>
         <div style={kaart}>
-          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Sticker</div>
+          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>{t('nieuw.sticker')}</div>
           {code ? (
             <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>
               {codeLabel(code)}
             </div>
           ) : (
             <div style={{ fontSize: 14, color: GRIJS, marginTop: 2 }}>
-              Nog geen sticker. Je kunt er later een koppelen vanaf het paspoort.
+              {t('nieuw.geenSticker')}
             </div>
           )}
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="omschrijving">Wat is het? *</label>
+          <label style={labelStijl} htmlFor="omschrijving">{t('nieuw.watIsHet')}</label>
           <input
             id="omschrijving"
             value={omschrijving}
             onChange={(e) => setOmschrijving(e.target.value)}
-            placeholder="Bijv. Accuboormachine"
+            placeholder={t('nieuw.watIsHetVoorbeeld')}
             style={veld}
           />
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="categorie">Soort</label>
+          <label style={labelStijl} htmlFor="categorie">{t('nieuw.soort')}</label>
           <select
             id="categorie"
             value={categorie}
@@ -161,24 +163,24 @@ export default function NieuwMaterieelForm({
             style={veld}
           >
             {MATERIEEL_CATEGORIEEN.map((c) => (
-              <option key={c} value={c}>{CATEGORIE_LABELS[c]}</option>
+              <option key={c} value={c}>{t(`categorie.${c}`)}</option>
             ))}
           </select>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <div>
-            <label style={labelStijl} htmlFor="merk">Merk</label>
+            <label style={labelStijl} htmlFor="merk">{t('nieuw.merk')}</label>
             <input id="merk" value={merk} onChange={(e) => setMerk(e.target.value)} style={veld} />
           </div>
           <div>
-            <label style={labelStijl} htmlFor="type">Type</label>
+            <label style={labelStijl} htmlFor="type">{t('nieuw.type')}</label>
             <input id="type" value={type} onChange={(e) => setType(e.target.value)} style={veld} />
           </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="serienummer">Serienummer</label>
+          <label style={labelStijl} htmlFor="serienummer">{t('nieuw.serienummer')}</label>
           <input
             id="serienummer"
             value={serienummer}
@@ -194,7 +196,7 @@ export default function NieuwMaterieelForm({
             camera af, en zonder een tweede input kun je geen bestaande foto meer
             kiezen. */}
         <div style={{ marginBottom: 12 }}>
-          <span style={labelStijl}>Foto</span>
+          <span style={labelStijl}>{t('nieuw.foto')}</span>
           {fotoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -205,10 +207,10 @@ export default function NieuwMaterieelForm({
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => cameraRef.current?.click()} style={{ ...secundaireKnop, flex: 1 }}>
-              {foto ? 'Opnieuw' : 'Foto maken'}
+              {foto ? t('nieuw.fotoOpnieuw') : t('nieuw.fotoMaken')}
             </button>
             <button type="button" onClick={() => bibliotheekRef.current?.click()} style={{ ...secundaireKnop, flex: 1 }}>
-              Kiezen
+              {t('nieuw.fotoKiezen')}
             </button>
           </div>
           <input
@@ -222,31 +224,31 @@ export default function NieuwMaterieelForm({
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="hoortBij">Waar hoort het?</label>
+          <label style={labelStijl} htmlFor="hoortBij">{t('nieuw.waarHoortHet')}</label>
           <OptieKiezer
             id="hoortBij"
             waarde={hoortBij}
             onKies={setHoortBij}
-            vaste={{ id: 'algemeen', naam: 'Algemeen gebruik' }}
+            vaste={{ id: 'algemeen', naam: t('algemeenGebruik') }}
             groepen={[
               ...(teams.length > 0 ? [{
-                label: 'Werkplaats en bussen',
-                opties: teams.map((t) => ({ id: `t:${t.id}`, naam: t.naam })),
+                label: t('kiezer.werkplaatsEnBussen'),
+                opties: teams.map((tm) => ({ id: `t:${tm.id}`, naam: tm.naam })),
               }] : []),
               {
-                label: "Collega's",
+                label: t('kiezer.collegas'),
                 opties: [
-                  { id: `m:${mijnId}`, naam: `Mijzelf (${mijnNaam})` },
+                  { id: `m:${mijnId}`, naam: t('nieuw.mijzelf', { naam: mijnNaam }) },
                   ...medewerkers.filter((m) => m.id !== mijnId).map((m) => ({ id: `m:${m.id}`, naam: m.naam })),
                 ],
               },
             ]}
-            zoekPlaatshouder="Typ een naam of werkplaats"
+            zoekPlaatshouder={t('kiezer.typNaamOfWerkplaats')}
           />
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStijl} htmlFor="opmerkingen">Opmerking</label>
+          <label style={labelStijl} htmlFor="opmerkingen">{t('nieuw.opmerking')}</label>
           <textarea
             id="opmerkingen"
             value={opmerkingen}
@@ -273,7 +275,7 @@ export default function NieuwMaterieelForm({
           disabled={bezig}
           style={{ ...secundaireKnop, flex: 1 }}
         >
-          Annuleren
+          {t('nieuw.annuleren')}
         </button>
         <button
           type="button"
@@ -281,7 +283,7 @@ export default function NieuwMaterieelForm({
           disabled={bezig}
           style={{ ...primaireKnop, flex: 2, opacity: bezig ? 0.6 : 1 }}
         >
-          {bezig ? 'Opslaan…' : 'Opslaan'}
+          {bezig ? t('nieuw.opslaanBezig') : t('nieuw.opslaan')}
         </button>
       </MobielStickyFooter>
     </div>

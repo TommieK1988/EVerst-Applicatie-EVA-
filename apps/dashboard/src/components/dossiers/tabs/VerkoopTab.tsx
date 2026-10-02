@@ -3,18 +3,21 @@ import { createAdminClient } from '@everts/database/server'
 import { getDossierVerkoop, getDossierBewaking, type VerkoopTermijnStatus } from '@/lib/dossiers/actions'
 import { getDossierMeerwerk } from '@/lib/dossiers/meerwerk'
 import { Card, CardHeader, CardBody, SkeletonCard } from '@/components/ui'
-import { fmt, fmtPct, TH, TD, LegeRij, LegeNotitie } from './tab-ui'
+import { fmt, fmtPct, LegeNotitie } from './tab-ui'
 import TermijnenBlok from './TermijnenBlok'
 import VerkoopFacturenTabel from './VerkoopFacturenTabel'
 import MeerwerkKlaarzetBlok from './MeerwerkKlaarzetBlok'
 import ServicedeskRegiePaneel from './ServicedeskRegiePaneel'
 import ServicedeskMargeBlok from './ServicedeskMargeBlok'
+import VerkoopOverzicht, { groepeerBtw } from './VerkoopOverzicht'
+import AfrekenwijzeKaart from './AfrekenwijzeKaart'
+import { getAfrekenwijzeStand } from '@/lib/dossiers/afrekenwijze'
 import { getTermijnAfwijking } from '@/lib/dossiers/termijnen'
 import { getFactureerbareCodes } from '@/lib/dossiers/facturatie-codes'
 import { getRegieFactuurvoorstel } from '@/lib/dossiers/servicedesk'
-import { berekenContracttotaalVerkoop, splitsMeerwerk } from '@/lib/dossiers/contractwaarde'
+import { berekenContracttotaalVerkoop, overzichtRegels, splitsMeerwerk } from '@/lib/dossiers/contractwaarde'
 import { Bouw7StandStrip } from '../Bouw7StandStrip'
-import { bonBewakingscode, type DossierSectie } from '../types'
+import { bonBewakingscode, opRegie as rekentOpRegie, type DossierSectie } from '../types'
 
 /** Label + kleur per termijnstatus. "Nog te factureren" en "Concept" vragen nog om actie. */
 const TERMIJN_STATUS: Record<VerkoopTermijnStatus, { label: string; kleur: string }> = {
@@ -60,56 +63,27 @@ const Kolom = ({ children }: { children: React.ReactNode }) => (
   <div style={{ minWidth: 0 }}>{children}</div>
 )
 
-/** Kopregel binnen het overzichtsblok — scheidt contractwaarde, BTW en facturatiestand. */
-const SectieRij = ({ titel, eerste }: { titel: string; eerste?: boolean }) => (
-  <tr>
-    <td
-      colSpan={4}
-      style={{
-        padding: eerste ? '10px 12px 4px' : '16px 12px 4px',
-        fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
-        color: 'var(--neutral-500)',
-        borderTop: eerste ? undefined : '1px solid var(--neutral-100)',
-      }}
-    >
-      {titel}
-    </td>
-  </tr>
-)
-
-type BtwGroep = { pct: number | null; grondslag: number; btw: number }
-
-/** Tel grondslag en BTW per tarief op. Regels zonder bekend tarief komen in een eigen groep. */
-function groepeerBtw(rijen: { pct: number | null; excl: number; btw: number }[]): BtwGroep[] {
-  const groepen = new Map<string, BtwGroep>()
-  for (const r of rijen) {
-    if (r.excl === 0 && r.btw === 0) continue
-    const sleutel = r.pct == null ? 'onbekend' : String(r.pct)
-    const g = groepen.get(sleutel) ?? { pct: r.pct, grondslag: 0, btw: 0 }
-    g.grondslag = rond(g.grondslag + r.excl)
-    g.btw = rond(g.btw + r.btw)
-    groepen.set(sleutel, g)
-  }
-  // Hoogste tarief eerst; onbekend tarief onderaan.
-  return Array.from(groepen.values()).sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1))
-}
-
 /**
  * Loopt dit dossier op regie als hoofdroute? Dan is nacalculatie geen uitzondering maar de
  * manier waarop er gefactureerd wordt: het blok staat er altijd, ook leeg, en een termijnstaat
  * die niet bestaat hoeft niet gemeld te worden.
  *
- * Bewust beperkt tot servicedesk. Op een opdracht is `facturatiemethode` vandaag betekenisloos:
- * de kolom staat standaard op 'regie' en er is geen scherm waar iemand hem bewust zet
- * (`ServicedeskInfoPaneel` rendert alleen op servicedesk). Sturen op die waarde zou op élke
- * opdracht een leeg paneel opleveren. Daar blijft het bestaande gedrag gelden: het blok
- * verschijnt zodra er werkelijk factureerbare nacalculatie op het dossier staat.
+ * Op een servicedeskbon volgt dat de facturatiemethode; op een opdracht alleen als iemand hem
+ * bewust op regie zette (de schakelaar "Regieopdracht"). De standaardwaarde 'regie' van de kolom
+ * telt daar niet — zie `opRegie()`. Op een aangenomen opdracht blijft het bestaande gedrag: het
+ * blok verschijnt zodra er werkelijk factureerbare nacalculatie op het dossier staat.
  */
-async function regieIsHoofdroute(dossierId: string, sectie?: DossierSectie): Promise<boolean> {
-  if (sectie !== 'servicedesk') return false
+async function regieIsHoofdroute(dossierId: string): Promise<{ regie: boolean; mandaat: number | null }> {
   const db = createAdminClient()
-  const { data } = await db.from('dossiers').select('facturatiemethode').eq('id', dossierId).maybeSingle()
-  return (data?.facturatiemethode ?? 'regie') === 'regie'
+  const { data } = await db
+    .from('dossiers')
+    .select('facturatiemethode, facturatiemethode_handmatig, bouw7_categorie_naam, servicedesk_substatus, mandaat_bedrag')
+    .eq('id', dossierId)
+    .maybeSingle()
+  return {
+    regie: rekentOpRegie(data),
+    mandaat: data?.mandaat_bedrag != null ? Number(data.mandaat_bedrag) : null,
+  }
 }
 
 /**
@@ -141,7 +115,7 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   // Alles wat bepaalt óf er iets te tonen valt, wordt vóór de lege staat opgehaald. Stond het
   // meerwerk daar eerst achter, dan bleef de tab leeg op een dossier met goedgekeurd meerwerk maar
   // zonder aanneemsom of termijnen — precies het geval waarin je juist iets wilt zien.
-  const [data, schemaAfwijking, meerwerk, nacalculatieCodes, voorstel, opRegie] = await Promise.all([
+  const [data, schemaAfwijking, meerwerk, nacalculatieCodes, voorstel, route, afrekenwijze] = await Promise.all([
     getDossierVerkoop(dossierId),
     // Faalt dit (geen offerte, geen betalingsconditie), dan blijft de banner gewoon weg.
     getTermijnAfwijking(dossierId).catch(() => null),
@@ -152,14 +126,20 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
     // Zwaarder dan de rest, maar het is Postgres (snapshots), geen Bouw7-aanroep — en het gaat mee
     // naar het paneel, zodat dat niet nog eens hoeft te lezen.
     getRegieFactuurvoorstel(dossierId).catch(() => null),
-    regieIsHoofdroute(dossierId, sectie).catch(() => false),
+    regieIsHoofdroute(dossierId).catch(() => ({ regie: false, mandaat: null })),
+    // De schakelaar Regieopdracht hoort alleen bij een opdracht; een bon heeft de zijne op Informatie.
+    sectie === 'opdracht' ? getAfrekenwijzeStand(dossierId).catch(() => null) : Promise.resolve(null),
   ])
+  const opRegie = route.regie
+  // Marge (kosten naast opbrengst) op een bon, en op een regieopdracht: daar is het net zo goed
+  // de vraag wat het werk opbrengt tegenover wat het kost.
+  const toonMarge = sectie === 'servicedesk' || opRegie
 
   /* Op een bon staat bovenaan wat het gekost heeft naast wat eruit gaat. De kosten komen uit
    * dezelfde projectbewaking als het Management Dashboard, zodat de marge hier en daar hetzelfde
    * getal is. Alleen op servicedesk: op een opdracht staat dit verhaal op de Financieel-tab, en
    * daar hoort het ook — die heeft de opbouw per bewakingscode die een bon niet nodig heeft. */
-  const [bewaking, kostengroep] = sectie === 'servicedesk'
+  const [bewaking, kostengroep] = toonMarge
     ? await Promise.all([
         getDossierBewaking(dossierId).catch(() => null),
         bonKostengroep(dossierId, sectie).catch(() => null),
@@ -174,7 +154,6 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
         .filter(r => r.code === kostengroep.code)
         .reduce((som, r) => som + r.geboekteKosten, 0)
     : 0
-  const tabel: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
   const bg = data.betaalgegevens
 
   const goedgekeurdeRegels = (meerwerk?.regels ?? []).filter(r => r.status === 'akkoord' || r.status === 'voltooid')
@@ -199,6 +178,7 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
     goedgekeurdAantal: goedgekeurdeRegels.length,
     meerwerk: meerwerk?.totalen ?? null,
     nacalculatie: voorstel,
+    opRegie,
   })
   const waarde = ct.waarde
   const nacalculatie = waarde.nacalculatie
@@ -264,8 +244,6 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
   const zonderTarief = rond(Math.max(0, t.contractTotaal - btwGrondslag))
   const totaalExcl = rond(Math.max(t.contractTotaal, btwGrondslag))
   const totaalIncl = rond(totaalExcl + btwTotaal)
-  const btwBekend = btwGroepen.length > 0        // is er überhaupt één bedrag met een tarief?
-  const btwOnvolledig = zonderTarief > 0.5       // centen-verschillen zijn geen echte gaten
 
   /* — Facturatiestand —
    * `totalen.gefactureerd` is incl. BTW zodra er facturen zijn; hier splitsen we het uit zodat het
@@ -287,7 +265,10 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
         ontbreekt={data.stand.ontbreekt}
         fout={data.stand.fout}
       />
-      {sectie === 'servicedesk' && (
+      {afrekenwijze && (
+        <AfrekenwijzeKaart dossierId={dossierId} stand={afrekenwijze} geboekt={splitsing.regiewerk} />
+      )}
+      {toonMarge && (
         <ServicedeskMargeBlok
           dossierId={dossierId}
           initieel={voorstel}
@@ -309,126 +290,23 @@ async function VerkoopInhoud({ dossierId, sectie }: { dossierId: string; sectie?
           hetzelfde geld, en onder elkaar stonden ze een scherm uit elkaar. */}
       <Kolommen>
         <Kolom>
-          {/* Overzicht: contractwaarde, BTW-specificatie per tarief en facturatiestand */}
-          <Card>
-            <CardHeader>Overzicht</CardHeader>
-            <CardBody style={{ padding: 0, overflowX: 'auto' }}>
-              <table style={tabel}>
-                <thead>
-                  <tr>
-                    <TH />
-                    <TH right breedte={150}>Excl. BTW</TH>
-                    <TH right breedte={130}>BTW</TH>
-                    <TH right breedte={150}>Incl. BTW</TH>
-                  </tr>
-                </thead>
-                <tbody>
-                  <SectieRij titel="Contractwaarde" eerste />
-                  <tr>
-                    <TD wrap>Aanneemsom</TD>
-                    <TD right>{fmt(t.aanneemsom, true)}</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                  </tr>
-                  {/* Meerwerk gesplitst zodra EVA de regels kent: aangenomen werk gaat via de
-                      termijnstaat, regie en stelposten via de nacalculatie. Dat verschil bepaalt waar
-                      het bedrag terechtkomt, dus het hoort zichtbaar te zijn; en meer- en minderwerk
-                      apart, omdat een saldo verbergt hoeveel er de ene en de andere kant op ging. */}
-                  {/* Altijd alle vier, ook op nul: dan zie je in één oogopslag dat er géén
-                      minderwerk is, in plaats van te moeten raden of een regel ontbreekt. */}
-                  {([
-                    ['Goedgekeurd minderwerk — aangenomen', 'via termijnen', splitsing.minderwerkAangenomen],
-                    ['Goedgekeurd meerwerk — aangenomen', 'via termijnen', splitsing.meerwerkAangenomen],
-                    ['Goedgekeurd minderwerk — regie en stelposten', 'via nacalculatie', splitsing.minderwerkRegie],
-                    ['Goedgekeurd meerwerk — regie en stelposten', 'via nacalculatie', splitsing.meerwerkRegie],
-                  ] as const).map(([label, route, bedrag]) => (
-                    <tr key={label}>
-                      <TD wrap>
-                        {label}
-                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>{route}</span>
-                      </TD>
-                      <TD right accent={Math.abs(bedrag) > 0.005} kleur={Math.abs(bedrag) > 0.005 ? undefined : 'var(--neutral-400)'}>{fmt(bedrag, true)}</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                    </tr>
-                  ))}
-                  {/* Zonder EVA-regels is er alleen het Bouw7-aggregaat: dat valt niet te splitsen. */}
-                  {!evaBron && Math.abs(t.meerwerk) > 0.005 && (
-                    <tr>
-                      <TD wrap>
-                        Goedgekeurd meer-/minderwerk
-                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>uit Bouw7, niet uitgesplitst</span>
-                      </TD>
-                      <TD right accent>{fmt(t.meerwerk, true)}</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                    </tr>
-                  )}
-                  <tr style={{ borderTop: '1px solid var(--neutral-100)' }}>
-                    <TD vet wrap>Contracttotaal</TD>
-                    <TD right vet>{fmt(t.contractTotaal, true)}</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                  </tr>
-
-                  <SectieRij titel="BTW-specificatie" />
-                  {/* Nog geen enkel tarief bekend: een nulregel in plaats van een kopje met niets
-                      eronder, zodat de specificatie dezelfde vorm houdt als straks. */}
-                  {btwGroepen.length === 0 && !btwOnvolledig && (
-                    <LegeRij velden={['tekst', 'bedrag', 'bedrag', 'bedrag']} label="Nog geen BTW-tarief bekend" />
-                  )}
-                  {btwGroepen.map((g) => (
-                    <tr key={g.pct ?? 'onbekend'}>
-                      <TD wrap>{g.pct != null ? `BTW ${fmtPct(g.pct)}` : 'Tarief onbekend'}</TD>
-                      <TD right>{fmt(g.grondslag, true)}</TD>
-                      <TD right>{fmt(g.btw, true)}</TD>
-                      <TD right>{fmt(rond(g.grondslag + g.btw), true)}</TD>
-                    </tr>
-                  ))}
-                  {btwOnvolledig && (
-                    <tr>
-                      <TD wrap kleur="var(--amber-700, #b45309)">
-                        Nog geen BTW-tarief bekend
-                        <span style={{ fontSize: 11, color: 'var(--neutral-400)', marginLeft: 6 }}>
-                          {data.termijnen.length === 0 ? 'geen termijnstaat' : 'niet in de termijnstaat'}
-                        </span>
-                      </TD>
-                      <TD right>{fmt(zonderTarief, true)}</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                      <TD right kleur="var(--neutral-400)">—</TD>
-                    </tr>
-                  )}
-                  <tr style={{ background: 'var(--neutral-50)' }}>
-                    <TD vet wrap>Totaal</TD>
-                    <TD right vet>{fmt(totaalExcl, true)}</TD>
-                    <TD right vet={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(btwTotaal, true) : '—'}</TD>
-                    <TD right vet={btwBekend} accent={btwBekend} kleur={btwBekend ? undefined : 'var(--neutral-400)'}>{btwBekend ? fmt(totaalIncl, true) : '—'}</TD>
-                  </tr>
-
-                  <SectieRij titel="Facturatiestand" />
-                  <tr>
-                    <TD wrap>Gefactureerd</TD>
-                    <TD right accent={gefactureerdExcl > 0}>{fmt(gefactureerdExcl, true)}</TD>
-                    <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurBtw, true) : '—'}</TD>
-                    <TD right kleur={heeftFacturen ? undefined : 'var(--neutral-400)'}>{heeftFacturen ? fmt(factuurIncl, true) : '—'}</TD>
-                  </tr>
-                  <tr style={{ background: 'var(--neutral-50)' }}>
-                    <TD vet wrap>Nog te factureren</TD>
-                    <TD right vet>{fmt(openstaandExcl, true)}</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                    <TD right kleur="var(--neutral-400)">—</TD>
-                  </tr>
-                </tbody>
-              </table>
-              <div style={{ fontSize: 11.5, color: 'var(--neutral-500)', padding: '8px 12px', lineHeight: 1.5 }}>
-                {!btwBekend
-                  ? 'Er staan nog geen bedragen met een BTW-tarief in de termijnstaat, dus de BTW en het totaal incl. BTW zijn nog niet te bepalen.'
-                  : btwOnvolledig
-                    ? `De BTW-tarieven komen uit de termijnstaat. Over ${fmt(zonderTarief)} van het contract is nog geen tarief bekend, dus het totaal incl. BTW is een ondergrens.`
-                    : `De BTW-tarieven komen uit de termijnstaat${goedgekeurdeRegels.every(heeftTermijn) ? '' : ', aangevuld met het goedgekeurde meerwerk uit EVA'}.`}
-              </div>
-            </CardBody>
-          </Card>
+          <VerkoopOverzicht
+            regels={overzichtRegels({
+              opRegie, aanneemsom: t.aanneemsom, splitsing, evaBron, bouw7Meerwerk: t.meerwerk,
+            })}
+            contractTotaal={t.contractTotaal}
+            mandaat={opRegie ? route.mandaat : null}
+            btwGroepen={btwGroepen}
+            zonderTarief={zonderTarief}
+            totaalExcl={totaalExcl}
+            btwTotaal={btwTotaal}
+            totaalIncl={totaalIncl}
+            geenTermijnstaat={data.termijnen.length === 0}
+            meerwerkUitEva={!goedgekeurdeRegels.every(heeftTermijn)}
+            facturatie={{
+              heeftFacturen, excl: gefactureerdExcl, btw: factuurBtw, incl: factuurIncl, openstaand: openstaandExcl,
+            }}
+          />
         </Kolom>
         <Kolom>
           {/* Verkoopfacturen */}

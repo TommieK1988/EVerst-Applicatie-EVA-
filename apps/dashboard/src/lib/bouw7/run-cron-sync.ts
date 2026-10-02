@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cronLogboek } from '@/lib/cron/logboek'
 import { runFullSync } from '@/app/(platform)/instellingen/integraties/actions'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
-import { geocodeDossiers } from '@/lib/dossiers/geocode'
+import { geocodeDossiers, geocodeExtraWerkadressen } from '@/lib/dossiers/geocode'
 import type { SyncMode } from '@/lib/bouw7/sync'
 import { amsterdamUur } from '@/lib/cron/lokaal-venster'
 
@@ -105,7 +105,10 @@ export async function runCronSync(
   let geocode: unknown
   log.stap('geocodeDossiers')
   try {
-    geocode = await geocodeDossiers({ max: 40 })
+    const hoofd = await geocodeDossiers({ max: 40 })
+    // Extra werkadressen worden al bij opslaan gegeocodeerd; dit pakt alleen wat toen misging.
+    const extra = await geocodeExtraWerkadressen({ max: 10 })
+    geocode = { ...hoofd, extra }
   } catch (e) {
     geocode = { error: e instanceof Error ? e.message : String(e) }
   }

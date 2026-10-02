@@ -1,10 +1,12 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import type { KwaliteitAfwijking } from '@everts/database/kwaliteit-types'
-import { kwaliteitAfwijkingStatusLabels, kwaliteitErnstLabels } from '@everts/database/kwaliteit-types'
 import { registreerHercontrole } from '@/lib/kwaliteit/afwijkingen'
 import { HERCONTROLE_LABELS, HERCONTROLE_VRAAGT_FOTO, type HercontroleUitkomst } from '@/lib/kwaliteit/regels'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import FotoStrook, { type StrookFoto } from './FotoStrook'
 import { ERNST_KLEUR, GRIJS, GROEN, kaart, primaireKnop, RAND, ROOD, secundaireKnop, TEKST, ZACHT } from './stijl'
@@ -33,20 +35,20 @@ export default function OpenAfwijkingen({
   onTerug: () => void
   onVerder: () => void
 }) {
+  const t = useTranslations('kwaliteit')
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <div style={{ padding: '16px 14px 0', flex: 1 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: TEKST }}>
-          Openstaande afwijkingen
+          {t('eerder.titel')}
         </h2>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: GRIJS, lineHeight: 1.4 }}>
-          Uit eerdere inspecties op dit project. Loop ze na voordat je aan de nieuwe controlepunten
-          begint.
+          {t('eerder.uitleg')}
         </p>
 
         {afwijkingen.length === 0 && (
           <p style={{ fontSize: 13, color: ZACHT, textAlign: 'center', padding: '24px 0' }}>
-            Geen openstaande afwijkingen.
+            {t('eerder.geen')}
           </p>
         )}
 
@@ -62,8 +64,8 @@ export default function OpenAfwijkingen({
       </div>
 
       <MobielStickyFooter>
-        <button type="button" onClick={onTerug} style={{ ...secundaireKnop, flex: '0 0 auto' }}>Terug</button>
-        <button type="button" onClick={onVerder} style={{ ...primaireKnop, flex: 1 }}>Naar de controlepunten</button>
+        <button type="button" onClick={onTerug} style={{ ...secundaireKnop, flex: '0 0 auto' }}>{t('terug')}</button>
+        <button type="button" onClick={onVerder} style={{ ...primaireKnop, flex: 1 }}>{t('eerder.naarControlepunten')}</button>
       </MobielStickyFooter>
     </div>
   )
@@ -77,6 +79,8 @@ function HercontroleKaart({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
+  const locale = useDatumLocale()
   const [keuze, setKeuze] = React.useState<HercontroleUitkomst | null>(null)
   const [opmerking, setOpmerking] = React.useState('')
   const [herstelFotos, setHerstelFotos] = React.useState<StrookFoto[]>([])
@@ -91,7 +95,7 @@ function HercontroleKaart({
   async function bevestig() {
     if (!keuze) return
     if (fotoVerplicht && herstelFotos.length === 0) {
-      setFout('Voeg een foto van het herstel toe; deze afwijking was kritiek.')
+      setFout(t('eerder.fotoKritiek'))
       return
     }
     setBezig(true); setFout(null)
@@ -107,19 +111,27 @@ function HercontroleKaart({
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: ZACHT }}>{afwijking.afwijkingsnummer}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: ERNST_KLEUR[afwijking.ernst] }}>
-          {kwaliteitErnstLabels[afwijking.ernst].toUpperCase()}
+          {t(`ernst.${afwijking.ernst}`).toLocaleUpperCase(locale)}
         </span>
         <span style={{ fontSize: 11, color: ZACHT }}>
-          {kwaliteitAfwijkingStatusLabels[afwijking.status]}
+          {t(`afwijkingStatus.${afwijking.status}`)}
         </span>
       </div>
 
-      <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: TEKST, lineHeight: 1.35 }}>
-        {afwijking.omschrijving ?? afwijking.controlepunt_code}
-      </p>
+      {/* Omschrijving van een eerdere ronde, mogelijk door iemand anders ingevoerd: vertalen. */}
+      {afwijking.omschrijving ? (
+        <VertaalbareTekst as="div" tekst={afwijking.omschrijving}
+          style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: TEKST, lineHeight: 1.35 }} />
+      ) : (
+        <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: TEKST, lineHeight: 1.35 }}>
+          {afwijking.controlepunt_code}
+        </p>
+      )}
       <p style={{ margin: '0 0 10px', fontSize: 12, color: GRIJS }}>
-        {afwijking.locatie ?? '—'} · geconstateerd{' '}
-        {new Date(afwijking.datum_constatering).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+        {t('eerder.geconstateerd', {
+          locatie: afwijking.locatie ?? '—',
+          datum: new Date(afwijking.datum_constatering).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }),
+        })}
       </p>
 
       {afwijking.fotoUrls.length > 0 && (
@@ -136,7 +148,7 @@ function HercontroleKaart({
 
       {klaar ? (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: GROEN }}>
-          ✓ Vastgelegd: {HERCONTROLE_LABELS[keuze!]}
+          {t('eerder.vastgelegd', { uitkomst: t(`hercontrole.${keuze!}`) })}
         </p>
       ) : (
         <>
@@ -157,7 +169,7 @@ function HercontroleKaart({
                     WebkitTapHighlightColor: 'transparent', minHeight: 40,
                   }}
                 >
-                  {HERCONTROLE_LABELS[u]}
+                  {t(`hercontrole.${u}`)}
                 </button>
               )
             })}
@@ -168,7 +180,7 @@ function HercontroleKaart({
               <input
                 value={opmerking}
                 onChange={e => setOpmerking(e.target.value)}
-                placeholder="Toelichting (optioneel)"
+                placeholder={t('eerder.toelichtingPlaceholder')}
                 style={{
                   width: '100%', padding: '11px 12px', borderRadius: 10, fontSize: 16,
                   border: `1px solid ${RAND}`, background: 'var(--bg)', color: TEKST,
@@ -194,7 +206,7 @@ function HercontroleKaart({
                 disabled={bezig || !bewerkbaar}
                 style={{ ...primaireKnop, width: '100%', padding: '11px 14px', fontSize: 14 }}
               >
-                {bezig ? 'Bezig…' : 'Vastleggen'}
+                {bezig ? t('bezig') : t('eerder.vastleggen')}
               </button>
             </div>
           )}

@@ -13,7 +13,9 @@
  *     werkelijke kosten wordt afgerekend;
  *   • een **stelpost** — die rekent per definitie op werkelijke kosten af;
  *   • de **kostengroep van een servicedeskbon op regie** (`RW01`) — zo'n bon is in zijn geheel
- *     nacalculatie; daar is geen aanneemsom waar iets al in zit. Zie `bon-bewakingscode.ts`.
+ *     nacalculatie; daar is geen aanneemsom waar iets al in zit. Zie `bon-bewakingscode.ts`;
+ *   • op een **regieopdracht** élke code waarop geboekt is. Die vult `getRegieFactuurvoorstel`
+ *     aan zodra de boekingen er zijn (`regie-opdracht.ts`); hier staan alleen de vaste codes.
  *
  * De tegenhanger `AW01` van een **aangenomen** bon hoort hier nadrukkelijk **niet** in. Die groep
  * draagt de kosten, niet de opbrengst: de opbrengst ligt vast in de aanneemsom en gaat via de
@@ -35,7 +37,8 @@
  */
 
 import { createAdminClient } from '@everts/database/server'
-import { REGIE_BEWAKINGSCODE_NAAM } from '@/components/dossiers/types'
+import { REGIE_BEWAKINGSCODE_NAAM, opRegie } from '@/components/dossiers/types'
+import { AFREKENWIJZE_VELDEN, isRegieOpdrachtRij } from './regie-opdracht'
 
 export type FactureerbareCode = {
   bewakingscode: string
@@ -86,7 +89,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       .not('bewakingscode', 'is', null),
     supabase
       .from('dossiers')
-      .select('regie_bewakingscode, regie_bouw7_chapter_id, facturatiemethode')
+      .select(`regie_bewakingscode, regie_bouw7_chapter_id, ${AFREKENWIJZE_VELDEN}`)
       .eq('id', dossierId)
       .maybeSingle(),
   ])
@@ -104,9 +107,13 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
     regie_bewakingscode: string | null
     regie_bouw7_chapter_id: number | null
     facturatiemethode: string | null
+    facturatiemethode_handmatig: boolean | null
+    bouw7_categorie_naam: string | null
+    servicedesk_substatus: string | null
   } | null
-  const opRegie = (d?.facturatiemethode ?? 'regie') === 'regie'
-  const regieCode = opRegie ? (d?.regie_bewakingscode ?? '').trim() : ''
+  const regieCode = opRegie(d) ? (d?.regie_bewakingscode ?? '').trim() : ''
+  // Een regieopdracht heeft geen aanneemsom: een stelpost zit dan nergens "al in".
+  const geenAanneemsom = isRegieOpdrachtRij(d)
   if (regieCode) {
     gezien.add(regieCode)
     uit.push({
@@ -134,7 +141,7 @@ export async function getFactureerbareCodes(dossierId: string): Promise<Facturee
       omschrijving: s.omschrijving ?? code,
       // Een carve-out is via de aanneemsom al gefactureerd; alleen het verschil telt nog, en dat
       // loopt via de verrekening naar een meerwerkregel.
-      alleenVerschil: s.in_aanneemsom !== false,
+      alleenVerschil: !geenAanneemsom && s.in_aanneemsom !== false,
       opslagPct: s.opslag_pct != null ? Number(s.opslag_pct) : null,
       inBouw7: s.bouw7_chapter_id != null,
       mandaat: null,

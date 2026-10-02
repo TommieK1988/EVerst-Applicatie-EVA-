@@ -514,7 +514,8 @@ function maakContextRegel(r: BronRegel): KeurRegel {
     projectNaam: r.projectNaam,
     nietGewerkt: r.nietGewerkt,
     magKeuren: false,
-    ligtBij: ligtBij ?? 'niemand — rollen ontbreken',
+    // Niemand: het scherm toont dan "niemand — rollen ontbreken" in de taal van de app.
+    ligtBij: ligtBij ?? null,
     codeOntbreekt: mistCode(r),
   }
 }

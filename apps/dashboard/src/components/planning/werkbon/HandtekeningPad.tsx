@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 type Props = {
   onChange: (dataUrl: string | null) => void
@@ -9,6 +10,7 @@ type Props = {
 }
 
 export default function HandtekeningPad({ onChange, hoogte = 140 }: Props) {
+  const t = useTranslations('werkbon')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const tekenend  = useRef(false)
   const heeftData = useRef(false)
@@ -116,7 +118,7 @@ export default function HandtekeningPad({ onChange, hoogte = 140 }: Props) {
         onClick={wissen}
         style={{ marginTop: 6, fontSize: 11 }}
       >
-        Opnieuw tekenen
+        {t('opnieuwTekenen')}
       </button>
     </div>
   )

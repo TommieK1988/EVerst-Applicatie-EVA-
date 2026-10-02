@@ -283,6 +283,30 @@ export function bonBewakingscode(
     : { code: REGIE_BEWAKINGSCODE, naam: REGIE_BEWAKINGSCODE_NAAM }
 }
 
+/** De velden die {@link opRegie} nodig heeft; een dossierrij voldoet altijd. */
+export type AfrekenwijzeVelden = {
+  facturatiemethode?: string | null
+  facturatiemethode_handmatig?: boolean | null
+  bouw7_categorie_naam?: string | null
+  servicedesk_substatus?: string | null
+}
+
+/**
+ * Rekent dit dossier af op regie (nacalculatie) in plaats van een aanneemsom?
+ *
+ * **De enige plek waar dat besloten wordt.** `dossiers.facturatiemethode` staat bedrijfsbreed
+ * standaard op `'regie'`, en wordt alleen op een servicedeskbon altijd bewust gezet. Op een
+ * opdracht telt de waarde daarom pas als iemand hem gekozen heeft (`facturatiemethode_handmatig`):
+ * de schakelaar "Regieopdracht" op de Verkoop-tab, of de mailintake die een regie-opdracht
+ * herkent. Zonder die tweede voorwaarde stonden in één klap alle ~700 opdrachten op regie.
+ */
+export function opRegie(d: AfrekenwijzeVelden | null | undefined): boolean {
+  if (!d) return false
+  const servicedesk = isServicedeskDossier(d) || d.servicedesk_substatus != null
+  if (servicedesk) return (d.facturatiemethode ?? 'regie') !== 'termijnen'
+  return d.facturatiemethode === 'regie' && d.facturatiemethode_handmatig === true
+}
+
 /**
  * Het servicedeskbord toont twee soorten werk: **Dagelijks onderhoud** (regie) en **Mutatie**
  * (aangenomen). Tot oktober 2026 hadden die elk een eigen kolomreeks; die waren zo naar elkaar

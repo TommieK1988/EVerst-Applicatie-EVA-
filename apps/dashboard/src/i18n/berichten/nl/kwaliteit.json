@@ -1,0 +1,202 @@
+{
+  "kopTitel": "Kwaliteitsronde",
+  "bezig": "Bezig…",
+  "terug": "Terug",
+  "verwijderen": "Verwijderen",
+  "resultaatStatus": {
+    "voldoet": "Voldoet",
+    "voldoet_niet": "Voldoet niet",
+    "niet_beoordeeld": "Niet beoordeeld",
+    "nvt": "N.v.t.",
+    "nader_onderzoek": "Nader onderzoek"
+  },
+  "statusUitleg": {
+    "voldoet": "De controle of meetwaarde voldoet aan het kwaliteitscriterium.",
+    "voldoet_niet": "Afwijking geconstateerd. Foto, locatie en toelichting zijn verplicht.",
+    "niet_beoordeeld": "Aanwezig, maar nu niet betrouwbaar zichtbaar, bereikbaar of controleerbaar. Dit is géén akkoord.",
+    "nvt": "Dit controlepunt is niet van toepassing op het aangetroffen werk.",
+    "nader_onderzoek": "Specialistische beoordeling nodig; niet zelf beoordelen."
+  },
+  "ernst": {
+    "kritiek": "Kritiek",
+    "technisch": "Technisch",
+    "esthetisch": "Esthetisch",
+    "observatie": "Observatie"
+  },
+  "afwijkingStatus": {
+    "open": "Open",
+    "gemeld": "Gemeld",
+    "herstel_gepland": "Herstel gepland",
+    "in_uitvoering": "In uitvoering",
+    "gereed_voor_hercontrole": "Gereed voor hercontrole",
+    "hersteld_akkoord": "Hersteld en akkoord",
+    "niet_akkoord": "Niet akkoord na herstel",
+    "nader_onderzoek": "Nader onderzoek",
+    "geaccepteerde_afwijking": "Geaccepteerde afwijking"
+  },
+  "bron": {
+    "NORM": "Norm",
+    "FABRIKANT": "Fabrikant",
+    "PROJECT": "Project",
+    "INTERN": "Interne bedrijfsnorm"
+  },
+  "hercontrole": {
+    "niet_gecontroleerd": "Niet gecontroleerd",
+    "nog_open": "Nog open",
+    "hersteld": "Hersteld",
+    "onvoldoende_hersteld": "Onvoldoende hersteld",
+    "nader_onderzoek": "Nader onderzoek nodig"
+  },
+  "locatieSuggestie": {
+    "voorgevel": "Voorgevel",
+    "achtergevel": "Achtergevel",
+    "zijgevelLinks": "Zijgevel links",
+    "zijgevelRechts": "Zijgevel rechts",
+    "kopgevel": "Kopgevel",
+    "dak": "Dak",
+    "dakrand": "Dakrand",
+    "balkon": "Balkon",
+    "entree": "Entree",
+    "blokA": "Blok A",
+    "blokB": "Blok B",
+    "verdieping1": "Verdieping 1",
+    "verdieping2": "Verdieping 2",
+    "beganeGrond": "Begane grond"
+  },
+  "waarnemingSuggestie": {
+    "schilderwerk": "Strak schilderwerk",
+    "houtreparatie": "Goede houtreparatie",
+    "kitvoeg": "Nette kitvoeg",
+    "voegwerk": "Verzorgd voegwerk",
+    "dakdetail": "Correct dakdetail",
+    "werkgebied": "Schoon werkgebied",
+    "aansluiting": "Nette aansluiting tussen disciplines"
+  },
+  "ronde": {
+    "beoordeeld": "<b>{aantal}</b> beoordeeld",
+    "voldoet": "<b>{aantal}</b> voldoet",
+    "voldoetNiet": "<b>{aantal}</b> voldoet niet",
+    "nietBeoordeeld": "<b>{aantal}</b> niet beoordeeld",
+    "kritiek": "{aantal} kritiek",
+    "alleenLezen": "Deze inspectie is definitief en alleen-lezen.",
+    "openEerdere": "↩ {aantal, plural, one {# openstaande afwijking} other {# openstaande afwijkingen}} uit eerdere inspecties",
+    "steekproefSignaal": "{afwijkend} van {bekeken} bekeken elementen wijkt af ({pct}%). Overweeg de steekproef uit te breiden.",
+    "geenDisciplines": "Nog geen disciplines gekozen.",
+    "disciplinesGekozen": "Disciplines gekozen: {lijst}",
+    "knopDisciplines": "Disciplines",
+    "knopAfronden": "Afronden",
+    "knopOverzicht": "Overzicht"
+  },
+  "disciplines": {
+    "titel": "Wat controleer je deze ronde?",
+    "uitleg": "Kies de onderdelen die nu zichtbaar en beoordeelbaar zijn. Je krijgt daarna alleen die controlepunten te zien.",
+    "aantalPunten": "{aantal, plural, one {# punt} other {# punten}}",
+    "aantalPuntenAltijd": "{aantal, plural, one {# punt} other {# punten}} · altijd",
+    "inDezeRonde": "{aantal, plural, one {<b>#</b> controlepunt in deze ronde} other {<b>#</b> controlepunten in deze ronde}}",
+    "gegevens": "Gegevens van deze ronde",
+    "inspecteur": "Inspecteur: {naam}",
+    "weer": "Weersomstandigheden (optioneel)",
+    "weerPlaceholder": "Bijv. droog, 12 °C, matige wind",
+    "werkzaamheden": "Aanwezige werkzaamheden (optioneel)",
+    "werkzaamhedenPlaceholder": "Bijv. schilderwerk voorgevel, kitwerk blok A",
+    "gebied": "Gelopen gebied (optioneel)",
+    "gebiedPlaceholder": "Bijv. voor- en achtergevel blok A",
+    "bekeken": "Elementen bekeken",
+    "afwijkend": "Daarvan afwijkend",
+    "steekproefUitleg": "Optioneel: legt de omvang van je steekproef vast. Je bepaalt zelf hoeveel je bekijkt.",
+    "verder": "{aantal, plural, one {Verder met # controlepunt} other {Verder met # controlepunten}}"
+  },
+  "punt": {
+    "veiligheid": "VEILIGHEID",
+    "meetwaarde": "{verplicht, select, ja {Meetwaarde *} other {Meetwaarde (optioneel)}}",
+    "meetwaardeEenheid": "{verplicht, select, ja {Meetwaarde * in {eenheid}} other {Meetwaarde (optioneel) in {eenheid}}}",
+    "meetPlaceholder": "0,0",
+    "waarGemeten": "Waar gemeten?",
+    "vulGetal": "Vul een getal in.",
+    "gemeten": "Gemeten <b>{waarde}</b>",
+    "gemetenToegestaan": "Gemeten <b>{waarde}</b> · Toegestaan <b>{eis}</b>",
+    "oordeelVoldoet": "VOLDOET",
+    "oordeelVoldoetNiet": "VOLDOET NIET",
+    "geenGrenswaarde": "Geen grenswaarde bekend — beoordeel zelf",
+    "projecteisNodig": "Voor dit onderdeel is geen generieke grenswaarde beschikbaar. Leg de projecteis <b>{sleutel}</b> vast om dit automatisch te laten toetsen.",
+    "opmerkingPlaceholder": "Opmerking (optioneel)",
+    "eisVerbergen": "▴ Technische eis verbergen",
+    "eisBekijken": "▾ Technische eis bekijken",
+    "meetmethode": "Meetmethode:",
+    "bron": "Bron:",
+    "projectwaarde": "(projectwaarde, overschrijft de standaard)"
+  },
+  "bevinding": {
+    "nogEen": "+ Nog een bevinding op dit punt",
+    "vanTotaal": "bevinding {nummer} van {totaal}",
+    "toelichting": "Toelichting *",
+    "toelichtingPlaceholder": "Wat is er aan de hand?",
+    "ernst": "Ernst",
+    "kritiekMelding": "Kritiek: veiligheid of waterdichtheid. Meld dit direct aan de uitvoerder.",
+    "herstelactie": "Voorgestelde herstelactie",
+    "herstelactiePlaceholder": "Wat moet er gebeuren?"
+  },
+  "locatie": {
+    "label": "Locatie *",
+    "placeholder": "Of typ een locatie, bijv. Woningen 21 t/m 28"
+  },
+  "foto": {
+    "verwijderen": "Foto verwijderen",
+    "maken": "📷 Foto maken",
+    "kiezen": "Kiezen",
+    "verplicht": "Een foto is verplicht bij deze afwijking.",
+    "optioneel": "Optioneel",
+    "aantal": "{aantal, plural, one {# foto} other {# foto's}}"
+  },
+  "eerder": {
+    "titel": "Openstaande afwijkingen",
+    "uitleg": "Uit eerdere inspecties op dit project. Loop ze na voordat je aan de nieuwe controlepunten begint.",
+    "geen": "Geen openstaande afwijkingen.",
+    "naarControlepunten": "Naar de controlepunten",
+    "fotoKritiek": "Voeg een foto van het herstel toe; deze afwijking was kritiek.",
+    "geconstateerd": "{locatie} · geconstateerd {datum}",
+    "vastgelegd": "✓ Vastgelegd: {uitkomst}",
+    "toelichtingPlaceholder": "Toelichting (optioneel)",
+    "vastleggen": "Vastleggen"
+  },
+  "waarneming": {
+    "knop": "+ Positieve kwaliteitswaarneming",
+    "watGaatGoed": "Wat gaat er goed bij {discipline}?",
+    "foutLeeg": "Geef een korte omschrijving.",
+    "omschrijvingPlaceholder": "Of typ zelf een korte omschrijving",
+    "annuleren": "Annuleren",
+    "opslaan": "Opslaan",
+    "fotoNaOpslaan": "Foto toevoegen kan zodra de waarneming is opgeslagen."
+  },
+  "afronden": {
+    "titelAfronden": "Inspectie afronden",
+    "titelAfgerond": "Inspectie afgerond",
+    "telling": {
+      "beoordeeld": "controlepunten beoordeeld",
+      "voldoen": "voldoen",
+      "technisch": "technische afwijkingen",
+      "esthetisch": "esthetische afwijkingen",
+      "kritiek": "kritieke afwijkingen",
+      "nietBeoordeeld": "niet beoordeeld",
+      "naderOnderzoek": "nader onderzoek",
+      "waarnemingen": "positieve waarnemingen"
+    },
+    "nietBeoordeeldUitleg": "Niet beoordeelde onderdelen tellen niet als goedgekeurd. Dat staat ook zo in het rapport.",
+    "definitief": "✓ De inspectie is definitief",
+    "definitiefUitleg": "De actie is afgevinkt en de afwijkingen staan in het register. Het rapport voor de opdrachtgever maak je op de computer, bij KAM → Kwaliteit.",
+    "nietCompleet": "Nog niet compleet",
+    "inspectieNietCompleet": "De inspectie is nog niet compleet.",
+    "ontbreekt": {
+      "nietsBeoordeeldTitel": "Nog niets beoordeeld",
+      "niets_beoordeeld": "Beoordeel ten minste één controlepunt voordat je afrondt.",
+      "geen_bevinding": "Voeg ten minste één bevinding met locatie toe.",
+      "locatie": "Locatie ontbreekt bij een bevinding.",
+      "toelichting": "Toelichting ontbreekt bij een bevinding.",
+      "foto": "Foto is verplicht bij deze afwijking."
+    },
+    "terugNaarControlepunten": "Terug naar de controlepunten",
+    "naDefinitief": "Na het definitief maken is de inspectie alleen-lezen. Corrigeren kan daarna nog via “Heropenen” op de computer, met vermelding van de reden.",
+    "terugNaarActies": "Terug naar mijn acties",
+    "definitiefMaken": "Definitief maken"
+  }
+}

@@ -14,6 +14,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
+import { getAppVertaler, getAppLocale } from '@/i18n/server'
 import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
 import { getUrenInstellingen, getIndirectDossierId, getIndirecteDossierIds } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
@@ -246,6 +247,8 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     !r.dossier_id || (!r.bewakingscode && !indirecteDossiers.has(r.dossier_id))
   )).length
   const blokkade = indienBlokkade(totalen, contracturen, ongecodeerd)
+    ? await blokkadeTekst(totalen, contracturen, ongecodeerd)
+    : null
 
   // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
   const bonLinks = await signBonnen((onkosten ?? []).map((o: Record<string, unknown>) => o.bon_pad as string))
@@ -481,28 +484,46 @@ async function isBonZonderCodes(dossierId: string): Promise<boolean> {
   return (await getBewakingscodesVoorUurlog(dossierId)).length === 0
 }
 
+/**
+ * Dezelfde reden als `indienBlokkade`, maar in de taal van de app: de weekstaat wordt alleen
+ * in EVA Mobiel getoond. De volgorde van de toetsen volgt `indienBlokkade` één op één.
+ */
+async function blokkadeTekst(
+  totalen: { totaalUren: number; tekort: number },
+  contracturen: number,
+  ongecodeerd: number,
+): Promise<string> {
+  const t = await getAppVertaler('uren')
+  if (contracturen <= 0) return t('fout.geenContracturen')
+  if (totalen.totaalUren <= 0) return t('fout.nogGeenUren')
+  if (totalen.tekort > 0) return t('fout.tekort', { uren: totalen.tekort.toLocaleString(await getAppLocale()) })
+  return t('fout.ongecodeerd', { aantal: ongecodeerd })
+}
+
 async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
   const supabase = db()
-  if (!(invoer.uren > 0) || invoer.uren > 24) throw new Error('Vul een aantal uren tussen 0 en 24 in.')
+  // De meldingen hieronder komen via `e.message` bij de monteur: in de taal van de app.
+  const t = await getAppVertaler('uren')
+  if (!(invoer.uren > 0) || invoer.uren > 24) throw new Error(t('fout.urenTussen'))
 
   const { data: soort } = await supabase
     .from('planning_uursoorten')
     .select('id, naam, uren_categorie')
     .eq('id', invoer.uursoort_id)
     .maybeSingle()
-  if (!soort) throw new Error('Onbekende uursoort.')
+  if (!soort) throw new Error(t('fout.onbekendeUursoort'))
   if (!soort.uren_categorie) {
-    throw new Error(`"${soort.naam}" is nog niet ingedeeld en kan daarom niet geboekt worden.`)
+    throw new Error(t('fout.uursoortNietIngedeeld', { naam: soort.naam }))
   }
 
   const categorie = soort.uren_categorie as UrenCategorie
   if (categorie === 'werk') {
-    if (!invoer.dossier_id) throw new Error('Kies een project voor deze uren.')
+    if (!invoer.dossier_id) throw new Error(t('fout.kiesProject'))
     // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
     // is de code niet verplicht. Zie `getIndirecteDossierIds`.
     const indirect = (await getIndirecteDossierIds()).has(invoer.dossier_id)
     if (!indirect && !invoer.bewakingscode && !(await isBonZonderCodes(invoer.dossier_id))) {
-      throw new Error('Kies een bewakingscode voor deze uren.')
+      throw new Error(t('fout.kiesBewakingscode'))
     }
     return {
       medewerker_id: medewerkerId,
@@ -520,9 +541,7 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
     .from('medewerkers').select('werkmaatschappij_id').eq('id', medewerkerId).maybeSingle()
   const indirect = await getIndirectDossierId(mw?.werkmaatschappij_id ?? null)
   if (!indirect) {
-    throw new Error(
-      'Er is nog geen dossier voor indirecte uren ingesteld. Vraag de beheerder dit te doen in Instellingen → Urenverantwoording.',
-    )
+    throw new Error(t('fout.geenIndirectDossier'))
   }
   return {
     medewerker_id: medewerkerId,
@@ -539,9 +558,10 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
 export async function voegRegelToe(
   weekId: string, invoer: RegelInvoer,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getAppVertaler('uren')
   try {
     const { medewerker, week, supabase } = await eigenWeek(weekId)
-    if (!bewerkbaar(week.status)) return { ok: false, error: 'Deze week is al ingediend.' }
+    if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
     const rij = await bouwRegel(medewerker.id, invoer)
     const { error } = await supabase.from('uren_regels').insert({ ...rij, week_id: weekId, bron: 'eva' })
@@ -550,13 +570,14 @@ export async function voegRegelToe(
     revalidatePath('/m/uren')
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Toevoegen mislukt.' }
+    return { ok: false, error: e instanceof Error ? e.message : t('fout.toevoegenMislukt') }
   }
 }
 
 export async function wijzigRegel(
   regelId: string, invoer: RegelInvoer,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getAppVertaler('uren')
   try {
     const medewerker = await vereisSessie()
     const supabase = db()
@@ -565,9 +586,9 @@ export async function wijzigRegel(
       .select('id, week_id, medewerker_id, bron, uren_weken(status)')
       .eq('id', regelId)
       .maybeSingle()
-    if (!bestaand) return { ok: false, error: 'Regel niet gevonden.' }
-    if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: 'Dit is niet jouw regel.' }
-    if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: 'Deze week is al ingediend.' }
+    if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
+    if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
+    if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
     const rij = await bouwRegel(medewerker.id, invoer)
     // Wijkt de medewerker af van wat uit Bouw7 kwam, dan blijft dat zichtbaar voor de goedkeurder.
@@ -580,13 +601,14 @@ export async function wijzigRegel(
     revalidatePath('/m/uren')
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Wijzigen mislukt.' }
+    return { ok: false, error: e instanceof Error ? e.message : t('fout.wijzigenMislukt') }
   }
 }
 
 export async function verwijderRegel(
   regelId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getAppVertaler('uren')
   const medewerker = await vereisSessie()
   const supabase = db()
   const { data: bestaand } = await supabase
@@ -594,9 +616,9 @@ export async function verwijderRegel(
     .select('id, medewerker_id, uren_weken(status)')
     .eq('id', regelId)
     .maybeSingle()
-  if (!bestaand) return { ok: false, error: 'Regel niet gevonden.' }
-  if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: 'Dit is niet jouw regel.' }
-  if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: 'Deze week is al ingediend.' }
+  if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
+  if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
+  if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
   const { error } = await supabase.from('uren_regels').delete().eq('id', regelId)
   if (error) return { ok: false, error: error.message }
@@ -616,12 +638,13 @@ export async function verwijderRegel(
 export async function dienWeekIn(
   weekId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await getAppVertaler('uren')
   const { medewerker, week, supabase } = await eigenWeek(weekId)
-  if (!bewerkbaar(week.status)) return { ok: false, error: 'Deze week is al ingediend.' }
+  if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
   const contracturen = Number(week.contracturen ?? 0)
   if (contracturen <= 0) {
-    return { ok: false, error: 'Er staan geen contracturen voor je ingesteld. Vraag de planning om je rooster in te vullen.' }
+    return { ok: false, error: t('fout.geenContracturen') }
   }
 
   const [{ data: regels }, inst, indirecteDossiers] = await Promise.all([
@@ -634,12 +657,12 @@ export async function dienWeekIn(
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rij = (regels ?? []) as any[]
-  if (!rij.length) return { ok: false, error: 'Je hebt nog geen uren ingevuld.' }
+  if (!rij.length) return { ok: false, error: t('fout.nogGeenUren') }
 
   const totaal = rondUren(rij.reduce((s, r) => s + Number(r.uren), 0))
   if (totaal < contracturen - inst.tolerantie_uren) {
     const tekort = rondUren(contracturen - inst.tolerantie_uren - totaal)
-    return { ok: false, error: `Nog ${tekort.toLocaleString('nl-NL')} uur te verantwoorden.` }
+    return { ok: false, error: t('fout.tekort', { uren: tekort.toLocaleString(await getAppLocale()) }) }
   }
 
   // Werk-uren zonder bewakingscode zouden in Bouw7 op de ongecodeerde hoop belanden. Behalve op
@@ -657,9 +680,7 @@ export async function dienWeekIn(
   if (ongecodeerd > 0) {
     return {
       ok: false,
-      error: ongecodeerd === 1
-        ? '1 regel mist nog een project of bewakingscode.'
-        : `${ongecodeerd} regels missen nog een project of bewakingscode.`,
+      error: t('fout.ongecodeerd', { aantal: ongecodeerd }),
     }
   }
 
@@ -676,7 +697,7 @@ export async function dienWeekIn(
     if (!teamleiderId) {
       return {
         ok: false,
-        error: 'Er is niemand die je week kan goedkeuren. Vraag de beheerder om een teamleider of terugvalgoedkeurder in te stellen.',
+        error: t('fout.geenGoedkeurder'),
       }
     }
   }

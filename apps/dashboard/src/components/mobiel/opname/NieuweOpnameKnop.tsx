@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { startOpname } from '@/lib/opname/opnames'
 import { primaireKnop, ROOD } from './stijl'
 
@@ -13,6 +14,7 @@ import { primaireKnop, ROOD } from './stijl'
  * prijslijst is erger dan niet kunnen beginnen.
  */
 export default function NieuweOpnameKnop({ dossierId }: { dossierId: string }) {
+  const t = useTranslations('opname')
   const router = useRouter()
   const [bezig, setBezig] = React.useState(false)
   const [fout, setFout] = React.useState<string | null>(null)
@@ -37,7 +39,7 @@ export default function NieuweOpnameKnop({ dossierId }: { dossierId: string }) {
         disabled={bezig}
         style={{ ...primaireKnop, width: '100%', opacity: bezig ? 0.6 : 1 }}
       >
-        {bezig ? 'Bezig…' : 'Nieuwe opname starten'}
+        {bezig ? t('bezig') : t('nieuweOpnameStarten')}
       </button>
       {fout && (
         <p style={{ margin: '8px 0 0', fontSize: 13, color: ROOD, fontWeight: 600 }}>{fout}</p>

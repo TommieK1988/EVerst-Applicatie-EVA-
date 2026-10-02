@@ -3,7 +3,7 @@ import React from 'react'
 import OverzichtTabel from '@/components/overzicht/OverzichtTabel'
 import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
-import { FACTURATIE_LABELS, getDossierSubstatus } from './types'
+import { FACTURATIE_LABELS, getDossierSubstatus, opRegie } from './types'
 import { isVerlopen } from './kaart-indicatoren'
 import { berekenKaartBedrag } from './kaart-bedrag'
 import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
@@ -129,10 +129,13 @@ function Tekst({ waarde, kleur = 'var(--neutral-600)', gewicht = 400 }: { waarde
   )
 }
 
-/** Facturatiemethode zoals de gebruiker hem leest; `termijnen` heet in de interface Aangenomen. */
-function facturatieLabel(methode: string | null | undefined): string | null {
-  if (methode === 'regie' || methode === 'termijnen') return FACTURATIE_LABELS[methode]
-  return null
+/**
+ * Afrekenwijze zoals de gebruiker hem leest; `termijnen` heet in de interface Aangenomen. Via
+ * `opRegie`: de kolomwaarde 'regie' is op een opdracht pas echt als iemand hem bewust zette —
+ * zonder die regel stond hier op elke opdracht "Regie".
+ */
+function facturatieLabel(d: DossierRij): string {
+  return FACTURATIE_LABELS[opRegie(d) ? 'regie' : 'termijnen']
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -570,9 +573,9 @@ export function DossierLijst({
       standaard_zichtbaar: false,
       filterType: 'select',
       filterOpties: [FACTURATIE_LABELS.regie, FACTURATIE_LABELS.termijnen],
-      sorteerWaarde: d => d.facturatiemethode ?? '',
-      filterWaarde: d => facturatieLabel(d.facturatiemethode) ?? '',
-      render: d => <Tekst waarde={facturatieLabel(d.facturatiemethode)} />,
+      sorteerWaarde: d => facturatieLabel(d),
+      filterWaarde: d => facturatieLabel(d),
+      render: d => <Tekst waarde={facturatieLabel(d)} />,
     },
 
     // ── Datums (standaard verborgen) ────────────────────────────────────────

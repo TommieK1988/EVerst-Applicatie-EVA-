@@ -1,5 +1,8 @@
+'use client'
+
 import React from 'react'
-import { VCA_SOORT_LABEL } from '@/lib/kam/vca'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 import type { EigenGegevens, EigenBedrijfsmiddel, EigenRooster } from '@/lib/medewerker/eigen-gegevens'
 import type { BedrijfsmiddelType } from '@everts/database/platform-types'
 
@@ -15,14 +18,43 @@ import type { BedrijfsmiddelType } from '@everts/database/platform-types'
  * VCA-diploma geregistreerd hebt staan, is precies wat je moet zien.
  */
 
-const TYPE_LABEL: Record<BedrijfsmiddelType, string> = {
-  sleutel: 'Sleutel',
-  telefoon: 'Telefoon',
-  tankpas: 'Tankpas',
-  overig: 'Overig',
+type T = ReturnType<typeof useTranslations<'profiel.gegevens'>>
+
+/**
+ * Sleutel per kenmerklabel uit `lib/medewerker/eigen-gegevens` (`ZICHTBARE_KENMERKEN`).
+ * Die lijst levert het Nederlandse label, want hij wordt ook op kantoor gebruikt; hier
+ * zoeken we de vertaling erbij. Een onbekend label blijft gewoon staan.
+ */
+type KenmerkSleutel =
+  | 'sleutelnummer' | 'kopienummer' | 'toestel' | 'imei' | 'simkaart'
+  | 'kaartnummer' | 'maatschappij' | 'extraInfo'
+
+const KENMERK_SLEUTEL: Record<string, KenmerkSleutel> = {
+  Sleutelnummer: 'sleutelnummer',
+  Kopienummer: 'kopienummer',
+  Toestel: 'toestel',
+  IMEI: 'imei',
+  Simkaart: 'simkaart',
+  Kaartnummer: 'kaartnummer',
+  Maatschappij: 'maatschappij',
+  'Extra info': 'extraInfo',
 }
 
-const DAG_KORT = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
+function kenmerkLabel(t: T, label: string): string {
+  const sleutel = KENMERK_SLEUTEL[label]
+  return sleutel ? t(`kenmerk.${sleutel}`) : label
+}
+
+function typeLabel(t: T, type: BedrijfsmiddelType): string {
+  return t(`type.${type}`)
+}
+
+/** Korte dagnaam in de taal van de app; 1 = maandag (ISO), zoals `rooster.werkdagen`. */
+function dagKort(locale: string, d: number): string {
+  // 5 januari 1970 was een maandag; in UTC rekenen houdt het los van de tijdzone.
+  const datum = new Date(Date.UTC(1970, 0, 4 + d))
+  return datum.toLocaleDateString(locale, { weekday: 'short', timeZone: 'UTC' })
+}
 
 const kaartStijl: React.CSSProperties = {
   padding: 16,
@@ -40,14 +72,14 @@ const kopStijl: React.CSSProperties = {
   marginBottom: 10,
 }
 
-/** 'YYYY-MM-DD' → '3 maart 1987'. Rekent bewust niet met tijdzones. */
-function datum(waarde: string | null): string | null {
+/** 'YYYY-MM-DD' → '3 maart 1987' (in de taal van de app). Rekent bewust niet met tijdzones. */
+function datum(waarde: string | null, locale: string): string | null {
   if (!waarde) return null
   const [jaar, maand, dag] = waarde.split('-').map(Number)
   if (!jaar || !maand || !dag) return waarde
-  const maanden = ['januari', 'februari', 'maart', 'april', 'mei', 'juni',
-    'juli', 'augustus', 'september', 'oktober', 'november', 'december']
-  return `${dag} ${maanden[maand - 1]} ${jaar}`
+  return new Date(Date.UTC(jaar, maand - 1, dag)).toLocaleDateString(locale, {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  })
 }
 
 /** Postgres levert '07:30:00'; daar wil niemand de seconden van zien. */
@@ -56,12 +88,12 @@ function tijd(waarde: string): string {
 }
 
 /** [1,2,3,4,5] → 'ma t/m vr'; losse dagen → 'ma, wo, vr'. */
-function werkdagenTekst(dagen: number[]): string {
+function werkdagenTekst(dagen: number[], t: T, locale: string): string {
   if (dagen.length === 0) return '—'
   const op = [...dagen].sort((a, b) => a - b)
   const aaneengesloten = op.every((d, i) => i === 0 || d === op[i - 1] + 1)
-  const label = (d: number) => DAG_KORT[d - 1] ?? String(d)
-  if (aaneengesloten && op.length > 2) return `${label(op[0])} t/m ${label(op[op.length - 1])}`
+  const label = (d: number) => (d >= 1 && d <= 7 ? dagKort(locale, d) : String(d))
+  if (aaneengesloten && op.length > 2) return t('werkdagenReeks', { van: label(op[0]), tot: label(op[op.length - 1]) })
   return op.map(label).join(', ')
 }
 
@@ -91,28 +123,41 @@ function LegeStaat({ tekst }: { tekst: string }) {
   return <div style={{ fontSize: 13.5, color: '#6b757c', lineHeight: 1.45 }}>{tekst}</div>
 }
 
+/**
+ * Tijdvakken als opsomming in de taal van de app ("a en b", "a i b", …), met elk tijdvak
+ * heel gehouden. `Intl.ListFormat` kent het voegwoord per taal; wij vullen de delen in.
+ */
+function Pauzes({ pauzes, locale }: { pauzes: EigenRooster['pauzes']; locale: string }) {
+  const vakken = pauzes.map((p) => `${tijd(p.start)}–${tijd(p.eind)}`)
+  const delen = new Intl.ListFormat(locale, { type: 'conjunction' }).formatToParts(vakken)
+  return (
+    <>
+      {delen.map((deel, i) =>
+        deel.type === 'element'
+          ? <Heel key={i}>{deel.value}</Heel>
+          : <React.Fragment key={i}>{deel.value}</React.Fragment>,
+      )}
+    </>
+  )
+}
+
 function RoosterBlok({ rooster }: { rooster: EigenRooster }) {
-  // Nederlandse notatie: de meest voorkomende deeltijdweek is 37,5 uur, en die
-  // hoort niet als "37.50" op het scherm te staan.
-  const uren = rooster.contracturen_per_week.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
+  const t = useTranslations('profiel.gegevens')
+  const locale = useDatumLocale()
+  // Notatie van de taal van de app: de meest voorkomende deeltijdweek is 37,5 uur, en
+  // die hoort in het Nederlands niet als "37.50" op het scherm te staan.
+  const uren = rooster.contracturen_per_week.toLocaleString(locale, { maximumFractionDigits: 2 })
   return (
     <div style={kaartStijl}>
-      <div style={kopStijl}>Werkrooster</div>
+      <div style={kopStijl}>{t('werkrooster')}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)' }}>
-        {werkdagenTekst(rooster.werkdagen)} · {tijd(rooster.dagstart)}–{tijd(rooster.dageind)}
+        {werkdagenTekst(rooster.werkdagen, t, locale)} · {tijd(rooster.dagstart)}–{tijd(rooster.dageind)}
       </div>
       <div style={{ marginTop: 8 }}>
-        <Regel label="Contracturen" waarde={`${uren} uur per week`} />
+        <Regel label={t('contracturen')} waarde={t('urenPerWeek', { uren })} />
         <Regel
-          label={rooster.pauzes.length === 1 ? 'Pauze' : 'Pauzes'}
-          waarde={rooster.pauzes.length > 0
-            ? rooster.pauzes.map((p, i) => (
-                <React.Fragment key={`${p.start}-${p.eind}`}>
-                  {i > 0 && ' en '}
-                  <Heel>{tijd(p.start)}–{tijd(p.eind)}</Heel>
-                </React.Fragment>
-              ))
-            : null}
+          label={t('pauze', { aantal: rooster.pauzes.length })}
+          waarde={rooster.pauzes.length > 0 ? <Pauzes pauzes={rooster.pauzes} locale={locale} /> : null}
         />
       </div>
     </div>
@@ -120,18 +165,20 @@ function RoosterBlok({ rooster }: { rooster: EigenRooster }) {
 }
 
 function BedrijfsmiddelRegel({ middel }: { middel: EigenBedrijfsmiddel }) {
+  const t = useTranslations('profiel.gegevens')
+  const locale = useDatumLocale()
   const details = [
-    ...middel.kenmerken.map((k) => `${k.label}: ${k.waarde}`),
-    middel.uitgegeven_op ? `Uitgegeven ${datum(middel.uitgegeven_op)}` : null,
+    ...middel.kenmerken.map((k) => `${kenmerkLabel(t, k.label)}: ${k.waarde}`),
+    middel.uitgegeven_op ? t('uitgegeven', { datum: datum(middel.uitgegeven_op, locale) ?? '' }) : null,
   ].filter(Boolean)
 
   return (
     <div style={{ padding: '9px 0', borderTop: '1px solid var(--border)' }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-        {middel.omschrijving || TYPE_LABEL[middel.type]}
+        {middel.omschrijving || typeLabel(t, middel.type)}
       </div>
       <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 2, lineHeight: 1.45 }}>
-        {middel.omschrijving ? `${TYPE_LABEL[middel.type]}${details.length ? ' · ' : ''}` : ''}
+        {middel.omschrijving ? `${typeLabel(t, middel.type)}${details.length ? ' · ' : ''}` : ''}
         {details.join(' · ')}
       </div>
     </div>
@@ -139,35 +186,39 @@ function BedrijfsmiddelRegel({ middel }: { middel: EigenBedrijfsmiddel }) {
 }
 
 function VcaBlok({ vca }: { vca: NonNullable<EigenGegevens['vca']> }) {
+  const t = useTranslations('profiel.gegevens.vca')
+  const locale = useDatumLocale()
   // Kleur volgt `bepaalVcaStatus()`, zodat mobiel en het KAM-overzicht niet uiteenlopen.
   const opmaak =
-    vca.status === 'verlopen' ? { kleur: '#b42318', rand: '#f0c8c2', tekst: 'Vernieuwen nodig' }
-    : vca.status === 'verloopt_binnenkort' ? { kleur: '#b54708', rand: '#f5d9b0', tekst: `Verloopt over ${vca.dagen_tot_verval} dagen` }
-    : vca.status === 'onbekend' ? { kleur: '#6b757c', rand: 'var(--border)', tekst: 'Geen einddatum bekend' }
-    : { kleur: '#027a48', rand: '#b7e0c6', tekst: 'Geldig' }
+    vca.status === 'verlopen' ? { kleur: '#b42318', rand: '#f0c8c2', tekst: t('vernieuwen') }
+    : vca.status === 'verloopt_binnenkort' ? { kleur: '#b54708', rand: '#f5d9b0', tekst: t('verlooptOver', { dagen: vca.dagen_tot_verval ?? 0 }) }
+    : vca.status === 'onbekend' ? { kleur: '#6b757c', rand: 'var(--border)', tekst: t('geenEinddatum') }
+    : { kleur: '#027a48', rand: '#b7e0c6', tekst: t('geldig') }
 
   // "Geldig tot" bij een verlopen diploma spreekt zichzelf tegen.
-  const kopregel = !vca.geldig_tot ? 'Einddatum onbekend'
-    : vca.status === 'verlopen' ? `Verlopen op ${datum(vca.geldig_tot)}`
-    : `Geldig tot ${datum(vca.geldig_tot)}`
+  const kopregel = !vca.geldig_tot ? t('einddatumOnbekend')
+    : vca.status === 'verlopen' ? t('verlopenOp', { datum: datum(vca.geldig_tot, locale) ?? '' })
+    : t('geldigTot', { datum: datum(vca.geldig_tot, locale) ?? '' })
 
   return (
     <div style={{ ...kaartStijl, borderColor: opmaak.rand }}>
-      <div style={kopStijl}>VCA-diploma</div>
+      <div style={kopStijl}>{t('titel')}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)' }}>{kopregel}</div>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: opmaak.kleur }}>{opmaak.tekst}</span>
       </div>
       <div style={{ marginTop: 8 }}>
-        <Regel label="Soort" waarde={vca.soort ? VCA_SOORT_LABEL[vca.soort] : null} />
-        <Regel label="Diplomanummer" waarde={vca.diplomanummer} />
-        <Regel label="Behaald op" waarde={datum(vca.behaald_op)} />
+        <Regel label={t('soort')} waarde={vca.soort ? t(`soorten.${vca.soort}`) : null} />
+        <Regel label={t('diplomanummer')} waarde={vca.diplomanummer} />
+        <Regel label={t('behaaldOp')} waarde={datum(vca.behaald_op, locale)} />
       </div>
     </div>
   )
 }
 
 export default function MedewerkerGegevensBlok({ gegevens }: { gegevens: EigenGegevens }) {
+  const t = useTranslations('profiel')
+  const locale = useDatumLocale()
   const woonplaatsregel = [gegevens.adres_postcode, gegevens.adres_plaats].filter(Boolean)
   // Twee regels, zoals op een envelop: straat boven, postcode en plaats eronder.
   // Als één string brak de postcode middenin af op een smal scherm.
@@ -191,46 +242,46 @@ export default function MedewerkerGegevensBlok({ gegevens }: { gegevens: EigenGe
     <>
       {persoonlijk && (
         <div style={kaartStijl}>
-          <div style={{ ...kopStijl, marginBottom: 2 }}>Persoonlijk</div>
-          <Regel label="E-mail" waarde={gegevens.email} />
-          <Regel label="Telefoon" waarde={gegevens.telefoon} />
-          <Regel label="Geboortedatum" waarde={datum(gegevens.geboortedatum)} />
-          <Regel label="Adres" waarde={adres || null} />
+          <div style={{ ...kopStijl, marginBottom: 2 }}>{t('gegevens.persoonlijk')}</div>
+          <Regel label={t('gegevens.email')} waarde={gegevens.email} />
+          <Regel label={t('gegevens.telefoon')} waarde={gegevens.telefoon} />
+          <Regel label={t('gegevens.geboortedatum')} waarde={datum(gegevens.geboortedatum, locale)} />
+          <Regel label={t('gegevens.adres')} waarde={adres || null} />
         </div>
       )}
 
       {werk && (
         <div style={kaartStijl}>
-          <div style={{ ...kopStijl, marginBottom: 2 }}>Werk</div>
-          <Regel label="Functie" waarde={gegevens.functie} />
-          <Regel label="Afdeling" waarde={gegevens.afdeling} />
-          <Regel label="Ploeg" waarde={gegevens.ploeg} />
-          <Regel label="In dienst sinds" waarde={datum(gegevens.in_dienst_vanaf)} />
+          <div style={{ ...kopStijl, marginBottom: 2 }}>{t('gegevens.werk')}</div>
+          <Regel label={t('gegevens.functie')} waarde={gegevens.functie} />
+          <Regel label={t('gegevens.afdeling')} waarde={gegevens.afdeling} />
+          <Regel label={t('gegevens.ploeg')} waarde={gegevens.ploeg} />
+          <Regel label={t('gegevens.inDienstSinds')} waarde={datum(gegevens.in_dienst_vanaf, locale)} />
         </div>
       )}
 
       {gegevens.rooster && <RoosterBlok rooster={gegevens.rooster} />}
 
       <div style={kaartStijl}>
-        <div style={kopStijl}>Bedrijfsmiddelen</div>
+        <div style={kopStijl}>{t('gegevens.bedrijfsmiddelen')}</div>
         {gegevens.bedrijfsmiddelen.length > 0
           ? gegevens.bedrijfsmiddelen.map((b) => <BedrijfsmiddelRegel key={b.id} middel={b} />)
-          : <LegeStaat tekst="Er staan geen sleutels, telefoons of tankpassen op jouw naam." />}
+          : <LegeStaat tekst={t('gegevens.geenBedrijfsmiddelen')} />}
       </div>
 
       {gegevens.vca
         ? <VcaBlok vca={gegevens.vca} />
         : (
           <div style={kaartStijl}>
-            <div style={kopStijl}>VCA-diploma</div>
-            <LegeStaat tekst="Er is geen VCA-diploma geregistreerd. Heb je er wel een? Geef het door aan KAM, dan wordt het vastgelegd." />
+            <div style={kopStijl}>{t('gegevens.vca.titel')}</div>
+            <LegeStaat tekst={t('gegevens.vca.geen')} />
           </div>
         )}
 
       {/* Alles hierboven is alleen-lezen. Zonder deze regel gaan mensen zoeken naar
           een bewerkknop die er niet is — en melden ze een fout adres nergens. */}
       <div style={{ fontSize: 12.5, color: '#6b757c', lineHeight: 1.5, padding: '0 4px' }}>
-        Klopt er iets niet? Geef het door aan de administratie; zij passen het aan.
+        {t('kloptNiet')}
       </div>
     </>
   )

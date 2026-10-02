@@ -1,12 +1,19 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import { useVertaling } from '@/components/vertalen/useVertaling'
 import type { KwaliteitFoto, KwaliteitWaarneming } from '@everts/database/kwaliteit-types'
 import { KWALITEIT_WAARNEMING_SUGGESTIES } from '@everts/database/kwaliteit-types'
 import { voegWaarnemingToe, verwijderWaarneming } from '@/lib/kwaliteit/inspecties'
 import FotoStrook, { type StrookFoto } from './FotoStrook'
 import LocatieKiezer from './LocatieKiezer'
 import { GRIJS, GROEN, primaireKnop, RAND, ROOD, TEKST, veld, ZACHT } from './stijl'
+import { suggestieSleutel, WAARNEMING_SLEUTEL } from './suggesties'
+
+/** Vinkje voor een positieve waarneming; geen tekst. */
+const VINK = '✓'
 
 /**
  * Positieve kwaliteitswaarneming per discipline (§37).
@@ -33,6 +40,10 @@ export default function WaarnemingBlok({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
+  const locale = useDatumLocale()
+  // Disciplinenaam komt uit de bibliotheek van kantoor.
+  const naam = useVertaling(disciplineNaam)
   const [open, setOpen] = React.useState(false)
   const [omschrijving, setOmschrijving] = React.useState('')
   const [locatie, setLocatie] = React.useState('')
@@ -40,7 +51,7 @@ export default function WaarnemingBlok({
   const [fout, setFout] = React.useState<string | null>(null)
 
   async function bewaar() {
-    if (!omschrijving.trim()) { setFout('Geef een korte omschrijving.'); return }
+    if (!omschrijving.trim()) { setFout(t('waarneming.foutLeeg')); return }
     setBezig(true); setFout(null)
     const res = await voegWaarnemingToe(inspectieId, {
       disciplineCode, locatie: locatie || null, omschrijving: omschrijving.trim(),
@@ -74,7 +85,7 @@ export default function WaarnemingBlok({
             fontSize: 13, fontWeight: 700, cursor: 'pointer',
           }}
         >
-          + Positieve kwaliteitswaarneming
+          {t('waarneming.knop')}
         </button>
       )}
 
@@ -84,7 +95,7 @@ export default function WaarnemingBlok({
           background: 'rgba(0,148,57,0.05)',
         }}>
           <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: GROEN }}>
-            Wat gaat er goed bij {disciplineNaam.toLowerCase()}?
+            {t('waarneming.watGaatGoed', { discipline: naam.tekst.toLocaleLowerCase(locale) })}
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
@@ -100,7 +111,8 @@ export default function WaarnemingBlok({
                   color: omschrijving === s ? '#fff' : GRIJS, cursor: 'pointer',
                 }}
               >
-                {s}
+                {/* Opgeslagen wordt de Nederlandse tekst; de knop toont de vertaling. */}
+                {t(`waarnemingSuggestie.${WAARNEMING_SLEUTEL[s]}`)}
               </button>
             ))}
           </div>
@@ -108,7 +120,7 @@ export default function WaarnemingBlok({
           <input
             value={omschrijving}
             onChange={e => setOmschrijving(e.target.value)}
-            placeholder="Of typ zelf een korte omschrijving"
+            placeholder={t('waarneming.omschrijvingPlaceholder')}
             style={{ ...veld, marginBottom: 10 }}
           />
 
@@ -125,7 +137,7 @@ export default function WaarnemingBlok({
                 background: 'transparent', color: GRIJS, fontSize: 14, fontWeight: 600, cursor: 'pointer',
               }}
             >
-              Annuleren
+              {t('waarneming.annuleren')}
             </button>
             <button
               type="button"
@@ -133,12 +145,12 @@ export default function WaarnemingBlok({
               disabled={bezig}
               style={{ ...primaireKnop, flex: 1, padding: '11px 14px', fontSize: 14 }}
             >
-              {bezig ? 'Bezig…' : 'Opslaan'}
+              {bezig ? t('bezig') : t('waarneming.opslaan')}
             </button>
           </div>
 
           <p style={{ margin: '8px 0 0', fontSize: 11, color: ZACHT }}>
-            Foto toevoegen kan zodra de waarneming is opgeslagen.
+            {t('waarneming.fotoNaOpslaan')}
           </p>
           {fout && <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD }}>{fout}</p>}
         </div>
@@ -156,6 +168,8 @@ function WaarnemingKaart({
   bewerkbaar: boolean
   onGewijzigd: () => void
 }) {
+  const t = useTranslations('kwaliteit')
+  const sleutel = suggestieSleutel(WAARNEMING_SLEUTEL, waarneming.omschrijving)
   const [lokaal, setLokaal] = React.useState<StrookFoto[]>(fotos.map(f => ({ id: f.id, url: f.url })))
 
   return (
@@ -166,7 +180,7 @@ function WaarnemingKaart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
         <div>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: TEKST }}>
-            ✓ {waarneming.omschrijving}
+            {VINK} {sleutel ? t(`waarnemingSuggestie.${sleutel}`) : waarneming.omschrijving}
           </p>
           {waarneming.locatie && (
             <p style={{ margin: '2px 0 0', fontSize: 12, color: GRIJS }}>{waarneming.locatie}</p>
@@ -178,7 +192,7 @@ function WaarnemingKaart({
             onClick={async () => { await verwijderWaarneming(waarneming.id, inspectieId); onGewijzigd() }}
             style={{ background: 'none', border: 'none', color: ROOD, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, flexShrink: 0 }}
           >
-            Verwijderen
+            {t('verwijderen')}
           </button>
         )}
       </div>

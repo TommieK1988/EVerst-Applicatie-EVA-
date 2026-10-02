@@ -1,5 +1,6 @@
 'use client'
 import * as React from 'react'
+import { useTranslations } from 'next-intl'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +24,9 @@ import { Input, Textarea } from './input'
  *   if (!(await bevestig({ titel: 'Regel verwijderen?', destructief: true }))) return
  *
  * De provider hangt in de root-layout, dus hij is beschikbaar op /(platform), /m en
- * de publieke routes. Ontbreekt hij toch (bijv. een los gerenderde boom in een test),
+ * de publieke routes. `/m` zet er binnen zijn taalprovider nog een tweede omheen, zodat
+ * de standaardknoppen daar in de taal van de medewerker staan; `useDialogen()` pakt
+ * altijd de dichtstbijzijnde provider. Ontbreekt hij toch (bijv. een los gerenderde boom in een test),
  * dan valt elke functie terug op de native variant — een knop mag nooit stukgaan
  * omdat de context mist.
  */
@@ -113,6 +116,9 @@ export function useBevestig(): DialoogApi['bevestig'] {
 }
 
 export function DialoogProvider({ children }: { children: React.ReactNode }) {
+  // Standaardknopteksten. Kantoor krijgt `dialogen` in het Nederlands mee via de
+  // root-layout (GEDEELDE_NAAMRUIMTES); in /m staan ze in de taal van de app.
+  const t = useTranslations('dialogen')
   const [verzoek, setVerzoek] = React.useState<Verzoek | null>(null)
   const [open, setOpen] = React.useState(false)
   const [tekst, setTekst] = React.useState('')
@@ -214,25 +220,25 @@ export function DialoogProvider({ children }: { children: React.ReactNode }) {
             <AlertDialogFooter>
               {verzoek.soort === 'melding' ? (
                 <AlertDialogAction variant="primary" onClick={() => afronden(true)}>
-                  {verzoek.opties.sluitLabel ?? 'Oké'}
+                  {verzoek.opties.sluitLabel ?? t('oke')}
                 </AlertDialogAction>
               ) : (
                 <>
                   <AlertDialogCancel onClick={() => afronden(false)}>
-                    {verzoek.soort === 'bevestig' ? (verzoek.opties.annuleerLabel ?? 'Annuleren') : 'Annuleren'}
+                    {verzoek.soort === 'bevestig' ? (verzoek.opties.annuleerLabel ?? t('annuleren')) : t('annuleren')}
                   </AlertDialogCancel>
                   {verzoek.soort === 'bevestig' ? (
                     <AlertDialogAction
                       variant={verzoek.opties.destructief ? 'destructive' : 'primary'}
                       onClick={() => afronden(true)}
                     >
-                      {verzoek.opties.bevestigLabel ?? 'Bevestigen'}
+                      {verzoek.opties.bevestigLabel ?? t('bevestigen')}
                     </AlertDialogAction>
                   ) : (
                     // Geen AlertDialogAction: die sluit altijd, ook wanneer een
                     // verplicht veld nog leeg is.
                     <Button variant="primary" disabled={tekstGeblokkeerd} onClick={() => afronden(true, tekst)}>
-                      {verzoek.opties.bevestigLabel ?? 'Opslaan'}
+                      {verzoek.opties.bevestigLabel ?? t('opslaan')}
                     </Button>
                   )}
                 </>

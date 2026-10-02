@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getAppVertaler } from '@/i18n/server'
 import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
@@ -7,7 +8,7 @@ import {
   getMijnMaterieel, getRecentToegevoegd, getZonderSticker, telZonderSticker,
   type MaterieelKort,
 } from '@/lib/materieel/zoeken'
-import { CATEGORIE_LABELS, STATUS_META } from '@/lib/materieel/types'
+import { STATUS_META } from '@/lib/materieel/types'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MaterieelZoek from '@/components/mobiel/materieel/MaterieelZoek'
 import MaterieelToevoegKnop from '@/components/mobiel/materieel/MaterieelToevoegKnop'
@@ -50,21 +51,23 @@ export default async function MobielMaterieelPage() {
   const mijnIds = new Set(mijn.map((m) => m.id))
   const overig = recent.filter((r) => !mijnIds.has(r.id))
 
+  const t = await getAppVertaler('materieel')
   const fotos = await signPaden(
     [...mijn, ...overig, ...teStickeren].map((o) => o.hoofdfoto_path).filter(Boolean) as string[],
   )
 
   return (
     <>
-      <AppHeader title="Materieel" sub="Zoeken en toevoegen" backHref="/m" />
+      <AppHeader title={t('titel')} sub={t('start.sub')} backHref="/m" />
       <div style={{ padding: 14 }}>
         <MaterieelZoek
           boven={
             <Lijst
-              titel="Toegewezen aan mij"
+              titel={t('start.toegewezenAanMij')}
               items={mijn}
               fotos={fotos}
-              leeg="Er staat nog niets op jouw naam."
+              leeg={t('start.nietsOpNaam')}
+              t={t}
               eersteBlok
             />
           }
@@ -74,15 +77,16 @@ export default async function MobielMaterieelPage() {
               /* Werkvoorraad bij het stickeren van een bestaande inventaris: kantoor
                  voert in, de bus plakt. Open je zo'n object, dan zit de knop
                  "Sticker koppelen" op het paspoort. */
-              titel={`Nog geen sticker (${teStickerenTotaal})`}
+              titel={t('start.nogGeenSticker', { aantal: teStickerenTotaal })}
               items={teStickeren}
               fotos={fotos}
               leeg=""
+              t={t}
             />
           )}
 
           {toonRecent && overig.length > 0 && (
-            <Lijst titel="Recent door mij toegevoegd" items={overig} fotos={fotos} leeg="" />
+            <Lijst titel={t('start.recentToegevoegd')} items={overig} fotos={fotos} leeg="" t={t} />
           )}
         </MaterieelZoek>
       </div>
@@ -92,8 +96,10 @@ export default async function MobielMaterieelPage() {
   )
 }
 
+type Vertaler = Awaited<ReturnType<typeof getAppVertaler<'materieel'>>>
+
 function Lijst({
-  titel, items, fotos, leeg, eersteBlok = false,
+  titel, items, fotos, leeg, eersteBlok = false, t,
 }: {
   titel: string
   items: MaterieelKort[]
@@ -101,6 +107,7 @@ function Lijst({
   leeg: string
   /** Bovenaan het scherm: geen extra ruimte boven de eerste kop. */
   eersteBlok?: boolean
+  t: Vertaler
 }) {
   return (
     <div style={{ marginTop: eersteBlok ? 0 : 22 }}>
@@ -135,14 +142,14 @@ function Lijst({
                     {o.omschrijving}
                   </span>
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--fg-muted)' }}>
-                    {[CATEGORIE_LABELS[o.categorie], o.merk, o.type].filter(Boolean).join(' · ')}
+                    {[t(`categorie.${o.categorie}`), o.merk, o.type].filter(Boolean).join(' · ')}
                   </span>
                 </span>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
                   color: status.kleur, background: `${status.kleur}1a`, flexShrink: 0,
                 }}>
-                  {status.label}
+                  {t(`status.${o.status}`)}
                 </span>
               </Link>
             )

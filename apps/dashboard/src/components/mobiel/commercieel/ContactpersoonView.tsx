@@ -18,11 +18,21 @@ import React from 'react'
 import Link from 'next/link'
 import { Building2, Mail, Phone } from 'lucide-react'
 import type { ContactpersoonBeeld } from '@/lib/commercie/contactpersoon-beeld'
+import { totaalExclBtw } from '@/lib/commercie/contactpersoon-groepen'
 import KlapBlok from './KlapBlok'
+import KengetallenRij from './KengetallenRij'
+import { useServicedeskBedragen } from './servicedesk-bedragen'
 import DossierRegel from './DossierRegel'
 import NotitieLijst from './NotitieLijst'
 import VastleggenSheet from './VastleggenSheet'
 import { GRIJS, OPPERVLAK, RAND, TEKST, lijstRij } from './stijl'
+
+const DOSSIER_BLOKKEN = [
+  { sleutel: 'aanvragen',   titel: 'Aanvragen',   leeg: 'Geen aanvragen van deze persoon.' },
+  { sleutel: 'offertes',    titel: 'Offertes',    leeg: 'Er staat geen offerte open bij deze persoon.' },
+  { sleutel: 'opdrachten',  titel: 'Opdrachten',  leeg: 'Geen opdrachten op zijn naam.' },
+  { sleutel: 'servicedesk', titel: 'Servicedesk', leeg: 'Geen servicedeskwerk op zijn naam.' },
+] as const
 
 const GESLACHT_LABEL: Record<string, string> = {
   man: 'Man', vrouw: 'Vrouw', overig: 'Overig',
@@ -104,6 +114,10 @@ export default function ContactpersoonView({
   // Open je van hieruit een dossier, dan hoort de terugknop naar deze kaart te wijzen.
   const terugNaar = `/m/commercieel/cp/${beeld.id}`
 
+  // Lopende servicedeskbonnen krijgen hun bedrag na de eerste weergave (zie de hook).
+  const servicedesk = useServicedeskBedragen(beeld.dossiers.servicedesk)
+  const groepen = { ...beeld.dossiers, servicedesk: servicedesk.dossiers }
+
   return (
     <>
       {!beeld.actief && (
@@ -123,6 +137,10 @@ export default function ContactpersoonView({
           label="Mailen" Icon={Mail} uit={!beeld.email}
         />
       </div>
+
+      {/* Zelfde scoreblok als op het klantbeeld, over zijn eigen dossiers. Omzet staat er niet
+          bij: die is per opdrachtgever geboekt, niet per persoon. */}
+      <KengetallenRij score={beeld.score} />
 
       <div style={{ padding: '16px 16px 16px' }}>
         {/* Waar hij werkt — bovenaan, want dat is de brug naar het klantbeeld. */}
@@ -208,15 +226,30 @@ export default function ContactpersoonView({
           </div>
         )}
 
-        <KlapBlok
-          titel="Dossiers op zijn naam"
-          aantal={beeld.dossiers.length}
-          leegTekst="Er staat geen dossier op deze contactpersoon."
-        >
-          {beeld.dossiers.map(d => (
-            <DossierRegel key={d.id} dossier={d} toonJaar terugNaar={terugNaar} />
-          ))}
-        </KlapBlok>
+        {/* Per soort, zoals het gesprek loopt: wat vraagt hij, wat ligt er bij hem, wat doen we
+            voor hem. Het totaal staat in de kop, zodat je zonder uitklappen ziet wat er bij deze
+            persoon in omgaat. Wat niet doorging staat apart en telt nergens mee. */}
+        {DOSSIER_BLOKKEN.map(({ sleutel, titel, leeg }) => (
+          <KlapBlok
+            key={sleutel}
+            titel={titel}
+            aantal={groepen[sleutel].length}
+            totaal={sleutel === 'servicedesk' && !servicedesk.klaar ? null : totaalExclBtw(groepen[sleutel])}
+            leegTekst={leeg}
+          >
+            {groepen[sleutel].map(d => (
+              <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} toonJaar terugNaar={terugNaar} />
+            ))}
+          </KlapBlok>
+        ))}
+
+        {beeld.dossiers.nietDoorgegaan.length > 0 && (
+          <KlapBlok titel="Vervallen/afgewezen" aantal={beeld.dossiers.nietDoorgegaan.length}>
+            {beeld.dossiers.nietDoorgegaan.map(d => (
+              <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} toonJaar terugNaar={terugNaar} />
+            ))}
+          </KlapBlok>
+        )}
 
         <KlapBlok
           titel="Gesprekken met hem"

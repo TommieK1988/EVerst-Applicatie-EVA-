@@ -12,10 +12,11 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
+import { getAppVertaler } from '@/i18n/server'
 import { eigenWeek, bewerkbaar } from './week-guard'
 import { getUrenInstellingen } from './instellingen'
 import {
-  berekenKmBedrag, bonVerplicht, controleerOnkosten, isOnkostenSoort, isVervoermiddel,
+  berekenKmBedrag, bonVerplicht, onkostenBezwaar, isOnkostenSoort, isVervoermiddel,
   rekentPerKm, type Vervoermiddel,
 } from './onkosten'
 import { ONKOSTEN_BUCKET, bonExtensie } from './bonnen'
@@ -36,7 +37,9 @@ export async function voegOnkostenToe(
   formData: FormData,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { medewerker, week, supabase } = await eigenWeek(weekId)
-  if (!bewerkbaar(week.status)) return { ok: false, error: 'Deze week is al ingediend.' }
+  // Foutteksten in de taal van de app: deze actie draait alleen vanuit EVA Mobiel.
+  const t = await getAppVertaler('uren')
+  if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
   const datum = String(formData.get('datum') ?? '')
   const soortRuw = formData.get('soort')
@@ -45,8 +48,8 @@ export async function voegOnkostenToe(
   const bon = formData.get('bon')
   const bestand = bon instanceof File && bon.size > 0 ? bon : null
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return { ok: false, error: 'Ongeldige datum.' }
-  if (!isOnkostenSoort(soortRuw)) return { ok: false, error: 'Kies een soort kosten.' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return { ok: false, error: t('fout.ongeldigeDatum') }
+  if (!isOnkostenSoort(soortRuw)) return { ok: false, error: t('fout.kiesSoort') }
   const soort = soortRuw
   const vervoermiddel: Vervoermiddel | null = isVervoermiddel(vervoerRuw) ? vervoerRuw : null
 
@@ -56,10 +59,10 @@ export async function voegOnkostenToe(
   const km = ruweKm == null ? null : Math.round(ruweKm * 10) / 10
   const ingevuldBedrag = getal(formData.get('bedrag'))
 
-  const bezwaar = controleerOnkosten({
+  const bezwaar = onkostenBezwaar({
     soort, vervoermiddel, km, bedrag: ingevuldBedrag, heeftBon: Boolean(bestand),
   })
-  if (bezwaar) return { ok: false, error: bezwaar }
+  if (bezwaar) return { ok: false, error: t(`onkosten.bezwaar.${bezwaar}`) }
 
   // Het bedrag komt bij auto en bromfiets uit de instellingen, nooit uit de invoer: anders zou
   // een aangepast scherm de afgesproken kilometervergoeding stilzwijgend kunnen omzeilen.
@@ -79,7 +82,7 @@ export async function voegOnkostenToe(
     const { error: uploadFout } = await supabase.storage
       .from(ONKOSTEN_BUCKET)
       .upload(pad, buffer, { contentType: bestand.type || 'image/jpeg', upsert: false })
-    if (uploadFout) return { ok: false, error: `Foto opslaan mislukt: ${uploadFout.message}` }
+    if (uploadFout) return { ok: false, error: t('fout.fotoOpslaan', { fout: uploadFout.message }) }
     bonPad = pad
   }
 
@@ -117,21 +120,22 @@ export async function verwijderOnkosten(
   onkostenId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const medewerker = await vereisSessie()
+  const t = await getAppVertaler('uren')
   const supabase = createAdminClient()
   const { data: rij } = await supabase
     .from('uren_onkosten')
     .select('id, medewerker_id, week_id, bon_pad')
     .eq('id', onkostenId)
     .maybeSingle()
-  if (!rij) return { ok: false, error: 'Regel niet gevonden.' }
-  if (rij.medewerker_id !== medewerker.id) return { ok: false, error: 'Dit is niet jouw regel.' }
+  if (!rij) return { ok: false, error: t('fout.regelNietGevonden') }
+  if (rij.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
 
   // De weekstatus apart opvragen en niet als join: een join dwingt hier een any-cast af, en
   // een tweede eenvoudige query leest net zo goed.
   const { data: week } = await supabase
     .from('uren_weken').select('status').eq('id', rij.week_id).maybeSingle()
   if (!week || !bewerkbaar(week.status)) {
-    return { ok: false, error: 'Deze week is al ingediend.' }
+    return { ok: false, error: t('fout.weekAlIngediend') }
   }
 
   const { error } = await supabase.from('uren_onkosten').delete().eq('id', onkostenId)

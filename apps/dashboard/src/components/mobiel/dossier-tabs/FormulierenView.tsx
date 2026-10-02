@@ -1,7 +1,9 @@
 import React from 'react'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { createAdminClient } from '@everts/database/server'
 import { format, parseISO } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { nl, pl, ta } from 'date-fns/locale'
+import { getAppTaal, getAppVertaler } from '@/i18n/server'
 
 /**
  * Mobiele Formulieren-tab: de formulier-inzendingen van dit dossier (read-only
@@ -11,15 +13,21 @@ import { nl } from 'date-fns/locale'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-const STATUS: Record<string, { label: string; kleur: string }> = {
-  concept: { label: 'Concept', kleur: '#9aa4ab' },
-  ingediend: { label: 'Ingediend', kleur: '#009439' },
-  goedgekeurd: { label: 'Goedgekeurd', kleur: '#009439' },
-  afgekeurd: { label: 'Afgekeurd', kleur: '#b42318' },
+// Labels staan in de taalbestanden (`dossiertabs.formulieren.status.*`).
+const STATUS: Record<string, { sleutel: 'concept' | 'ingediend' | 'goedgekeurd' | 'afgekeurd'; kleur: string }> = {
+  concept: { sleutel: 'concept', kleur: '#9aa4ab' },
+  ingediend: { sleutel: 'ingediend', kleur: '#009439' },
+  goedgekeurd: { sleutel: 'goedgekeurd', kleur: '#009439' },
+  afgekeurd: { sleutel: 'afgekeurd', kleur: '#b42318' },
 }
+
+const DATE_FNS = { nl, pl, ta }
+const GRIJS = '#9aa4ab'
+const DATUMPATROON = 'd MMM yyyy'
 
 export default async function FormulierenView({ dossierId }: { dossierId: string }) {
   const supabase = db()
+  const [t, taal] = await Promise.all([getAppVertaler('dossiertabs'), getAppTaal()])
   const { data } = await supabase
     .from('form_inzendingen')
     .select('id, status, aangemaakt_op, ingediend_op, template:template_id ( naam )')
@@ -32,7 +40,7 @@ export default async function FormulierenView({ dossierId }: { dossierId: string
   if (inzendingen.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '40px 16px', fontSize: 14 }}>
-        Nog geen formulieren voor dit dossier.
+        {t('formulieren.geen')}
       </div>
     )
   }
@@ -40,10 +48,11 @@ export default async function FormulierenView({ dossierId }: { dossierId: string
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {inzendingen.map((i: any) => {
-        const st = STATUS[i.status as string] ?? { label: i.status, kleur: '#9aa4ab' }
+        const def = STATUS[i.status as string]
+        const st = { label: def ? t(`formulieren.status.${def.sleutel}`) : i.status, kleur: def?.kleur ?? GRIJS }
         const datum = i.ingediend_op ?? i.aangemaakt_op
         let datumLabel = ''
-        try { datumLabel = datum ? format(parseISO(datum), 'd MMM yyyy', { locale: nl }) : '' } catch {}
+        try { datumLabel = datum ? format(parseISO(datum), DATUMPATROON, { locale: DATE_FNS[taal] }) : '' } catch {}
 
         return (
           <div key={i.id} style={{
@@ -53,7 +62,7 @@ export default async function FormulierenView({ dossierId }: { dossierId: string
           }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
-                {i.template?.naam ?? 'Formulier'}
+                {i.template?.naam ? <VertaalbareTekst tekst={i.template.naam} label={false} /> : t('formulieren.formulier')}
               </div>
               {datumLabel && <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>{datumLabel}</div>}
             </div>

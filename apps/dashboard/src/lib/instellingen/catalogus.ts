@@ -62,6 +62,14 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
         guard: { module: 'instellingen', niveau: 'beheren' },
         synoniemen: ['sharepoint', 'map', 'bestanden', 'voorbeeld', 'standaard', 'submap', 'projectmap'],
       },
+      {
+        href: '/instellingen/bestandssoorten',
+        titel: 'Bestandssoorten',
+        omschrijving: 'De soorten in de kolom Soort van de Bestanden-tab, en de trefwoorden waarmee EVA ze zelf herkent.',
+        module: 'instellingen',
+        guard: { module: 'instellingen', niveau: 'beheren' },
+        synoniemen: ['soort', 'bestandstype', 'documentsoort', 'bestanden', 'trefwoord', 'tekening', 'offerte'],
+      },
     ],
   },
   {

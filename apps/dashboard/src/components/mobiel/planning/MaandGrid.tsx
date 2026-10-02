@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { addMonths, format, isSameMonth, isToday, subMonths } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { addMonths, isSameMonth, isToday, subMonths } from 'date-fns'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 import {
   MAX_STIPPEN, dagSleutel, isFeestdag, maandGridDagen, stipKleuren,
   type AgendaItem,
@@ -12,6 +13,11 @@ const GROEN = '#009439'
 const RAND = '#e3e8ea'
 const ZACHT = '#9aa4ab'
 const BUITEN = '#c3cbd0'
+const DONKER = '#161b20'
+const ROOD = '#dc2626'
+const TEKST = 'var(--fg)'
+const GEEN = 'transparent'
+const WIT = '#fff'
 
 const BALK_H = 48
 const KOP_H = 22
@@ -19,7 +25,11 @@ const RIJ_H = 52
 /** Zes vaste rijen: zie `maandGridDagen` — een wisselend aantal weken laat de pagina springen. */
 export const GRID_H = BALK_H + KOP_H + RIJ_H * 6
 
-const DAGNAMEN = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo']
+/** Korte weekdagnamen in de taal van de app, maandag eerst (5 januari 2026 is een maandag). */
+function dagnamen(locale: string): string[] {
+  const opmaak = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+  return Array.from({ length: 7 }, (_, i) => opmaak.format(new Date(2026, 0, 5 + i, 12)))
+}
 
 /** Vanaf hier telt een beweging als richting; daaronder is het nog een tik. */
 const RICHTING_DREMPEL = 8
@@ -42,6 +52,9 @@ type Props = {
 export default function MaandGrid({
   peil, geselecteerd, perDag, bezig, onKiesDag, onWisselMaand, onVandaag,
 }: Props) {
+  const t = useTranslations('planning')
+  const locale = useDatumLocale()
+  const DAGNAMEN = useMemo(() => dagnamen(locale), [locale])
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [dx, setDx] = useState(0)
   const [animatie, setAnimatie] = useState(false)
@@ -130,7 +143,7 @@ export default function MaandGrid({
     onKiesDag(dag)
   }
 
-  const maandNaam = format(peil, 'LLLL yyyy', { locale: nl })
+  const maandNaam = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(peil)
   const toonVandaag = !isSameMonth(peil, new Date()) || geselecteerd !== dagSleutel(new Date())
 
   return (
@@ -160,11 +173,11 @@ export default function MaandGrid({
                 WebkitTapHighlightColor: 'transparent', fontFamily: 'inherit',
               }}
             >
-              Vandaag
+              {t('vandaag')}
             </button>
           )}
-          <PijlKnop label="Vorige maand" teken="‹" onClick={() => onWisselMaand(-1)} />
-          <PijlKnop label="Volgende maand" teken="›" onClick={() => onWisselMaand(1)} />
+          <PijlKnop label={t('vorigeMaand')} teken="‹" onClick={() => onWisselMaand(-1)} />
+          <PijlKnop label={t('volgendeMaand')} teken="›" onClick={() => onWisselMaand(1)} />
         </div>
         {/* Laadstreepje: houdt het grid staan terwijl een maand bijlaadt. */}
         <div style={{
@@ -176,8 +189,8 @@ export default function MaandGrid({
 
       {/* Weekdagkoppen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: KOP_H }}>
-        {DAGNAMEN.map(d => (
-          <div key={d} style={{
+        {DAGNAMEN.map((d, i) => (
+          <div key={i} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 10, fontWeight: 700, color: ZACHT,
             textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -259,11 +272,11 @@ function Rooster({ maand, geselecteerd, perDag, onKiesDag }: {
         const feestdag = isFeestdag(items)
         const { kleuren, rest } = stipKleuren(items)
 
-        const cirkelBg = gekozen ? (vandaag ? GROEN : '#161b20') : 'transparent'
-        const cirkelKleur = gekozen ? '#fff'
+        const cirkelBg = gekozen ? (vandaag ? GROEN : DONKER) : GEEN
+        const cirkelKleur = gekozen ? WIT
           : vandaag ? GROEN
-          : feestdag && inMaand ? '#dc2626'
-          : inMaand ? 'var(--fg)' : BUITEN
+          : feestdag && inMaand ? ROOD
+          : inMaand ? TEKST : BUITEN
 
         return (
           <button
@@ -282,7 +295,7 @@ function Rooster({ maand, geselecteerd, perDag, onKiesDag }: {
               background: cirkelBg, color: cirkelKleur,
               fontSize: 14, fontWeight: gekozen || vandaag || feestdag ? 800 : inMaand ? 600 : 500,
             }}>
-              {format(dag, 'd')}
+              {dag.getDate()}
             </span>
             <span style={{ height: 6, display: 'flex', alignItems: 'center', gap: 3 }}>
               {kleuren.map((kleur, i) => (

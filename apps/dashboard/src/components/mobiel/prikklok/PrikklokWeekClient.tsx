@@ -4,6 +4,9 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import BottomSheet from '../BottomSheet'
 import { AMBER, GRIJS, GROEN, OPPERVLAK, RAND, ROOD, TEKST, VLAK, primaireKnop } from '../oplevering/stijl'
 import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
@@ -16,12 +19,9 @@ import type { Markering, PrikklokRegel } from '@/lib/prikklok/bereken'
  * weekstaat staat, zodat de rekenregels tegen de werkelijkheid te leggen zijn.
  */
 
-const DAGNAMEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag']
-const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
-
-function dagLabel(datum: string) {
+function dagLabel(datum: string, locale: string) {
   const d = new Date(`${datum}T12:00:00`)
-  return `${DAGNAMEN[d.getDay()]} ${d.getDate()}-${d.getMonth() + 1}`
+  return new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'numeric' }).format(d)
 }
 
 function verschuif(datum: string, dagen: number) {
@@ -30,20 +30,31 @@ function verschuif(datum: string, dagen: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const MARKERING: Record<Markering, { tekst: string; kleur: string }> = {
-  nog_open: { tekst: 'Nog niet uitgeklokt', kleur: ROOD },
-  handmatig_uitgeklokt: { tekst: 'Vertrektijd zelf opgegeven', kleur: AMBER },
-  geen_bewakingscode: { tekst: 'Kies een bewakingscode', kleur: AMBER },
-  gesimuleerd: { tekst: 'Testlocatie', kleur: GRIJS },
+const MARKERING: Record<Markering, {
+  sleutel: 'nogOpen' | 'handmatigUitgeklokt' | 'geenBewakingscode' | 'gesimuleerd'
+  kleur: string
+}> = {
+  nog_open: { sleutel: 'nogOpen', kleur: ROOD },
+  handmatig_uitgeklokt: { sleutel: 'handmatigUitgeklokt', kleur: AMBER },
+  geen_bewakingscode: { sleutel: 'geenBewakingscode', kleur: AMBER },
+  gesimuleerd: { sleutel: 'gesimuleerd', kleur: GRIJS },
 }
 
-const WIJZE_TEKST: Record<string, string> = { locatie: 'uitgeklokt', wissel: 'gewisseld', handmatig: 'zelf opgegeven' }
+const WIJZEN = ['locatie', 'wissel', 'handmatig'] as const
+const isWijze = (w: string): w is (typeof WIJZEN)[number] => (WIJZEN as readonly string[]).includes(w)
 
 export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
+  const t = useTranslations('prikklok')
+  const locale = useDatumLocale()
+  const uur = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
   const router = useRouter()
   const [codeVoor, setCodeVoor] = useState<PrikklokRegel | null>(null)
   const schaduw = week.fase === 'schaduw'
   const verschil = week.totaalPrikklok - week.totaalUrenstaat
+  const totaalPrikklok = t.rich('week.totaalPrikklok', {
+    uren: uur(week.totaalPrikklok),
+    klein: (c) => <span style={{ fontSize: 16, fontWeight: 600, color: GRIJS }}>{c}</span>,
+  })
 
   return (
     <>
@@ -51,22 +62,23 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
         padding: '8px 12px', flexShrink: 0, background: OPPERVLAK, borderBottom: `1px solid ${RAND}`,
       }}>
-        <Link href={`/m/prikklok/week?week=${verschuif(week.weekStart, -7)}`} style={navKnop} aria-label="Vorige week">←</Link>
-        <div style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>Week {week.weekNr}</div>
-        <Link href={`/m/prikklok/week?week=${verschuif(week.weekStart, 7)}`} style={navKnop} aria-label="Volgende week">→</Link>
+        <Link href={`/m/prikklok/week?week=${verschuif(week.weekStart, -7)}`} style={navKnop} aria-label={t('week.vorigeWeek')}>←</Link>
+        <div style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>{t('week.weekNummer', { nummer: week.weekNr })}</div>
+        <Link href={`/m/prikklok/week?week=${verschuif(week.weekStart, 7)}`} style={navKnop} aria-label={t('week.volgendeWeek')}>→</Link>
       </div>
 
       {/* ── Kop ─────────────────────────────────────────────────── */}
       <div style={{ padding: '16px 16px 12px', background: OPPERVLAK, borderBottom: `1px solid ${RAND}`, flexShrink: 0 }}>
         <div style={{ fontSize: 28, fontWeight: 800, color: TEKST, fontVariantNumeric: 'tabular-nums' }}>
-          {uur(week.totaalPrikklok)}
-          <span style={{ fontSize: 16, fontWeight: 600, color: GRIJS }}> uur volgens de prikklok</span>
+          {totaalPrikklok}
         </div>
         {schaduw && (
           <div style={{ fontSize: 13, color: GRIJS, marginTop: 4 }}>
-            In je urenstaat: {uur(week.totaalUrenstaat)} uur
+            {t('week.inUrenstaatTotaal', { uren: uur(week.totaalUrenstaat) })}
             {Math.abs(verschil) >= 0.01 && (
-              <strong style={{ color: AMBER }}> · verschil {verschil > 0 ? '+' : ''}{uur(verschil)}</strong>
+              <strong style={{ color: AMBER }}>
+                {` · ${t('week.verschil', { verschil: `${verschil > 0 ? '+' : ''}${uur(verschil)}` })}`}
+              </strong>
             )}
           </div>
         )}
@@ -77,8 +89,8 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
           background: week.openPunten ? '#fff6db' : '#e6f5ec',
         }}>
           {week.openPunten
-            ? `${week.openPunten} ${week.openPunten === 1 ? 'punt vraagt' : 'punten vragen'} nog aandacht`
-            : 'Alles compleet'}
+            ? t('week.openPunten', { aantal: week.openPunten })
+            : t('week.allesCompleet')}
         </div>
       </div>
 
@@ -95,15 +107,15 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8,
                 padding: '10px 16px', borderBottom: `1px solid ${RAND}`,
               }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: TEKST, textTransform: 'capitalize' }}>{dagLabel(dag.datum)}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: TEKST, textTransform: 'capitalize' }}>{dagLabel(dag.datum, locale)}</span>
                 <span style={{ fontSize: 13, color: GRIJS, fontVariantNumeric: 'tabular-nums' }}>
-                  {dag.prikklok ? `${uur(dag.prikklok.uren)} u` : '—'}
-                  {dag.prikklok && dag.prikklok.pauzeMinuten > 0 && ` · ${dag.prikklok.pauzeMinuten} min pauze`}
+                  {dag.prikklok ? t('week.urenKort', { uren: uur(dag.prikklok.uren) }) : '—'}
+                  {dag.prikklok && dag.prikklok.pauzeMinuten > 0 && ` · ${t('week.pauzeMin', { minuten: String(dag.prikklok.pauzeMinuten) })}`}
                 </span>
               </div>
 
               {!dag.prikklok && (
-                <div style={{ padding: '10px 16px', fontSize: 13, color: GRIJS }}>Niet ingeklokt.</div>
+                <div style={{ padding: '10px 16px', fontSize: 13, color: GRIJS }}>{t('week.nietIngeklokt')}</div>
               )}
 
               {dag.prikklok?.regels.map(r => (
@@ -111,7 +123,7 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: TEKST, minWidth: 0 }}>{r.dossier_label}</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: TEKST, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                      {uur(r.uren)} u
+                      {t('week.urenKort', { uren: uur(r.uren) })}
                     </span>
                   </div>
                   <button
@@ -123,7 +135,7 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
                       textDecoration: 'underline', textUnderlineOffset: 2,
                     }}
                   >
-                    {r.bewakingscode ? `Code ${r.bewakingscode}` : 'Bewakingscode kiezen'}
+                    {r.bewakingscode ? t('week.code', { code: r.bewakingscode }) : t('week.bewakingscodeKiezen')}
                   </button>
                   {r.markeringen.filter(m => m !== 'geen_bewakingscode').length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
@@ -132,7 +144,7 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
                           fontSize: 11, fontWeight: 700, color: MARKERING[m].kleur,
                           border: `1px solid ${MARKERING[m].kleur}`, borderRadius: 999, padding: '2px 8px',
                         }}>
-                          {MARKERING[m].tekst}
+                          {t(`week.markering.${MARKERING[m].sleutel}`)}
                         </span>
                       ))}
                     </div>
@@ -142,13 +154,13 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
 
               {dag.sessies.length > 0 && (
                 <details style={{ padding: '8px 16px', borderBottom: schaduw ? `1px solid ${RAND}` : undefined }}>
-                  <summary style={{ fontSize: 12, color: GRIJS, cursor: 'pointer' }}>In- en uitkloktijden</summary>
+                  <summary style={{ fontSize: 12, color: GRIJS, cursor: 'pointer' }}>{t('week.inUitkloktijden')}</summary>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
                     {dag.sessies.map(s => (
                       <div key={s.id} style={{ fontSize: 12, color: GRIJS, fontVariantNumeric: 'tabular-nums' }}>
                         {s.in_tijd} – {s.uit_tijd ?? '…'} · {s.dossier_label}
-                        {s.uit_wijze && ` · ${WIJZE_TEKST[s.uit_wijze]}`}
-                        {s.uit_wijze === 'handmatig' && s.uit_afstand_m != null && ` (${Math.round(s.uit_afstand_m)} m van het werk)`}
+                        {s.uit_wijze && ` · ${isWijze(s.uit_wijze) ? t(`wijze.${s.uit_wijze}`) : s.uit_wijze}`}
+                        {s.uit_wijze === 'handmatig' && s.uit_afstand_m != null && ` ${t('afstandVanWerk', { meter: String(Math.round(s.uit_afstand_m)) })}`}
                       </div>
                     ))}
                   </div>
@@ -158,9 +170,9 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
               {schaduw && (
                 <div style={{ padding: '8px 16px 10px', background: VLAK }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: GRIJS }}>
-                    <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 10.5 }}>In je urenstaat</span>
+                    <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 10.5 }}>{t('week.inJeUrenstaat')}</span>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {uur(dag.urenstaatTotaal)} u
+                      {t('week.urenKort', { uren: uur(dag.urenstaatTotaal) })}
                       {dag.prikklok && Math.abs(dagVerschil) >= 0.01 && (
                         <strong style={{ color: AMBER }}> ({dagVerschil > 0 ? '+' : ''}{uur(dagVerschil)})</strong>
                       )}
@@ -168,7 +180,8 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
                   </div>
                   {dag.urenstaat.map((u, i) => (
                     <div key={i} style={{ fontSize: 12, color: GRIJS, marginTop: 2 }}>
-                      {uur(u.uren)} u · {u.label}{u.bewakingscode ? ` · ${u.bewakingscode}` : ''}{u.uursoort ? ` · ${u.uursoort}` : ''}
+                      {t('week.urenKort', { uren: uur(u.uren) })} · {u.label}{u.bewakingscode ? ` · ${u.bewakingscode}` : ''}
+                      {u.uursoort && <>{' · '}<VertaalbareTekst tekst={u.uursoort} label={false} /></>}
                     </div>
                   ))}
                 </div>
@@ -179,8 +192,8 @@ export default function PrikklokWeekClient({ week }: { week: PrikklokWeek }) {
 
         <div style={{ fontSize: 13, color: GRIJS, lineHeight: 1.5, padding: '4px 4px 0' }}>
           {schaduw
-            ? 'Testmodus: deze week gaat nog niet naar je urenstaat. Straks controleer je hier je week en dien je hem in één keer in.'
-            : 'Controleer je week. Klopt alles, dan dien je hem in via Uren.'}
+            ? t('week.voetSchaduw')
+            : t('week.voetNormaal')}
         </div>
       </div>
 
@@ -200,6 +213,7 @@ function CodeSheet({ regel, onSluit, onGekozen }: {
   onSluit: () => void
   onGekozen: () => void
 }) {
+  const t = useTranslations('prikklok')
   const [codes, setCodes] = useState<BewakingscodeOptie[] | null>(null)
   const [bezig, setBezig] = useState(false)
 
@@ -222,11 +236,11 @@ function CodeSheet({ regel, onSluit, onGekozen }: {
   }
 
   return (
-    <BottomSheet titel="Bewakingscode" onSluit={onSluit}>
+    <BottomSheet titel={t('week.bewakingscode')} onSluit={onSluit}>
       <div style={{ fontSize: 13, color: GRIJS }}>{regel.dossier_label}</div>
-      {codes === null && <div style={{ fontSize: 14, color: GRIJS }}>Codes laden…</div>}
+      {codes === null && <div style={{ fontSize: 14, color: GRIJS }}>{t('week.codesLaden')}</div>}
       {codes?.length === 0 && (
-        <div style={{ fontSize: 14, color: GRIJS }}>Voor dit dossier zijn geen codes met begrote uren gevonden.</div>
+        <div style={{ fontSize: 14, color: GRIJS }}>{t('week.geenCodes')}</div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {codes?.map(o => (

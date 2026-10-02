@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { LOCATIE_AUTO_KEY } from './LocatieAutoOpen'
 
 /**
@@ -9,6 +10,7 @@ import { LOCATIE_AUTO_KEY } from './LocatieAutoOpen'
  * detectie op de home uit (zie LocatieAutoOpen).
  */
 export default function LocatieAutoToggle() {
+  const t = useTranslations('profiel.locatieAuto')
   // Start op null tot we localStorage gelezen hebben (voorkomt hydration-mismatch).
   const [aan, setAan] = useState<boolean | null>(null)
 
@@ -42,16 +44,16 @@ export default function LocatieAutoToggle() {
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>
-          Dossier openen op locatie
+          {t('titel')}
         </div>
         <div style={{ fontSize: 12.5, color: '#6b757c', marginTop: 3, lineHeight: 1.4 }}>
-          Opent bij het starten van de app automatisch het dossier dat bij jouw locatie hoort.
+          {t('uitleg')}
         </div>
       </div>
       <button
         role="switch"
         aria-checked={actief}
-        aria-label="Dossier openen op locatie"
+        aria-label={t('titel')}
         onClick={wissel}
         disabled={aan === null}
         style={{

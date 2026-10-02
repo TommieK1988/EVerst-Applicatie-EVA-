@@ -119,6 +119,13 @@ export function dagenSindsDatum(datum: string | null, vandaagMs: number): number
   return Math.floor((vandaagMs - ms) / 86_400_000)
 }
 
+/**
+ * Een dossier met het bedrag dat op zijn regel hoort, excl. btw (`lib/commercie/dossier-bedragen.ts`).
+ * Lopend werk: de waarde volgens dezelfde rekenregel als de borden. Een afgeronde
+ * servicedeskbon: het gefactureerde bedrag. `null` = geen bedrag bekend.
+ */
+export type DossierMetBedrag = RelatieDossier & { bedragExclBtw: number | null }
+
 /* ── Vorm van het scherm ───────────────────────────────────────────────────────────────── */
 
 export type KlantKengetallen = {
@@ -273,14 +280,14 @@ export type Klantbeeld = {
   signalen: KlantSignalen
   /** De dossierlijsten, in de volgorde waarin ze op het scherm staan. */
   offertesOpen: KlantOfferte[]
-  offertesInDeMaak: RelatieDossier[]
+  offertesInDeMaak: DossierMetBedrag[]
   /**
    * Lopend werk, gesplitst. Het stond eerder in één blok "Lopend werk", en bij een beheerder
    * met 38 lopende dossiers is dat een bak waarin een renovatie van een ton naast een
    * lekkagemelding van tweehonderd euro staat. Het zijn twee gesprekken, dus twee blokken.
    */
-  opdrachten: RelatieDossier[]
-  servicedesk: RelatieDossier[]
+  opdrachten: DossierMetBedrag[]
+  servicedesk: DossierMetBedrag[]
   /** Inclusief opdrachten op Financieel gereed — zie `isWerkGereed`. */
   uitgevoerd: RelatieDossier[]
   /**

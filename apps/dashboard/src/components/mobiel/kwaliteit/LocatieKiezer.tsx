@@ -1,8 +1,10 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import { KWALITEIT_LOCATIE_SUGGESTIES } from '@everts/database/kwaliteit-types'
 import { GRIJS, GROEN, label, RAND, TEKST, veld } from './stijl'
+import { LOCATIE_SLEUTEL, suggestieSleutel } from './suggesties'
 
 /**
  * Locatie van een bevinding: aantikken of zelf typen.
@@ -21,6 +23,7 @@ export default function LocatieKiezer({
   /** Eerder in deze ronde gebruikte locaties; komen vooraan te staan. */
   recent?: string[]
 }) {
+  const t = useTranslations('kwaliteit')
   const suggesties = React.useMemo(() => {
     const uniek = new Set<string>()
     const lijst: string[] = []
@@ -35,10 +38,12 @@ export default function LocatieKiezer({
 
   return (
     <div>
-      <label style={label}>Locatie *</label>
+      <label style={label}>{t('locatie.label')}</label>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
         {suggesties.slice(0, 12).map(s => {
           const actief = waarde.trim().toLowerCase() === s.toLowerCase()
+          // Vaste snelkeuze: vertaald op de knop, opgeslagen blijft het Nederlands. Zelf getypt: zoals getypt.
+          const sleutel = suggestieSleutel(LOCATIE_SLEUTEL, s)
           return (
             <button
               key={s}
@@ -52,7 +57,7 @@ export default function LocatieKiezer({
                 cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
               }}
             >
-              {s}
+              {sleutel ? t(`locatieSuggestie.${sleutel}`) : s}
             </button>
           )
         })}
@@ -60,7 +65,7 @@ export default function LocatieKiezer({
       <input
         value={waarde}
         onChange={e => onChange(e.target.value)}
-        placeholder="Of typ een locatie, bijv. Woningen 21 t/m 28"
+        placeholder={t('locatie.placeholder')}
         style={{ ...veld, color: TEKST }}
       />
     </div>

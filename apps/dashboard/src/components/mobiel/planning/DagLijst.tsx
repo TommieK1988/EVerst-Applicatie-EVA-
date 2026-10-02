@@ -1,10 +1,13 @@
 'use client'
 
 import React from 'react'
-import { format, isToday, isTomorrow, parseISO } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { isToday, isTomorrow, parseISO } from 'date-fns'
 import { CalendarDays } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { AgendaItem } from '@/lib/agenda/agenda-model'
+import AgendaTypeLabel from './AgendaTypeLabel'
 
 const GRIJS = '#6b757c'
 const ZACHT = '#9aa4ab'
@@ -22,13 +25,18 @@ export default function DagLijst({ dag, items, onKies }: {
   items: AgendaItem[]
   onKies: (item: AgendaItem) => void
 }) {
+  const t = useTranslations('planning')
+  const locale = useDatumLocale()
   const datum = parseISO(dag)
-  const voorvoegsel = isToday(datum) ? 'Vandaag · ' : isTomorrow(datum) ? 'Morgen · ' : ''
+  const datumTekst = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' }).format(datum)
+  const kop = isToday(datum) ? t('vandaagMetDatum', { datum: datumTekst })
+    : isTomorrow(datum) ? t('morgenMetDatum', { datum: datumTekst })
+    : datumTekst
 
   return (
     <div style={{ paddingBottom: 24 }}>
       <div style={{ padding: '14px 16px 8px', fontSize: 13, fontWeight: 700, color: GRIJS }}>
-        {voorvoegsel}{format(datum, 'EEEE d MMMM', { locale: nl })}
+        {kop}
       </div>
 
       {items.length === 0 ? (
@@ -37,7 +45,7 @@ export default function DagLijst({ dag, items, onKies }: {
           alignItems: 'center', gap: 10,
         }}>
           <CalendarDays size={28} color="#d7dde0" />
-          <div style={{ fontSize: 13, color: ZACHT }}>Niets gepland op deze dag.</div>
+          <div style={{ fontSize: 13, color: ZACHT }}>{t('nietsGepland')}</div>
         </div>
       ) : (
         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -74,7 +82,7 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
           background: tint(item.kleur, 0.12), color: item.kleur,
           fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>
-          {item.typeLabel}
+          <AgendaTypeLabel tekst={item.typeLabel} />
         </span>
       ) : (
         // Vaste breedte + flexShrink 0, anders drukt een lange titel de tijd weg.
@@ -92,19 +100,15 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
 
       {/* minWidth 0 maakt de ellipsis pas mogelijk binnen een flexregel. */}
       <span style={{ minWidth: 0, flex: 1 }}>
-        <span style={{
+        <ItemTitel item={item} style={{
           display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--fg)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {item.titel}
-        </span>
+        }} />
         {item.subtitel && (
-          <span style={{
+          <ItemSubtitel item={item} style={{
             display: 'block', fontSize: 12, color: GRIJS, marginTop: 2,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {item.subtitel}
-          </span>
+          }} />
         )}
         {item.locatie && (
           <span style={{
@@ -117,4 +121,26 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
       </span>
     </button>
   )
+}
+
+/**
+ * Titel van een item. Bij afwezigheid is dat het vaste typelabel; anders tekst van kantoor
+ * (activiteit, agenda-item, taak, feestdag) die we automatisch vertalen.
+ */
+export function ItemTitel({ item, style }: { item: AgendaItem; style?: React.CSSProperties }) {
+  if (item.bron === 'afwezigheid') return <AgendaTypeLabel tekst={item.titel} style={style} />
+  return <VertaalbareTekst tekst={item.titel} label={false} style={style} />
+}
+
+/**
+ * Subtitel: bij afwezigheid de opmerking van kantoor (vertalen), bij de andere bronnen een
+ * klantnaam, dossiernummer of locatie (niet vertalen).
+ */
+export function ItemSubtitel({ item, style, label = false }: {
+  item: AgendaItem
+  style?: React.CSSProperties
+  label?: boolean
+}) {
+  if (item.bron === 'afwezigheid') return <VertaalbareTekst tekst={item.subtitel} label={label} style={style} />
+  return <span style={style}>{item.subtitel}</span>
 }

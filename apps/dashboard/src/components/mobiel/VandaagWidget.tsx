@@ -1,8 +1,11 @@
+'use client'
+
 import React from 'react'
 import Link from 'next/link'
-import { format, parseISO } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { useTranslations } from 'next-intl'
 import { ChevronRight } from 'lucide-react'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { AgendaItem } from '@/lib/agenda/agenda-model'
 
 const GRIJS = '#6b757c'
@@ -28,7 +31,13 @@ function tint(hex: string, alpha: number): string {
  * staan (beide leunen op `haalAgendaVenster`).
  */
 export default function VandaagWidget({ dag, items }: { dag: string; items: AgendaItem[] }) {
-  const datum = parseISO(dag)
+  const t = useTranslations('home.vandaag')
+  const locale = useDatumLocale()
+  // 'YYYY-MM-DD' als UTC-middernacht en zo ook opmaken: dan is het op server en telefoon
+  // dezelfde dag, welke tijdzone het toestel ook heeft.
+  const datumTekst = new Date(`${dag}T00:00:00Z`).toLocaleDateString(locale, {
+    weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC',
+  })
   const getoond = items.slice(0, MAX_ITEMS)
   const rest = items.length - getoond.length
 
@@ -42,10 +51,10 @@ export default function VandaagWidget({ dag, items }: { dag: string; items: Agen
           margin: 0, fontSize: 13, fontWeight: 700, color: GRIJS,
           letterSpacing: '-0.01em',
         }}>
-          Planning voor vandaag
+          {t('titel')}
         </h2>
         <span style={{ fontSize: 12, color: ZACHT, flexShrink: 0 }}>
-          {format(datum, 'EEEE d MMM', { locale: nl })}
+          {datumTekst}
         </span>
       </div>
 
@@ -57,7 +66,7 @@ export default function VandaagWidget({ dag, items }: { dag: string; items: Agen
       }}>
         {getoond.length === 0 ? (
           <div style={{ padding: '18px 14px', fontSize: 13, color: ZACHT }}>
-            Niets gepland vandaag.
+            {t('nietsGepland')}
           </div>
         ) : (
           getoond.map((item, i) => (
@@ -75,7 +84,7 @@ export default function VandaagWidget({ dag, items }: { dag: string; items: Agen
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          <span>{rest > 0 ? `Nog ${rest} meer · hele agenda` : 'Hele agenda'}</span>
+          <span>{rest > 0 ? t('nogMeer', { aantal: rest }) : t('heleAgenda')}</span>
           <ChevronRight size={16} strokeWidth={2.4} />
         </Link>
       </div>
@@ -101,7 +110,7 @@ function Regel({ item, eerste }: { item: AgendaItem; eerste: boolean }) {
           background: tint(item.kleur, 0.12), color: item.kleur,
           fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>
-          {item.typeLabel}
+          <VertaalbareTekst tekst={item.typeLabel} label={false} />
         </span>
       ) : (
         // Vaste breedte + flexShrink 0, anders drukt een lange titel de tijd weg.
@@ -123,7 +132,8 @@ function Regel({ item, eerste }: { item: AgendaItem; eerste: boolean }) {
           display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--fg)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {item.titel}
+          {/* Naam van het agenda-item komt van kantoor: in lijsten zonder label. */}
+          <VertaalbareTekst tekst={item.titel} label={false} />
         </span>
         {(item.subtitel || item.locatie) && (
           <span style={{

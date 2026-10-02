@@ -11,6 +11,7 @@ import { tekstNaarBouw7RichText } from '@/lib/bouw7/rich-text'
 import { ververSnapshotsNaSchrijven } from '@/lib/bouw7/snapshot'
 import { getFactureerbareCodes, getCodeInstellingen, getRegelGroepen } from './facturatie-codes'
 import { zorgVoorBonBewakingscode } from './bon-bewakingscode'
+import { isRegieOpdracht, metGeboekteCodes } from './regie-opdracht'
 import { bonBewakingscode } from '@/components/dossiers/types'
 import {
   aantalEnEenheid, afgeleideOmschrijving, groepeer, groepSleutelVoor, isHandmatigeGroep,
@@ -520,11 +521,13 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   // Vóór het ophalen, zodat wat vrijkomt in dit voorstel meteen weer als te factureren meetelt.
   await geefVerwijderdeFacturenVrij(dossierId)
 
-  const [codes, instellingen, groepen] = await Promise.all([
+  const [vasteCodes, instellingen, groepen, regieOpdracht] = await Promise.all([
     getFactureerbareCodes(dossierId),
     getCodeInstellingen(dossierId),
     getRegelGroepen(dossierId),
+    isRegieOpdracht(dossierId),
   ])
+  let codes = vasteCodes
   const instelling = new Map(instellingen.map(i => [i.bewakingscode, i]))
   const groep = new Map(groepen.map(g => [`${g.bewakingscode}|${g.groep_sleutel}`, g]))
 
@@ -536,8 +539,9 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
       reden: 'Zit in de aanneemsom — alleen het verschil wordt verrekend, via een meerwerkregel.',
     }))
 
-  const teFactureren = codes.filter(c => !c.alleenVerschil)
-  if (teFactureren.length === 0) {
+  let teFactureren = codes.filter(c => !c.alleenVerschil)
+  // Een regieopdracht weet pas na het lezen van de boekingen welke codes erbij horen.
+  if (teFactureren.length === 0 && !regieOpdracht) {
     return {
       regels: [], codes: [], totaal: 0, alGefactureerd: 0, alGefactureerdBedrag: 0,
       waardePerBron: { stelpost: 0, meerwerk: 0, regie: 0 }, buitenBeschouwing,
@@ -547,12 +551,32 @@ export async function getRegieFactuurvoorstel(dossierId: string): Promise<RegieV
   // Eigen opslagpercentages meegeven, zodat de verkoopwaarde per code met het juiste percentage
   // wordt gerekend. Voorrang: het popup-scherm, dan de stelpost zelf, dan de bedrijfsstandaard.
   const opslagPerCode: Record<string, number> = {}
+  // Op een regieopdracht kan elke code een eigen percentage hebben gekregen in het popup-scherm,
+  // ook een die pas na het lezen van de boekingen in beeld komt.
+  if (regieOpdracht) {
+    for (const i of instellingen) if (i.opslag_pct != null) opslagPerCode[i.bewakingscode] = Number(i.opslag_pct)
+  }
   for (const c of teFactureren) {
     const eigen = instelling.get(c.bewakingscode)?.opslag_pct ?? c.opslagPct
     if (eigen != null) opslagPerCode[c.bewakingscode] = Number(eigen)
   }
 
   const regie = await getServicedeskRegie(dossierId, { opslagPerCode })
+  if (regieOpdracht) {
+    // Elke code waarop geboekt is wordt een factuurpost: er is geen aanneemsom waar iets in zit.
+    codes = metGeboekteCodes(codes, regie.regels.map(r => r.bewakingscode))
+    teFactureren = codes.filter(c => !c.alleenVerschil)
+    // Wat zonder code geboekt is kan nergens op een factuurregel landen. Niet stil laten vallen.
+    const zonderCode = regie.regels.filter(r => !r.bewakingscode && !r.uitgesloten && r.status !== 'gefactureerd')
+    const zonderCodeBedrag = rond(zonderCode.reduce((s, r) => s + (r.verkoopBedrag || 0), 0))
+    if (zonderCode.length > 0) {
+      buitenBeschouwing.push({
+        bewakingscode: '—',
+        omschrijving: `Geboekt zonder bewakingscode (${zonderCode.length}×, € ${zonderCodeBedrag.toFixed(2).replace('.', ',')})`,
+        reden: 'Kan pas gefactureerd worden als de boeking een bewakingscode heeft — hercodeer hem eerst.',
+      })
+    }
+  }
   const relevant = new Set(teFactureren.map(c => c.bewakingscode))
   const opCode = regie.regels.filter(r => r.bewakingscode && relevant.has(r.bewakingscode))
   const mee = opCode.filter(r => !r.uitgesloten && r.status !== 'gefactureerd')

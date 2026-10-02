@@ -46,7 +46,8 @@ function Cel({ kop, waarde, onder }: { kop: string; waarde: string; onder?: stri
 export default function KengetallenRij({
   kengetallen, score,
 }: {
-  kengetallen: KlantKengetallen
+  /** Zonder kengetallen (de contactpersoonkaart) staat alleen de score er. */
+  kengetallen?: KlantKengetallen | null
   score: KlantScore
 }) {
   // Zonder percentage tonen we de aantallen als hoofdwaarde — die zijn altijd waar.
@@ -67,10 +68,14 @@ export default function KengetallenRij({
         background: OPPERVLAK, border: `1px solid ${RAND}`, borderRadius: 14,
         padding: '13px 6px',
       }}>
-        <Cel kop={`Omzet ${kengetallen.ditJaar}`} waarde={euro(kengetallen.omzetDitJaar)} />
-        <div style={{ width: 1, alignSelf: 'stretch', background: RAND }} aria-hidden />
-        <Cel kop={`Omzet ${kengetallen.vorigJaar}`} waarde={euro(kengetallen.omzetVorigJaar)} />
-        <div style={{ width: 1, alignSelf: 'stretch', background: RAND }} aria-hidden />
+        {kengetallen && (
+          <>
+            <Cel kop={`Omzet ${kengetallen.ditJaar}`} waarde={euro(kengetallen.omzetDitJaar)} />
+            <div style={{ width: 1, alignSelf: 'stretch', background: RAND }} aria-hidden />
+            <Cel kop={`Omzet ${kengetallen.vorigJaar}`} waarde={euro(kengetallen.omzetVorigJaar)} />
+            <div style={{ width: 1, alignSelf: 'stretch', background: RAND }} aria-hidden />
+          </>
+        )}
         <Cel
           kop="Score"
           waarde={scoreWaarde}
@@ -81,7 +86,7 @@ export default function KengetallenRij({
       <div style={{ fontSize: 11.5, color: GRIJS, marginTop: 6, lineHeight: 1.45 }}>
         {scoreOnder}
         {score.open > 0 && ` · ${score.open} nog open`}
-        {kengetallen.zonderFacturatiegegevens > 0 && (
+        {kengetallen && kengetallen.zonderFacturatiegegevens > 0 && (
           <>
             {' · '}
             {kengetallen.zonderFacturatiegegevens} zonder facturatieregel, dus de omzet is een

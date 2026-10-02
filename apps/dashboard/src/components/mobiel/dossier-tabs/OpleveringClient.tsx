@@ -3,10 +3,10 @@
 import React, { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  opleverMomentStatusLabels, opleverMomentTypeLabels,
-  type OpleverMomentType,
-} from '@everts/database'
+import { opleverMomentTypeLabels, type OpleverMomentType } from '@everts/database'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import {
   maakOplevermoment, maakLosOpleverpunt, setPuntStatus, uploadOpleverFoto,
   type DossierOpleveringData, type OpleverPuntView, type OpleverFeedbackSamenvatting, type OpleverToewijsbaar,
@@ -26,6 +26,7 @@ export default function OpleveringClient({ dossierId, data, feedback, toewijsbaa
   feedback: OpleverFeedbackSamenvatting
   toewijsbaar: OpleverToewijsbaar
 }) {
+  const t = useTranslations('dossiertabs.oplevering')
   const router = useRouter()
   const [nieuwOpen, setNieuwOpen] = useState(false)
   const [puntOpen, setPuntOpen] = useState(false)
@@ -53,7 +54,7 @@ export default function OpleveringClient({ dossierId, data, feedback, toewijsbaa
 
       <MobielStickyFooter>
         <button type="button" onClick={() => setNieuwOpen(true)} style={{ ...primaireKnop, width: '100%' }}>
-          + Oplevering
+          {t('plusOplevering')}
         </button>
       </MobielStickyFooter>
 
@@ -78,12 +79,14 @@ export default function OpleveringClient({ dossierId, data, feedback, toewijsbaa
 /* ───────────────────────────── Sterrenscore ──────────────────────────────── */
 
 function Sterrenscore({ feedback }: { feedback: OpleverFeedbackSamenvatting }) {
+  const t = useTranslations('dossiertabs.oplevering')
+  const locale = useDatumLocale()
   const { hoofdscore, cijfers, aantal } = feedback
 
   if (aantal === 0) {
     return (
       <div style={{ background: 'var(--bg-elev)', border: `1px solid ${RAND}`, borderRadius: 16, padding: 18, textAlign: 'center' }}>
-        <div style={{ fontSize: 14, color: GRIJS }}>Nog geen bewonersfeedback ontvangen.</div>
+        <div style={{ fontSize: 14, color: GRIJS }}>{t('geenFeedback')}</div>
       </div>
     )
   }
@@ -97,18 +100,19 @@ function Sterrenscore({ feedback }: { feedback: OpleverFeedbackSamenvatting }) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ fontSize: 38, fontWeight: 800, color: TEKST, lineHeight: 1 }}>
-              {hoofdscore.gemiddelde.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              {hoofdscore.gemiddelde.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </span>
             <span style={{ fontSize: 16, fontWeight: 600, color: ZACHT }}>/ {hoofdscore.max}</span>
           </div>
           <Sterren score={hoofdscore.gemiddelde} max={hoofdscore.max} />
           <div style={{ fontSize: 13, color: GRIJS, textAlign: 'center' }}>
-            {hoofdscore.label} · {aantal} reactie{aantal === 1 ? '' : 's'}
+            <VertaalbareTekst tekst={hoofdscore.label} label={false} />
+            {` · ${t('reacties', { aantal })}`}
           </div>
         </div>
       ) : (
         <div style={{ fontSize: 14, fontWeight: 600, color: TEKST }}>
-          {aantal} reactie{aantal === 1 ? '' : 's'} ontvangen
+          {t('reactiesOntvangen', { aantal })}
         </div>
       )}
 
@@ -116,9 +120,9 @@ function Sterrenscore({ feedback }: { feedback: OpleverFeedbackSamenvatting }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
           {rest.map(c => (
             <div key={c.label} style={{ background: VLAK, borderRadius: 10, padding: '7px 11px', flex: '1 1 40%' }}>
-              <div style={{ fontSize: 11, color: GRIJS, lineHeight: 1.3 }}>{c.label}</div>
+              <div style={{ fontSize: 11, color: GRIJS, lineHeight: 1.3 }}><VertaalbareTekst tekst={c.label} label={false} /></div>
               <div style={{ fontSize: 16, fontWeight: 700, color: TEKST }}>
-                {c.gemiddelde.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                {c.gemiddelde.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                 <span style={{ fontSize: 11, fontWeight: 500, color: ZACHT }}> / {c.max}</span>
               </div>
             </div>
@@ -135,15 +139,16 @@ function TriageBlok({ punten, onWijzig }: { punten: OpleverPuntView[]; onWijzig:
   const [bezig, setBezig] = useState<string | null>(null)
   const [fout, setFout] = useState<string | null>(null)
   const { vraagTekst } = useDialogen()
+  const t = useTranslations('dossiertabs.oplevering')
 
   async function beoordeel(punt: OpleverPuntView, status: 'open' | 'afgewezen') {
     let reden: string | null = null
     if (status === 'afgewezen') {
       const antwoord = await vraagTekst({
-        titel: 'Melding afwijzen',
-        label: 'Waarom is dit geen opleverpunt? (optioneel)',
+        titel: t('afwijzenTitel'),
+        label: t('afwijzenLabel'),
         meerregelig: true,
-        bevestigLabel: 'Afwijzen',
+        bevestigLabel: t('afwijzen'),
       })
       if (antwoord === null) return
       reden = antwoord.trim() || null
@@ -156,23 +161,24 @@ function TriageBlok({ punten, onWijzig }: { punten: OpleverPuntView[]; onWijzig:
   }
 
   return (
-    <Blok titel={`Nieuwe meldingen (${punten.length})`}>
+    <Blok titel={t('nieuweMeldingen', { aantal: punten.length })}>
       {fout && <Fout tekst={fout} />}
       <div style={{ fontSize: 13, color: GRIJS, marginBottom: 4 }}>
-        Gemeld via een formulier. Zet ze op de lijst, of wijs ze af.
+        {t('triageUitleg')}
       </div>
       {punten.map(p => (
         <div key={p.id} style={{ border: '1px solid #f0dfb8', background: '#fdf8ec', borderRadius: 12, padding: 12 }}>
-          <div style={{ fontSize: 14, color: TEKST, lineHeight: 1.4 }}>{p.omschrijving}</div>
+          {/* Gemeld door bewoners via een formulier: vertalen, met de weg terug naar het origineel. */}
+          <VertaalbareTekst tekst={p.omschrijving} as="div" style={{ fontSize: 14, color: TEKST, lineHeight: 1.4 }} />
           <div style={{ fontSize: 12, color: GRIJS, marginTop: 3 }}>
-            {[p.ruimte, p.melder_naam ?? 'Anoniem', p.bronTemplateNaam].filter(Boolean).join(' · ')}
+            {[p.ruimte, p.melder_naam ?? t('anoniem'), p.bronTemplateNaam].filter(Boolean).join(' · ')}
           </div>
           {p.fotos.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {p.fotos.map(f => (
                 <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={f.url} alt="foto bij melding" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: `1px solid ${RAND}` }} />
+                  <img src={f.url} alt={t('fotoBijMelding')} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: `1px solid ${RAND}` }} />
                 </a>
               ))}
             </div>
@@ -180,11 +186,11 @@ function TriageBlok({ punten, onWijzig }: { punten: OpleverPuntView[]; onWijzig:
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button type="button" disabled={bezig === p.id} onClick={() => beoordeel(p, 'open')}
               style={{ ...primaireKnop, flex: 1, padding: '11px 12px', fontSize: 14 }}>
-              Op de lijst
+              {t('opDeLijst')}
             </button>
             <button type="button" disabled={bezig === p.id} onClick={() => beoordeel(p, 'afgewezen')}
               style={{ ...secundaireKnop, padding: '11px 14px', fontSize: 14, color: '#b42318' }}>
-              Afwijzen
+              {t('afwijzen')}
             </button>
           </div>
         </div>
@@ -196,18 +202,19 @@ function TriageBlok({ punten, onWijzig }: { punten: OpleverPuntView[]; onWijzig:
 /* ───────────────────────────── Oplevermomenten ───────────────────────────── */
 
 function MomentenBlok({ momenten }: { momenten: DossierOpleveringData['momenten'] }) {
+  const t = useTranslations('dossiertabs.oplevering')
   if (momenten.length === 0) {
     return (
       <div style={{ background: 'var(--bg-elev)', border: `1px solid ${RAND}`, borderRadius: 14, padding: 20, textAlign: 'center' }}>
         <div style={{ fontSize: 14, color: GRIJS, lineHeight: 1.5 }}>
-          Nog geen oplevermoment op dit dossier.<br />Maak er hieronder een aan.
+          {t('geenMoment')}<br />{t('maakEenAan')}
         </div>
       </div>
     )
   }
 
   return (
-    <Blok titel="Opleveringen">
+    <Blok titel={t('opleveringen')}>
       {momenten.map(m => {
         const klaar = m.aantalTotaal > 0 && m.aantalOpen === 0
         return (
@@ -217,14 +224,14 @@ function MomentenBlok({ momenten }: { momenten: DossierOpleveringData['momenten'
               borderLeft: `4px solid ${klaar ? GROEN : '#e3e8ea'}`,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: TEKST, minWidth: 0 }}>{m.titel}</div>
+                <VertaalbareTekst tekst={m.titel} label={false} as="div" style={{ fontSize: 15, fontWeight: 600, color: TEKST, minWidth: 0 }} />
                 <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: GRIJS, flexShrink: 0 }}>
-                  {opleverMomentStatusLabels[m.status]}
+                  {t(`momentStatus.${m.status}`)}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: GRIJS, marginTop: 3 }}>
-                {opleverMomentTypeLabels[m.type]}
-                {m.handtekeningen.length > 0 && ` · ${m.handtekeningen.length}× ondertekend`}
+                {t(`momentType.${m.type}`)}
+                {m.handtekeningen.length > 0 && ` · ${t('ondertekend', { aantal: m.handtekeningen.length })}`}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
                 <div style={{ flex: 1, height: 6, borderRadius: 999, background: VLAK, overflow: 'hidden' }}>
@@ -253,13 +260,14 @@ function AandachtspuntenBlok({ punten, toewijsbaar, onToevoegen, onWijzig }: {
   onToevoegen: () => void
   onWijzig: () => void
 }) {
+  const t = useTranslations('dossiertabs.oplevering')
   const open = punten.filter(p => p.status !== 'geaccepteerd').length
 
   return (
-    <Blok titel={punten.length > 0 ? `Aandachtspunten (${open} open)` : 'Aandachtspunten'}>
+    <Blok titel={punten.length > 0 ? t('aandachtspuntenOpen', { aantal: open }) : t('aandachtspunten')}>
       {punten.length === 0 ? (
         <div style={{ fontSize: 13, color: GRIJS }}>
-          Nog geen losse aandachtspunten. Meld hier wat je onderweg tegenkomt.
+          {t('geenAandachtspunten')}
         </div>
       ) : (
         punten.map(p => (
@@ -267,7 +275,7 @@ function AandachtspuntenBlok({ punten, toewijsbaar, onToevoegen, onWijzig }: {
         ))
       )}
       <button type="button" onClick={onToevoegen} style={{ ...secundaireKnop, width: '100%', marginTop: 2 }}>
-        + Aandachtspunt
+        {t('plusAandachtspunt')}
       </button>
     </Blok>
   )
@@ -276,6 +284,7 @@ function AandachtspuntenBlok({ punten, toewijsbaar, onToevoegen, onWijzig }: {
 /* ─────────────────────────────── Afgewezen ───────────────────────────────── */
 
 function AfgewezenBlok({ punten }: { punten: OpleverPuntView[] }) {
+  const t = useTranslations('dossiertabs.oplevering')
   const [open, setOpen] = useState(false)
   return (
     <div style={{ background: VLAK, border: `1px solid ${RAND}`, borderRadius: 12 }}>
@@ -285,17 +294,17 @@ function AfgewezenBlok({ punten }: { punten: OpleverPuntView[] }) {
           padding: '13px 14px', background: 'none', border: 'none', font: 'inherit', cursor: 'pointer',
         }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: GRIJS }}>
-          {punten.length} afgewezen melding{punten.length === 1 ? '' : 'en'}
+          {t('afgewezenMeldingen', { aantal: punten.length })}
         </span>
-        <span style={{ fontSize: 12, color: ZACHT }}>{open ? 'Verbergen' : 'Tonen'}</span>
+        <span style={{ fontSize: 12, color: ZACHT }}>{open ? t('verbergen') : t('tonen')}</span>
       </button>
       {open && (
         <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {punten.map(p => (
             <div key={p.id}>
-              <div style={{ fontSize: 13, color: GRIJS, textDecoration: 'line-through' }}>{p.omschrijving}</div>
+              <div style={{ fontSize: 13, color: GRIJS, textDecoration: 'line-through' }}><VertaalbareTekst tekst={p.omschrijving} label={false} /></div>
               {p.geweigerd_reden && (
-                <div style={{ fontSize: 12, color: ZACHT }}>Reden: {p.geweigerd_reden}</div>
+                <div style={{ fontSize: 12, color: ZACHT }}>{t('reden', { reden: p.geweigerd_reden })}</div>
               )}
             </div>
           ))}
@@ -314,11 +323,12 @@ function NieuwMomentSheet({ dossierId, onSluit, onKlaar }: {
 }) {
   const [titel, setTitel] = useState('')
   const [type, setType] = useState<OpleverMomentType>('eindoplevering')
+  const t = useTranslations('dossiertabs.oplevering')
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
   async function opslaan() {
-    if (!titel.trim()) { setFout('Geef een titel op.'); return }
+    if (!titel.trim()) { setFout(t('geefTitel')); return }
     setBezig(true); setFout(null)
     const r = await maakOplevermoment(dossierId, { titel: titel.trim(), type })
     setBezig(false)
@@ -328,23 +338,23 @@ function NieuwMomentSheet({ dossierId, onSluit, onKlaar }: {
   }
 
   return (
-    <BottomSheet titel="Nieuwe oplevering" onSluit={onSluit}>
+    <BottomSheet titel={t('nieuweOplevering')} onSluit={onSluit}>
       {fout && <Fout tekst={fout} />}
       <div>
-        <label style={label} htmlFor="op-titel">Titel</label>
+        <label style={label} htmlFor="op-titel">{t('titel')}</label>
         <input id="op-titel" style={veld} value={titel} onChange={e => setTitel(e.target.value)}
-          placeholder="Bijv. Eindoplevering blok A" autoFocus />
+          placeholder={t('titelPlaceholder')} autoFocus />
       </div>
       <div>
-        <label style={label} htmlFor="op-type">Type</label>
+        <label style={label} htmlFor="op-type">{t('type')}</label>
         <select id="op-type" style={veld} value={type} onChange={e => setType(e.target.value as OpleverMomentType)}>
-          {(Object.keys(opleverMomentTypeLabels) as OpleverMomentType[]).map(t => (
-            <option key={t} value={t}>{opleverMomentTypeLabels[t]}</option>
+          {(Object.keys(opleverMomentTypeLabels) as OpleverMomentType[]).map(soort => (
+            <option key={soort} value={soort}>{t(`momentType.${soort}`)}</option>
           ))}
         </select>
       </div>
       <button type="button" onClick={opslaan} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>
-        {bezig ? 'Aanmaken…' : 'Aanmaken en starten'}
+        {bezig ? t('aanmaken') : t('aanmakenEnStarten')}
       </button>
     </BottomSheet>
   )
@@ -362,6 +372,7 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
   const [fout, setFout] = useState<string | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const bibliotheekRef = useRef<HTMLInputElement>(null)
+  const t = useTranslations('dossiertabs.oplevering')
 
   /** Aanvullen, niet vervangen: een foto van de camera en een uit de bibliotheek horen bij hetzelfde punt. */
   function voegFotosToe(files: FileList | null) {
@@ -370,7 +381,7 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
   }
 
   async function opslaan() {
-    if (!omschrijving.trim()) { setFout('Beschrijf wat er aan de hand is.'); return }
+    if (!omschrijving.trim()) { setFout(t('beschrijf')); return }
     setBezig(true); setFout(null)
     const r = await maakLosOpleverpunt(dossierId, {
       omschrijving: omschrijving.trim(),
@@ -385,29 +396,29 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
       fd.append('foto', await verkleinFoto(file))
       fd.append('soort', 'voor')
       const f = await uploadOpleverFoto(r.id, fd)
-      if (!f.ok) { setBezig(false); setFout(`Punt opgeslagen, maar een foto mislukte: ${f.error}`); return }
+      if (!f.ok) { setBezig(false); setFout(t('fotoMislukt', { fout: f.error })); return }
     }
     setBezig(false)
     onKlaar()
   }
 
   return (
-    <BottomSheet titel="Aandachtspunt melden" onSluit={onSluit}>
+    <BottomSheet titel={t('aandachtspuntMelden')} onSluit={onSluit}>
       {fout && <Fout tekst={fout} />}
       <div>
-        <label style={label} htmlFor="ap-oms">Wat is er aan de hand?</label>
+        <label style={label} htmlFor="ap-oms">{t('watIsEr')}</label>
         {/* Inspreken in plaats van typen: op locatie scheelt dat bij een ronde veel tijd. */}
         <SpraakTextarea id="ap-oms" style={{ ...veld, minHeight: 88, resize: 'vertical' }}
           value={omschrijving} onChange={setOmschrijving}
-          placeholder="Beschrijf of spreek in wat er nog moet gebeuren" />
+          placeholder={t('omschrijvingPlaceholder')} />
       </div>
       <div>
-        <label style={label} htmlFor="ap-ruimte">Ruimte / locatie</label>
+        <label style={label} htmlFor="ap-ruimte">{t('ruimte')}</label>
         <input id="ap-ruimte" style={veld} value={ruimte} onChange={e => setRuimte(e.target.value)}
-          placeholder="Bijv. hal, kozijn achtergevel" />
+          placeholder={t('ruimtePlaceholder')} />
       </div>
       <div>
-        <span style={label}>Foto&apos;s</span>
+        <span style={label}>{t('fotos')}</span>
         {/* Camera en bibliotheek apart: `capture` dwingt de camera af, zonder dat kenmerk kies je
             een bestaande foto. Meestal fotografeer je ter plekke, maar soms staat het beeld er al. */}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -417,25 +428,25 @@ function NieuwAandachtspuntSheet({ dossierId, onSluit, onKlaar }: {
             onChange={e => { voegFotosToe(e.target.files); e.target.value = '' }} />
           <button type="button" onClick={() => cameraRef.current?.click()}
             style={{ ...secundaireKnop, flex: 1, fontSize: 14 }}>
-            📷 Foto maken
+            {t('fotoMaken')}
           </button>
           <button type="button" onClick={() => bibliotheekRef.current?.click()}
             style={{ ...secundaireKnop, flex: 1, fontSize: 14 }}>
-            🖼 Uit bibliotheek
+            {t('uitBibliotheek')}
           </button>
         </div>
         {fotos.length > 0 && (
           <div style={{ fontSize: 12, color: GRIJS, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{fotos.length} foto{fotos.length > 1 ? "'s" : ''} gekozen</span>
+            <span>{t('fotosGekozen', { aantal: fotos.length })}</span>
             <button type="button" onClick={() => setFotos([])}
               style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: GRIJS, textDecoration: 'underline', cursor: 'pointer' }}>
-              wissen
+              {t('wissen')}
             </button>
           </div>
         )}
       </div>
       <button type="button" onClick={opslaan} disabled={bezig} style={{ ...primaireKnop, width: '100%' }}>
-        {bezig ? 'Opslaan…' : 'Opslaan'}
+        {bezig ? t('opslaanBezig') : t('opslaan')}
       </button>
     </BottomSheet>
   )

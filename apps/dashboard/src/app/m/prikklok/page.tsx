@@ -1,3 +1,4 @@
+import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import PrikklokClient from '@/components/mobiel/prikklok/PrikklokClient'
@@ -13,12 +14,12 @@ export const dynamic = 'force-dynamic'
  */
 export default async function PrikklokPage() {
   const { instellingen } = await vereisPrikklok('/m')
-  const status = await getPrikklokStatus()
+  const [status, t] = await Promise.all([getPrikklokStatus(), getAppVertaler('prikklok')])
   return (
     <>
       <AppHeader
-        title="Prikklok"
-        sub={instellingen.fase === 'schaduw' ? 'Testmodus' : undefined}
+        title={t('titel')}
+        sub={instellingen.fase === 'schaduw' ? t('testmodus') : undefined}
         backHref="/m"
       />
       <MobielPullToRefresh />

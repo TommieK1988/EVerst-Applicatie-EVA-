@@ -1,4 +1,5 @@
 import { createAdminClient } from '@everts/database/server'
+import { getAppVertaler } from '@/i18n/server'
 import { getEffectieveRechten } from '@/lib/auth/rechten'
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { vereisMaterieelToegang } from '@/lib/materieel/auth'
@@ -33,11 +34,12 @@ export default async function ScanPage({
     koppelAanNaam = (data as { omschrijving: string } | null)?.omschrijving ?? null
   }
 
+  const t = await getAppVertaler('materieel')
   return (
     <>
       <AppHeader
-        title="Scannen"
-        sub={koppelAanNaam ? 'Sticker koppelen' : 'QR-sticker op materieel'}
+        title={t('scan.titel')}
+        sub={koppelAanNaam ? t('scan.subKoppelen') : t('scan.subStandaard')}
         backHref={koppelAan ? `/m/materieel/${koppelAan}` : '/m/materieel'}
       />
       <ScanScherm

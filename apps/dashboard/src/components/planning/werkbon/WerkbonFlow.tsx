@@ -3,10 +3,12 @@
 import { useState, useRef, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
 import HandtekeningPad from './HandtekeningPad'
 import { startWerkbon, uploadWerkbonFoto, sluitWerkbon } from '@/app/(platform)/planning/werkbon/actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody } from '@/components/ui/card'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 
 type Stap = 'start' | 'bezig' | 'afronden'
 
@@ -27,6 +29,7 @@ export default function WerkbonFlow({
   omschrijving, medewerkersOokGepland, bestaandeWerkbonId, readsAlBezig,
 }: Props) {
   const router = useRouter()
+  const t = useTranslations('werkbon')
   const [, startTransition] = useTransition()
 
   const [stap,       setStap]       = useState<Stap>(readsAlBezig ? 'bezig' : 'start')
@@ -77,7 +80,7 @@ export default function WerkbonFlow({
     const result = await sluitWerkbon(werkbonId, { opmerking, handtekening_b64: handtek, gewerkte_uren })
     setPending(false)
     if (!result.ok) { toast.error(result.error); return }
-    toast.success('Werkbon afgesloten')
+    toast.success(t('afgesloten'))
     startTransition(() => router.push('/planning/mijn-werkbonnen'))
   }
 
@@ -95,7 +98,7 @@ export default function WerkbonFlow({
         <Card>
           <CardBody>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
-              Klant
+              {t('klant')}
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--fg)' }}>
               {klantNaam}
@@ -111,17 +114,17 @@ export default function WerkbonFlow({
         <Card>
           <CardBody>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>
-              Activiteit
+              {t('activiteit')}
             </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>
-              {activiteitTitel}
+              <VertaalbareTekst tekst={activiteitTitel} label={false} />
             </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
               {dossierTitel}
             </div>
             {omschrijving && (
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                {omschrijving}
+                <VertaalbareTekst tekst={omschrijving} />
               </div>
             )}
           </CardBody>
@@ -131,7 +134,7 @@ export default function WerkbonFlow({
           <Card>
             <CardBody>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
-                Ook aanwezig
+                {t('ookAanwezig')}
               </div>
               {medewerkersOokGepland.map(n => (
                 <div key={n} style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)' }}>{n}</div>
@@ -148,7 +151,7 @@ export default function WerkbonFlow({
           onClick={handleStart}
           loading={pending}
         >
-          {pending ? 'Even geduld…' : 'Start werkbon'}
+          {pending ? t('evenGeduld') : t('startWerkbon')}
         </Button>
       </div>
     )
@@ -161,13 +164,13 @@ export default function WerkbonFlow({
         <Card>
           <CardBody style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginBottom: 4 }}>
-              Looptijd
+              {t('looptijd')}
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.02em' }}>
               {formatTijd(verstrekenSec)}
             </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg-muted)', marginTop: 4 }}>
-              {activiteitTitel}
+              <VertaalbareTekst tekst={activiteitTitel} label={false} />
             </div>
           </CardBody>
         </Card>
@@ -175,12 +178,12 @@ export default function WerkbonFlow({
         <Card>
           <CardBody>
             <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-              Opmerking
+              {t('opmerking')}
             </label>
             <textarea
               className="eva-input"
               rows={3}
-              placeholder="Bevindingen, bijzonderheden…"
+              placeholder={t('opmerkingPlaceholder')}
               value={opmerking}
               onChange={e => setOpmerking(e.target.value)}
               style={{ resize: 'vertical', fontFamily: 'var(--font-ui)', fontSize: 13 }}
@@ -191,7 +194,7 @@ export default function WerkbonFlow({
         <Card>
           <CardBody>
             <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-              Foto&apos;s
+              {t('fotos')}
             </label>
             <input
               ref={fotoInputRef}
@@ -210,7 +213,7 @@ export default function WerkbonFlow({
               onClick={() => fotoInputRef.current?.click()}
               loading={uploading}
             >
-              {uploading ? 'Uploaden…' : '📷 Foto toevoegen'}
+              {uploading ? t('uploaden') : t('fotoToevoegen')}
             </Button>
             {fotos.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
@@ -230,7 +233,7 @@ export default function WerkbonFlow({
           style={{ minHeight: 52, fontSize: 16, fontWeight: 700 }}
           onClick={() => setStap('afronden')}
         >
-          Afronden →
+          {t('afronden')}
         </Button>
       </div>
     )
@@ -242,13 +245,13 @@ export default function WerkbonFlow({
       <Card>
         <CardBody>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>Gewerkte uren</span>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{t('gewerkteUren')}</span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
-              {(Math.round(verstrekenSec / 360) / 10).toFixed(1)}u
+              {t('urenKort', { uren: (Math.round(verstrekenSec / 360) / 10).toFixed(1) })}
             </span>
           </div>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
-            Looptijd timer: {formatTijd(verstrekenSec)}
+            {t('looptijdTimer', { tijd: formatTijd(verstrekenSec) })}
           </div>
         </CardBody>
       </Card>
@@ -256,7 +259,7 @@ export default function WerkbonFlow({
       <Card>
         <CardBody>
           <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-            Handtekening opdrachtgever
+            {t('handtekeningOpdrachtgever')}
           </label>
           <HandtekeningPad onChange={setHandtek} />
         </CardBody>
@@ -269,7 +272,7 @@ export default function WerkbonFlow({
           style={{ minHeight: 48, flex: 1, fontSize: 14 }}
           onClick={() => setStap('bezig')}
         >
-          ← Terug
+          {t('terug')}
         </Button>
         <Button
           variant="primary"
@@ -278,7 +281,7 @@ export default function WerkbonFlow({
           onClick={handleAfronden}
           loading={pending}
         >
-          {pending ? 'Afronden…' : 'Werkbon afsluiten ✓'}
+          {pending ? t('afrondenBezig') : t('afsluiten')}
         </Button>
       </div>
     </div>

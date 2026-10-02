@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import QrScanner from './QrScanner'
 import { koppelSticker, zoekScan } from '@/app/m/materieel/actions'
 import { codeLabel } from '@/lib/materieel/qr'
@@ -35,6 +36,7 @@ export default function ScanScherm({
   koppelAanId?: string | null
   koppelAanNaam?: string | null
 }) {
+  const t = useTranslations('materieel')
   const router = useRouter()
   const [bezig, setBezig] = React.useState(false)
   const [fout, setFout] = React.useState<string | null>(null)
@@ -63,14 +65,14 @@ export default function ScanScherm({
       return
     }
     if (!magKoppelen) {
-      setFout('Deze sticker hoort nog nergens bij. Je hebt geen recht om materieel toe te voegen — vraag een collega met dat recht.')
+      setFout(t('scan.geenRecht'))
       setBezig(false)
       return
     }
     // Onbekende sticker: eerst vragen of het bij bestaand materieel hoort.
     setOnbekend(res.data.code)
     setBezig(false)
-  }, [koppelAanId, magKoppelen, router])
+  }, [koppelAanId, magKoppelen, router, t])
 
   // Gescand, niet gevonden: eerst kiezen. Camera weg, anders scant hij door de
   // keuze heen.
@@ -78,12 +80,12 @@ export default function ScanScherm({
     return (
       <div style={{ padding: 14 }}>
         <div style={kaart}>
-          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Onbekende sticker</div>
+          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>{t('scan.onbekendeSticker')}</div>
           <div style={{ fontSize: 17, fontWeight: 800 }}>{codeLabel(onbekend)}</div>
           <div style={{ fontSize: 13, color: GRIJS, marginTop: 6, lineHeight: 1.45 }}>
             {magToevoegen
-              ? 'Deze code staat nog nergens in EVA. Hoort hij bij materieel dat er al in staat, of is dit iets nieuws?'
-              : 'Deze code staat nog nergens in EVA. Je kunt hem aan materieel koppelen dat er al in staat; nieuw materieel toevoegen doet kantoor.'}
+              ? t('scan.onbekendUitlegToevoegen')
+              : t('scan.onbekendUitlegKoppelen')}
           </div>
         </div>
 
@@ -93,7 +95,7 @@ export default function ScanScherm({
             onClick={() => router.push(`/m/materieel/koppel?code=${encodeURIComponent(onbekend)}`)}
             style={primaireKnop}
           >
-            Koppelen aan bestaand materieel
+            {t('scan.koppelenAanBestaand')}
           </button>
           {magToevoegen && (
             <button
@@ -101,11 +103,11 @@ export default function ScanScherm({
               onClick={() => router.push(`/m/materieel/nieuw?code=${encodeURIComponent(onbekend)}`)}
               style={secundaireKnop}
             >
-              Nieuw materieel aanmaken
+              {t('scan.nieuwAanmaken')}
             </button>
           )}
           <button type="button" onClick={() => setOnbekend(null)} style={secundaireKnop}>
-            Opnieuw scannen
+            {t('scanner.opnieuwScannen')}
           </button>
         </div>
       </div>
@@ -116,7 +118,7 @@ export default function ScanScherm({
     <div style={{ padding: 14 }}>
       {koppelAanNaam && (
         <div style={{ ...kaart, marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>Sticker koppelen aan</div>
+          <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600 }}>{t('scan.koppelenAan')}</div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{koppelAanNaam}</div>
         </div>
       )}
@@ -124,7 +126,7 @@ export default function ScanScherm({
       <QrScanner
         onCode={verwerk}
         bezig={bezig}
-        hint={koppelAanId ? 'Scan de sticker die je op dit materieel plakt' : 'Richt op de QR-code van de sticker'}
+        hint={koppelAanId ? t('scan.hintKoppelen') : t('scanner.hint')}
       />
 
       {fout && (
@@ -141,13 +143,13 @@ export default function ScanScherm({
           het nummer staat er meestal ook in leesbare tekst onder. */}
       <div style={{ marginTop: 18 }}>
         <label style={{ fontSize: 12, fontWeight: 600, color: GRIJS, display: 'block', marginBottom: 6 }}>
-          Lukt scannen niet? Typ de code van de sticker over
+          {t('scan.handmatigLabel')}
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             value={handmatig}
             onChange={(e) => setHandmatig(e.target.value)}
-            placeholder="Bijv. EV-00123"
+            placeholder={t('scan.handmatigVoorbeeld')}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
@@ -162,7 +164,7 @@ export default function ScanScherm({
               opacity: bezig || handmatig.trim().length === 0 ? 0.5 : 1,
             }}
           >
-            Zoek
+            {t('scan.zoek')}
           </button>
         </div>
       </div>
@@ -173,7 +175,7 @@ export default function ScanScherm({
           onClick={() => router.push('/m/materieel/nieuw')}
           style={{ ...secundaireKnop, width: '100%', marginTop: 18 }}
         >
-          Toevoegen zonder sticker
+          {t('toevoegen.zonderSticker')}
         </button>
       )}
     </div>

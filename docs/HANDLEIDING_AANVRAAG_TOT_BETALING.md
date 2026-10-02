@@ -286,6 +286,13 @@ als **concept-verkoopfactuur naar Bouw7** (`maakRegieFactuurInBouw7`, `POST /inv
 regels worden dan gemarkeerd als "gefactureerd". Het definitief maken en versturen doe je in
 Bouw7.
 
+**Regieopdracht:** een gewone opdracht die in regie is aangenomen (komt weinig voor). Zet hem op
+de **Verkoop-tab** met de schakelaar **Regieopdracht** op regie. De aanneemsom vervalt — in EVA
+en in Bouw7 (`fixedPrice` → 0) — en élke bewakingscode waarop geboekt is wordt een post in
+hetzelfde regie-paneel; in het Overzicht heet de basisregel dan **Regiewerkzaamheden**. Heeft de
+opdracht nog geen enkele bewakingscode, dan krijgt hij opvangcode `RW01`. Een mandaat is optioneel
+(plafond, geen minimum). Na de eerste verkoopfactuur staat de schakelaar op slot.
+
 **(b) Status:**
 - Opdracht: `financieel_gereed` als het werk klaar is voor eindafrekening.
 - Servicedesk: `uitgevoerd` → `kosten_compleet` → `financieel_gereed`.

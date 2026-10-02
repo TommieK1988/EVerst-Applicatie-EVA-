@@ -1,0 +1,29 @@
+{
+  "metaTitel": "Toolbox · EVA Mobiel",
+  "vraagVan": "Pytanie {nr}/{totaal}",
+  "slideVan": "Slajd {nr}/{totaal}",
+  "vorige": "Wstecz",
+  "volgende": "Dalej",
+  "naarVragen": "Przejdź do pytań",
+  "naarAftekenen": "Przejdź do podpisu",
+  "nietJuist": "To nie jest poprawna odpowiedź — spróbuj jeszcze raz.",
+  "aftekenen": "Podpisanie",
+  "aftekenenUitleg": "Toolbox ukończony, wszystkie odpowiedzi są poprawne. Podpisz się poniżej, aby potwierdzić, że rozumiesz instrukcję.",
+  "naam": "Imię i nazwisko",
+  "handtekening": "Podpis",
+  "bezig": "Trwa zapisywanie…",
+  "afronden": "Zakończ toolbox",
+  "alAfgerond": "Już zakończony",
+  "afgerond": "Toolbox zakończony",
+  "eerderAfgetekend": "Toolbox „{titel}” jest już podpisany.",
+  "doorlopenAfgetekend": "Toolbox „{titel}” ukończony i podpisany. Zadanie zostało automatycznie zakończone.",
+  "terugNaarActies": "Wróć do zadań",
+  "fout": {
+    "geenToegang": "Brak dostępu do tego toolboxa.",
+    "naamLeeg": "Wpisz swoje imię i nazwisko.",
+    "geenHandtekening": "Najpierw złóż podpis.",
+    "inhoudNietGevonden": "Nie znaleziono treści toolboxa.",
+    "vragenNietGoed": "Najpierw poprawnie odpowiedz na wszystkie pytania, a potem się podpisz.",
+    "handtekeningOpslaan": "Nie udało się zapisać podpisu: {fout}"
+  }
+}

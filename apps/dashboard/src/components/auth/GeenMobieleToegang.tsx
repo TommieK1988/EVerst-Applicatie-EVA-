@@ -9,7 +9,14 @@ import { logout } from '@/app/(auth)/login/actions'
  * de medewerker-poort omzeilde. We loggen direct uit — een kale redirect naar
  * /login zou lussen (middleware stuurt een ingelogde gebruiker terug naar /m).
  */
-export default function GeenMobieleToegang() {
+export default function GeenMobieleToegang({ tekst }: {
+  /**
+   * De melding, al vertaald door de layout. Deze tak staat búíten de taalprovider van
+   * `/m` (er is geen geldige medewerker om de app voor op te zetten), dus de tekst
+   * komt als prop mee in plaats van via `useTranslations`.
+   */
+  tekst: string
+}) {
   React.useEffect(() => {
     logout().catch(() => { window.location.href = '/login' })
   }, [])
@@ -21,7 +28,7 @@ export default function GeenMobieleToegang() {
       fontFamily: "'Montserrat', ui-sans-serif, system-ui, sans-serif",
       color: '#6b757c', fontSize: 14,
     }}>
-      Geen toegang — je wordt uitgelogd…
+      {tekst}
     </div>
   )
 }

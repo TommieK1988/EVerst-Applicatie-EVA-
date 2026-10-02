@@ -60,6 +60,7 @@ import {
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { AFREKENWIJZE_VELDEN, isRegieOpdracht, isRegieOpdrachtRij } from './regie-opdracht'
 
 type DossierResult =
   /** `totaal` = het aantal rijen dat aan het filter voldoet, ook als `data` door een limit is ingekort. */
@@ -119,7 +120,7 @@ const LIJST_KOLOMMEN = `
   bedrag_excl_btw, bedrag_incl_btw, kostprijs_excl_btw, mandaat_bedrag,
   verwacht_startdatum, verwacht_einddatum, aanvraagdatum, deadline, verzonden_op, opdrachtdatum,
   created_at, updated_at, gearchiveerd,
-  categorie, referentie, opdracht_referentie, opmerkingen, vve_code, facturatiemethode,
+  categorie, referentie, opdracht_referentie, opmerkingen, vve_code, facturatiemethode, facturatiemethode_handmatig,
   werkadres_naam, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad,
   bouw7_id, bouw7_laatst_sync, bouw7_sync_status, bouw7_aanmaakdatum,
   bouw7_categorie, bouw7_categorie_naam, bouw7_projectstatus_naam, bouw7_quotation_status,
@@ -1440,6 +1441,13 @@ export async function updateDossierSubstatus(
     if (huidig.bouw7_id != null && !opts?.slaAanneemsomOver) {
       aanneemsom = await stuurAanneemsomNaarBouw7Intern(supabase, id)
         .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
+    }
+    // Een offerte die in Bouw7 is gemaakt (geen EVA-calculatie) gaat daar ook op Gewonnen, en
+    // levert de aanneemsom als het project er nog geen heeft. Ná de EVA-aanneemsom hierboven,
+    // zodat een bedrag uit de calculatie voorgaat.
+    if (huidig.bouw7_id != null) {
+      const { bevestigOfferteGewonnenEnLog } = await import('@/lib/bouw7/offerte-gewonnen')
+      await bevestigOfferteGewonnenEnLog(huidig.bouw7_id, '/dossiers/[id]', 'server', { aanneemsom: !opts?.slaAanneemsomOver })
     }
   }
 
@@ -3553,8 +3561,11 @@ export async function getDossierVerkoop(dossierId: string): Promise<DossierVerko
   // en dan viel dit terug op `revenue.budgeted` — de aanneemsom plús het begrote meerwerk. Dat
   // meerwerk telt hieronder nog eens mee, dus stond het dubbel in het contracttotaal (Vlietkinderen:
   // MW001, € 19.914,88; 6 van de 708 dossiers, sep 2026).
-  const aanneemsom = toGetal(bouw7Financial?.fixedPrice?.budgeted)
-    || Math.round((toGetal(bouw7Financial?.revenue?.budgeted) - toGetal(bouw7Financial?.additionalWork?.budgeted)) * 100) / 100
+  // Een regieopdracht heeft geen aanneemsom, ook niet als Bouw7 (nog) een vaste prijs of begroting
+  // teruggeeft — die zou anders bovenop de nacalculatie in het contracttotaal staan.
+  const aanneemsom = (await isRegieOpdracht(dossierId).catch(() => false)) ? 0
+    : toGetal(bouw7Financial?.fixedPrice?.budgeted)
+      || Math.round((toGetal(bouw7Financial?.revenue?.budgeted) - toGetal(bouw7Financial?.additionalWork?.budgeted)) * 100) / 100
   // Goedgekeurd meerwerk: additionalWork is een object; bedrag zit in prognosis (= expected)
   const meerwerk = toGetal(bouw7Financial?.additionalWork?.prognosis ?? bouw7Financial?.additionalWork?.expected)
   const contractTotaal = aanneemsom + meerwerk
@@ -3952,8 +3963,15 @@ export async function stuurAanneemsomNaarBouw7(dossierId: string): Promise<Bouw7
 }
 
 async function stuurAanneemsomNaarBouw7Intern(supabase: any, dossierId: string): Promise<Bouw7WriteResult & { bedrag?: number }> {
-  const { data: d } = await supabase.from('dossiers').select('bouw7_id, everts_calc_project_id').eq('id', dossierId).maybeSingle()
+  const { data: d } = await supabase.from('dossiers')
+    .select(`bouw7_id, everts_calc_project_id, ${AFREKENWIJZE_VELDEN}`).eq('id', dossierId).maybeSingle()
   if (!d?.bouw7_id) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
+  // Een regieopdracht heeft geen aanneemsom. Deze ene grens dekt het gewonnen-pad, de cron-retry
+  // en de knop op de Informatie-tab tegelijk; de schakelaar zelf zet hem in Bouw7 op nul.
+  if (isRegieOpdrachtRij(d)) {
+    await ontmarkeerHandmatig(supabase, 'dossiers', dossierId, ['aanneemsom']).catch(() => {})
+    return { ok: false, error: 'Dit is een regieopdracht: die heeft geen aanneemsom.' }
+  }
   if (!d.everts_calc_project_id) return { ok: false, error: 'Dossier heeft geen EVA-calculatie; er is geen aanneemsom om te schrijven.' }
   const bedragen = await laadKaartBedragen([{ id: dossierId, everts_calc_project_id: d.everts_calc_project_id }])
   const bedrag = bedragen.get(dossierId)?.eva_offerte_excl_btw ?? null
@@ -4292,8 +4310,10 @@ export async function getBewakingscodesVoorUurlog(
     let filteren = !!opties?.alleenMetPrognose
     if (filteren) {
       const { data: d } = await createAdminClient()
-        .from('dossiers').select('servicedesk_substatus').eq('id', dossierId).maybeSingle()
-      if (d?.servicedesk_substatus) filteren = false
+        .from('dossiers').select('servicedesk_substatus, regie_bewakingscode').eq('id', dossierId).maybeSingle()
+      // Een bon, of een regieopdracht met opvangcode RW01: die code heeft geen prognose en moet
+      // tóch kiesbaar zijn, anders valt er nergens op te boeken.
+      if (d?.servicedesk_substatus || d?.regie_bewakingscode) filteren = false
     }
     const lijst = filteren ? gevonden.filter(o => o.prognoseUren > 0) : gevonden
     return lijst.sort((a, b) => a.code.localeCompare(b.code))

@@ -1,8 +1,10 @@
 'use client'
 import React, { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { format, parseISO, isPast, isToday } from 'date-fns'
-import { nl } from 'date-fns/locale'
+import { parseISO, isPast, isToday } from 'date-fns'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
+import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { bepaalUitvoerActies } from '@/lib/taken/uitvoeracties'
 import TaakUitvoerKnop, { UitvoerBadge } from './TaakUitvoerKnop'
@@ -25,23 +27,27 @@ export type MobielTaak = {
   omschrijving: string | null
 }
 
-const PRIO: Record<string, { label: string; c: string; bg: string }> = {
-  urgent:  { label: 'Urgent',  c: '#b42318', bg: '#fef3f2' },
-  hoog:    { label: 'Urgent',  c: '#b42318', bg: '#fef3f2' },
-  normaal: { label: 'Normaal', c: '#b85a00', bg: '#fff6ec' },
-  laag:    { label: 'Laag',    c: '#6b757c', bg: '#f1f4f5' },
+// `hoog` toont in de lijst bewust als Urgent; vandaar een eigen sleutel naast de kleur.
+const PRIO: Record<string, { sleutel: 'urgent' | 'normaal' | 'laag'; c: string; bg: string }> = {
+  urgent:  { sleutel: 'urgent',  c: '#b42318', bg: '#fef3f2' },
+  hoog:    { sleutel: 'urgent',  c: '#b42318', bg: '#fef3f2' },
+  normaal: { sleutel: 'normaal', c: '#b85a00', bg: '#fff6ec' },
+  laag:    { sleutel: 'laag',    c: '#6b757c', bg: '#f1f4f5' },
 }
 
-function deadlineLabel(iso: string | null): { tekst: string; kleur: string } | null {
+function deadlineLabel(iso: string | null, locale: string): { tekst: string; kleur: string } | null {
   if (!iso) return null
   try {
     const d = parseISO(iso)
+    if (isNaN(d.getTime())) return null
     const kleur = isPast(d) && !isToday(d) ? '#b42318' : isToday(d) ? '#b85a00' : '#6b757c'
-    return { tekst: format(d, 'd MMM', { locale: nl }), kleur }
+    return { tekst: d.toLocaleDateString(locale, { day: 'numeric', month: 'short' }), kleur }
   } catch { return null }
 }
 
 export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
+  const t = useTranslations('taken')
+  const locale = useDatumLocale()
   const [afgevinkt, setAfgevinkt] = useState<Set<string>>(new Set())
   const [detail, setDetail] = useState<MobielTaak | null>(null)
   const [, startTransition] = useTransition()
@@ -57,12 +63,12 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
     })
   }
 
-  const zichtbaar = taken.filter(t => !afgevinkt.has(t.id))
+  const zichtbaar = taken.filter(tk => !afgevinkt.has(tk.id))
 
   if (zichtbaar.length === 0) {
     return (
       <div style={{ textAlign: 'center', color: '#6b757c', padding: '48px 16px', fontSize: 14 }}>
-        Geen openstaande acties
+        {t('geenOpenstaand')}
       </div>
     )
   }
@@ -72,7 +78,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
     <div style={{ padding: '10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       {zichtbaar.map(taak => {
         const prio = PRIO[taak.prioriteit] ?? PRIO.normaal
-        const dl = deadlineLabel(taak.deadline)
+        const dl = deadlineLabel(taak.deadline, locale)
         const acties = bepaalUitvoerActies(taak)
         return (
           <div
@@ -92,7 +98,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
             ) : (
               <button
                 onClick={() => vinkAf(taak.id)}
-                aria-label="Actie afvinken"
+                aria-label={t('afvinkenLabel')}
                 style={{
                   width: 22, height: 22, flexShrink: 0, marginTop: 1,
                   borderRadius: 6, border: '2px solid var(--border)', background: 'transparent',
@@ -111,17 +117,22 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                     textAlign: 'left', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.45 }}>
-                    {taak.titel}
-                  </span>
+                  <VertaalbareTekst
+                    tekst={taak.titel}
+                    label={false}
+                    style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.45 }}
+                  />
                   <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#1f6feb" strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }}>
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                   </svg>
                 </button>
               ) : (
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.45, marginBottom: 6 }}>
-                  {taak.titel}
-                </div>
+                <VertaalbareTekst
+                  as="div"
+                  tekst={taak.titel}
+                  label={false}
+                  style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', lineHeight: 1.45, marginBottom: 6 }}
+                />
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {taak.dossier_naam && (
@@ -139,7 +150,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
                   )
                 )}
                 <span style={{ fontSize: 10, fontWeight: 700, color: prio.c, background: prio.bg, padding: '2px 8px', borderRadius: 99 }}>
-                  {prio.label}
+                  {t(`prioriteit.${prio.sleutel}`)}
                 </span>
                 {dl && (
                   <span style={{ fontSize: 10, fontWeight: 700, color: dl.kleur }}>{dl.tekst}</span>
@@ -179,12 +190,17 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
         >
           {/* grijp-streepje */}
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d7dde0', margin: '0 auto 14px', flexShrink: 0 }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)', marginBottom: 10, flexShrink: 0 }}>
-            {detail.titel}
-          </div>
-          <div style={{ overflowY: 'auto', fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-            {detail.omschrijving}
-          </div>
+          <VertaalbareTekst
+            as="div"
+            tekst={detail.titel}
+            label={false}
+            style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)', marginBottom: 10, flexShrink: 0 }}
+          />
+          <VertaalbareTekst
+            as="div"
+            tekst={detail.omschrijving}
+            style={{ overflowY: 'auto', fontSize: 14, color: '#3a444b', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}
+          />
           <button
             type="button"
             onClick={() => setDetail(null)}
@@ -195,7 +211,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
               fontSize: 15, fontWeight: 600, cursor: 'pointer',
             }}
           >
-            Sluiten
+            {t('sluiten')}
           </button>
         </div>
       </div>

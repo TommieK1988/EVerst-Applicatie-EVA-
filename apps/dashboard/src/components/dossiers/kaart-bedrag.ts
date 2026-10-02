@@ -1,5 +1,5 @@
 import { kiesAanneemsom } from '@/lib/dossiers/aanneemsom'
-import type { DossierRij, DossierSectie } from './types'
+import { opRegie, type DossierRij, type DossierSectie } from './types'
 
 /**
  * Eén plek waar het bedrag op een dossierkaart/lijstregel wordt bepaald, zodat het bord, de
@@ -107,12 +107,16 @@ export function berekenKaartBedrag(dossier: DossierRij, sectie?: DossierSectie):
     // De som loopt over meerdere offertes; de kostprijs van één ervan zegt niets over die som.
     kostprijs  = null
   } else {
+    const regie = opRegie(dossier)
     const keuze = kiesAanneemsom({
       hoofdstatus:       dossier.hoofdstatus,
       bouw7ExclBtw:      dossier.bedrag_excl_btw != null ? Number(dossier.bedrag_excl_btw) : null,
       evaOfferteExclBtw: dossier.eva_offerte_excl_btw ?? null,
+      opRegie:           regie,
     })
-    aanneemsom = keuze.aanneemsom
+    // Een regieopdracht heeft geen aanneemsom. De geboekte regie kent alleen de Verkoop-tab (te
+    // zwaar voor een bord); het mandaat is het enige vaste getal, dus dat staat op de kaart.
+    aanneemsom = regie && dossier.mandaat_bedrag != null ? Number(dossier.mandaat_bedrag) : keuze.aanneemsom
     bron       = keuze.bron
     // De kostprijs hoort altijd bij de offerte/het project dat ook de verkoopprijs leverde; ze
     // mengen zou een betekenisloze marge opleveren.

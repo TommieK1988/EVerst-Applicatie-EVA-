@@ -69,5 +69,6 @@ export const chip = (actief: boolean): React.CSSProperties => ({
   cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
 })
 
-export const euro = (bedrag: number | null | undefined): string =>
-  new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(bedrag ?? 0)
+/** Bedrag in euro's. `locale` uit `useDatumLocale()`, zodat de opmaak bij de taal van de app past. */
+export const euro = (bedrag: number | null | undefined, locale = 'nl-NL'): string =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(bedrag ?? 0)

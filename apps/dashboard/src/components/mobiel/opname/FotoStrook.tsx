@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import { verwijderOpnameFoto, zetHoofdfoto } from '@/lib/opname/opnames'
 import { verwijderUitWachtrij, zetInWachtrij } from '@/lib/opname/wachtrij'
@@ -50,6 +51,7 @@ export default function FotoStrook({
    */
   voorbereiden?: () => Promise<boolean>
 }) {
+  const t = useTranslations('opname')
   const cameraRef = React.useRef<HTMLInputElement>(null)
   const bibliotheekRef = React.useRef<HTMLInputElement>(null)
   const [bezig, setBezig] = React.useState(false)
@@ -95,7 +97,7 @@ export default function FotoStrook({
           blob: verkleind,
         })
       } catch (err) {
-        setFout(err instanceof Error ? err.message : 'Foto opslaan mislukt')
+        setFout(err instanceof Error ? err.message : t('foto.opslaanMislukt'))
         continue
       }
       nieuwe.push({
@@ -175,12 +177,12 @@ export default function FotoStrook({
                     fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
                   }}
                 >
-                  OFFERTE
+                  {t('foto.offerte')}
                 </span>
               )}
               {f.wacht && (
                 <span
-                  title="Wacht op verbinding"
+                  title={t('foto.wachtOpVerbinding')}
                   style={{
                     position: 'absolute', top: 4, left: 4, width: 16, height: 16,
                     borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#fff',
@@ -194,7 +196,7 @@ export default function FotoStrook({
                 <button
                   type="button"
                   onClick={() => void verwijder(f.id)}
-                  aria-label="Foto verwijderen"
+                  aria-label={t('foto.verwijderen')}
                   style={{
                     position: 'absolute', top: -6, right: -6, width: 22, height: 22,
                     borderRadius: 11, border: 'none', background: 'rgba(0,0,0,0.65)',
@@ -217,7 +219,7 @@ export default function FotoStrook({
             disabled={bezig}
             style={{ ...secundaireKnop, flex: 1, padding: '11px 12px', fontSize: 14 }}
           >
-            {bezig ? 'Bezig…' : '📷 Foto maken'}
+            {bezig ? t('bezig') : t('foto.maken')}
           </button>
           <button
             type="button"
@@ -225,7 +227,7 @@ export default function FotoStrook({
             disabled={bezig}
             style={{ ...secundaireKnop, padding: '11px 12px', fontSize: 14 }}
           >
-            Kiezen
+            {t('foto.kiezen')}
           </button>
         </div>
       )}
@@ -245,16 +247,16 @@ export default function FotoStrook({
 
       {mist && (
         <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD, fontWeight: 600 }}>
-          Bij dit onderdeel is een foto verplicht.
+          {t('foto.verplicht')}
         </p>
       )}
       {fout && <p style={{ margin: '6px 0 0', fontSize: 12, color: ROOD }}>{fout}</p>}
       {!mist && !fout && fotos.length === 0 && (
-        <p style={{ margin: '6px 0 0', fontSize: 11, color: ZACHT }}>Optioneel</p>
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: ZACHT }}>{t('foto.optioneel')}</p>
       )}
       {fotos.length > 1 && (
         <p style={{ margin: '6px 0 0', fontSize: 11, color: GRIJS }}>
-          Tik een foto aan om hem in de offerte te gebruiken.
+          {t('foto.tikVoorOfferte')}
         </p>
       )}
     </div>

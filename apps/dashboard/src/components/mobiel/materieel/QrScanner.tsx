@@ -2,7 +2,8 @@
 
 import React from 'react'
 import jsQR from 'jsqr'
-import { herstelUitleg, kanStatusLezen, laatLos, leesStatus, pakCamera } from '@/lib/materieel/camera'
+import { useTranslations } from 'next-intl'
+import { kanStatusLezen, laatLos, leesStatus, pakCamera } from '@/lib/materieel/camera'
 import { GRIJS, RAND, ROOD, secundaireKnop } from './stijl'
 
 /**
@@ -35,10 +36,22 @@ type BarcodeDetectorAchtig = {
 }
 type BarcodeDetectorCtor = new (opties: { formats: string[] }) => BarcodeDetectorAchtig
 
+/**
+ * Soort toestel voor de herstel-uitleg. Zelfde indeling als `herstelUitleg()` in
+ * `lib/materieel/camera.ts`; die tekst blijft Nederlands voor kantoor, hier komt
+ * hij uit de taalbestanden.
+ */
+function toestelSoort(): 'ios' | 'android' | 'anders' {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  if (/Android/i.test(ua)) return 'android'
+  return 'anders'
+}
+
 export default function QrScanner({
   onCode,
   bezig = false,
-  hint = 'Richt op de QR-code van de sticker',
+  hint,
 }: {
   /** Wordt één keer per gelezen code aangeroepen. */
   onCode: (payload: string) => void
@@ -46,6 +59,7 @@ export default function QrScanner({
   bezig?: boolean
   hint?: string
 }) {
+  const t = useTranslations('materieel')
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
@@ -77,7 +91,7 @@ export default function QrScanner({
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setFout('Deze telefoon of browser geeft geen toegang tot de camera. Typ de code van de sticker over.')
+        setFout(t('scanner.geenCamera'))
         return
       }
       try {
@@ -108,9 +122,9 @@ export default function QrScanner({
         const naam = (e as { name?: string }).name
         if (naam === 'NotAllowedError') {
           setGeweigerd(true)
-          setFout(herstelUitleg())
+          setFout(t(`scanner.herstel.${toestelSoort()}`))
         } else {
-          setFout('De camera start niet. Typ de code van de sticker over.')
+          setFout(t('scanner.startNiet'))
         }
       }
     }
@@ -166,6 +180,7 @@ export default function QrScanner({
       vrijgeven?.()
       streamRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- de camera start één keer; `t` wisselt niet tijdens het scannen
   }, [])
 
   // Toestemming die buiten EVA om alsnog wordt gegeven (site-instellingen) —
@@ -243,13 +258,13 @@ export default function QrScanner({
               color: lampAan ? '#111' : '#fff', fontSize: 14, fontWeight: 700,
             }}
           >
-            {lampAan ? 'Lamp uit' : 'Lamp aan'}
+            {lampAan ? t('scanner.lampUit') : t('scanner.lampAan')}
           </button>
         )}
       </div>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <p style={{ margin: '10px 2px 0', fontSize: 13, color: GRIJS, textAlign: 'center' }}>
-        {bezig ? 'Even zoeken…' : hint}
+        {bezig ? t('scanner.evenZoeken') : (hint ?? t('scanner.hint'))}
       </p>
       {/* Na een treffer blijft de laatste code onthouden zodat dezelfde sticker
           niet blijft vuren. Opnieuw scannen van hetzelfde object kan hiermee. */}
@@ -258,7 +273,7 @@ export default function QrScanner({
         onClick={() => { laatsteCode.current = '' }}
         style={{ ...secundaireKnop, width: '100%', marginTop: 10 }}
       >
-        Opnieuw scannen
+        {t('scanner.opnieuwScannen')}
       </button>
     </div>
   )

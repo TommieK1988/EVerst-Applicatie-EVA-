@@ -1,0 +1,75 @@
+{
+  "paginaTitel": "Oględziny",
+  "bezig": "Trwa…",
+  "nieuweOpnameStarten": "Rozpocznij nowe oględziny",
+  "terug": "Wstecz",
+  "losPuntKnop": "+ Osobny punkt",
+  "annuleren": "Anuluj",
+  "opslaan": "Zapisz",
+  "toevoegen": "Dodaj",
+  "fout": {
+    "fotoOntbreektInWachtrij": "Brak zdjęcia w kolejce",
+    "omschrijvingVerplicht": "Wpisz opis",
+    "opslaanMislukt": "Nie udało się zapisać",
+    "verwijderenMislukt": "Nie udało się usunąć",
+    "nogNietVerstuurd": "{aantal, plural, one {# zmiana nie została jeszcze wysłana.} few {# zmiany nie zostały jeszcze wysłane.} many {# zmian nie zostało jeszcze wysłanych.} other {# zmiany nie zostały jeszcze wysłane.}} Wyślą się same, gdy wróci połączenie; potem możesz zakończyć."
+  },
+  "foto": {
+    "opslaanMislukt": "Nie udało się zapisać zdjęcia",
+    "offerte": "OFERTA",
+    "wachtOpVerbinding": "Czeka na połączenie",
+    "verwijderen": "Usuń zdjęcie",
+    "maken": "📷 Zrób zdjęcie",
+    "kiezen": "Wybierz",
+    "verplicht": "Przy tej pozycji zdjęcie jest obowiązkowe.",
+    "optioneel": "Opcjonalnie",
+    "tikVoorOfferte": "Dotknij zdjęcia, aby użyć go w ofercie."
+  },
+  "kiezer": {
+    "zoekPlaatshouder": "Szukaj po kodzie lub opisie",
+    "alles": "Wszystko",
+    "vaakGebruikt": "Często używane u tego klienta",
+    "heleLijst": "Cała lista",
+    "nietsGevonden": "Nic nie znaleziono. Dodaj to jako osobny punkt, kosztorysant wyceni go później.",
+    "meerResultaten": "{aantal, plural, one {Jeszcze # wynik — doprecyzuj wyszukiwanie, aby go zobaczyć.} few {Jeszcze # wyniki — doprecyzuj wyszukiwanie, aby je zobaczyć.} many {Jeszcze # wyników — doprecyzuj wyszukiwanie, aby je zobaczyć.} other {Jeszcze # wyniku — doprecyzuj wyszukiwanie, aby je zobaczyć.}}",
+    "perEenheid": "za {eenheid}",
+    "fotoVerplicht": "zdjęcie obowiązkowe",
+    "toelichtingVerplicht": "uwagi obowiązkowe"
+  },
+  "ruimte": {
+    "anders": "Inne…",
+    "eigenNaam": "Własna nazwa pomieszczenia"
+  },
+  "regel": {
+    "watMoetErGebeuren": "Co trzeba zrobić? (obowiązkowe)",
+    "omschrijvingVoorbeeld": "Np. wymienić listwę za grzejnikiem",
+    "losPuntUitleg": "Osobny punkt. Lokalizację, ilość i zdjęcie możesz zostawić puste; cenę ustali biuro w kosztorysie.",
+    "locatie": "Lokalizacja",
+    "locatieOptioneel": "Lokalizacja (opcjonalnie)",
+    "aantalMetEenheid": "Ilość ({eenheid})",
+    "aantalOptioneel": "Ilość (opcjonalnie, puste = 1)",
+    "minder": "Mniej",
+    "meer": "Więcej",
+    "toelichtingVerplicht": "Uwagi (obowiązkowe)",
+    "toelichtingOptioneel": "Uwagi (opcjonalnie)",
+    "toelichtingPlaatshouder": "Co powinien wiedzieć kosztorysant",
+    "fotos": "Zdjęcia",
+    "verwijderen": "Usuń pozycję"
+  },
+  "overzicht": {
+    "nogNietsOpgenomen": "Jeszcze nic nie zapisano",
+    "legeUitlegBibliotheek": "Wybierz lokalizację i dodaj pierwszą pracę.",
+    "legeUitlegLos": "Dodaj pierwszy punkt. Wystarczy opis; cena pojawi się później.",
+    "overig": "Inne",
+    "aantalFotos": "{aantal, plural, one {# zdjęcie} few {# zdjęcia} many {# zdjęć} other {# zdjęcia}}",
+    "nogTePrijzen": "do wyceny",
+    "aantalPunten": "{aantal, plural, one {# punkt} few {# punkty} many {# punktów} other {# punktu}}",
+    "aantalLocaties": "{aantal, plural, one {# lokalizacja} few {# lokalizacje} many {# lokalizacji} other {# lokalizacji}}",
+    "aantalNogTePrijzen": "{aantal} do wyceny",
+    "aantalWachtOpVerbinding": "{aantal} czeka na połączenie",
+    "toevoegenKnop": "+ Dodaj",
+    "puntToevoegenKnop": "+ Dodaj punkt",
+    "afronden": "Zakończ",
+    "isAfgerond": "Te oględziny są zakończone."
+  }
+}

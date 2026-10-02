@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useTranslations } from 'next-intl'
+import { useDatumLocale } from '@/i18n/client'
 import BottomSheet from '../BottomSheet'
 import { AMBER, GRIJS, GROEN, OPPERVLAK, RAND, ROOD, TEKST, VLAK, primaireKnop, secundaireKnop, veld, label } from '../oplevering/stijl'
-import { haalLocatie, herstelUitleg, LocatieFout } from '@/lib/locatie/toestemming'
+import { haalLocatie, LocatieFout, type LocatieFoutSoort } from '@/lib/locatie/toestemming'
 import {
   zoekWerklocaties, klokIn, klokUit, meldVertrokken, meldGpsFout, type PrikklokStatus,
 } from '@/lib/prikklok/actions'
@@ -20,24 +22,43 @@ import type { PositieInvoer, Werklocatie } from '@/lib/prikklok/types'
  * op inklokt, en een buurpand is zo snel verward.
  */
 
-const uur = (n: number) => n.toLocaleString('nl-NL', { maximumFractionDigits: 2 })
+type Vertaler = ReturnType<typeof useTranslations<'prikklok'>>
 
-function looptijd(sinds: string, nu: number): string {
+const uur = (n: number, locale: string) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
+
+function looptijd(sinds: string, nu: number, t: Vertaler): string {
   const min = Math.max(0, Math.floor((nu - new Date(sinds).getTime()) / 60_000))
-  return `${Math.floor(min / 60)}u ${String(min % 60).padStart(2, '0')}m`
+  return t('looptijd', { uren: String(Math.floor(min / 60)), minuten: String(min % 60).padStart(2, '0') })
 }
 
 function nuAlsTijd(): string {
+  // Waarde van een <input type="time">: altijd HH:MM, los van de taal.
   return new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
 }
 
-const WIJZE_TEKST: Record<string, string> = {
-  locatie: 'uitgeklokt',
-  wissel: 'gewisseld',
-  handmatig: 'zelf opgegeven',
+/** Uitlegtekst bij `LocatieFout.soort`; de meldingen in `lib/locatie` zelf zijn Nederlands (ook kantoor). */
+const LOCATIE_FOUT: Record<LocatieFoutSoort, 'geenGps' | 'geweigerd' | 'teTraag' | 'geenFix'> = {
+  'geen-gps': 'geenGps',
+  geweigerd: 'geweigerd',
+  'te-traag': 'teTraag',
+  'geen-fix': 'geenFix',
 }
 
+/** Zelfde toestelherkenning als `herstelUitleg()` in `lib/locatie/toestemming`, maar vertaald. */
+function herstelUitleg(t: Vertaler): string {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return t('herstel.ios')
+  if (/Android/i.test(ua)) return t('herstel.android')
+  return t('herstel.overig')
+}
+
+/** Hoe een sessie is afgesloten, in de taal van de app. */
+const wijzeTekst = (wijze: string, t: Vertaler) =>
+  wijze === 'locatie' || wijze === 'wissel' || wijze === 'handmatig' ? t(`wijze.${wijze}`) : wijze
+
 export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
+  const t = useTranslations('prikklok')
+  const locale = useDatumLocale()
   const router = useRouter()
   const [bezig, setBezig] = useState<null | 'in' | 'uit' | 'vertrek'>(null)
   const [fout, setFout] = useState<{ tekst: string; vertrekAanbieden: boolean } | null>(null)
@@ -53,6 +74,7 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
 
   const open = status.open
   const schaduw = status.fase === 'schaduw'
+  const testmodusMelding = t.rich('testmodusMelding', { b: (c) => <strong>{c}</strong> })
 
   /** Positie van de telefoon, of de gekozen testlocatie. Null = fout al getoond. */
   async function positie(actie: 'in' | 'uit'): Promise<PositieInvoer | null> {
@@ -64,12 +86,13 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
       if (e instanceof LocatieFout) {
         const geweigerd = e.soort === 'geweigerd'
         void meldGpsFout(actie, geweigerd ? 'geweigerd' : 'geen_gps').catch(() => {})
+        const melding = t(`locatieFout.${LOCATIE_FOUT[e.soort]}`)
         setFout({
-          tekst: geweigerd ? `${e.message} ${herstelUitleg()}` : e.message,
+          tekst: geweigerd ? t('foutMetUitleg', { fout: melding, uitleg: herstelUitleg(t) }) : melding,
           vertrekAanbieden: false,
         })
       } else {
-        setFout({ tekst: 'Locatie ophalen lukte niet.', vertrekAanbieden: false })
+        setFout({ tekst: t('locatieFout.geenFix'), vertrekAanbieden: false })
       }
       return null
     }
@@ -88,7 +111,7 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
       }
       setKeuze({ locaties: res.locaties, invoer })
     } catch {
-      setFout({ tekst: 'Er ging iets mis. Probeer het opnieuw.', vertrekAanbieden: false })
+      setFout({ tekst: t('foutAlgemeen'), vertrekAanbieden: false })
     } finally {
       setBezig(null)
     }
@@ -125,7 +148,7 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
         setFout({ tekst: res.melding, vertrekAanbieden: res.reden === 'te_ver' || res.reden === 'geen_coordinaten' })
       }
     } catch {
-      setFout({ tekst: 'Er ging iets mis. Probeer het opnieuw.', vertrekAanbieden: false })
+      setFout({ tekst: t('foutAlgemeen'), vertrekAanbieden: false })
     } finally {
       setBezig(null)
     }
@@ -164,8 +187,7 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
           padding: '10px 12px', borderRadius: 10, background: '#fff6db', color: '#6b5200',
           fontSize: 13, lineHeight: 1.45, border: '1px solid #f0dc9c',
         }}>
-          <strong>Testmodus.</strong> De prikklok telt nog niet mee: je urenstaat en Bouw7 blijven
-          onaangeroerd.
+          {testmodusMelding}
         </div>
       )}
 
@@ -188,10 +210,10 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
             {open ? (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: GROEN, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ingeklokt sinds {open.in_tijd}
+                  {t('ingekloktSinds', { tijd: open.in_tijd })}
                 </div>
                 <div style={{ fontSize: 32, fontWeight: 800, color: TEKST, fontVariantNumeric: 'tabular-nums', margin: '4px 0' }}>
-                  {looptijd(open.in_op, nu)}
+                  {looptijd(open.in_op, nu, t)}
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: TEKST }}>{open.dossier_label}</div>
                 {open.adres && <div style={{ fontSize: 13, color: GRIJS, marginTop: 2 }}>{open.adres}</div>}
@@ -199,10 +221,10 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
             ) : (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: GRIJS, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Niet ingeklokt
+                  {t('nietIngeklokt')}
                 </div>
                 <div style={{ fontSize: 14, color: GRIJS, marginTop: 4, lineHeight: 1.45 }}>
-                  Inklokken kan binnen {status.straal_m} m van het werkadres.
+                  {t('binnenStraal', { meter: String(status.straal_m) })}
                 </div>
               </div>
             )}
@@ -210,20 +232,20 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
             {open ? (
               <>
                 <button type="button" onClick={uitklokken} disabled={!!bezig} style={{ ...primaireKnop, background: ROOD, padding: '18px 16px', fontSize: 18 }}>
-                  {bezig === 'uit' ? 'Locatie ophalen…' : 'Uitklokken'}
+                  {bezig === 'uit' ? t('locatieOphalen') : t('uitklokken')}
                 </button>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <button type="button" onClick={startInklokken} disabled={!!bezig} style={secundaireKnop}>
-                    {bezig === 'in' ? 'Zoeken…' : 'Wisselen'}
+                    {bezig === 'in' ? t('zoeken') : t('wisselen')}
                   </button>
                   <button type="button" onClick={() => setVertrekOpen(true)} disabled={!!bezig} style={secundaireKnop}>
-                    Al vertrokken
+                    {t('alVertrokken')}
                   </button>
                 </div>
               </>
             ) : (
               <button type="button" onClick={startInklokken} disabled={!!bezig} style={{ ...primaireKnop, padding: '18px 16px', fontSize: 18 }}>
-                {bezig === 'in' ? 'Locatie ophalen…' : 'Inklokken'}
+                {bezig === 'in' ? t('locatieOphalen') : t('inklokken')}
               </button>
             )}
           </div>
@@ -236,7 +258,7 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
               <span>{fout.tekst}</span>
               {fout.vertrekAanbieden && open && (
                 <button type="button" onClick={() => setVertrekOpen(true)} style={{ ...secundaireKnop, color: '#8a1c12' }}>
-                  Ik ben al vertrokken
+                  {t('ikBenAlVertrokken')}
                 </button>
               )}
             </div>
@@ -251,20 +273,20 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             padding: '12px 16px', borderBottom: `1px solid ${RAND}`,
           }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>Vandaag</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: TEKST }}>{t('vandaag')}</span>
             <span style={{ fontSize: 13, color: GRIJS }}>
-              {status.vandaag ? `${uur(status.vandaag.uren)} uur` : '—'}
-              {status.vandaag && status.vandaag.pauzeMinuten > 0 && ` · ${status.vandaag.pauzeMinuten} min pauze eraf`}
+              {status.vandaag ? t('urenTotaal', { uren: uur(status.vandaag.uren, locale) }) : '—'}
+              {status.vandaag && status.vandaag.pauzeMinuten > 0 && ` · ${t('pauzeEraf', { minuten: String(status.vandaag.pauzeMinuten) })}`}
             </span>
           </div>
           {status.sessiesVandaag.map(s => (
             <div key={s.id} style={{ padding: '10px 16px', borderBottom: `1px solid ${RAND}`, fontSize: 13 }}>
               <div style={{ color: TEKST, fontWeight: 600 }}>{s.dossier_label}</div>
               <div style={{ color: GRIJS, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                {s.in_tijd} – {s.uit_tijd ?? 'nu'}
-                {s.uit_wijze && ` · ${WIJZE_TEKST[s.uit_wijze]}`}
-                {s.uit_wijze === 'handmatig' && s.uit_afstand_m != null && ` (${Math.round(s.uit_afstand_m)} m van het werk)`}
-                {s.gesimuleerd && ' · testlocatie'}
+                {s.in_tijd} – {s.uit_tijd ?? t('nu')}
+                {s.uit_wijze && ` · ${wijzeTekst(s.uit_wijze, t)}`}
+                {s.uit_wijze === 'handmatig' && s.uit_afstand_m != null && ` ${t('afstandVanWerk', { meter: String(Math.round(s.uit_afstand_m)) })}`}
+                {s.gesimuleerd && ` · ${t('testlocatie')}`}
               </div>
             </div>
           ))}
@@ -274,25 +296,25 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
       <Link href="/m/prikklok/week" style={{
         ...secundaireKnop, textAlign: 'center', textDecoration: 'none', color: TEKST, display: 'block',
       }}>
-        Mijn week controleren
+        {t('weekControleren')}
       </Link>
 
       {/* ── Testlocatie (alleen schaduwfase) ──────────────────── */}
       {schaduw && status.testDossiers.length > 0 && (
         <div style={{ borderTop: `1px dashed ${RAND}`, paddingTop: 16 }}>
-          <label style={label} htmlFor="prikklok-test">Testlocatie (alleen in testmodus)</label>
+          <label style={label} htmlFor="prikklok-test">{t('testlocatieLabel')}</label>
           <select id="prikklok-test" value={testDossier} onChange={e => setTestDossier(e.target.value)} style={veld}>
-            <option value="">Echte GPS-locatie gebruiken</option>
+            <option value="">{t('echteGps')}</option>
             {status.testDossiers.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
           </select>
           <p style={{ fontSize: 12, color: GRIJS, margin: '8px 0 0', lineHeight: 1.45 }}>
-            Doet alsof je op het werkadres van dit dossier staat. Zulke sessies worden gemarkeerd.
+            {t('testlocatieUitleg')}
           </p>
         </div>
       )}
 
       {keuze && (
-        <BottomSheet titel={keuze.locaties.length === 1 ? 'Hier inklokken?' : 'Op welk werk klok je in?'} onSluit={() => setKeuze(null)}>
+        <BottomSheet titel={keuze.locaties.length === 1 ? t('hierInklokken') : t('welkWerk')} onSluit={() => setKeuze(null)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keuze.locaties.map(l => (
               <button
@@ -310,13 +332,15 @@ export default function PrikklokClient({ status }: { status: PrikklokStatus }) {
                 <span style={{ fontSize: 15, fontWeight: 700, color: TEKST }}>{l.label}</span>
                 {l.adres && <span style={{ fontSize: 13, color: GRIJS }}>{l.adres}</span>}
                 <span style={{ fontSize: 12, color: l.ingepland ? GROEN : GRIJS, fontWeight: 600 }}>
-                  {l.ingepland ? 'Vandaag ingepland · ' : ''}{l.afstand_m} m
+                  {l.ingepland
+                    ? t('vandaagIngepland', { meter: String(l.afstand_m) })
+                    : t('afstand', { meter: String(l.afstand_m) })}
                 </span>
               </button>
             ))}
             {keuze.locaties.length === 1 && (
               <button type="button" disabled={!!bezig} onClick={() => bevestigInklokken(keuze.locaties[0].id)} style={{ ...primaireKnop, marginTop: 4 }}>
-                {bezig ? 'Bezig…' : 'Inklokken'}
+                {bezig ? t('bezig') : t('inklokken')}
               </button>
             )}
           </div>
@@ -341,22 +365,20 @@ function VertrekSheet({ inTijd, bezig, onSluit, onBevestig }: {
   onSluit: () => void
   onBevestig: (tijd: string) => void
 }) {
+  const t = useTranslations('prikklok')
   const [tijd, setTijd] = useState(nuAlsTijd)
   return (
-    <BottomSheet titel="Hoe laat ben je vertrokken?" onSluit={onSluit}>
+    <BottomSheet titel={t('vertrekTitel')} onSluit={onSluit}>
       <p style={{ fontSize: 14, color: GRIJS, margin: 0, lineHeight: 1.5 }}>
-        Je bent niet meer op het werkadres. Geef op hoe laat je wegging; dit komt als
-        &lsquo;zelf opgegeven&rsquo; in je weekcontrole. Ingeklokt om {inTijd}.
+        {t('vertrekUitleg', { tijd: inTijd })}
       </p>
-      <input type="time" value={tijd} onChange={e => setTijd(e.target.value)} style={veld} aria-label="Vertrektijd" />
+      <input type="time" value={tijd} onChange={e => setTijd(e.target.value)} style={veld} aria-label={t('vertrektijd')} />
       <button type="button" disabled={bezig || !tijd} onClick={() => onBevestig(tijd)} style={{ ...primaireKnop, opacity: bezig || !tijd ? 0.5 : 1 }}>
-        {bezig ? 'Opslaan…' : 'Vertrektijd vastleggen'}
+        {bezig ? t('opslaan') : t('vertrektijdVastleggen')}
       </button>
     </BottomSheet>
   )
 }
-
-const DAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag']
 
 function VergetenKaart({ dossier, datum, inTijd, bezig, onBevestig }: {
   dossier: string
@@ -365,26 +387,29 @@ function VergetenKaart({ dossier, datum, inTijd, bezig, onBevestig }: {
   bezig: boolean
   onBevestig: (tijd: string) => void
 }) {
+  const t = useTranslations('prikklok')
+  const locale = useDatumLocale()
   const [tijd, setTijd] = useState('')
   const d = new Date(`${datum}T12:00:00`)
+  const dag = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'numeric' }).format(d)
+  const vergetenTekst = t.rich('vergetenTekst', { dag, tijd: inTijd, dossier, b: (c) => <strong>{c}</strong> })
   return (
     <div style={{
       background: OPPERVLAK, border: `2px solid ${AMBER}`, borderRadius: 16, padding: 20,
       display: 'flex', flexDirection: 'column', gap: 12,
     }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: AMBER, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        Niet uitgeklokt
+        {t('nietUitgeklokt')}
       </div>
       <div style={{ fontSize: 15, color: TEKST, lineHeight: 1.5 }}>
-        Op {DAGEN[d.getDay()]} {d.getDate()}-{d.getMonth() + 1} ben je om {inTijd} ingeklokt bij{' '}
-        <strong>{dossier}</strong>, maar niet uitgeklokt. Hoe laat ben je vertrokken?
+        {vergetenTekst}
       </div>
-      <input type="time" value={tijd} onChange={e => setTijd(e.target.value)} style={veld} aria-label="Vertrektijd" />
+      <input type="time" value={tijd} onChange={e => setTijd(e.target.value)} style={veld} aria-label={t('vertrektijd')} />
       <button type="button" disabled={bezig || !tijd} onClick={() => onBevestig(tijd)} style={{ ...primaireKnop, opacity: bezig || !tijd ? 0.5 : 1 }}>
-        {bezig ? 'Opslaan…' : 'Vertrektijd vastleggen'}
+        {bezig ? t('opslaan') : t('vertrektijdVastleggen')}
       </button>
       <p style={{ fontSize: 12, color: GRIJS, margin: 0, lineHeight: 1.45 }}>
-        Tot je dit invult, telt die dag 0 uur en kun je niet opnieuw inklokken.
+        {t('vergetenVoet')}
       </p>
     </div>
   )

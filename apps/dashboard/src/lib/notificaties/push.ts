@@ -4,6 +4,8 @@ import { createAdminClient } from '@everts/database/server'
 import { logFout } from '@/lib/fouten/log'
 import { isMobileUA } from '@/lib/isMobileUA'
 import { naarMobielPad } from './paden'
+import { taalVanGebruiker } from '@/i18n/server'
+import { vertaal } from '@/lib/vertalen/kern'
 
 /**
  * Pushmeldingen (Web Push / VAPID).
@@ -100,6 +102,23 @@ export function pushBeschikbaar(): VapidStand {
   return vapidStand()
 }
 
+/** Hoe lang een melding mag wachten op de vertaling voordat hij in het Nederlands gaat. */
+const VERTAAL_MAX_MS = 6_000
+
+async function inTaalVanOntvanger(
+  userId: string, titel: string, body: string,
+): Promise<{ titel: string; body: string }> {
+  try {
+    const taal = await taalVanGebruiker(userId)
+    if (taal === 'nl') return { titel, body }
+    const tijdslimiet = new Promise<null>((r) => setTimeout(() => r(null), VERTAAL_MAX_MS))
+    const res = await Promise.race([vertaal([titel, body], taal), tijdslimiet])
+    return { titel: res?.[0] ?? titel, body: res?.[1] ?? body }
+  } catch {
+    return { titel, body }
+  }
+}
+
 /**
  * Stuur één melding naar alle apparaten van een gebruiker.
  *
@@ -123,6 +142,11 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
 
     const doel = payload.url ?? '/'
 
+    // In de taal van de ontvanger. Meldingen worden op kantoor in het Nederlands gemaakt;
+    // een Poolse of Tamil monteur krijgt ze vertaald (zelfde cache als de app). Te traag of
+    // mislukt: dan gaat het Nederlands — de melding zelf is belangrijker dan de taal.
+    const { titel, body } = await inTaalVanOntvanger(userId, payload.titel, payload.body ?? '')
+
     // Aantal ongelezen meldingen gaat mee, zodat de service worker het tellertje
     // op het app-icoon kan bijwerken terwijl EVA dicht staat. Op dit moment staat
     // de zojuist aangemaakte melding er al in.
@@ -145,8 +169,8 @@ export async function stuurPush(userId: string, payload: PushPayload): Promise<n
         // via de middleware alsnog goed uit, want die kent het apparaat-cookie.
         const naarMobiel = ab.mobiel ?? isMobileUA(ab.user_agent)
         const bericht = JSON.stringify({
-          titel: payload.titel,
-          body: payload.body ?? '',
+          titel,
+          body,
           url: naarMobiel ? naarMobielPad(doel) : doel,
           type: payload.type ?? 'algemeen',
           id: payload.id ?? null,

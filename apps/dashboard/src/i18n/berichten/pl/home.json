@@ -1,0 +1,38 @@
+{
+  "welkom": "Witaj, {naam}",
+  "buitendienst": "Praca w terenie",
+  "tegel": {
+    "acties": "Zadania",
+    "dossiers": "Projekty",
+    "prikklok": "Rejestracja czasu",
+    "uren": "Godziny",
+    "planning": "Grafik",
+    "verlof": "Urlop",
+    "commercieel": "Sprzedaż",
+    "materieel": "Sprzęt",
+    "handboek": "Podręcznik pracownika",
+    "mijnGegevens": "Moje dane"
+  },
+  "vandaag": {
+    "titel": "Grafik na dziś",
+    "nietsGepland": "Na dziś nic nie zaplanowano.",
+    "heleAgenda": "Cały kalendarz",
+    "nogMeer": "Jeszcze {aantal} · cały kalendarz"
+  },
+  "signalen": {
+    "titel": "Do zrobienia",
+    "teFiatteren": "{aantal, plural, one {# wpis godzin do zatwierdzenia} few {# wpisy godzin do zatwierdzenia} many {# wpisów godzin do zatwierdzenia} other {# wpisu godzin do zatwierdzenia}}",
+    "teFiatterenSub": "Zatwierdź godziny swojej ekipy lub projektu",
+    "weekAfgekeurd": "Tydzień {week} został odrzucony",
+    "weekAfgekeurdSub": "Popraw godziny i wyślij tydzień ponownie",
+    "weekNietIngediend": "Tydzień {week} jeszcze nie wysłany",
+    "deadlineVerstreken": "{dagen, plural, one {Termin minął # dzień temu} few {Termin minął # dni temu} many {Termin minął # dni temu} other {Termin minął # dnia temu}}",
+    "vulAan": "Uzupełnij godziny i wyślij tydzień"
+  },
+  "locatie": {
+    "dossierBijLocatie": "Projekt w twojej lokalizacji · {afstand} m",
+    "openen": "Otwórz ({seconden})",
+    "meerdereTitel": "Projekty w tej lokalizacji",
+    "kiesDossier": "Wybierz projekt, nad którym pracujesz."
+  }
+}

@@ -6,8 +6,9 @@
  * Deze bestanden staan bewust niet óók in de bestandenlijst — een regel
  * `IMG_20260714_113052.jpg` zegt niets, de foto zelf wel.
  *
- * Opzet: één grote preview met pijlen erop, en daaronder de bestandsnamen als
- * navigatie. Een raster met postzegels is bij bouwfoto's weinig waard — details als
+ * Opzet: één grote preview met pijlen erop, en ernaast (op een smal scherm eronder)
+ * de bestandsnamen als navigatie. De galerij staat onder de bestandenlijst over de
+ * volle breedte; de preview is daarom in hoogte begrensd. Een raster met postzegels is bij bouwfoto's weinig waard — details als
  * scheurvorming of houtrot zie je pas op formaat. Vanuit de preview ga je door naar
  * volledig scherm.
  */
@@ -18,8 +19,8 @@ import { Card, CardHeader, CardBody } from '@/components/ui'
 import { ChevronLeft, ChevronRight, X, Download, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
 
-/** De preview vult een halve kolom; op een scherm met hoge resolutie is 900 scherp genoeg. */
-const PREVIEW_BREEDTE = 900
+/** De preview vult ruim de helft van de breedte; op een scherm met hoge resolutie is 1200 scherp genoeg. */
+const PREVIEW_BREEDTE = 1200
 const GROOT_BREEDTE = 1800
 
 /**
@@ -77,7 +78,7 @@ function Preview({ foto, index, totaal, onVorige, onVolgende, onVergroot }: {
   }, [voorkeur])
 
   return (
-    <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
+    <div className="relative aspect-[4/3] max-h-[60vh] w-full overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
       {mislukt ? (
         <div className="grid h-full w-full place-items-center px-4 text-center text-[12px] text-neutral-400">
           Deze afbeelding kon niet geladen worden.
@@ -287,7 +288,7 @@ export default function Fotogalerij({
     }
   }, [index, fotos])
 
-  // Het blok blijft staan als er niets is: de vaste plek naast de bestandenlijst
+  // Het blok blijft staan als er niets is: de vaste plek onder de bestandenlijst
   // maakt duidelijk dát er foto's kunnen zijn, in plaats van dat het onderdeel
   // ontbreekt en je je afvraagt of je iets mist.
   if (fotos.length === 0 || !foto) {
@@ -295,7 +296,7 @@ export default function Fotogalerij({
       <Card>
         <CardHeader>Foto&apos;s</CardHeader>
         <CardBody>
-          <div className="grid aspect-[4/3] place-items-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-4 text-center text-[12.5px] text-neutral-500">
+          <div className="grid h-[120px] place-items-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-4 text-center text-[12.5px] text-neutral-500">
             Geen foto&apos;s beschikbaar.
           </div>
         </CardBody>
@@ -306,7 +307,7 @@ export default function Fotogalerij({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex w-full items-center justify-between">
           <span>Foto&apos;s</span>
           <span className="text-[11px] font-normal text-neutral-400">
             {fotos.length} afbeelding{fotos.length === 1 ? '' : 'en'}
@@ -315,6 +316,7 @@ export default function Fotogalerij({
         </div>
       </CardHeader>
       <CardBody>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Preview
           foto={foto}
           index={index}
@@ -325,8 +327,8 @@ export default function Fotogalerij({
         />
 
         {/* Bestandsnamen als navigatie: klikken zet de preview op die foto. */}
-        <div className="mt-3 border-t border-neutral-100 pt-2">
-          <div className="max-h-[196px] overflow-y-auto">
+        <div className="border-t border-neutral-100 pt-2 lg:border-t-0 lg:pt-0">
+          <div className="max-h-[196px] overflow-y-auto lg:max-h-[60vh]">
             {fotos.map((f, i) => (
               <div
                 key={f.sleutel}
@@ -364,6 +366,7 @@ export default function Fotogalerij({
               </div>
             ))}
           </div>
+        </div>
         </div>
       </CardBody>
 

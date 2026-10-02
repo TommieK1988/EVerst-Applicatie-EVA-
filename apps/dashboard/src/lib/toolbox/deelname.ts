@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getAppVertaler } from '@/i18n/server'
 import type { ToolboxSchema } from '@/components/toolbox/types'
 import {
   stripSchemaVoorDeelnemer,
@@ -147,16 +148,18 @@ export async function rondAf(
   toewijzingId: string,
   input: { naam: string; handtekeningB64: string },
 ): Promise<AfrondResultaat> {
+  // Foutteksten in de taal van de medewerker; alleen de app roept dit aan.
+  const t = await getAppVertaler('toolbox')
   const toew = await eigenToewijzing(toewijzingId)
-  if (!toew) return { ok: false, error: 'Geen toegang tot deze toolbox.' }
+  if (!toew) return { ok: false, error: t('fout.geenToegang') }
   if (toew.status === 'afgerond') return { ok: true }
 
   const naam = input.naam.trim()
-  if (!naam) return { ok: false, error: 'Vul je naam in.' }
-  if (!input.handtekeningB64) return { ok: false, error: 'Zet eerst je handtekening.' }
+  if (!naam) return { ok: false, error: t('fout.naamLeeg') }
+  if (!input.handtekeningB64) return { ok: false, error: t('fout.geenHandtekening') }
 
   const schema = await versieSchema(toew.versie_id)
-  if (!schema) return { ok: false, error: 'Toolbox-inhoud niet gevonden.' }
+  if (!schema) return { ok: false, error: t('fout.inhoudNietGevonden') }
 
   // Elke vraag moet minstens één correcte poging hebben (voorkomt overslaan).
   const vraagIds = alleVraagIds(schema)
@@ -169,7 +172,7 @@ export async function rondAf(
     const goedGemaakt = new Set((goede ?? []).map((r: { vraag_id: string }) => r.vraag_id))
     const onbeantwoord = vraagIds.filter((id) => !goedGemaakt.has(id))
     if (onbeantwoord.length > 0) {
-      return { ok: false, error: 'Beantwoord eerst alle vragen goed voordat je aftekent.' }
+      return { ok: false, error: t('fout.vragenNietGoed') }
     }
   }
 
@@ -181,7 +184,7 @@ export async function rondAf(
   const { error: upErr } = await supabase.storage
     .from('toolbox-handtekeningen')
     .upload(pad, buffer, { contentType: 'image/png', upsert: true })
-  if (upErr) return { ok: false, error: `Handtekening opslaan mislukt: ${upErr.message}` }
+  if (upErr) return { ok: false, error: t('fout.handtekeningOpslaan', { fout: upErr.message }) }
 
   const { error: uErr } = await supabase
     .from('toolbox_toewijzingen')

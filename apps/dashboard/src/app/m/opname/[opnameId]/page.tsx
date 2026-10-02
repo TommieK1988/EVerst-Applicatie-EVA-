@@ -4,6 +4,7 @@ import OpnameScherm from '@/components/mobiel/opname/OpnameScherm'
 import { getOpnameMetRegels } from '@/lib/opname/opnames'
 import { getBibliotheek, getVaakGebruikt } from '@/lib/opname/bibliotheek'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Opname · EVA Mobiel' }
 
@@ -40,11 +41,12 @@ export default async function MobielOpnamePage({
 
   // Suggestielijstje; mag falen zonder het scherm te blokkeren.
   const vaakGebruikt = await getVaakGebruikt(opname.prijslijst_id).catch(() => [])
+  const t = await getAppVertaler('opname')
 
   return (
     <>
       <AppHeader
-        title="Opname"
+        title={t('paginaTitel')}
         sub={`${opname.opnamenummer}${opname.adres_vrij ? ` · ${opname.adres_vrij}` : ''}`}
         backHref={`/m/dossiers/${opname.dossier_id}/opname`}
       />

@@ -5,6 +5,7 @@ import { getInspectie } from '@/lib/kwaliteit/inspecties'
 import { getDisciplinesMetAantal } from '@/lib/kwaliteit/bibliotheek'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { heeftProjectrol } from '@/lib/dossiers/guards'
+import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Kwaliteitsronde · EVA Mobiel' }
 
@@ -39,10 +40,12 @@ export default async function MobielKwaliteitRondePage({
     if (!rol) notFound()
   }
 
+  const t = await getAppVertaler('kwaliteit')
+
   return (
     <>
       <AppHeader
-        title="Kwaliteitsronde"
+        title={t('kopTitel')}
         sub={`${context.inspectie.inspectienummer} · ${context.dossier.titel}`}
         backHref="/m/taken"
       />
