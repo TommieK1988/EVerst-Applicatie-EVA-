@@ -396,7 +396,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       'heeft_foto_voor', 'heeft_foto_tijdens', 'heeft_foto_na', 'heeft_foto',
       // Binnen {#werkzaamheden}
       'aantal', 'code', 'naam', 'omschrijving', 'eenheid', 'uren',
-      'prijs_per_stuk', 'totaal', 'kostprijs_per_stuk', 'kostprijs_totaal',
+      'prijs_per_stuk', 'totaal', 'kostprijs_per_stuk', 'kostprijs_totaal', 'bron', 'categorie',
       // Binnen {#houtrot.groepen} en {#locatie}
       'niveau_label', 'waarde',
     ],
@@ -432,6 +432,8 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
       { v: '{btw_pct}',        label: 'Werkzaamheid — btw-percentage ("21%" of "21% verlegd")' },
       { v: '{totaal}',         label: 'Werkzaamheid — regeltotaal exclusief btw' },
       { v: '{uren}',           label: 'Werkzaamheid — totaal arbeidsuren' },
+      { v: '{bron}',           label: 'Werkzaamheid — "Handmatig" bij zelf ingevoerde regels, anders leeg' },
+      { v: '{categorie}',      label: 'Werkzaamheid — "Reparatie" of "Aanvullende werkzaamheden"' },
       { v: '{#houtrot.btw}…{/houtrot.btw}', label: 'Loop: btw-opstelling, één regel per tarief' },
       { v: '{label}',          label: 'Btw-regel — tarief ("9%", "21% verlegd")' },
       { v: '{excl}',           label: 'Btw-regel — bedrag exclusief btw met dit tarief' },
@@ -440,7 +442,7 @@ export const DOCUMENT_VARIABELEN: VariabeleGroep[] = [
     ],
     binnenLoop: [
       'naam', 'code', 'aantal', 'aantal_num', 'eenheid', 'prijs_per_stuk',
-      'btw_pct', 'btw_pct_num', 'totaal', 'totaal_num', 'uren',
+      'btw_pct', 'btw_pct_num', 'totaal', 'totaal_num', 'uren', 'bron', 'categorie',
       'label', 'pct', 'verlegd', 'excl', 'btw', 'incl',
     ],
   },

@@ -10,6 +10,8 @@ import type {
 /** Bouwt een werkzaamheid-regel (met prijs-momentopname) uit een gekozen recept. */
 export function regelVanRecept(recept: Recept, aantal: number, volgorde: number): RegistratieRegelForm {
   return {
+    bron: 'bibliotheek',
+    categorie: 'reparatie',
     recept_id: recept.id || undefined,
     aantal,
     repair_code_snapshot: recept.code,
@@ -188,6 +190,8 @@ export async function createRegistratie(
       actual_material_cost: form.actual_material_cost ?? null,
       actual_cost_price: form.actual_cost_price ?? null,
       actual_sale_price: form.actual_sale_price ?? null,
+      gefactureerd_op: form.gefactureerd ? new Date().toISOString() : null,
+      gefactureerd_door: form.gefactureerd ? userId : null,
     })
     .select()
     .single()
@@ -228,6 +232,14 @@ function bouwRegelRijen(registrationId: string, regels: RegistratieRegelForm[]) 
     cost_price_snapshot: r.cost_price_snapshot ?? null,
     sale_price_snapshot: r.sale_price_snapshot ?? null,
     volgorde: r.volgorde ?? i,
+    bron: r.bron ?? 'bibliotheek',
+    regel_type: r.regel_type ?? null,
+    categorie: r.categorie ?? 'reparatie',
+    functie: r.functie || null,
+    opslag_pct: r.opslag_pct ?? null,
+    btw_tarief: r.btw_tarief || null,
+    notitie: r.notitie || null,
+    foto_pad: r.foto_pad || null,
   }))
 }
 
@@ -267,6 +279,10 @@ function aggregeerRegels(regels: RegistratieRegelForm[]) {
  * Werkt een bestaande registratie bij (veld-editflow): locatie, status en de
  * werkzaamheden-regels. De regels worden vervangen (verwijderen + opnieuw
  * invoegen) en de aggregaat-snapshots opnieuw uit de regels afgeleid.
+ *
+ * Is de registratie gefactureerd (en blijft dat zo), dan liggen de werkzaamheden
+ * vast: regels en bedragen blijven dan onaangeroerd, wat de aanroeper ook meestuurt.
+ * Dat dekt ook de mobiele app, die bij bewerken altijd de hele regelset meestuurt.
  */
 export async function updateRegistratie(
   id: string,
@@ -280,20 +296,25 @@ export async function updateRegistratie(
 
   const { data: oldData } = await supabase
     .from('repair_registrations')
-    .select('status, control_status')
+    .select('status, control_status, gefactureerd_op')
     .eq('id', id)
     .single()
 
-  const { data, error } = await supabase
-    .from('repair_registrations')
-    .update({
-      registration_date: form.registration_date,
-      locatie: form.locatie ?? [],
-      // `updated_at` komt van een trigger; wie de wijziging deed leggen we hier vast.
-      bijgewerkt_door: userId,
-      notes: form.notes || null,
-      status: form.status,
-      status_handmatig: form.status_handmatig ?? false,
+  const wasGefactureerd = !!oldData?.gefactureerd_op
+  const wordtGefactureerd = form.gefactureerd ?? wasGefactureerd
+  const regelsVast = wasGefactureerd && wordtGefactureerd
+
+  const updates: Record<string, unknown> = {
+    registration_date: form.registration_date,
+    locatie: form.locatie ?? [],
+    // `updated_at` komt van een trigger; wie de wijziging deed leggen we hier vast.
+    bijgewerkt_door: userId,
+    notes: form.notes || null,
+    status: form.status,
+    status_handmatig: form.status_handmatig ?? false,
+  }
+  if (!regelsVast) {
+    Object.assign(updates, {
       recept_id: regels[0]?.recept_id || null,
       labor_hours_snapshot: agg.labor_hours,
       labor_rate_snapshot: regels[0]?.labor_rate_snapshot ?? null,
@@ -304,19 +325,42 @@ export async function updateRegistratie(
       repair_code_snapshot: agg.code,
       repair_name_snapshot: agg.naam,
     })
+  }
+  if (wordtGefactureerd !== wasGefactureerd) {
+    updates.gefactureerd_op = wordtGefactureerd ? new Date().toISOString() : null
+    updates.gefactureerd_door = wordtGefactureerd ? userId : null
+  }
+
+  const { data, error } = await supabase
+    .from('repair_registrations')
+    .update(updates)
     .eq('id', id)
     .select()
     .single()
 
   if (error) throw new Error(error.message)
 
-  // Regels vervangen: eerst weg, dan de actuele set terug.
-  await supabase.from('repair_registration_lines').delete().eq('registration_id', id)
-  if (regels.length > 0) {
-    const { error: regelFout } = await supabase
+  if (!regelsVast) {
+    // Fotopaden van de huidige regels, om na het vervangen wezen op te ruimen.
+    const { data: oudeRegels } = await supabase
       .from('repair_registration_lines')
-      .insert(bouwRegelRijen(id, regels))
-    if (regelFout) throw new Error(regelFout.message)
+      .select('foto_pad')
+      .eq('registration_id', id)
+
+    // Regels vervangen: eerst weg, dan de actuele set terug.
+    await supabase.from('repair_registration_lines').delete().eq('registration_id', id)
+    if (regels.length > 0) {
+      const { error: regelFout } = await supabase
+        .from('repair_registration_lines')
+        .insert(bouwRegelRijen(id, regels))
+      if (regelFout) throw new Error(regelFout.message)
+    }
+
+    const blijven = new Set(regels.map(r => r.foto_pad).filter(Boolean))
+    const weg = ((oudeRegels ?? []) as { foto_pad: string | null }[])
+      .map(r => r.foto_pad)
+      .filter((p): p is string => !!p && !blijven.has(p))
+    if (weg.length > 0) await supabase.storage.from('repair-photos').remove(weg)
   }
 
   await logActivity(supabase, userId, 'registratie', id, 'update', oldData, form)
@@ -386,9 +430,15 @@ export async function deleteRegistratie(id: string, userId?: string): Promise<vo
     .select('storage_path')
     .eq('registration_id', id)
 
-  const paden = (fotos ?? [])
-    .map((f: { storage_path: string | null }) => f.storage_path)
-    .filter((p: string | null): p is string => !!p)
+  const { data: regelFotos } = await supabase
+    .from('repair_registration_lines')
+    .select('foto_pad')
+    .eq('registration_id', id)
+
+  const paden = [
+    ...(fotos ?? []).map((f: { storage_path: string | null }) => f.storage_path),
+    ...(regelFotos ?? []).map((f: { foto_pad: string | null }) => f.foto_pad),
+  ].filter((p: string | null): p is string => !!p)
   // Mislukt het opruimen van een bestand, dan mag dat de verwijdering niet tegenhouden.
   if (paden.length > 0) await supabase.storage.from('repair-photos').remove(paden)
 
@@ -431,6 +481,22 @@ export async function uploadPhoto(
   if (dbError) throw new Error(dbError.message)
 
   return fileName
+}
+
+/**
+ * Uploadt de foto bij één handmatige regel en geeft het opslagpad terug. Het pad
+ * hangt aan het dossier en niet aan de registratie: een nieuwe registratie heeft op
+ * dit moment nog geen id. De regel bewaart het pad in `foto_pad`.
+ */
+export async function uploadRegelFoto(dossierId: string, file: File): Promise<string> {
+  const supabase = createClient()
+  const ext = file.name.split('.').pop() || 'jpg'
+  const pad = `regels/${dossierId}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from('repair-photos')
+    .upload(pad, file, { cacheControl: '3600', upsert: false })
+  if (error) throw new Error(error.message)
+  return pad
 }
 
 export async function deletePhoto(photoId: string, storagePath: string): Promise<void> {

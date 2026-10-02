@@ -9,7 +9,9 @@ import { formatDateShort, formatCurrency } from '@/lib/houtrotherstel/utils'
 import { fotoPubliekeUrl, FOTO_VOLGORDE, FOTO_LABELS } from '@/lib/houtrotherstel/fotos'
 import {
   registratieVerkoop, registratieUren, registratieArbeid, registratieMateriaal, werkzaamhedenTekst,
+  registratieVerkoopHandmatig, registratieVerkoopMeerwerk,
 } from '@/lib/houtrotherstel/bedragen'
+import { Badge } from '@/components/ui'
 import StatusBadge from '@/components/houtrotherstel/shared/StatusBadge'
 import LocatieBoomEditor from './LocatieBoomEditor'
 import HoutrotRegistratieModal from './HoutrotRegistratieModal'
@@ -89,6 +91,10 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
   const zichtbaar = toonArchief ? (registraties ?? []) : actief
   // Het totaal is dat van het werk dat telt; archief doet nergens aan mee.
   const totaal = actief.reduce((s, r) => s + registratieVerkoop(r), 0)
+  const totArbeid = actief.reduce((s, r) => s + registratieArbeid(r), 0)
+  const totMateriaal = actief.reduce((s, r) => s + registratieMateriaal(r), 0)
+  const totHandmatig = actief.reduce((s, r) => s + registratieVerkoopHandmatig(r), 0)
+  const totMeerwerk = actief.reduce((s, r) => s + registratieVerkoopMeerwerk(r), 0)
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,6 +108,14 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                 {actief.length} registratie{actief.length !== 1 ? 's' : ''} · {formatCurrency(totaal)}
                 {archiefAantal > 0 && ` · ${archiefAantal} gearchiveerd`}
               </span>
+            )}
+            {actief.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-slate-500">
+                <span>Arbeid {formatCurrency(totArbeid)}</span>
+                <span>Materiaal {formatCurrency(totMateriaal)}</span>
+                {totHandmatig > 0 && <span>Waarvan handmatig {formatCurrency(totHandmatig)}</span>}
+                {totMeerwerk > 0 && <span>Waarvan meerwerk {formatCurrency(totMeerwerk)}</span>}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -173,6 +187,7 @@ export default function HoutrotTab({ dossierId }: { dossierId: string }) {
                     >
                       <td className="px-4 py-3 text-sm text-slate-700">
                         {plaats}
+                        {r.gefactureerd_op && <Badge size="sm" tone="success" className="ml-2">Gefactureerd</Badge>}
                         {gearchiveerd && (
                           <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                             Gearchiveerd

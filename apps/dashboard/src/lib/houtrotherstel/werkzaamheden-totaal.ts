@@ -8,11 +8,14 @@
  */
 import { gesorteerdeRegels } from './bedragen'
 import { pctLabel, type BtwUitkomst } from './btw'
-import type { RepairRegistration } from './types'
+import { REGEL_CATEGORIEEN, type RegelCategorie, type RepairRegistration } from './types'
 import { euroNL, getalNL } from '@/lib/documenten/format'
 
-/** Bepaalt per recept het geldende btw-tarief. */
-export type BtwWijzer = (receptId: string | null | undefined) => BtwUitkomst
+/**
+ * Bepaalt per regel het geldende btw-tarief: een bibliotheekregel via zijn recept,
+ * een handmatige regel via de code die op de regel zelf staat.
+ */
+export type BtwWijzer = (regel: { recept_id?: string | null; btw_tarief?: string | null }) => BtwUitkomst
 
 /** Eén regel van het totaalblad, klaar voor het Word-sjabloon. */
 export interface WerkzaamheidTotaal {
@@ -27,6 +30,10 @@ export interface WerkzaamheidTotaal {
   btw_pct_num: number
   totaal: string
   totaal_num: number
+  /** 'Handmatig' voor zelf ingevoerde regels, anders leeg. */
+  bron: string
+  /** 'Reparatie' of 'Aanvullende werkzaamheden'. */
+  categorie: string
 }
 
 export interface WerkzaamhedenTelling {
@@ -52,6 +59,7 @@ export function telWerkzaamheden(
     code: string; naam: string; eenheid: string
     aantal: number; perStuk: number; totaal: number
     uren: number; uitkomst: BtwUitkomst
+    handmatig: boolean; categorie: RegelCategorie
   }
   const bakken = new Map<string, Bak>()
 
@@ -60,15 +68,25 @@ export function telWerkzaamheden(
       const aantal = Number(l.aantal) || 0
       if (aantal === 0) continue
       const perStuk = Number(l.sale_price_snapshot ?? 0)
-      const sleutel = `${l.recept_id ?? l.repair_code_snapshot ?? l.repair_name_snapshot ?? '?'}|${perStuk}`
+      const handmatig = l.bron === 'handmatig'
+      const categorie: RegelCategorie = l.categorie === 'meerwerk' ? 'meerwerk' : 'reparatie'
+      // Handmatige regels hebben geen recept: ze bundelen op omschrijving + eenheid,
+      // en nooit met een bibliotheekregel van dezelfde naam.
+      const wie = handmatig
+        ? `h:${(l.repair_name_snapshot ?? '').trim().toLowerCase()}|${l.unit_snapshot ?? ''}|${l.btw_tarief ?? ''}`
+        : (l.recept_id ?? l.repair_code_snapshot ?? l.repair_name_snapshot ?? '?')
+      const sleutel = `${wie}|${perStuk}|${categorie}`
       let bak = bakken.get(sleutel)
       if (!bak) {
+        const naam = l.repair_name_snapshot ?? 'Werkzaamheid'
         bak = {
           code: l.repair_code_snapshot ?? '',
-          naam: l.repair_name_snapshot ?? 'Werkzaamheid',
+          // In de naam, zodat het ook in bestaande Word-sjablonen zichtbaar is.
+          naam: handmatig ? `${naam} (handmatig)` : naam,
           eenheid: l.unit_snapshot ?? '',
           aantal: 0, perStuk, totaal: 0, uren: 0,
-          uitkomst: btwVan(l.recept_id),
+          uitkomst: btwVan(l),
+          handmatig, categorie,
         }
         bakken.set(sleutel, bak)
       }
@@ -96,6 +114,8 @@ export function telWerkzaamheden(
       btw_pct_num: b.uitkomst.pct,
       totaal: toonPrijzen ? euroNL(totaal) : '',
       totaal_num: toonPrijzen ? totaal : 0,
+      bron: b.handmatig ? 'Handmatig' : '',
+      categorie: REGEL_CATEGORIEEN[b.categorie],
     }
   })
 

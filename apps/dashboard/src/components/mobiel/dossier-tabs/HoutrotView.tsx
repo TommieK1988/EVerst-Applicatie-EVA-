@@ -17,16 +17,22 @@ import {
 } from '@/lib/houtrotherstel/locatie-boom'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 import {
-  type RepairRegistration, type RepairPhoto, type RegistratieForm,
+  type RepairRegistration, type RepairPhoto, type RegistratieForm, type RegistratieRegelForm,
   type LocatieBoom, type LocatieWaarde, type FotoType,
 } from '@/lib/houtrotherstel/types'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import { fotoPubliekeUrl, FOTO_VOLGORDE } from '@/lib/houtrotherstel/fotos'
 import { registratieUren } from '@/lib/houtrotherstel/bedragen'
+import { regelVanLijn } from '@/lib/houtrotherstel/handmatige-regel'
 import { formatDateTime } from '@/lib/houtrotherstel/utils'
 
 /** Eén werkzaamheid in het formulier: gekozen recept + aantal. */
-type Werkzaamheid = { recept: Recept; aantal: number }
+/**
+ * `opgeslagen` is de regel zoals hij in de database staat. Opslaan vervangt alle
+ * regels; zonder dit veld zou een handmatige regel van kantoor (arbeid/materiaal
+ * buiten de bibliotheek) bij elke bewerking in het veld zijn bron en categorie kwijtraken.
+ */
+type Werkzaamheid = { recept: Recept; aantal: number; opgeslagen?: RegistratieRegelForm }
 
 const fotoUrl = fotoPubliekeUrl
 
@@ -275,7 +281,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       (r.lines ?? [])
         .slice()
         .sort((a, b) => a.volgorde - b.volgorde)
-        .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
+        .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal), opgeslagen: regelVanLijn(l) })),
     )
     setNotitie(r.notes ?? '')
     setAfgerond(r.status === 'afgerond')
@@ -327,7 +333,9 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (!locatieCompleet) throw new Error(t('fout.kiesLocatie'))
       if (werkzaamheden.length === 0) throw new Error(t('fout.minstensEen'))
 
-      const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
+      const regels = werkzaamheden.map((w, i) => w.opgeslagen
+        ? { ...w.opgeslagen, aantal: w.aantal, volgorde: i }
+        : regelVanRecept(w.recept, w.aantal, i))
 
       // Een vastgezette locatie gaat er letterlijk weer in — niet opnieuw uit de boom
       // opbouwen, anders verliest een registratie zijn plek zodra de projectleider de

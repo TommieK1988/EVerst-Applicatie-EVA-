@@ -23,7 +23,7 @@ import {
   registratieMateriaal, gesorteerdeRegels, werkzaamhedenTekst,
 } from '@/lib/houtrotherstel/bedragen'
 import {
-  REGISTRATIE_STATUSSEN, CONTROL_STATUSSEN, SCHADE_SEVERITY,
+  REGISTRATIE_STATUSSEN, CONTROL_STATUSSEN, SCHADE_SEVERITY, REGEL_CATEGORIEEN,
   type LocatieBoom, type RepairRegistration, type RepairPhoto,
 } from '@/lib/houtrotherstel/types'
 import { bepaalBtw, btwOpstelling, type BtwUitkomst } from '@/lib/houtrotherstel/btw'
@@ -281,8 +281,8 @@ async function laadMedewerkerNamen(ids: (string | null)[]): Promise<Map<string, 
 
 // ── Btw ───────────────────────────────────────────────────────────────────
 
-/** Bepaalt per recept het geldende tarief; zie `lib/houtrotherstel/btw.ts`. */
-type BtwWijzer = (receptId: string | null | undefined) => BtwUitkomst
+/** Bepaalt per regel het geldende tarief; zie `lib/houtrotherstel/btw.ts`. */
+type BtwWijzer = (regel: { recept_id?: string | null; btw_tarief?: string | null }) => BtwUitkomst
 
 /**
  * Bouwt de btw-wijzer: de stamtarieven plus de code uit de eenheidsprijs van elk
@@ -292,7 +292,7 @@ type BtwWijzer = (receptId: string | null | undefined) => BtwUitkomst
 async function bouwBtwWijzer(receptIds: string[]): Promise<BtwWijzer> {
   try {
     const tarieven = await laadBtwTarieven()
-    if (receptIds.length === 0) return () => bepaalBtw({ basisCode: null, tarieven })
+    if (receptIds.length === 0) return regel => bepaalBtw({ basisCode: regel.btw_tarief ?? null, tarieven })
 
     const { data } = await losseTabel()
       .from('paint_items').select('id, btw_tarief').in('id', receptIds)
@@ -300,8 +300,9 @@ async function bouwBtwWijzer(receptIds: string[]): Promise<BtwWijzer> {
       (data ?? []).map((b: Rij) => [tekst(b, 'id'), tekstOfNull(b, 'btw_tarief')]),
     )
 
-    return receptId => bepaalBtw({
-      basisCode: receptId ? codes.get(receptId) ?? null : null,
+    // Een handmatige regel heeft geen recept; zijn code staat op de regel zelf.
+    return regel => bepaalBtw({
+      basisCode: regel.recept_id ? codes.get(regel.recept_id) ?? null : regel.btw_tarief ?? null,
       tarieven,
     })
   } catch {
@@ -337,7 +338,10 @@ function bouwRegistratie(
       aantal: getalNL(aantal, aantal % 1 === 0 ? 0 : 2),
       aantal_num: aantal,
       code: l.repair_code_snapshot ?? '',
-      naam: l.repair_name_snapshot ?? '',
+      // Handmatige regels staan zichtbaar gemarkeerd, ook in bestaande sjablonen.
+      naam: l.bron === 'handmatig' ? `${l.repair_name_snapshot ?? ''} (handmatig)` : (l.repair_name_snapshot ?? ''),
+      bron: l.bron === 'handmatig' ? 'Handmatig' : '',
+      categorie: REGEL_CATEGORIEEN[l.categorie === 'meerwerk' ? 'meerwerk' : 'reparatie'],
       omschrijving: l.repair_description_snapshot ?? '',
       eenheid: l.unit_snapshot ?? '',
       uren: getalNL(Number(l.labor_hours_snapshot ?? 0) * aantal),

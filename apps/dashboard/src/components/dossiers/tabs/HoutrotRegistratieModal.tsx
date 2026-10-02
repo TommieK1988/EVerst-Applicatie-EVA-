@@ -3,24 +3,32 @@
 import { useEffect, useState } from 'react'
 import {
   createRegistratie, updateRegistratie, uploadPhoto, deletePhoto, regelVanRecept,
-  zetArchief, deleteRegistratie,
+  zetArchief, deleteRegistratie, uploadRegelFoto,
 } from '@/services/houtrotherstel/registraties'
+import { getHandmatigeStandaarden, type HandmatigeStandaarden } from '@/services/houtrotherstel/handmatig'
+import {
+  regelVanLijn, regelVanHandmatig, handmatigVanRegel, type HandmatigeRegel,
+} from '@/lib/houtrotherstel/handmatige-regel'
+import { Button } from '@/components/ui'
+import HoutrotHandmatigeRegel from './HoutrotHandmatigeRegel'
+import HoutrotWerkzaamhedenTabel from './HoutrotWerkzaamhedenTabel'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import type { Recept } from '@/services/houtrotherstel/recepten'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
-import { formatCurrency, formatDateTime } from '@/lib/houtrotherstel/utils'
+import { formatDateTime } from '@/lib/houtrotherstel/utils'
 import {
   cascadeRijen, bouwLocatiePad, selectieVanLocatie, locatieKeuzeCompleet,
 } from '@/lib/houtrotherstel/locatie-boom'
 import { fotoPubliekeUrl } from '@/lib/houtrotherstel/fotos'
 import { useDialogen } from '@/components/ui/dialogen'
 import type {
-  RepairRegistration, RepairPhoto, RegistratieForm, LocatieBoom, LocatieWaarde,
+  RepairRegistration, RepairPhoto, RegistratieForm, RegistratieRegelForm, LocatieBoom, LocatieWaarde,
 } from '@/lib/houtrotherstel/types'
 
 const fotoUrl = fotoPubliekeUrl
 
-type Werkzaamheid = { recept: Recept; aantal: number }
+/** Eén regel in de modal; `foto` is een nog te uploaden foto bij een handmatige regel. */
+type Werkzaamheid = { regel: RegistratieRegelForm; foto?: File | null }
 
 function variantLabel(r: Recept): string {
   if (r.groep && r.naam.toLowerCase().startsWith(r.groep.toLowerCase())) {
@@ -28,17 +36,6 @@ function variantLabel(r: Recept): string {
     return rest || r.naam
   }
   return r.naam
-}
-
-function receptVanLijn(l: NonNullable<RepairRegistration['lines']>[number]): Recept {
-  return {
-    id: l.recept_id ?? '', code: l.repair_code_snapshot ?? '',
-    naam: l.repair_name_snapshot ?? 'Werkzaamheid', omschrijving: l.repair_description_snapshot ?? null,
-    eenheid: l.unit_snapshot ?? null, groep: null,
-    uren: Number(l.labor_hours_snapshot ?? 0), uurtarief: Number(l.labor_rate_snapshot ?? 0),
-    arbeidskosten: Number(l.labor_cost_snapshot ?? 0), materiaalkosten: Number(l.material_cost_snapshot ?? 0),
-    kostprijs: Number(l.cost_price_snapshot ?? 0), margePct: null, verkoopprijs: Number(l.sale_price_snapshot ?? 0),
-  }
 }
 
 const inputCls =
@@ -91,10 +88,21 @@ export default function HoutrotRegistratieModal({
   const locatieCompleet = heeftBoom
     ? locatieKeuzeCompleet(boom!.nodes, gekozen)
     : !!vrijeLocatie.trim()
+  // Opgeslagen regels gaan met álle velden mee terug (bron, categorie, foto, …):
+  // opslaan vervangt de hele regelset, dus wat hier wegvalt is daarna weg.
   const [werkzaamheden, setWerkzaamheden] = useState<Werkzaamheid[]>(
     (bestaand?.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
-      .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal) })),
+      .map(l => ({ regel: regelVanLijn(l) })),
   )
+  // Welk invoerblok open staat onder de lijst, en welke handmatige regel wordt bewerkt.
+  const [invoer, setInvoer] = useState<'bibliotheek' | 'handmatig' | null>(
+    (bestaand?.lines?.length ?? 0) === 0 ? 'bibliotheek' : null,
+  )
+  const [bewerkIndex, setBewerkIndex] = useState<number | null>(null)
+  const [standaarden, setStandaarden] = useState<HandmatigeStandaarden | null>(null)
+  const [gefactureerd, setGefactureerd] = useState(!!bestaand?.gefactureerd_op)
+  // Pas vast na opslaan: wie "gefactureerd" net aanvinkt kan nog corrigeren.
+  const vast = !!bestaand?.gefactureerd_op && gefactureerd
   const [keuzeGroep, setKeuzeGroep] = useState('')
   const [keuzeRecept, setKeuzeRecept] = useState('')
   const [keuzeAantal, setKeuzeAantal] = useState('1')
@@ -113,23 +121,38 @@ export default function HoutrotRegistratieModal({
   const receptenInGroep = recepten.filter(r => r.groep === keuzeGroep)
   const zichtbareFotos = bestaandeFotos.filter(p => !verwijderd.has(p.id))
 
-  const totUren = werkzaamheden.reduce((s, w) => s + w.aantal * w.recept.uren, 0)
-  const totArbeid = werkzaamheden.reduce((s, w) => s + w.aantal * w.recept.arbeidskosten, 0)
-  const totMateriaal = werkzaamheden.reduce((s, w) => s + w.aantal * w.recept.materiaalkosten, 0)
-  const totVerkoop = werkzaamheden.reduce((s, w) => s + w.aantal * w.recept.verkoopprijs, 0)
+  useEffect(() => {
+    getHandmatigeStandaarden(dossierId).then(setStandaarden)
+      .catch(() => setStandaarden({ functies: [], opslagPct: 0, eenheden: ['st', 'uur'] }))
+  }, [dossierId])
 
   function voegToe() {
     const recept = recepten.find(r => r.id === keuzeRecept)
     const aantal = Math.max(1, Math.round(Number(keuzeAantal.replace(',', '.')) || 0))
     if (!recept || aantal < 1) return
     setWerkzaamheden(prev => {
-      const idx = prev.findIndex(w => w.recept.id === recept.id)
+      // Hetzelfde recept tegen dezelfde prijs: aantal ophogen in plaats van een tweede regel.
+      const idx = prev.findIndex(w => w.regel.bron !== 'handmatig' && w.regel.recept_id === recept.id
+        && w.regel.sale_price_snapshot === recept.verkoopprijs)
       if (idx >= 0) {
-        const k = [...prev]; k[idx] = { ...k[idx], aantal: k[idx].aantal + aantal }; return k
+        const k = [...prev]
+        k[idx] = { regel: { ...k[idx].regel, aantal: Number(k[idx].regel.aantal) + aantal } }
+        return k
       }
-      return [...prev, { recept, aantal }]
+      return [...prev, { regel: regelVanRecept(recept, aantal, prev.length) }]
     })
     setKeuzeRecept(''); setKeuzeAantal('1')
+  }
+
+  function bewaarHandmatig(h: HandmatigeRegel, foto: File | null, fotoWeg: boolean) {
+    const regel = regelVanHandmatig(h, bewerkIndex ?? werkzaamheden.length)
+    setWerkzaamheden(prev => {
+      if (bewerkIndex == null) return [...prev, { regel, foto }]
+      const k = [...prev]
+      k[bewerkIndex] = { regel, foto: foto ?? (fotoWeg ? null : k[bewerkIndex].foto) }
+      return k
+    })
+    setBewerkIndex(null); setInvoer(null)
   }
 
   async function opslaan() {
@@ -147,7 +170,14 @@ export default function HoutrotRegistratieModal({
       }
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
-      const regels = werkzaamheden.map((w, i) => regelVanRecept(w.recept, w.aantal, i))
+      if (invoer === 'handmatig') throw new Error('Rond de handmatige regel eerst af (toevoegen of annuleren).')
+
+      // Nieuwe regelfoto's eerst uploaden: hun pad moet in de regel mee de database in.
+      const regels: RegistratieRegelForm[] = []
+      for (const [i, w] of werkzaamheden.entries()) {
+        const foto_pad = w.foto ? await uploadRegelFoto(dossierId, await verkleinFoto(w.foto)) : w.regel.foto_pad
+        regels.push({ ...w.regel, foto_pad, volgorde: i })
+      }
       const locatie: LocatieWaarde[] =
         heeftBoom
           ? bouwLocatiePad(boom!, gekozen)
@@ -166,6 +196,7 @@ export default function HoutrotRegistratieModal({
         status: afgerond ? 'afgerond' : 'geregistreerd',
         status_handmatig: true,
         control_status: 'niet_gecontroleerd',
+        gefactureerd,
       }
 
       let regId: string
@@ -283,45 +314,47 @@ export default function HoutrotRegistratieModal({
           {/* Werkzaamheden */}
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Werkzaamheden</h3>
-            {werkzaamheden.length > 0 && (
-              <div className="mb-3 overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-xs text-slate-500">
-                      <th className="px-3 py-2 text-left">Werkzaamheid</th>
-                      <th className="px-3 py-2 text-right">Aantal</th>
-                      <th className="px-3 py-2 text-right">Uren</th>
-                      <th className="px-3 py-2 text-right">Verkoop</th>
-                      <th className="px-3 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {werkzaamheden.map((w, i) => (
-                      <tr key={i}>
-                        <td className="px-3 py-2 text-slate-700">{w.recept.naam}</td>
-                        <td className="px-3 py-2 text-right">{w.aantal}</td>
-                        <td className="px-3 py-2 text-right text-slate-500">{(w.aantal * w.recept.uren).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(w.aantal * w.recept.verkoopprijs)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <button type="button" onClick={() => setWerkzaamheden(prev => prev.filter((_, idx) => idx !== i))}
-                            className="text-red-600 hover:text-red-800" aria-label="Verwijderen">×</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-slate-200 text-xs font-semibold text-slate-600">
-                      <td className="px-3 py-2">Totaal</td>
-                      <td />
-                      <td className="px-3 py-2 text-right">{totUren.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(totVerkoop)}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
+            {vast && (
+              <p className="mb-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+                Deze reparatie is gefactureerd: de werkzaamheden liggen vast. Zet «Gefactureerd» uit om ze te wijzigen.
+              </p>
+            )}
+            <HoutrotWerkzaamhedenTabel
+              regels={werkzaamheden.map(w => w.regel)}
+              vast={vast}
+              onBewerk={i => { setBewerkIndex(i); setInvoer('handmatig') }}
+              onVerwijder={i => setWerkzaamheden(prev => prev.filter((_, idx) => idx !== i))}
+            />
+
+            {!vast && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant={invoer === 'bibliotheek' ? 'primary' : 'outline'}
+                  onClick={() => { setInvoer(invoer === 'bibliotheek' ? null : 'bibliotheek'); setBewerkIndex(null) }}>
+                  Uit bibliotheek
+                </Button>
+                <Button type="button" size="sm" variant={invoer === 'handmatig' && bewerkIndex == null ? 'primary' : 'outline'}
+                  onClick={() => { setInvoer('handmatig'); setBewerkIndex(null) }}>
+                  Handmatige regel toevoegen
+                </Button>
               </div>
             )}
 
+            {!vast && invoer === 'handmatig' && (
+              <HoutrotHandmatigeRegel
+                // Andere sleutel per regel: het formulier begint dan schoon met de juiste waarden.
+                key={bewerkIndex ?? 'nieuw'}
+                standaarden={standaarden}
+                start={bewerkIndex != null ? {
+                  regel: handmatigVanRegel(werkzaamheden[bewerkIndex].regel),
+                  fotoUrl: werkzaamheden[bewerkIndex].regel.foto_pad
+                    ? fotoUrl(werkzaamheden[bewerkIndex].regel.foto_pad!) : undefined,
+                } : undefined}
+                onOpslaan={bewaarHandmatig}
+                onAnnuleer={() => { setBewerkIndex(null); setInvoer(null) }}
+              />
+            )}
+
+            {!vast && invoer === 'bibliotheek' && (
             <div className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
               <div>
                 <label className={lblCls}>Soort</label>
@@ -349,12 +382,6 @@ export default function HoutrotRegistratieModal({
                 Toevoegen
               </button>
             </div>
-
-            {werkzaamheden.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-                <span>Arbeidskosten: <strong className="text-slate-700">{formatCurrency(totArbeid)}</strong></span>
-                <span>Materiaalkosten: <strong className="text-slate-700">{formatCurrency(totMateriaal)}</strong></span>
-              </div>
             )}
           </section>
 
@@ -404,6 +431,10 @@ export default function HoutrotRegistratieModal({
                   Afgerond
                 </button>
               </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" checked={gefactureerd} onChange={e => setGefactureerd(e.target.checked)} />
+                Gefactureerd — werkzaamheden liggen daarna vast
+              </label>
             </div>
           </section>
 

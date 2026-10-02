@@ -1,4 +1,4 @@
-import type { RepairRegistration } from './types'
+import type { RepairRegistration, RepairRegistrationLine } from './types'
 
 /**
  * Aggregaten per registratie. De waarheid zijn de werkzaamheden-regels (aantal ×
@@ -47,9 +47,33 @@ export const registratieMateriaal = (r: RepairRegistration): number =>
 export const gesorteerdeRegels = (r: RepairRegistration) =>
   (r.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
 
-/** "2× Houtrotherstel dorpel · 1× Kitwerk" — terugval op de reparatienaam-snapshot. */
+/** Verkoop van de regels die aan een voorwaarde voldoen (bv. alleen handmatig). */
+function verkoopWaar(r: RepairRegistration, pred: (l: RepairRegistrationLine) => boolean): number {
+  return (r.lines ?? []).filter(pred).reduce((s, l) => s + Number(l.line_sale_total ?? 0), 0)
+}
+
+/** Deel van het verkooptotaal dat uit handmatige regels komt. */
+export const registratieVerkoopHandmatig = (r: RepairRegistration): number =>
+  verkoopWaar(r, l => l.bron === 'handmatig')
+
+/** Deel van het verkooptotaal dat aanvullende werkzaamheden (meerwerk) is. */
+export const registratieVerkoopMeerwerk = (r: RepairRegistration): number =>
+  verkoopWaar(r, l => l.categorie === 'meerwerk')
+
+/** "2" of "1,5": aantallen zonder overbodige decimalen. */
+const aantalTekst = (n: number) => (Number.isInteger(n) ? String(n) : String(n).replace('.', ','))
+
+/**
+ * "2× Houtrotherstel dorpel · 1,5 uur Kozijn uitzagen (handmatig)" — terugval op de
+ * reparatienaam-snapshot. Handmatige regels noemen hun eenheid (uren, m¹, …) omdat
+ * "1,5×" bij arbeid niets zegt.
+ */
 export function werkzaamhedenTekst(r: RepairRegistration): string {
   const regels = gesorteerdeRegels(r)
   if (regels.length === 0) return r.repair_name_snapshot ?? ''
-  return regels.map(l => `${Number(l.aantal)}× ${l.repair_name_snapshot ?? 'Werkzaamheid'}`).join(' · ')
+  return regels.map(l => {
+    const naam = l.repair_name_snapshot ?? 'Werkzaamheid'
+    if (l.bron !== 'handmatig') return `${aantalTekst(Number(l.aantal))}× ${naam}`
+    return `${aantalTekst(Number(l.aantal))} ${l.unit_snapshot ?? ''} ${naam} (handmatig)`.replace(/\s+/g, ' ')
+  }).join(' · ')
 }

@@ -258,6 +258,9 @@ export interface RepairRegistration {
    */
   gearchiveerd_op: string | null
   gearchiveerd_door: string | null
+  /** Gezet = gefactureerd: de werkzaamheden liggen vast (geen toevoegen/bewerken/verwijderen). */
+  gefactureerd_op?: string | null
+  gefactureerd_door?: string | null
   damage_description: string | null
   damage_severity: SchadeSeverity | null
   damage_cause: string | null
@@ -327,6 +330,27 @@ export interface RepairRegistrationLine {
   line_sale_total: number | null
   volgorde: number
   created_at: string
+  /** Ontbreekt bij rijen van vóór de handmatige regels: telt dan als 'bibliotheek'. */
+  bron?: RegelBron | null
+  regel_type?: RegelType | null
+  categorie?: RegelCategorie | null
+  functie?: string | null
+  opslag_pct?: number | null
+  btw_tarief?: string | null
+  notitie?: string | null
+  foto_pad?: string | null
+}
+
+/** Waar een werkzaamheden-regel vandaan komt. */
+export type RegelBron = 'bibliotheek' | 'handmatig'
+/** Soort handmatige regel; bibliotheekregels zijn altijd een mix en hebben geen type. */
+export type RegelType = 'arbeid' | 'materiaal'
+/** Reparatie of aanvullende werkzaamheden (meerwerk). */
+export type RegelCategorie = 'reparatie' | 'meerwerk'
+
+export const REGEL_CATEGORIEEN: Record<RegelCategorie, string> = {
+  reparatie: 'Reparatie',
+  meerwerk: 'Aanvullende werkzaamheden',
 }
 
 export interface RepairPhoto {
@@ -473,6 +497,8 @@ export interface RegistratieForm {
   actual_material_cost?: number
   actual_cost_price?: number
   actual_sale_price?: number
+  /** Gefactureerd zetten (true) of terugzetten (false); weglaten = ongewijzigd. */
+  gefactureerd?: boolean
 }
 
 /** Eén werkzaamheid bij het opslaan: recept + aantal + prijs-momentopname per stuk. */
@@ -490,6 +516,14 @@ export interface RegistratieRegelForm {
   cost_price_snapshot?: number
   sale_price_snapshot?: number
   volgorde?: number
+  bron?: RegelBron
+  regel_type?: RegelType
+  categorie?: RegelCategorie
+  functie?: string
+  opslag_pct?: number
+  btw_tarief?: string
+  notitie?: string
+  foto_pad?: string
 }
 
 // ============================================================
