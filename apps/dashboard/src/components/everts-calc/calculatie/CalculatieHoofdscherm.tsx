@@ -19,6 +19,7 @@ import BibliotheekDrawer from './BibliotheekDrawer'
 import CufImportModal from './CufImportModal'
 import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
+import { offerteKeuzesBestaan } from '@/lib/everts-calc/offerte-keuzes'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { serialiseerNaarCuf } from '@/lib/everts-calc/cuf-serializer'
@@ -356,13 +357,16 @@ export default function CalculatieHoofdscherm({
 
   /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
    *  betalingsconditie én algemene voorwaarden op de calculatie; anders opent
-   *  eerst het instellingen-dialoog (verplicht-modus). */
-  const startOfferte = (type: QuoteType) => {
+   *  eerst het instellingen-dialoog (verplicht-modus). Een keuze die intussen
+   *  uit Instellingen is verwijderd telt als niet gekozen: anders weigert de
+   *  database de offerte. */
+  const startOfferte = async (type: QuoteType) => {
     // Kijk naar het geopende scenario — dát is het scenario waarvan de offerte
     // gemaakt wordt. Na een revisie is dat een ander dan het standaard-scenario.
     const scs = getScenarios(projectId)
     const actief = scs.find(s => s.id === scenario.id) ?? scs.find(s => s.is_standaard) ?? scs[0]
-    if (!actief?.betalingsconditie_id || !actief?.algemene_voorwaarden_id) {
+    const geldig = await offerteKeuzesBestaan(actief?.betalingsconditie_id, actief?.algemene_voorwaarden_id)
+    if (!geldig) {
       setPendingOfferteType(type)
       setInstellingenVereist(true)
       setInstellingenOpen(true)

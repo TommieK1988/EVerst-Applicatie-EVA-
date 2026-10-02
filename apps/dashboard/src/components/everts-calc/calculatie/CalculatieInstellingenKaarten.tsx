@@ -36,8 +36,8 @@ interface Props {
 
 export default function CalculatieInstellingenKaarten({ projectId, dossierId, scenarioId, vereist = false, onVoltooid }: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
-  const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[]>([])
-  const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[]>([])
+  const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[] | null>(null)
+  const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[] | null>(null)
   const [opslaan, setOpslaan] = useState(false)
   const { bevestig } = useDialogen()
 
@@ -114,12 +114,26 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
   }
 
 
-  const beideGekozen = !!scenario.betalingsconditie_id && !!scenario.algemene_voorwaarden_id
+  // Een id dat niet (meer) in de lijst staat is onder Instellingen verwijderd: dat
+  // telt als niet gekozen. De keuzelijst valt dan terug op leeg in plaats van
+  // stilletjes de eerste optie te tonen, en de offerte wordt niet geweigerd.
+  const conditieId = betalingscondities?.some(b => b.id === scenario.betalingsconditie_id)
+    ? scenario.betalingsconditie_id ?? null : null
+  const voorwaardenId = algVoorwaarden?.some(av => av.id === scenario.algemene_voorwaarden_id)
+    ? scenario.algemene_voorwaarden_id ?? null : null
+  const verwijderd = (!!betalingscondities && !!scenario.betalingsconditie_id && !conditieId)
+    || (!!algVoorwaarden && !!scenario.algemene_voorwaarden_id && !voorwaardenId)
+  const beideGekozen = !!conditieId && !!voorwaardenId
 
   return (
     <div className="grid grid-cols-1 gap-4">
 
-      {vereist && !beideGekozen && (
+      {verwijderd ? (
+        <Alert tone="warning" title="Gekozen voorwaarden bestaan niet meer">
+          De betalingscondities of algemene voorwaarden op deze calculatie zijn onder Instellingen verwijderd.
+          Kies ze opnieuw, anders kan er geen offerte of interne begroting gemaakt worden.
+        </Alert>
+      ) : vereist && !beideGekozen && (
         <Alert tone="warning" title="Kies eerst betalingscondities én algemene voorwaarden">
           Deze zijn verplicht voordat je een offerte kunt aanmaken. Ze worden vastgelegd op deze calculatie.
         </Alert>
@@ -133,12 +147,12 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Betalingscondities</label>
               <select
-                value={scenario.betalingsconditie_id ?? ''}
+                value={conditieId ?? ''}
                 onChange={e => wijzig({ betalingsconditie_id: e.target.value || null }, true)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
               >
                 <option value="">— Geen voorkeur —</option>
-                {betalingscondities.map(b => (
+                {(betalingscondities ?? []).map(b => (
                   <option key={b.id} value={b.id}>
                     {b.naam}
                   </option>
@@ -148,12 +162,12 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Algemene Voorwaarden</label>
               <select
-                value={scenario.algemene_voorwaarden_id ?? ''}
+                value={voorwaardenId ?? ''}
                 onChange={e => wijzig({ algemene_voorwaarden_id: e.target.value || null }, true)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
               >
                 <option value="">— Geen voorkeur —</option>
-                {algVoorwaarden.map(av => (
+                {(algVoorwaarden ?? []).map(av => (
                   <option key={av.id} value={av.id}>
                     {av.naam}{av.versie ? ` (${av.versie})` : ''}{av.is_standaard ? ' (standaard)' : ''}
                   </option>

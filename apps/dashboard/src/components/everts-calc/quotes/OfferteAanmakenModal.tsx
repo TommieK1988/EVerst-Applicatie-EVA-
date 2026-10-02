@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import { Check, FileText, Paperclip } from 'lucide-react'
 import { getLayouts } from '@/app/(platform)/everts-calc/actions/quote-instellingen'
 import { getBetalingscondities } from '@/app/(platform)/everts-calc/actions/betalingscondities'
@@ -236,6 +237,8 @@ export default function OfferteAanmakenModal({
       }
     } catch (e) {
       console.error('Offerte aanmaken mislukt:', e)
+      // Niet stil falen: zonder melding lijkt de knop niets te doen.
+      toast.error(`${type === 'interne_calculatie' ? 'Interne begroting' : 'Offerte'} aanmaken mislukt. Controleer de offerte-instellingen (betalingscondities en algemene voorwaarden) en probeer het opnieuw.`)
       setLoading(false)
     }
   }
