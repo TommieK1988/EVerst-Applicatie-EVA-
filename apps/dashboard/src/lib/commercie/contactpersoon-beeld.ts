@@ -18,7 +18,9 @@ import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { getContactpersoonDossiers } from '@/lib/relaties/dossiers'
 import type { RelatieNotitie } from '@/lib/relaties/notities-types'
-import { metBedragen } from './contactpersoon-bedragen'
+import { metBedragen } from './dossier-bedragen'
+import { berekenScore } from './klantbeeld-score'
+import type { KlantScore } from './klantbeeld-types'
 import { groepeerContactDossiers, type ContactDossierGroepen } from './contactpersoon-groepen'
 
 /** Eén organisatie waar deze persoon aan hangt, met zijn rol daar. */
@@ -53,6 +55,11 @@ export type ContactpersoonBeeld = {
   /** Vaste kenmerken bij de persoon ("alleen bereikbaar op dinsdag"), los van gesprekken. */
   opmerkingen: string | null
   organisaties: ContactpersoonOrganisatie[]
+  /**
+   * Hoe vaak we scoren bij déze persoon — zelfde rekenregel als bij de klant (`berekenScore`),
+   * over de dossiers waarop hij contactpersoon is.
+   */
+  score: KlantScore
   /** Dossiers waarop hij de contactpersoon is, per soort en met bedrag. */
   dossiers: ContactDossierGroepen
   /** Gespreksnotities die aan hém gekoppeld zijn. */
@@ -175,6 +182,7 @@ export async function getContactpersoonBeeld(
     priveAdres: adresRegel(c.prive_adres_straat, c.prive_adres_postcode, c.prive_adres_plaats),
     opmerkingen: leeg(c.opmerkingen),
     organisaties,
+    score: berekenScore(dossiers),
     dossiers: groepeerContactDossiers(await metBedragen(dossiers)),
     notities,
   }

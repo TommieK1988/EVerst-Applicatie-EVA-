@@ -20,6 +20,8 @@ import { Building2, Mail, Phone } from 'lucide-react'
 import type { ContactpersoonBeeld } from '@/lib/commercie/contactpersoon-beeld'
 import { totaalExclBtw } from '@/lib/commercie/contactpersoon-groepen'
 import KlapBlok from './KlapBlok'
+import KengetallenRij from './KengetallenRij'
+import { useServicedeskBedragen } from './servicedesk-bedragen'
 import DossierRegel from './DossierRegel'
 import NotitieLijst from './NotitieLijst'
 import VastleggenSheet from './VastleggenSheet'
@@ -112,6 +114,10 @@ export default function ContactpersoonView({
   // Open je van hieruit een dossier, dan hoort de terugknop naar deze kaart te wijzen.
   const terugNaar = `/m/commercieel/cp/${beeld.id}`
 
+  // Lopende servicedeskbonnen krijgen hun bedrag na de eerste weergave (zie de hook).
+  const servicedesk = useServicedeskBedragen(beeld.dossiers.servicedesk)
+  const groepen = { ...beeld.dossiers, servicedesk: servicedesk.dossiers }
+
   return (
     <>
       {!beeld.actief && (
@@ -131,6 +137,10 @@ export default function ContactpersoonView({
           label="Mailen" Icon={Mail} uit={!beeld.email}
         />
       </div>
+
+      {/* Zelfde scoreblok als op het klantbeeld, over zijn eigen dossiers. Omzet staat er niet
+          bij: die is per opdrachtgever geboekt, niet per persoon. */}
+      <KengetallenRij score={beeld.score} />
 
       <div style={{ padding: '16px 16px 16px' }}>
         {/* Waar hij werkt — bovenaan, want dat is de brug naar het klantbeeld. */}
@@ -223,11 +233,11 @@ export default function ContactpersoonView({
           <KlapBlok
             key={sleutel}
             titel={titel}
-            aantal={beeld.dossiers[sleutel].length}
-            totaal={totaalExclBtw(beeld.dossiers[sleutel])}
+            aantal={groepen[sleutel].length}
+            totaal={sleutel === 'servicedesk' && !servicedesk.klaar ? null : totaalExclBtw(groepen[sleutel])}
             leegTekst={leeg}
           >
-            {beeld.dossiers[sleutel].map(d => (
+            {groepen[sleutel].map(d => (
               <DossierRegel key={d.id} dossier={d} bedrag={d.bedragExclBtw} toonJaar terugNaar={terugNaar} />
             ))}
           </KlapBlok>

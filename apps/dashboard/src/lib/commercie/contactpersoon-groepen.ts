@@ -14,22 +14,15 @@
  * Pure module (geen `server-only`): de test rekent ermee, en de types gaan naar de client.
  */
 import type { RelatieDossier } from '@/lib/relaties/dossiers-types'
-import { isNietDoorgegaan, isWerkGereed } from './klantbeeld-types'
+import { isNietDoorgegaan, isWerkGereed, type DossierMetBedrag } from './klantbeeld-types'
 
-export type ContactDossier = RelatieDossier & {
-  /**
-   * Excl. btw. Lopend werk: de waarde volgens dezelfde rekenregel als de borden. Een afgeronde
-   * servicedeskbon: het gefactureerde bedrag. `null` = geen bedrag bekend.
-   */
-  bedragExclBtw: number | null
-}
 
 export type ContactDossierGroepen = {
-  aanvragen: ContactDossier[]
-  offertes: ContactDossier[]
-  opdrachten: ContactDossier[]
-  servicedesk: ContactDossier[]
-  nietDoorgegaan: ContactDossier[]
+  aanvragen: DossierMetBedrag[]
+  offertes: DossierMetBedrag[]
+  opdrachten: DossierMetBedrag[]
+  servicedesk: DossierMetBedrag[]
+  nietDoorgegaan: DossierMetBedrag[]
 }
 
 /** Is er op dit dossier nog iets gaande? Afgerond werk zakt in zijn blok naar onderen. */
@@ -37,7 +30,7 @@ export function isAfgerond(d: RelatieDossier): boolean {
   return d.fase === 'afgesloten' || isWerkGereed(d)
 }
 
-export function groepeerContactDossiers(dossiers: ContactDossier[]): ContactDossierGroepen {
+export function groepeerContactDossiers(dossiers: DossierMetBedrag[]): ContactDossierGroepen {
   const groepen: ContactDossierGroepen = {
     aanvragen: [], offertes: [], opdrachten: [], servicedesk: [], nietDoorgegaan: [],
   }
@@ -58,7 +51,7 @@ export function groepeerContactDossiers(dossiers: ContactDossier[]): ContactDoss
 }
 
 /** Som van de bekende bedragen; `null` als geen enkel dossier een bedrag heeft. */
-export function totaalExclBtw(dossiers: ContactDossier[]): number | null {
+export function totaalExclBtw(dossiers: DossierMetBedrag[]): number | null {
   const bedragen = dossiers.map(d => d.bedragExclBtw).filter((b): b is number => b != null)
   if (bedragen.length === 0) return null
   return Math.round(bedragen.reduce((s, b) => s + b, 0) * 100) / 100

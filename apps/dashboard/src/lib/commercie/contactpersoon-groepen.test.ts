@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ContactDossier } from './contactpersoon-groepen'
+import type { DossierMetBedrag } from './klantbeeld-types'
 import { groepeerContactDossiers, totaalExclBtw } from './contactpersoon-groepen'
 
-function dossier(over: Partial<ContactDossier>): ContactDossier {
+function dossier(over: Partial<DossierMetBedrag>): DossierMetBedrag {
   return {
     id: Math.random().toString(36).slice(2), dossiernummer: null, titel: 'x', fase: 'aanvraag',
     href: null, adres: null, jaar: 2026, updated_at: '2026-09-01', bedrag: null, rollen: [],

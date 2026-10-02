@@ -86,9 +86,14 @@ export default function KlapBlok({
         />
         <span style={{ flex: 1, minWidth: 0 }}>{titel}</span>
         {totaal != null && totaal !== 0 && (
-          <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEKST, whiteSpace: 'nowrap' }}>
-            {euro(totaal)}
-            <span style={{ fontSize: 11, fontWeight: 600, color: GRIJS }}> excl. btw</span>
+          // Gestapeld: naast elkaar kostte "excl. btw" zo veel breedte dat een kop als
+          // "Uitgevoerd 2024–2026" op een telefoon over twee regels brak.
+          <span style={{
+            flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+            lineHeight: 1.15, whiteSpace: 'nowrap',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: TEKST }}>{euro(totaal)}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: GRIJS }}>excl. btw</span>
           </span>
         )}
         <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: GRIJS }}>{aantal}</span>
