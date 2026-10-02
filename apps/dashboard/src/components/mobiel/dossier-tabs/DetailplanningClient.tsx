@@ -290,17 +290,18 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
   const locale = useDateFnsLocale()
   const scrollRef = useRef<HTMLDivElement>(null)
   /**
-   * Ingeklapte activiteiten. Uitgeklapt (de standaard) staan onder de activiteit de volledige
-   * omschrijving — in de labelkolom wordt die afgekapt — en de ingeplande medewerkers.
+   * Uitgeklapte activiteiten. Standaard staat alles ingeklapt: één rij per activiteit, zodat
+   * de hele planning in beeld past. Uitgeklapt staan eronder de volledige omschrijving — in de
+   * labelkolom wordt die afgekapt — en de ingeplande medewerkers.
    */
-  const [ingeklapt, setIngeklapt] = useState<Set<string>>(() => new Set())
-  const klapIn = (id: string) => setIngeklapt(huidig => {
+  const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(() => new Set())
+  const klapIn = (id: string) => setUitgeklapt(huidig => {
     const nieuw = new Set(huidig)
     if (nieuw.has(id)) nieuw.delete(id); else nieuw.add(id)
     return nieuw
   })
-  const allesIngeklapt = activiteiten.every(a => ingeklapt.has(a.id))
-  const klapAllesIn = () => setIngeklapt(allesIngeklapt ? new Set() : new Set(activiteiten.map(a => a.id)))
+  const allesIngeklapt = activiteiten.every(a => !uitgeklapt.has(a.id))
+  const klapAllesIn = () => setUitgeklapt(allesIngeklapt ? new Set(activiteiten.map(a => a.id)) : new Set())
 
   const ppd = PPD
   const headerH = WEEK_H + DAG_H
@@ -363,7 +364,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
       if (groep.naam) out.push({ kind: 'fase', key: `fase-${groep.id}`, naam: groep.naam })
       for (const a of groep.activiteiten) {
         out.push({ kind: 'activiteit', key: `act-${a.id}`, a })
-        if (ingeklapt.has(a.id)) continue
+        if (!uitgeklapt.has(a.id)) continue
 
         // Alle blokken van dezelfde medewerker binnen deze activiteit op ÉÉN rij,
         // anders krijg je dezelfde naam vijf keer onder elkaar. Sleutel op
@@ -383,7 +384,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
       }
     }
     return out
-  }, [activiteiten, ingeklapt])
+  }, [activiteiten, uitgeklapt])
 
   const weken = useMemo(() => {
     const uit: { i: number; datum: Date }[] = []
@@ -495,7 +496,7 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           }
 
           const isAct = rij.kind === 'activiteit'
-          const isIngeklapt = isAct && ingeklapt.has(rij.a.id)
+          const isIngeklapt = isAct && !uitgeklapt.has(rij.a.id)
           const hoogte = isAct ? RIJ_H : SUBRIJ_H
           const kleur = kleurVan(rij.a.status)
 
