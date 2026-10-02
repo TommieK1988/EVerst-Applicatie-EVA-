@@ -211,7 +211,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     ...(medewerkerRes.data as Medewerker),
     ...(magPersoonsgegevens ? {} : {
       bsn: null, geboortedatum: null,
-      adres_straat: null, adres_postcode: null, adres_plaats: null,
+      adres_straat: null, adres_postcode: null, adres_plaats: null, noodcontact: null,
     }),
     ...(magTarieven ? {} : {
       uurtarief_verkoop: null, uurtarief_kostprijs: null,

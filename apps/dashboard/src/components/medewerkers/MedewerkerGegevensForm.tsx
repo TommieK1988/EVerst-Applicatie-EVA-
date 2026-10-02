@@ -459,6 +459,11 @@ export default function MedewerkerGegevensForm({
                 <Veld label={<>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></>}>
                   <BsnVeld value={editing ? state.bsn : (m.bsn ?? '')} onChange={v => set('bsn', v)} disabled={!editing} />
                 </Veld>
+                {/* Ook tijdens bewerken alleen-lezen: het komt uit Bouw7 en de sync zou een
+                    wijziging hier overschrijven. Vrije tekst, vaak over meerdere regels. */}
+                <Veld label={<>Noodcontact <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(uit Bouw7)</span></>} span>
+                  <span style={{ ...(m.noodcontact ? valueStyle : mutedStyle), whiteSpace: 'pre-line' }}>{m.noodcontact || '—'}</span>
+                </Veld>
               </>
             )}
           </div>

@@ -1103,6 +1103,8 @@ export type Medewerker = {
   adres_straat: string | null
   adres_postcode: string | null
   adres_plaats: string | null
+  /** Vrije tekst uit het Bouw7-maatwerkveld "Noodcontact + nummer"; alleen-lezen in EVA. */
+  noodcontact: string | null
   geboortedatum: string | null
   bsn: string | null
   werkmaatschappij_id: string | null
