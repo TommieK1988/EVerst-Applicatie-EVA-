@@ -1,6 +1,6 @@
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { haalAgendaVenster, haalMijnTaakItems } from '@/lib/agenda/mijn-agenda'
-import { dagSleutel, maandSleutel, startVenster, vingerafdruk } from '@/lib/agenda/agenda-model'
+import { maandSleutel, startVenster, vandaagNl, vingerafdruk } from '@/lib/agenda/agenda-model'
 import { getAppVertaler } from '@/i18n/server'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
@@ -40,7 +40,9 @@ export default async function MobielPlanningPage(
   // `?dag=` maakt een deeplink vanuit een melding mogelijk; anders vandaag.
   const { dag } = await searchParams
   const geldigeDag = dag && /^\d{4}-\d{2}-\d{2}$/.test(dag) ? dag : null
-  const peil = geldigeDag ? new Date(`${geldigeDag}T12:00:00`) : new Date()
+  // Peil via de NL-dag: de server draait in UTC, en rond middernacht is dat nog gisteren.
+  const vandaag = vandaagNl()
+  const peil = new Date(`${geldigeDag ?? vandaag}T12:00:00`)
   const { van, tot } = startVenster(peil)
 
   const [vensterItems, taakItems] = await Promise.all([
@@ -56,7 +58,7 @@ export default async function MobielPlanningPage(
       <AgendaClient
         items={items}
         peilMaand={maandSleutel(peil)}
-        startDag={geldigeDag ?? dagSleutel(new Date())}
+        startDag={geldigeDag ?? vandaag}
         dataSleutel={vingerafdruk(items)}
       />
     </>

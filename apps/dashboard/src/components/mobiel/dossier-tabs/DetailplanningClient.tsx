@@ -10,6 +10,7 @@ import { useTranslations } from 'next-intl'
 import { useDateFnsLocale } from '@/i18n/client'
 import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import BewakingscodeLabel from './BewakingscodeLabel'
+import { dagVanTijdstip } from '@/lib/agenda/agenda-model'
 
 /**
  * Mobiele dossierplanning — read-only.
@@ -80,25 +81,6 @@ const kleurVan = (status: string | null) => STATUS_KLEUR[status ?? ''] ?? '#9aa4
 
 /** Datum-only ISO (yyyy-MM-dd) uit een `date`-kolom (gewenste_start, deadline). */
 const dagVan = (iso: string | null): string | null => (iso ? iso.slice(0, 10) : null)
-
-/**
- * Lokale kalenderdag van een timestamptz (`planning_items.start_dt`/`eind_dt`).
- *
- * NIET `slice(0,10)` gebruiken: PostgREST levert UTC, dus 1 juni 00:00 in
- * Nederland komt binnen als `2026-05-31T22:00:00+00:00` en zou dan als 31 mei
- * op de tijdlijn belanden. `parseISO` rekent wél naar lokale tijd.
- *
- * `eindExclusief`: een planitem eindigt op middernacht ván de volgende dag, dus
- * de laatste gewerkte dag is die van (eind − 1 ms). Bij een eindtijd midden op
- * de dag (bv. 15:00) verandert dat niets.
- */
-function dagVanTijdstip(iso: string | null, eindExclusief = false): string | null {
-  if (!iso) return null
-  try {
-    const d = parseISO(iso)
-    return format(new Date(eindExclusief ? d.getTime() - 1 : d.getTime()), 'yyyy-MM-dd')
-  } catch { return null }
-}
 
 function datumLabel(iso: string | null, locale: Locale): string | null {
   const d = dagVan(iso)

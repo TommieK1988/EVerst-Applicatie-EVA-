@@ -55,12 +55,33 @@ export const MAX_STIPPEN = 3
 export const dagVanDatum = (iso: string | null): string | null => (iso ? iso.slice(0, 10) : null)
 
 /**
- * Lokale kalenderdag van een timestamptz (`planning_items.start_dt`/`eind_dt`).
+ * NL-kalenderdag en -kloktijd van een moment, zomertijd-bewust.
+ *
+ * Expliciet Europe/Amsterdam en níet "lokale tijd": deze helpers draaien vooral
+ * op de server, en die staat op Vercel in UTC. Met `date-fns format` werd een
+ * planitem van 07:00 daar 05:00 (zomer) of 06:00 (winter), en schoof een
+ * dagblok van 00:00 naar 22:00/23:00 op de vórige dag.
+ */
+const NL_OPMAAK = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Amsterdam',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
+function nlDagEnTijd(ms: number): { dag: string; tijd: string } | null {
+  if (Number.isNaN(ms)) return null
+  const delen = NL_OPMAAK.formatToParts(new Date(ms))
+  const g = (t: string) => delen.find(p => p.type === t)?.value ?? '00'
+  const uur = g('hour') === '24' ? '00' : g('hour')
+  return { dag: `${g('year')}-${g('month')}-${g('day')}`, tijd: `${uur}:${g('minute')}` }
+}
+
+/**
+ * NL-kalenderdag van een timestamptz (`planning_items.start_dt`/`eind_dt`).
  *
  * NIET `slice(0,10)` gebruiken: PostgREST levert UTC, dus 1 juni 00:00 in
  * Nederland komt binnen als `2026-05-31T22:00:00+00:00` en zou dan op 31 mei
- * belanden. `parseISO` rekent wél naar lokale tijd. Dezelfde helper staat in
- * `components/mobiel/dossier-tabs/DetailplanningClient.tsx`.
+ * belanden.
  *
  * `eindExclusief`: een planitem eindigt op middernacht ván de volgende dag, dus
  * de laatste gewerkte dag is die van (eind − 1 ms). Bij een eindtijd midden op
@@ -68,17 +89,18 @@ export const dagVanDatum = (iso: string | null): string | null => (iso ? iso.sli
  */
 export function dagVanTijdstip(iso: string | null, eindExclusief = false): string | null {
   if (!iso) return null
-  try {
-    const d = parseISO(iso)
-    return format(new Date(eindExclusief ? d.getTime() - 1 : d.getTime()), 'yyyy-MM-dd')
-  } catch { return null }
+  const ms = parseISO(iso).getTime()
+  return nlDagEnTijd(eindExclusief ? ms - 1 : ms)?.dag ?? null
 }
 
-/** Lokale tijd 'HH:mm' van een timestamptz. */
+/** NL-kloktijd 'HH:mm' van een timestamptz. */
 export function tijdVanTijdstip(iso: string | null): string | null {
   if (!iso) return null
-  try { return format(parseISO(iso), 'HH:mm') } catch { return null }
+  return nlDagEnTijd(parseISO(iso).getTime())?.tijd ?? null
 }
+
+/** Vandaag als NL-kalenderdag — op de server is `new Date()` UTC, en rond middernacht dus gisteren. */
+export const vandaagNl = (): string => nlDagEnTijd(Date.now())!.dag
 
 export const maandSleutel = (d: Date): string => format(d, 'yyyy-MM')
 export const dagSleutel = (d: Date): string => format(d, 'yyyy-MM-dd')

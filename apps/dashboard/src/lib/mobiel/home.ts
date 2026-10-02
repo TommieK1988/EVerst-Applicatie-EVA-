@@ -2,7 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 import type { CurrentMedewerker } from '@/lib/auth/rechten'
 import { haalAgendaVenster, haalMijnTaakItems } from '@/lib/agenda/mijn-agenda'
-import { dagSleutel, sorteerDagItems, type AgendaItem } from '@/lib/agenda/agenda-model'
+import { sorteerDagItems, vandaagNl, type AgendaItem } from '@/lib/agenda/agenda-model'
 import { getUrenInstellingen, indienDeadline } from '@/lib/uren/instellingen'
 import { weekStartVan } from '@/lib/uren/rooster'
 import { isFiatteerder } from './keuren'
@@ -32,7 +32,7 @@ import { getAppVertaler } from '@/i18n/server'
 export async function haalVandaag(
   medewerker: CurrentMedewerker,
 ): Promise<{ dag: string; items: AgendaItem[] }> {
-  const dag = dagSleutel(new Date())
+  const dag = vandaagNl()
 
   const [venster, taken] = await Promise.all([
     haalAgendaVenster(medewerker, dag, dag).catch(() => [] as AgendaItem[]),
