@@ -312,37 +312,36 @@ export async function getUursoortOpties(): Promise<UursoortOptie[]> {
   return lijst.sort((a, b) => rang(a) - rang(b) || a.naam.localeCompare(b.naam))
 }
 
-/** Rolkolommen op `dossiers` die iemand aan een opdracht koppelen. */
-const ROL_KOLOMMEN = [
-  'project_manager_id', 'teamleider_id', 'werkvoorbereider_id',
-  'calculator_id', 'uitvoerder_id', 'controller_id',
-] as const
-
-
-/**
- * Hoe ver de planning en de eerdere uren meetellen als koppeling: een halfjaar terug en een
- * halfjaar vooruit, gerekend vanaf de dag die geboekt wordt. Het venster is er om de query
- * begrensd te houden (zie de paginatie-regel in CLAUDE.md), niet om streng te zijn.
- */
-const KOPPELING_DAGEN = 180
+/** Een dossier in de projectkeuze van de weekstaat. */
+export type DossierOptie = {
+  id: string
+  label: string
+  /** Een indirecte-urendossier (overhead); altijd kiesbaar, zonder bewakingscode. */
+  indirect: boolean
+  servicedesk: boolean
+  /** Ingepland op precies de dag die geboekt wordt. */
+  vandaag: boolean
+}
 
 /**
- * Dossiers om uit te kiezen bij werk-uren: eerst de lopende opdrachten waaraan deze medewerker
- * gekoppeld is, daarna alle overige lopende opdrachten.
- *
- * Eerder stond hier alleen wie op díé dag was ingepland. Dat bleek in de praktijk vrijwel altijd
- * leeg -- de planning wordt niet per dag bijgehouden, en een meerdaags planitem viel er sowieso
- * buiten omdat er alleen op `start_dt` werd gefilterd. De monteur zag dus een kop "Je stond hier
- * ingepland" zonder projecten en moest alsnog door de hele lijst van alle opdrachten scrollen.
- *
- * Gekoppeld is nu breder en robuuster: ingepland op het dossier (ergens in het venster, ook
- * meerdaags), rolhouder op het dossier, of er eerder uren op geschreven. Binnen die groep komt
- * bovenaan waarop hij deze dag staat ingepland; dat blijft het beste eerste antwoord, maar het is
- * geen voorwaarde meer.
+ * Hoe ver de planning meetelt: twee weken terug en twee weken vooruit, gerekend vanaf de dag die
+ * geboekt wordt. Wie de uren van vorige week nog invult, krijgt zo de projecten van toen te zien.
  */
-export async function getDossierOpties(datum: string): Promise<Array<{
-  id: string; label: string; gekoppeld: boolean; indirect: boolean; servicedesk: boolean
-}>> {
+const PLANNING_VENSTER_DAGEN = 14
+
+/**
+ * Dossiers om uit te kiezen bij werk-uren: alleen de lopende opdrachten waarop deze medewerker in
+ * het venster staat ingepland, plus de indirecte-urendossiers.
+ *
+ * Eerder stonden hier álle lopende opdrachten (honderden), met de eigen projecten bovenaan. De
+ * monteur moest dan alsnog door een lange lijst; in de praktijk boekt hij vrijwel alleen op waar
+ * hij ingepland staat (in een steekproef van 60 dagen: elke regel die niet op een ingepland
+ * dossier stond, stond op een indirecte-urendossier). Rolhouderschap telt bewust niet meer mee.
+ *
+ * Een planitem telt als het het venster overlapt, dus een meerdaags item dat vóór het venster
+ * begint en erin doorloopt hoort er ook bij. Waarop hij díé dag staat komt bovenaan.
+ */
+export async function getDossierOpties(datum: string): Promise<DossierOptie[]> {
   const medewerker = await vereisSessie()
   const supabase = db()
 
@@ -351,77 +350,53 @@ export async function getDossierOpties(datum: string): Promise<Array<{
     d.setDate(d.getDate() + dagen)
     return datumSleutel(d)
   }
-  const van = verschoven(-KOPPELING_DAGEN)
-  const tot = verschoven(KOPPELING_DAGEN)
+  const van = verschoven(-PLANNING_VENSTER_DAGEN)
+  const tot = verschoven(PLANNING_VENSTER_DAGEN)
 
-  const [{ data: items }, { data: rolDossiers }, { data: eerder }] = await Promise.all([
-    supabase
-      .from('planning_items')
-      .select('start_dt, eind_dt, planning_activiteiten(dossier_id)')
-      .eq('medewerker_id', medewerker.id)
-      .gte('start_dt', `${van}T00:00:00`)
-      .lte('start_dt', `${tot}T23:59:59`)
-      .order('start_dt')
-      .limit(1000),
-    supabase
-      .from('dossiers')
-      .select('id')
-      .or(ROL_KOLOMMEN.map(k => `${k}.eq.${medewerker.id}`).join(','))
-      .eq('gearchiveerd', false)
-      .limit(500),
-    supabase
-      .from('uren_regels')
-      .select('dossier_id')
-      .eq('medewerker_id', medewerker.id)
-      .gte('datum', van)
-      .lte('datum', tot)
-      .limit(1000),
-  ])
+  // Eén medewerker over vier weken: ruim onder de 1000 rijen.
+  const { data: items } = await supabase
+    .from('planning_items')
+    .select('start_dt, eind_dt, planning_activiteiten(dossier_id)')
+    .eq('medewerker_id', medewerker.id)
+    .lte('start_dt', `${tot}T23:59:59`)
+    .or(`eind_dt.gte.${van}T00:00:00,and(eind_dt.is.null,start_dt.gte.${van}T00:00:00)`)
+    .order('start_dt')
+    .limit(1000)
 
-  // Ingepland op deze dag = het planitem overlapt de dag. Een item van maandag t/m vrijdag telt
-  // dus ook op woensdag mee; dat deed de oude vergelijking op start_dt niet. De momenten uit de
-  // database worden eerst teruggerekend naar de Nederlandse kalenderdag -- op Vercel draait Node
-  // in UTC, en dan schuift een planitem van 's ochtends een dag op.
+  // Ingepland op deze dag = het planitem overlapt de dag. De momenten uit de database worden
+  // eerst teruggerekend naar de Nederlandse kalenderdag -- op Vercel draait Node in UTC, en dan
+  // schuift een planitem van 's ochtends een dag op.
   const kalenderdag = (dt: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date(dt))
 
-  const gekoppeld = new Set<string>()
+  const ingepland = new Set<string>()
   const vandaagGepland = new Set<string>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const it of (items ?? []) as any[]) {
     const dossierId = it.planning_activiteiten?.dossier_id
     if (!dossierId) continue
-    gekoppeld.add(dossierId)
+    ingepland.add(dossierId)
     const start = kalenderdag(it.start_dt)
     const eind = it.eind_dt ? kalenderdag(it.eind_dt) : start
     if (start <= datum && eind >= datum) vandaagGepland.add(dossierId)
   }
-  for (const d of (rolDossiers ?? []) as Array<{ id: string }>) gekoppeld.add(d.id)
-  for (const r of (eerder ?? []) as Array<{ dossier_id: string | null }>) {
-    if (r.dossier_id) gekoppeld.add(r.dossier_id)
-  }
 
-  // Koppeling bepaalt de volgorde, niet of een dossier mag. Beide groepen worden op dezelfde
-  // manier ingeperkt tot waar uren op horen: lopende opdrachten en open servicedeskbonnen (zie
-  // ./boekbaar). Gekoppeld zijn aan een afgerond of nog niet voorbereid project maakt het geen
-  // plek om uren op te schrijven.
-  const lopendeOpdrachten = () => supabase
-    .from('dossiers')
-    .select('id, dossiernummer, titel, servicedesk_substatus')
-    .or(BOEKBAAR_FILTER)
-    .eq('gearchiveerd', false)
-    .not('bouw7_id', 'is', null)
-    .order('dossiernummer', { ascending: false })
-
-  const idLijst = [...gekoppeld]
+  // Ingepland zijn op een afgerond of nog niet voorbereid project maakt het geen plek om uren op
+  // te schrijven: dezelfde inperking tot lopende opdrachten en open bonnen als overal (./boekbaar).
+  const idLijst = [...ingepland]
   const { data: mijne } = idLijst.length
-    ? await lopendeOpdrachten().in('id', idLijst)
+    ? await supabase
+        .from('dossiers')
+        .select('id, dossiernummer, titel, servicedesk_substatus')
+        .or(BOEKBAAR_FILTER)
+        .eq('gearchiveerd', false)
+        .not('bouw7_id', 'is', null)
+        .in('id', idLijst)
+        .order('dossiernummer', { ascending: false })
     : { data: [] }
 
-  const { data: opdrachten } = await lopendeOpdrachten().limit(500)
-
   // De indirecte-urendossiers horen er altijd bij te staan. Het zijn administratieve dossiers en
-  // vaak geen lopende opdracht, dus het filter hierboven laat ze vallen -- terwijl juist daar de
+  // vaak geen lopende opdracht, en niemand wordt erop ingepland -- terwijl juist daar de
   // overheadtijd op hoort. Ze krijgen in het scherm een eigen groep.
   const indirecteIds = [...await getIndirecteDossierIds()]
   const { data: indirecte } = indirecteIds.length
@@ -440,19 +415,17 @@ export async function getDossierOpties(datum: string): Promise<Array<{
 
   const eigen = ((mijne ?? []) as Rij[])
     .filter(d => !indirectSet.has(d.id))
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: true, indirect: false, servicedesk: !!d.servicedesk_substatus }))
+    .map(d => ({
+      id: d.id, label: label(d), indirect: false,
+      servicedesk: !!d.servicedesk_substatus, vandaag: vandaagGepland.has(d.id),
+    }))
     // Waar hij deze dag staat ingepland bovenaan; de rest op dossiernummer aflopend.
-    .sort((a, b) => Number(vandaagGepland.has(b.id)) - Number(vandaagGepland.has(a.id)))
-
-  const eigenIds = new Set(eigen.map(d => d.id))
-  const rest = ((opdrachten ?? []) as Rij[])
-    .filter(d => !eigenIds.has(d.id) && !indirectSet.has(d.id))
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: false, servicedesk: !!d.servicedesk_substatus }))
+    .sort((a, b) => Number(b.vandaag) - Number(a.vandaag))
 
   const overhead = ((indirecte ?? []) as Rij[])
-    .map(d => ({ id: d.id, label: label(d), gekoppeld: false, indirect: true, servicedesk: false }))
+    .map(d => ({ id: d.id, label: label(d), indirect: true, servicedesk: false, vandaag: false }))
 
-  return [...eigen, ...rest, ...overhead]
+  return [...eigen, ...overhead]
 }
 
 /* ── Muteren ──────────────────────────────────────────────────────── */

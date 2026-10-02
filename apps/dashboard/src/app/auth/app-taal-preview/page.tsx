@@ -7,6 +7,7 @@ import AppHeader from '@/components/mobiel/AppHeader'
 import MobielTegel from '@/components/mobiel/MobielTegel'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
+import ProjectZoekerVoorbeeld from './ProjectZoekerVoorbeeld'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
 import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
 import { laadBerichten } from '@/i18n/berichten'
@@ -106,6 +107,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         </div>
         <MobielTakenLijst taken={TAKEN} />
         <VerlofClient aanvragen={VERLOF} soorten={[{ id: 'u1', naam: 'Vakantie' }, { id: 'u2', naam: 'Bijzonder verlof' }]} saldo={86.5} />
+        <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>
       </div>

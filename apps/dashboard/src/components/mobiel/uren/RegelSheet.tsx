@@ -6,7 +6,8 @@ import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import { useVertalingen } from '@/components/vertalen/useVertaling'
 import type { UursoortOptie, WeekRegel, RegelInvoer } from '@/lib/uren/weekstaat'
-import { getDossierOpties } from '@/lib/uren/weekstaat'
+import { getDossierOpties, type DossierOptie } from '@/lib/uren/weekstaat'
+import ProjectZoeker from './ProjectZoeker'
 import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
 
 /**
@@ -50,7 +51,8 @@ export default function RegelSheet({
   const [opmerking, setOpmerking] = useState(regel?.opmerking ?? '')
   const [bezig, setBezig] = useState(false)
 
-  const [dossiers, setDossiers] = useState<Array<{ id: string; label: string; gekoppeld: boolean; indirect: boolean; servicedesk: boolean }>>([])
+  const [dossiers, setDossiers] = useState<DossierOptie[]>([])
+  const [dossiersLaden, setDossiersLaden] = useState(true)
   const [codes, setCodes] = useState<BewakingscodeOptie[]>([])
   const [codesLaden, setCodesLaden] = useState(false)
 
@@ -61,13 +63,25 @@ export default function RegelSheet({
   const isIndirect = dossiers.some(d => d.id === dossierId && d.indirect)
   const isBon = dossiers.some(d => d.id === dossierId && d.servicedesk)
 
-  // De opdrachten waaraan deze medewerker gekoppeld is staan bovenaan; de rest blijft kiesbaar.
+  // Alleen de projecten waar deze medewerker rond deze dag op staat ingepland, plus de indirecte
+  // uren. Een bestaande regel op een project dat daar (inmiddels) buiten valt blijft zichtbaar --
+  // anders zou het bewerken ervan het project stil leegmaken.
+  const eigenId = regel?.dossier_id ?? null
+  const eigenLabel = regel?.dossier_label ?? ''
   useEffect(() => {
     if (!isWerk) return
     let levend = true
-    getDossierOpties(datum).then(d => { if (levend) setDossiers(d) })
+    setDossiersLaden(true)
+    getDossierOpties(datum)
+      .then(d => {
+        if (!levend) return
+        setDossiers(eigenId && !d.some(o => o.id === eigenId)
+          ? [{ id: eigenId, label: eigenLabel, indirect: false, servicedesk: false, vandaag: false }, ...d]
+          : d)
+      })
+      .finally(() => { if (levend) setDossiersLaden(false) })
     return () => { levend = false }
-  }, [datum, isWerk])
+  }, [datum, isWerk, eigenId, eigenLabel])
 
   // Alleen codes waar prognose-uren op staan: de monteur kiest uit het werk dat voor dit project
   // begroot is, niet uit de volledige codelijst.
@@ -148,35 +162,12 @@ export default function RegelSheet({
             <>
               <div>
                 <label style={labelStijl}>{t('regel.project')}</label>
-                <select value={dossierId} onChange={e => { setDossierId(e.target.value); setCode('') }} style={veld}>
-                  <option value="">{t('regel.kiesProject')}</option>
-                  {dossiers.some(d => d.gekoppeld) && (
-                    <optgroup label={t('regel.jouwProjecten')}>
-                      {dossiers.filter(d => d.gekoppeld).map(d => (
-                        <option key={d.id} value={d.id}>{d.label}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label={t('regel.overigeOpdrachten')}>
-                    {dossiers.filter(d => !d.gekoppeld && !d.indirect && !d.servicedesk).map(d => (
-                      <option key={d.id} value={d.id}>{d.label}</option>
-                    ))}
-                  </optgroup>
-                  {dossiers.some(d => !d.gekoppeld && !d.indirect && d.servicedesk) && (
-                    <optgroup label={t('regel.servicedeskbonnen')}>
-                      {dossiers.filter(d => !d.gekoppeld && !d.indirect && d.servicedesk).map(d => (
-                        <option key={d.id} value={d.id}>{d.label}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {dossiers.some(d => d.indirect) && (
-                    <optgroup label={t('regel.indirecteUren')}>
-                      {dossiers.filter(d => d.indirect).map(d => (
-                        <option key={d.id} value={d.id}>{d.label}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                <ProjectZoeker
+                  opties={dossiers}
+                  laden={dossiersLaden}
+                  gekozenId={dossierId}
+                  onKies={id => { setDossierId(id); setCode('') }}
+                />
               </div>
 
               {isIndirect ? (
