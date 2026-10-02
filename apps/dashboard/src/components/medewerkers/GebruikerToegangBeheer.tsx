@@ -9,7 +9,7 @@ import {
   verstuurUitnodiging,
   ontkoppelOffice365,
 } from '@/app/(platform)/medewerkers/[id]/actions'
-import { Button } from '@/components/ui'
+import { Button, Badge } from '@/components/ui'
 import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
 
 const MODULES = RECHTEN_MODULES
@@ -30,6 +30,28 @@ const valueStyle: React.CSSProperties = {
   fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--fg)',
 }
 
+/** Vaste tijdzone: zo tonen server en browser hetzelfde, ook buiten Nederland. */
+const tijdstipFmt = new Intl.DateTimeFormat('nl-NL', {
+  timeZone: 'Europe/Amsterdam', day: 'numeric', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit',
+})
+
+/** Groen of rood: heeft de medewerker de uitnodiging geaccepteerd, en wanneer was hij er voor het laatst. */
+function UitnodigingStatusRegel({ geaccepteerd, laatstIngelogd }: { geaccepteerd: boolean; laatstIngelogd: string | null }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <Badge tone={geaccepteerd ? 'success' : 'error'} dot>
+        {geaccepteerd ? 'Uitnodiging geaccepteerd' : 'Uitnodiging nog niet geaccepteerd'}
+      </Badge>
+      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
+        {laatstIngelogd
+          ? `Laatst ingelogd: ${tijdstipFmt.format(new Date(laatstIngelogd))}`
+          : 'Nog nooit ingelogd'}
+      </span>
+    </div>
+  )
+}
+
 export default function GebruikerToegangBeheer({
   magToegangBeheren,
   magOntkoppelenO365,
@@ -37,6 +59,8 @@ export default function GebruikerToegangBeheer({
   medewerker_email,
   gebruiker_type: initial_type,
   auth_user_id,
+  uitnodiging_geaccepteerd,
+  laatst_ingelogd,
   o365_email: initial_o365_email,
   o365_verlopen,
   isEigenKaart,
@@ -55,6 +79,10 @@ export default function GebruikerToegangBeheer({
   medewerker_email: string | null
   gebruiker_type: GebruikerType
   auth_user_id: string | null
+  /** Zie lib/auth/account-status.ts — één keer gelezen bij het openen van de kaart. */
+  uitnodiging_geaccepteerd: boolean
+  /** ISO-tijdstip van de laatste login, `null` = nog nooit. */
+  laatst_ingelogd: string | null
   o365_email: string | null
   /** Microsoft heeft de mailkoppeling ingetrokken (`medewerker_o365_tokens.verlopen_op`). */
   o365_verlopen: boolean
@@ -152,13 +180,18 @@ export default function GebruikerToegangBeheer({
       {magToegangBeheren && type !== 'geen' && (
         <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
           <label style={labelStyle}>Platformaccount</label>
+          {/* Na opnieuw versturen kan de koppeling los zijn gemaakt (adreswijziging): dan is de
+              status van de server verouderd en geldt "nog niet geaccepteerd". */}
+          <UitnodigingStatusRegel
+            geaccepteerd={!!authUserId && authUserId === auth_user_id && uitnodiging_geaccepteerd}
+            laatstIngelogd={authUserId === auth_user_id ? laatst_ingelogd : null}
+          />
           {authUserId ? (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
-                <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
-                  {medewerker_email ?? '—'}
-                </span>
+              {/* Geen groen "gekoppeld" meer: de badge hierboven draagt de status, en een
+                  gekoppeld account zegt niets over of de uitnodiging is geaccepteerd. */}
+              <div style={{ ...valueStyle, color: 'var(--fg-muted)', marginBottom: 8 }}>
+                Account op {medewerker_email ?? '—'}
               </div>
               {/* Opnieuw versturen: bij een vergeten wachtwoord, een kwijtgeraakte mail, of na een
                   gewijzigd e-mailadres — dan koppelt de server het oude account los en gaat de mail

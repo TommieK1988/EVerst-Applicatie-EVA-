@@ -41,6 +41,7 @@ import {
   getRechtenBundel, heeftFunctie, kiesKanaal,
 } from '@/lib/auth/rechten'
 import { heeftModuleToegang, isBeheerder } from '@/lib/auth/rechten-shared'
+import { haalUitnodigingStatus } from '@/lib/auth/account-status'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -217,6 +218,11 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       cao_schaal: null, cao_trede: null, cao_document_id: null,
     }),
   } as Medewerker
+
+  // Uitnodiging geaccepteerd + laatste login: alleen voor beheerders, één keer bij het openen.
+  const uitnodigingStatus = isRechtenBeheerder && medewerker.gebruiker_type !== 'geen'
+    ? await haalUitnodigingStatus(medewerker.auth_user_id, medewerker.email)
+    : null
   const roosters = ((roosterRes.data ?? []) as (RoosterMetPauzes & { medewerker_rooster_pauzes: unknown[] })[]).map(r => ({
     ...r,
     pauzes: r.medewerker_rooster_pauzes ?? [],
@@ -407,6 +413,8 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
                   medewerker_email={isRechtenBeheerder ? medewerker.email : null}
                   gebruiker_type={isRechtenBeheerder ? medewerker.gebruiker_type : 'geen'}
                   auth_user_id={isRechtenBeheerder ? medewerker.auth_user_id : null}
+                  uitnodiging_geaccepteerd={uitnodigingStatus?.geaccepteerd ?? false}
+                  laatst_ingelogd={uitnodigingStatus?.laatstIngelogd ?? null}
                   rechten_override={isRechtenBeheerder ? medewerker.rechten_override : {}}
                   afdeling_standaard_rechten={isRechtenBeheerder ? afdelingStandaardRechten : {}}
                 />
