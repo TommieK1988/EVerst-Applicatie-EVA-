@@ -545,21 +545,14 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 >
                   {isAct && <Chevron open={!isIngeklapt} />}
                   {isAct && <div style={{ width: 3, height: 14, borderRadius: 2, background: kleur, flexShrink: 0 }} />}
-                  <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{
-                      fontSize: isAct ? 12 : 10.5,
-                      fontWeight: isAct ? 600 : 400,
-                      color: isAct ? '#161b20' : GRIJS,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {isAct ? <VertaalbareTekst tekst={rij.a.titel} label={false} /> : rij.naam}
-                    </span>
-                    {isAct && rij.a.bewakingscode && (
-                      <span style={{ display: 'flex', lineHeight: 1.2, overflow: 'hidden' }}>
-                        <BewakingscodeLabel code={rij.a.bewakingscode} naam={null} compact />
-                      </span>
-                    )}
-                  </div>
+                  <span style={{
+                    fontSize: isAct ? 12 : 10.5,
+                    fontWeight: isAct ? 600 : 400,
+                    color: isAct ? '#161b20' : GRIJS,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {isAct ? <VertaalbareTekst tekst={rij.a.titel} label={false} /> : rij.naam}
+                  </span>
                 </div>
 
                 {/* Tijdlijn: een tik op de balk klapt net zo goed in of uit. */}
@@ -579,9 +572,10 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 </div>
               </div>
 
-              {/* Uitgeklapt: de volledige omschrijving, die in de labelkolom wordt afgekapt.
-                  Sticky links en zo breed als het scherm, zodat hij bij horizontaal scrollen
-                  in beeld blijft en kan doorlopen over meerdere regels. */}
+              {/* Uitgeklapt: de volledige omschrijving (in de labelkolom wordt die afgekapt) met
+                  daaronder de bewakingscode voor de weekstaat. Sticky links en zo breed als het
+                  scherm, zodat hij bij horizontaal scrollen in beeld blijft en kan doorlopen
+                  over meerdere regels. */}
               {isAct && !isIngeklapt && (
                 <div style={{ borderBottom: `1px solid ${RAND}`, background: '#f4f7f7' }}>
                   <div
@@ -594,6 +588,9 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                     }}
                   >
                     <VertaalbareTekst tekst={rij.a.titel} label={false} />
+                    {rij.a.bewakingscode && (
+                      <BewakingscodeLabel code={rij.a.bewakingscode} naam={rij.a.bewakingscode_naam} />
+                    )}
                   </div>
                 </div>
               )}
