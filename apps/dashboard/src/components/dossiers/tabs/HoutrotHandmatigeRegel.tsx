@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, FormField, FormRow, Input, Textarea, inputVariants } from '@/components/ui'
 import { formatCurrency } from '@/lib/houtrotherstel/utils'
 import {
@@ -21,12 +21,14 @@ const invoer = (n: number | undefined) => (n == null || !Number.isFinite(n) ? ''
  * `regelVanHandmatig()`, zodat scherm en database dezelfde bedragen kennen.
  */
 export default function HoutrotHandmatigeRegel({
-  standaarden, start, onOpslaan, onAnnuleer,
+  standaarden, start, onIngevuld, onOpslaan, onAnnuleer,
 }: {
   /** `null` = de standaardwaarden worden nog geladen. */
   standaarden: HandmatigeStandaarden | null
   /** Bestaande regel om te bewerken; weglaten = nieuwe regel. */
   start?: { regel: HandmatigeRegel; fotoUrl?: string }
+  /** Meldt of er al iets is ingevuld, zodat de registratie die invoer niet stil laat vallen. */
+  onIngevuld?: (ingevuld: boolean) => void
   onOpslaan: (regel: HandmatigeRegel, foto: File | null, fotoWeg: boolean) => void
   onAnnuleer: () => void
 }) {
@@ -54,6 +56,9 @@ export default function HoutrotHandmatigeRegel({
     s?.type === 'materiaal' ? invoer(s.opslag_pct) : invoer(standaarden?.opslagPct),
   )
   const [fout, setFout] = useState<string | null>(null)
+
+  const ingevuld = !start && omschrijving.trim() !== ''
+  useEffect(() => { onIngevuld?.(ingevuld) }, [ingevuld, onIngevuld])
 
   const standaardFunctie = functies.find(f => f.naam === functie)
   // De opslag kan pas worden voorgesteld als de standaarden binnen zijn.

@@ -36,6 +36,9 @@ import { formatDateTime } from '@/lib/houtrotherstel/utils'
  */
 type Werkzaamheid = { recept: Recept; aantal: number; opgeslagen?: RegistratieRegelForm; foto?: File | null }
 
+/** Keuze in de lijst Soort die het invoerblok voor handmatige regels opent. */
+const HANDMATIG = '__handmatig__'
+
 /** Recept-vorm van een handmatige regel: alleen naam en aantal worden ervan gebruikt. */
 function receptVanRegel(r: RegistratieRegelForm): Recept {
   return {
@@ -194,9 +197,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   const [keuzeRecept, setKeuzeRecept] = useState('')
   const [keuzeAantal, setKeuzeAantal] = useState('1')
   const [notitie, setNotitie] = useState('')
-  // Handmatige regel: formulier open (nieuw of bewerken) en de standaardtarieven.
-  const [handmatigOpen, setHandmatigOpen] = useState(false)
+  // Handmatige regels: soort "Handmatig" opent het invoerblok. `bewerkIndex` = welke
+  // regel wordt bewerkt; `handmatigTeller` geeft na elke toegevoegde regel een leeg blok;
+  // `handmatigIngevuld` voorkomt dat half ingevulde invoer bij opslaan stil wegvalt.
   const [bewerkIndex, setBewerkIndex] = useState<number | null>(null)
+  const [handmatigTeller, setHandmatigTeller] = useState(0)
+  const [handmatigIngevuld, setHandmatigIngevuld] = useState(false)
   const [standaarden, setStandaarden] = useState<HandmatigeStandaarden | null>(null)
   // Gefactureerd op kantoor: de werkzaamheden liggen vast (de server dwingt dat ook af).
   const [vast, setVast] = useState(false)
@@ -272,7 +278,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
     setGekozen([]); setZelfGekozen(false); setBewerkLocatie([])
     setRegDatum(new Date().toISOString().slice(0, 10))
     setNotitie(''); setWerkzaamheden([]); setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
-    setHandmatigOpen(false); setBewerkIndex(null); setVast(false)
+    setBewerkIndex(null); setHandmatigIngevuld(false); setVast(false)
     setAfgerond(false)
     setVoorFoto(null); setNaFoto(null); setBestaandeFotos([]); setVerwijderdeFotos(new Set())
   }
@@ -303,7 +309,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
         .map(l => ({ recept: receptVanLijn(l), aantal: Number(l.aantal), opgeslagen: regelVanLijn(l) })),
     )
     setNotitie(r.notes ?? '')
-    setHandmatigOpen(false); setBewerkIndex(null); setVast(!!r.gefactureerd_op)
+    setBewerkIndex(null); setHandmatigIngevuld(false); setVast(!!r.gefactureerd_op)
     setAfgerond(r.status === 'afgerond')
     setKeuzeGroep(''); setKeuzeRecept(''); setKeuzeAantal('1')
     setBestaandeFotos(r.photos ?? [])
@@ -338,7 +344,8 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (bewerkIndex == null) return [...prev, nieuw()]
       const kopie = [...prev]; kopie[bewerkIndex] = nieuw(kopie[bewerkIndex]); return kopie
     })
-    setHandmatigOpen(false); setBewerkIndex(null)
+    // Soort blijft op Handmatig met een leeg blok: zo voeg je de volgende regel direct toe.
+    setBewerkIndex(null); setHandmatigIngevuld(false); setHandmatigTeller(n => n + 1)
   }
 
   function werkzaamheidVerwijderen(index: number) {
@@ -365,7 +372,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
       if (!locatieCompleet) throw new Error(t('fout.kiesLocatie'))
       if (werkzaamheden.length === 0) throw new Error(t('fout.minstensEen'))
 
-      if (handmatigOpen) throw new Error(t('handmatig.fout.afronden'))
+      if (bewerkIndex != null || handmatigIngevuld) throw new Error(t('handmatig.fout.afronden'))
 
       // Nieuwe regelfoto's eerst uploaden: hun pad gaat in de regel mee de database in.
       const regels: RegistratieRegelForm[] = []
@@ -543,35 +550,40 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 {werkzaamheden.map((w, i) => (
                   <WerkzaamheidRij key={i} regel={w.opgeslagen} naam={w.recept.naam} code={w.recept.code}
                     aantal={w.aantal} vast={vast}
-                    onBewerk={() => { setBewerkIndex(i); setHandmatigOpen(true) }}
+                    onBewerk={() => { setBewerkIndex(i); setKeuzeGroep(HANDMATIG); setKeuzeRecept('') }}
                     onVerwijder={() => werkzaamheidVerwijderen(i)} />
                 ))}
               </div>
             )}
             {vast && <div style={{ fontSize: 13, color: '#6b757c' }}>{t('handmatig.gefactureerd')}</div>}
 
-            {!vast && handmatigOpen && (
+            {!vast && (<>
+            {/* Stap 1: soort (of Handmatig). Stap 2: variant binnen die soort, of het
+                invoerblok voor arbeid en materiaal. */}
+            <div>
+              <label style={label} htmlFor="hr-groep">{t('soort')}</label>
+              <select id="hr-groep" style={veld} value={keuzeGroep}
+                onChange={e => {
+                  setKeuzeGroep(e.target.value); setKeuzeRecept('')
+                  setBewerkIndex(null); setHandmatigIngevuld(false)
+                }}>
+                <option value="">{t('kiesSoort')}</option>
+                {groepen.map(g => <option key={g} value={g}>{vt(g)}</option>)}
+                <option value={HANDMATIG}>{t('handmatig.soortOptie')}</option>
+              </select>
+            </div>
+            {keuzeGroep === HANDMATIG ? (
               <HandmatigeRegelFormulier
-                key={bewerkIndex ?? 'nieuw'}
+                key={`${bewerkIndex ?? 'nieuw'}-${handmatigTeller}`}
                 standaarden={standaarden}
                 start={bewerkIndex != null ? werkzaamheden[bewerkIndex]?.opgeslagen : undefined}
                 startFotoUrl={bewerkIndex != null && werkzaamheden[bewerkIndex]?.opgeslagen?.foto_pad
                   ? fotoUrl(werkzaamheden[bewerkIndex].opgeslagen!.foto_pad!) : undefined}
+                onIngevuld={setHandmatigIngevuld}
                 onOpslaan={bewaarHandmatig}
-                onAnnuleer={() => { setHandmatigOpen(false); setBewerkIndex(null) }}
+                onAnnuleer={() => { setBewerkIndex(null); setHandmatigIngevuld(false); setKeuzeGroep('') }}
               />
-            )}
-
-            {!vast && !handmatigOpen && (<>
-            {/* Stap 1: soort. Stap 2: variant binnen die soort. */}
-            <div>
-              <label style={label} htmlFor="hr-groep">{t('soort')}</label>
-              <select id="hr-groep" style={veld} value={keuzeGroep}
-                onChange={e => { setKeuzeGroep(e.target.value); setKeuzeRecept('') }}>
-                <option value="">{t('kiesSoort')}</option>
-                {groepen.map(g => <option key={g} value={g}>{vt(g)}</option>)}
-              </select>
-            </div>
+            ) : (<>
             {keuzeGroep && (
               <div>
                 <label style={label} htmlFor="hr-variant">{t('variant')}</label>
@@ -607,14 +619,7 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
                 {t('toevoegen')}
               </button>
             </div>
-            <button type="button" onClick={() => { setBewerkIndex(null); setHandmatigOpen(true) }}
-              style={{
-                padding: '11px 12px', borderRadius: 10, border: '1px dashed var(--border)',
-                background: 'var(--bg-elev)', color: 'var(--fg)', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', whiteSpace: 'normal',
-              }}>
-              {t('handmatig.knop')}
-            </button>
+            </>)}
             </>)}
 
             <div>

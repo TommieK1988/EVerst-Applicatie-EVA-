@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
@@ -31,12 +31,14 @@ const getal = (v: string) => (v.trim() === '' ? NaN : Number(v.replace(',', '.')
 const invoer = (n: number | undefined) => (n == null || !Number.isFinite(n) ? '' : String(n))
 
 export function HandmatigeRegelFormulier({
-  standaarden, start, startFotoUrl, onOpslaan, onAnnuleer,
+  standaarden, start, startFotoUrl, onIngevuld, onOpslaan, onAnnuleer,
 }: {
   standaarden: HandmatigeStandaarden | null
   /** Bestaande handmatige regel om te bewerken. */
   start?: RegistratieRegelForm
   startFotoUrl?: string
+  /** Meldt of er al iets is ingevuld, zodat de registratie die invoer niet stil laat vallen. */
+  onIngevuld?: (ingevuld: boolean) => void
   onOpslaan: (regel: RegistratieRegelForm, foto: File | null, fotoWeg: boolean) => void
   onAnnuleer: () => void
 }) {
@@ -57,6 +59,9 @@ export function HandmatigeRegelFormulier({
   const [foto, setFoto] = useState<File | null>(null)
   const [fotoWeg, setFotoWeg] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
+
+  const ingevuld = !start && omschrijving.trim() !== ''
+  useEffect(() => { onIngevuld?.(ingevuld) }, [ingevuld, onIngevuld])
 
   // Functienamen komen van kantoor; in een <option> kan geen component, dus hier vertalen.
   const namen = functies.map(f => f.naam)

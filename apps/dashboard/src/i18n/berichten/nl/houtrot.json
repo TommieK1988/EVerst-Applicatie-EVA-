@@ -51,7 +51,7 @@
     "opslaanMislukt": "Opslaan mislukt"
   },
   "handmatig": {
-    "knop": "Handmatige regel toevoegen",
+    "soortOptie": "Handmatig (arbeid of materiaal)",
     "titelNieuw": "Handmatige regel",
     "titelBewerken": "Regel bewerken",
     "arbeid": "Arbeid",

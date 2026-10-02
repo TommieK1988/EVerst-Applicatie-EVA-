@@ -9,7 +9,6 @@ import { getHandmatigeStandaarden, type HandmatigeStandaarden } from '@/services
 import {
   regelVanLijn, regelVanHandmatig, handmatigVanRegel, type HandmatigeRegel,
 } from '@/lib/houtrotherstel/handmatige-regel'
-import { Button } from '@/components/ui'
 import HoutrotHandmatigeRegel from './HoutrotHandmatigeRegel'
 import HoutrotWerkzaamhedenTabel from './HoutrotWerkzaamhedenTabel'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
@@ -26,6 +25,9 @@ import type {
 } from '@/lib/houtrotherstel/types'
 
 const fotoUrl = fotoPubliekeUrl
+
+/** Keuze in de lijst Soort die het invoerblok voor handmatige regels opent. */
+const HANDMATIG = '__handmatig__'
 
 /** Eén regel in de modal; `foto` is een nog te uploaden foto bij een handmatige regel. */
 type Werkzaamheid = { regel: RegistratieRegelForm; foto?: File | null }
@@ -94,11 +96,12 @@ export default function HoutrotRegistratieModal({
     (bestaand?.lines ?? []).slice().sort((a, b) => a.volgorde - b.volgorde)
       .map(l => ({ regel: regelVanLijn(l) })),
   )
-  // Welk invoerblok open staat onder de lijst, en welke handmatige regel wordt bewerkt.
-  const [invoer, setInvoer] = useState<'bibliotheek' | 'handmatig' | null>(
-    (bestaand?.lines?.length ?? 0) === 0 ? 'bibliotheek' : null,
-  )
+  // Soort "Handmatig" opent het invoerblok. `bewerkIndex` = welke handmatige regel wordt
+  // bewerkt; `handmatigTeller` geeft na elke toegevoegde regel een leeg blok;
+  // `handmatigIngevuld` voorkomt dat half ingevulde invoer bij opslaan stil wegvalt.
   const [bewerkIndex, setBewerkIndex] = useState<number | null>(null)
+  const [handmatigTeller, setHandmatigTeller] = useState(0)
+  const [handmatigIngevuld, setHandmatigIngevuld] = useState(false)
   const [standaarden, setStandaarden] = useState<HandmatigeStandaarden | null>(null)
   const [gefactureerd, setGefactureerd] = useState(!!bestaand?.gefactureerd_op)
   // Pas vast na opslaan: wie "gefactureerd" net aanvinkt kan nog corrigeren.
@@ -152,7 +155,8 @@ export default function HoutrotRegistratieModal({
       k[bewerkIndex] = { regel, foto: foto ?? (fotoWeg ? null : k[bewerkIndex].foto) }
       return k
     })
-    setBewerkIndex(null); setInvoer(null)
+    // Soort blijft op Handmatig met een leeg blok: zo voeg je de volgende regel direct toe.
+    setBewerkIndex(null); setHandmatigIngevuld(false); setHandmatigTeller(n => n + 1)
   }
 
   async function opslaan() {
@@ -170,7 +174,7 @@ export default function HoutrotRegistratieModal({
       }
       if (werkzaamheden.length === 0) throw new Error('Voeg minstens één werkzaamheid toe.')
 
-      if (invoer === 'handmatig') throw new Error('Rond de handmatige regel eerst af (toevoegen of annuleren).')
+      if (bewerkIndex != null || handmatigIngevuld) throw new Error('Rond de handmatige regel eerst af (toevoegen of annuleren).')
 
       // Nieuwe regelfoto's eerst uploaden: hun pad moet in de regel mee de database in.
       const regels: RegistratieRegelForm[] = []
@@ -322,48 +326,25 @@ export default function HoutrotRegistratieModal({
             <HoutrotWerkzaamhedenTabel
               regels={werkzaamheden.map(w => w.regel)}
               vast={vast}
-              onBewerk={i => { setBewerkIndex(i); setInvoer('handmatig') }}
+              onBewerk={i => { setBewerkIndex(i); setKeuzeGroep(HANDMATIG); setKeuzeRecept('') }}
               onVerwijder={i => setWerkzaamheden(prev => prev.filter((_, idx) => idx !== i))}
             />
 
             {!vast && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant={invoer === 'bibliotheek' ? 'primary' : 'outline'}
-                  onClick={() => { setInvoer(invoer === 'bibliotheek' ? null : 'bibliotheek'); setBewerkIndex(null) }}>
-                  Uit bibliotheek
-                </Button>
-                <Button type="button" size="sm" variant={invoer === 'handmatig' && bewerkIndex == null ? 'primary' : 'outline'}
-                  onClick={() => { setInvoer('handmatig'); setBewerkIndex(null) }}>
-                  Handmatige regel toevoegen
-                </Button>
-              </div>
-            )}
-
-            {!vast && invoer === 'handmatig' && (
-              <HoutrotHandmatigeRegel
-                // Andere sleutel per regel: het formulier begint dan schoon met de juiste waarden.
-                key={bewerkIndex ?? 'nieuw'}
-                standaarden={standaarden}
-                start={bewerkIndex != null ? {
-                  regel: handmatigVanRegel(werkzaamheden[bewerkIndex].regel),
-                  fotoUrl: werkzaamheden[bewerkIndex].regel.foto_pad
-                    ? fotoUrl(werkzaamheden[bewerkIndex].regel.foto_pad!) : undefined,
-                } : undefined}
-                onOpslaan={bewaarHandmatig}
-                onAnnuleer={() => { setBewerkIndex(null); setInvoer(null) }}
-              />
-            )}
-
-            {!vast && invoer === 'bibliotheek' && (
             <div className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
-              <div>
+              <div className={keuzeGroep === HANDMATIG ? 'sm:col-span-4' : undefined}>
                 <label className={lblCls}>Soort</label>
                 <select className={inputCls} value={keuzeGroep}
-                  onChange={e => { setKeuzeGroep(e.target.value); setKeuzeRecept('') }}>
+                  onChange={e => {
+                    setKeuzeGroep(e.target.value); setKeuzeRecept('')
+                    setBewerkIndex(null); setHandmatigIngevuld(false)
+                  }}>
                   <option value="">— kies —</option>
                   {groepen.map(g => <option key={g} value={g}>{g}</option>)}
+                  <option value={HANDMATIG}>Handmatig (arbeid of materiaal)</option>
                 </select>
               </div>
+              {keuzeGroep !== HANDMATIG && (<>
               <div>
                 <label className={lblCls}>Variant</label>
                 <select className={inputCls} value={keuzeRecept} disabled={!keuzeGroep}
@@ -381,7 +362,26 @@ export default function HoutrotRegistratieModal({
                 className="rounded-md bg-everts px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Toevoegen
               </button>
+              </>)}
             </div>
+            )}
+
+            {!vast && keuzeGroep === HANDMATIG && (
+              <div className="mt-3">
+                <HoutrotHandmatigeRegel
+                  // Nieuwe sleutel per regel: het formulier begint dan schoon met de juiste waarden.
+                  key={`${bewerkIndex ?? 'nieuw'}-${handmatigTeller}`}
+                  standaarden={standaarden}
+                  start={bewerkIndex != null ? {
+                    regel: handmatigVanRegel(werkzaamheden[bewerkIndex].regel),
+                    fotoUrl: werkzaamheden[bewerkIndex].regel.foto_pad
+                      ? fotoUrl(werkzaamheden[bewerkIndex].regel.foto_pad!) : undefined,
+                  } : undefined}
+                  onIngevuld={setHandmatigIngevuld}
+                  onOpslaan={bewaarHandmatig}
+                  onAnnuleer={() => { setBewerkIndex(null); setHandmatigIngevuld(false); setKeuzeGroep('') }}
+                />
+              </div>
             )}
           </section>
 
