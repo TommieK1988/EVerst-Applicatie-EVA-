@@ -280,32 +280,53 @@ export async function zoekDuplicaten(invoer: DuplicaatInvoer): Promise<Duplicaat
       score += 0.9
       redenen.push(`Onze offerte ${invoer.onzeReferentie} hoort bij dit dossier`)
     }
-    if (pc && d.werkadres_postcode === pc && hn && huisnummerKern(d.werkadres_huisnummer) === hn) {
-      score += 0.45
-      redenen.push('Zelfde werkadres')
-    }
-    // Adres op tekst, voor als de postcode ontbreekt of het huisnummer in het
-    // straatveld is beland. Zonder deze regel viel het dossier dat bij de eerste
-    // echte opdrachtbon hoorde volledig af: zelfde straat, zelfde huisnummers,
-    // en nul punten omdat er aan beide kanten geen postcode stond.
+    /**
+     * HETZELFDE ADRES TELT ÉÉN KEER
+     *
+     * Er zijn twee manieren om een adres te matchen: op postcode plus huisnummer uit
+     * de velden, en op straat plus huisnummer in de tekst. Die tweede is er als
+     * terugval -- voor als de postcode ontbreekt of het huisnummer in het straatveld
+     * is beland. Een terugval, dus geen tweede bewijs.
+     *
+     * Ze werden wél opgeteld, en het klantbonusje daarbovenop twee keer: 0,45 + 0,40
+     * + 0,15 + 0,10 = 1,10, afgetopt op 1,00. Eén adres, vier keer geteld, en dan
+     * precies de maximale score -- terwijl er niets anders was dan "zelfde klant,
+     * zelfde pand". In productie hield dat acht van de vijfenveertig berichten tegen
+     * met "dit lijkt op iets dat al is ingeschreven". Een vochtplek is geen lekkend
+     * dak, ook niet als het hetzelfde gebouw is.
+     *
+     * De drempel was hier al eens voor opgetrokken (zie `DUPLICAAT_TWIJFEL`: van 0,55
+     * naar 0,65, "bij een beheerder die vaker op hetzelfde complex werkt is dat de
+     * normale toestand"). Dat hielp niet zolang dezelfde waarneming vier keer
+     * meetelde.
+     *
+     * De harde signalen staan hier los van en blijven onaangetast: dezelfde
+     * mailconversatie, een identieke bijlage, ons eigen nummer in de mail. Die wijzen
+     * één dossier aan; een adres wijst een gebouw aan.
+     */
     const adresTekst = [d.werkadres_straat, d.werkadres_huisnummer, d.titel]
       .filter(Boolean).join(' ')
     const adresMatch = adresOvereenkomst(invoer.straat, invoer.huisnummer, adresTekst)
-    if (adresMatch === 'straat_en_nummer') {
+    const zelfdePostcodeHuisnummer =
+      Boolean(pc && d.werkadres_postcode === pc && hn && huisnummerKern(d.werkadres_huisnummer) === hn)
+
+    if (zelfdePostcodeHuisnummer) {
+      score += 0.45
+      redenen.push('Zelfde werkadres')
+    } else if (adresMatch === 'straat_en_nummer') {
       score += 0.4
       redenen.push('Zelfde straat en huisnummer')
     } else if (adresMatch === 'straat') {
       score += 0.15
       redenen.push('Zelfde straat')
     }
-    if (invoer.relatieId && d.klant_id === invoer.relatieId && adresMatch === 'straat_en_nummer') {
+
+    // Dezelfde opdrachtgever op dat adres: één keer, en alleen als het adres ook
+    // werkelijk tot het huisnummer klopt. Alleen dezelfde straat zegt te weinig.
+    const zelfdeKlant = Boolean(invoer.relatieId && d.klant_id === invoer.relatieId)
+    if (zelfdeKlant && (zelfdePostcodeHuisnummer || adresMatch === 'straat_en_nummer')) {
       score += 0.15
       redenen.push('Zelfde opdrachtgever op dit adres')
-    }
-
-    if (invoer.relatieId && d.klant_id === invoer.relatieId && pc && d.werkadres_postcode === pc) {
-      score += 0.1
-      if (!redenen.includes('Zelfde opdrachtgever op dit adres')) redenen.push('Zelfde opdrachtgever op dit adres')
     }
     const ref = (invoer.referentie ?? '').trim()
     if (ref.length >= 3 && d.referentie && String(d.referentie).trim() === ref) {

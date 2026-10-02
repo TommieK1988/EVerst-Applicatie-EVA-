@@ -129,17 +129,19 @@ async function bijlagenVoorAI(berichtIds: string[]): Promise<{ voorAI: BijlageVo
       gezien.add(b.sha256)
     }
     namen.push(b.bestandsnaam)
-    if (b.te_groot || !b.opslag_pad) { ongelezen = true; continue }
+    // Zelfde maatstaf als bij overgeslagen bijlagen: een foto kost geen gegevens.
+    const isFoto = (b.content_type ?? '').toLowerCase().startsWith('image/')
+    if (b.te_groot || !b.opslag_pad) { ongelezen = ongelezen || !isFoto; continue }
     try {
       const { data: blob, error } = await supabase.storage.from('mail-intake').download(b.opslag_pad)
-      if (error || !blob) { ongelezen = true; continue }
+      if (error || !blob) { ongelezen = ongelezen || !isFoto; continue }
       voorAI.push({
         bestandsnaam: b.bestandsnaam,
         contentType: b.content_type,
         bytes: Buffer.from(await blob.arrayBuffer()),
       })
     } catch {
-      ongelezen = true
+      ongelezen = ongelezen || !isFoto
     }
   }
 
@@ -536,7 +538,9 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       offerteMatchHard,
       regie: velden.regie,
       meerdereWerkadressen: velden.meerdereWerkadressen,
-      ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.length > 0,
+      // Alleen een overgeslagen dócument houdt het bericht tegen; zie
+      // `OvergeslagenBijlage`. Een foto die niet meekon mist geen gegevens.
+      ongelezenBijlage: ongelezen || ex.overgeslagenBijlagen.some(o => o.soort === 'document'),
       dagbudgetOp: budgetOp,
       bouw7Gereed: bouw7.gereed,
       bouw7Ontbreekt: bouw7.ontbreekt,

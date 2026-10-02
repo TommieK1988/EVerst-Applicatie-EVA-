@@ -78,6 +78,21 @@ export interface BijlageVoorAI {
   bytes: Buffer
 }
 
+/**
+ * Een bijlage die niet naar het model kon, met wat er mogelijk mee verloren gaat.
+ *
+ * Een overgeslagen **document** kan het bestek of de bon zelf zijn -- dan hoort een
+ * mens ernaar te kijken. Een overgeslagen **foto** niet: adres, scope en referentie
+ * staan in de tekst of op de bon, niet op het plaatje. Zonder dat onderscheid hield
+ * één te grote foto een verder perfecte bon tegen -- twee foto's van dezelfde
+ * vochtplek, de ene 4,9 MB en gelezen, de andere 5,8 MB en overgeslagen.
+ */
+export interface OvergeslagenBijlage {
+  naam: string
+  reden: string
+  soort: 'foto' | 'document'
+}
+
 export interface ExtractieResultaat {
   ok: boolean
   data: Extractie | null
@@ -89,8 +104,8 @@ export interface ExtractieResultaat {
   kostenCent: number
   /** Bestandsnamen die wél zijn meegestuurd. */
   gelezenBijlagen: string[]
-  /** Bestandsnamen die zijn overgeslagen, met reden. */
-  overgeslagenBijlagen: { naam: string; reden: string }[]
+  /** Bestandsnamen die zijn overgeslagen, met reden en soort. */
+  overgeslagenBijlagen: OvergeslagenBijlage[]
   /**
    * Gevuld als het niet aan dit bericht ligt maar aan de AI zelf: geen tegoed, geen
    * sleutel, te druk, onbereikbaar. De aanroeper hoort dan te stoppen in plaats van
@@ -130,7 +145,7 @@ export async function extraheer(
   }
 
   // ── Bijlagen selecteren ────────────────────────────────────────────────────
-  const overgeslagen: { naam: string; reden: string }[] = []
+  const overgeslagen: OvergeslagenBijlage[] = []
   const gelezen: string[] = []
   const inhoud: unknown[] = []
 
@@ -143,15 +158,15 @@ export async function extraheer(
     const type = (b.contentType ?? '').toLowerCase().split(';')[0].trim()
     if (PDF_TYPES.has(type)) {
       if (b.bytes.length > MAX_PDF_BYTES) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: `PDF groter dan ${MAX_PDF_BYTES / 1024 / 1024} MB` })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'document', reden: `PDF groter dan ${MAX_PDF_BYTES / 1024 / 1024} MB` })
         continue
       }
       if (pdfs >= MAX_DOCUMENTEN) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: `meer dan ${MAX_DOCUMENTEN} documenten` })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'document', reden: `meer dan ${MAX_DOCUMENTEN} documenten` })
         continue
       }
       if (gebruikteBytes + b.bytes.length > MAX_TOTAAL_BYTES) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'paste niet meer in één verzoek' })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'document', reden: 'paste niet meer in één verzoek' })
         continue
       }
       gebruikteBytes += b.bytes.length
@@ -165,15 +180,15 @@ export async function extraheer(
       pdfs++
     } else if (AFBEELDING_TYPES.has(type)) {
       if (plaatjes >= MAX_AFBEELDINGEN) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: `meer dan ${MAX_AFBEELDINGEN} afbeeldingen` })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'foto', reden: `meer dan ${MAX_AFBEELDINGEN} afbeeldingen` })
         continue
       }
       if (b.bytes.length > 5 * 1024 * 1024) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'afbeelding groter dan 5 MB' })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'foto', reden: 'afbeelding groter dan 5 MB' })
         continue
       }
       if (gebruikteBytes + b.bytes.length > MAX_TOTAAL_BYTES) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'paste niet meer in één verzoek' })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'foto', reden: 'paste niet meer in één verzoek' })
         continue
       }
       gebruikteBytes += b.bytes.length
@@ -191,7 +206,7 @@ export async function extraheer(
       // missen bij een mail die alleen zegt "zie bijgaand werkomschrijving".
       const tekst = leesOfficeTekst(b.bytes, b.bestandsnaam)
       if (!tekst) {
-        overgeslagen.push({ naam: b.bestandsnaam, reden: 'kon er geen tekst uit halen' })
+        overgeslagen.push({ naam: b.bestandsnaam, soort: 'document', reden: 'kon er geen tekst uit halen' })
       } else {
         inhoud.push({
           type: 'text',
@@ -202,7 +217,7 @@ export async function extraheer(
     } else {
       // dwg, zip en het oude .doc: die kunnen we niet uitpakken. Ze zijn wél
       // gearchiveerd, en de bestandsnaam staat in de metadata.
-      overgeslagen.push({ naam: b.bestandsnaam, reden: `bestandstype ${type || 'onbekend'} kan niet gelezen worden` })
+      overgeslagen.push({ naam: b.bestandsnaam, soort: 'document', reden: `bestandstype ${type || 'onbekend'} kan niet gelezen worden` })
     }
   }
 
@@ -551,18 +566,15 @@ export async function keurEnKalibreer(
         ?? toegestaan[0]
     }
   }
-  // Regiewerk is geen servicedeskwerk -- behálve op de servicedeskpostbus zelf.
+  // Regiewerk is geen servicedeskwerk -- behálve op de servicedeskpostbus zelf. Deze
+  // regel is er voor een regie-opdracht die per ongeluk 'Dagelijks onderhoud' of
+  // 'Mutatie' krijgt: die hoort niet op het servicedeskbord. Op de servicedeskpostbus
+  // is het omgekeerde waar -- daar is de categorie hierboven bewust gedwongen, en een
+  // bon mét mandaat is de normale gang van zaken (negen van de eenendertig).
   //
-  // Deze regel is er voor een regie-opdracht die per ongeluk 'Dagelijks onderhoud' of
-  // 'Mutatie' krijgt toegewezen: die zou op het servicedeskbord belanden terwijl hij
-  // daar niet hoort. Op de servicedeskpostbus is het omgekeerde waar. Daar is de
-  // categorie hierboven bewust naar een servicedeskcategorie gedwongen, en een bon
-  // mét mandaat is daar de normale gang van zaken -- negen van de eenendertig.
-  //
-  // De twee gegevens zeggen ook iets anders: de categorie zegt wat voor werk het is
-  // en bepaalt het bord, regie zegt hoe het wordt afgerekend. Die laten meebewegen
-  // met elkaar zou elke servicedeskbon met een mandaat van het bord halen, en dat
-  // merkt niemand tot de bon kwijt is.
+  // De categorie zegt wát voor werk het is en bepaalt het bord, regie zegt hóé er
+  // wordt afgerekend. Die laten meebewegen haalt elke bon met mandaat van het bord,
+  // en dat merkt niemand tot de bon kwijt is.
   if (regie && !opties.isServicedesk && cat && SERVICEDESK_CATEGORIEEN.includes(cat.naam)) {
     cat = lijsten.categorieen.find(c => c.naam === 'Bouwkundig Onderhoud')
       ?? lijsten.categorieen.find(c => !SERVICEDESK_CATEGORIEEN.includes(c.naam))
