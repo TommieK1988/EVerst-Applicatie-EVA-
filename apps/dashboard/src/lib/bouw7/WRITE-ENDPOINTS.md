@@ -188,8 +188,16 @@ Body: `HourLog`. Vereist een actieve user gekoppeld aan een medewerker.
 | `startTime`, `endTime` | string | opt | alleen bij dagstaat-modus |
 | `approved`, `paidOff` | bool | opt | |
 
-### `POST /quotation` — offerte — **BEWUST NIET GEBRUIKT**
-Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, `contact{id}`, `quotationDate`, `language` (bv. `nl-NL`), `layout`. Regels via `chapters[] → QuotationLineChapter`. AK/W&R via `overheads`/`profitAndRisk` (+ hun `CondensedVatTariff`).
+### `POST /quotation` — offerte — **aanmaken BEWUST NIET; status wél**
+Body: `Quotation`. Verplicht: `employee{id}`, `subject`, `quotationStatus{id}`, `contact{id}`, `quotationDate`, `language` (bv. `nl-NL`), `layout`, en `salutation` of `salutationText`. Regels via `chapters[] → QuotationLineChapter`. AK/W&R via `overheads`/`profitAndRisk` (+ hun `CondensedVatTariff`).
+
+> **Offertestatus wijzigen (okt 2026, in gebruik):** `POST /quotation { id, quotationStatus: { id } }`
+> is een **partiële upsert**. Geverifieerd op testproject 4202130 (test-offerte 3219183, nu
+> "06. Vervallen"): onderwerp, aanhef, klant, project en regels bleven ongewijzigd. "04. Gewonnen"
+> vult de `fixedPrice` van het project **niet** — die moet er apart bij (`schrijfBouw7Aanneemsom`).
+> Status-id's uit `GET /organization/quotation-statuses`. Gebruikt door `offerte-gewonnen.ts`: wordt
+> een dossier opdracht, dan gaat de offerte op Gewonnen (Rederserf 20261.00546: projectstatus door,
+> offerte bleef "Verstuurd", project zonder aanneemsom → geen termijnen).
 
 > **Besluit aug 2026 (Tom):** EVA maakt géén offertes aan in Bouw7. Bij het verzenden van een
 > EVA-offerte volgt alleen de **status** mee: het dossier gaat op substatus `verzonden`, wat via

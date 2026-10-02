@@ -2187,6 +2187,14 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
           await neemWerkbegrotingOverStil(d.id)
         }
       } catch { /* overname is best-effort */ }
+
+      // Zelfde overgang, Bouw7-kant: de offerte op Gewonnen en een aanneemsom op het project.
+      // Ging de projectstatus in Bouw7 door terwijl de offerte op Verstuurd bleef, dan had het
+      // project geen contractbedrag en waren er geen termijnen te maken (Rederserf, sep 2026).
+      const { bevestigOfferteGewonnenEnLog } = await import('./offerte-gewonnen')
+      for (const bouw7Id of werkbegrotingKandidaten) {
+        await bevestigOfferteGewonnenEnLog(bouw7Id, 'bouw7-sync/dossiers', 'cron')
+      }
     }
 
     // De DB-trigger heeft dossier-events ge-enqueued voor dossiers die via de sync wijzigden;

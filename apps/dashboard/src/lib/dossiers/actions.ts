@@ -1442,6 +1442,13 @@ export async function updateDossierSubstatus(
       aanneemsom = await stuurAanneemsomNaarBouw7Intern(supabase, id)
         .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'Onbekende fout' }))
     }
+    // Een offerte die in Bouw7 is gemaakt (geen EVA-calculatie) gaat daar ook op Gewonnen, en
+    // levert de aanneemsom als het project er nog geen heeft. Ná de EVA-aanneemsom hierboven,
+    // zodat een bedrag uit de calculatie voorgaat.
+    if (huidig.bouw7_id != null) {
+      const { bevestigOfferteGewonnenEnLog } = await import('@/lib/bouw7/offerte-gewonnen')
+      await bevestigOfferteGewonnenEnLog(huidig.bouw7_id, '/dossiers/[id]', 'server', { aanneemsom: !opts?.slaAanneemsomOver })
+    }
   }
 
   // Two-way: opdracht-substatus terugschrijven naar Bouw7 (alleen opdracht-dossiers met koppeling).
