@@ -14,6 +14,9 @@
 --
 -- Geen nieuwe tabel: alleen kolommen erbij, met standaardwaarden die bestaande
 -- regels exact laten zoals ze zijn (bron 'bibliotheek', categorie 'reparatie').
+--
+-- Toegepast op productie via de Supabase MCP op 2026-10-02 (14 bestaande regels,
+-- vooraf gecontroleerd: geen negatieve bedragen).
 
 alter table houtrotherstel.repair_registration_lines
   add column if not exists bron text not null default 'bibliotheek',
