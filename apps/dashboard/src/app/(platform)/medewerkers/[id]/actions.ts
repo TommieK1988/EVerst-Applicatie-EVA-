@@ -26,7 +26,7 @@ import { schrijfPlatteDesktopSet } from '@/lib/auth/rechten-opslag'
 import { bouwUitnodigingsMail } from '@/lib/auth/uitnodiging-mail'
 import { maakActivatielink } from '@/lib/auth/activatielink'
 import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
-import { controleerEenAccount } from '@/lib/auth/account-controle'
+import { controleerEenAccount, koppelingVoorAdres } from '@/lib/auth/account-controle'
 import { verstuurMailNamensMedewerker, type MailBijlage } from '@/lib/o365/mail'
 import { O365TokenError } from '@/lib/o365/tokens'
 import { verwerkMedewerkerTriggers } from '@/app/(platform)/taken/actions/sjablonen'
@@ -584,8 +584,15 @@ export async function verstuurUitnodiging(
   if (!med.email) return { ok: false, error: 'Medewerker heeft geen e-mailadres' }
 
   // Eén account per medewerker — zie lib/auth/account-controle.ts voor wat er misgaat zonder.
-  const bestaandeKoppeling = await controleerEenAccount(medewerker_id, med.auth_user_id, med.email)
-  if (bestaandeKoppeling) return bestaandeKoppeling
+  const adresInGebruik = await controleerEenAccount(medewerker_id, med.email)
+  if (adresInGebruik) return adresInGebruik
+
+  // Adres gewijzigd sinds de vorige uitnodiging? Dan hoort het account op het oude adres niet
+  // meer bij deze medewerker: loskoppelen, zodat mail en eerstvolgende login het nieuwe adres volgen.
+  const koppeling = await koppelingVoorAdres(med.auth_user_id, med.email)
+  if (med.auth_user_id && !koppeling) {
+    await db().from('medewerkers').update({ auth_user_id: null }).eq('id', medewerker_id)
+  }
 
   // De uitnodiging wordt namens de uitnodigende beheerder gemaild (Graph), niet
   // door de Supabase-mailer. Zonder O365-koppeling kunnen we dus niets sturen.
@@ -611,15 +618,15 @@ export async function verstuurUitnodiging(
   const viaMicrosoft = logtInMetMicrosoft(med.email)
 
   let actieLink: string | null = null
-  let auth_user_id: string | null = null
-  let herhaling = false
+  let auth_user_id: string | null = koppeling
+  let herhaling = !!koppeling
 
   if (!viaMicrosoft) {
     const { headers } = await import('next/headers')
     const host = (await headers()).get('host') ?? 'localhost:3000'
     const protocol = host.startsWith('localhost') ? 'http' : 'https'
     const link = await maakActivatielink({
-      email: med.email, volledigeNaam, basisUrl: `${protocol}://${host}`, authUserId: med.auth_user_id,
+      email: med.email, volledigeNaam, basisUrl: `${protocol}://${host}`, authUserId: koppeling,
     })
     if (!link.ok) return { ok: false, error: link.error }
     ;({ actieLink, herhaling } = link)

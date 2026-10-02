@@ -10,6 +10,7 @@ import {
   ontkoppelOffice365,
 } from '@/app/(platform)/medewerkers/[id]/actions'
 import { Button } from '@/components/ui'
+import { logtInMetMicrosoft } from '@/lib/auth/account-regels'
 
 const MODULES = RECHTEN_MODULES
 
@@ -98,8 +99,9 @@ export default function GebruikerToegangBeheer({
     startTransition(async () => {
       const res = await verstuurUitnodiging(medewerker_id)
       if (!res.ok) { toast.error(res.error); return }
-      if (res.auth_user_id) setAuthUserId(res.auth_user_id)
-      toast.success('Uitnodiging verstuurd')
+      // Ook `null` overnemen: na een adreswijziging maakt de server de oude koppeling los.
+      setAuthUserId(res.auth_user_id)
+      toast.success(`Uitnodiging verstuurd naar ${medewerker_email}`)
     })
   }
 
@@ -151,11 +153,32 @@ export default function GebruikerToegangBeheer({
         <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
           <label style={labelStyle}>Platformaccount</label>
           {authUserId ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
-              <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                {medewerker_email ?? '—'}
-              </span>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ ...valueStyle, color: 'var(--accent)', fontWeight: 600 }}>● Gekoppeld</span>
+                <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
+                  {medewerker_email ?? '—'}
+                </span>
+              </div>
+              {/* Opnieuw versturen: bij een vergeten wachtwoord, een kwijtgeraakte mail, of na een
+                  gewijzigd e-mailadres — dan koppelt de server het oude account los en gaat de mail
+                  naar het nieuwe adres. */}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={sendInvite}
+                loading={isPending}
+                disabled={isPending || !medewerker_email}
+              >
+                Uitnodiging opnieuw versturen
+              </Button>
+              <p style={{ margin: '8px 0 0', fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)' }}>
+                {logtInMetMicrosoft(medewerker_email)
+                  ? 'Stuurt de mail opnieuw; inloggen gaat met Microsoft.'
+                  : 'Stuurt een nieuwe link waarmee een (nieuw) wachtwoord gekozen wordt. Een eerder wachtwoord blijft werken tot het nieuwe is gekozen.'}
+                {' '}Is het e-mailadres gewijzigd, dan gaat de mail naar het nieuwe adres.
+              </p>
             </div>
           ) : (
             <div>

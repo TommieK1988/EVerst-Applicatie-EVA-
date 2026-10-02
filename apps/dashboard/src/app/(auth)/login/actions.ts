@@ -66,7 +66,9 @@ export async function wachtwoordLogin(
     return { ok: false, error: 'Dit account heeft geen toegang tot EVA.' }
   }
 
-  if (!medewerker.auth_user_id) {
+  // Gekoppeld aan een ánder account (adres gewijzigd)? Het account op het huidige adres wint —
+  // zie /auth/callback en lib/auth/account-controle.ts.
+  if (medewerker.auth_user_id !== data.user.id) {
     await admin.from('medewerkers').update({ auth_user_id: data.user.id }).eq('id', medewerker.id)
   }
 

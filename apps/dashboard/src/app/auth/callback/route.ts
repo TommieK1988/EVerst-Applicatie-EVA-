@@ -44,7 +44,10 @@ export async function GET(request: Request) {
         .maybeSingle()
 
       if (medewerker) {
-        if (!medewerker.auth_user_id) {
+        // Gekoppeld aan een ánder account (adres gewijzigd sinds de vorige login)? Dan wint het
+        // account dat bij het huidige adres hoort: de medewerker-poort hierboven matchte op precies
+        // dat adres, en dit account heeft bewezen het te bezitten. Zie lib/auth/account-controle.ts.
+        if (medewerker.auth_user_id !== user.id) {
           await admin
             .from('medewerkers')
             .update({ auth_user_id: user.id })

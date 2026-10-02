@@ -70,7 +70,7 @@ export async function activeerAccount(
     return { ok: false, error: updateFout.message }
   }
 
-  if (!medewerker.auth_user_id) {
+  if (medewerker.auth_user_id !== link.authUserId) {
     await admin.from('medewerkers').update({ auth_user_id: link.authUserId }).eq('id', medewerker.id)
   }
 
