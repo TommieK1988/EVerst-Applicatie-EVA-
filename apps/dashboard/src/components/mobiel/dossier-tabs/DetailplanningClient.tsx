@@ -15,8 +15,9 @@ import BewakingscodeLabel from './BewakingscodeLabel'
  * Mobiele dossierplanning — read-only.
  *
  * Portret : chronologische kaartlijst; verlopen werk staat achter een knop.
- * Liggend : versimpelde Gantt (altijd álle activiteiten, ook verlopen). Tik op de naam
- *           van een activiteit klapt de medewerkers eronder in; tik op de balk toont details.
+ * Liggend : versimpelde Gantt (altijd álle activiteiten, ook verlopen). Een tik op een
+ *           activiteit (naam óf balk) klapt hem in of uit; uitgeklapt staan eronder de
+ *           volledige omschrijving en de ingeplande medewerkers.
  *
  * In beide staat de bewakingscode van de activiteit: die vult de medewerker in zijn weekstaat in.
  *
@@ -288,21 +289,18 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
   const t = useTranslations('dossiertabs.planning')
   const locale = useDateFnsLocale()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState<string | null>(null)
-  /** Activiteiten waarvan de medewerkerrijen verborgen zijn. Standaard alles uitgeklapt. */
+  /**
+   * Ingeklapte activiteiten. Uitgeklapt (de standaard) staan onder de activiteit de volledige
+   * omschrijving — in de labelkolom wordt die afgekapt — en de ingeplande medewerkers.
+   */
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(() => new Set())
   const klapIn = (id: string) => setIngeklapt(huidig => {
     const nieuw = new Set(huidig)
     if (nieuw.has(id)) nieuw.delete(id); else nieuw.add(id)
     return nieuw
   })
-  /** Activiteiten die überhaupt medewerkers op de tijdlijn hebben — alleen die zijn in te klappen. */
-  const metMensen = useMemo(
-    () => new Set(activiteiten.filter(a => a.items.some(i => i.start_dt || i.eind_dt)).map(a => a.id)),
-    [activiteiten],
-  )
-  const allesIngeklapt = metMensen.size > 0 && [...metMensen].every(id => ingeklapt.has(id))
-  const klapAllesIn = () => setIngeklapt(allesIngeklapt ? new Set() : new Set(metMensen))
+  const allesIngeklapt = activiteiten.every(a => ingeklapt.has(a.id))
+  const klapAllesIn = () => setIngeklapt(allesIngeklapt ? new Set() : new Set(activiteiten.map(a => a.id)))
 
   const ppd = PPD
   const headerH = WEEK_H + DAG_H
@@ -428,7 +426,6 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           <button
             type="button"
             onClick={klapAllesIn}
-            disabled={metMensen.size === 0}
             aria-label={t(allesIngeklapt ? 'allesUitklappen' : 'allesInklappen')}
             style={{
               width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
@@ -436,10 +433,10 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
               display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px',
               fontSize: 10, fontWeight: 700, color: GRIJS, fontFamily: 'inherit',
               textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left',
-              cursor: metMensen.size > 0 ? 'pointer' : 'default',
+              cursor: 'pointer',
             }}
           >
-            {metMensen.size > 0 && <Chevron open={!allesIngeklapt} />}
+            <Chevron open={!allesIngeklapt} />
             {t('kop')}
           </button>
           <div style={{ position: 'relative', width: tijdlijnW, flexShrink: 0 }}>
@@ -498,7 +495,6 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
           }
 
           const isAct = rij.kind === 'activiteit'
-          const kanKlappen = isAct && metMensen.has(rij.a.id)
           const isIngeklapt = isAct && ingeklapt.has(rij.a.id)
           const hoogte = isAct ? RIJ_H : SUBRIJ_H
           const kleur = kleurVan(rij.a.status)
@@ -533,22 +529,20 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                   borderBottom: `1px solid ${isAct ? RAND : '#f0f3f4'}`,
                 }}
               >
-                {/* Labelkolom: een tik klapt de medewerkers onder deze activiteit in of uit. */}
+                {/* Labelkolom: een tik klapt de activiteit in of uit. */}
                 <div
-                  onClick={kanKlappen ? () => klapIn(rij.a.id) : undefined}
-                  role={kanKlappen ? 'button' : undefined}
-                  aria-expanded={kanKlappen ? !isIngeklapt : undefined}
+                  onClick={isAct ? () => klapIn(rij.a.id) : undefined}
+                  role={isAct ? 'button' : undefined}
+                  aria-expanded={isAct ? !isIngeklapt : undefined}
                   style={{
                     width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
                     background: 'var(--bg-elev)', borderRight: `1px solid ${RAND}`,
                     display: 'flex', alignItems: 'center', gap: 4,
                     padding: isAct ? '0 6px' : '0 8px 0 18px',
-                    cursor: kanKlappen ? 'pointer' : 'default',
+                    cursor: isAct ? 'pointer' : 'default',
                   }}
                 >
-                  {isAct && (kanKlappen
-                    ? <Chevron open={!isIngeklapt} />
-                    : <span style={{ width: 10, flexShrink: 0 }} />)}
+                  {isAct && <Chevron open={!isIngeklapt} />}
                   {isAct && <div style={{ width: 3, height: 14, borderRadius: 2, background: kleur, flexShrink: 0 }} />}
                   <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{
@@ -567,9 +561,9 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                   </div>
                 </div>
 
-                {/* Tijdlijn: een tik op de activiteitrij toont de detailregel. */}
+                {/* Tijdlijn: een tik op de balk klapt net zo goed in of uit. */}
                 <div
-                  onClick={isAct ? () => setOpen(o => (o === rij.a.id ? null : rij.a.id)) : undefined}
+                  onClick={isAct ? () => klapIn(rij.a.id) : undefined}
                   style={{ position: 'relative', width: tijdlijnW, flexShrink: 0, cursor: isAct ? 'pointer' : 'default', ...raster }}
                 >
                   {balken.map(balk => (
@@ -584,32 +578,21 @@ function PlanningMiniGantt({ activiteiten }: { activiteiten: MobielActiviteit[] 
                 </div>
               </div>
 
-              {/* Detailregel bij tik op een activiteitbalk */}
-              {isAct && open === rij.a.id && (
-                <div style={{
-                  display: 'flex', borderBottom: `1px solid ${RAND}`, background: 'var(--bg)',
-                }}>
-                  <div style={{
-                    width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                    background: 'var(--bg)', borderRight: `1px solid ${RAND}`,
-                  }} />
-                  <div style={{ padding: '8px 10px', fontSize: 11, color: GRIJS, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    {periodeLabel(rij.a, locale) && <span>📅 {periodeLabel(rij.a, locale)}</span>}
-                    {mensenVan(rij.a) && <span>👤 {mensenVan(rij.a)}</span>}
-                    {rij.a.bewakingscode && (
-                      <span style={{ marginTop: -6 }}>
-                        <BewakingscodeLabel code={rij.a.bewakingscode} naam={rij.a.bewakingscode_naam} />
-                      </span>
-                    )}
-                    {rij.a.locatie_adres && (
-                      <a
-                        href={`https://maps.google.com/?q=${encodeURIComponent(rij.a.locatie_adres)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{ color: GROEN, textDecoration: 'none' }}
-                      >
-                        📍 {rij.a.locatie_adres}
-                      </a>
-                    )}
+              {/* Uitgeklapt: de volledige omschrijving, die in de labelkolom wordt afgekapt.
+                  Sticky links en zo breed als het scherm, zodat hij bij horizontaal scrollen
+                  in beeld blijft en kan doorlopen over meerdere regels. */}
+              {isAct && !isIngeklapt && (
+                <div style={{ borderBottom: `1px solid ${RAND}`, background: '#f4f7f7' }}>
+                  <div
+                    onClick={() => klapIn(rij.a.id)}
+                    style={{
+                      position: 'sticky', left: 0, zIndex: 3, width: '100vw', maxWidth: '100%',
+                      boxSizing: 'border-box', padding: '6px 10px 6px 30px',
+                      fontSize: 12, lineHeight: 1.35, color: '#161b20', cursor: 'pointer',
+                      whiteSpace: 'normal', overflowWrap: 'anywhere',
+                    }}
+                  >
+                    <VertaalbareTekst tekst={rij.a.titel} label={false} />
                   </div>
                 </div>
               )}
