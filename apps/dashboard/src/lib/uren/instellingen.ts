@@ -26,6 +26,16 @@ export type UrenInstellingen = {
    * bij de teamleider en de projectleider: dat is hun budget.
    */
   indirecte_dossier_ids: string[]
+  /**
+   * Afdelingen die nooit een project kiezen: al hun gewerkte uren zijn overhead en landen op het
+   * gewerkte indirecte project van hun werkmaatschappij (zie `getUrenBestemming`).
+   */
+  indirecte_afdelingen: string[]
+  /**
+   * Waar de gewerkte uren van externen op een kantoorafdeling landen. Externen (ZZP) hebben geen
+   * werkmaatschappij, dus het kantoorproject van een werkmaatschappij geldt voor hen niet.
+   */
+  extern_kantoor_dossier_id: string | null
   tolerantie_uren: number
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -54,6 +64,8 @@ const STANDAARD: UrenInstellingen = {
   terugval_goedkeurder_id: null,
   niet_gewerkt_goedkeurder_id: null,
   indirecte_dossier_ids: [],
+  indirecte_afdelingen: ['Projectbureau', 'Ondersteunend', 'Directie'],
+  extern_kantoor_dossier_id: null,
   tolerantie_uren: 0,
   indien_deadline_dag: 5,
   indien_deadline_tijd: '17:00:00',
@@ -70,13 +82,14 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
   const supabase = db()
   const { data } = await supabase
     .from('uren_instellingen')
-    .select('terugval_goedkeurder_id, niet_gewerkt_goedkeurder_id, indirecte_dossier_ids, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, verlof_routes, km_vergoeding_auto, km_vergoeding_bromfiets')
+    .select('terugval_goedkeurder_id, niet_gewerkt_goedkeurder_id, indirecte_dossier_ids, indirecte_afdelingen, extern_kantoor_dossier_id, tolerantie_uren, indien_deadline_dag, indien_deadline_tijd, goedkeur_deadline_dag, goedkeur_deadline_tijd, goedkeuring_modus, verlof_routes, km_vergoeding_auto, km_vergoeding_bromfiets')
     .eq('id', true)
     .maybeSingle()
   if (!data) return STANDAARD
   return {
     ...data,
     indirecte_dossier_ids: (data.indirecte_dossier_ids ?? []) as string[],
+    indirecte_afdelingen: (data.indirecte_afdelingen ?? STANDAARD.indirecte_afdelingen) as string[],
     tolerantie_uren: Number(data.tolerantie_uren ?? 0),
     verlof_routes: (data.verlof_routes ?? {}) as Record<string, string>,
     km_vergoeding_auto: Number(data.km_vergoeding_auto ?? STANDAARD.km_vergoeding_auto),
@@ -85,30 +98,50 @@ export async function getUrenInstellingen(): Promise<UrenInstellingen> {
 }
 
 /**
- * Het dossier waar niet-projectgebonden uren (verlof, ziek, feestdag, tijd voor tijd) op geboekt
- * worden. Bouw7 eist een project op elke hour-log, dus zonder dit dossier kan zulk verlof niet
- * verstuurd worden — de weekstaat moet dat als blokkade tonen, niet stilzwijgend overslaan.
+ * Waar de uren van een medewerker landen als hij zelf geen project kiest.
  *
- * Per werkmaatschappij in te stellen; valt terug op de eerste werkmaatschappij die er wél een
- * heeft, zodat één ingevulde instelling het hele bedrijf al werkend krijgt.
+ * Per werkmaatschappij twee projecten: één voor de niet-gewerkte uren (verlof, ziek, feestdag,
+ * tijd voor tijd -- Bouw7 eist een project op elke hour-log) en één voor gewerkte overhead. Wie op
+ * een kantoorafdeling zit (`indirecte_afdelingen`) kiest nooit een project: al zijn gewerkte uren
+ * zijn overhead.
+ *
+ * Externen (ZZP) hebben geen werkmaatschappij: zij boeken alleen gewerkte uren, zonder norm, en
+ * op kantoor komt dat op het vaste `extern_kantoor_dossier_id`.
+ *
+ * Bewust géén terugval op "de eerste werkmaatschappij die er een heeft": die koos willekeurig, en
+ * zette zo het verlof van Everts-schilders op het project van Morgenstond. Ontbreekt de
+ * werkmaatschappij, dan is dat een melding, geen gok.
  */
-export async function getIndirectDossierId(werkmaatschappijId: string | null): Promise<string | null> {
+export type UrenBestemming = {
+  extern: boolean
+  kantoor: boolean
+  werkmaatschappijId: string | null
+  gewerktDossierId: string | null
+  nietGewerktDossierId: string | null
+}
+
+export async function getUrenBestemming(medewerkerId: string): Promise<UrenBestemming> {
   const supabase = db()
-  if (werkmaatschappijId) {
-    const { data } = await supabase
-      .from('bedrijfsgegevens')
-      .select('indirect_uren_dossier_id')
-      .eq('id', werkmaatschappijId)
-      .maybeSingle()
-    if (data?.indirect_uren_dossier_id) return data.indirect_uren_dossier_id
+  const [{ data: mw }, inst] = await Promise.all([
+    supabase
+      .from('medewerkers')
+      .select('afdeling, extern, werkmaatschappij_id, bedrijfsgegevens(indirect_uren_dossier_id, indirect_gewerkt_dossier_id)')
+      .eq('id', medewerkerId)
+      .maybeSingle(),
+    getUrenInstellingen(),
+  ])
+  const wm = mw?.bedrijfsgegevens as
+    | { indirect_uren_dossier_id: string | null; indirect_gewerkt_dossier_id: string | null }
+    | null
+    | undefined
+  const extern = !!mw?.extern
+  return {
+    extern,
+    kantoor: !!mw?.afdeling && inst.indirecte_afdelingen.includes(mw.afdeling),
+    werkmaatschappijId: mw?.werkmaatschappij_id ?? null,
+    gewerktDossierId: extern ? inst.extern_kantoor_dossier_id : wm?.indirect_gewerkt_dossier_id ?? null,
+    nietGewerktDossierId: extern ? null : wm?.indirect_uren_dossier_id ?? null,
   }
-  const { data: fallback } = await supabase
-    .from('bedrijfsgegevens')
-    .select('indirect_uren_dossier_id')
-    .not('indirect_uren_dossier_id', 'is', null)
-    .limit(1)
-    .maybeSingle()
-  return fallback?.indirect_uren_dossier_id ?? null
 }
 
 /**
@@ -145,7 +178,7 @@ function deadlineVan(weekStart: string, dag: number, tijd: string, volgendeWeek:
 
 /**
  * Alle dossiers die als indirecte-urenproject gelden: wat in de instellingen is aangevinkt én
- * het dossier dat per werkmaatschappij voor indirecte uren is aangewezen.
+ * de twee projecten die per werkmaatschappij voor indirecte uren zijn aangewezen.
  *
  * Hierop is een bewakingscode niet verplicht. Een bewakingscode hoort bij een begroting die
  * bewaakt wordt; op een indirecte-urendossier staat geen begroting, dus valt er geen code te
@@ -159,12 +192,14 @@ export async function getIndirecteDossierIds(): Promise<Set<string>> {
     // Een handvol rijen: één per werkmaatschappij.
     supabase
       .from('bedrijfsgegevens')
-      .select('indirect_uren_dossier_id')
-      .not('indirect_uren_dossier_id', 'is', null),
+      .select('indirect_uren_dossier_id, indirect_gewerkt_dossier_id'),
   ])
   const ids = new Set(inst.indirecte_dossier_ids)
-  for (const r of (wm ?? []) as Array<{ indirect_uren_dossier_id: string }>) {
-    ids.add(r.indirect_uren_dossier_id)
+  if (inst.extern_kantoor_dossier_id) ids.add(inst.extern_kantoor_dossier_id)
+  type Rij = { indirect_uren_dossier_id: string | null; indirect_gewerkt_dossier_id: string | null }
+  for (const r of (wm ?? []) as Rij[]) {
+    if (r.indirect_uren_dossier_id) ids.add(r.indirect_uren_dossier_id)
+    if (r.indirect_gewerkt_dossier_id) ids.add(r.indirect_gewerkt_dossier_id)
   }
   return ids
 }

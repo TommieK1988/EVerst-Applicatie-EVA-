@@ -16,7 +16,7 @@ import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getAppVertaler, getAppLocale } from '@/i18n/server'
 import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
-import { getUrenInstellingen, getIndirectDossierId, getIndirecteDossierIds } from './instellingen'
+import { getUrenInstellingen, getUrenBestemming, getIndirecteDossierIds } from './instellingen'
 import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
@@ -86,9 +86,27 @@ export type Weekstaat = {
   onkosten: WeekOnkosten[]
   /** De kilometervergoedingen, zodat de sheet het bedrag alvast kan laten zien. */
   kmTarieven: { auto: number; bromfiets: number }
+  /** Kantoorafdeling: kiest nooit een project, gewerkte uren landen vanzelf op overhead. */
+  kantoor: boolean
+  /** Extern (ZZP): alleen gewerkte uren, geen norm en geen tijd-voor-tijdsaldo. */
+  extern: boolean
 }
 
 /* ── Interne helpers ──────────────────────────────────────────────── */
+
+async function isExtern(medewerkerId: string): Promise<boolean> {
+  const { data } = await db().from('medewerkers').select('extern').eq('id', medewerkerId).maybeSingle()
+  return !!data?.extern
+}
+
+/**
+ * De norm van een week: de contracturen uit het rooster, of 0 voor een extern. Een ZZP'er
+ * verantwoordt geen contract -- hij boekt wat hij gewerkt heeft, en vult geen gat met verlof.
+ */
+async function normVoor(medewerkerId: string, weekStart: string): Promise<number> {
+  if (await isExtern(medewerkerId)) return 0
+  return (await getContracturen(medewerkerId, weekStart)).uren
+}
 
 /* ── Opbouw ───────────────────────────────────────────────────────── */
 
@@ -108,7 +126,7 @@ async function actualiseerNorm(
   week: { id: string; status: WeekStatus; contracturen: number | string | null },
 ) {
   if (!bewerkbaar(week.status)) return
-  const { uren } = await getContracturen(medewerkerId, weekStart)
+  const uren = await normVoor(medewerkerId, weekStart)
   if (rondUren(uren) === rondUren(Number(week.contracturen ?? 0))) return
   await db().from('uren_weken').update({ contracturen: uren }).eq('id', week.id)
 }
@@ -134,7 +152,7 @@ async function zorgVoorWeek(medewerkerId: string, weekStart: string) {
     return bestaand.id as string
   }
 
-  const { uren } = await getContracturen(medewerkerId, weekStart)
+  const uren = await normVoor(medewerkerId, weekStart)
   const { data: nieuw, error } = await supabase
     .from('uren_weken')
     .insert({ medewerker_id: medewerkerId, jaar, week_nr: week, week_start: weekStart, contracturen: uren })
@@ -156,6 +174,8 @@ async function zorgVoorWeek(medewerkerId: string, weekStart: string) {
 
 /** Feestdagen en geregistreerd verlof als regels neerzetten. */
 async function vulVoor(medewerkerId: string, weekStart: string, weekId: string) {
+  // Externen boeken geen verlof of feestdagen: die worden hun niet uitbetaald.
+  if (await isExtern(medewerkerId)) return
   const supabase = db()
   const voorgevuld = await getVoorgevuldeRegels(medewerkerId, weekStart)
   if (!voorgevuld.length) return
@@ -177,9 +197,7 @@ async function vulVoor(medewerkerId: string, weekStart: string, weekId: string) 
     : type === 'training' ? (zoek('scholing') ?? zoek('vakantie'))
     : (zoek('vakantie') ?? afwezig[0])
 
-  const medewerker = await supabase
-    .from('medewerkers').select('werkmaatschappij_id').eq('id', medewerkerId).maybeSingle()
-  const indirectDossier = await getIndirectDossierId(medewerker.data?.werkmaatschappij_id ?? null)
+  const indirectDossier = (await getUrenBestemming(medewerkerId)).nietGewerktDossierId
 
   const rijen = voorgevuld.flatMap(r => {
     const soort = r.bron === 'bouw7_feestdag' ? feestdagSoort : soortVoorType(r.afwezigheidType)
@@ -207,7 +225,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   const weekStart = weekStartVan(datum ?? new Date())
   const weekId = await zorgVoorWeek(medewerker.id, weekStart)
 
-  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers] = await Promise.all([
+  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers, bestemming] = await Promise.all([
     supabase.from('uren_weken').select('*').eq('id', weekId).single(),
     supabase
       .from('uren_regels')
@@ -218,6 +236,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     supabase.from('uren_saldo_per_medewerker').select('saldo_uren').eq('medewerker_id', medewerker.id).maybeSingle(),
     getUrenInstellingen(),
     getIndirecteDossierIds(),
+    getUrenBestemming(medewerker.id),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -241,13 +260,15 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   }))
 
   const contracturen = Number(week.contracturen ?? 0)
-  const totalen = berekenWeekTotalen(nette, contracturen, inst.tolerantie_uren)
+  const berekend = berekenWeekTotalen(nette, contracturen, inst.tolerantie_uren)
+  // Een extern bouwt geen saldo op (zie de view uren_week_saldo).
+  const totalen = bestemming.extern ? { ...berekend, saldoMutatie: 0 } : berekend
   const status = week.status as WeekStatus
   const ongecodeerd = nette.filter(r => r.categorie === 'werk' && (
     !r.dossier_id || (!r.bewakingscode && !indirecteDossiers.has(r.dossier_id))
   )).length
-  const blokkade = indienBlokkade(totalen, contracturen, ongecodeerd)
-    ? await blokkadeTekst(totalen, contracturen, ongecodeerd)
+  const blokkade = indienBlokkade(totalen, contracturen, ongecodeerd, bestemming.extern)
+    ? await blokkadeTekst(totalen, contracturen, ongecodeerd, bestemming.extern)
     : null
 
   // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
@@ -279,6 +300,8 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
       bon_url: bonLinks.get(o.bon_pad as string) ?? null,
     })),
     kmTarieven: { auto: inst.km_vergoeding_auto, bromfiets: inst.km_vergoeding_bromfiets },
+    kantoor: bestemming.kantoor,
+    extern: bestemming.extern,
   }
 }
 
@@ -293,7 +316,7 @@ export async function getUursoortOpties(): Promise<UursoortOptie[]> {
       .eq('actief', true)
       .not('uren_categorie', 'is', null)
       .order('naam'),
-    supabase.from('medewerkers').select('standaard_uursoort_id').eq('id', medewerker.id).maybeSingle(),
+    supabase.from('medewerkers').select('standaard_uursoort_id, extern').eq('id', medewerker.id).maybeSingle(),
   ])
 
   const lijst: UursoortOptie[] = (soorten ?? []).map((s: Record<string, unknown>) => ({
@@ -301,6 +324,8 @@ export async function getUursoortOpties(): Promise<UursoortOptie[]> {
     naam: s.naam as string,
     categorie: s.uren_categorie as UrenCategorie,
   }))
+    // Een extern boekt alleen wat hij gewerkt heeft: verlof en tijd voor tijd bestaan voor hem niet.
+    .filter((o: UursoortOptie) => !mw?.extern || o.categorie === 'werk')
 
   // Volgorde die de monteur het minste tikwerk kost: zijn eigen soort eerst, dan de rest van het
   // werk, dan tijd voor tijd, dan afwezigheid. Feestdagen worden voorgevuld en horen onderaan.
@@ -331,7 +356,11 @@ const PLANNING_VENSTER_DAGEN = 14
 
 /**
  * Dossiers om uit te kiezen bij werk-uren: alleen de lopende opdrachten waarop deze medewerker in
- * het venster staat ingepland, plus de indirecte-urendossiers.
+ * het venster staat ingepland.
+ *
+ * De indirecte-urenprojecten staan er niet bij: dat is administratie, geen keuze. Niet-gewerkte
+ * uren en de uren van kantoor landen er vanzelf op (`getUrenBestemming`). Alleen een bestaande
+ * regel die al op zo'n project staat (`behoudId`) blijft zichtbaar, anders maakt bewerken hem leeg.
  *
  * Eerder stonden hier álle lopende opdrachten (honderden), met de eigen projecten bovenaan. De
  * monteur moest dan alsnog door een lange lijst; in de praktijk boekt hij vrijwel alleen op waar
@@ -341,7 +370,7 @@ const PLANNING_VENSTER_DAGEN = 14
  * Een planitem telt als het het venster overlapt, dus een meerdaags item dat vóór het venster
  * begint en erin doorloopt hoort er ook bij. Waarop hij díé dag staat komt bovenaan.
  */
-export async function getDossierOpties(datum: string): Promise<DossierOptie[]> {
+export async function getDossierOpties(datum: string, behoudId?: string | null): Promise<DossierOptie[]> {
   const medewerker = await vereisSessie()
   const supabase = db()
 
@@ -395,26 +424,16 @@ export async function getDossierOpties(datum: string): Promise<DossierOptie[]> {
         .order('dossiernummer', { ascending: false })
     : { data: [] }
 
-  // De indirecte-urendossiers horen er altijd bij te staan. Het zijn administratieve dossiers en
-  // vaak geen lopende opdracht, en niemand wordt erop ingepland -- terwijl juist daar de
-  // overheadtijd op hoort. Ze krijgen in het scherm een eigen groep.
-  const indirecteIds = [...await getIndirecteDossierIds()]
-  const { data: indirecte } = indirecteIds.length
-    ? await supabase
-        .from('dossiers')
-        .select('id, dossiernummer, titel')
-        .in('id', indirecteIds)
-        .eq('gearchiveerd', false)
-        .order('dossiernummer')
+  const indirecteIds = await getIndirecteDossierIds()
+  const { data: behouden } = behoudId && indirecteIds.has(behoudId)
+    ? await supabase.from('dossiers').select('id, dossiernummer, titel').eq('id', behoudId)
     : { data: [] }
 
   type Rij = { id: string; dossiernummer: string; titel: string; servicedesk_substatus?: string | null }
   const label = (d: Rij) => `${d.dossiernummer} · ${d.titel}`
 
-  const indirectSet = new Set(((indirecte ?? []) as Rij[]).map(d => d.id))
-
   const eigen = ((mijne ?? []) as Rij[])
-    .filter(d => !indirectSet.has(d.id))
+    .filter(d => !indirecteIds.has(d.id))
     .map(d => ({
       id: d.id, label: label(d), indirect: false,
       servicedesk: !!d.servicedesk_substatus, vandaag: vandaagGepland.has(d.id),
@@ -422,7 +441,7 @@ export async function getDossierOpties(datum: string): Promise<DossierOptie[]> {
     // Waar hij deze dag staat ingepland bovenaan; de rest op dossiernummer aflopend.
     .sort((a, b) => Number(b.vandaag) - Number(a.vandaag))
 
-  const overhead = ((indirecte ?? []) as Rij[])
+  const overhead = ((behouden ?? []) as Rij[])
     .map(d => ({ id: d.id, label: label(d), indirect: true, servicedesk: false, vandaag: false }))
 
   return [...eigen, ...overhead]
@@ -442,8 +461,9 @@ export type RegelInvoer = {
 
 /**
  * Valideert een regel tegen de categorie van zijn uursoort en levert de rij op die opgeslagen
- * mag worden. Werk-uren eisen een dossier én een bewakingscode; alle andere categorieën landen op
- * het indirecte-uren-dossier, want Bouw7 wil op élke urenregel een project.
+ * mag worden. Werk-uren eisen een dossier én een bewakingscode; alle andere categorieën -- en het
+ * werk van kantoor -- landen op een indirecte-urenproject, want Bouw7 wil op élke urenregel een
+ * project.
  */
 /**
  * Een servicedeskbon waar (nog) geen enkele bewakingscode op staat. Elke bon krijgt de eigen code
@@ -465,9 +485,10 @@ async function blokkadeTekst(
   totalen: { totaalUren: number; tekort: number },
   contracturen: number,
   ongecodeerd: number,
+  zonderNorm = false,
 ): Promise<string> {
   const t = await getAppVertaler('uren')
-  if (contracturen <= 0) return t('fout.geenContracturen')
+  if (contracturen <= 0 && !zonderNorm) return t('fout.geenContracturen')
   if (totalen.totaalUren <= 0) return t('fout.nogGeenUren')
   if (totalen.tekort > 0) return t('fout.tekort', { uren: totalen.tekort.toLocaleString(await getAppLocale()) })
   return t('fout.ongecodeerd', { aantal: ongecodeerd })
@@ -490,7 +511,11 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
   }
 
   const categorie = soort.uren_categorie as UrenCategorie
-  if (categorie === 'werk') {
+  const bestemming = await getUrenBestemming(medewerkerId)
+  // Kantoor kiest geen project: al zijn gewerkte uren zijn overhead, dus ze gaan naar dezelfde
+  // plek als zijn verlof -- alleen op het gewerkte overheadproject.
+  if (categorie !== 'werk' && bestemming.extern) throw new Error(t('fout.externAlleenGewerkt'))
+  if (categorie === 'werk' && !bestemming.kantoor) {
     if (!invoer.dossier_id) throw new Error(t('fout.kiesProject'))
     // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
     // is de code niet verplicht. Zie `getIndirecteDossierIds`.
@@ -510,12 +535,9 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
     }
   }
 
-  const { data: mw } = await supabase
-    .from('medewerkers').select('werkmaatschappij_id').eq('id', medewerkerId).maybeSingle()
-  const indirect = await getIndirectDossierId(mw?.werkmaatschappij_id ?? null)
-  if (!indirect) {
-    throw new Error(t('fout.geenIndirectDossier'))
-  }
+  if (!bestemming.werkmaatschappijId && !bestemming.extern) throw new Error(t('fout.geenWerkmaatschappij'))
+  const indirect = categorie === 'werk' ? bestemming.gewerktDossierId : bestemming.nietGewerktDossierId
+  if (!indirect) throw new Error(t('fout.geenIndirectDossier'))
   return {
     medewerker_id: medewerkerId,
     datum: invoer.datum,
@@ -616,7 +638,7 @@ export async function dienWeekIn(
   if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
 
   const contracturen = Number(week.contracturen ?? 0)
-  if (contracturen <= 0) {
+  if (contracturen <= 0 && !(await isExtern(medewerker.id))) {
     return { ok: false, error: t('fout.geenContracturen') }
   }
 

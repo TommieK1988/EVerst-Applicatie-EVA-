@@ -33,10 +33,12 @@ const labelStijl: React.CSSProperties = {
 const CATEGORIEEN = ['werk', 'tijd_voor_tijd', 'afwezig', 'feestdag'] as const
 
 export default function RegelSheet({
-  datum, uursoorten, regel, onSluit, onBewaar,
+  datum, uursoorten, regel, kantoor, onSluit, onBewaar,
 }: {
   datum: string
   uursoorten: UursoortOptie[]
+  /** Kantoorafdeling: geen projectkeuze, de uren landen vanzelf op het overheadproject. */
+  kantoor: boolean
   /** Gevuld = bewerken, leeg = nieuw. */
   regel: WeekRegel | null
   onSluit: () => void
@@ -58,21 +60,23 @@ export default function RegelSheet({
 
   const soort = uursoorten.find(u => u.id === uursoortId)
   const isWerk = soort?.categorie === 'werk'
+  // Alleen wie op projecten werkt kiest er een; kantoor boekt altijd op overhead.
+  const kiestProject = isWerk && !kantoor
   // Overheadwerk op een indirecte-urendossier: daar staat geen begroting tegenover, dus is er
   // geen bewakingscode te kiezen en vraagt het scherm er ook niet om.
   const isIndirect = dossiers.some(d => d.id === dossierId && d.indirect)
   const isBon = dossiers.some(d => d.id === dossierId && d.servicedesk)
 
-  // Alleen de projecten waar deze medewerker rond deze dag op staat ingepland, plus de indirecte
-  // uren. Een bestaande regel op een project dat daar (inmiddels) buiten valt blijft zichtbaar --
-  // anders zou het bewerken ervan het project stil leegmaken.
+  // Alleen de projecten waar deze medewerker rond deze dag op staat ingepland. Een bestaande regel
+  // op een project dat daar (inmiddels) buiten valt blijft zichtbaar -- anders zou het bewerken
+  // ervan het project stil leegmaken.
   const eigenId = regel?.dossier_id ?? null
   const eigenLabel = regel?.dossier_label ?? ''
   useEffect(() => {
-    if (!isWerk) return
+    if (!kiestProject) return
     let levend = true
     setDossiersLaden(true)
-    getDossierOpties(datum)
+    getDossierOpties(datum, eigenId)
       .then(d => {
         if (!levend) return
         setDossiers(eigenId && !d.some(o => o.id === eigenId)
@@ -81,19 +85,19 @@ export default function RegelSheet({
       })
       .finally(() => { if (levend) setDossiersLaden(false) })
     return () => { levend = false }
-  }, [datum, isWerk, eigenId, eigenLabel])
+  }, [datum, kiestProject, eigenId, eigenLabel])
 
   // Alleen codes waar prognose-uren op staan: de monteur kiest uit het werk dat voor dit project
   // begroot is, niet uit de volledige codelijst.
   useEffect(() => {
-    if (!isWerk || !dossierId || isIndirect) { setCodes([]); return }
+    if (!kiestProject || !dossierId || isIndirect) { setCodes([]); return }
     let levend = true
     setCodesLaden(true)
     getBewakingscodesVoorUurlog(dossierId, { alleenMetPrognose: true })
       .then(c => { if (levend) setCodes(c) })
       .finally(() => { if (levend) setCodesLaden(false) })
     return () => { levend = false }
-  }, [dossierId, isWerk, isIndirect])
+  }, [dossierId, kiestProject, isIndirect])
 
   async function bewaar() {
     setBezig(true)
@@ -101,9 +105,9 @@ export default function RegelSheet({
       datum,
       uren,
       uursoort_id: uursoortId,
-      dossier_id: isWerk ? (dossierId || null) : null,
-      bewakingscode: isWerk ? (code || null) : null,
-      bouw7_psl_id: isWerk ? (codes.find(c => c.code === code)?.pslId ?? null) : null,
+      dossier_id: kiestProject ? (dossierId || null) : null,
+      bewakingscode: kiestProject ? (code || null) : null,
+      bouw7_psl_id: kiestProject ? (codes.find(c => c.code === code)?.pslId ?? null) : null,
       opmerking: opmerking || null,
     })
     setBezig(false)
@@ -158,7 +162,13 @@ export default function RegelSheet({
             </select>
           </div>
 
-          {isWerk && (
+          {isWerk && kantoor && (
+            <p style={{ fontSize: 12.5, color: '#6b757c', margin: '-6px 0 0', lineHeight: 1.45 }}>
+              {t('regel.kantoorUitleg')}
+            </p>
+          )}
+
+          {kiestProject && (
             <>
               <div>
                 <label style={labelStijl}>{t('regel.project')}</label>

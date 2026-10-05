@@ -8,8 +8,9 @@ import type { DossierOptie } from '@/lib/uren/weekstaat'
  * Projectkeuze in de urenregel: een zoekveld met daaronder de treffers, in plaats van een lange
  * keuzelijst om doorheen te scrollen.
  *
- * De lijst is al klein (alleen waar de monteur ingepland staat, plus de indirecte uren), dus er
- * wordt in de browser gefilterd. Elk woord uit de zoekterm moet in nummer of naam voorkomen, zodat
+ * De lijst is al klein (alleen waar de monteur ingepland staat), dus er wordt in de browser
+ * gefilterd. De groep indirecte uren verschijnt alleen nog bij een bestaande regel die al op zo'n
+ * project stond; nieuw kiezen kan daar niet meer (zie `getDossierOpties`). Elk woord uit de zoekterm moet in nummer of naam voorkomen, zodat
  * "kerk 183" net zo goed werkt als "20265.00183".
  */
 

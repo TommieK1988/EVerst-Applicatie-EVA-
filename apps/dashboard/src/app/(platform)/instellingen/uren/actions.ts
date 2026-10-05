@@ -148,16 +148,75 @@ export async function setUursoortCategorie(
   return { ok: true }
 }
 
-/** Het dossier waar niet-projectgebonden uren van deze werkmaatschappij op landen. */
+/**
+ * Een van de twee indirecte-urenprojecten van een werkmaatschappij: `niet_gewerkt` voor verlof,
+ * ziek, feestdag en tijd voor tijd; `gewerkt` voor overhead (alle werk van kantoor).
+ */
 export async function setIndirectDossier(
   werkmaatschappijId: string,
+  soort: 'gewerkt' | 'niet_gewerkt',
+  dossierId: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisBeheerder()
+  const kolom = soort === 'gewerkt' ? 'indirect_gewerkt_dossier_id' : 'indirect_uren_dossier_id'
+  const { error } = await db()
+    .from('bedrijfsgegevens')
+    .update({ [kolom]: dossierId || null })
+    .eq('id', werkmaatschappijId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/uren')
+  return { ok: true }
+}
+
+/**
+ * De afdelingen die nooit een project kiezen. Hun gewerkte uren landen vanzelf op het gewerkte
+ * indirecte project van hun werkmaatschappij. Alleen bestaande, actieve afdelingen.
+ */
+export async function setIndirecteAfdelingen(
+  afdelingen: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisBeheerder()
+  const { data } = await db()
+    .from('medewerker_afdelingen').select('naam').eq('actief', true).limit(200)
+  const geldig = new Set(((data ?? []) as Array<{ naam: string }>).map(a => a.naam))
+  const onbekend = afdelingen.find(a => !geldig.has(a))
+  if (onbekend) return { ok: false, error: `Onbekende afdeling: ${onbekend}.` }
+
+  const { error } = await db()
+    .from('uren_instellingen').update({ indirecte_afdelingen: afdelingen }).eq('id', true)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/uren')
+  return { ok: true }
+}
+
+/** Het vaste project voor de gewerkte uren van externen op een kantoorafdeling. */
+export async function setExternKantoorDossier(
   dossierId: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await vereisBeheerder()
   const { error } = await db()
-    .from('bedrijfsgegevens')
-    .update({ indirect_uren_dossier_id: dossierId || null })
-    .eq('id', werkmaatschappijId)
+    .from('uren_instellingen').update({ extern_kantoor_dossier_id: dossierId || null }).eq('id', true)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/instellingen/uren')
+  return { ok: true }
+}
+
+/**
+ * Zet de werkmaatschappij van een medewerker vanaf het urenscherm. Zonder werkmaatschappij weet
+ * EVA niet op welk indirect project zijn verlof en overhead horen.
+ */
+export async function setMedewerkerWerkmaatschappij(
+  medewerkerId: string,
+  werkmaatschappijId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisBeheerder()
+  const { data: wm } = await db()
+    .from('bedrijfsgegevens').select('id').eq('id', werkmaatschappijId)
+    .eq('type', 'werkmaatschappij').maybeSingle()
+  if (!wm) return { ok: false, error: 'Onbekende werkmaatschappij.' }
+
+  const { error } = await db()
+    .from('medewerkers').update({ werkmaatschappij_id: werkmaatschappijId }).eq('id', medewerkerId)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/instellingen/uren')
   return { ok: true }

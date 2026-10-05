@@ -67,6 +67,7 @@
     "geenResultaat": "Nie znaleziono projektu dla „{zoek}”.",
     "indirecteUren": "Godziny pośrednie",
     "indirectUitleg": "Godziny pośrednie nie są kontrolowane, więc kod budżetowy nie jest tu potrzebny.",
+    "kantoorUitleg": "Twoje godziny trafiają automatycznie do projektu godzin pośrednich Twojej firmy. Nie musisz wybierać projektu.",
     "bewakingscode": "Kod budżetowy",
     "kiesEerstProject": "— najpierw wybierz projekt —",
     "codesOphalen": "Pobieranie…",
@@ -143,7 +144,9 @@
     "uursoortNietIngedeeld": "„{naam}” nie ma jeszcze przypisanej kategorii, więc nie można go zaksięgować.",
     "kiesProject": "Wybierz projekt dla tych godzin.",
     "kiesBewakingscode": "Wybierz kod budżetowy dla tych godzin.",
-    "geenIndirectDossier": "Nie ustawiono jeszcze projektu dla godzin pośrednich. Poproś administratora, aby to zrobił."
+    "geenIndirectDossier": "Dla Twojej firmy nie ustawiono jeszcze projektu dla tych godzin. Poproś administratora, aby to zrobił.",
+    "geenWerkmaatschappij": "W Twoim profilu nie ma jeszcze firmy, więc EVA nie wie, do którego projektu należą te godziny. Poproś biuro o uzupełnienie.",
+    "externAlleenGewerkt": "Jako pracownik zewnętrzny wpisujesz tylko przepracowane godziny."
   },
   "keuren": {
     "titel": "Zatwierdzanie",

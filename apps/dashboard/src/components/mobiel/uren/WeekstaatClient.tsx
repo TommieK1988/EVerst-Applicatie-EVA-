@@ -101,23 +101,28 @@ export default function WeekstaatClient({
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
             {uur(staat.totaalUren)}
-            <span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}>{t('weekstaat.vanNorm', { uren: uur(staat.contracturen) })}</span>
+            {/* Een extern heeft geen norm en geen saldo: alleen wat hij gewerkt heeft telt. */}
+            {!staat.extern && (
+              <span style={{ fontSize: 16, fontWeight: 600, color: '#6b757c' }}>{t('weekstaat.vanNorm', { uren: uur(staat.contracturen) })}</span>
+            )}
           </div>
-          <div style={{ fontSize: 12, color: '#6b757c', textAlign: 'right' }}>
+          {!staat.extern && <div style={{ fontSize: 12, color: '#6b757c', textAlign: 'right' }}>
             {t('weekstaat.saldo')}<br />
             <strong style={{ fontSize: 15, color: staat.saldoNu < 0 ? '#c0392b' : 'var(--fg)' }}>
               {t('eenheid.urenKort', { uren: `${staat.saldoNu > 0 ? '+' : ''}${uur(staat.saldoNu)}` })}
             </strong>
-          </div>
+          </div>}
         </div>
 
-        <div style={{ height: 6, borderRadius: 3, background: '#e8ebed', margin: '10px 0 10px', overflow: 'hidden' }}>
-          <div style={{
-            width: `${voortgang}%`, height: '100%',
-            background: staat.tekort > 0 ? '#e0a800' : '#009439',
-            transition: 'width 160ms ease',
-          }} />
-        </div>
+        {staat.extern ? <div style={{ height: 10 }} /> : (
+          <div style={{ height: 6, borderRadius: 3, background: '#e8ebed', margin: '10px 0 10px', overflow: 'hidden' }}>
+            <div style={{
+              width: `${voortgang}%`, height: '100%',
+              background: staat.tekort > 0 ? '#e0a800' : '#009439',
+              transition: 'width 160ms ease',
+            }} />
+          </div>
+        )}
 
         <div style={{
           display: 'inline-block', padding: '4px 10px', borderRadius: 999,
@@ -312,6 +317,7 @@ export default function WeekstaatClient({
           datum={sheet.datum}
           regel={sheet.regel}
           uursoorten={uursoorten}
+          kantoor={staat.kantoor}
           onSluit={() => setSheet(null)}
           onBewaar={bewaarRegel}
         />

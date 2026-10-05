@@ -7,17 +7,19 @@ import { Button, Card, CardBody, Input } from '@/components/ui'
 import {
   setUrenInstellingen,
   setUursoortCategorie,
-  setIndirectDossier,
   setPloegModus,
   setVerlofRoutes,
   herlaadUursoorten,
   type UrenCategorie,
 } from '@/app/(platform)/instellingen/uren/actions'
+import IndirecteUrenKaart, { type IndirectWerkmaatschappij, type MedewerkerZonderWm } from './IndirecteUrenKaart'
 
 type Instellingen = {
   terugval_goedkeurder_id: string | null
   niet_gewerkt_goedkeurder_id: string | null
   indirecte_dossier_ids: string[] | null
+  indirecte_afdelingen: string[] | null
+  extern_kantoor_dossier_id: string | null
   tolerantie_uren: number | string
   indien_deadline_dag: number
   indien_deadline_tijd: string
@@ -38,7 +40,6 @@ type Uursoort = {
   actief: boolean
 }
 
-type Werkmaatschappij = { id: string; naam: string; indirect_uren_dossier_id: string | null }
 type Ploeg = { id: string; naam: string; goedkeuring_modus: 'eva' | 'bouw7' | null }
 type Medewerker = { id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string }
 type Dossier = { id: string; dossiernummer: string; titel: string }
@@ -76,10 +77,12 @@ function volledigeNaam(m: Medewerker) {
 
 export default function UrenInstellingenBeheer({
   instellingen, uursoorten, werkmaatschappijen, medewerkers, indirectDossiers, ploegen, afdelingen,
+  zonderWerkmaatschappij,
 }: {
   instellingen: Instellingen
   uursoorten: Uursoort[]
-  werkmaatschappijen: Werkmaatschappij[]
+  werkmaatschappijen: IndirectWerkmaatschappij[]
+  zonderWerkmaatschappij: MedewerkerZonderWm[]
   medewerkers: Medewerker[]
   indirectDossiers: Dossier[]
   ploegen: Ploeg[]
@@ -141,13 +144,6 @@ export default function UrenInstellingenBeheer({
     ververs()
   }
 
-  async function wijzigIndirect(wmId: string, dossierId: string) {
-    const r = await setIndirectDossier(wmId, dossierId || null)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success('Opgeslagen')
-    ververs()
-  }
-
   async function bewaarRoutes() {
     setRoutesBusy(true)
     const r = await setVerlofRoutes(routes)
@@ -171,7 +167,6 @@ export default function UrenInstellingenBeheer({
   }
 
   const ongeclassificeerd = uursoorten.filter(u => u.bouw7_id && !u.uren_categorie).length
-  const zonderIndirect = werkmaatschappijen.filter(w => !w.indirect_uren_dossier_id).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -397,51 +392,30 @@ export default function UrenInstellingenBeheer({
       </Card>
 
       {/* ── Indirecte uren ───────────────────────────────────────── */}
+      <IndirecteUrenKaart
+        werkmaatschappijen={werkmaatschappijen}
+        indirectDossiers={indirectDossiers}
+        afdelingen={afdelingen}
+        indirecteAfdelingen={instellingen?.indirecte_afdelingen ?? []}
+        zonderWerkmaatschappij={zonderWerkmaatschappij}
+        externKantoorDossierId={instellingen?.extern_kantoor_dossier_id ?? null}
+      />
+
       <Card>
         <CardBody>
-          <h2 style={kopStijl}>Dossier voor indirecte uren</h2>
-          <p style={uitlegStijl}>
-            Bouw7 wil op élke urenregel een project, ook op verlof- en ziekuren. Wijs per
-            werkmaatschappij het dossier aan waar die uren op geboekt worden.
-            {zonderIndirect > 0 && (
-              <strong style={{ color: 'var(--warn-fg, #a15c00)' }}>
-                {' '}Nog {zonderIndirect} werkmaatschappij{zonderIndirect === 1 ? '' : 'en'} zonder
-                dossier — verlof en ziekte kunnen daar nog niet verstuurd worden.
-              </strong>
-            )}
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {werkmaatschappijen.map(w => (
-              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12, flex: 1, color: 'var(--fg)' }}>
-                  {w.naam}
-                </span>
-                <select value={w.indirect_uren_dossier_id ?? ''} style={{ ...veldStijl, minWidth: 320 }}
-                  onChange={e => wijzigIndirect(w.id, e.target.value)}>
-                  <option value="">— niet ingesteld —</option>
-                  {indirectDossiers.map(d => (
-                    <option key={d.id} value={d.id}>{d.dossiernummer} · {d.titel}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-
           {/* Welke dossiers als indirect tellen voor de GOEDKEURING. Bewust een eigen lijst en
               geen titel-match: "heet het toevallig Indirecte uren" is geen autorisatieregel, en
               een hernoemd project zou de route stilletjes verleggen. */}
-          <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)' }}>
-              Wie keurt de uren op deze dossiers?
-            </span>
-            <p style={{ ...uitlegStijl, marginTop: 4 }}>
+          <div>
+            <h2 style={kopStijl}>Wie keurt de uren op indirecte dossiers?</h2>
+            <p style={uitlegStijl}>
               Op een aangevinkt dossier gaan <strong>alle</strong> uren naar de eigen goedkeurder
               van de medewerker — ook de gewerkte. Daar is geen projectwerk te beoordelen, alleen
               overhead. Er is op zo&apos;n dossier ook <strong>geen bewakingscode nodig</strong>:
               overhead wordt niet bewaakt, dus valt er niets te kiezen en houdt het opgeven en
               goedkeuren van die uren niemand op. Niet aangevinkt = gewerkte uren gaan naar de
               teamleider en projectleider van dat dossier, mét code, zoals bij elk ander project.
+              De projecten die hierboven aan een werkmaatschappij hangen tellen altijd als indirect.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {indirectDossiers.map(d => (

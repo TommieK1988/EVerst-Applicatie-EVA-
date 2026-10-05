@@ -56,14 +56,18 @@ async function Verantwoording() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const [{ data: instellingen }, { data: uursoorten }, { data: werkmaatschappijen }, { data: medewerkers }, { data: dossiers }, { data: ploegen }, { data: afdelingen }] =
+  const [{ data: instellingen }, { data: uursoorten }, { data: werkmaatschappijen }, { data: medewerkers }, { data: dossiers }, { data: ploegen }, { data: afdelingen }, { data: zonderWm }] =
     await Promise.all([
       supabase.from('uren_instellingen').select('*').eq('id', true).maybeSingle(),
       supabase
         .from('planning_uursoorten')
         .select('id, naam, code, bouw7_id, uren_categorie, actief')
         .order('naam', { ascending: true }),
-      supabase.from('bedrijfsgegevens').select('id, naam, indirect_uren_dossier_id').order('naam'),
+      supabase
+        .from('bedrijfsgegevens')
+        .select('id, naam, indirect_uren_dossier_id, indirect_gewerkt_dossier_id')
+        .eq('type', 'werkmaatschappij')
+        .order('naam'),
       supabase
         .from('medewerkers')
         .select('id, voornaam, tussenvoegsel, achternaam')
@@ -80,6 +84,18 @@ async function Verantwoording() {
         .order('titel'),
       supabase.from('ploegen').select('id, naam, goedkeuring_modus').eq('actief', true).order('volgorde'),
       supabase.from('medewerker_afdelingen').select('naam').eq('actief', true).order('volgorde'),
+      // Zonder werkmaatschappij weet EVA niet waar verlof en overhead heen moeten. Externen (ZZP)
+      // hebben er geen nodig: zij boeken alleen gewerkte uren, op kantoor op het vaste
+      // extern-kantoorproject. Wie geen EVA-account heeft boekt niets.
+      supabase
+        .from('medewerkers')
+        .select('id, voornaam, tussenvoegsel, achternaam, afdeling')
+        .eq('actief', true)
+        .eq('extern', false)
+        .neq('gebruiker_type', 'geen')
+        .is('werkmaatschappij_id', null)
+        .order('voornaam')
+        .limit(500),
     ])
 
   return (
@@ -91,6 +107,11 @@ async function Verantwoording() {
       indirectDossiers={dossiers ?? []}
       ploegen={ploegen ?? []}
       afdelingen={(afdelingen ?? []).map((a: { naam: string }) => a.naam)}
+      zonderWerkmaatschappij={(zonderWm ?? []).map((m: { id: string; voornaam: string; tussenvoegsel: string | null; achternaam: string; afdeling: string | null }) => ({
+        id: m.id,
+        naam: [m.voornaam, m.tussenvoegsel, m.achternaam].filter(Boolean).join(' '),
+        afdeling: m.afdeling,
+      }))}
     />
   )
 }

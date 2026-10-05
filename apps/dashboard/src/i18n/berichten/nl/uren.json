@@ -67,6 +67,7 @@
     "geenResultaat": "Geen project gevonden voor „{zoek}”.",
     "indirecteUren": "Indirecte uren",
     "indirectUitleg": "Indirecte uren worden niet bewaakt, dus een bewakingscode hoeft hier niet.",
+    "kantoorUitleg": "Je uren komen vanzelf op het project voor indirecte uren van je werkmaatschappij. Je hoeft geen project te kiezen.",
     "bewakingscode": "Bewakingscode",
     "kiesEerstProject": "— kies eerst een project —",
     "codesOphalen": "Bezig met ophalen…",
@@ -143,7 +144,9 @@
     "uursoortNietIngedeeld": "\"{naam}\" is nog niet ingedeeld en kan daarom niet geboekt worden.",
     "kiesProject": "Kies een project voor deze uren.",
     "kiesBewakingscode": "Kies een bewakingscode voor deze uren.",
-    "geenIndirectDossier": "Er is nog geen dossier voor indirecte uren ingesteld. Vraag de beheerder dit te doen in Instellingen → Urenverantwoording."
+    "geenIndirectDossier": "Er is voor jouw werkmaatschappij nog geen project voor deze uren ingesteld. Vraag de beheerder dit te doen in Instellingen → Uren.",
+    "geenWerkmaatschappij": "Op je profiel staat nog geen werkmaatschappij, dus EVA weet niet op welk project deze uren horen. Vraag kantoor dit in te vullen.",
+    "externAlleenGewerkt": "Als externe boek je alleen gewerkte uren."
   },
   "keuren": {
     "titel": "Fiatteren",

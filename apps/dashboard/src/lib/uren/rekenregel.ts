@@ -59,8 +59,10 @@ export function indienBlokkade(
   totalen: WeekTotalen,
   contracturen: number,
   ongecodeerdeWerkregels = 0,
+  /** Externen (ZZP) hebben geen norm: elke week met uren is indienbaar. */
+  zonderNorm = false,
 ): string | null {
-  if (contracturen <= 0) {
+  if (contracturen <= 0 && !zonderNorm) {
     return 'Er staan geen contracturen voor je ingesteld. Vraag de planning om je rooster in te vullen.'
   }
   if (totalen.totaalUren <= 0) return 'Je hebt nog geen uren ingevuld.'
