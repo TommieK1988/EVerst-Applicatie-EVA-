@@ -12,6 +12,8 @@
   "saldo": "ஈடு நேர இருப்பு",
   "aantalUur": "{uren} மணிநேரம்",
   "geenAanvragen": "திட்டத்தில் உங்களுக்கு இன்னும் விடுப்பு இல்லை.",
+  "geenKomend": "திட்டமிடப்பட்ட விடுப்பு இல்லை.",
+  "verleden": "கடந்த விடுப்பு ({aantal})",
   "reden": "காரணம்:",
   "goedgekeurdDoor": "{naam} அங்கீகரித்தார்",
   "afgewezenDoor": "{naam} நிராகரித்தார்",

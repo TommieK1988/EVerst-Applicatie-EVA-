@@ -12,6 +12,8 @@
   "saldo": "Tijd-voor-tijdsaldo",
   "aantalUur": "{uren} uur",
   "geenAanvragen": "Er staat nog geen verlof voor je in de planning.",
+  "geenKomend": "Er staat geen verlof meer gepland.",
+  "verleden": "Verlof uit het verleden ({aantal})",
   "reden": "Reden:",
   "goedgekeurdDoor": "Goedgekeurd door {naam}",
   "afgewezenDoor": "Afgewezen door {naam}",

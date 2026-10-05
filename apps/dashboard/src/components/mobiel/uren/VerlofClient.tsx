@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
-import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   vraagVerlofAan, trekVerlofIn, berekenMijnVerlofUren,
@@ -13,6 +12,7 @@ import {
 } from '@/lib/uren/verlof'
 import type { IngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
 import IngeplandVerlofKaart from './IngeplandVerlofKaart'
+import VerlofAanvraagKaart from './VerlofAanvraagKaart'
 
 /**
  * Verlof aanvragen en je eigen aanvragen volgen, op de telefoon.
@@ -38,29 +38,17 @@ const labelStijl: React.CSSProperties = {
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 }
 
-type StatusSleutel = 'aangevraagd' | 'goedgekeurd' | 'afgewezen' | 'ingetrokken'
-
-/** Kleuren per status; de tekst staat in `verlof.status.*`. */
-const STATUS: Record<StatusSleutel, { kleur: string; achtergrond: string }> = {
-  aangevraagd: { kleur: '#a15c00', achtergrond: '#fdf3e3' },
-  goedgekeurd: { kleur: '#009439', achtergrond: '#e6f5ec' },
-  afgewezen: { kleur: '#c0392b', achtergrond: '#fdecea' },
-  ingetrokken: { kleur: '#8a8c86', achtergrond: '#f1f3f4' },
+/** Eén datum in de taal van de app, bijv. "8 sep" of met jaar "8 sep 2026". */
+function kortDatum(d: string, locale: string, metJaar: boolean) {
+  return new Date(`${d}T12:00:00`).toLocaleDateString(locale, {
+    day: 'numeric', month: 'short', ...(metJaar ? { year: 'numeric' } : {}),
+  })
 }
 
-/** Onbekende status valt terug op "aangevraagd", zoals voorheen. */
-function statusSleutel(status: string): StatusSleutel {
-  return status in STATUS ? status as StatusSleutel : 'aangevraagd'
-}
-
-/** "13:00-17:00" achter de periode, alleen bij een deel van een dag. */
-function venster(a: VerlofAanvraag) {
-  return a.startTijd && a.eindTijd ? ` · ${a.startTijd}-${a.eindTijd}` : ''
-}
-
-/** Eén datum in de taal van de app, bijv. "8 sep". */
-function kortDatum(d: string, locale: string) {
-  return new Date(`${d}T12:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+/** Vandaag als 'YYYY-MM-DD' in de tijdzone van de telefoon. */
+function vandaagIso() {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
 export default function VerlofClient({
@@ -75,9 +63,14 @@ export default function VerlofClient({
   const t = useTranslations('verlof')
   const locale = useDatumLocale()
   const getal = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 2 })
+  // Jaartal altijd erbij — de lijst loopt terug tot vorig jaar. Binnen één jaar alleen achter de
+  // einddatum ("8 sep t/m 12 sep 2026"), over de jaargrens achter allebei.
   const periode = (start: string, eind: string) => start === eind
-    ? kortDatum(start, locale)
-    : t('periode', { van: kortDatum(start, locale), tot: kortDatum(eind, locale) })
+    ? kortDatum(start, locale, true)
+    : t('periode', {
+      van: kortDatum(start, locale, start.slice(0, 4) !== eind.slice(0, 4)),
+      tot: kortDatum(eind, locale, true),
+    })
   // Namen van verlofsoorten stelt kantoor in; in een <option> kan geen component.
   const soortNamen = useVertalingen(soorten.map(s => s.naam))
   const router = useRouter()
@@ -86,10 +79,22 @@ export default function VerlofClient({
 
   // Eén lijst, nieuwste periode bovenaan: wat je in de app aanvroeg en wat er in de planning staat
   // horen voor de medewerker bij elkaar — het is allebei "wanneer ben ik vrij".
-  const regels = useMemo(() => [
-    ...aanvragen.map(a => ({ soort: 'aanvraag' as const, datum: a.startDatum, a })),
-    ...ingepland.map(v => ({ soort: 'planning' as const, datum: v.startDatum, v })),
-  ].sort((x, y) => y.datum.localeCompare(x.datum)), [aanvragen, ingepland])
+  // Verlof dat al voorbij is gaat onder een inklapknop, zodat bovenaan staat wat er nog komt.
+  const { komend, verleden } = useMemo(() => {
+    const vandaag = vandaagIso()
+    const alle = [
+      ...aanvragen.map(a => ({ soort: 'aanvraag' as const, datum: a.startDatum, eind: a.eindDatum, a })),
+      ...ingepland.map(v => ({ soort: 'planning' as const, datum: v.startDatum, eind: v.eindDatum, v })),
+    ].sort((x, y) => y.datum.localeCompare(x.datum))
+    return { komend: alle.filter(r => r.eind >= vandaag), verleden: alle.filter(r => r.eind < vandaag) }
+  }, [aanvragen, ingepland])
+  const [verledenOpen, setVerledenOpen] = useState(false)
+
+  const toonRegel = (r: (typeof komend)[number]) => r.soort === 'planning'
+    ? <IngeplandVerlofKaart key={`p-${r.v.id}`} verlof={r.v}
+      periode={periode(r.v.startDatum, r.v.eindDatum)} />
+    : <VerlofAanvraagKaart key={r.a.id} aanvraag={r.a}
+      periode={periode(r.a.startDatum, r.a.eindDatum)} onIntrekken={intrekken} />
 
   const [open, setOpen] = useState(false)
   const [bezig, setBezig] = useState(false)
@@ -163,76 +168,30 @@ export default function VerlofClient({
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {regels.length === 0 ? (
+        {komend.length === 0 && (
           <p style={{ textAlign: 'center', color: '#6b757c', padding: '32px 0', fontSize: 14 }}>
-            {t('geenAanvragen')}
+            {verleden.length === 0 ? t('geenAanvragen') : t('geenKomend')}
           </p>
-        ) : regels.map(r => {
-          if (r.soort === 'planning') {
-            return <IngeplandVerlofKaart key={`p-${r.v.id}`} verlof={r.v}
-              periode={periode(r.v.startDatum, r.v.eindDatum)} />
-          }
-          const a = r.a
-          const sleutel = statusSleutel(a.status)
-          const st = STATUS[sleutel]
-          return (
-            <div key={a.id} style={{
-              border: '1px solid var(--border)', borderRadius: 12,
-              background: 'var(--bg-elev)', padding: '12px 14px',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
-                    {periode(a.startDatum, a.eindDatum)}{venster(a)}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#6b757c', marginTop: 2 }}>
-                    <VertaalbareTekst tekst={a.uursoortNaam} label={false} />
-                    {' · '}{t('aantalUur', { uren: a.urenTotaal.toLocaleString(locale) })}
-                  </div>
-                </div>
-                <span style={{
-                  padding: '4px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                  color: st.kleur, background: st.achtergrond, height: 'fit-content', maxWidth: '50%',
-                }}>
-                  {t(`status.${sleutel}`)}
-                </span>
-              </div>
+        )}
+        {komend.map(toonRegel)}
 
-              {a.toelichting && (
-                <div style={{ fontSize: 12, color: '#8a949a', marginTop: 6 }}>{a.toelichting}</div>
-              )}
-              {a.status === 'afgewezen' && a.afwijzingReden && (
-                <div style={{ fontSize: 12, color: '#c0392b', marginTop: 6 }}>
-                  <strong>{t('reden')}</strong>{' '}
-                  <VertaalbareTekst tekst={a.afwijzingReden} />
-                </div>
-              )}
-              {/* Een hele afdeling kan beoordelen, dus de naam erbij: anders weet de aanvrager
-                  niet bij wie hij moet zijn als hij er iets over wil vragen. */}
-              {a.beoordelaarNaam && (a.status === 'goedgekeurd' || a.status === 'afgewezen') && (
-                <div style={{ fontSize: 11, color: '#8a949a', marginTop: 6 }}>
-                  {a.status === 'goedgekeurd'
-                    ? t('goedgekeurdDoor', { naam: a.beoordelaarNaam })
-                    : t('afgewezenDoor', { naam: a.beoordelaarNaam })}
-                </div>
-              )}
-              {a.status === 'goedgekeurd' && a.bouw7Status === 'fout' && (
-                <div style={{ fontSize: 11, color: '#a15c00', marginTop: 6 }}>
-                  {t('nietInBouw7')}
-                </div>
-              )}
-              {a.status === 'aangevraagd' && (
-                <button type="button" onClick={() => intrekken(a)}
-                  style={{
-                    marginTop: 8, border: 'none', background: 'transparent', padding: 0,
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: '#c0392b', cursor: 'pointer',
-                  }}>
-                  {t('intrekken')}
-                </button>
-              )}
-            </div>
-          )
-        })}
+        {verleden.length > 0 && (
+          <button type="button" onClick={() => setVerledenOpen(o => !o)} aria-expanded={verledenOpen}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              marginTop: komend.length > 0 ? 8 : 0, padding: '12px 14px', borderRadius: 12,
+              border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c', textAlign: 'left',
+            }}>
+            <span>{t('verleden', { aantal: verleden.length })}</span>
+            <svg aria-hidden width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+              style={{ flexShrink: 0, transition: 'transform 150ms', transform: verledenOpen ? 'rotate(180deg)' : 'none' }}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        )}
+        {verledenOpen && verleden.map(toonRegel)}
       </div>
 
       <div style={{

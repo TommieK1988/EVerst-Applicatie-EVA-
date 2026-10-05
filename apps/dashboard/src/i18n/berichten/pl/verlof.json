@@ -12,6 +12,8 @@
   "saldo": "Saldo nadgodzin (czas za czas)",
   "aantalUur": "{uren} godz.",
   "geenAanvragen": "Nie masz jeszcze urlopu w planie.",
+  "geenKomend": "Nie masz zaplanowanego urlopu.",
+  "verleden": "Urlop z przeszłości ({aantal})",
   "reden": "Powód:",
   "goedgekeurdDoor": "Zatwierdził(a): {naam}",
   "afgewezenDoor": "Odrzucił(a): {naam}",
