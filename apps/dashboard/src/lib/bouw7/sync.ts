@@ -1061,13 +1061,12 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
       const straat   = e.address?.trim() || null
       const postcode = normaliseerPostcode(e.zipCode)
       const plaats   = e.city?.trim() || null
-      // Noodcontact (maatwerkveld) staat op "Mijn gegevens" in de app. Alleen-lezen in EVA,
-      // dus niet in BOUW7_MEDEWERKER_VELDEN: Bouw7 blijft hier de bron.
-      const noodcontact = e['caNoodcontact+Nummer']?.trim() || null
+      // Noodcontact (maatwerkveld caNoodcontact+Nummer) is eenmalig uit Bouw7 opgehaald en
+      // wordt sinds okt 2026 in EVA beheerd: de sync schrijft het bewust niet meer.
       const hash = fingerprint({
         v: e.firstName ?? '', tv: e.prefix ?? null, a: e.lastName ?? '',
         em: e.emailAddress ?? null, tel: e.phoneNumber ?? null,
-        str: straat, pc: postcode, pl: plaats, nood: noodcontact,
+        str: straat, pc: postcode, pl: plaats,
         act: actief, ext: e.external ?? false,
         gb: e.birthDate ?? null, dvd: e.dateOfEmployment ?? null, udp: e.dateOfResignation ?? null,
         hr: uurtariefVerkoop, cr: uurtariefKostprijs,
@@ -1081,7 +1080,6 @@ export async function syncEmployees(opts?: { mode?: SyncMode }): Promise<SyncRes
         adres_straat:        straat,
         adres_postcode:      postcode,
         adres_plaats:        plaats,
-        noodcontact,
         actief,
         extern:              e.external ?? false,
         geboortedatum:       toDate(e.birthDate),

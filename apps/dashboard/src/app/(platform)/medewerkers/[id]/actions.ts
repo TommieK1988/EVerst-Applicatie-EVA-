@@ -242,6 +242,8 @@ const gegevensSchema = z.object({
   adres_plaats:       z.string().nullable(),
   geboortedatum:      z.string().nullable(),
   bsn:                z.string().nullable(),
+  /** Vrije tekst (naam, relatie, nummer), vaak meerdere regels. EVA-beheerd sinds okt 2026. */
+  noodcontact:        z.string().trim().nullable().transform(v => v || null),
   werkmaatschappij_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
   relatie_id:         z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
   kleur:              z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().or(z.literal('')).transform(v => v || null),
@@ -275,7 +277,7 @@ export async function updateMedewerkerGegevens(
   const set = kiesKanaal(await getRechtenBundel(), 'beide')
   const velden = { ...parsed.data } as Record<string, unknown>
   if (!heeftFunctie(set, 'medewerkers.persoonsgegevens')) {
-    for (const k of ['adres_straat', 'adres_postcode', 'adres_plaats', 'geboortedatum', 'bsn']) delete velden[k]
+    for (const k of ['adres_straat', 'adres_postcode', 'adres_plaats', 'geboortedatum', 'bsn', 'noodcontact']) delete velden[k]
   }
   if (!heeftFunctie(set, 'medewerkers.tarieven')) {
     for (const k of ['uurtarief_verkoop', 'uurtarief_kostprijs', 'cao_schaal', 'cao_document_id', 'cao_trede']) delete velden[k]

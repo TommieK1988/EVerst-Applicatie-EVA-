@@ -34,6 +34,7 @@ type FormState = {
   adres_plaats: string
   geboortedatum: string
   bsn: string
+  noodcontact: string
   werkmaatschappij_id: string
   relatie_id: string
   kleur: string
@@ -67,6 +68,7 @@ function toForm(m: Medewerker): FormState {
     adres_plaats:        m.adres_plaats ?? '',
     geboortedatum:       m.geboortedatum ?? '',
     bsn:                 m.bsn ?? '',
+    noodcontact:         m.noodcontact ?? '',
     werkmaatschappij_id: m.werkmaatschappij_id ?? '',
     relatie_id:          m.relatie_id ?? '',
     kleur:               m.kleur ?? '',
@@ -378,6 +380,7 @@ export default function MedewerkerGegevensForm({
         adres_plaats:        state.adres_plaats    || null,
         geboortedatum:       state.geboortedatum   || null,
         bsn:                 state.bsn             || null,
+        noodcontact:         state.noodcontact.trim() || null,
         werkmaatschappij_id: state.werkmaatschappij_id || null,
         relatie_id:          state.relatie_id || null,
         kleur:               state.kleur || null,
@@ -459,10 +462,21 @@ export default function MedewerkerGegevensForm({
                 <Veld label={<>BSN <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(AVG-gevoelig)</span></>}>
                   <BsnVeld value={editing ? state.bsn : (m.bsn ?? '')} onChange={v => set('bsn', v)} disabled={!editing} />
                 </Veld>
-                {/* Ook tijdens bewerken alleen-lezen: het komt uit Bouw7 en de sync zou een
-                    wijziging hier overschrijven. Vrije tekst, vaak over meerdere regels. */}
-                <Veld label={<>Noodcontact <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(uit Bouw7)</span></>} span>
-                  <span style={{ ...(m.noodcontact ? valueStyle : mutedStyle), whiteSpace: 'pre-line' }}>{m.noodcontact || '—'}</span>
+                {/* Vrije tekst, vaak over meerdere regels: naam, relatie en nummer door elkaar.
+                    In de app worden de nummers erin aantikbaar. */}
+                <Veld label="Noodcontact" span>
+                  {editing ? (
+                    <textarea
+                      className="eva-input"
+                      rows={3}
+                      style={{ width: '100%', resize: 'vertical', fontFamily: 'var(--font-ui)' }}
+                      value={state.noodcontact}
+                      onChange={e => set('noodcontact', e.target.value)}
+                      placeholder={'Naam (relatie)\n06-12345678'}
+                    />
+                  ) : (
+                    <span style={{ ...(m.noodcontact ? valueStyle : mutedStyle), whiteSpace: 'pre-line' }}>{m.noodcontact || '—'}</span>
+                  )}
                 </Veld>
               </>
             )}

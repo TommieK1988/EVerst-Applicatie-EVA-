@@ -126,7 +126,7 @@ function Heel({ children }: { children: React.ReactNode }) {
 const TELEFOONNUMMER = /\+?\d[\d\s()-]{7,}\d/g
 
 /**
- * Het noodcontact komt als vrije tekst uit Bouw7 — naam, relatie en nummer door elkaar,
+ * Het noodcontact is vrije tekst (beheerd in EVA) — naam, relatie en nummer door elkaar,
  * soms over meerdere regels. Opsplitsen in losse velden zou bij de helft misgaan, dus
  * de tekst blijft staan zoals de administratie hem invulde en alleen de nummers erin
  * worden aantikbaar. In een noodgeval wil je bellen, niet overtypen.
