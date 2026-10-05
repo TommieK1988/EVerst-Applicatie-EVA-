@@ -4,7 +4,7 @@ import type { Medewerker, MedewerkerRooster, PlanningItemVerrijkt, PlanningUurso
 import MedewerkerTimeline from '@/components/planning/MedewerkerTimeline'
 import { haalPlanningItemsMetExpansie } from '../bedrijfsagenda/actions'
 import { berekenFeestdagen } from '@/lib/agenda/feestdagen'
-import { PageHeader } from '@/components/ui'
+import { PageHeader, SubTabs } from '@/components/ui'
 import VerlofGoedkeurenKnop from '@/components/planning/VerlofGoedkeurenKnop'
 import { getVerlofBeoordeelStand } from '@/lib/uren/verlof'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
@@ -12,9 +12,16 @@ import { haalAfwezigheidVoorPlanning } from '@/lib/planning/afwezigheid'
 
 export const metadata: Metadata = { title: 'Medewerkerplanning' }
 
-/** De medewerkerplanning gaat over de buitendienst: alleen de afdeling Uitvoering.
- *  Pas deze waarde aan als de afdelingsindeling wijzigt. */
-const PLANBARE_AFDELING = 'Uitvoering'
+/** Twee weergaven op dit scherm (`?deel=`):
+ *  - Uitvoering: de buitendienst, om werk in te plannen (standaard).
+ *  - Kantoor: staat niet op dossiers, maar je wilt wel zien wie er wanneer met verlof is en
+ *    waar dat samenvalt. Daarom staat daar de tellerregel "Afwezig" boven.
+ *  Pas de afdelingsnamen aan als de afdelingsindeling wijzigt. */
+const AFDELINGEN = {
+  uitvoering: ['Uitvoering'],
+  kantoor:    ['Directie', 'Ondersteunend', 'Projectbureau'],
+} as const
+type Deel = keyof typeof AFDELINGEN
 
 /** Dossierregel zoals dit scherm hem nodig heeft: alleen titel + projectleider voor de balken. */
 type DossierRegel = {
@@ -28,7 +35,14 @@ type DossierRegel = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-export default async function MedewerkerplanningPage() {
+export default async function MedewerkerplanningPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deel?: string }>
+}) {
+  const { deel: deelParam } = await searchParams
+  const deel: Deel = deelParam === 'kantoor' ? 'kantoor' : 'uitvoering'
+  const afdelingen: readonly string[] = AFDELINGEN[deel]
   const supabase = db()
   const jaar     = new Date().getFullYear()
 
@@ -70,9 +84,8 @@ export default async function MedewerkerplanningPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const p of ((ploegenRes.data ?? []) as any[])) ploegNamen[p.id] = p.naam
 
-  // Alleen uitvoerend personeel: kantoor en ondersteuning horen niet op dit bord.
   const medewerkers = ((medewerkerRes.data ?? []) as Medewerker[])
-    .filter(m => m.afdeling === PLANBARE_AFDELING)
+    .filter(m => m.afdeling !== null && afdelingen.includes(m.afdeling))
   const roosters    = (roostersRes.data ?? []) as MedewerkerRooster[]
   const afwezigheid = afwezigheidRes
   const uursoorten  = (uursoortRes.data ?? []) as PlanningUursoort[]
@@ -100,6 +113,12 @@ export default async function MedewerkerplanningPage() {
       {/* Toelichting op de bediening staat in de HELP-tekst van de topbar (lib/page-help.ts). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <PageHeader eyebrow="Planning" title="Medewerkerplanning" className="mb-3" />
+        <div style={{ paddingTop: 6 }}>
+          <SubTabs delen={[
+            { deel: 'uitvoering', label: 'Uitvoering', actief: deel === 'uitvoering' },
+            { deel: 'kantoor',    label: 'Kantoor',    actief: deel === 'kantoor' },
+          ]} />
+        </div>
         {/* Verlof beoordelen hoort hier: je ziet meteen wie er die week al vrij is en wat er staat. */}
         <div style={{ marginLeft: 'auto', paddingTop: 6 }}>
           <VerlofGoedkeurenKnop initieelAantal={verlofStand.aantal} />
@@ -117,6 +136,9 @@ export default async function MedewerkerplanningPage() {
         uursoorten={uursoorten}
         agendaItems={agendaItems}
         feestdagen={feestdagen}
+        toonAfwezigheidTeller={deel === 'kantoor'}
+        // Per afdeling gegroepeerd: overlap binnen één afdeling is wat er het meest toe doet.
+        standaardSortering={deel === 'kantoor' ? 'afdeling' : 'voornaam'}
       />
     </div>
   )

@@ -1413,7 +1413,8 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     sections: [
       { title: 'Inplannen', body: 'Klik op een lege cel om snel een planning-item toe te voegen (bewakingscode verplicht). Sleep een balk om te verschuiven; met Ctrl+slepen of rechtsklik+slepen kopieer je een item. Dubbelklik op een balk opent het dossier.' },
       { title: 'Afwezigheid & conflicten', body: 'Roosters staan als grijze achtergrond; verlof is licht rood, ziek donkerrood, training en overige eigen kleuren, feestdagen worden automatisch berekend. Hover toont conflictwaarschuwingen bij overlap of werk binnen een verlof-/ziek-/feestdagblok.' },
-      { title: 'Filteren', body: 'Filter op voornaam, afdeling, functie of ploeg. Kantoorafdelingen (Projectbureau, Administratie, Directie) worden weggelaten — alleen uitvoerend personeel verschijnt.' },
+      { title: 'Uitvoering en Kantoor', body: 'Bovenaan wissel je tussen Uitvoering (de buitendienst, om werk in te plannen) en Kantoor (Directie, Ondersteunend en Projectbureau). Op Kantoor staat een extra regel "Afwezig" met per werkdag het aantal collega’s dat er niet is: licht rood bij één, fel rood zodra twee of meer tegelijk weg zijn. Ga met de muis op een dag staan voor de namen.' },
+      { title: 'Sorteren', body: 'Sorteer op voornaam, afdeling, functie of ploeg. Bij afdeling, functie en ploeg krijgt elke groep een eigen kopje.' },
       { title: 'Verlofaanvragen', body: 'De knop rechtsboven kleurt fel rood zodra er verlof op beoordeling wacht. Een hele afdeling beoordeelt: verlof van Uitvoering gaat naar Projectbureau, al het overige naar Directie (in te stellen op Instellingen → Uren). Iedereen van die afdeling kan goed- of afkeuren; wie het eerst klikt handelt de aanvraag af. Bij goedkeuren verschijnt het verlof meteen als afwezigheid op deze tijdlijn en gaat het naar Bouw7; de aanvrager krijgt een melding met jouw naam erin.' },
     ],
   }],

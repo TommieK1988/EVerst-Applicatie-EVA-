@@ -37,6 +37,7 @@ import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
 import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
+import { AfwezigheidTellerLabel, AfwezigheidTellerRij } from './AfwezigheidTellerRij'
 import {
   DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, roosterOpDag, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
@@ -97,7 +98,7 @@ const dialogLabelStyle: React.CSSProperties = {
  */
 type BalkLabel = 'dossier' | 'activiteit'
 
-type SortKey = 'voornaam' | 'afdeling' | 'functie' | 'ploeg'
+export type SortKey = 'voornaam' | 'afdeling' | 'functie' | 'ploeg'
 const SORT_OPTIES: { key: SortKey; label: string }[] = [
   { key: 'voornaam', label: 'Voornaam' },
   { key: 'afdeling', label: 'Afdeling' },
@@ -1204,6 +1205,12 @@ type Props = {
    * dezelfde dossiernaam; zet hem daar op 'activiteit' zodat je ziet wélk werk er staat.
    */
   balkLabel?: BalkLabel
+  /**
+   * Extra regel "Afwezig" bovenaan met per werkdag het aantal afwezigen, rood bij overlap.
+   * Voor de weergave Kantoor: daar is verlof het onderwerp, niet planitems.
+   */
+  toonAfwezigheidTeller?: boolean
+  standaardSortering?: SortKey
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -1212,6 +1219,7 @@ export default function MedewerkerTimeline({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
   projectleiders = {}, ploegNamen = {}, uursoorten = [], agendaItems = [], feestdagen = [],
   alleenGeplandeMedewerkers = false, balkLabel = 'dossier',
+  toonAfwezigheidTeller = false, standaardSortering = 'voornaam',
 }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -1233,7 +1241,7 @@ export default function MedewerkerTimeline({
   const [conflictInfo,  setConflictInfo]  = useState<{ medewerker: Medewerker; conflicten: ConflictDetail[] } | null>(null)
   const [oplosConflict, setOplosConflict] = useState<{ medewerkerId: string; conflict: ConflictDetail } | null>(null)
 
-  const [sortBy, setSortBy] = useState<SortKey>('voornaam')
+  const [sortBy, setSortBy] = useState<SortKey>(standaardSortering)
 
   /** Aanduiding van één planitem in sleep-overlay en kopieerhint — volgt `balkLabel`. */
   function itemLabel(e: { dossier_id?: string | null; planning_activiteiten?: PlanningItemVerrijkt['planning_activiteiten'] }): string {
@@ -1358,6 +1366,10 @@ export default function MedewerkerTimeline({
   }, [feestdagen, vs, ve])
 
   const heeftAgendaRij = agendaItems.length > 0 || feestdagen.length > 0
+  // Hoogte van de vaste regels boven de medewerkers (bedrijfsagenda, afwezigheidsteller).
+  const tellerTop = heeftAgendaRij ? RIJ_HOOGTE : 0
+  const kopHoogte = tellerTop + (toonAfwezigheidTeller ? RIJ_HOOGTE : 0)
+  const vrijeDagen = useMemo(() => new Set([...feestdagenDagen, ...atvDagen]), [feestdagenDagen, atvDagen])
 
   // Per-medewerker layout: zichtbare entries + conflictsegmenten + vaste rijhoogte + top.
   const medewerkerLayout = useMemo(() => {
@@ -1379,7 +1391,7 @@ export default function MedewerkerTimeline({
     }
     const groepVan = GROEP_VAN[sortBy] ?? null
     let vorigeGroep: string | null = null
-    let accTop = heeftAgendaRij ? RIJ_HOOGTE : 0
+    let accTop = kopHoogte
     return zichtbareMedewerkers.map(m => {
       const alle    = entriesPerMedewerker[m.id] ?? []
       const myEntries = alle.filter(e => {
@@ -1417,13 +1429,13 @@ export default function MedewerkerTimeline({
       accTop += RIJ_VAST
       return row
     })
-  }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, heeftAgendaRij, sortBy, ploegNamen])
+  }, [zichtbareMedewerkers, entriesPerMedewerker, afwezigheidPerMedewerker, feestAtvIntervals, vs, ve, kopHoogte, sortBy, ploegNamen])
 
   // Uit de layout afgeleid, want de tussenbalken tellen mee in de hoogte.
   const laatsteRij = medewerkerLayout[medewerkerLayout.length - 1]
   const bodyHoogte = laatsteRij
     ? laatsteRij.top + RIJ_VAST
-    : (heeftAgendaRij ? RIJ_HOOGTE : 0)
+    : kopHoogte
 
   /**
    * Nieuwe start/eind voor een entry op een doel-dag, op de roostertijden van de medewerker
@@ -1555,6 +1567,7 @@ export default function MedewerkerTimeline({
           }}>Bedrijfsagenda</span>
         </div>
       )}
+      {toonAfwezigheidTeller && <AfwezigheidTellerLabel />}
       {medewerkerLayout.map(({ medewerker: m, heeftConflict, openConflicten, groepLabel }) => (
         <Fragment key={m.id}>
         {groepLabel && (
@@ -1633,6 +1646,16 @@ export default function MedewerkerTimeline({
           dagen={dagen}
         />
       )}
+      {toonAfwezigheidTeller && (
+        <AfwezigheidTellerRij
+          top={tellerTop}
+          dagen={dagen}
+          layout={layout}
+          medewerkers={zichtbareMedewerkers}
+          afwezigheidPerMedewerker={afwezigheidPerMedewerker}
+          vrijeDagen={vrijeDagen}
+        />
+      )}
       {medewerkerLayout.map(({ medewerker: m, top, entries: rijEntries, conflicten, groepLabel, groepTop }) => (
         <Fragment key={m.id}>
         {groepLabel && (
@@ -1694,6 +1717,12 @@ export default function MedewerkerTimeline({
         <AlertTriangle size={12} color="#ef4444" />
         <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>Conflict — klik op de rode gloed om op te lossen</span>
       </div>
+      {toonAfwezigheidTeller && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 12, height: 12, borderRadius: 2, background: '#dc2626' }} />
+          <span style={{ fontSize: 10, color: KLEUR.fgMuted }}>Afwezig: 2 of meer tegelijk weg (overlap)</span>
+        </div>
+      )}
     </div>
   )
 
