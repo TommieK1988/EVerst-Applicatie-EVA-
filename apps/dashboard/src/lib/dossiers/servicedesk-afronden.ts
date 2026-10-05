@@ -17,7 +17,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { vereisSessie, GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
-import { assertDossierBewerkbaar } from '@/lib/dossiers/guards'
+import { assertDossierBewerkbaar, magBonAfronden } from '@/lib/dossiers/guards'
 import { updateServicedeskSubstatus } from '@/lib/dossiers/actions'
 import { medewerkerNaam } from '@/lib/dossiers/medewerker-naam'
 import { meldAanProjectleider } from '@/lib/dossiers/meld-projectleider'
@@ -34,10 +34,13 @@ const VOORBIJ_UITGEVOERD = new Set(['uitgevoerd', 'kosten_compleet', 'financieel
 
 type Uitkomst = { ok: true } | { ok: false; error: string }
 
-/** Ingelogd als platformgebruiker. Gooit anders — de aanroepers vangen dat af. */
-async function poort(): Promise<CurrentMedewerker> {
+/**
+ * Ingelogd en betrokken bij de bon (zie `magBonAfronden`): platformgebruikers altijd, vakmannen
+ * met een app-account als ze op de bon ingepland staan. Gooit anders — de aanroepers vangen dat af.
+ */
+async function poort(dossierId: string): Promise<CurrentMedewerker> {
   const medewerker = await vereisSessie()
-  if (medewerker.gebruiker_type !== 'platform_gebruiker') {
+  if (!(await magBonAfronden(dossierId, medewerker))) {
     throw new GeenToegangError('Je hebt geen toegang tot deze bon.')
   }
   return medewerker
@@ -108,7 +111,7 @@ export async function getServicedeskAfronding(dossierId: string): Promise<Servic
 /** Foto van een pakbon aan de bon hangen. FormData: `foto` (bestand), optioneel `opmerking`. */
 export async function voegPakbonToe(dossierId: string, formData: FormData): Promise<Uitkomst> {
   try {
-    const medewerker = await poort()
+    const medewerker = await poort(dossierId)
     await assertDossierBewerkbaar(dossierId)
     const bon = await haalBon(dossierId)
     if (!bon) return { ok: false, error: 'Dit is geen servicedeskbon.' }
@@ -155,7 +158,7 @@ export async function voegPakbonToe(dossierId: string, formData: FormData): Prom
  */
 export async function voegMateriaalToe(dossierId: string, tekst: string): Promise<Uitkomst> {
   try {
-    const medewerker = await poort()
+    const medewerker = await poort(dossierId)
     await assertDossierBewerkbaar(dossierId)
     const bon = await haalBon(dossierId)
     if (!bon) return { ok: false, error: 'Dit is geen servicedeskbon.' }
@@ -187,7 +190,9 @@ export async function voegMateriaalToe(dossierId: string, tekst: string): Promis
 /** Een eigen pakbon weer weghalen (verkeerde foto). Andermans pakbonnen blijven staan. */
 export async function verwijderPakbon(pakbonId: string): Promise<Uitkomst> {
   try {
-    const medewerker = await poort()
+    // Geen bon-poort nodig: je kunt alleen je eigen regel weghalen (check hieronder), en die
+    // kon je alleen plaatsen als je door de poort kwam.
+    const medewerker = await vereisSessie()
     const supabase = createAdminClient()
     const { data: pakbon } = await supabase
       .from('dossier_pakbonnen')
@@ -224,7 +229,7 @@ export async function meldServicedeskGereed(
   invoer: { uitgevoerdeWerkzaamheden: string; handtekeningB64: string | null; getekendDoor: string | null },
 ): Promise<Uitkomst & { waarschuwing?: string }> {
   try {
-    const medewerker = await poort()
+    const medewerker = await poort(dossierId)
     await assertDossierBewerkbaar(dossierId)
     const bon = await haalBon(dossierId)
     if (!bon) return { ok: false, error: 'Dit is geen servicedeskbon.' }

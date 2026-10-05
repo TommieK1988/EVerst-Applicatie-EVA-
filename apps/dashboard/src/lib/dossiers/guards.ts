@@ -83,3 +83,32 @@ export async function magVoortgangWijzigen(dossierId: string | null | undefined)
   const medewerker = await getCurrentMedewerker()
   return heeftProjectrol(dossierId, medewerker?.id)
 }
+
+/**
+ * Mag deze medewerker een bon afronden vanaf de telefoon (materiaal, gereed melden, opmerking
+ * voor kantoor)?
+ *
+ * - Platformgebruikers: ja, zoals altijd.
+ * - App-gebruikers (de vakmannen, `gebruiker_type = 'app_gebruiker'`): alleen op een bon waar ze
+ *   op ingepland staan of een projectrol op hebben. Op een servicedeskbon staat de monteur in de
+ *   planning, niet in de rollen — dat is juist wie hem gereed meldt. Een eerdere poort op alleen
+ *   `platform_gebruiker` sloot ze daardoor allemaal buiten (5 van de 6 ingeplande monteurs).
+ * - `geen`: nee.
+ */
+export async function magBonAfronden(
+  dossierId: string,
+  medewerker: { id: string; gebruiker_type: string },
+): Promise<boolean> {
+  if (medewerker.gebruiker_type === 'platform_gebruiker') return true
+  if (medewerker.gebruiker_type !== 'app_gebruiker') return false
+  if (await heeftProjectrol(dossierId, medewerker.id)) return true
+
+  // Begrensd: één medewerker op één dossier, één rij is genoeg.
+  const { data } = await createAdminClient()
+    .from('planning_items')
+    .select('id, planning_activiteiten!inner(dossier_id)')
+    .eq('medewerker_id', medewerker.id)
+    .eq('planning_activiteiten.dossier_id', dossierId)
+    .limit(1)
+  return (data?.length ?? 0) > 0
+}

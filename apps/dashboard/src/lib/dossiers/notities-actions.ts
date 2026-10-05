@@ -3,7 +3,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
-import { assertDossierBewerkbaar } from './guards'
+import { assertDossierBewerkbaar, magBonAfronden } from './guards'
 import { meldAanProjectleider } from './meld-projectleider'
 
 /** Foto's bij een opmerking vanaf de telefoon — zelfde publieke bucket als de pakbonnen. */
@@ -101,7 +101,7 @@ export async function plaatsNotitieMetFotos(
 
   const mw = await getCurrentMedewerker()
   if (!mw) return { ok: false, error: 'Niet ingelogd' }
-  if (mw.gebruiker_type !== 'platform_gebruiker') return { ok: false, error: 'Je hebt geen toegang tot dit dossier.' }
+  if (!(await magBonAfronden(dossierId, mw))) return { ok: false, error: 'Je hebt geen toegang tot dit dossier.' }
   await assertDossierBewerkbaar(dossierId)
 
   const supabase = createAdminClient()
