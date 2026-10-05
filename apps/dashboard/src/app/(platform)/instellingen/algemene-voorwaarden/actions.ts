@@ -21,6 +21,7 @@ export async function getAlgemeneVoorwaarden(): Promise<AlgemeneVoorwaarden[]> {
   const { data, error } = await db()
     .from('algemene_voorwaarden')
     .select('*')
+    .is('gearchiveerd_op', null)
     .order('naam')
   if (error) throw new Error(error.message)
   return data ?? []
@@ -41,8 +42,12 @@ export async function maakAlgemeneVoorwaarden(data: {
   return row.id as string
 }
 
+/** Archiveert in plaats van te verwijderen (DEVELOPMENT_STANDARDS §5.5): calculaties
+ *  en verzonden offertes verwijzen naar deze rij. Hij verdwijnt uit de keuzelijsten,
+ *  bestaande offertes houden hem. */
 export async function verwijderAlgemeneVoorwaarden(id: string): Promise<void> {
-  const { error } = await db().from('algemene_voorwaarden').delete().eq('id', id)
+  const { error } = await db().from('algemene_voorwaarden')
+    .update({ gearchiveerd_op: new Date().toISOString(), is_standaard: false }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(PAD)
 }

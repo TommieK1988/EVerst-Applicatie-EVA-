@@ -47,7 +47,7 @@ export async function verwijderLayout(id: string): Promise<{ ok: true } | { ok: 
   try {
     await _verwijderLayout(id)
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Fout bij verwijderen' }
+    return { ok: false, error: e instanceof Error ? e.message : 'Archiveren mislukt' }
   }
   revalidatePath(LIJST)
   return { ok: true }

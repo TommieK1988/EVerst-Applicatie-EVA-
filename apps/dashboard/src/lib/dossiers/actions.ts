@@ -4527,11 +4527,17 @@ export async function deleteCalculatieVanDossier(dossierId: string): Promise<{ o
     // Vind quotes voor dit project
     const { data: quotes, error: quotesError } = await eventsCalcSupa
       .from('quotes')
-      .select('id')
+      .select('id, status')
       .eq('project_id', dossier.everts_calc_project_id)
 
     if (quotesError) {
       return { ok: false, error: `Fout bij ophalen quotes: ${quotesError.message}` }
+    }
+
+    // Een verzonden offerte is een juridisch document en blijft altijd bewaard
+    // (DEVELOPMENT_STANDARDS §5.5; de database weigert het verwijderen ook).
+    if ((quotes ?? []).some((q: { status: string }) => q.status !== 'concept')) {
+      return { ok: false, error: 'Er is al een offerte verzonden; die en de calculatie blijven bewaard.' }
     }
 
     // Verwijder alle quotes

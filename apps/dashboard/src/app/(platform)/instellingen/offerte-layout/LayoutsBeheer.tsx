@@ -72,15 +72,15 @@ export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
   }
 
   async function handleVerwijder(id: string, naam: string) {
-    if (!await bevestig({ titel: `Layout "${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
+    if (!await bevestig({ titel: `Lay-out "${naam}" archiveren?`, omschrijving: 'Je kunt hem daarna niet meer kiezen voor nieuwe offertes. Offertes en calculaties die hem al gebruiken houden hem.', bevestigLabel: 'Archiveren' })) return
     startT(async () => {
       try {
         const r = await verwijderLayout(id)
         if (!r.ok) { toast.error(r.error); return }
         setLayouts(l => l.filter(x => x.id !== id))
-        toast.success('Verwijderd')
+        toast.success('Gearchiveerd')
         router.refresh()
-      } catch { toast.error('Fout bij verwijderen') }
+      } catch { toast.error('Archiveren mislukt') }
     })
   }
 
@@ -169,7 +169,7 @@ export default function LayoutsBeheer({ initial }: { initial: LayoutItem[] }) {
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/instellingen/offerte-layout/${l.id}`}>Bewerken</Link>
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleVerwijder(l.id, l.naam)}>Verwijder</Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleVerwijder(l.id, l.naam)}>Archiveer</Button>
                     </div>
                   </div>
                 ))}

@@ -25,6 +25,7 @@ export async function getBetalingscondities(): Promise<Betalingsconditie[]> {
   const { data, error } = await db()
     .from('betalingscondities')
     .select('id, naam, termijnen, volgorde, created_at')
+    .is('gearchiveerd_op', null)
     .order('volgorde')
     .order('naam')
   if (error) throw new Error(error.message)
@@ -59,8 +60,12 @@ export async function updateBetalingsconditie(id: string, data: {
   revalidatePath(PAD)
 }
 
+/** Archiveert in plaats van te verwijderen (DEVELOPMENT_STANDARDS §5.5): calculaties
+ *  en verzonden offertes verwijzen naar deze rij. Hij verdwijnt uit de keuzelijsten,
+ *  bestaande offertes houden hem. */
 export async function verwijderBetalingsconditie(id: string): Promise<void> {
-  const { error } = await db().from('betalingscondities').delete().eq('id', id)
+  const { error } = await db().from('betalingscondities')
+    .update({ gearchiveerd_op: new Date().toISOString(), is_standaard: false }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(PAD)
 }

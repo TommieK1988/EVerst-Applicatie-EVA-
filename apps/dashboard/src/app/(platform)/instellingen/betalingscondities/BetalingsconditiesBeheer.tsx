@@ -130,11 +130,11 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
   }
 
   async function verwijder(id: string, naam: string) {
-    if (!await bevestig({ titel: `"${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
+    if (!await bevestig({ titel: `"${naam}" archiveren?`, omschrijving: 'Je kunt hem daarna niet meer kiezen voor nieuwe offertes. Offertes en calculaties die hem al gebruiken houden hem.', bevestigLabel: 'Archiveren' })) return
     try {
       await verwijderBetalingsconditie(id)
       setCondities(prev => prev.filter(c => c.id !== id))
-      toast.success('Verwijderd')
+      toast.success('Gearchiveerd')
       startT(() => router.refresh())
     } catch (e) {
       toast.error(String(e))
@@ -153,7 +153,7 @@ export default function BetalingsconditiesBeheer({ initial }: { initial: Betalin
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: c.termijnen.length > 0 ? 10 : 0 }}>
               <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600, color: 'var(--fg)', flex: 1 }}>{c.naam}</span>
               <Button variant="ghost" size="sm" onClick={() => openBewerk(c)}>Bewerken</Button>
-              <Button variant="ghost" size="sm" onClick={() => verwijder(c.id, c.naam)}>Verwijder</Button>
+              <Button variant="ghost" size="sm" onClick={() => verwijder(c.id, c.naam)}>Archiveer</Button>
             </div>
             {c.termijnen.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 28 }}>

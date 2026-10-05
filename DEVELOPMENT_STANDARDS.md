@@ -138,6 +138,27 @@ Uitvoeren via de Supabase MCP `apply_migration`, niet via psql of Docker.
 Check-constraints en triggers overleven een tweede client, een script en een AI-assistent die
 de applicatielaag niet kent.
 
+**5.5 — Archiveren, niet verwijderen, zodra iets ergens naar verwezen kan worden.**
+Stamdata die een document of een andere rij kiest (algemene voorwaarden, betalingscondities,
+offerte-lay-outs, en wat er nog bijkomt) krijgt een kolom `gearchiveerd_op timestamptz`. De
+"verwijder"-knop in Instellingen zet die kolom; de rij blijft bestaan.
+
+- **Keuzelijsten voor iets nieuws** filteren op `gearchiveerd_op is null`.
+- **Opzoeken op id** (een bestaande offerte renderen, een termijnschema lezen) filtert níet:
+  een verzonden offerte toont de voorwaarden van toen, ook als die inmiddels gearchiveerd zijn.
+- **FK's naar stamdata staan op `ON DELETE RESTRICT`**, nooit `SET NULL`. `SET NULL` laat een
+  verzonden document stil zijn gegevens verliezen; dat is in oktober 2026 met 33 verzonden
+  offertes gebeurd en was niet terug te draaien.
+- **Een id in een JSON-blob (zoals de calculatie-snapshot) heeft geen FK.** Controleer bij het
+  gebruiken dat de rij nog bestaat én niet gearchiveerd is, en vraag anders om een nieuwe keuze
+  (`lib/everts-calc/offerte-keuzes.ts`). Archiveren maakt dat zeldzaam, niet onmogelijk.
+- **Een verzonden offerte wordt nooit verwijderd**; een databasetrigger
+  (`quotes_alleen_concept_verwijderen`) weigert het. Alleen concepten mogen weg.
+- **Een kolom die naar een andere tabel wijst krijgt een echte FK** (`quote_id` op
+  opdracht-onderdelen en meerwerkregels had er geen en wees naar verwijderde offertes). Kies
+  bewust: `RESTRICT` als de verwijzing betekenis draagt, `SET NULL` als het een "huidige"-pointer
+  is die opnieuw gezet wordt.
+
 ---
 
 ## 6. Businesslogica en statusovergangen

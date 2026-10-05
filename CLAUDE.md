@@ -132,6 +132,15 @@ precies het patroon dat de bug veroorzaakte.
 Ditzelfde geldt bij het **analyseren** van de database met losse scripts: paginate daar ook, anders trek
 je conclusies uit een half resultaat.
 
+### Archiveren, niet verwijderen
+
+Stamdata waar iets naar kan verwijzen (algemene voorwaarden, betalingscondities,
+offerte-lay-outs) wordt **gearchiveerd** (`gearchiveerd_op`), nooit verwijderd. Keuzelijsten
+voor iets nieuws filteren gearchiveerde rijen weg; opzoeken op id niet. Verzonden offertes zijn
+onverwijderbaar (databasetrigger). FK's naar stamdata staan op `ON DELETE RESTRICT`, nooit
+`SET NULL`. Zie **`DEVELOPMENT_STANDARDS.md` §5.5** vóór je een verwijder-actie of een nieuwe
+verwijzende kolom toevoegt.
+
 ## Architecture patterns
 
 ### Data flow (Next.js 15 App Router)

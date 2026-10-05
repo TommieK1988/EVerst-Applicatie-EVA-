@@ -57,9 +57,9 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
     // Betalingscondities + AV ophalen via Supabase browser client
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createClient() as any
-    supabase.from('betalingscondities').select('*').order('volgorde').order('naam')
+    supabase.from('betalingscondities').select('*').is('gearchiveerd_op', null).order('volgorde').order('naam')
       .then(({ data }: { data: Betalingsconditie[] | null }) => setBetalingscondities(data ?? []))
-    supabase.from('algemene_voorwaarden').select('*').order('naam')
+    supabase.from('algemene_voorwaarden').select('*').is('gearchiveerd_op', null).order('naam')
       .then(({ data }: { data: AlgemeneVoorwaarden[] | null }) => setAlgVoorwaarden(data ?? []))
   }, [projectId, scenarioId])
 
@@ -114,7 +114,7 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
   }
 
 
-  // Een id dat niet (meer) in de lijst staat is onder Instellingen verwijderd: dat
+  // Een id dat niet (meer) in de lijst staat is gearchiveerd of verwijderd: dat
   // telt als niet gekozen. De keuzelijst valt dan terug op leeg in plaats van
   // stilletjes de eerste optie te tonen, en de offerte wordt niet geweigerd.
   const conditieId = betalingscondities?.some(b => b.id === scenario.betalingsconditie_id)
@@ -130,7 +130,7 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
 
       {verwijderd ? (
         <Alert tone="warning" title="Gekozen voorwaarden bestaan niet meer">
-          De betalingscondities of algemene voorwaarden op deze calculatie zijn onder Instellingen verwijderd.
+          De betalingscondities of algemene voorwaarden op deze calculatie zijn onder Instellingen gearchiveerd of verwijderd.
           Kies ze opnieuw, anders kan er geen offerte of interne begroting gemaakt worden.
         </Alert>
       ) : vereist && !beideGekozen && (

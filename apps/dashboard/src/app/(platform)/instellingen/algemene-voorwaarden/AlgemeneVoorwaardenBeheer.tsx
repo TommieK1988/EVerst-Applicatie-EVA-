@@ -70,12 +70,12 @@ export default function AlgemeneVoorwaardenBeheer({ initial }: { initial: Algeme
   }
 
   async function verwijder(id: string, naam: string) {
-    if (!await bevestig({ titel: `"${naam}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
+    if (!await bevestig({ titel: `"${naam}" archiveren?`, omschrijving: 'Je kunt hem daarna niet meer kiezen voor nieuwe offertes. Offertes en calculaties die hem al gebruiken houden hem.', bevestigLabel: 'Archiveren' })) return
     startT(async () => {
       try {
         await verwijderAlgemeneVoorwaarden(id)
         setItems(prev => prev.filter(x => x.id !== id))
-        toast.success('Verwijderd')
+        toast.success('Gearchiveerd')
         router.refresh()
       } catch (e) { toast.error(String(e)) }
     })
@@ -141,7 +141,7 @@ export default function AlgemeneVoorwaardenBeheer({ initial }: { initial: Algeme
                   variant="ghost"
                   size="sm"
                   onClick={() => verwijder(av.id, av.naam)}
-                >Verwijder</Button>
+                >Archiveer</Button>
               </div>
             </div>
           ))}

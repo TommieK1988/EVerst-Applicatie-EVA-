@@ -2,10 +2,10 @@ import { getBetalingscondities } from '@/app/(platform)/everts-calc/actions/beta
 import { getAlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/algemene-voorwaarden'
 
 /**
- * Bestaan de betalingsconditie en algemene voorwaarden die op een calculatie
- * staan nog? Een calculatie bewaart alleen het id; wordt de set daarna onder
- * Instellingen verwijderd, dan wijst de calculatie nergens meer naar en weigert
- * de database de offerte (foreign key). Leeg telt ook als ongeldig.
+ * Zijn de betalingsconditie en algemene voorwaarden die op een calculatie staan
+ * nog te kiezen? Een calculatie bewaart alleen het id (JSON-blob, geen FK); is de
+ * set daarna gearchiveerd of verwijderd, dan moet er opnieuw gekozen worden. De
+ * get-acties geven alleen niet-gearchiveerde rijen. Leeg telt ook als ongeldig.
  */
 export async function offerteKeuzesBestaan(
   betalingsconditieId: string | null | undefined,

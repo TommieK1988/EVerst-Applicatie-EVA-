@@ -54,6 +54,7 @@ export default function OfferteAanmakenModal({
   projectId, scenarioId, dossierId, projectNaam, clientNaam, projectNummer, type, meerwerkRegelId, terugNaarUrl,
 }: Props) {
   const router = useRouter()
+  const isIntern = type === 'interne_calculatie'
   const [layouts, setLayouts] = useState<Layout[]>([])
   const [gekozenLayoutId, setGekozenLayoutId] = useState<string | null>(null)
   const [heeftBetalingscondities, setHeeftBetalingscondities] = useState(true)
@@ -216,9 +217,10 @@ export default function OfferteAanmakenModal({
         projectNummer,
         type,
         layoutId: gekozenLayoutId,
-        // Keuzes uit het Offerte-instellingen-blok (scenario).
-        betalingsconditieId: actiefScenario?.betalingsconditie_id ?? null,
-        voorwaardenId: actiefScenario?.algemene_voorwaarden_id ?? null,
+        // Keuzes uit het Offerte-instellingen-blok (scenario). Een interne begroting
+        // gaat niet naar de klant: geen voorwaarden of termijnen.
+        betalingsconditieId: isIntern ? null : actiefScenario?.betalingsconditie_id ?? null,
+        voorwaardenId: isIntern ? null : actiefScenario?.algemene_voorwaarden_id ?? null,
         // Vrije offerte-teksten van de calculatie (leeg → standaardsjabloon).
         inleidingTekst: actiefScenario?.inleiding_tekst ?? null,
         // Meerwerk-offerte: koppel aan de meerwerkregel (leeg → gewone offerte).
@@ -238,12 +240,14 @@ export default function OfferteAanmakenModal({
     } catch (e) {
       console.error('Offerte aanmaken mislukt:', e)
       // Niet stil falen: zonder melding lijkt de knop niets te doen.
-      toast.error(`${type === 'interne_calculatie' ? 'Interne begroting' : 'Offerte'} aanmaken mislukt. Controleer de offerte-instellingen (betalingscondities en algemene voorwaarden) en probeer het opnieuw.`)
+      toast.error(isIntern
+        ? 'Interne begroting aanmaken mislukt. Probeer het opnieuw.'
+        : 'Offerte aanmaken mislukt. Controleer de offerte-instellingen (betalingscondities en algemene voorwaarden) en probeer het opnieuw.')
       setLoading(false)
     }
   }
 
-  const titel = type === 'interne_calculatie' ? 'Interne begroting aanmaken' : 'Offerte aanmaken'
+  const titel = isIntern ? 'Interne begroting aanmaken' : 'Offerte aanmaken'
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !loading) onClose() }}>
@@ -257,7 +261,7 @@ export default function OfferteAanmakenModal({
         <DialogBody className="space-y-5">
 
           {/* Betalingscondities waarschuwing */}
-          {!heeftBetalingscondities && !fetchingData && (
+          {!isIntern && !heeftBetalingscondities && !fetchingData && (
             <Alert tone="warning" title="Geen betalingscondities ingesteld.">
               <a href="/instellingen/offertes?deel=condities" className="underline hover:opacity-80">
                 Ga naar Instellingen

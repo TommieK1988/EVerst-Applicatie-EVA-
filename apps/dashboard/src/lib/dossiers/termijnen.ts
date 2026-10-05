@@ -249,7 +249,9 @@ export async function getTermijnschemaBron(dossierId: string): Promise<Termijnsc
   const [uitCalculatie, conditieRes, grondslagen, btwVerdeling] = await Promise.all([
     offerteBetalingsconditie(dossierId).catch(() => null),
     // Stamgegevens: tientallen rijen, geen duizenden. Eén lezing volstaat.
-    supabase.from('betalingscondities').select('id, naam, termijnen').order('volgorde').order('naam'),
+    // Gearchiveerde condities zijn niet meer te kiezen (DEVELOPMENT_STANDARDS §5.5).
+    supabase.from('betalingscondities').select('id, naam, termijnen').is('gearchiveerd_op', null)
+      .order('volgorde').order('naam'),
     termijnGrondslagen(dossierId),
     offerteBtwVerdeling(dossierId, tarieven).catch(() => [] as BtwAandeel[]),
   ])

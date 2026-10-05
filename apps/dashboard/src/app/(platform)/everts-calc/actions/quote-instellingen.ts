@@ -97,7 +97,8 @@ export type LayoutSoort = 'offerte' | 'interne_begroting'
  */
 export async function getLayouts(soort?: LayoutSoort) {
   const supabase = await getDb()
-  let query = supabase.from('quote_layouts').select('*')
+  // Gearchiveerde lay-outs zijn niet meer te kiezen; bestaande offertes houden ze.
+  let query = supabase.from('quote_layouts').select('*').is('gearchiveerd_op', null)
   if (soort) query = query.eq('soort', soort)
   const { data, error } = await query.order('naam')
   if (error) throw new Error(error.message)
@@ -229,35 +230,22 @@ export async function kopieerLayout(id: string): Promise<{ id: string; waarschuw
 }
 
 /**
- * Offertes op deze lay-out gaan eerst over naar de standaard-lay-out van dezelfde
- * soort. De FK staat op ON DELETE SET NULL: zonder dit houden ze géén lay-out over
- * en kunnen ze niet meer als PDF gemaakt, goedgekeurd of verzonden worden.
+ * Archiveert de lay-out in plaats van hem te verwijderen (DEVELOPMENT_STANDARDS §5.5).
+ * Offertes die er al op staan houden hem — ook verzonden offertes, die anders hun
+ * opmaak zouden wisselen. Hij verdwijnt alleen uit de keuzelijst voor nieuwe offertes.
+ * De standaard-lay-out kan niet weg: die is de terugval voor offertes zonder lay-out.
  */
 export async function verwijderLayout(id: string): Promise<void> {
   const supabase = await getDb()
   const { data: rij } = await supabase
-    .from('quote_layouts').select('soort, is_standaard').eq('id', id).maybeSingle()
+    .from('quote_layouts').select('is_standaard').eq('id', id).maybeSingle()
   if (!rij) return
-  const { count } = await supabase
-    .from('quotes').select('id', { count: 'exact', head: true }).eq('layout_id', id)
-  if ((count ?? 0) > 0) {
-    if (rij.is_standaard) {
-      throw new Error('Deze lay-out is de standaard en er staan nog offertes op. Maak eerst een andere lay-out standaard.')
-    }
-    const { data: standaard } = await supabase
-      .from('quote_layouts').select('id')
-      .eq('soort', rij.soort ?? 'offerte').eq('is_standaard', true).neq('id', id)
-      .limit(1).maybeSingle()
-    if (!standaard) {
-      throw new Error('Er staan nog offertes op deze lay-out en er is geen standaard-lay-out om ze naartoe te verplaatsen.')
-    }
-    const { error: verplaatsFout } = await supabase
-      .from('quotes').update({ layout_id: standaard.id }).eq('layout_id', id)
-    if (verplaatsFout) throw new Error(verplaatsFout.message)
+  if (rij.is_standaard) {
+    throw new Error('Dit is de standaard-lay-out. Maak eerst een andere lay-out standaard.')
   }
   const { error } = await supabase
     .from('quote_layouts')
-    .delete()
+    .update({ gearchiveerd_op: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/instellingen/offertes')
