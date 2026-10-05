@@ -34,7 +34,7 @@ import VerlofOverzicht from '@/components/medewerkers/VerlofOverzicht'
 import SaldoBeheer from '@/components/medewerkers/SaldoBeheer'
 import MedewerkerTakenKaart from '@/components/medewerkers/MedewerkerTakenKaart'
 import AppTaalBeheer from '@/components/medewerkers/AppTaalBeheer'
-import BestuurderKoppeling, { type BestuurderOptie } from '@/components/medewerkers/BestuurderKoppeling'
+import type { BestuurderOptie, VoertuigKoppeling } from '@/components/medewerkers/VoertuigBedrijfsmiddel'
 import { pgQuery } from '@/lib/wagenpark/db'
 import {
   vereisModuleToegang, getEffectieveRechten, getCurrentMedewerker,
@@ -93,7 +93,6 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     attribuutDefRes,
     attribuutWaardenRes,
     bestandenRes,
-    voertuigRes,
     functiesRes,
     afdelingenRes,
     caoDocumentenRes,
@@ -149,12 +148,6 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       .select('*')
       .eq('medewerker_id', params.id)
       .order('created_at', { ascending: false }),
-    supabase
-      .from('voertuig_bestuurders')
-      .select('voertuig_id, voertuigen(id, kenteken, merk, model)')
-      .eq('medewerker_id', params.id)
-      .is('eind_datum', null)
-      .maybeSingle(),
     supabase.from('medewerker_functies').select('*').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('medewerker_afdelingen').select('*').eq('actief', true).order('volgorde').order('naam'),
     supabase.from('cao_documenten').select('id, naam, werkmaatschappij_id').eq('actief', true).order('created_at', { ascending: false }),
@@ -263,15 +256,6 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   const attribuutWaarden = (attribuutWaardenRes.data ?? []) as MedewerkerAttribuutWaarde[]
   const bestanden = (bestandenRes.data ?? []) as MedewerkerBestand[]
 
-  const voertuigKoppeling = voertuigRes.data?.voertuigen
-    ? {
-        voertuig_id: voertuigRes.data.voertuigen.id as string,
-        kenteken:    voertuigRes.data.voertuigen.kenteken as string,
-        merk:        voertuigRes.data.voertuigen.merk as string | null,
-        model:       voertuigRes.data.voertuigen.model as string | null,
-      }
-    : null
-
   // Verlof: individuele afwezigheid + org-brede vrije dagen (recent of jaarlijks herhalend)
   const afwezigheid = (afwezigheidRes.data ?? []) as MedewerkerAfwezigheid[]
   const vorigJaarStart = `${new Date().getFullYear() - 1}-01-01`
@@ -284,8 +268,9 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
   let bestuurdersBeschikbaar: BestuurderOptie[] = []
   let bestuurderSuggestieId: string | null = null
   let bestuurderFout: string | null = null
+  let voertuigKoppeling: VoertuigKoppeling | null = null
   try {
-    const [gekoppeldRows, beschikbaarRows] = await Promise.all([
+    const [gekoppeldRows, beschikbaarRows, voertuigRows] = await Promise.all([
       pgQuery<{ id: string; volledige_naam: string | null; email: string | null }>(
         'SELECT id::text AS id, volledige_naam, email FROM public.ulu_users WHERE medewerker_id = $1 LIMIT 1',
         [params.id],
@@ -293,7 +278,21 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       pgQuery<{ id: string; volledige_naam: string | null; email: string | null }>(
         'SELECT id::text AS id, volledige_naam, email FROM public.ulu_users WHERE actief AND medewerker_id IS NULL ORDER BY volledige_naam',
       ),
+      // Wagenpark koppelt de auto aan de ULU-bestuurder (ulu_user_id), niet aan de medewerker.
+      // Oudere rijen met medewerker_id tellen nog mee.
+      pgQuery<VoertuigKoppeling>(
+        `SELECT v.id::text AS voertuig_id, v.kenteken, v.merk, v.model
+           FROM public.voertuig_bestuurders vb
+           JOIN public.voertuigen v ON v.id = vb.voertuig_id
+          WHERE vb.eind_datum IS NULL
+            AND (vb.medewerker_id = $1
+                 OR vb.ulu_user_id IN (SELECT id FROM public.ulu_users WHERE medewerker_id = $1))
+          ORDER BY vb.is_primair DESC, vb.start_datum DESC
+          LIMIT 1`,
+        [params.id],
+      ),
     ])
+    voertuigKoppeling = voertuigRows[0] ?? null
     bestuurderGekoppeld = gekoppeldRows[0] ?? null
     bestuurdersBeschikbaar = beschikbaarRows
     if (!bestuurderGekoppeld && medewerker.email) {
@@ -433,26 +432,19 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
             </CardBody>
           </Card>
 
-          {/* Wagenpark-bestuurder */}
-          <Card>
-            <CardBody>
-              <BestuurderKoppeling
-                medewerker_id={params.id}
-                gekoppeld={bestuurderGekoppeld}
-                beschikbaar={bestuurdersBeschikbaar}
-                suggestie_id={bestuurderSuggestieId}
-                fout={bestuurderFout}
-              />
-            </CardBody>
-          </Card>
-
           {/* Bedrijfsmiddelen */}
           <Card>
             <CardBody>
               <BedrijfsmiddelenBeheer
                 medewerker_id={params.id}
                 initial={bedrijfsmiddelen}
-                actief_voertuig={voertuigKoppeling}
+                voertuig={voertuigKoppeling}
+                bestuurder={{
+                  gekoppeld: bestuurderGekoppeld,
+                  beschikbaar: bestuurdersBeschikbaar,
+                  suggestie_id: bestuurderSuggestieId,
+                  fout: bestuurderFout,
+                }}
               />
             </CardBody>
           </Card>

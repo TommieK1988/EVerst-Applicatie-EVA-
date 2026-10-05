@@ -24,6 +24,8 @@ import {
   CardBody,
   EmptyState,
 } from '@/components/ui'
+import { euroNL } from '@/lib/documenten/format'
+import VoertuigBedrijfsmiddel, { type BestuurderOptie, type VoertuigKoppeling } from './VoertuigBedrijfsmiddel'
 
 const TYPE_LABELS: Record<BedrijfsmiddelType, string> = {
   sleutel:  'Sleutel',
@@ -42,7 +44,12 @@ const TYPE_ICONS: Record<BedrijfsmiddelType, string> = {
 // Type-specifieke velden voor kenmerken JSONB
 const KENMERKEN_FIELDS: Record<BedrijfsmiddelType, { key: string; label: string; type?: string }[]> = {
   sleutel:  [{ key: 'sleutelnummer', label: 'Sleutelnummer' }, { key: 'kopienummer', label: 'Kopienummer' }],
-  telefoon: [{ key: 'toestel', label: 'Toestel' }, { key: 'imei', label: 'IMEI' }, { key: 'simkaart', label: 'Simkaartnummer' }],
+  telefoon: [
+    { key: 'toestel', label: 'Toestel' },
+    { key: 'imei', label: 'IMEI' },
+    { key: 'simkaart', label: 'Simkaartnummer' },
+    { key: 'aanschafwaarde', label: 'Aanschafwaarde (€)', type: 'number' },
+  ],
   tankpas:  [{ key: 'kaartnummer', label: 'Kaartnummer' }, { key: 'pin', label: 'PIN-code' }, { key: 'maatschappij', label: 'Maatschappij' }],
   overig:   [{ key: 'omschrijving_extra', label: 'Extra info' }],
 }
@@ -166,6 +173,8 @@ function BedrijfsmiddelModal({
                 <label style={labelStyle}>{f.label}</label>
                 <Input
                   type={f.type ?? 'text'}
+                  step={f.type === 'number' ? '0.01' : undefined}
+                  min={f.type === 'number' ? '0' : undefined}
                   value={state.kenmerken[f.key] ?? ''}
                   onChange={e => setKenmerk(f.key, e.target.value)}
                 />
@@ -204,11 +213,18 @@ function BedrijfsmiddelModal({
 export default function BedrijfsmiddelenBeheer({
   medewerker_id,
   initial,
-  actief_voertuig,
+  voertuig,
+  bestuurder,
 }: {
   medewerker_id: string
   initial: MedewerkerBedrijfsmiddel[]
-  actief_voertuig?: { kenteken: string; merk: string | null; model: string | null; voertuig_id: string } | null
+  voertuig: VoertuigKoppeling | null
+  bestuurder: {
+    gekoppeld: BestuurderOptie | null
+    beschikbaar: BestuurderOptie[]
+    suggestie_id: string | null
+    fout: string | null
+  }
 }) {
   const [middelen, setMiddelen] = useState<MedewerkerBedrijfsmiddel[]>(initial)
   const [modal, setModal] = useState<ModalState>({ open: false })
@@ -226,7 +242,11 @@ export default function BedrijfsmiddelenBeheer({
   function formatKenmerken(m: MedewerkerBedrijfsmiddel) {
     const fields = KENMERKEN_FIELDS[m.type]
     return fields
-      .map(f => m.kenmerken[f.key] ? `${f.label}: ${m.kenmerken[f.key]}` : null)
+      .map(f => {
+        const waarde = m.kenmerken[f.key]
+        if (!waarde) return null
+        return f.key === 'aanschafwaarde' ? `Aanschafwaarde: ${euroNL(Number(waarde))}` : `${f.label}: ${waarde}`
+      })
       .filter(Boolean)
       .join(' · ')
   }
@@ -243,29 +263,8 @@ export default function BedrijfsmiddelenBeheer({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Voertuig (read-only, uit wagenpark) */}
-        <Card>
-          <CardBody className="flex items-center gap-3 py-2.5">
-            <span style={{ fontSize: 18 }}>🚐</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>Voertuig</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 2 }}>
-                {actief_voertuig
-                  ? `${actief_voertuig.kenteken}${actief_voertuig.merk ? ` — ${actief_voertuig.merk} ${actief_voertuig.model ?? ''}` : ''}`
-                  : 'Geen voertuig gekoppeld'
-                }
-              </div>
-            </div>
-            {actief_voertuig && (
-              <a
-                href={`/wagenpark/voertuigen/${actief_voertuig.voertuig_id}`}
-                style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}
-              >
-                Wagenpark →
-              </a>
-            )}
-          </CardBody>
-        </Card>
+        {/* Voertuig + wagenpark-bestuurder */}
+        <VoertuigBedrijfsmiddel medewerker_id={medewerker_id} voertuig={voertuig} {...bestuurder} />
 
         {/* Overige bedrijfsmiddelen */}
         {middelen.length === 0 ? (

@@ -387,7 +387,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Persoonsgegevens', body: 'Naam, e-mail, telefoon, functie, afdeling, CAO-schaal, uurtarieven (verkoop en kostprijs) en datum in dienst. Het kostprijstarief is alleen zichtbaar voor managers en financieel beheer.' },
       { title: 'Werkrooster', body: 'Stel het standaard werkrooster in per dag inclusief pauzetijden. Het rooster bepaalt de beschikbaarheid in de planning en de normuren voor verlofberekening.' },
       { title: 'Skills en certificaten', body: 'Registreer VCA, BHV, rijbewijs of andere vakdiploma\'s met geldig­heidsdatum. EVA geeft een melding wanneer een certificaat binnen 60 dagen verloopt.' },
-      { title: 'Bedrijfsmiddelen', body: 'Wijs telefoons, laptops, gereedschap of andere middelen toe aan de medewerker. Bedrijfsmiddelen worden automatisch opgenomen in het overdrachtsdossier bij uitdiensttreding.' },
+      { title: 'Bedrijfsmiddelen', body: 'Wijs sleutels, telefoons (met aanschafwaarde), tankpassen of andere middelen toe aan de medewerker. Bovenaan staat het voertuig uit Wagenpark: koppel hier de wagenpark-bestuurder, dan verschijnt de auto die aan die bestuurder hangt. Bedrijfsmiddelen worden automatisch opgenomen in het overdrachtsdossier bij uitdiensttreding.' },
       { title: 'Toegangsbeheer', body: 'Stel het gebruikers­type in (app/platform/geen) en pas de rechten per module aan. Afwijkingen van de afdelingsstandaard worden als "rechten­overschrijving" geregistreerd en zijn zichtbaar in het gebruikersbeheer.' },
       { title: 'Handtekening', body: 'Upload een afbeelding van de handtekening. Deze wordt automatisch ingevoegd op digitale offertes en opdrachtbevestigingen wanneer de medewerker als ondertekenaar is ingesteld.' },
     ],
