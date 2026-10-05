@@ -33,6 +33,10 @@ const fmtPct = (v: number): string =>
 const resultaatKleur = (v: number | null): string | undefined =>
   v == null ? undefined : v < 0 ? ROOD : v > 0 ? 'var(--success-700, #2e7d4f)' : undefined
 
+/** Marge onder 20 % rood, 20–25 % oranje, daarboven gewoon. */
+const margeKleur = (v: number | null): string | undefined =>
+  v == null ? undefined : v < 20 ? ROOD : v < 25 ? 'var(--warning-500, #f08000)' : undefined
+
 const leeg = (v: number | null): string => (v == null ? '—' : fmt(v, true))
 
 /** Groepskop over de volle breedte, in de stijl van de veldlabels (UPPERCASE 10,5px). */
@@ -85,7 +89,7 @@ function PostRij({ post, inspringen, metLabel }: { post: ResultaatPost; inspring
       </td>
       <TD>{leeg(post.prognose)}</TD>
       <TD vet kleur={resultaatKleur(post.resultaat)}>{leeg(post.resultaat)}</TD>
-      <TD kleur={post.margePct != null && post.margePct < 0 ? ROOD : undefined}>{fmtMarge(post.margePct)}</TD>
+      <TD kleur={margeKleur(post.margePct)}>{fmtMarge(post.margePct)}</TD>
     </tr>
   )
 }
@@ -104,7 +108,7 @@ function SubtotaalRij({ label, s, inspringen, achtergrond = SUBTOTAAL_GRIJS }: {
       <TD vet>{fmt(s.verkoop, true)}</TD>
       <TD vet>{leeg(s.prognose)}</TD>
       <TD vet kleur={resultaatKleur(s.resultaat)}>{leeg(s.resultaat)}</TD>
-      <TD vet kleur={s.margePct != null && s.margePct < 0 ? ROOD : undefined}>{fmtMarge(s.margePct)}</TD>
+      <TD vet kleur={margeKleur(s.margePct)}>{fmtMarge(s.margePct)}</TD>
     </tr>
   )
 }
@@ -126,11 +130,11 @@ export default async function ResultaatPerPostBlok({ dossierId }: { dossierId: s
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '40%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
+              <col style={{ width: '52%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
             </colgroup>
             <thead>
               <tr>
@@ -176,7 +180,8 @@ export default async function ResultaatPerPostBlok({ dossierId }: { dossierId: s
             ? 'de kosten uit de werkbegroting per bewakingscode (kostprijs, zonder opslag).'
             : 'de prognose uit Bouw7 — dit dossier heeft nog geen werkbegroting.'} Een post krijgt de kosten van de
           bewakingscode waarop hij staat; delen meerdere posten één code, dan naar verhouding van hun
-          verkoop. Ga met de muis over een verkoopbedrag om te zien hoe het tot stand kwam.
+          verkoop. Ga met de muis over een verkoopbedrag om te zien hoe het tot stand kwam. Een marge
+          onder 20 % staat in rood, tussen 20 en 25 % in oranje.
           {zonderPrognose > 0 && <>
             {' '}{zonderPrognose === 1 ? 'Eén post heeft' : `${zonderPrognose} posten hebben`} geen eigen
             bewakingscode en dus geen prognose (—): die kosten staan op de gewone codes en tellen mee in de

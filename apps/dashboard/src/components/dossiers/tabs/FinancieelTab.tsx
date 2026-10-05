@@ -490,12 +490,11 @@ export function FinancieelTab({ dossierId, sectie }: { dossierId: string; sectie
         <BewakingTabel dossierId={dossierId} sectie={sectie} />
       </Suspense>
 
-      {/* Verwacht resultaat — hoofdaanneemsom, stelposten en meerwerk per post */}
-      <div style={{ maxWidth: 960 }}>
-        <Suspense fallback={<SkeletonCard />}>
-          <ResultaatPerPostBlok dossierId={dossierId} />
-        </Suspense>
-      </div>
+      {/* Verwacht resultaat — hoofdaanneemsom, stelposten en meerwerk per post; volle breedte,
+          zoals de bewakingstabel, zodat lange omschrijvingen niet worden afgekapt */}
+      <Suspense fallback={<SkeletonCard />}>
+        <ResultaatPerPostBlok dossierId={dossierId} />
+      </Suspense>
 
       {/* Projecttotalen — smaller blok eronder */}
       <div style={{ maxWidth: 960 }}>
