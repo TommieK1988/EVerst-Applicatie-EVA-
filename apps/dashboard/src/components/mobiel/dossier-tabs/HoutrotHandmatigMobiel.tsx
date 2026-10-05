@@ -8,6 +8,7 @@ import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   handmatigVanRegel, regelVanHandmatig, valideerHandmatigeRegel, tariefVoorFunctie,
 } from '@/lib/houtrotherstel/handmatige-regel'
+import HoutrotFotoVak from './HoutrotFotoVak'
 import type { RegelCategorie, RegelType, RegistratieRegelForm } from '@/lib/houtrotherstel/types'
 import type { HandmatigeStandaarden } from '@/services/houtrotherstel/handmatig'
 import {
@@ -186,23 +187,11 @@ export function HandmatigeRegelFormulier({
           onChange={e => setNotitie(e.target.value)} />
       </div>
 
-      <div>
-        <label style={label} htmlFor="hm-foto">{t('handmatig.foto')}</label>
-        {startFotoUrl && !fotoWeg && !foto ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14 }}>
-            <a href={startFotoUrl} target="_blank" rel="noopener noreferrer" style={{ color: GROEN }}>
-              {t('handmatig.huidigeFoto')}
-            </a>
-            <button type="button" onClick={() => setFotoWeg(true)}
-              style={{ ...secundaireKnop, padding: '8px 12px', fontSize: 13 }}>
-              {t('handmatig.fotoWeghalen')}
-            </button>
-          </div>
-        ) : (
-          <input id="hm-foto" type="file" accept="image/*" capture="environment" style={{ fontSize: 14 }}
-            onChange={e => setFoto(e.target.files?.[0] ?? null)} />
-        )}
-      </div>
+      <HoutrotFotoVak titel={t('handmatig.foto')}
+        huidigeUrl={fotoWeg ? undefined : startFotoUrl}
+        nieuw={foto} gewijzigd={!!foto || (fotoWeg && !!startFotoUrl)}
+        onKies={setFoto}
+        onVerwijder={() => { setFoto(null); setFotoWeg(true) }} />
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={onAnnuleer} style={{ ...secundaireKnop, flex: 1, whiteSpace: 'normal' }}>

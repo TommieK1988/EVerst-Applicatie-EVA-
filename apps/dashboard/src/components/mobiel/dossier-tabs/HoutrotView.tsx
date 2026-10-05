@@ -11,6 +11,7 @@ import {
 } from '@/services/houtrotherstel/registraties'
 import { getHandmatigeStandaarden, type HandmatigeStandaarden } from '@/services/houtrotherstel/handmatig'
 import { HandmatigeRegelFormulier, WerkzaamheidRij } from './HoutrotHandmatigMobiel'
+import HoutrotFotoVak from './HoutrotFotoVak'
 import { getRecepten, type Recept } from '@/services/houtrotherstel/recepten'
 import { getHuidigeMedewerker } from '@/services/houtrotherstel/identiteit'
 import { getLocatieBoom } from '@/services/houtrotherstel/locatie-config'
@@ -48,6 +49,9 @@ function receptVanRegel(r: RegistratieRegelForm): Recept {
 }
 
 const fotoUrl = fotoPubliekeUrl
+
+/** De twee vaste fotovakken van een reparatie; andere soorten kun je alleen weghalen. */
+const FOTO_VAKKEN = ['voor', 'na'] as const
 
 /** Kortere variant-tekst binnen een groep: strip het groepswoord uit de naam. */
 function variantLabel(r: Recept): string {
@@ -357,8 +361,6 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
   }
 
   const zichtbareFotos = bestaandeFotos.filter(p => !verwijderdeFotos.has(p.id))
-  const heeftVoorBestaand = zichtbareFotos.some(p => p.photo_type === 'voor')
-  const heeftNaBestaand = zichtbareFotos.some(p => p.photo_type === 'na')
 
   async function opslaan() {
     setBezig(true)
@@ -465,46 +467,44 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
           )}
 
           <Blok titel={t('fotos')}>
-            {/* Groot en over de volle breedte: in het veld wil je de schade zien, niet
-                een duimnagel. `contain` in plaats van `cover` zodat er niets wegvalt. */}
-            {zichtbareFotos.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {zichtbareFotos.map(p => (
-                  <div key={p.id} style={{ position: 'relative' }}>
-                    <a href={fotoUrl(p.storage_path)} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'block' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotoUrl(p.storage_path)} alt={t(`fotoSoort.${p.photo_type}`)}
-                        style={{
-                          display: 'block', width: '100%', maxHeight: '50vh', objectFit: 'contain',
-                          background: '#0e1114', borderRadius: 12, border: '1px solid var(--border)',
-                        }} />
-                    </a>
-                    <span style={{
-                      position: 'absolute', top: 8, left: 8, padding: '3px 9px', borderRadius: 999,
-                      background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                    }}>
-                      {t(`fotoSoort.${p.photo_type}`)}
-                    </span>
-                    <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label={t('fotoVerwijderen')}
-                      style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, border: 'none', background: 'rgba(180,35,24,0.92)', color: '#fff', fontSize: 15, lineHeight: 1, cursor: 'pointer' }}>
-                      ×
-                    </button>
-                  </div>
-                ))}
+            {FOTO_VAKKEN.map(soort => {
+              const nieuw = soort === 'voor' ? voorFoto : naFoto
+              const zet = soort === 'voor' ? setVoorFoto : setNaFoto
+              const huidig = zichtbareFotos.find(p => p.photo_type === soort)
+              const weggehaald = bestaandeFotos.some(p => p.photo_type === soort && verwijderdeFotos.has(p.id))
+              return (
+                <HoutrotFotoVak key={soort} titel={t(`fotoSoort.${soort}`)}
+                  huidigeUrl={huidig ? fotoUrl(huidig.storage_path) : undefined}
+                  nieuw={nieuw} gewijzigd={!!nieuw || weggehaald}
+                  onKies={zet}
+                  onVerwijder={() => {
+                    zet(null)
+                    bestaandeFotos.filter(p => p.photo_type === soort).forEach(p => fotoVerwijderen(p.id))
+                  }} />
+              )
+            })}
+            {/* Oudere registraties kunnen ook een tijdens-foto hebben: alleen weghalen. */}
+            {zichtbareFotos.filter(p => p.photo_type !== 'voor' && p.photo_type !== 'na').map(p => (
+              <div key={p.id} style={{ position: 'relative' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={fotoUrl(p.storage_path)} alt={t(`fotoSoort.${p.photo_type}`)}
+                  style={{
+                    display: 'block', width: '100%', maxHeight: '45vh', objectFit: 'contain',
+                    background: '#0e1114', borderRadius: 12, border: '1px solid var(--border)',
+                  }} />
+                <span style={{
+                  position: 'absolute', top: 8, left: 8, padding: '3px 9px', borderRadius: 999,
+                  background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                }}>
+                  {t(`fotoSoort.${p.photo_type}`)}
+                </span>
+                <button type="button" onClick={() => fotoVerwijderen(p.id)} aria-label={t('fotoVerwijderen')}
+                  style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, border: 'none', background: 'rgba(180,35,24,0.92)', color: '#fff', fontSize: 15, lineHeight: 1, cursor: 'pointer' }}>
+                  ×
+                </button>
               </div>
-            )}
-            <div>
-              <label style={label} htmlFor="hr-voor">{heeftVoorBestaand && !voorFoto ? t('fotoVervangen', { soort: t('fotoSoort.voor') }) : t('fotoSoort.voor')}</label>
-              <input id="hr-voor" type="file" accept="image/*" style={{ ...veld, padding: 9 }}
-                onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
-            </div>
-            <div>
-              <label style={label} htmlFor="hr-na">{heeftNaBestaand && !naFoto ? t('fotoVervangen', { soort: t('fotoSoort.na') }) : t('fotoSoort.na')}</label>
-              <input id="hr-na" type="file" accept="image/*" style={{ ...veld, padding: 9 }}
-                onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
-            </div>
+            ))}
           </Blok>
 
           {/* Alleen te kiezen zolang de locatie nog niet vaststaat; anders staat hij

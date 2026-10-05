@@ -10,7 +10,6 @@
     "tijdens": "Brak zdjęcia w trakcie",
     "na": "Brak zdjęcia po"
   },
-  "fotoVervangen": "{soort} (zastąp)",
   "uren": "{uren} godz.",
   "locatie": "Lokalizacja",
   "fotos": "Zdjęcia",
@@ -70,8 +69,6 @@
     "meerwerkKort": "Prace dodatkowe",
     "notitie": "Notatka",
     "foto": "Zdjęcie",
-    "huidigeFoto": "Obecne zdjęcie",
-    "fotoWeghalen": "Usuń zdjęcie",
     "regelToevoegen": "Dodaj pozycję",
     "regelBijwerken": "Zapisz pozycję",
     "annuleren": "Anuluj",
@@ -90,5 +87,12 @@
       "ongeldig": "Ta pozycja jest nieprawidłowa. Sprawdź pola."
     },
     "aantalKeer": "{aantal}×"
+  },
+  "fotoVak": {
+    "fotoMaken": "Zrób zdjęcie",
+    "nieuweFoto": "Nowe zdjęcie",
+    "uitGalerij": "Z galerii",
+    "verwijderen": "Usuń",
+    "pasNaOpslaan": "Zostanie zapisane dopiero po zapisaniu naprawy."
   }
 }

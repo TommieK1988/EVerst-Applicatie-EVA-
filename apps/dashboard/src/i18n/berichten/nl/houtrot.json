@@ -10,7 +10,6 @@
     "tijdens": "Geen tijdens-foto",
     "na": "Geen na-foto"
   },
-  "fotoVervangen": "{soort} (vervangen)",
   "uren": "{uren} uur",
   "locatie": "Locatie",
   "fotos": "Foto's",
@@ -70,8 +69,6 @@
     "meerwerkKort": "Meerwerk",
     "notitie": "Notitie",
     "foto": "Foto",
-    "huidigeFoto": "Huidige foto",
-    "fotoWeghalen": "Foto weghalen",
     "regelToevoegen": "Regel toevoegen",
     "regelBijwerken": "Regel bijwerken",
     "annuleren": "Annuleren",
@@ -90,5 +87,12 @@
       "ongeldig": "Deze regel klopt niet. Controleer de velden."
     },
     "aantalKeer": "{aantal}×"
+  },
+  "fotoVak": {
+    "fotoMaken": "Foto maken",
+    "nieuweFoto": "Nieuwe foto",
+    "uitGalerij": "Uit galerij",
+    "verwijderen": "Verwijderen",
+    "pasNaOpslaan": "Wordt pas bewaard als je de reparatie opslaat."
   }
 }
