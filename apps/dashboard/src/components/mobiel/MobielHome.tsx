@@ -5,9 +5,11 @@ import MobielTegel from './MobielTegel'
 import LocatieAutoOpen from './LocatieAutoOpen'
 import VandaagWidget from './VandaagWidget'
 import HomeSignalen from './HomeSignalen'
+import MobielUpdates from './MobielUpdates'
 import AppBadge from '@/components/eva/AppBadge'
 import type { AgendaItem } from '@/lib/agenda/agenda-model'
 import type { HomeSignalen as Signalen } from '@/lib/mobiel/home'
+import type { MobielUpdate } from '@/lib/mobiel/updates'
 import { getAppVertaler } from '@/i18n/server'
 
 /**
@@ -27,7 +29,7 @@ import { getAppVertaler } from '@/i18n/server'
  */
 export default async function MobielHome({
   naam, openTaken, ongelezenMeldingen = 0, magMaterieel = false, magHandboek = false,
-  magCommercieel = false, magPrikklok = false, vandaag, signalen,
+  magCommercieel = false, magPrikklok = false, vandaag, signalen, updates = [],
 }: {
   naam?: string | null
   openTaken?: number
@@ -51,6 +53,8 @@ export default async function MobielHome({
   /** Agenda-items van vandaag; `null` als er geen medewerker-koppeling is. */
   vandaag?: { dag: string; items: AgendaItem[] } | null
   signalen?: Signalen | null
+  /** Changelog-items voor de app die deze gebruiker nog niet zag. */
+  updates?: MobielUpdate[]
 }) {
   // Servercomponent: de tegellabels komen hier al in de taal van de medewerker mee.
   const t = await getAppVertaler('home')
@@ -95,6 +99,8 @@ export default async function MobielHome({
       </div>
       {/* Automatisch dossier openen op locatie — draait één keer per sessie. */}
       <LocatieAutoOpen />
+      {/* Nieuw in EVA Mobiel — met de oproep de app opnieuw op te starten. */}
+      {updates.length > 0 && <MobielUpdates items={updates} />}
     </>
   )
 }

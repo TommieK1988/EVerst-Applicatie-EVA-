@@ -10,6 +10,8 @@ import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import ProjectZoekerVoorbeeld from './ProjectZoekerVoorbeeld'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
 import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
+import MobielUpdates from '@/components/mobiel/MobielUpdates'
+import type { MobielUpdate } from '@/lib/mobiel/updates'
 import { laadBerichten } from '@/i18n/berichten'
 import { naarTaal, TALEN, TAAL_NAAM, TIJDZONE } from '@/i18n/talen'
 import type { VerlofAanvraag } from '@/lib/uren/verlof'
@@ -71,8 +73,17 @@ const GEGEVENS: EigenGegevens = {
   vca: null,
 }
 
-export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string }> }) {
-  const taal = naarTaal((await searchParams).taal)
+/** `?updates=1` toont het "Nieuw in EVA Mobiel"-paneel van het startscherm. */
+const UPDATES: MobielUpdate[] = [
+  { id: 'c1', datum: '2026-10-05', categorie: 'opgelost', titel: 'Houtrotreparaties vastleggen werkt weer',
+    omschrijving: 'Je kunt weer een houtrotreparatie opslaan. Bij een reparatie kies je nu ook een foto uit je galerij.' },
+  { id: 'c2', datum: '2026-10-04', categorie: 'verbeterd', titel: 'Projecten zoeken bij uren',
+    omschrijving: 'Bij het schrijven van uren zie je alleen je ingeplande projecten en kun je zoeken in plaats van scrollen.' },
+]
+
+export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string }> }) {
+  const params = await searchParams
+  const taal = naarTaal(params.taal)
   const berichten = await laadBerichten(taal)
   const t = await getTranslations({ locale: taal, namespace: 'home' })
 
@@ -89,7 +100,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
       >
         <div style={{ display: 'flex', gap: 8, padding: 8, background: '#111', flexWrap: 'wrap' }}>
           {TALEN.map((l) => (
-            <a key={l} href={`?taal=${l}`} style={{ color: l === taal ? '#7ee2a8' : '#fff', fontSize: 13, fontWeight: 700 }}>
+            <a key={l} href={`?taal=${l}${params.updates === '1' ? '&updates=1' : ''}`} style={{ color: l === taal ? '#7ee2a8' : '#fff', fontSize: 13, fontWeight: 700 }}>
               {TAAL_NAAM[l]}
             </a>
           ))}
@@ -110,6 +121,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>
+        {params.updates === '1' && <MobielUpdates items={UPDATES} />}
       </div>
     </NextIntlClientProvider>
   )

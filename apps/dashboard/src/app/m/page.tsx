@@ -5,6 +5,7 @@ import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { FEATURES } from '@/lib/features'
 import { magPrikklok as prikklokToegang } from '@/lib/prikklok/auth'
 import { haalVandaag, haalHomeSignalen } from '@/lib/mobiel/home'
+import { haalOngelezenMobielUpdates } from '@/lib/mobiel/updates'
 import MobielHome from '@/components/mobiel/MobielHome'
 
 export const metadata = { title: 'EVA Mobiel' }
@@ -34,10 +35,11 @@ export default async function MobielHomePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const [openTaken, medewerker, ongelezenMeldingen] = await Promise.all([
+  const [openTaken, medewerker, ongelezenMeldingen, updates] = await Promise.all([
     user ? telMijnOpenTaken(user.id).catch(() => 0) : Promise.resolve(0),
     getCurrentMedewerker().catch(() => null),
     user ? telOngelezenMeldingen(user.id) : Promise.resolve(0),
+    user ? haalOngelezenMobielUpdates(user.id).catch(() => []) : Promise.resolve([]),
   ])
 
   // Wie de Materieel-tegel ziet, bepaalt het recht `materieelbeheer` (niveau
@@ -83,6 +85,7 @@ export default async function MobielHomePage() {
       magPrikklok={magPrikklok}
       vandaag={vandaag}
       signalen={signalen}
+      updates={updates}
     />
   )
 }

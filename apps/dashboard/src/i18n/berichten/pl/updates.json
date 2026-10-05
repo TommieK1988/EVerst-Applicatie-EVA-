@@ -1,0 +1,12 @@
+{
+  "titel": "Nowości w EVA Mobiel",
+  "sluiten": "Zamknij",
+  "begrepen": "Rozumiem",
+  "categorie": {
+    "nieuw": "Nowość",
+    "verbeterd": "Ulepszone",
+    "opgelost": "Naprawione"
+  },
+  "herstartTitel": "Całkowicie zamknij aplikację",
+  "herstartTekst": "Usuń EVA z ostatnio otwartych aplikacji i otwórz ją ponownie. Wtedy pracujesz na najnowszej wersji i unikasz błędów."
+}

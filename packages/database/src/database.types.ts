@@ -1125,6 +1125,7 @@ export type Database = {
           aangemaakt_op: string
           categorie: string
           datum: string
+          doelgroep: string
           gepubliceerd: boolean
           id: string
           module: string | null
@@ -1135,6 +1136,7 @@ export type Database = {
           aangemaakt_op?: string
           categorie?: string
           datum: string
+          doelgroep?: string
           gepubliceerd?: boolean
           id?: string
           module?: string | null
@@ -1145,6 +1147,7 @@ export type Database = {
           aangemaakt_op?: string
           categorie?: string
           datum?: string
+          doelgroep?: string
           gepubliceerd?: boolean
           id?: string
           module?: string | null
@@ -1155,14 +1158,17 @@ export type Database = {
       }
       changelog_gezien: {
         Row: {
+          gezien_mobiel_op: string | null
           gezien_op: string
           user_id: string
         }
         Insert: {
+          gezien_mobiel_op?: string | null
           gezien_op?: string
           user_id: string
         }
         Update: {
+          gezien_mobiel_op?: string | null
           gezien_op?: string
           user_id?: string
         }

@@ -29,6 +29,7 @@ import toolbox from './toolbox.json'
 import formulieren from './formulieren.json'
 import werkbon from './werkbon.json'
 import vertalen from './vertalen.json'
+import updates from './updates.json'
 
 const berichten = {
   gedeeld,
@@ -57,6 +58,7 @@ const berichten = {
   formulieren,
   werkbon,
   vertalen,
+  updates,
 }
 
 export default berichten

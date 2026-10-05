@@ -197,6 +197,12 @@ insert into public.changelog (datum, categorie, module, titel, omschrijving) val
    'Eén tot drie zinnen: wat kan de gebruiker nu, en waarom is dat handig.');
 ```
 
+- `doelgroep` — `kantoor` (default; `/wat-is-nieuw` + popup op de computer) | `mobiel` (paneel
+  "Nieuw in EVA Mobiel" op het startscherm van `/m`) | `beide`. Raakt de wijziging EVA Mobiel,
+  schrijf dan een **apart** item met `doelgroep = 'mobiel'`, in de taal van de vakman (wat kan hij
+  nu op zijn telefoon). Het paneel toont er zelf altijd de oproep onder om de app helemaal af te
+  sluiten en opnieuw te openen — die zin hoort dus níet in de omschrijving. Mobiele items worden
+  in de app automatisch vertaald (pl/ta), houd ze daarom kort en eenvoudig.
 - `categorie` — `nieuw` (nieuwe functie) | `verbeterd` (uitbreiding van iets bestaands) | `opgelost` (bugfix)
 - `module` — tag, bijv. Offertes, Calculatie, Dossiers, Planning, Financieel, Wagenpark
 - `datum` — opleverdatum

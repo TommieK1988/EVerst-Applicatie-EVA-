@@ -14,6 +14,12 @@ export type ChangelogItem = {
   aangemaakt_op: string
 }
 
+/**
+ * Kantoor ziet alleen wat voor kantoor geschreven is. Items voor EVA Mobiel verschijnen
+ * daar als melding bij het openen van de app (`lib/mobiel/updates.ts`).
+ */
+const KANTOOR = ['kantoor', 'beide']
+
 /** Alle gepubliceerde changelog-items, nieuwste eerst. */
 export async function getChangelog(): Promise<ChangelogItem[]> {
   try {
@@ -22,6 +28,7 @@ export async function getChangelog(): Promise<ChangelogItem[]> {
       .from('changelog')
       .select('id, datum, titel, omschrijving, categorie, module, aangemaakt_op')
       .eq('gepubliceerd', true)
+      .in('doelgroep', KANTOOR)
       .order('datum', { ascending: false })
       .order('aangemaakt_op', { ascending: false })
     return (data ?? []) as ChangelogItem[]
@@ -54,6 +61,7 @@ export async function telOngelezenUpdates(): Promise<number> {
       .from('changelog')
       .select('id', { count: 'exact', head: true })
       .eq('gepubliceerd', true)
+      .in('doelgroep', KANTOOR)
       .gt('aangemaakt_op', drempel)
     return count ?? 0
   } catch {
@@ -74,6 +82,7 @@ export async function getOngelezenUpdates(limit = 5): Promise<ChangelogItem[]> {
       .from('changelog')
       .select('id, datum, titel, omschrijving, categorie, module, aangemaakt_op')
       .eq('gepubliceerd', true)
+      .in('doelgroep', KANTOOR)
       .gt('aangemaakt_op', drempel)
       .order('aangemaakt_op', { ascending: false })
       .limit(limit)
