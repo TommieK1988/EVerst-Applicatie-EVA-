@@ -11,6 +11,8 @@ import {
   vraagVerlofAan, trekVerlofIn, berekenMijnVerlofUren,
   type VerlofAanvraag,
 } from '@/lib/uren/verlof'
+import type { IngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
+import IngeplandVerlofKaart from './IngeplandVerlofKaart'
 
 /**
  * Verlof aanvragen en je eigen aanvragen volgen, op de telefoon.
@@ -62,9 +64,11 @@ function kortDatum(d: string, locale: string) {
 }
 
 export default function VerlofClient({
-  aanvragen, soorten, saldo,
+  aanvragen, ingepland, soorten, saldo,
 }: {
   aanvragen: VerlofAanvraag[]
+  /** Verlof uit de planning dat niet via de app is aangevraagd (meestal uit Bouw7). */
+  ingepland: IngeplandVerlof[]
   soorten: Array<{ id: string; naam: string }>
   saldo: number
 }) {
@@ -79,6 +83,13 @@ export default function VerlofClient({
   const router = useRouter()
   const [, startT] = useTransition()
   const ververs = () => startT(() => router.refresh())
+
+  // Eén lijst, nieuwste periode bovenaan: wat je in de app aanvroeg en wat er in de planning staat
+  // horen voor de medewerker bij elkaar — het is allebei "wanneer ben ik vrij".
+  const regels = useMemo(() => [
+    ...aanvragen.map(a => ({ soort: 'aanvraag' as const, datum: a.startDatum, a })),
+    ...ingepland.map(v => ({ soort: 'planning' as const, datum: v.startDatum, v })),
+  ].sort((x, y) => y.datum.localeCompare(x.datum)), [aanvragen, ingepland])
 
   const [open, setOpen] = useState(false)
   const [bezig, setBezig] = useState(false)
@@ -152,11 +163,16 @@ export default function VerlofClient({
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {aanvragen.length === 0 ? (
+        {regels.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#6b757c', padding: '32px 0', fontSize: 14 }}>
             {t('geenAanvragen')}
           </p>
-        ) : aanvragen.map(a => {
+        ) : regels.map(r => {
+          if (r.soort === 'planning') {
+            return <IngeplandVerlofKaart key={`p-${r.v.id}`} verlof={r.v}
+              periode={periode(r.v.startDatum, r.v.eindDatum)} />
+          }
+          const a = r.a
           const sleutel = statusSleutel(a.status)
           const st = STATUS[sleutel]
           return (

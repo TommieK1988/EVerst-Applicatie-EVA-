@@ -11,7 +11,7 @@
   "periode": "{van} t/m {tot}",
   "saldo": "Tijd-voor-tijdsaldo",
   "aantalUur": "{uren} uur",
-  "geenAanvragen": "Je hebt nog geen verlof aangevraagd.",
+  "geenAanvragen": "Er staat nog geen verlof voor je in de planning.",
   "reden": "Reden:",
   "goedgekeurdDoor": "Goedgekeurd door {naam}",
   "afgewezenDoor": "Afgewezen door {naam}",
@@ -41,5 +41,12 @@
   "kiesPeriode": "Kies een periode.",
   "kiesDag": "Kies een dag.",
   "verstuurd": "Aanvraag verstuurd.",
-  "ingetrokkenMelding": "Aanvraag ingetrokken."
+  "ingetrokkenMelding": "Aanvraag ingetrokken.",
+  "type": {
+    "verlof": "Verlof",
+    "ziek": "Ziek",
+    "training": "Training",
+    "overig": "Afwezig"
+  },
+  "ingepland": "In planning"
 }

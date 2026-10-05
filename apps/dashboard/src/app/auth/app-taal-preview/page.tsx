@@ -15,6 +15,7 @@ import type { MobielUpdate } from '@/lib/mobiel/updates'
 import { laadBerichten } from '@/i18n/berichten'
 import { naarTaal, TALEN, TAAL_NAAM, TIJDZONE } from '@/i18n/talen'
 import type { VerlofAanvraag } from '@/lib/uren/verlof'
+import type { IngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
 import type { EigenGegevens } from '@/lib/medewerker/eigen-gegevens'
 
 /**
@@ -57,6 +58,11 @@ const VERLOF: VerlofAanvraag[] = [
     urenTotaal: 4, toelichting: 'Tandarts', status: 'afgewezen', beoordelaarNaam: 'Jan de Vries',
     afwijzingReden: 'Die middag is de oplevering.', bouw7Status: 'nieuw', aangevraagdOp: dag(-25),
   },
+]
+
+// Verlof dat kantoor in Bouw7 zette: staat in de planning, niet als aanvraag.
+const INGEPLAND: IngeplandVerlof[] = [
+  { id: 'a1', type: 'verlof', startDatum: dag(35), eindDatum: dag(46), startTijd: null, eindTijd: null, opmerking: 'Zomervakantie' },
 ]
 
 const GEGEVENS: EigenGegevens = {
@@ -117,7 +123,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
           <MobielTegel href="#" label={t('tegel.mijnGegevens')} Icon={User} />
         </div>
         <MobielTakenLijst taken={TAKEN} />
-        <VerlofClient aanvragen={VERLOF} soorten={[{ id: 'u1', naam: 'Vakantie' }, { id: 'u2', naam: 'Bijzonder verlof' }]} saldo={86.5} />
+        <VerlofClient aanvragen={VERLOF} ingepland={INGEPLAND} soorten={[{ id: 'u1', naam: 'Vakantie' }, { id: 'u2', naam: 'Bijzonder verlof' }]} saldo={86.5} />
         <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>

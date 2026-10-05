@@ -11,7 +11,7 @@
   "periode": "{van} – {tot}",
   "saldo": "Saldo nadgodzin (czas za czas)",
   "aantalUur": "{uren} godz.",
-  "geenAanvragen": "Nie złożyłeś jeszcze żadnego wniosku o urlop.",
+  "geenAanvragen": "Nie masz jeszcze urlopu w planie.",
   "reden": "Powód:",
   "goedgekeurdDoor": "Zatwierdził(a): {naam}",
   "afgewezenDoor": "Odrzucił(a): {naam}",
@@ -41,5 +41,12 @@
   "kiesPeriode": "Wybierz okres.",
   "kiesDag": "Wybierz dzień.",
   "verstuurd": "Wniosek wysłany.",
-  "ingetrokkenMelding": "Wniosek wycofany."
+  "ingetrokkenMelding": "Wniosek wycofany.",
+  "type": {
+    "verlof": "Urlop",
+    "ziek": "Choroba",
+    "training": "Szkolenie",
+    "overig": "Nieobecność"
+  },
+  "ingepland": "W planie"
 }
