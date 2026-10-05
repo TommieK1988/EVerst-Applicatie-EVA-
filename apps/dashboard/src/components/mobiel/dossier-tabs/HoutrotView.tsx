@@ -497,12 +497,12 @@ export default function HoutrotView({ dossierId }: { dossierId: string }) {
             )}
             <div>
               <label style={label} htmlFor="hr-voor">{heeftVoorBestaand && !voorFoto ? t('fotoVervangen', { soort: t('fotoSoort.voor') }) : t('fotoSoort.voor')}</label>
-              <input id="hr-voor" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
+              <input id="hr-voor" type="file" accept="image/*" style={{ ...veld, padding: 9 }}
                 onChange={e => setVoorFoto(e.target.files?.[0] ?? null)} />
             </div>
             <div>
               <label style={label} htmlFor="hr-na">{heeftNaBestaand && !naFoto ? t('fotoVervangen', { soort: t('fotoSoort.na') }) : t('fotoSoort.na')}</label>
-              <input id="hr-na" type="file" accept="image/*" capture="environment" style={{ ...veld, padding: 9 }}
+              <input id="hr-na" type="file" accept="image/*" style={{ ...veld, padding: 9 }}
                 onChange={e => setNaFoto(e.target.files?.[0] ?? null)} />
             </div>
           </Blok>
