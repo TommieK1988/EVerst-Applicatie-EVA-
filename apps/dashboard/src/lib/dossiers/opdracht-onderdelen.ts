@@ -4,6 +4,7 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import type { OpdrachtOnderdeel, OpdrachtOnderdeelGrondslag } from '@everts/database'
 import { getDossierBewaking } from './actions'
+import { bewakingPerCode } from './bewaking-per-code'
 import { assertDossierBewerkbaar } from './guards'
 import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk, stuurMeerwerkNaarBouw7 } from './meerwerk'
@@ -326,11 +327,9 @@ export async function getOpdrachtOverzicht(dossierId: string): Promise<OpdrachtO
   if (heeftCodes) {
     const bewaking = await getDossierBewaking(dossierId).catch(() => null)
     if (bewaking) {
-      for (const h of bewaking.hoofdstukken) {
-        for (const r of h.regels) {
-          if (!r.code) continue
-          perCode.set(r.code, { begroot: r.begroot, prognose: r.prognose, geboekt: r.geboekteKosten, progress: r.progress })
-        }
+      // Opgeteld over de hoofdstukken: dezelfde codetekst kan onder meerdere staan.
+      for (const [code, t] of bewakingPerCode(bewaking.hoofdstukken.flatMap(h => h.regels))) {
+        perCode.set(code, { begroot: t.begroot, prognose: t.prognose, geboekt: t.geboekteKosten, progress: t.progress })
       }
     }
   }

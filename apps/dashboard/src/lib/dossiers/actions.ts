@@ -22,6 +22,7 @@ import { after } from 'next/server'
 import type { Hoofdstatus, AanvraagSubstatus, OfferteSubstatus, OpdrachtSubstatus, ServicedeskSubstatus, RelatieFactuuradres } from '@everts/database'
 import type { DossierRij, DossierSubstatus } from '@/components/dossiers/types'
 import { isCorrectieCode, isMutatieDossier } from '@/components/dossiers/types'
+import { bewakingPerCode } from './bewaking-per-code'
 import { verwerkDossierTriggers } from '@/app/(platform)/taken/actions/sjablonen'
 import { schrijfBouw7Projectstatus, projectstatusCacheVelden, type Bouw7WriteResult } from './bouw7-status'
 import { SERVICEDESK_CATEGORIEEN, isServicedeskCategorie, isLopendeBonStatus } from '@/components/dossiers/fase-plaatsing'
@@ -4190,16 +4191,19 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
 
   // Inclusief codes met alleen prognoseuren (nog geen boekingen) — zodat projecten
   // die nog in voorbereiding zijn al zichtbaar zijn in de tabel.
-  const bouwMap = new Map<string, { prognose_uren: number; prognose_kosten: number; geboekte_uren: number; geboekte_kosten: number; naam: string | null; progress: number | null }>()
-  for (const hfd of bewaking.hoofdstukken) {
-    for (const r of hfd.regels) {
-      if (!r.code || (r.prognoseUren <= 0 && r.arbeidPrognose <= 0 && r.geboekteUren <= 0 && r.arbeidskosten <= 0)) continue
-      // Correcties zijn prognose voor de maandcijfers, geen urenbudget van de uitvoering: ze
-      // horen niet in het urensaldo.
-      if (isCorrectieCode(r.code)) continue
-      bouwMap.set(r.code, { prognose_uren: r.prognoseUren, prognose_kosten: r.arbeidPrognose, geboekte_uren: r.geboekteUren, geboekte_kosten: r.arbeidskosten, naam: r.naam, progress: r.progress })
-    }
-  }
+  // Per code opgeteld over de hoofdstukken: dezelfde codetekst kan onder meerdere staan, en een
+  // `set` per regel liet dan alleen de laatste over.
+  const perCode = bewakingPerCode(
+    bewaking.hoofdstukken.flatMap((h) => h.regels),
+    // Correcties zijn prognose voor de maandcijfers, geen urenbudget van de uitvoering: ze
+    // horen niet in het urensaldo.
+    (r) => !isCorrectieCode(r.code)
+      && (r.prognoseUren > 0 || r.arbeidPrognose > 0 || r.geboekteUren > 0 || r.arbeidskosten > 0),
+  )
+  const bouwMap = new Map([...perCode].map(([code, t]) => [code, {
+    prognose_uren: t.prognoseUren, prognose_kosten: t.arbeidPrognose, geboekte_uren: t.geboekteUren,
+    geboekte_kosten: t.arbeidskosten, naam: t.naam, progress: t.progress,
+  }]))
 
   const codeSet = new Set<string>([...bouwMap.keys(), ...(wbData?.keys() ?? [])])
   const heeftWerkbegroting = wbData != null && wbData.size > 0
