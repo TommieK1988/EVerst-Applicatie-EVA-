@@ -7,6 +7,7 @@ import { getOpdrachtOverzicht } from './opdracht-onderdelen'
 import { getServicedeskRegie } from './servicedesk'
 import { getFactureerbareCodes } from './facturatie-codes'
 import { getWerkbegrotingKostenPerCode } from './werkbegroting-kosten'
+import { leesKoppelingen } from './bewakingscode-koppeling'
 import {
   berekenResultaatPerPost, type CodeKosten, type MeerwerkInvoer, type ResultaatPerPost,
 } from './resultaat-per-code'
@@ -34,7 +35,7 @@ export async function getResultaatPerPost(
 ): Promise<ResultaatPerPost & { beschikbaar: boolean }> {
   const supabase = createAdminClient()
 
-  const [bewaking, overzicht, factureerbaar, meerwerkRes, standaardOpslag, wbKosten] = await Promise.all([
+  const [bewaking, overzicht, factureerbaar, meerwerkRes, standaardOpslag, wbKosten, koppelingen] = await Promise.all([
     getDossierBewaking(dossierId, { verbergCorrecties: opties?.verbergCorrecties }),
     getOpdrachtOverzicht(dossierId).catch(() => null),
     getFactureerbareCodes(dossierId).catch(() => []),
@@ -46,6 +47,7 @@ export async function getResultaatPerPost(
       .order('created_at', { ascending: true }),
     standaardOpslagPct(supabase),
     getWerkbegrotingKostenPerCode(dossierId).catch(() => null),
+    leesKoppelingen(dossierId).catch(() => new Set<string>()),
   ])
 
   // Kosten per code, opgeteld over de hoofdstukken: dezelfde code kan onder meerdere staan.
@@ -58,6 +60,10 @@ export async function getResultaatPerPost(
       c.geboekt += r.geboekteKosten
       c.begroot = (c.begroot ?? 0) + r.begroot
       c.meerwerk = (c.meerwerk ?? 0) + r.meerwerk
+      // Alleen voor de weergave: in welk hoofdstuk (of welke hoofdstukken) de code staat.
+      if (h.naam && !(c.hoofdstuk ?? '').split(' · ').includes(h.naam)) {
+        c.hoofdstuk = c.hoofdstuk ? `${c.hoofdstuk} · ${h.naam}` : h.naam
+      }
       codes.set(r.code, c)
     }
   }
@@ -102,6 +108,7 @@ export async function getResultaatPerPost(
     verkoopPerCode,
     inkoopPerCode,
     aanneemsomBasis: overzicht?.basis ?? null,
+    gekoppeld: koppelingen,
     opties: (overzicht?.opties ?? []).filter(o => o.in_opdracht),
     standaardOpslagPct: standaardOpslag,
     prognoseBron: wbKosten ? 'werkbegroting' : 'bouw7',

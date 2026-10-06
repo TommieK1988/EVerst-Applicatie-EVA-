@@ -237,4 +237,55 @@ describe('berekenResultaatPerPost', () => {
     expect(r.aanneemsom.hoofd).toBeNull()
     expect(r.aanneemsom.regie).toMatchObject({ verkoop: 1400, resultaat: 400 })
   })
+
+  describe('koppeling aan de Hoofdopdracht', () => {
+    const invoer = (gekoppeld?: Set<string>) => basis({
+      codes: [
+        { code: 'Schilderwerk', naam: 'Schilderwerk', hoofdstuk: 'WERKZAAMHEDEN', prognose: 135360.004, geboekt: 0 },
+        { code: 'KK.A', naam: 'Bereikbaarheid', hoofdstuk: 'ALGEMEEN', prognose: 34800.333, geboekt: 0 },
+        { code: 'CO01', naam: 'Correcties', hoofdstuk: null, prognose: -12600, geboekt: 0 },
+        { code: 'LEEG', naam: null, hoofdstuk: 'ALGEMEEN', prognose: 0, geboekt: 0 },
+        { code: 'SP01', naam: 'Houtwerk', hoofdstuk: 'STELPOSTEN', prognose: 59420, geboekt: 0 },
+        // Gedeelde code: een kwart is meerwerk, driekwart hoort bij de hoofdopdracht.
+        { code: 'GEVEL.A', naam: null, hoofdstuk: 'WERKZAAMHEDEN', prognose: 4000, geboekt: 0, begroot: 3000, meerwerk: 1000 },
+      ],
+      stelposten: [stelpost({ id: 'sp-vast', bewakingscode: 'SP01', bedrag_excl_btw: 196073.55 })],
+      meerwerk: [meerwerk({ id: 'mw-vast', bewakingscode: null, kosten_bewakingscode: 'GEVEL.A', bedrag_excl_btw: 1400 })],
+      aanneemsomBasis: 196739,
+      gekoppeld,
+    })
+
+    it('verandert geen enkel bedrag', () => {
+      const zonder = berekenResultaatPerPost(invoer())
+      const met = berekenResultaatPerPost(invoer(new Set(['Schilderwerk', 'GEVEL.A'])))
+      const bedragen = (r: typeof zonder) => ({
+        hoofd: { ...r.aanneemsom.hoofd, onderdelen: undefined },
+        stelposten: r.aanneemsom.stelposten, sub: r.aanneemsom.subtotaal, subStp: r.aanneemsom.subtotaalStelposten,
+        meerwerk: r.meerwerk, totaal: r.totaal,
+      })
+      expect(bedragen(met)).toEqual(bedragen(zonder))
+    })
+
+    it('de onderdelen tellen exact op tot de prognose van de Hoofdopdracht', () => {
+      for (const g of [undefined, new Set(['KK.A']), new Set(['Schilderwerk', 'KK.A', 'CO01', 'GEVEL.A'])]) {
+        const h = berekenResultaatPerPost(invoer(g)).aanneemsom.hoofd!
+        const som = h.onderdelen!.reduce((s, o) => s + o.prognose, 0)
+        expect(Math.round(som * 100) / 100).toBe(h.prognose)
+      }
+    })
+
+    it('neemt alleen codes zonder eigen post op, met het aanneemsomdeel van een gedeelde code', () => {
+      const h = berekenResultaatPerPost(invoer()).aanneemsom.hoofd!
+      expect(h.onderdelen!.map(o => o.code).sort()).toEqual(['CO01', 'GEVEL.A', 'KK.A', 'Schilderwerk'])
+      expect(h.onderdelen!.find(o => o.code === 'GEVEL.A')!.prognose).toBe(3000)
+    })
+
+    it('zet gekoppelde codes eerst, per hoofdstuk, en laat een lege ongekoppelde code weg', () => {
+      const h = berekenResultaatPerPost(invoer(new Set(['KK.A', 'Schilderwerk', 'LEEG']))).aanneemsom.hoofd!
+      expect(h.onderdelen!.map(o => [o.code, o.gekoppeld])).toEqual([
+        ['KK.A', true], ['LEEG', true], ['Schilderwerk', true], ['GEVEL.A', false], ['CO01', false],
+      ])
+      expect(h.omschrijving).toBe('Hoofdopdracht')
+    })
+  })
 })

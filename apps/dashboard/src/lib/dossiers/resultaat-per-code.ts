@@ -2,14 +2,15 @@
  * Verwacht resultaat per post — pure rekenregels, geen 'use server' (die mag geen sync exports
  * hebben, en zo is dit los te testen).
  *
- * Eén regel per onderdeel van de opdracht: de hoofdaanneemsom, elke stelpost en elke goedgekeurde
- * meerwerkregel. Stelposten die ín de aanneemsom zitten staan onder de aanneemsom; aanvullende
+ * Eén regel per onderdeel van de opdracht: de hoofdopdracht, elke stelpost en elke goedgekeurde
+ * meerwerkregel. Stelposten die ín de aanneemsom zitten staan onder de hoofdopdracht; aanvullende
  * stelposten onder het meerwerk.
  *
  * Kosten (de prognose) komen per bewakingscode uit Bouw7. Een post krijgt de kosten van de code
  * waar hij op staat; delen meerdere posten één code, dan naar verhouding van hun verkoop. Een post
  * zonder code heeft geen eigen prognose: zijn kosten staan op de gewone codes, dus bij de
- * hoofdaanneemsom. Die krijgt alle codes zonder eigen post.
+ * hoofdopdracht. Die krijgt alle codes zonder eigen post; welke daarvan aan de Hoofdopdracht
+ * gekoppeld zijn (`bewakingscode_koppelingen`) bepaalt alleen de indeling eronder, nooit het bedrag.
  *
  * De prognose is de kostprijs uit de werkbegroting per bewakingscode. Een dossier zonder
  * werkbegroting valt terug op de prognose uit de Bouw7-bewaking.
@@ -41,6 +42,21 @@ export type ResultaatPost = {
   margePct: number | null
   /** Deel van de kosten van de code dat bij deze post hoort (0–1); null = de hele code. */
   kostenAandeel: number | null
+  /** Alleen op de hoofdopdracht: de bewakingscodes waaruit zijn prognose bestaat. */
+  onderdelen?: HoofdOnderdeel[]
+}
+
+/**
+ * Eén bewakingscode onder de hoofdopdracht. `prognose` is precies het bedrag waarmee de code in de
+ * prognose van de hoofdopdracht zit (onafgerond, zodat de som exact sluit). `gekoppeld` is alleen
+ * de indeling: gekoppeld aan de Hoofdopdracht, of nog niet.
+ */
+export type HoofdOnderdeel = {
+  code: string
+  naam: string | null
+  hoofdstuk: string | null
+  prognose: number
+  gekoppeld: boolean
 }
 
 /**
@@ -82,6 +98,8 @@ export type PrognoseBron = 'werkbegroting' | 'bouw7'
 export type CodeKosten = {
   code: string; naam: string | null; prognose: number; geboekt: number
   begroot?: number; meerwerk?: number
+  /** Bouw7-hoofdstuk(ken) waarin de code staat, alleen voor de weergave. */
+  hoofdstuk?: string | null
 }
 
 export type StelpostInvoer = {
@@ -132,6 +150,8 @@ export type ResultaatInvoer = {
   inkoopPerCode: Map<string, number>
   /** Aanneemsom − de stelposten die erin zitten; null = geen aanneemsom. */
   aanneemsomBasis: number | null
+  /** Aan de Hoofdopdracht gekoppelde bewakingscodes — alleen voor de indeling. */
+  gekoppeld?: Set<string>
   /** Bedrijfsstandaard opslag op geboekte kosten, in %. */
   standaardOpslagPct: number
   prognoseBron?: PrognoseBron
@@ -328,20 +348,31 @@ export function berekenResultaatPerPost(invoer: ResultaatInvoer): ResultaatPerPo
     }
   }
 
-  // ── 3. Hoofdaanneemsom: alle codes zonder eigen post, plus het aanneemsomdeel van gedeelde codes.
-  const hoofdKosten = rond(invoer.codes.reduce((s, c) => {
+  // ── 3. Hoofdopdracht: alle codes zonder eigen post, plus het aanneemsomdeel van gedeelde codes.
+  // De onderdelen zijn diezelfde codes met hun aandeel; de prognose is er de som van. De koppeling
+  // sorteert ze alleen (gekoppeld eerst), en een code met prognose 0 die niet gekoppeld is laten we
+  // weg — hij draagt niets bij.
+  const gekoppeld = invoer.gekoppeld ?? new Set<string>()
+  const alleOnderdelen: HoofdOnderdeel[] = invoer.codes.map(c => {
     const deel = postenPerCode.has(c.code) ? (restPerCode.get(c.code) ?? 0) : 1
-    return s + c.prognose * deel
-  }, 0))
+    return { code: c.code, naam: c.naam, hoofdstuk: c.hoofdstuk ?? null, prognose: c.prognose * deel, gekoppeld: gekoppeld.has(c.code) }
+  })
+  const hoofdKosten = rond(alleOnderdelen.reduce((s, o) => s + o.prognose, 0))
+  const onderdelen = alleOnderdelen
+    .filter(o => o.prognose !== 0 || o.gekoppeld)
+    .sort((a, b) => Number(b.gekoppeld) - Number(a.gekoppeld)
+      || Number(a.hoofdstuk == null) - Number(b.hoofdstuk == null)
+      || (a.hoofdstuk ?? '').localeCompare(b.hoofdstuk ?? '', 'nl')
+      || a.code.localeCompare(b.code, 'nl'))
   let hoofd: ResultaatPost | null = null
   if (invoer.aanneemsomBasis != null || hoofdKosten !== 0) {
     const verkoop = rond(invoer.aanneemsomBasis ?? 0)
     const resultaat = rond(verkoop - hoofdKosten)
     hoofd = {
       sleutel: 'hoofd', code: null,
-      omschrijving: invoer.aanneemsomBasis != null ? 'Hoofdaanneemsom' : 'Overige codes',
+      omschrijving: invoer.aanneemsomBasis != null ? 'Hoofdopdracht' : 'Overige codes',
       soort: 'hoofd', grondslag: 'aanneemsom', verkoop, prognose: hoofdKosten, resultaat,
-      margePct: margeVan(resultaat, verkoop), kostenAandeel: null,
+      margePct: margeVan(resultaat, verkoop), kostenAandeel: null, onderdelen,
     }
   }
 

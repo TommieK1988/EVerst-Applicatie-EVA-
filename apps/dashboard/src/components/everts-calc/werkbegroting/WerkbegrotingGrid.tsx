@@ -26,6 +26,7 @@ import type { EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
 import { magCorrecties as haalMagCorrecties, voegCorrectieKostengroepToe } from '@/lib/dossiers/correctie-bewakingscode'
 import { CORRECTIE_BEWAKINGSCODE, isCorrectieCode } from '@/components/dossiers/types'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
+import { KoppelSchakelaar, POST_LABEL, POST_VOLGORDE, isKoppelbaar, postVan, useKoppelingen, type PostGroep } from './werkbegroting-per-post'
 
 interface Props {
   werkbegrotingId: string
@@ -169,7 +170,7 @@ const COL_MAP        = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Recor
 const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
 const DEFAULT_WIDTHS = Object.fromEntries(COL_DEFS.map(c => [c.id, c.dw])) as Record<ColId, number>
 
-type Sortering = 'kostengroep' | 'component' | 'leverancier' | 'calculatie'
+type Sortering = 'kostengroep' | 'post' | 'component' | 'leverancier' | 'calculatie'
 
 // ─── Tabelrij types ────────────────────────────────────────────────────────────
 
@@ -195,7 +196,15 @@ interface SeparatorRij {
   leeg?: boolean
 }
 
-type TabelRij = DisplayRij | SeparatorRij
+/** Sortering "Per post": kop boven de kostengroepen van één post, met hun opgetelde totalen. */
+interface PostKopRij {
+  type: 'postkop'
+  post: PostGroep
+  groepTotaal: number
+  groepCalcTotaal: number
+}
+
+type TabelRij = DisplayRij | SeparatorRij | PostKopRij
 
 /** Wat het merkje achter een door EVA uitgedeelde kostengroep betekent. */
 const EIGEN_SOORT_UITLEG: Record<EigenBewakingscode['soort'], string> = {
@@ -558,6 +567,8 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const [samenvoegen, setSamenvoegen] = useState(false)
   const [sortering,   setSortering]   = useState<Sortering>('kostengroep')
   const [verwijderdOpen, setVerwijderdOpen] = useState(false)
+  // Welke bewakingscodes aan de Hoofdopdracht gekoppeld zijn — alleen indeling, geen bedragen.
+  const { gekoppeld, wissel: wisselKoppeling } = useKoppelingen(dossierId)
 
   // Interne opmerking popover
   const [opmerkingEditId, setOpmerkingEditId] = useState<string | null>(null)
@@ -759,6 +770,13 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   // ─── Tabelrijen opbouwen ──────────────────────────────────────────────────
   const tabelRijen = useMemo((): TabelRij[] => {
     const groepMap = new Map(groepen.map(g => [g.id, g]))
+    // "Per post" is de kostengroep-weergave, alleen anders geordend.
+    const perKostengroep = sortering === 'kostengroep' || sortering === 'post'
+    const postVanLabel = (kg?: string | null): PostGroep => {
+      const code = kg ? bareCode(kg) : ''
+      return postVan(code, eigenSoortPerCode.get(code), gekoppeld)
+    }
+    const postRang = (kg?: string | null) => POST_VOLGORDE[postVanLabel(kg)]
 
     const displayRijen: DisplayRij[] = []
     for (const regel of regels) {
@@ -819,6 +837,10 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
       })
     } else {
       verwerkt.sort((a, b) => {
+        if (sortering === 'post') {
+          const d = postRang(a.regel.kostengroep) - postRang(b.regel.kostengroep)
+          if (d !== 0) return d
+        }
         const kgA = a.regel.kostengroep ?? '\uffff'; const kgB = b.regel.kostengroep ?? '\uffff'
         if (kgA !== kgB) return kgA.localeCompare(kgB, 'nl')
         if (a.groepNaam !== b.groepNaam) return a.groepNaam.localeCompare(b.groepNaam, 'nl')
@@ -857,7 +879,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
           type: 'separator', label,
           groepTotaal:     groepTotalen.get(label)     ?? 0,
           groepCalcTotaal: groepCalcTotalen.get(label) ?? 0,
-          eigenSoort:      sortering === 'kostengroep' ? eigenSoortPerCode.get(bareCode(label)) : undefined,
+          eigenSoort:      perKostengroep ? eigenSoortPerCode.get(bareCode(label)) : undefined,
         })
         vorigeLabel = label
       }
@@ -868,7 +890,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
     // Zonder dit zie je zo'n post pas in de werkbegroting nadat er iets onder staat -- terwijl
     // juist de lege post het werk is dat nog begroot moet worden. De kop staat op zijn
     // alfabetische plek tussen de andere kostengroepen, zodat SP01 niet ineens onderaan hangt.
-    if (sortering === 'kostengroep') {
+    if (perKostengroep) {
       const bezet = new Set(result.filter((r): r is SeparatorRij => r.type === 'separator').map(r => bareCode(r.label)))
       for (const e of eigenCodes ?? []) {
         if (bezet.has(e.code.trim())) continue
@@ -877,14 +899,37 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
         const kop: SeparatorRij = {
           type: 'separator', label, groepTotaal: 0, groepCalcTotaal: 0, eigenSoort: e.soort, leeg: true,
         }
-        let idx = result.findIndex(r => r.type === 'separator' && r.label.localeCompare(label, 'nl') > 0)
+        // Per post eerst op post, dan alfabetisch: de kop landt in het blok van zijn post.
+        const komtErna = (r: SeparatorRij) => sortering === 'post'
+          ? (postRang(r.label) - postRang(label) || r.label.localeCompare(label, 'nl')) > 0
+          : r.label.localeCompare(label, 'nl') > 0
+        let idx = result.findIndex(r => r.type === 'separator' && komtErna(r))
         if (idx < 0) idx = result.length
         result.splice(idx, 0, kop)
       }
     }
 
+    // Per post: een kop boven elk blok, met de som van de kostengroep-totalen eronder.
+    if (sortering === 'post') {
+      const metKoppen: TabelRij[] = []
+      let kop: PostKopRij | null = null
+      for (const r of result) {
+        if (r.type === 'separator') {
+          const post = postVanLabel(r.label)
+          if (!kop || kop.post !== post) {
+            kop = { type: 'postkop', post, groepTotaal: 0, groepCalcTotaal: 0 }
+            metKoppen.push(kop)
+          }
+          kop.groepTotaal += r.groepTotaal
+          kop.groepCalcTotaal += r.groepCalcTotaal
+        }
+        metKoppen.push(r)
+      }
+      return metKoppen
+    }
+
     return result
-  }, [groepen, regels, actieveComponenten, verborgenRegelIds, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, eigenCodes, eigenSoortPerCode])
+  }, [groepen, regels, actieveComponenten, verborgenRegelIds, samenvoegen, sortering, calcCompMap, calcRegelMap, groepVolgorde, groepPad, eigenCodes, eigenSoortPerCode, gekoppeld])
 
   // ─── Selectie helpers ─────────────────────────────────────────────────────
   const displayRijen = tabelRijen.filter((r): r is DisplayRij => r.type === 'rij')
@@ -1674,6 +1719,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
 
           <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Sortering:</span>
           {sortBtn('kostengroep', 'Kostengroep')}
+          {dossierId && sortBtn('post', 'Per post')}
           {sortBtn('component',   'Component')}
           {sortBtn('leverancier', 'Leverancier / OA')}
           {sortBtn('calculatie',  'Calculatie')}
@@ -1720,6 +1766,28 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
               )}
 
               {tabelRijen.map((rij, i) => {
+                if (rij.type === 'postkop') {
+                  return (
+                    <tr key={`post-${rij.post}`} className="bg-white border-t-2 border-slate-300">
+                      <td colSpan={colOrder.length} className="pt-3 pb-1 px-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className={[
+                            'text-[11px] font-bold uppercase tracking-widest',
+                            rij.post === 'los' ? 'text-slate-400 italic' : 'text-everts',
+                          ].join(' ')}>
+                            {POST_LABEL[rij.post]}
+                          </span>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {rij.groepCalcTotaal !== 0 && (
+                              <span className="text-[10px] text-slate-400">Calc: {formatEuro(rij.groepCalcTotaal)}</span>
+                            )}
+                            <span className="text-[11px] font-bold text-slate-800">{formatEuro(rij.groepTotaal)}</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
                 if (rij.type === 'separator') {
                   const isDropTarget = sortering === 'kostengroep' && dragCompId !== null
                   const isHovered    = dragOverSep === rij.label
@@ -1744,7 +1812,7 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                               <GitBranch className="w-3 h-3 flex-shrink-0 opacity-50" />
                             )}
                             {rij.label}
-                            {sortering === 'kostengroep' && codeNaam.get(bareCode(rij.label)) && (
+                            {(sortering === 'kostengroep' || sortering === 'post') && codeNaam.get(bareCode(rij.label)) && (
                               <span className="ml-1.5 normal-case font-normal tracking-normal text-slate-400">
                                 — {codeNaam.get(bareCode(rij.label))}
                               </span>
@@ -1760,6 +1828,14 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
                             {isHovered && <span className="ml-2 normal-case font-normal text-everts/70">↓ Hier neerzetten</span>}
                           </span>
                           <div className="flex items-center gap-3 flex-shrink-0">
+                            {dossierId && (sortering === 'kostengroep' || sortering === 'post')
+                              && rij.label !== 'Geen kostengroep'
+                              && isKoppelbaar(bareCode(rij.label), eigenSoortPerCode.get(bareCode(rij.label))) && (
+                              <KoppelSchakelaar
+                                aan={gekoppeld.has(bareCode(rij.label))}
+                                onWissel={() => wisselKoppeling(rij.label, bareCode(rij.label))}
+                              />
+                            )}
                             {rij.leeg && (
                               <span className="text-[10px] normal-case font-normal tracking-normal text-slate-400">
                                 nog niets begroot

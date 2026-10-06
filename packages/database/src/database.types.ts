@@ -795,6 +795,41 @@ export type Database = {
         }
         Relationships: []
       }
+      bewakingscode_koppelingen: {
+        Row: {
+          bewakingscode: string
+          doel: string
+          dossier_id: string
+          gekoppeld_door: string | null
+          gekoppeld_op: string
+          id: string
+        }
+        Insert: {
+          bewakingscode: string
+          doel?: string
+          dossier_id: string
+          gekoppeld_door?: string | null
+          gekoppeld_op?: string
+          id?: string
+        }
+        Update: {
+          bewakingscode?: string
+          doel?: string
+          dossier_id?: string
+          gekoppeld_door?: string | null
+          gekoppeld_op?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bewakingscode_koppelingen_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       btw_tarieven: {
         Row: {
           actief: boolean
