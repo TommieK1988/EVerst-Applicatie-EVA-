@@ -7,7 +7,9 @@
  * aanmaak. Reviseren geldt alléén voor een verzonden (definitieve) versie en
  * kopieert **alleen de calculatie** naar een nieuwe, bewerkbare concept-versie —
  * zonder offerte. De offerte wordt later opnieuw gemaakt zodra de gereviseerde
- * begroting klaar is (zonder calculatie geen offerte).
+ * begroting klaar is (zonder calculatie geen offerte). Een concept-versie kan met
+ * dezelfde functie gekopieerd worden ("Kopiëren"); alleen de aanroeper verschilt
+ * (geen dossier-reset, want er is nog niets verzonden).
  *
  * Meerwerk-calculaties reviseren op dezelfde manier: de kopie houdt zijn
  * `meerwerk_regel_id`, zodat de nieuwe versie bij dezelfde meerwerkregel blijft

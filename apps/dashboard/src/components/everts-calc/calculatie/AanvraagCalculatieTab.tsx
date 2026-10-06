@@ -108,6 +108,16 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
     handleScenariosGewijzigd(nieuw.id)
   }
 
+  // Kopiëren van een concept-versie: zelfde kopie als reviseren, maar er is nog niets
+  // verzonden, dus de dossierstatus blijft staan.
+  const handleKopieer = async (sid: string) => {
+    if (!projectId) return
+    const nieuw = await reviseerCalculatie(projectId, sid)
+    if (!nieuw) { toast.error('Kopiëren mislukt'); return }
+    toast.success(`Kopie aangemaakt als v${nieuw.versie}`)
+    handleScenariosGewijzigd(nieuw.id)
+  }
+
   async function handleVerwijder(sid: string) {
     if (!projectId) return
     const s = scenarios.find(x => x.id === sid)
@@ -219,6 +229,7 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
         onOpenOfferte={setOfferteId}
         onReviseer={handleReviseer}
         onReviseerMeerwerk={handleReviseer}
+        onKopieer={handleKopieer}
         onVerwijder={handleVerwijder}
       />
     )

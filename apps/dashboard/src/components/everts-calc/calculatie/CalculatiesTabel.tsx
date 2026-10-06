@@ -6,7 +6,9 @@
  * familie + versienummer. Elke versie heeft ten hoogste één offerte; een versie
  * zonder offerte is een calculatie in bewerking ("Nog geen offerte"). Een
  * verzonden (definitieve) versie is alleen-lezen — je maakt een nieuwe versie via
- * "Reviseren" (kopieert de calculatie; de offerte maak je daarna opnieuw).
+ * "Reviseren" (kopieert de calculatie; de offerte maak je daarna opnieuw). Een
+ * concept-versie kun je "Kopiëren": dezelfde kopie als volgende versie, bijv. om
+ * een variant uit te werken vóórdat er iets verzonden is.
  * Meerwerk-calculaties staan in een eigen blok en zijn óók te reviseren — ook ná
  * opdracht. Losse offertes zonder versie in dit project staan onder "Overige offertes".
  */
@@ -47,6 +49,9 @@ interface Props {
   /** Reviseren van een meerwerk-calculatie. Staat los van `onReviseer`: meerwerk mag
    *  ook ná opdracht nog een nieuwe versie krijgen. */
   onReviseerMeerwerk?: (scenarioId: string) => void
+  /** Kopiëren van een concept-contractversie (nog niet verzonden) naar een nieuwe
+   *  versie. Weglaten verbergt de knop. */
+  onKopieer?: (scenarioId: string) => void
   /** Verwijderen van één concept-versie (calculatie + concept-offerte). Alleen zichtbaar
    *  zolang de versie niet definitief/bevroren is. */
   onVerwijder?: (scenarioId: string) => void
@@ -56,7 +61,7 @@ interface Props {
 
 export default function CalculatiesTabel({
   projectId, scenarios, rijen, tick = 0, readOnly = false,
-  onOpenCalculatie, onOpenOfferte, onReviseer, onReviseerMeerwerk, onVerwijder, headerExtra,
+  onOpenCalculatie, onOpenOfferte, onReviseer, onReviseerMeerwerk, onKopieer, onVerwijder, headerExtra,
 }: Props) {
   // Totalen per calculatie, gerekend over de gedeelde calculatie uit Supabase
   // (één snapshot voor alle versies) — niet uit de lokale kopie van dit apparaat.
@@ -181,6 +186,11 @@ export default function CalculatiesTabel({
                         {definitief && !readOnly && onReviseer && (
                           <Button variant="ghost" size="sm" onClick={() => onReviseer(s.id)} title="Nieuwe versie op basis van deze calculatie">
                             <Copy className="h-3.5 w-3.5" /> Reviseren
+                          </Button>
+                        )}
+                        {!definitief && !s.bevroren_op && !readOnly && onKopieer && (
+                          <Button variant="ghost" size="sm" onClick={() => onKopieer(s.id)} title="Nieuwe versie als kopie van deze concept-calculatie">
+                            <Copy className="h-3.5 w-3.5" /> Kopiëren
                           </Button>
                         )}
                         {!definitief && !s.bevroren_op && !readOnly && onVerwijder && (

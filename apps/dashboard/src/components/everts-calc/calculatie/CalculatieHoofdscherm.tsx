@@ -410,6 +410,17 @@ export default function CalculatieHoofdscherm({
     onScenariosGewijzigd?.(nieuw.id)
   }
 
+  /** Kopiëren: een concept-calculatie (nog niet verzonden) als nieuwe versie
+   *  dupliceren, bijv. om een variant uit te werken. Geen dossier-reset: er is nog
+   *  niets verzonden. */
+  const handleKopieer = async () => {
+    if (!scenario) return
+    const nieuw = await reviseerCalculatie(projectId, scenario.id)
+    if (!nieuw) { toast.error('Kopiëren mislukt'); return }
+    toast.success(`Kopie aangemaakt als v${nieuw.versie}`)
+    onScenariosGewijzigd?.(nieuw.id)
+  }
+
   const ddItem = 'flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md'
 
   return (
@@ -617,6 +628,13 @@ export default function CalculatieHoofdscherm({
                   {scenario?.bevroren_op && magDezeReviseren && (
                     <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
                       <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
+                    </DropdownMenu.Item>
+                  )}
+                  {/* Meerwerk niet: een tweede scenario bij dezelfde meerwerkregel zou de
+                      actuele meerwerk-calculatie stil vervangen (hoogste versie wint). */}
+                  {scenario && !readOnly && magReviseren === 'alles' && !scenario.meerwerk_regel_id && (
+                    <DropdownMenu.Item className={ddItem} onSelect={handleKopieer}>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" /> Kopiëren (nieuwe versie)
                     </DropdownMenu.Item>
                   )}
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
