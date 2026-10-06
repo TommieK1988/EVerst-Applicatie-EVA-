@@ -1790,6 +1790,7 @@ export function InformatieTab({
         `${res.saldo > 0 ? 'Meerwerk' : 'Minderwerk'} van ${fmtBedrag(Math.abs(res.saldo))} aangemaakt — `
         + 'staat op Aangevraagd, dus loopt via klantakkoord.',
       )
+      if (res.waarschuwing) toast.error(res.waarschuwing, { duration: 8000 })
       router.refresh()
     })
   }

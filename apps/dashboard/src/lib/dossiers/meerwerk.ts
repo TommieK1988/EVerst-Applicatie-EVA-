@@ -284,7 +284,7 @@ export type NieuweMeerwerkData = {
 export async function maakMeerwerkRegel(
   dossierId: string,
   data: NieuweMeerwerkData,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string; waarschuwing?: string } | { ok: false; error: string }> {
   // Muterende actie op de admin-client: zonder deze gate is dit een publiek
   // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
   // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
@@ -326,8 +326,11 @@ export async function maakMeerwerkRegel(
     .select('id')
     .single()
   if (error) return { ok: false, error: error.message }
+  // Elke nieuwe regel gaat meteen als meerwerkregel naar Bouw7. Mislukt dat, dan haalt de
+  // eerstvolgende bewerking of statuswijziging het in (zie updateMeerwerkRegel/setMeerwerkStatus).
+  const b7 = await maakMeerwerkInBouw7(ins.id)
   revalidatePath(`/opdrachten/${dossierId}/meerwerk`)
-  return { ok: true, id: ins.id }
+  return { ok: true, id: ins.id, waarschuwing: b7.ok ? undefined : `Opgeslagen, maar aanmaken in Bouw7 mislukt: ${b7.error}` }
 }
 
 export async function updateMeerwerkRegel(
@@ -362,11 +365,13 @@ export async function updateMeerwerkRegel(
     .single()
   if (error) return { ok: false, error: error.message }
 
-  // Twee-weg: een bewerkte EVA-eigen regel die aan een Bouw7-meerwerkregel hangt terugschrijven naar Bouw7.
-  // Geïmporteerde regels (bron='bouw7_line') niet — daar is Bouw7 leidend en de sync overschrijft toch.
+  // Twee-weg: EVA-eigen regel terugschrijven naar Bouw7, of alsnog aanmaken als dat bij toevoegen
+  // mislukte. Geïmporteerde regels (bron='bouw7_line') niet — daar is Bouw7 leidend.
   let waarschuwing: string | undefined
-  if (bestaand?.bron === 'eva' && bestaand.bouw7_line_id != null) {
-    const res = await updateMeerwerkInBouw7({ ...(bestaand as MeerwerkRegel), ...(velden as Partial<MeerwerkRegel>) })
+  if (bestaand?.bron === 'eva') {
+    const res = bestaand.bouw7_line_id != null
+      ? await updateMeerwerkInBouw7({ ...(bestaand as MeerwerkRegel), ...(velden as Partial<MeerwerkRegel>) })
+      : await maakMeerwerkInBouw7(id)
     if (!res.ok) waarschuwing = `Wijziging in EVA opgeslagen, maar terugschrijven naar Bouw7 mislukt: ${res.error}`
   }
 
@@ -548,10 +553,10 @@ export async function setMeerwerkStatus(
       : `Bedrag uit de offerte overgenomen: ${euro(offerte.verkoopExclBtw)}`)
   }
 
-  // Fallback/retry bij akkoord: normaal is de bewakingscode al bij het aanmaken van de regel gezet.
-  // De guard bouw7_chapter_id == null voorkomt dubbel aanmaken; alleen voor EVA-native regels zonder
-  // Bouw7-koppeling (geïmporteerde/teruggeschreven Bouw7-meerwerkregels krijgen er geen).
-  if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_line_id == null && r.bouw7_chapter_id == null) {
+  // Bij akkoord krijgt een EVA-eigen regel zijn bewakingscode in Bouw7. Los van de meerwerkregel
+  // zelf (additional-work-line): die staat er sinds het toevoegen al, de code nog niet. De guard
+  // bouw7_security_code_id == null voorkomt dubbel aanmaken; geïmporteerde regels krijgen er geen.
+  if (status === 'akkoord' && r.bron === 'eva' && r.bouw7_security_code_id == null) {
     const code = `MW${String(r.volgnummer).padStart(2, '0')}`
     // Wat er als verwachte kosten naar Bouw7 gaat. Is er een offerte, dan de KOSTPRIJS daarvan --
     // nooit het verkoopbedrag: dat draagt AK en winst en zou de verwachte kosten opblazen (zelfde
@@ -576,9 +581,11 @@ export async function setMeerwerkStatus(
   const { error } = await supabase.from('meerwerk_regels').update(velden).eq('id', id)
   if (error) return { ok: false, error: error.message }
 
-  // Statuswijziging terugschrijven naar Bouw7 als de regel aan een Bouw7-meerwerkregel hangt.
-  if (r.bouw7_line_id != null) {
-    const res = await updateMeerwerkInBouw7({ ...r, ...(velden as Partial<MeerwerkRegel>), status })
+  // Statuswijziging terugschrijven naar Bouw7; een EVA-regel die er nog niet staat alsnog aanmaken.
+  if (r.bouw7_line_id != null || r.bron === 'eva') {
+    const res = r.bouw7_line_id != null
+      ? await updateMeerwerkInBouw7({ ...r, ...(velden as Partial<MeerwerkRegel>), status })
+      : await maakMeerwerkInBouw7(id)
     if (!res.ok) {
       waarschuwing = [waarschuwing, `Status in EVA bijgewerkt, maar terugschrijven naar Bouw7 mislukt: ${res.error}`]
         .filter(Boolean).join(' ')
@@ -728,24 +735,21 @@ async function bouwBouw7MeerwerkBody(regel: MeerwerkRegel): Promise<Record<strin
  * Na aanmaken worden het teruggegeven Bouw7-id + MW-nummer op de EVA-regel vastgelegd (en de
  * bronsleutel, tegen dubbele import). Regels die al aan een Bouw7-regel hangen worden overgeslagen.
  */
-export async function stuurMeerwerkNaarBouw7(
-  regelId: string,
-): Promise<{ ok: true; nummer: string | null } | { ok: false; error: string }> {
-  // Muterende actie op de admin-client: zonder deze gate is dit een publiek
-  // aanroepbaar endpoint voor iedereen met een sessie -- sinds het klantportaal
-  // ook voor opdrachtgevers. vereisSessie en niet vereisRecht('dossiers'): die
-  // module staat niet in AFGEDWONGEN_MODULES, dus een rechtencheck zou collega's
-  // buitensluiten die dat recht nooit expliciet hebben gekregen. Een
-  // portaalgebruiker heeft geen medewerkersrij en komt er hoe dan ook niet door.
+export async function stuurMeerwerkNaarBouw7(regelId: string): Promise<Bouw7AanmaakResultaat> {
   await vereisSessie()
+  return maakMeerwerkInBouw7(regelId)
+}
+type Bouw7AanmaakResultaat = { ok: true; nummer: string | null } | { ok: false; error: string }
+
+/** Zonder sessiegate: ook het akkoord van een opdrachtgever in het portaal komt hier langs. */
+async function maakMeerwerkInBouw7(regelId: string): Promise<Bouw7AanmaakResultaat> {
   const supabase = createAdminClient() as any
   const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
   if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
-  await assertDossierBewerkbaar(regel.dossier_id)
   if (regel.bouw7_line_id) return { ok: true, nummer: regel.bouw7_nummer ?? null }
 
   const ctx = await bouw7VoorDossier(regel.dossier_id)
-  if (!ctx) return { ok: false, error: 'Dossier is niet aan een Bouw7-project gekoppeld.' }
+  if (!ctx) return { ok: true, nummer: null } // dossier zonder Bouw7-project: niets te schrijven, geen fout
   const { client, bouw7Id } = ctx
 
   const body = await bouwBouw7MeerwerkBody(regel as MeerwerkRegel)

@@ -6,7 +6,7 @@ import type { OpdrachtOnderdeel, OpdrachtOnderdeelGrondslag } from '@everts/data
 import { getDossierBewaking } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { kiesAanneemsom } from './aanneemsom'
-import { getDossierMeerwerk } from './meerwerk'
+import { getDossierMeerwerk, stuurMeerwerkNaarBouw7 } from './meerwerk'
 import { getServicedeskRegie } from './servicedesk'
 import { isDossierAfgesloten, opRegie } from '@/components/dossiers/types'
 import {
@@ -928,7 +928,7 @@ export async function zorgVoorStelpostBewakingscodes(
  */
 export async function verrekenStelpost(
   onderdeelId: string,
-): Promise<{ ok: true; meerwerkId: string; saldo: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; meerwerkId: string; saldo: number; waarschuwing?: string } | { ok: false; error: string }> {
   const supabase = createAdminClient() as any
   const { data: rij } = await supabase
     .from('opdracht_onderdelen')
@@ -1008,7 +1008,11 @@ export async function verrekenStelpost(
     .single()
   if (error) return { ok: false, error: error.message }
 
+  // Net als elke andere nieuwe meerwerkregel meteen naar Bouw7; mislukt dat, dan haalt de
+  // volgende bewerking of statuswijziging van de regel het in.
+  const b7 = await stuurMeerwerkNaarBouw7(ins.id)
+
   revalidatePath(`/opdrachten/${rij.dossier_id}/informatie`)
   revalidatePath(`/opdrachten/${rij.dossier_id}/meerwerk`)
-  return { ok: true, meerwerkId: ins.id, saldo }
+  return { ok: true, meerwerkId: ins.id, saldo, waarschuwing: b7.ok ? undefined : `Aanmaken in Bouw7 mislukt: ${b7.error}` }
 }

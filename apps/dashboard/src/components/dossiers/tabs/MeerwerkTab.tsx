@@ -8,7 +8,7 @@ import { Card, CardHeader, CardBody, Button, Input, Badge, useDialogen } from '@
 import { meerwerkStatusLabels, type MeerwerkStatus, type MeerwerkAfrekenwijze, type MeerwerkTermijnWijze } from '@everts/database'
 import {
   getDossierMeerwerk, maakMeerwerkRegel, updateMeerwerkRegel, setMeerwerkStatus,
-  verwijderMeerwerkRegel, maakMeerwerkCalculatie, stuurMeerwerkNaarBouw7,
+  verwijderMeerwerkRegel, maakMeerwerkCalculatie,
   type DossierMeerwerkData, type MeerwerkRegelView, type NieuweMeerwerkData,
 } from '@/lib/dossiers/meerwerk'
 import { getMeerwerkKostencodes, koppelMeerwerkKostencode, type MeerwerkKostencode } from '@/lib/dossiers/meerwerk-kostencode'
@@ -149,8 +149,9 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     })
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('Meerwerkregel toegevoegd')
-    setNieuw(leegNieuw); setRuw(LEGE_RUW); setFormOpen(false); herlaad()
+    if (r.waarschuwing) toast.error(r.waarschuwing, { duration: 8000 })
+    else toast.success('Meerwerkregel toegevoegd')
+    setNieuw(leegNieuw); setRuw(LEGE_RUW); setFormOpen(false); herlaad(); router.refresh()
   }
 
   /**
@@ -212,14 +213,6 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     herlaad()
   }
 
-  async function naarBouw7(regel: MeerwerkRegelView) {
-    setBezig(true)
-    const res = await stuurMeerwerkNaarBouw7(regel.id)
-    setBezig(false)
-    if (!res.ok) { toast.error(res.error); return }
-    toast.success(res.nummer ? `Aangemaakt in Bouw7 (${res.nummer})` : 'Aangemaakt in Bouw7'); herlaad(); router.refresh()
-  }
-
   // Opent (of maakt) de eigen calculatie van dit meerwerk en toont de calculatie-omgeving inline.
   async function calculatie(regel: MeerwerkRegelView) {
     setBezig(true)
@@ -245,6 +238,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
     setBezig(false)
     if (!r.ok) { toast.error(r.error); return }
     toast.success(`Verrekend: ${fmt(r.saldo)} als ${r.saldo < 0 ? 'minderwerk' : 'meerwerk'}`)
+    if (r.waarschuwing) toast.error(r.waarschuwing, { duration: 8000 })
     herlaad(); router.refresh()
   }
 
@@ -611,10 +605,6 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                         <span className="block text-right text-neutral-300">—</span>
                       ) : (
                         <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5">
-                          {!r.bouw7_line_id && (
-                            <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
-                              onClick={() => naarBouw7(r)}>Naar Bouw7</button>
-                          )}
                           <button className="text-[11px] font-medium text-brand-600 hover:underline" disabled={bezig}
                             onClick={() => calculatie(r)}>
                             Calculatie
