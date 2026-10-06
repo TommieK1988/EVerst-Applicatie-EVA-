@@ -28,6 +28,7 @@ type FormState = {
   achternaam:    string
   email:         string
   functie:       string
+  werkmaatschappij_id: string
   extern:        boolean
 }
 
@@ -37,15 +38,19 @@ const LEEG: FormState = {
   achternaam:    '',
   email:         '',
   functie:       '',
+  werkmaatschappij_id: '',
   extern:        false,
 }
 
 export default function NieuweMedewerkerModal({
   onClose,
   functies = [],
+  werkmaatschappijen = {},
 }: {
   onClose: () => void
   functies?: { id: string; naam: string }[]
+  /** id → naam */
+  werkmaatschappijen?: Record<string, string>
 }) {
   const [form, setForm] = useState<FormState>(LEEG)
   const [isPending, startTransition] = useTransition()
@@ -63,10 +68,13 @@ export default function NieuweMedewerkerModal({
         achternaam:    form.achternaam.trim(),
         email:         form.email.trim() || null,
         functie:       form.functie.trim() || null,
+        werkmaatschappij_id: form.werkmaatschappij_id || null,
         extern:        form.extern,
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Medewerker aangemaakt')
+      // Aanmaken in Bouw7 kan mislukken terwijl EVA wel slaagt; dat moet de gebruiker zien.
+      if (result.waarschuwing) toast(result.waarschuwing, { icon: '⚠️', duration: 8000 })
       onClose()
       router.push(`/medewerkers/${result.id}`)
     })
@@ -148,6 +156,28 @@ export default function NieuweMedewerkerModal({
                 )}
               </FormField>
             </div>
+
+            {/* Werkmaatschappij — staat alleen in EVA, Bouw7 laat hem via de koppeling niet zetten */}
+            {Object.keys(werkmaatschappijen).length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <FormField label="Werkmaatschappij" helper="Alleen in EVA — in Bouw7 stel je dit zelf in.">
+                  <Select
+                    value={form.werkmaatschappij_id || undefined}
+                    onValueChange={v => set('werkmaatschappij_id', v === '__geen__' ? '' : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="— Geen —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__geen__">— Geen —</SelectItem>
+                      {Object.entries(werkmaatschappijen)
+                        .sort(([, a], [, b]) => a.localeCompare(b))
+                        .map(([id, naam]) => <SelectItem key={id} value={id}>{naam}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </div>
+            )}
 
             {/* Extern */}
             <div style={{ marginBottom: 4 }}>

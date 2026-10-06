@@ -12,6 +12,9 @@ const nieuweMedewerkerSchema = z.object({
   email:         z.string().email().nullable().optional(),
   functie:       z.string().nullable().optional(),
   extern:        z.boolean().optional().default(false),
+  // Alleen in EVA: Bouw7 koppelt een medewerker aan een werkmaatschappij via de Exact-administratie,
+  // en die koppeling is via de API alleen te lezen. Zie lib/bouw7/employee-write.ts.
+  werkmaatschappij_id: z.string().uuid().nullable().optional(),
 })
 
 type MaakMedewerkerResult = { ok: true; id: string; waarschuwing?: string } | { ok: false; error: string }
@@ -32,6 +35,7 @@ export async function maakMedewerker(raw: unknown): Promise<MaakMedewerkerResult
       email:         parsed.data.email ?? null,
       functie:       parsed.data.functie ?? null,
       extern:        parsed.data.extern ?? false,
+      werkmaatschappij_id: parsed.data.werkmaatschappij_id ?? null,
       actief:        true,
     })
     .select('id')

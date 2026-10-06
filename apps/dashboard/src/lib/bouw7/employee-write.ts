@@ -10,6 +10,10 @@
  * gebruikersnaam voor inloggen; een tikfout in EVA zou iemand buitensluiten. Het is in EVA
  * gewoon bewerkbaar en blijft daar beschermd, maar gaat niet naar Bouw7.
  *
+ * De werkmaatschappij gaat níet mee, en dat kan ook niet: een Bouw7-medewerker heeft geen
+ * `branch`, de koppeling loopt via de Exact-administratie (`employeeDivisions`/`payrollDivision`)
+ * en die is in de API alleen-lezen (gecheckt okt 2026). `medewerkers.werkmaatschappij_id` is EVA-eigen.
+ *
  * Eén uitzondering op "afdeling niet schrijven": wie in EVA op **inactief** gaat, verhuist in
  * Bouw7 naar de afdeling **"Inactief personeel"** — zo valt hij daar ook uit de planning- en
  * personeelslijsten. Zie `AFDELING_INACTIEF`.

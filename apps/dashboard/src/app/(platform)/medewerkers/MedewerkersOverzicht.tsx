@@ -477,7 +477,7 @@ export default function MedewerkersOverzicht({
       />
 
       {/* Nieuw modal */}
-      {showNieuw && <NieuweMedewerkerModal onClose={() => setShowNieuw(false)} functies={functies} />}
+      {showNieuw && <NieuweMedewerkerModal onClose={() => setShowNieuw(false)} functies={functies} werkmaatschappijen={lookups.werkmaatschappijen} />}
     </div>
   )
 }
