@@ -10,6 +10,7 @@ import { haalAgendaMaand } from '@/app/m/planning/actions'
 import MaandGrid from './MaandGrid'
 import DagLijst from './DagLijst'
 import ItemSheet from './ItemSheet'
+import WeekScherm from './WeekScherm'
 
 /**
  * Mobiele agenda — maandrooster boven, dagagenda eronder.
@@ -36,6 +37,8 @@ export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }
   const [extra, setExtra] = useState<Map<string, AgendaItem[]>>(new Map())
   const [bezigMaand, setBezigMaand] = useState<string | null>(null)
   const [gekozen, setGekozen] = useState<AgendaItem | null>(null)
+  /** Maandag (yyyy-MM-dd) van de week die schermvullend open staat. */
+  const [week, setWeek] = useState<string | null>(null)
 
   const initieleMaanden = useMemo(() => {
     const p = maandUitSleutel(peilMaand)
@@ -121,12 +124,18 @@ export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }
           perDag={perDag}
           bezig={bezigMaand !== null}
           onKiesDag={setGeselecteerd}
+          onKiesWeek={setWeek}
           onWisselMaand={wisselMaand}
           onVandaag={naarVandaag}
         />
       </div>
 
       <DagLijst dag={geselecteerd} items={dagItems} onKies={setGekozen} />
+
+      {/* Vóór de ItemSheet: een kaart in de week opent het detail, en dat moet erbovenop liggen. */}
+      {week && (
+        <WeekScherm maandag={week} perDag={perDag} onKies={setGekozen} onSluit={() => setWeek(null)} />
+      )}
 
       {gekozen && <ItemSheet item={gekozen} onSluit={() => setGekozen(null)} />}
     </>

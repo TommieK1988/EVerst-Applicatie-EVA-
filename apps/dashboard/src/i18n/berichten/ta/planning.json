@@ -12,6 +12,9 @@
   "dagHeleDag": "{dag} · முழு நாள்",
   "naarDossier": "திட்டத்துக்குச் செல்",
   "naarMijnTaken": "எனது பணிகளுக்குச் செல்",
+  "weekKop": "வாரம் {nummer}",
+  "weekKort": "வா",
+  "toonWeek": "வாரம் {nummer} ஐக் காட்டு",
   "type": {
     "verlof": "விடுப்பு",
     "ziek": "சுகவீனம்",

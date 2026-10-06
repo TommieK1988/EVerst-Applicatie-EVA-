@@ -12,6 +12,9 @@
   "dagHeleDag": "{dag} · Hele dag",
   "naarDossier": "Naar dossier",
   "naarMijnTaken": "Naar mijn taken",
+  "weekKop": "Week {nummer}",
+  "weekKort": "wk",
+  "toonWeek": "Toon week {nummer}",
   "type": {
     "verlof": "Verlof",
     "ziek": "Ziekte",

@@ -58,7 +58,16 @@ export default function DagLijst({ dag, items, onKies }: {
   )
 }
 
-function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) => void }) {
+/**
+ * Eén agenda-item als kaart. `verlopen` (weekweergave) dimt de kaart en kleurt hem grijs,
+ * zodat je in één oogopslag ziet wat al voorbij is.
+ */
+export function Kaart({ item, onKies, verlopen = false }: {
+  item: AgendaItem
+  onKies: (item: AgendaItem) => void
+  verlopen?: boolean
+}) {
+  const kleur = verlopen ? ZACHT : item.kleur
   // Verlof en ziekte krijgen een gekleurd vlak: een niet-werkdag moet je in één
   // oogopslag herkennen, niet pas nadat je het label gelezen hebt.
   const gevuld = item.bron === 'afwezigheid'
@@ -69,9 +78,9 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
       onClick={() => onKies(item)}
       style={{
         width: '100%', textAlign: 'left', padding: '12px 14px',
-        background: gevuld ? tint(item.kleur, 0.07) : 'var(--bg-elev)',
-        border: '1px solid var(--border)', borderLeft: `4px solid ${item.kleur}`,
-        borderRadius: 12, cursor: 'pointer',
+        background: gevuld ? tint(kleur, 0.07) : 'var(--bg-elev)',
+        border: '1px solid var(--border)', borderLeft: `4px solid ${kleur}`,
+        borderRadius: 12, cursor: 'pointer', opacity: verlopen ? 0.45 : 1,
         WebkitTapHighlightColor: 'transparent', fontFamily: 'inherit',
         display: 'flex', gap: 10, alignItems: 'flex-start',
       }}
@@ -79,7 +88,7 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
       {item.heleDag ? (
         <span style={{
           flexShrink: 0, marginTop: 1, padding: '2px 7px', borderRadius: 6,
-          background: tint(item.kleur, 0.12), color: item.kleur,
+          background: tint(kleur, 0.12), color: kleur,
           fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em',
         }}>
           <AgendaTypeLabel tekst={item.typeLabel} />
@@ -87,7 +96,7 @@ function Kaart({ item, onKies }: { item: AgendaItem; onKies: (item: AgendaItem) 
       ) : (
         // Vaste breedte + flexShrink 0, anders drukt een lange titel de tijd weg.
         <span style={{ width: 44, flexShrink: 0 }}>
-          <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: item.kleur }}>
+          <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: kleur }}>
             {item.startTijd}
           </span>
           {item.eindTijd && (

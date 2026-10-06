@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { addMonths, isSameMonth, isToday, subMonths } from 'date-fns'
+import { addMonths, getISOWeek, isSameMonth, isToday, subMonths } from 'date-fns'
 import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import {
@@ -25,6 +25,12 @@ const RIJ_H = 52
 /** Zes vaste rijen: zie `maandGridDagen` — een wisselend aantal weken laat de pagina springen. */
 export const GRID_H = BALK_H + KOP_H + RIJ_H * 6
 
+/**
+ * Weeknummer, ma t/m vr, za, zo. Zaterdag en zondag zijn samen zo breed als één werkdag:
+ * daar staat zelden iets, en zo krijgen de werkdagen de ruimte.
+ */
+const KOLOMMEN = '28px repeat(5, 1fr) 0.5fr 0.5fr'
+
 /** Korte weekdagnamen in de taal van de app, maandag eerst (5 januari 2026 is een maandag). */
 function dagnamen(locale: string): string[] {
   const opmaak = new Intl.DateTimeFormat(locale, { weekday: 'short' })
@@ -45,12 +51,14 @@ type Props = {
   perDag: Map<string, AgendaItem[]>
   bezig: boolean
   onKiesDag: (dag: string) => void
+  /** Maandag (yyyy-MM-dd) van de week waarvan je het weeknummer aantikte. */
+  onKiesWeek: (maandag: string) => void
   onWisselMaand: (delta: -1 | 1) => void
   onVandaag: () => void
 }
 
 export default function MaandGrid({
-  peil, geselecteerd, perDag, bezig, onKiesDag, onWisselMaand, onVandaag,
+  peil, geselecteerd, perDag, bezig, onKiesDag, onKiesWeek, onWisselMaand, onVandaag,
 }: Props) {
   const t = useTranslations('planning')
   const locale = useDatumLocale()
@@ -143,6 +151,11 @@ export default function MaandGrid({
     onKiesDag(dag)
   }
 
+  const kiesWeek = (maandag: string) => {
+    if (swipeRef.current) { swipeRef.current = false; return }
+    onKiesWeek(maandag)
+  }
+
   const maandNaam = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(peil)
   const toonVandaag = !isSameMonth(peil, new Date()) || geselecteerd !== dagSleutel(new Date())
 
@@ -188,14 +201,23 @@ export default function MaandGrid({
       </div>
 
       {/* Weekdagkoppen */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: KOP_H }}>
-        {DAGNAMEN.map((d, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 700, color: ZACHT,
-            textTransform: 'uppercase', letterSpacing: '0.08em',
-          }}>{d}</div>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: KOLOMMEN, height: KOP_H }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 9, fontWeight: 700, color: BUITEN, textTransform: 'uppercase',
+        }}>{t('weekKort')}</div>
+        {DAGNAMEN.map((d, i) => {
+          // Za/zo zijn half zo breed: in het Tamil ("ஞாயி.") liepen de koppen in elkaar.
+          const smal = i >= 5
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: smal ? 9 : 10, fontWeight: 700, color: ZACHT,
+              textTransform: 'uppercase', letterSpacing: smal ? 0 : '0.08em',
+              minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
+            }}>{smal ? d.replace(/\.$/, '') : d}</div>
+          )
+        })}
       </div>
 
       {/* Drie roosters naast elkaar; alleen het middelste is in beeld. */}
@@ -228,6 +250,7 @@ export default function MaandGrid({
                 geselecteerd={geselecteerd}
                 perDag={perDag}
                 onKiesDag={kiesDag}
+                onKiesWeek={kiesWeek}
               />
             </div>
           ))}
@@ -254,63 +277,112 @@ function PijlKnop({ label, teken, onClick }: { label: string; teken: string; onC
   )
 }
 
-function Rooster({ maand, geselecteerd, perDag, onKiesDag }: {
+function Rooster({ maand, geselecteerd, perDag, onKiesDag, onKiesWeek }: {
   maand: Date
   geselecteerd: string
   perDag: Map<string, AgendaItem[]>
   onKiesDag: (dag: string) => void
+  onKiesWeek: (maandag: string) => void
 }) {
+  const t = useTranslations('planning')
+  const dagen = maandGridDagen(maand)
+  const weken = Array.from({ length: 6 }, (_, w) => dagen.slice(w * 7, w * 7 + 7))
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: `repeat(6, ${RIJ_H}px)` }}>
-      {maandGridDagen(maand).map(dag => {
-        const sleutel = dagSleutel(dag)
-        const items = perDag.get(sleutel) ?? []
-        const inMaand = isSameMonth(dag, maand)
-        const vandaag = isToday(dag)
-        const gekozen = sleutel === geselecteerd
-        const weekend = dag.getDay() === 0 || dag.getDay() === 6
-        const feestdag = isFeestdag(items)
-        const { kleuren, rest } = stipKleuren(items)
-
-        const cirkelBg = gekozen ? (vandaag ? GROEN : DONKER) : GEEN
-        const cirkelKleur = gekozen ? WIT
-          : vandaag ? GROEN
-          : feestdag && inMaand ? ROOD
-          : inMaand ? TEKST : BUITEN
-
+    <div style={{ display: 'grid', gridTemplateColumns: KOLOMMEN, gridTemplateRows: `repeat(6, ${RIJ_H}px)` }}>
+      {weken.map(week => {
+        const nummer = getISOWeek(week[0])
+        const maandag = dagSleutel(week[0])
         return (
-          <button
-            key={sleutel}
-            type="button"
-            onClick={() => onKiesDag(sleutel)}
-            style={{
-              border: 'none', padding: '4px 0 0', background: weekend ? 'rgba(0,0,0,0.02)' : 'transparent',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-              cursor: 'pointer', WebkitTapHighlightColor: 'transparent', fontFamily: 'inherit',
-            }}
-          >
-            <span style={{
-              width: 28, height: 28, borderRadius: 999,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: cirkelBg, color: cirkelKleur,
-              fontSize: 14, fontWeight: gekozen || vandaag || feestdag ? 800 : inMaand ? 600 : 500,
-            }}>
-              {dag.getDate()}
-            </span>
-            <span style={{ height: 6, display: 'flex', alignItems: 'center', gap: 3 }}>
-              {kleuren.map((kleur, i) => (
-                <span key={i} style={{
-                  width: 5, height: 5, borderRadius: 999, background: kleur,
-                  opacity: inMaand ? 1 : 0.4,
-                }} />
-              ))}
-              {rest > 0 && kleuren.length === MAX_STIPPEN && (
-                <span style={{ width: 3, height: 3, borderRadius: 999, background: BUITEN }} />
-              )}
-            </span>
-          </button>
+          <React.Fragment key={maandag}>
+            <button
+              type="button"
+              onClick={() => onKiesWeek(maandag)}
+              aria-label={t('toonWeek', { nummer })}
+              style={{
+                border: 'none', padding: '4px 0 0', background: 'transparent',
+                display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+                cursor: 'pointer', WebkitTapHighlightColor: 'transparent', fontFamily: 'inherit',
+              }}
+            >
+              <span style={{
+                height: 28, minWidth: 22, padding: '0 4px', borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 700, color: ZACHT, background: 'rgba(0,0,0,0.04)',
+              }}>
+                {nummer}
+              </span>
+            </button>
+            {week.map(dag => (
+              <DagCel
+                key={dagSleutel(dag)}
+                dag={dag}
+                maand={maand}
+                geselecteerd={geselecteerd}
+                items={perDag.get(dagSleutel(dag)) ?? []}
+                onKiesDag={onKiesDag}
+              />
+            ))}
+          </React.Fragment>
         )
       })}
     </div>
+  )
+}
+
+function DagCel({ dag, maand, geselecteerd, items, onKiesDag }: {
+  dag: Date
+  maand: Date
+  geselecteerd: string
+  items: AgendaItem[]
+  onKiesDag: (dag: string) => void
+}) {
+  const sleutel = dagSleutel(dag)
+  const inMaand = isSameMonth(dag, maand)
+  const vandaag = isToday(dag)
+  const gekozen = sleutel === geselecteerd
+  // Weekenddagen zijn half zo breed (zie KOLOMMEN): kleinere cirkel en cijfer.
+  const weekend = dag.getDay() === 0 || dag.getDay() === 6
+  const cirkel = weekend ? 24 : 28
+  const feestdag = isFeestdag(items)
+  const { kleuren, rest } = stipKleuren(items)
+
+  const cirkelBg = gekozen ? (vandaag ? GROEN : DONKER) : GEEN
+  const cirkelKleur = gekozen ? WIT
+    : vandaag ? GROEN
+    : feestdag && inMaand ? ROOD
+    : inMaand ? TEKST : BUITEN
+
+  return (
+    <button
+      type="button"
+      onClick={() => onKiesDag(sleutel)}
+      style={{
+        border: 'none', padding: weekend ? '6px 0 0' : '4px 0 0', minWidth: 0,
+        background: weekend ? 'rgba(0,0,0,0.02)' : 'transparent',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: weekend ? 6 : 4,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent', fontFamily: 'inherit',
+      }}
+    >
+      <span style={{
+        width: cirkel, height: cirkel, borderRadius: 999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: cirkelBg, color: cirkelKleur,
+        fontSize: weekend ? 12 : 14, fontWeight: gekozen || vandaag || feestdag ? 800 : inMaand ? 600 : 500,
+      }}>
+        {dag.getDate()}
+      </span>
+      <span style={{ height: 6, display: 'flex', alignItems: 'center', gap: weekend ? 2 : 3 }}>
+        {kleuren.map((kleur, i) => (
+          <span key={i} style={{
+            width: 5, height: 5, borderRadius: 999, background: kleur,
+            opacity: inMaand ? 1 : 0.4,
+          }} />
+        ))}
+        {rest > 0 && kleuren.length === MAX_STIPPEN && (
+          <span style={{ width: 3, height: 3, borderRadius: 999, background: BUITEN }} />
+        )}
+      </span>
+    </button>
   )
 }

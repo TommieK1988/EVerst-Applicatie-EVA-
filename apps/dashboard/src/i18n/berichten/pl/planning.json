@@ -12,6 +12,9 @@
   "dagHeleDag": "{dag} · Cały dzień",
   "naarDossier": "Do projektu",
   "naarMijnTaken": "Do moich zadań",
+  "weekKop": "Tydzień {nummer}",
+  "weekKort": "tydz.",
+  "toonWeek": "Pokaż tydzień {nummer}",
   "type": {
     "verlof": "Urlop",
     "ziek": "Choroba",
