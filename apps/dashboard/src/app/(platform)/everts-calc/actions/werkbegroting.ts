@@ -1056,15 +1056,28 @@ async function zorgVoorOntbrekendePsls(
   // Index: code → budgetData-entry die al op het project staat, plus het hoofdstuk waar hij onder
   // hangt. Dat hoofdstuk gaat mee terug naar de aanroeper: die legt ermee vast dát zijn code in
   // Bouw7 staat, óók wanneer hij de hoofdstukkeuze hier heeft gelaten.
-  const codeEntry = new Map<string, SecBudgetData>()
+  // Per code een lijst: een project kan meerdere codes met hetzelfde nummer hebben die alleen in
+  // omschrijving verschillen (20251.00038: zes keer ".A"). Op code alleen won de laatste, en kreeg
+  // die de nieuwe kostensoort in plaats van de bedoelde code.
+  const codeEntries = new Map<string, SecBudgetData[]>()
   const hoofdstukPerCode = new Map<string, number | null>()
   for (const chap of obj.securityCodesPerChapters) {
     for (const bd of chap.budgetDataPerSecurityCodes ?? []) {
       const c = (bd.securityCode?.code ?? '').trim()
       if (!c) continue
-      codeEntry.set(c, bd)
+      const lijst = codeEntries.get(c) ?? []
+      lijst.push(bd)
+      codeEntries.set(c, lijst)
       hoofdstukPerCode.set(c, chap.securityCodeChapter?.id ?? null)
     }
+  }
+  /** Entry op code + omschrijving; zonder treffer alleen terugvallen als het nummer uniek is. */
+  const entryVoor = (code: string, naam: string | null): SecBudgetData | 'dubbel' | undefined => {
+    const lijst = codeEntries.get(code) ?? []
+    const raak = lijst.find(bd => codeIdentity(code, bd.securityCode?.name) === codeIdentity(code, naam))
+    if (raak) return raak
+    if (lijst.length === 1) return lijst[0]
+    return lijst.length > 1 ? 'dubbel' : undefined
   }
 
   /**
@@ -1100,18 +1113,25 @@ async function zorgVoorOntbrekendePsls(
     return doel
   }
 
-  // Per code groeperen (we maken een code max één keer aan).
-  const perCode = new Map<string, { naam: string | null; cts: number[] }>()
+  // Per code + omschrijving groeperen (we maken een code max één keer aan).
+  const perCode = new Map<string, { code: string; naam: string | null; cts: number[] }>()
   for (const o of ontbrekend) {
-    const g = perCode.get(o.code) ?? { naam: o.naam, cts: [] }
+    const sleutel = codeIdentity(o.code, o.naam)
+    const g = perCode.get(sleutel) ?? { code: o.code, naam: o.naam, cts: [] }
     g.cts.push(o.ct)
-    perCode.set(o.code, g)
+    perCode.set(sleutel, g)
   }
 
   const fouten: string[] = []
   let aangemaakt = 0
-  for (const [code, { naam, cts }] of perCode) {
-    let bd = codeEntry.get(code)
+  for (const { code, naam, cts } of perCode.values()) {
+    const gevonden = entryVoor(code, naam)
+    if (gevonden === 'dubbel') {
+      // Gokken zou de kostensoort op een verkeerde code zetten; nieuw aanmaken een duplicaat.
+      fouten.push(`Code "${code}" staat meerdere keren in Bouw7 en geen ervan heet "${naam ?? ''}" — kostensoort niet toegevoegd.`)
+      continue
+    }
+    let bd = gevonden
     if (!bd) {
       const chap = await doelChapter()
       if (!chap) { fouten.push(`Geen hoofdstuk voor nieuwe code "${code}": aanmaken van hoofdstuk "${FALLBACK_HOOFDSTUK}" mislukte (${hoofdstukFout ?? 'onbekende fout'}). Kies anders zelf een hoofdstuk in EVA bij 'Naar Bouw7'.`); continue }
@@ -1120,7 +1140,7 @@ async function zorgVoorOntbrekendePsls(
         bd = { securityCode: { id: newId, name: naam ?? code, code, chapterName: chap.securityCodeChapter.name } }
         chap.budgetDataPerSecurityCodes = chap.budgetDataPerSecurityCodes ?? []
         chap.budgetDataPerSecurityCodes.push(bd)
-        codeEntry.set(code, bd)
+        codeEntries.set(code, [...(codeEntries.get(code) ?? []), bd])
         hoofdstukPerCode.set(code, chap.securityCodeChapter.id)
       } catch (e) { fouten.push(`Code "${code}" aanmaken mislukt: ${e instanceof Error ? e.message : ''}`); continue }
     }
