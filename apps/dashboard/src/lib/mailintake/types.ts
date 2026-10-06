@@ -242,6 +242,23 @@ export const DUPLICAAT_HARD = 0.80
  */
 export const DUPLICAAT_TWIJFEL = 0.65
 
+/**
+ * Een werkafspraak: wat de binnendienst EVA meegeeft over het lezen van de post.
+ *
+ * Staat hier en niet in `werkafspraken.ts`, omdat dat bestand `server-only` is en
+ * het beheerscherm een client-component.
+ */
+export interface Werkafspraak {
+  id: string
+  postbusId: string | null
+  tekst: string
+  /** Wat EVA ervan begreep, in zijn eigen woorden. */
+  uitleg: string | null
+  actief: boolean
+  aangemaaktDoor: string | null
+  createdAt: string
+}
+
 /** Per veld: vanaf hier tonen we het als betrouwbaar ingevuld. */
 export const VELD_BETROUWBAAR = 0.80
 

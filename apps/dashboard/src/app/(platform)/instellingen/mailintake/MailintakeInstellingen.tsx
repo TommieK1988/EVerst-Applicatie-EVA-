@@ -11,6 +11,9 @@ import {
 } from '@/lib/mailintake/actions'
 import { probeerNabehandelingOpnieuw } from '@/lib/mailintake/nabehandeling-actions'
 import { NABEHANDEL_LABELS } from '@/lib/mailintake/types'
+import type { Werkafspraak } from '@/lib/mailintake/types'
+
+import Werkafspraken from './Werkafspraken'
 
 const klein = { fontSize: 12, color: 'var(--fg-muted)' } as const
 const zacht = { fontSize: 13, color: 'var(--fg-soft)' } as const
@@ -113,10 +116,12 @@ function MeldingKiezer({
 }
 
 export default function MailintakeInstellingen({
-  postbussen, aliassen, nabehandelStand, nabehandelAchterstand, medewerkers, magBeheren,
+  postbussen, aliassen, werkafspraken, nabehandelStand, nabehandelAchterstand,
+  medewerkers, magBeheren,
 }: {
   postbussen: Postbus[]
   aliassen: Alias[]
+  werkafspraken: Werkafspraak[]
   nabehandelStand: string
   /** Behandelde mail die nog in Postvak IN staat; nul betekent niets tonen. */
   nabehandelAchterstand: { open: number; opgegeven: number; laatsteFout: string | null }
@@ -245,6 +250,12 @@ export default function MailintakeInstellingen({
       <p style={{ ...zacht, marginTop: -8 }}>
         De drie gedeelde postbussen waaruit EVA aanvragen, opdrachten en servicedeskbonnen leest.
       </p>
+
+      <Werkafspraken
+        afspraken={werkafspraken}
+        postbussen={postbussen.map(p => ({ id: p.id, naam: p.naam }))}
+        magBeheren={magBeheren}
+      />
 
       {/* ── Postbussen ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -28,10 +28,9 @@ import {
 import { VELD_LABELS } from '@/lib/mailintake/schema'
 import OpdrachtPaneel from './panelen/OpdrachtPaneel'
 import { FASE_PLAATSINGEN, type DossierFase } from '@/components/dossiers/fase-plaatsing'
-import MailPaneel from './panelen/MailPaneel'
+import RechterKolom from './panelen/RechterKolom'
 import AfgehandeldBalk from './panelen/AfgehandeldBalk'
 import AndereWeg from './panelen/AndereWeg'
-import BeoordelingPaneel from './panelen/BeoordelingPaneel'
 import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { Voorvertoning, Afwijkingen } from './panelen/voorvertoning'
@@ -769,30 +768,25 @@ export default function BerichtBehandelen({
 
         </div>
 
-        {/* ── Rechts: waarop berust dit ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <MailPaneel
-          bericht={b}
-          bijlagen={detail.bijlagen}
-          groepsMails={detail.groepsMails}
-          onOpenBijlage={openBijlage}
-          haalBijlageUrl={haalBijlageUrl}
-          magAntwoorden={magSchrijven}
-        />
-
-        <BeoordelingPaneel
-          bericht={b}
-          toelichting={detail.extractie?.toelichting ?? null}
-          duplicaten={detail.duplicaten}
+        {/* ── Rechts: waarop berust dit, en wat zeg jij erover ── */}
+        <RechterKolom
           bewerkbaar={bewerkbaar}
-          bezig={bezig}
-          onKoppel={koppelen}
-          onKiesOfferte={kiesOfferte}
-          objectTreffer={objectTreffer}
-          objectId={objectId}
-          setObjectId={setObjectId}
+          mail={{
+            bericht: b, bijlagen: detail.bijlagen, groepsMails: detail.groepsMails,
+            onOpenBijlage: openBijlage, haalBijlageUrl, magAntwoorden: magSchrijven,
+          }}
+          aanwijzing={{
+            postbusId: b.postbus?.id ?? null,
+            tekst: (b.aanwijzing as string | null) ?? null,
+            onKlaar: () => router.refresh(),
+          }}
+          beoordeling={{
+            toelichting: detail.extractie?.toelichting ?? null,
+            duplicaten: detail.duplicaten, bezig,
+            onKoppel: koppelen, onKiesOfferte: kiesOfferte,
+            objectTreffer, objectId, setObjectId,
+          }}
         />
-        </div>
       </div>
     </div>
   )

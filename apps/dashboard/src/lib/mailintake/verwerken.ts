@@ -32,6 +32,8 @@ import { beoordeelBijlage, isOnderscheidendeBijlage } from './bijlagen-filter'
 import { storingTekst, type AiStoring } from './ai-storing'
 import { zoekGroepVooraf, zoekGroepAchteraf, zetGroep, andereLeden } from './groeperen'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
+import { bijlagenVoorAI } from './bijlagen-voor-ai'
+import { haalWerkafsprakenVoorPrompt } from './werkafspraken'
 import { maakDossierUitBericht } from './aanmaken'
 import { faseVoorstelVoor } from '@/components/dossiers/fase-plaatsing'
 import {
@@ -94,59 +96,6 @@ async function kostenVandaag(postbusId: string): Promise<number> {
   return (data ?? []).reduce((som: number, r: any) => som + (r.kosten_cent ?? 0), 0)
 }
 
-/**
- * De bijlagen van één of meer berichten, klaar om mee te sturen.
- *
- * Meer dan één, want mails over dezelfde klus horen als geheel gelezen te worden:
- * de bon zit vaak in een ander bericht dan de afspraak erover. Een dubbele bijlage
- * (dezelfde bon twee keer doorgestuurd) gaat er één keer in -- ontdubbeld op
- * `sha256`, want twee keer hetzelfde bestand meesturen kost geld en helpt niets.
- */
-async function bijlagenVoorAI(berichtIds: string[]): Promise<{ voorAI: BijlageVoorAI[]; namen: string[]; ongelezen: boolean }> {
-  const supabase = createAdminClient()
-  const { data } = await supabase
-    .from('mailintake_bijlagen')
-    .select('id, bestandsnaam, content_type, grootte_bytes, is_inline, opslag_pad, te_groot, sha256')
-    .in('bericht_id', berichtIds)
-    .limit(100)
-
-  const voorAI: BijlageVoorAI[] = []
-  const namen: string[] = []
-  const gezien = new Set<string>()
-  let ongelezen = false
-
-  for (const b of data ?? []) {
-    // Ingesloten beeld filteren we hier, niet in de query: een geplakte gevelfoto
-    // moet mee, het logo uit de handtekening niet. Dat onderscheid zit in de
-    // grootte en de naam, en die kent alleen `beoordeelBijlage`.
-    if (!beoordeelBijlage({
-      bestandsnaam: b.bestandsnaam, contentType: b.content_type,
-      grootteBytes: b.grootte_bytes, isInline: Boolean(b.is_inline),
-    }).meelezen) continue
-
-    if (b.sha256) {
-      if (gezien.has(b.sha256)) continue
-      gezien.add(b.sha256)
-    }
-    namen.push(b.bestandsnaam)
-    // Zelfde maatstaf als bij overgeslagen bijlagen: een foto kost geen gegevens.
-    const isFoto = (b.content_type ?? '').toLowerCase().startsWith('image/')
-    if (b.te_groot || !b.opslag_pad) { ongelezen = ongelezen || !isFoto; continue }
-    try {
-      const { data: blob, error } = await supabase.storage.from('mail-intake').download(b.opslag_pad)
-      if (error || !blob) { ongelezen = ongelezen || !isFoto; continue }
-      voorAI.push({
-        bestandsnaam: b.bestandsnaam,
-        contentType: b.content_type,
-        bytes: Buffer.from(await blob.arrayBuffer()),
-      })
-    } catch {
-      ongelezen = ongelezen || !isFoto
-    }
-  }
-
-  return { voorAI, namen, ongelezen }
-}
 
 // ─── De verwerking van één bericht ───────────────────────────────────────────
 
@@ -227,6 +176,12 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
     log.stap('hulplijst relaties')
     const hulplijst = await hulplijstRelaties(echteAfzender, geclaimd.onderwerp)
 
+    // Wat de binnendienst zelf heeft meegegeven: de algemene werkafspraken van deze
+    // postbus, en de aanwijzing die iemand bij dít bericht heeft getypt. Zie
+    // `werkafspraken.ts` voor waar de grens ligt tussen een aanwijzing en de
+    // deterministische poorten.
+    const werkafspraken = await haalWerkafsprakenVoorPrompt(postbus.id)
+
     const basisContext = {
       postbusSoort: postbus.soort,
       postbusAdres: postbus.adres,
@@ -239,6 +194,8 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       bodyTekst: geclaimd.body_tekst ?? '',
       bekendeRelaties: hulplijst,
       mensZegtWerk: Boolean(geclaimd.mens_zegt_werk),
+      werkafspraken,
+      aanwijzing: geclaimd.aanwijzing ?? null,
     }
 
     log.stap('AI-extractie', { bijlagen: voorAI.length, eerdereMails: eerdere.length })

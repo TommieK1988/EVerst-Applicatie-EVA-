@@ -7,6 +7,7 @@ import { vereisModuleToegang, vereisRecht } from '@/lib/auth/rechten'
 // dus anders kom je wel op de pagina maar staat alles op alleen-lezen.
 import { heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { getPostbussen, getAliassen, getNabehandelAchterstand } from '@/lib/mailintake/data'
+import { haalWerkafspraken } from '@/lib/mailintake/werkafspraken'
 import { getNabehandelStand } from '@/lib/mailintake/actions'
 
 import MailintakeInstellingen from './MailintakeInstellingen'
@@ -21,9 +22,10 @@ export default async function MailintakeInstellingenPage() {
   const { rechten } = await vereisRecht('mailintake', 'lezen')
 
   const supabase = createAdminClient()
-  const [postbussen, aliassen, stand, achterstand, { data: medewerkers }] = await Promise.all([
+  const [postbussen, aliassen, werkafspraken, stand, achterstand, { data: medewerkers }] = await Promise.all([
     getPostbussen(),
     getAliassen(),
+    haalWerkafspraken(),
     getNabehandelStand(),
     getNabehandelAchterstand(),
     supabase.from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam, auth_user_id')
@@ -34,6 +36,7 @@ export default async function MailintakeInstellingenPage() {
     <MailintakeInstellingen
       postbussen={JSON.parse(JSON.stringify(postbussen))}
       aliassen={JSON.parse(JSON.stringify(aliassen))}
+      werkafspraken={werkafspraken}
       nabehandelStand={stand}
       nabehandelAchterstand={achterstand}
       medewerkers={(medewerkers ?? []).map(m => ({

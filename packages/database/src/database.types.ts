@@ -6935,6 +6935,9 @@ export type Database = {
       }
       mailintake_berichten: {
         Row: {
+          aanwijzing: string | null
+          aanwijzing_door: string | null
+          aanwijzing_op: string | null
           aan: string[]
           aandachtspunten: string | null
           buiten_scope: string | null
@@ -6990,6 +6993,9 @@ export type Database = {
           van_naam: string | null
         }
         Insert: {
+          aanwijzing?: string | null
+          aanwijzing_door?: string | null
+          aanwijzing_op?: string | null
           aan?: string[]
           aandachtspunten?: string | null
           buiten_scope?: string | null
@@ -7045,6 +7051,9 @@ export type Database = {
           van_naam?: string | null
         }
         Update: {
+          aanwijzing?: string | null
+          aanwijzing_door?: string | null
+          aanwijzing_op?: string | null
           aan?: string[]
           aandachtspunten?: string | null
           buiten_scope?: string | null
@@ -7547,6 +7556,57 @@ export type Database = {
             columns: ["standaard_werkmaatschappij_id"]
             isOneToOne: false
             referencedRelation: "bedrijfsgegevens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mailintake_werkafspraken: {
+        Row: {
+          aangemaakt_door: string | null
+          actief: boolean
+          created_at: string
+          gearchiveerd_op: string | null
+          id: string
+          postbus_id: string | null
+          tekst: string
+          uitleg: string | null
+          updated_at: string
+        }
+        Insert: {
+          aangemaakt_door?: string | null
+          actief?: boolean
+          created_at?: string
+          gearchiveerd_op?: string | null
+          id?: string
+          postbus_id?: string | null
+          tekst: string
+          uitleg?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aangemaakt_door?: string | null
+          actief?: boolean
+          created_at?: string
+          gearchiveerd_op?: string | null
+          id?: string
+          postbus_id?: string | null
+          tekst?: string
+          uitleg?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mailintake_werkafspraken_aangemaakt_door_fkey"
+            columns: ["aangemaakt_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mailintake_werkafspraken_postbus_id_fkey"
+            columns: ["postbus_id"]
+            isOneToOne: false
+            referencedRelation: "mailintake_postbussen"
             referencedColumns: ["id"]
           },
         ]
