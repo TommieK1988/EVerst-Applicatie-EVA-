@@ -24,12 +24,14 @@ const veld: React.CSSProperties = {
 }
 
 export default function ProjectZoeker({
-  opties, laden, gekozenId, onKies,
+  opties, laden, gekozenId, onKies, kantoor
 }: {
   opties: DossierOptie[]
   laden: boolean
   gekozenId: string
   onKies: (id: string) => void
+  /** Kantoor: de lijst bevat ook de dossiers waarop hij een rol heeft, dus een andere lege-lijsttekst. */
+  kantoor?: boolean
 }) {
   const t = useTranslations('uren')
   const [zoek, setZoek] = useState('')
@@ -104,7 +106,7 @@ export default function ProjectZoeker({
         <Melding>{t('regel.codesOphalen')}</Melding>
       ) : (
         <>
-          {!heeftIngepland && !zoek && <Melding>{t('regel.geenIngepland')}</Melding>}
+          {!heeftIngepland && !zoek && <Melding>{t(kantoor ? 'regel.geenProjectKantoor' : 'regel.geenIngepland')}</Melding>}
           {zoek && treffers.length === 0 && <Melding>{t('regel.geenResultaat', { zoek })}</Melding>}
 
           {ingepland.length > 0 && (

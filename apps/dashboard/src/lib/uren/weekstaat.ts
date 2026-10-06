@@ -50,6 +50,8 @@ export type WeekRegel = {
   pl_status: string
   gewijzigd_door_goedkeurder: boolean
   bouw7_status: string
+  /** Staat op een indirecte-urenproject (overhead). Kantoor ziet zo of een regel op een echt project staat. */
+  indirect: boolean
 }
 
 export type WeekOnkosten = {
@@ -257,6 +259,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     pl_status: r.pl_status,
     gewijzigd_door_goedkeurder: !!r.gewijzigd_door_goedkeurder_id,
     bouw7_status: r.bouw7_status,
+    indirect: !!r.dossier_id && indirecteDossiers.has(r.dossier_id),
   }))
 
   const contracturen = Number(week.contracturen ?? 0)
@@ -400,6 +403,11 @@ export async function getDossierOpties(datum: string, behoudId?: string | null):
 
   const ingepland = new Set<string>()
   const vandaagGepland = new Set<string>()
+  // Kantoor staat zelden in de planning; wie daar toch op een project werkt, werkt bijna altijd
+  // op een dossier waar hij een rol heeft. Voor kantoor tellen die dus wél mee (zie `rolDossierIds`).
+  if ((await getUrenBestemming(medewerker.id)).kantoor) {
+    for (const id of await rolDossierIds(medewerker.id)) ingepland.add(id)
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const it of (items ?? []) as any[]) {
     const dossierId = it.planning_activiteiten?.dossier_id
@@ -445,6 +453,24 @@ export async function getDossierOpties(datum: string, behoudId?: string | null):
     .map(d => ({ id: d.id, label: label(d), indirect: true, servicedesk: false, vandaag: false }))
 
   return [...eigen, ...overhead]
+}
+
+/**
+ * Dossiers waarop deze medewerker een rol heeft. Alleen voor kantoor: een monteur kiest uit waar
+ * hij is ingepland, rolhouderschap telt bij hem bewust niet. De boekbaar-inperking volgt daarna
+ * in `getDossierOpties`. Begrensd door de rolfilter: de drukste rolhouder had er in okt 2026
+ * 419 niet-gearchiveerde.
+ */
+async function rolDossierIds(medewerkerId: string): Promise<string[]> {
+  const rollen = ['project_manager_id', 'teamleider_id', 'werkvoorbereider_id', 'uitvoerder_id', 'calculator_id']
+  const { data } = await db()
+    .from('dossiers')
+    .select('id')
+    .or(rollen.map(k => `${k}.eq.${medewerkerId}`).join(','))
+    .eq('gearchiveerd', false)
+    .order('id')
+    .limit(1000)
+  return ((data ?? []) as Array<{ id: string }>).map(d => d.id)
 }
 
 /* ── Muteren ──────────────────────────────────────────────────────── */
@@ -512,10 +538,11 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
 
   const categorie = soort.uren_categorie as UrenCategorie
   const bestemming = await getUrenBestemming(medewerkerId)
-  // Kantoor kiest geen project: al zijn gewerkte uren zijn overhead, dus ze gaan naar dezelfde
-  // plek als zijn verlof -- alleen op het gewerkte overheadproject.
+  // Kantoor kiest standaard geen project: zijn gewerkte uren zijn overhead en gaan naar het
+  // gewerkte overheadproject. Zet hij in het boekscherm "Op een project" aan, dan komt er een
+  // dossier mee en volgt de regel dezelfde route als die van een vakman -- met bewakingscode.
   if (categorie !== 'werk' && bestemming.extern) throw new Error(t('fout.externAlleenGewerkt'))
-  if (categorie === 'werk' && !bestemming.kantoor) {
+  if (categorie === 'werk' && (!bestemming.kantoor || invoer.dossier_id)) {
     if (!invoer.dossier_id) throw new Error(t('fout.kiesProject'))
     // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
     // is de code niet verplicht. Zie `getIndirecteDossierIds`.

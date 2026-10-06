@@ -37,7 +37,10 @@ export default function RegelSheet({
 }: {
   datum: string
   uursoorten: UursoortOptie[]
-  /** Kantoorafdeling: geen projectkeuze, de uren landen vanzelf op het overheadproject. */
+  /**
+   * Kantoorafdeling: standaard geen projectkeuze, de uren landen vanzelf op het overheadproject.
+   * Werkt hij een keer op een project, dan zet hij "Op een project" aan en kiest hij er een.
+   */
   kantoor: boolean
   /** Gevuld = bewerken, leeg = nieuw. */
   regel: WeekRegel | null
@@ -51,6 +54,10 @@ export default function RegelSheet({
   const [dossierId, setDossierId] = useState(regel?.dossier_id ?? '')
   const [code, setCode] = useState(regel?.bewakingscode ?? '')
   const [opmerking, setOpmerking] = useState(regel?.opmerking ?? '')
+  // Een bestaande regel van kantoor die al op een echt project staat, opent op "Op een project".
+  const [opProject, setOpProject] = useState(
+    kantoor && !!regel?.dossier_id && regel.categorie === 'werk' && !regel.indirect,
+  )
   const [bezig, setBezig] = useState(false)
 
   const [dossiers, setDossiers] = useState<DossierOptie[]>([])
@@ -60,8 +67,8 @@ export default function RegelSheet({
 
   const soort = uursoorten.find(u => u.id === uursoortId)
   const isWerk = soort?.categorie === 'werk'
-  // Alleen wie op projecten werkt kiest er een; kantoor boekt altijd op overhead.
-  const kiestProject = isWerk && !kantoor
+  // Een vakman kiest altijd een project; kantoor alleen als hij "Op een project" aanzet.
+  const kiestProject = isWerk && (!kantoor || opProject)
   // Overheadwerk op een indirecte-urendossier: daar staat geen begroting tegenover, dus is er
   // geen bewakingscode te kiezen en vraagt het scherm er ook niet om.
   const isIndirect = dossiers.some(d => d.id === dossierId && d.indirect)
@@ -163,9 +170,26 @@ export default function RegelSheet({
           </div>
 
           {isWerk && kantoor && (
-            <p style={{ fontSize: 12.5, color: '#6b757c', margin: '-6px 0 0', lineHeight: 1.45 }}>
-              {t('regel.kantoorUitleg')}
-            </p>
+            <div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([false, true] as const).map(v => (
+                  <button key={String(v)} type="button"
+                    onClick={() => { setOpProject(v); setDossierId(''); setCode('') }}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 9, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                      border: `1.5px solid ${opProject === v ? '#009439' : 'var(--border)'}`,
+                      background: opProject === v ? 'rgba(0,148,57,0.08)' : 'transparent',
+                      color: opProject === v ? '#009439' : '#6b757c',
+                    }}>
+                    {v ? t('regel.kantoorOpProject') : t('regel.kantoorOverhead')}
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontSize: 12.5, color: '#6b757c', margin: '8px 0 0', lineHeight: 1.45 }}>
+                {opProject ? t('regel.kantoorProjectUitleg') : t('regel.kantoorUitleg')}
+              </p>
+            </div>
           )}
 
           {kiestProject && (
@@ -177,6 +201,7 @@ export default function RegelSheet({
                   laden={dossiersLaden}
                   gekozenId={dossierId}
                   onKies={id => { setDossierId(id); setCode('') }}
+                  kantoor={kantoor}
                 />
               </div>
 
