@@ -4,6 +4,7 @@ import React, { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Pencil, Trash2, Plus, X, Search } from 'lucide-react'
+import { cn } from '@everts/ui'
 import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -113,7 +114,7 @@ function AkSectie({ akData, filialen }: { akData: ManagementAK[]; filialen: stri
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr>
-                  <th className={th}>Jaar</th>
+                  <th className={cn(th, 'text-center')}>Jaar</th>
                   <th className={cn(th, 'text-left')}>Werkmaatschappij</th>
                   <th className={cn(th, 'text-right')}>AK-bedrag</th>
                   <th className={th} />
@@ -225,7 +226,7 @@ function DoelstellingSectie({ doelstellingen, filialen, projectleiders }: {
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr>
-                  <th className={th}>Jaar</th>
+                  <th className={cn(th, 'text-center')}>Jaar</th>
                   <th className={cn(th, 'text-left')}>Werkmij.</th>
                   <th className={cn(th, 'text-left')}>Projectleider</th>
                   <th className={cn(th, 'text-right')}>Omzetdoel</th>
@@ -540,12 +541,6 @@ function RijActies({ onBewerk, onWis, disabled }: { onBewerk: () => void; onWis:
       </button>
     </div>
   )
-}
-
-/* ── Tailwind helper (cn-loos: lokale join) ───────────────────────── */
-
-function cn(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(' ')
 }
 
 const th = 'px-[10px] py-[7px] bg-neutral-50 border-b-2 border-neutral-200 text-[11px] font-bold uppercase tracking-[0.04em] text-neutral-500 text-right whitespace-nowrap'

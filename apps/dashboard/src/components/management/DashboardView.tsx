@@ -337,7 +337,7 @@ function PivotTabelPL({ plPivot, doelstellingen }: {
         <thead>
           <tr>
             <th className={cn(pvTh, 'text-left min-w-[120px]')}>Projectleider</th>
-            <th className={cn(pvTh, 'min-w-[40px]')}>#</th>
+            <th className={cn(pvTh, 'min-w-[40px] text-center')}>#</th>
             <th colSpan={2} className={cn(pvTh, 'bg-success-50 border-b-2 border-success-200')}>Omzet</th>
             <th colSpan={2} className={cn(pvTh, 'bg-info-50 border-b-2 border-info-200')}>Resultaat</th>
             <th className={cn(pvTh, 'min-w-[80px]')}>Doel</th>

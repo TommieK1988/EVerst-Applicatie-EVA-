@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Cell,
 } from 'recharts'
+import { cn } from '@everts/ui'
 import { Card, CardBody } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatCard } from '@/components/ui/stat-card'
@@ -134,7 +135,7 @@ export default function WerkvoorraadView({ data }: { data: WerkvoorraadData }) {
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={pvTh + ' text-left'}>Uursoort</th>
+                  <th className={cn(pvTh, 'text-left')}>Uursoort</th>
                   <th className={pvTh}>Beschikbaar</th>
                   <th className={pvTh}>Intern</th>
                   <th className={pvTh}>Extern</th>
@@ -144,32 +145,32 @@ export default function WerkvoorraadView({ data }: { data: WerkvoorraadData }) {
               </thead>
               <tbody>
                 {perUursoort.length === 0 ? (
-                  <tr><td className={pvTd + ' text-left text-neutral-400'} colSpan={6}>Geen toegewezen capaciteit.</td></tr>
+                  <tr><td className={cn(pvTd, 'text-left text-neutral-400')} colSpan={6}>Geen toegewezen capaciteit.</td></tr>
                 ) : perUursoort.map(u => (
                   <tr key={u.uursoort_id}>
-                    <td className={pvTd + ' text-left'}>
+                    <td className={cn(pvTd, 'text-left')}>
                       <span className="inline-flex items-center gap-2">
                         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: u.kleur || 'var(--neutral-300)' }} />
                         {u.naam}
                       </span>
                     </td>
-                    <td className={pvTd + ' font-semibold'}>{fUren(u.beschikbaar_totaal)}</td>
-                    <td className={pvTd}>{fUren(u.beschikbaar_intern)}</td>
-                    <td className={pvTd}>{fUren(u.beschikbaar_extern)}</td>
-                    <td className={pvTd}>{u.aantal_medewerkers}</td>
-                    <td className={pvTd}>{aanbodUren > 0 ? `${((u.beschikbaar_totaal / aanbodUren) * 100).toFixed(0)}%` : '—'}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-semibold')}>{fUren(u.beschikbaar_totaal)}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums')}>{fUren(u.beschikbaar_intern)}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums')}>{fUren(u.beschikbaar_extern)}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums')}>{u.aantal_medewerkers}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums')}>{aanbodUren > 0 ? `${((u.beschikbaar_totaal / aanbodUren) * 100).toFixed(0)}%` : '—'}</td>
                   </tr>
                 ))}
               </tbody>
               {perUursoort.length > 0 && (
                 <tfoot>
                   <tr>
-                    <td className={pvTd + ' text-left font-bold'}>Totaal</td>
-                    <td className={pvTd + ' font-bold'}>{fUren(aanbodUren)}</td>
-                    <td className={pvTd + ' font-bold'}>{fUren(perUursoort.reduce((s, u) => s + u.beschikbaar_intern, 0))}</td>
-                    <td className={pvTd + ' font-bold'}>{fUren(perUursoort.reduce((s, u) => s + u.beschikbaar_extern, 0))}</td>
-                    <td className={pvTd + ' font-bold'}>{perUursoort.reduce((s, u) => s + u.aantal_medewerkers, 0)}</td>
-                    <td className={pvTd + ' font-bold'}>100%</td>
+                    <td className={cn(pvTd, 'text-left font-bold')}>Totaal</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-bold')}>{fUren(aanbodUren)}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-bold')}>{fUren(perUursoort.reduce((s, u) => s + u.beschikbaar_intern, 0))}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-bold')}>{fUren(perUursoort.reduce((s, u) => s + u.beschikbaar_extern, 0))}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-bold')}>{perUursoort.reduce((s, u) => s + u.aantal_medewerkers, 0)}</td>
+                    <td className={cn(pvTd, 'text-right tabular-nums font-bold')}>100%</td>
                   </tr>
                 </tfoot>
               )}
@@ -194,19 +195,19 @@ export default function WerkvoorraadView({ data }: { data: WerkvoorraadData }) {
               <table className="w-full border-collapse">
                 <thead className="sticky top-0">
                   <tr>
-                    <th className={pvTh + ' text-left'}>Project</th>
-                    <th className={pvTh + ' text-left'}>Naam</th>
-                    <th className={pvTh + ' text-left'}>Filiaal</th>
+                    <th className={cn(pvTh, 'text-left')}>Project</th>
+                    <th className={cn(pvTh, 'text-left')}>Naam</th>
+                    <th className={cn(pvTh, 'text-left')}>Filiaal</th>
                     <th className={pvTh}>Uren saldo</th>
                   </tr>
                 </thead>
                 <tbody>
                   {projecten.map(p => (
                     <tr key={p.bouw7_id ?? p.projectnummer}>
-                      <td className={pvTd + ' text-left font-medium'}>{p.projectnummer}</td>
-                      <td className={pvTd + ' text-left'}>{p.projectnaam}</td>
-                      <td className={pvTd + ' text-left'}>{p.filiaal ?? '—'}</td>
-                      <td className={pvTd + ' font-semibold'}>{fUren(p.saldo)}</td>
+                      <td className={cn(pvTd, 'text-left font-medium')}>{p.projectnummer}</td>
+                      <td className={cn(pvTd, 'text-left')}>{p.projectnaam}</td>
+                      <td className={cn(pvTd, 'text-left')}>{p.filiaal ?? '—'}</td>
+                      <td className={cn(pvTd, 'text-right tabular-nums font-semibold')}>{fUren(p.saldo)}</td>
                     </tr>
                   ))}
                 </tbody>
