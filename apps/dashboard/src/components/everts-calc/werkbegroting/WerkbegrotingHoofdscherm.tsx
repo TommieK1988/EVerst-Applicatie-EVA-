@@ -18,6 +18,7 @@ import type { Werkbegroting } from '@/lib/everts-calc/types'
 import WerkbegrotingGrid from './WerkbegrotingGrid'
 import GoedkeuringPaneel from '@/components/goedkeuring/GoedkeuringPaneel'
 import BestellingenPaneel from './BestellingenPaneel'
+import { regelsZonderKostengroep, meldingZonderKostengroep, type RegelZonderKostengroep } from '@/lib/everts-calc/zonder-kostengroep'
 import { X, ClipboardCheck as ClipboardIcon, ShoppingCart } from 'lucide-react'
 
 interface Props {
@@ -60,6 +61,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
   const [goedkeuringStatus, setGoedkeuringStatus] = useState<string | null>(null)
   /** Eén gecombineerde "Naar Bouw7"-modal: stuurt bestelregels én prognose in één keer. */
   const [bouw7Open, setBouw7Open] = useState(false)
+  const [zonderKg, setZonderKg] = useState<RegelZonderKostengroep[]>([])
   const [bouw7Bezig, setBouw7Bezig] = useState(false)
   const [prognosePreview, setPrognosePreview] = useState<PrognoseResultaat | null>(null)
   /** Bouw7-bewakingscodes van het gekoppelde project (null = niet gekoppeld / nog niet geladen). */
@@ -304,6 +306,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
     if (!payload) return
     setBouw7Open(true)
     setBestelPreview(null)
+    setZonderKg(regelsZonderKostengroep(payload.regels, payload.componenten))
     setPrognosePreview(null)
     setBouw7Bezig(true)
     try {
@@ -566,6 +569,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
                 hieronder vóór verzenden.
               </p>
 
+              {zonderKg.length > 0 && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{meldingZonderKostengroep(zonderKg)}</div>}
               {/* Doelhoofdstuk voor nieuwe codes — gedeeld door beide helften. */}
               {((bestelPreview?.ok && bestelPreview.regels.some(r => r.actie === 'aanmaken')) ||
                 (prognosePreview?.ok && prognosePreview.regels.some(r => r.actie === 'aanmaken' && r.nieuweCode))) && (
@@ -709,7 +713,7 @@ export default function WerkbegrotingHoofdscherm({ projectId, projectNaam, proje
               <button
                 onClick={verstuurBouw7}
                 disabled={
-                  bouw7Bezig ||
+                  bouw7Bezig || zonderKg.length > 0 ||
                   !(
                     (bestelPreview?.ok && bestelPreview.regels.some(r => r.actie !== 'skip')) ||
                     (prognosePreview?.ok && prognosePreview.regels.some(r => r.schrijfbaar))

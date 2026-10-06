@@ -13,6 +13,7 @@ import { dossierBouw7Id, leesDossierBron, ververSnapshotsNaSchrijven } from '@/l
 import type { AthenaControlPayload, ContractOrderLinesPayload } from '@/lib/bouw7/snapshot-bronnen'
 import { haalGoedgekeurdMeerwerkNaarWerkbegroting } from '@/lib/dossiers/meerwerk-werkbegroting'
 import type { Werkbegroting, WerkbegrotingRegel, WerkbegrotingComponent, WerkbegrotingWijziging, WerkbegrotingBestelling, RelatieRef } from '@/lib/everts-calc/types'
+import { regelsZonderKostengroep, meldingZonderKostengroep } from '@/lib/everts-calc/zonder-kostengroep'
 
 export interface SyncWerkbegrotingResultaat {
   gelukt: boolean
@@ -2293,6 +2294,11 @@ async function stuurBeideNaarBouw7Intern(
   payload: WerkbegrotingPayload,
   doelHoofdstukId: number | null,
 ): Promise<BestelEnPrognoseResultaat> {
+  // Een regel zonder kostengroep kan Bouw7 nergens boeken; stil overslaan leek op een kapotte push.
+  const zonderKg = regelsZonderKostengroep(payload.regels, payload.componenten)
+  if (zonderKg.length > 0) {
+    return { ok: false, melding: meldingZonderKostengroep(zonderKg), fouten: [], bestelregels: null, prognose: null }
+  }
   const fouten: string[] = []
   const delen: string[] = []
 
