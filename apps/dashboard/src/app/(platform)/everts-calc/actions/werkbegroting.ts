@@ -1980,10 +1980,20 @@ async function bouwBestelregelPlan(dossierId: string, payload: WerkbegrotingPayl
       // draagt de PSL per definitie wél, dus die is hier de betrouwbaarste bron.
       const perLineId = new Map<number, Bouw7ContractOrderLine>()
       for (const ol of bestaande) perLineId.set(ol.id, ol)
+      // Alleen een PSL van dezelfde kostensoort: Bouw7 weigert een Materiaal-regel op een OA-PSL
+      // met 400 "does not have cost type material". Dat gebeurde toen een component van type
+      // wisselde maar het bouw7_line_id van de oude OA-regel hield (20267.00240, Hastelweg).
       for (const r of regels) {
         if (r.pslId != null || r.bouw7LineId == null) continue
-        const psl = perLineId.get(r.bouw7LineId)?.projectSecurityLink?.id
-        if (psl != null) r.pslId = psl
+        const ol = perLineId.get(r.bouw7LineId)
+        const psl = ol?.projectSecurityLink
+        if (psl?.id == null) continue
+        const pslCt = psl.costType ?? (ol?.costType != null ? LINE_CT_NAAR_PSL_CT[ol.costType] : undefined)
+        if (pslCt === r.ct) r.pslId = psl.id
+        // Neutraliseren raakt alleen het aantal: dan mag de regel zijn eigen PSL en type houden.
+        else if (r.actie === 'neutraliseren' && ol?.costType != null) { r.pslId = psl.id; r.lineCt = ol.costType }
+        // Bijwerken: pslId blijft leeg → stap 1 maakt de PSL van de juiste kostensoort aan en de
+        // upsert zet de bestaande regel om naar het nieuwe type.
       }
 
       for (const r of regels) {
