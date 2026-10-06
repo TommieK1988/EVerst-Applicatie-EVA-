@@ -70,6 +70,7 @@
     "eslint-plugin-i18next": "^6.1.5",
     "fast-xml-parser": "^5.9.3",
     "handlebars": "^4.7.8",
+    "heic-to": "^1.6.5",
     "html2canvas": "^1.4.1",
     "iconv-lite": "^0.6.3",
     "image-size": "^2.0.2",

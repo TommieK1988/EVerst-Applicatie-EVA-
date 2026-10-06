@@ -8,9 +8,15 @@
  * onverklaarbare fout midden op een dak. Bijkomend voordeel: 300 kB gaat over 4G nu eenmaal een
  * stuk sneller dan 4 MB, en dat scheelt op locatie echt.
  *
- * Bewust fail-soft: lukt het verkleinen niet (onbekend formaat, HEIC zonder decoder, canvas
- * geblokkeerd), dan gaat het originele bestand alsnog de deur uit. Een iets te grote foto is
- * altijd beter dan géén foto — de 8 MB-limiet vangt dat af.
+ * Bewust fail-soft: lukt het verkleinen niet (onbekend formaat, canvas geblokkeerd), dan gaat
+ * het originele bestand alsnog de deur uit. Een iets te grote foto is altijd beter dan géén
+ * foto — de 8 MB-limiet vangt dat af.
+ *
+ * HEIC eerst naar JPEG: Samsung- en iPhone-camera's slaan foto's als HEIC op, en wie er een uit
+ * de galerij kiest krijgt dat bestand ongewijzigd (alleen iOS Safari zet het zelf om). Chrome
+ * op Android kan HEIC niet tonen én niet decoderen, dus zonder omzetting stond er een kapotte
+ * foto in de app en het rapport (okt 2026, houtrot). De decoder (libheif, ~3 MB) laadt pas
+ * als er werkelijk een HEIC voorbijkomt.
  */
 
 /** Langste zijde na verkleinen. 1600px is ruim genoeg voor een A4-rapport op 150 dpi. */
@@ -21,8 +27,26 @@ const KWALITEIT = 0.8
 /** Foto's kleiner dan dit laten we ongemoeid — verkleinen levert dan niets op. */
 const OVERSLAAN_ONDER_BYTES = 400 * 1024
 
+/** HEIC/HEIF herken je aan het type, maar Android geeft soms een leeg type mee: dan de extensie. */
+function isHeic(file: File): boolean {
+  return /^image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)
+}
+
+/** HEIC → JPEG in de browser. Mislukt het, dan het origineel (fail-soft, zie boven). */
+async function heicNaarJpeg(file: File): Promise<File> {
+  try {
+    const { heicTo } = await import('heic-to')
+    const blob = await heicTo({ blob: file, type: 'image/jpeg', quality: KWALITEIT })
+    const naam = file.name.replace(/\.[^.]+$/, '') || 'foto'
+    return new File([blob], `${naam}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
+  } catch {
+    return file
+  }
+}
+
 export async function verkleinFoto(file: File): Promise<File> {
   if (typeof window === 'undefined') return file
+  if (isHeic(file)) file = await heicNaarJpeg(file)
   if (!file.type.startsWith('image/')) return file
   if (file.size <= OVERSLAAN_ONDER_BYTES) return file
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useTranslations } from 'next-intl'
 import { AMBER, ROOD, label, secundaireKnop } from '@/components/mobiel/oplevering/stijl'
+import { verkleinFoto } from '@/lib/foto/verkleinFoto'
 
 /**
  * Eén fotovak bij een houtrotreparatie (voor, na, of de foto van een handmatige regel).
@@ -40,10 +41,12 @@ export default function HoutrotFotoVak({ titel, huidigeUrl, nieuw, gewijzigd, on
   }, [nieuw])
 
   const toon = nieuwUrl ?? huidigeUrl
-  const gekozen = (e: ChangeEvent<HTMLInputElement>) => {
+  // Meteen verkleinen (en HEIC → JPEG): anders toont de voorvertoning op Android een kapot
+  // plaatje voor een galerijfoto. Bij opslaan is het daarna een kleine JPEG die niets meer kost.
+  const gekozen = async (e: ChangeEvent<HTMLInputElement>) => {
     const bestand = e.target.files?.[0]
-    if (bestand) onKies(bestand)
     e.target.value = '' // dezelfde foto nog eens kiezen moet ook een change geven
+    if (bestand) onKies(await verkleinFoto(bestand))
   }
 
   return (
