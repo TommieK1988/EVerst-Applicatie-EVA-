@@ -9,6 +9,7 @@ import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import type { Weekstaat, WeekRegel, UursoortOptie, RegelInvoer } from '@/lib/uren/weekstaat'
 import { voegRegelToe, wijzigRegel, verwijderRegel, dienWeekIn } from '@/lib/uren/weekstaat'
 import { verwijderOnkosten } from '@/lib/uren/onkosten-acties'
+import { OVERUREN_BRON } from '@/lib/uren/rekenregel'
 import RegelSheet from './RegelSheet'
 import OnkostenSheet from './OnkostenSheet'
 
@@ -57,6 +58,10 @@ export default function WeekstaatClient({
 
   const statusSleutel: StatusSleutel = staat.status in STATUS_KLEUR ? staat.status as StatusSleutel : 'concept'
   const status = STATUS_KLEUR[statusSleutel]
+  // De overuren die EVA als min-regel tijd voor tijd heeft neergezet (zie lib/uren/overuren.ts).
+  const overuren = -staat.regels
+    .filter(r => r.bron === OVERUREN_BRON)
+    .reduce((s, r) => s + r.uren, 0)
   const voortgang = staat.contracturen > 0
     ? Math.min(100, (staat.totaalUren / staat.contracturen) * 100)
     : 0
@@ -141,6 +146,18 @@ export default function WeekstaatClient({
 
       {/* ── Dagkaarten ──────────────────────────────────────────── */}
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Uitleg bij de min-regel: zonder dit lijkt het alsof er uren worden afgepakt. */}
+        {overuren > 0 && (
+          <div style={{
+            padding: '12px 14px', borderRadius: 12, background: '#e8f1fc',
+            border: '1px solid #c7ddf6', color: '#0b4f96', fontSize: 13, lineHeight: 1.5,
+          }}>
+            <strong style={{ display: 'block', marginBottom: 2 }}>
+              {t('weekstaat.overurenTitel', { uren: uur(overuren) })}
+            </strong>
+            {t('weekstaat.overurenUitleg', { uren: uur(overuren) })}
+          </div>
+        )}
         {staat.dagen.map(datum => {
           const regels = staat.regels.filter(r => r.datum === datum)
           const dagKosten = staat.onkosten.filter(k => k.datum === datum)
@@ -171,7 +188,7 @@ export default function WeekstaatClient({
                 </span>
               </div>
 
-              {regels.map(r => (
+              {regels.map(r => { const auto = r.bron === OVERUREN_BRON; return (
                 <div key={r.id} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
                   padding: '11px 14px', borderBottom: '1px solid var(--border)',
@@ -190,7 +207,11 @@ export default function WeekstaatClient({
                         {r.dossier_label ?? t('weekstaat.geenProject')}{r.bewakingscode ? ` · ${r.bewakingscode}` : ''}
                       </div>
                     )}
-                    {r.opmerking && (
+                    {/* De opmerking van de automatische regel is Nederlands voor Bouw7; de monteur
+                        krijgt hem in de taal van de app. */}
+                    {auto ? (
+                      <div style={{ fontSize: 12, color: '#0b6bcb', marginTop: 2 }}>{t('weekstaat.overurenRegel')}</div>
+                    ) : r.opmerking && (
                       <div style={{ fontSize: 12, color: '#8a949a', marginTop: 2 }}>{r.opmerking}</div>
                     )}
                     {r.gewijzigd_door_goedkeurder && (
@@ -204,7 +225,7 @@ export default function WeekstaatClient({
                     {uur(r.uren)}
                   </span>
 
-                  {staat.bewerkbaar && (
+                  {staat.bewerkbaar && !auto && (
                     <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                       <button type="button" onClick={() => setSheet({ datum, regel: r })}
                         // eslint-disable-next-line i18next/no-literal-string -- potlood-pictogram, geen tekst
@@ -214,7 +235,7 @@ export default function WeekstaatClient({
                     </div>
                   )}
                 </div>
-              ))}
+              ) })}
 
               {dagKosten.map(k => (
                 <div key={k.id} style={{

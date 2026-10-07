@@ -12,8 +12,12 @@
 //   saldo-mutatie : som(alle regels) - som(tijd voor tijd) - contracturen
 //
 // Zo bouwt 45 uur werk bij een contract van 37,5 een saldo van +7,5 op, en kost 32 uur werk met
-// 5,5 uur tijd voor tijd erbij precies die 5,5 uur saldo. Er is geen aparte overuren-regel: die
-// zou naast de gewerkte uren staan en in Bouw7 dubbel tellen.
+// 5,5 uur tijd voor tijd erbij precies die 5,5 uur saldo.
+//
+// OVERUREN. Voor de vierkantscontrole (Bouw7, loonadministratie) moet een week precies op de
+// contracturen uitkomen. Overuren krijgen daarom een automatische regel tijd voor tijd met MIN de
+// overuren (`verdeelOveruren`): 45 uur werk + (-7,5) tijd voor tijd = 37,5. Aan het saldo verandert
+// niets -- tijd voor tijd telt daar niet mee, dus het blijft 45 - 37,5 = +7,5.
 
 export type UrenCategorie = 'werk' | 'afwezig' | 'tijd_voor_tijd' | 'feestdag'
 
@@ -49,6 +53,50 @@ export function berekenWeekTotalen(
     tekort: rondUren(Math.max(0, contracturen - tolerantie - totaalUren)),
     saldoMutatie: rondUren(totaalUren - tijdVoorTijdUren - contracturen),
   }
+}
+
+/** `uren_regels.bron` van de automatische overurenregel; die zet EVA neer, niet de medewerker. */
+export const OVERUREN_BRON = 'auto_overuren'
+
+export type OverurenRegel = { datum: string; uren: number }
+
+/**
+ * De automatische tijd-voor-tijdregels voor de overuren van een week (uren negatief), of `[]`.
+ *
+ * `regels` zijn alle regels van de week BEHALVE eerdere automatische overurenregels. Overuren
+ * gelden per week: wie maandag 10 en dinsdag 6 uur werkt bij 8 per dag, heeft er geen. Wat er
+ * per week over is, gaat op de dagen waarop meer gewerkt is dan de roosterdag (`dagNormen`; een
+ * dag zonder norm, zoals zaterdag, telt helemaal als meer). Van achter naar voren: de laatste
+ * dagen vullen de week aan. Blijft er dan nog iets over -- de bevroren weeknorm wijkt af van de
+ * som van de roosterdagen -- dan komt dat op de laatste dag met uren.
+ */
+export function verdeelOveruren(
+  regels: Array<{ datum: string; uren: number }>,
+  dagNormen: Record<string, number>,
+  contracturen: number,
+): OverurenRegel[] {
+  const totaal = rondUren(regels.reduce((s, r) => s + r.uren, 0))
+  let rest = rondUren(totaal - contracturen)
+  if (contracturen <= 0 || rest <= 0) return []
+
+  const perDag = new Map<string, number>()
+  for (const r of regels) perDag.set(r.datum, rondUren((perDag.get(r.datum) ?? 0) + r.uren))
+  const dagen = [...perDag.keys()].sort().reverse()
+
+  const uit = new Map<string, number>()
+  for (const datum of dagen) {
+    if (rest <= 0) break
+    const meer = rondUren((perDag.get(datum) ?? 0) - (dagNormen[datum] ?? 0))
+    if (meer <= 0) continue
+    const deel = Math.min(meer, rest)
+    uit.set(datum, deel)
+    rest = rondUren(rest - deel)
+  }
+  if (rest > 0 && dagen.length) uit.set(dagen[0], rondUren((uit.get(dagen[0]) ?? 0) + rest))
+
+  return [...uit.entries()]
+    .map(([datum, uren]) => ({ datum, uren: -uren }))
+    .sort((a, b) => a.datum.localeCompare(b.datum))
 }
 
 /**

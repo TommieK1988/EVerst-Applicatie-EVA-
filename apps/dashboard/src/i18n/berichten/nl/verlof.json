@@ -50,5 +50,9 @@
     "training": "Training",
     "overig": "Afwezig"
   },
-  "ingepland": "In planning"
+  "ingepland": "In planning",
+  "saldoTeLaag": "Je hebt niet genoeg tijd-voor-tijdsaldo: je vraagt {uren} uur aan en je hebt {beschikbaar} uur beschikbaar.",
+  "tvtBeschikbaar": "Je hebt {uren} uur tijd voor tijd beschikbaar.",
+  "tvtTeWeinig": "Te weinig saldo: je hebt {uren} uur tijd voor tijd beschikbaar.",
+  "tvtUitleg": "Overuren uit weken die nog niet zijn goedgekeurd tellen nog niet mee."
 }

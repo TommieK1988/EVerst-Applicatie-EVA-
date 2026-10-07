@@ -16,6 +16,7 @@ import { revalidatePath } from 'next/cache'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 import { isoWeek, weekDagen, weekStartVan } from '@/lib/uren/rooster'
 import { BOEKBAAR_FILTER } from '@/lib/uren/boekbaar'
+import { OVERUREN_BRON } from '@/lib/uren/rekenregel'
 import { extraWerkadressenInVak, extraWerkadressenVan } from '@/lib/dossiers/werkadressen-data'
 import { dichtstbijzijnd, puntLabel, werkpuntenVan, type Werkpunt } from '@/lib/dossiers/werkpunten'
 import { vereisPrikklokActie } from './auth'
@@ -675,7 +676,7 @@ export async function getPrikklokWeek(datum?: string): Promise<PrikklokWeek> {
       .limit(500),
     db()
       .from('uren_regels')
-      .select('datum, uren, bewakingscode, dossiers ( dossiernummer, titel ), planning_uursoorten ( naam )')
+      .select('datum, uren, bron, bewakingscode, dossiers ( dossiernummer, titel ), planning_uursoorten ( naam )')
       .eq('medewerker_id', medewerker.id)
       .gte('datum', weekStart)
       .lte('datum', weekEind)
@@ -689,7 +690,9 @@ export async function getPrikklokWeek(datum?: string): Promise<PrikklokWeek> {
 
   const weekDagenUit: PrikklokWeekDag[] = dagen.map(dag => {
     const urenstaat: UrenstaatRegel[] = (urenRijen ?? [])
-      .filter(r => r.datum === dag)
+      // De automatische overurenregel (min tijd voor tijd) is boekhouding, geen aanwezigheid: met
+      // hem erbij zou een dag van 9 uur tegen de prikklok als 7,5 staan.
+      .filter(r => r.datum === dag && r.bron !== OVERUREN_BRON)
       .map(r => ({
         label: r.dossiers ? dossierLabel(r.dossiers) : geenDossier,
         bewakingscode: r.bewakingscode ?? null,

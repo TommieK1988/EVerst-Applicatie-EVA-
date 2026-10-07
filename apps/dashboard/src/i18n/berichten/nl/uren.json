@@ -46,7 +46,10 @@
     "naarSaldo": "+{uren} uur naar je tijd-voor-tijdsaldo",
     "weekIndienen": "Week indienen",
     "ingediend": "Week ingediend.",
-    "ingediendMetSaldo": "Week ingediend. {uren} uur naar je tijd-voor-tijdsaldo."
+    "ingediendMetSaldo": "Week ingediend. {uren} uur naar je tijd-voor-tijdsaldo.",
+    "overurenTitel": "Je hebt deze week {uren} uur extra gewerkt",
+    "overurenUitleg": "Die uren gaan naar je tijd-voor-tijdsaldo. Daarom staat er een regel van −{uren} uur tijd voor tijd. Zo klopt je week precies met je contract. Je hoeft hier niets voor te doen.",
+    "overurenRegel": "Overuren naar je saldo"
   },
   "regel": {
     "titelNieuw": "Uren toevoegen",
@@ -150,7 +153,9 @@
     "kiesBewakingscode": "Kies een bewakingscode voor deze uren.",
     "geenIndirectDossier": "Er is voor jouw werkmaatschappij nog geen project voor deze uren ingesteld. Vraag de beheerder dit te doen in Instellingen → Uren.",
     "geenWerkmaatschappij": "Op je profiel staat nog geen werkmaatschappij, dus EVA weet niet op welk project deze uren horen. Vraag kantoor dit in te vullen.",
-    "externAlleenGewerkt": "Als externe boek je alleen gewerkte uren."
+    "externAlleenGewerkt": "Als externe boek je alleen gewerkte uren.",
+    "automatischeRegel": "Deze regel zet EVA zelf neer voor je overuren. Pas je gewerkte uren aan, dan past hij vanzelf mee.",
+    "tvtSaldoTeLaag": "Je hebt niet genoeg tijd-voor-tijdsaldo: je wilt {uren} uur opnemen en je hebt {beschikbaar} uur beschikbaar."
   },
   "keuren": {
     "titel": "Fiatteren",

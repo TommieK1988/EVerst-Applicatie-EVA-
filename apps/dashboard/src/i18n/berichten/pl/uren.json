@@ -46,7 +46,10 @@
     "naarSaldo": "+{uren} godz. na Twoje saldo nadgodzin (czas za czas)",
     "weekIndienen": "Wyślij tydzień",
     "ingediend": "Tydzień wysłany.",
-    "ingediendMetSaldo": "Tydzień wysłany. {uren} godz. trafia na Twoje saldo nadgodzin."
+    "ingediendMetSaldo": "Tydzień wysłany. {uren} godz. trafia na Twoje saldo nadgodzin.",
+    "overurenTitel": "W tym tygodniu przepracowałeś {uren} godz. więcej",
+    "overurenUitleg": "Te godziny trafiają na Twoje saldo nadgodzin (czas za czas). Dlatego jest tu wiersz −{uren} godz. „czas za czas”. Dzięki temu Twój tydzień zgadza się dokładnie z umową. Nie musisz nic robić.",
+    "overurenRegel": "Nadgodziny na Twoje saldo"
   },
   "regel": {
     "titelNieuw": "Dodaj godziny",
@@ -150,7 +153,9 @@
     "kiesBewakingscode": "Wybierz kod budżetowy dla tych godzin.",
     "geenIndirectDossier": "Dla Twojej firmy nie ustawiono jeszcze projektu dla tych godzin. Poproś administratora, aby to zrobił.",
     "geenWerkmaatschappij": "W Twoim profilu nie ma jeszcze firmy, więc EVA nie wie, do którego projektu należą te godziny. Poproś biuro o uzupełnienie.",
-    "externAlleenGewerkt": "Jako pracownik zewnętrzny wpisujesz tylko przepracowane godziny."
+    "externAlleenGewerkt": "Jako pracownik zewnętrzny wpisujesz tylko przepracowane godziny.",
+    "automatischeRegel": "Ten wiersz EVA dodaje sama dla Twoich nadgodzin. Zmień przepracowane godziny, a on dopasuje się automatycznie.",
+    "tvtSaldoTeLaag": "Masz za mało salda nadgodzin: chcesz wykorzystać {uren} godz., a masz dostępne {beschikbaar} godz."
   },
   "keuren": {
     "titel": "Zatwierdzanie",

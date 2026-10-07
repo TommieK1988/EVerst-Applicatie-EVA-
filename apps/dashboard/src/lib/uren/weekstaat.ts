@@ -15,15 +15,18 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getAppVertaler, getAppLocale } from '@/i18n/server'
-import { getContracturen, getVoorgevuldeRegels, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
+import { getContracturen, isoWeek, weekStartVan, weekDagen, datumSleutel } from './rooster'
+import { vulVoor } from './voorvullen'
 import { getUrenInstellingen, getUrenBestemming, getIndirecteDossierIds } from './instellingen'
-import { berekenWeekTotalen, indienBlokkade, rondUren, type UrenCategorie } from './rekenregel'
+import { berekenWeekTotalen, indienBlokkade, rondUren, OVERUREN_BRON, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
 import type { OnkostenSoort, Vervoermiddel } from './onkosten'
 import { signBonnen } from './bonnen'
 import { BOEKBAAR_FILTER } from './boekbaar'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
+import { zetOverurenRegels } from './overuren'
+import { berekenTvtSaldo } from './tvt-saldo'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -174,50 +177,6 @@ async function zorgVoorWeek(medewerkerId: string, weekStart: string) {
   return nieuw.id as string
 }
 
-/** Feestdagen en geregistreerd verlof als regels neerzetten. */
-async function vulVoor(medewerkerId: string, weekStart: string, weekId: string) {
-  // Externen boeken geen verlof of feestdagen: die worden hun niet uitbetaald.
-  if (await isExtern(medewerkerId)) return
-  const supabase = db()
-  const voorgevuld = await getVoorgevuldeRegels(medewerkerId, weekStart)
-  if (!voorgevuld.length) return
-
-  const { data: soorten } = await supabase
-    .from('planning_uursoorten')
-    .select('id, naam, uren_categorie')
-    .not('uren_categorie', 'is', null)
-  type Soort = { id: string; naam: string; uren_categorie: UrenCategorie }
-  const lijst = (soorten ?? []) as Soort[]
-
-  const feestdagSoort = lijst.find(s => s.uren_categorie === 'feestdag')
-  // Verlof uit Bouw7 komt binnen als type 'verlof' | 'ziek' | 'training' | 'overig'. We mikken op
-  // de best passende afwezigheidssoort en vallen terug op Vakantie uren.
-  const afwezig = lijst.filter(s => s.uren_categorie === 'afwezig')
-  const zoek = (naam: string) => afwezig.find(s => s.naam.toLowerCase().includes(naam))
-  const soortVoorType = (type?: string) =>
-    type === 'ziek' ? (zoek('ziek') ?? zoek('vakantie'))
-    : type === 'training' ? (zoek('scholing') ?? zoek('vakantie'))
-    : (zoek('vakantie') ?? afwezig[0])
-
-  const indirectDossier = (await getUrenBestemming(medewerkerId)).nietGewerktDossierId
-
-  const rijen = voorgevuld.flatMap(r => {
-    const soort = r.bron === 'bouw7_feestdag' ? feestdagSoort : soortVoorType(r.afwezigheidType)
-    if (!soort) return []
-    return [{
-      week_id: weekId,
-      medewerker_id: medewerkerId,
-      datum: r.datum,
-      uren: r.uren,
-      uursoort_id: soort.id,
-      dossier_id: indirectDossier,
-      bron: r.bron,
-      opmerking: r.omschrijving,
-    }]
-  })
-  if (rijen.length) await supabase.from('uren_regels').insert(rijen)
-}
-
 /* ── Lezen ────────────────────────────────────────────────────────── */
 
 /** De weekstaat van de ingelogde medewerker. `datum` mag elke dag in de week zijn. */
@@ -226,6 +185,9 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   const supabase = db()
   const weekStart = weekStartVan(datum ?? new Date())
   const weekId = await zorgVoorWeek(medewerker.id, weekStart)
+  // Ook hier, niet alleen na een wijziging: een normwijziging (actualiseerNorm) of een week van
+  // vóór deze regel moet bij het openen meteen goed staan.
+  await zetOverurenRegels(weekId)
 
   const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers, bestemming] = await Promise.all([
     supabase.from('uren_weken').select('*').eq('id', weekId).single(),
@@ -520,7 +482,12 @@ async function blokkadeTekst(
   return t('fout.ongecodeerd', { aantal: ongecodeerd })
 }
 
-async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
+async function bouwRegel(
+  medewerkerId: string,
+  invoer: RegelInvoer,
+  /** Bij wijzigen: de regel zelf, zodat zijn oude uren niet tegen het saldo tellen. */
+  bestaand?: { id: string; bron: string },
+) {
   const supabase = db()
   // De meldingen hieronder komen via `e.message` bij de monteur: in de taal van de app.
   const t = await getAppVertaler('uren')
@@ -542,6 +509,19 @@ async function bouwRegel(medewerkerId: string, invoer: RegelInvoer) {
   // gewerkte overheadproject. Zet hij in het boekscherm "Op een project" aan, dan komt er een
   // dossier mee en volgt de regel dezelfde route als die van een vakman -- met bewakingscode.
   if (categorie !== 'werk' && bestemming.extern) throw new Error(t('fout.externAlleenGewerkt'))
+  // Tijd voor tijd opnemen kan alleen van saldo dat er is -- dezelfde toets als bij een
+  // verlofaanvraag, anders is die te omzeilen door het hier direct te boeken. Een voorgevulde
+  // regel van goedgekeurd verlof is al getoetst (en telt via de aanvraag al mee).
+  if (categorie === 'tijd_voor_tijd' && (!bestaand || bestaand.bron === 'eva')) {
+    const { beschikbaar } = await berekenTvtSaldo(medewerkerId, { negeerRegelId: bestaand?.id })
+    if (invoer.uren > beschikbaar) {
+      const locale = await getAppLocale()
+      throw new Error(t('fout.tvtSaldoTeLaag', {
+        uren: invoer.uren.toLocaleString(locale),
+        beschikbaar: Math.max(0, beschikbaar).toLocaleString(locale),
+      }))
+    }
+  }
   if (categorie === 'werk' && (!bestemming.kantoor || invoer.dossier_id)) {
     if (!invoer.dossier_id) throw new Error(t('fout.kiesProject'))
     // Op een indirecte-urendossier staat geen begroting en dus geen code om uit te kiezen; daar
@@ -588,6 +568,7 @@ export async function voegRegelToe(
     const rij = await bouwRegel(medewerker.id, invoer)
     const { error } = await supabase.from('uren_regels').insert({ ...rij, week_id: weekId, bron: 'eva' })
     if (error) return { ok: false, error: error.message }
+    await zetOverurenRegels(weekId)
 
     revalidatePath('/m/uren')
     return { ok: true }
@@ -611,14 +592,16 @@ export async function wijzigRegel(
     if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
     if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
     if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
+    if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
 
-    const rij = await bouwRegel(medewerker.id, invoer)
+    const rij = await bouwRegel(medewerker.id, invoer, { id: regelId, bron: bestaand.bron })
     // Wijkt de medewerker af van wat uit Bouw7 kwam, dan blijft dat zichtbaar voor de goedkeurder.
     const afgeweken = bestaand.bron !== 'eva'
     const { error } = await supabase.from('uren_regels')
       .update({ ...rij, afgeweken_van_bron: afgeweken })
       .eq('id', regelId)
     if (error) return { ok: false, error: error.message }
+    await zetOverurenRegels(bestaand.week_id)
 
     revalidatePath('/m/uren')
     return { ok: true }
@@ -635,15 +618,17 @@ export async function verwijderRegel(
   const supabase = db()
   const { data: bestaand } = await supabase
     .from('uren_regels')
-    .select('id, medewerker_id, uren_weken(status)')
+    .select('id, week_id, medewerker_id, bron, uren_weken(status)')
     .eq('id', regelId)
     .maybeSingle()
   if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
   if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
   if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
+  if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
 
   const { error } = await supabase.from('uren_regels').delete().eq('id', regelId)
   if (error) return { ok: false, error: error.message }
+  await zetOverurenRegels(bestaand.week_id)
   revalidatePath('/m/uren')
   return { ok: true }
 }
@@ -668,6 +653,9 @@ export async function dienWeekIn(
   if (contracturen <= 0 && !(await isExtern(medewerker.id))) {
     return { ok: false, error: t('fout.geenContracturen') }
   }
+
+  // De overurenregel nog één keer server-side goedzetten: wat er nu staat gaat naar Bouw7.
+  await zetOverurenRegels(weekId)
 
   const [{ data: regels }, inst, indirecteDossiers] = await Promise.all([
     supabase

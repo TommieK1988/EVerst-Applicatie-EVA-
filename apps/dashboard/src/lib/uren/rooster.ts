@@ -121,6 +121,7 @@ type Afwezigheid = {
   start_tijd: string | null
   eind_tijd: string | null
   type: string
+  uursoort_id: string | null
   opmerking: string | null
 }
 
@@ -157,6 +158,8 @@ export type VoorgevuldeRegel = {
   bron: 'bouw7_feestdag' | 'bouw7_verlof'
   /** Type uit medewerker_afwezigheid, alleen bij verlof — bepaalt welke uursoort past. */
   afwezigheidType?: string
+  /** De uursoort van de verlofaanvraag; gaat voor op raden uit het type. */
+  uursoortId?: string | null
   omschrijving: string
 }
 
@@ -190,7 +193,7 @@ export async function getVoorgevuldeRegels(
       .gte('eind_datum', weekStart),
     supabase
       .from('medewerker_afwezigheid')
-      .select('start_datum, eind_datum, start_tijd, eind_tijd, type, opmerking')
+      .select('start_datum, eind_datum, start_tijd, eind_tijd, type, uursoort_id, opmerking')
       .eq('medewerker_id', medewerkerId)
       .lte('start_datum', weekEind)
       .gte('eind_datum', weekStart),
@@ -221,6 +224,7 @@ export async function getVoorgevuldeRegels(
       regels.push({
         datum, uren: urenVanAfwezigheid(af, perDag), bron: 'bouw7_verlof',
         afwezigheidType: af.type,
+        uursoortId: af.uursoort_id,
         omschrijving: [af.opmerking?.trim() || af.type, tijdvenster(af)].filter(Boolean).join(' '),
       })
     }

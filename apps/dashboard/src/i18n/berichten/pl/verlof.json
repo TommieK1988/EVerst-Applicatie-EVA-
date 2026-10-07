@@ -50,5 +50,9 @@
     "training": "Szkolenie",
     "overig": "Nieobecność"
   },
-  "ingepland": "W planie"
+  "ingepland": "W planie",
+  "saldoTeLaag": "Masz za mało salda nadgodzin: wnioskujesz o {uren} godz., a masz dostępne {beschikbaar} godz.",
+  "tvtBeschikbaar": "Masz dostępne {uren} godz. czasu za czas.",
+  "tvtTeWeinig": "Za mało salda: masz dostępne {uren} godz. czasu za czas.",
+  "tvtUitleg": "Nadgodziny z tygodni, które nie zostały jeszcze zatwierdzone, nie są jeszcze liczone."
 }

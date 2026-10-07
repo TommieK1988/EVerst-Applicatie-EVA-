@@ -14,7 +14,10 @@ import MobielUpdates from '@/components/mobiel/MobielUpdates'
 import type { MobielUpdate } from '@/lib/mobiel/updates'
 import { laadBerichten } from '@/i18n/berichten'
 import { naarTaal, TALEN, TAAL_NAAM, TIJDZONE } from '@/i18n/talen'
-import type { VerlofAanvraag } from '@/lib/uren/verlof'
+import WeekstaatClient from '@/components/mobiel/uren/WeekstaatClient'
+import type { VerlofAanvraag, VerlofSoort } from '@/lib/uren/verlof'
+import type { Weekstaat, WeekRegel } from '@/lib/uren/weekstaat'
+import { OVERUREN_BRON } from '@/lib/uren/rekenregel'
 import type { IngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
 import type { EigenGegevens } from '@/lib/medewerker/eigen-gegevens'
 
@@ -47,18 +50,50 @@ const TAKEN: MobielTaak[] = [
 
 const VERLOF: VerlofAanvraag[] = [
   {
-    id: 'v1', medewerkerNaam: 'Kasun Perera', uursoortId: 'u1', uursoortNaam: 'Vakantie',
+    id: 'v1', medewerkerId: 'm1', medewerkerNaam: 'Kasun Perera', uursoortId: 'u1', uursoortNaam: 'Vakantie',
     startDatum: dag(14), eindDatum: dag(18), heleDagen: true, startTijd: null, eindTijd: null,
     urenTotaal: 40, toelichting: null, status: 'aangevraagd', beoordelaarNaam: null,
-    afwijzingReden: null, bouw7Status: 'nieuw', aangevraagdOp: dag(-2),
+    afwijzingReden: null, bouw7Status: 'nieuw', aangevraagdOp: dag(-2), tijdVoorTijd: false,
   },
   {
-    id: 'v2', medewerkerNaam: 'Kasun Perera', uursoortId: 'u2', uursoortNaam: 'Bijzonder verlof',
+    id: 'v2', medewerkerId: 'm1', medewerkerNaam: 'Kasun Perera', uursoortId: 'u2', uursoortNaam: 'Bijzonder verlof',
     startDatum: dag(-20), eindDatum: dag(-20), heleDagen: false, startTijd: '13:00', eindTijd: '17:00',
     urenTotaal: 4, toelichting: 'Tandarts', status: 'afgewezen', beoordelaarNaam: 'Jan de Vries',
-    afwijzingReden: 'Die middag is de oplevering.', bouw7Status: 'nieuw', aangevraagdOp: dag(-25),
+    afwijzingReden: 'Die middag is de oplevering.', bouw7Status: 'nieuw', aangevraagdOp: dag(-25), tijdVoorTijd: false,
   },
 ]
+
+const VERLOF_SOORTEN: VerlofSoort[] = [
+  { id: 'u1', naam: 'Vakantie', tijdVoorTijd: false },
+  { id: 'u2', naam: 'Bijzonder verlof', tijdVoorTijd: false },
+  { id: 'u3', naam: 'Tijd voor tijd', tijdVoorTijd: true },
+]
+
+/**
+ * `?uren=1`: een weekstaat met overuren, zodat de automatische min-regel tijd voor tijd en de
+ * uitleg erbij in elke taal te zien zijn. 9 uur per dag op 37,5: -1,5 per dag naar het saldo.
+ */
+function voorbeeldWeek(): Weekstaat {
+  const maandag = new Date(vandaag.getTime() - ((vandaag.getUTCDay() + 6) % 7) * 86_400_000)
+  const dagen = Array.from({ length: 7 }, (_, i) =>
+    new Date(maandag.getTime() + i * 86_400_000).toISOString().slice(0, 10))
+  const regel = (id: string, datum: string, uren: number, auto: boolean): WeekRegel => ({
+    id, datum, uren, uursoort_id: auto ? 'tvt' : 'werk',
+    uursoort_naam: auto ? 'Tijd voor tijd' : 'Gewerkte uren - Schilder',
+    categorie: auto ? 'tijd_voor_tijd' : 'werk',
+    dossier_id: 'd1', dossier_label: auto ? null : '20261.00412 · Kerkstraat 12, Zwolle',
+    bewakingscode: auto ? null : 'SC01', opmerking: auto ? 'Overuren naar tijd-voor-tijdsaldo' : null,
+    bron: auto ? OVERUREN_BRON : 'eva', afgeweken_van_bron: false, pl_status: 'nvt',
+    gewijzigd_door_goedkeurder: false, bouw7_status: 'niet_verzonden', indirect: auto,
+  })
+  const regels = dagen.slice(0, 5).flatMap((d, i) => [regel(`w${i}`, d, 9, false), regel(`a${i}`, d, -1.5, true)])
+  return {
+    weekId: 'w', weekStart: dagen[0], jaar: 2026, weekNr: 41, dagen, status: 'concept',
+    contracturen: 37.5, totaalUren: 37.5, tijdVoorTijdUren: -7.5, tekort: 0, saldoMutatie: 7.5,
+    saldoNu: 12, magIndienen: true, blokkade: null, bewerkbaar: true, afkeurReden: null,
+    regels, onkosten: [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor: false, extern: false,
+  }
+}
 
 // Verlof dat kantoor in Bouw7 zette: staat in de planning, niet als aanvraag.
 const INGEPLAND: IngeplandVerlof[] = [
@@ -87,7 +122,7 @@ const UPDATES: MobielUpdate[] = [
     omschrijving: 'Bij het schrijven van uren zie je alleen je ingeplande projecten en kun je zoeken in plaats van scrollen.' },
 ]
 
-export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string }> }) {
+export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string; uren?: string }> }) {
   const params = await searchParams
   const taal = naarTaal(params.taal)
   const berichten = await laadBerichten(taal)
@@ -123,7 +158,10 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
           <MobielTegel href="#" label={t('tegel.mijnGegevens')} Icon={User} />
         </div>
         <MobielTakenLijst taken={TAKEN} />
-        <VerlofClient aanvragen={VERLOF} ingepland={INGEPLAND} soorten={[{ id: 'u1', naam: 'Vakantie' }, { id: 'u2', naam: 'Bijzonder verlof' }]} saldo={86.5} />
+        {params.uren === '1' && (
+          <WeekstaatClient staat={voorbeeldWeek()} uursoorten={[]} vandaag={vandaag.toISOString().slice(0, 10)} />
+        )}
+        <VerlofClient aanvragen={VERLOF} ingepland={INGEPLAND} soorten={VERLOF_SOORTEN} saldo={86.5} tvtBeschikbaar={6} />
         <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>

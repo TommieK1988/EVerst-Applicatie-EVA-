@@ -1,10 +1,10 @@
-import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import AppHeader from '@/components/mobiel/AppHeader'
 import MobielPullToRefresh from '@/components/mobiel/MobielPullToRefresh'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import { getMijnVerlof, getVerlofSoorten } from '@/lib/uren/verlof'
 import { getIngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
+import { berekenTvtSaldo } from '@/lib/uren/tvt-saldo'
 import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Verlof · EVA Mobiel' }
@@ -30,14 +30,11 @@ export default async function MobielVerlofPage() {
     )
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createAdminClient() as any
-  const [aanvragen, ingepland, soorten, { data: saldoRij }] = await Promise.all([
+  const [aanvragen, ingepland, soorten, tvt] = await Promise.all([
     getMijnVerlof(),
     getIngeplandVerlof(medewerker.id),
     getVerlofSoorten(),
-    supabase.from('uren_saldo_per_medewerker')
-      .select('saldo_uren').eq('medewerker_id', medewerker.id).maybeSingle(),
+    berekenTvtSaldo(medewerker.id),
   ])
 
   return (
@@ -48,7 +45,8 @@ export default async function MobielVerlofPage() {
         aanvragen={aanvragen}
         ingepland={ingepland}
         soorten={soorten}
-        saldo={Number(saldoRij?.saldo_uren ?? 0)}
+        saldo={tvt.saldo}
+        tvtBeschikbaar={tvt.beschikbaar}
       />
     </>
   )

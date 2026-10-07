@@ -30,6 +30,9 @@ import { getBouw7Client } from '@/lib/bouw7/sync'
 import { naarBouw7DayOffDatum } from '@/lib/bouw7/verlof-write'
 import { getRooster, isoWeekdag, datumSleutel, minutenVanTijd } from './rooster'
 import { getUrenInstellingen } from './instellingen'
+import { berekenTvtSaldo } from './tvt-saldo'
+import { vulVerlofInOpenWeken } from './voorvullen'
+import { getAppVertaler, getAppLocale } from '@/i18n/server'
 import {
   bepaalBeoordelendeAfdeling, haalPoolLeden, magVerlofBeoordelen,
   STANDAARD_BEOORDELENDE_AFDELING, type PoolLid,
@@ -42,6 +45,7 @@ export type VerlofStatus = 'aangevraagd' | 'goedgekeurd' | 'afgewezen' | 'ingetr
 
 export type VerlofAanvraag = {
   id: string
+  medewerkerId: string
   medewerkerNaam: string
   uursoortId: string
   uursoortNaam: string
@@ -58,6 +62,13 @@ export type VerlofAanvraag = {
   afwijzingReden: string | null
   bouw7Status: string
   aangevraagdOp: string
+  /** Tijd voor tijd: gaat van het saldo af in plaats van van de vakantiedagen. */
+  tijdVoorTijd: boolean
+  /**
+   * Alleen bij open tijd-voor-tijdaanvragen voor de beoordelaar: hoeveel saldo er voor déze
+   * aanvraag beschikbaar is. Kleiner dan `urenTotaal` = er is intussen te weinig.
+   */
+  tvtBeschikbaar?: number
 }
 
 /**
@@ -134,7 +145,8 @@ export async function vraagVerlofAan(invoer: {
     .eq('id', invoer.uursoortId)
     .maybeSingle()
   if (!soort) return { ok: false, error: 'Onbekende verlofsoort.' }
-  if (soort.uren_categorie !== 'afwezig') {
+  const tijdVoorTijd = soort.uren_categorie === 'tijd_voor_tijd'
+  if (soort.uren_categorie !== 'afwezig' && !tijdVoorTijd) {
     return { ok: false, error: `"${soort.naam}" is geen verlofsoort.` }
   }
 
@@ -181,6 +193,23 @@ export async function vraagVerlofAan(invoer: {
     uren = Math.min(berekend.uren, Math.round((minuten / 60) * 100) / 100)
   }
   if (!(uren > 0)) return { ok: false, error: 'Vul het aantal uren in.' }
+
+  // Tijd voor tijd gaat van het saldo af: alleen aanvragen wat er is. Wat al aangevraagd of
+  // geboekt is maar nog niet in het saldo zit, telt mee (zie tvt-saldo.ts).
+  if (tijdVoorTijd) {
+    const { beschikbaar } = await berekenTvtSaldo(medewerker.id)
+    if (uren > beschikbaar) {
+      const t = await getAppVertaler('verlof')
+      const locale = await getAppLocale()
+      return {
+        ok: false,
+        error: t('saldoTeLaag', {
+          uren: uren.toLocaleString(locale),
+          beschikbaar: Math.max(0, beschikbaar).toLocaleString(locale),
+        }),
+      }
+    }
+  }
 
   // De pool bepalen vóór de insert: we bevriezen alleen een afdeling waar ook echt iemand in zit.
   const inst = await getUrenInstellingen()
@@ -260,9 +289,18 @@ export async function getMijnVerlof(): Promise<VerlofAanvraag[]> {
 /** De open aanvragen die de ingelogde medewerker mag beoordelen: die van zijn afdeling. */
 export async function getTeBeoordelenVerlof(): Promise<VerlofAanvraag[]> {
   const medewerker = await vereisSessie()
-  return leesAanvragen({
+  const lijst = await leesAanvragen({
     poolAfdeling: medewerker.afdeling ?? null, kijkerId: medewerker.id, alleenOpen: true,
   })
+  // Bij tijd voor tijd ziet de beoordelaar of het saldo er (nog) is: de aanvraag is bij het
+  // indienen getoetst, maar intussen kan er meer zijn opgenomen of een week zijn afgekeurd.
+  // De aanvraag telt zelf al mee in wat onderweg is; voor het oordeel hoort hij erbij opgeteld.
+  for (const a of lijst) {
+    if (!a.tijdVoorTijd || !a.medewerkerId) continue
+    const { beschikbaar } = await berekenTvtSaldo(a.medewerkerId)
+    a.tvtBeschikbaar = Math.round((beschikbaar + a.urenTotaal) * 100) / 100
+  }
+  return lijst
 }
 
 /**
@@ -297,7 +335,7 @@ async function leesAanvragen(filter: {
   const supabase = db()
   let q = supabase
     .from('verlof_aanvragen')
-    .select('id, uursoort_id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam), aanvrager:medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam), beoordelaar:medewerkers!verlof_aanvragen_beoordeeld_door_fkey(voornaam, tussenvoegsel, achternaam)')
+    .select('id, medewerker_id, uursoort_id, start_datum, eind_datum, hele_dagen, start_tijd, eind_tijd, uren_totaal, toelichting, status, afwijzing_reden, bouw7_status, created_at, planning_uursoorten(naam, uren_categorie), aanvrager:medewerkers!verlof_aanvragen_medewerker_id_fkey(voornaam, tussenvoegsel, achternaam), beoordelaar:medewerkers!verlof_aanvragen_beoordeeld_door_fkey(voornaam, tussenvoegsel, achternaam)')
     .order('start_datum', { ascending: false })
     .limit(100)
 
@@ -309,6 +347,7 @@ async function leesAanvragen(filter: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return ((data ?? []) as any[]).map(a => ({
     id: a.id,
+    medewerkerId: a.medewerker_id,
     medewerkerNaam: naamVan(a.aanvrager),
     uursoortId: a.uursoort_id,
     uursoortNaam: a.planning_uursoorten?.naam ?? '—',
@@ -325,19 +364,32 @@ async function leesAanvragen(filter: {
     afwijzingReden: a.afwijzing_reden,
     bouw7Status: a.bouw7_status,
     aangevraagdOp: a.created_at,
+    tijdVoorTijd: a.planning_uursoorten?.uren_categorie === 'tijd_voor_tijd',
   }))
 }
 
-/** De verlofsoorten waaruit gekozen kan worden (alle 'afwezig'-uursoorten uit Bouw7). */
-export async function getVerlofSoorten(): Promise<Array<{ id: string; naam: string }>> {
-  await vereisSessie()
-  const { data } = await db()
-    .from('planning_uursoorten')
-    .select('id, naam')
-    .eq('uren_categorie', 'afwezig')
-    .eq('actief', true)
-    .order('naam')
-  return (data ?? []) as Array<{ id: string; naam: string }>
+export type VerlofSoort = { id: string; naam: string; tijdVoorTijd: boolean }
+
+/**
+ * De verlofsoorten waaruit gekozen kan worden: alle 'afwezig'-uursoorten uit Bouw7, plus tijd voor
+ * tijd (gaat van het saldo af en wordt daarom bij aanvragen getoetst). Een extern bouwt geen
+ * saldo op en krijgt tijd voor tijd dus niet te zien.
+ */
+export async function getVerlofSoorten(): Promise<VerlofSoort[]> {
+  const medewerker = await vereisSessie()
+  const supabase = db()
+  const [{ data }, { data: mw }] = await Promise.all([
+    supabase
+      .from('planning_uursoorten')
+      .select('id, naam, uren_categorie')
+      .in('uren_categorie', ['afwezig', 'tijd_voor_tijd'])
+      .eq('actief', true)
+      .order('naam'),
+    supabase.from('medewerkers').select('extern').eq('id', medewerker.id).maybeSingle(),
+  ])
+  return ((data ?? []) as Array<{ id: string; naam: string; uren_categorie: string }>)
+    .map(s => ({ id: s.id, naam: s.naam, tijdVoorTijd: s.uren_categorie === 'tijd_voor_tijd' }))
+    .filter(s => !s.tijdVoorTijd || !mw?.extern)
 }
 
 /* ── Beoordelen ───────────────────────────────────────────────────── */
@@ -376,6 +428,9 @@ export async function keurVerlofGoed(
   const { data: afwezigheid } = await supabase.from('medewerker_afwezigheid').insert({
     medewerker_id: a.medewerker_id,
     type: /ziek/i.test(a.planning_uursoorten?.naam ?? '') ? 'ziek' : 'verlof',
+    // De uursoort zelf mee: het type hierboven kent geen tijd voor tijd, en de weekstaat vulde
+    // zulk verlof anders als vakantie voor.
+    uursoort_id: a.uursoort_id,
     start_datum: a.start_datum,
     eind_datum: a.eind_datum,
     // Het venster moet mee: de planning laat de monteur dan de rest van de dag beschikbaar zien,
@@ -389,6 +444,11 @@ export async function keurVerlofGoed(
   await supabase.from('verlof_aanvragen')
     .update({ afwezigheid_id: afwezigheid?.id ?? null })
     .eq('id', aanvraagId)
+
+  // Bestaat de week al (de monteur opende hem eerder), dan komt het verlof er nu in te staan.
+  // Bijzaak naast de goedkeuring zelf: mislukt het, dan boekt hij het alsnog met de hand.
+  await vulVerlofInOpenWeken(a.medewerker_id, a.start_datum, a.eind_datum)
+    .catch(e => console.error('[verlof] voorvullen in open week mislukt', aanvraagId, e))
 
   const bouw7 = await schrijfVerlofNaarBouw7(aanvraagId)
 

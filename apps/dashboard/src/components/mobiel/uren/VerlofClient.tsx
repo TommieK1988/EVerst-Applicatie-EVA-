@@ -8,7 +8,7 @@ import { useDatumLocale } from '@/i18n/client'
 import { useVertalingen } from '@/components/vertalen/useVertaling'
 import {
   vraagVerlofAan, trekVerlofIn, berekenMijnVerlofUren,
-  type VerlofAanvraag,
+  type VerlofAanvraag, type VerlofSoort,
 } from '@/lib/uren/verlof'
 import type { IngeplandVerlof } from '@/lib/uren/afwezigheid-mobiel'
 import IngeplandVerlofKaart from './IngeplandVerlofKaart'
@@ -52,13 +52,15 @@ function vandaagIso() {
 }
 
 export default function VerlofClient({
-  aanvragen, ingepland, soorten, saldo,
+  aanvragen, ingepland, soorten, saldo, tvtBeschikbaar,
 }: {
   aanvragen: VerlofAanvraag[]
   /** Verlof uit de planning dat niet via de app is aangevraagd (meestal uit Bouw7). */
   ingepland: IngeplandVerlof[]
-  soorten: Array<{ id: string; naam: string }>
+  soorten: VerlofSoort[]
   saldo: number
+  /** Wat er van het saldo nog op te nemen is: min wat al geboekt of aangevraagd is. */
+  tvtBeschikbaar: number
 }) {
   const t = useTranslations('verlof')
   const locale = useDatumLocale()
@@ -131,7 +133,10 @@ export default function VerlofClient({
   const kosten = heleDagen
     ? (berekend?.uren ?? 0)
     : Math.min(berekend?.uren ?? 0, vensterUren)
-  const kanVersturen = !!berekend && berekend.dagen > 0 && kosten > 0
+  // Tijd voor tijd gaat van het saldo af; de server toetst het ook, dit is de hint vooraf.
+  const tijdVoorTijd = soorten.find(s => s.id === soortId)?.tijdVoorTijd ?? false
+  const saldoTeLaag = tijdVoorTijd && kosten > tvtBeschikbaar
+  const kanVersturen = !!berekend && berekend.dagen > 0 && kosten > 0 && !saldoTeLaag
 
   async function verstuur() {
     if (!start || !tot) { toast.error(heleDagen ? t('kiesPeriode') : t('kiesDag')); return }
@@ -234,6 +239,16 @@ export default function VerlofClient({
                 <select value={soortId} onChange={e => setSoortId(e.target.value)} style={veld}>
                   {soorten.map((s, i) => <option key={s.id} value={s.id}>{soortNamen[i]?.tekst ?? s.naam}</option>)}
                 </select>
+                {tijdVoorTijd && (
+                  <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: saldoTeLaag ? '#c0392b' : '#6b757c' }}>
+                    <strong>
+                      {saldoTeLaag
+                        ? t('tvtTeWeinig', { uren: getal(Math.max(0, tvtBeschikbaar)) })
+                        : t('tvtBeschikbaar', { uren: getal(Math.max(0, tvtBeschikbaar)) })}
+                    </strong>
+                    <div>{t('tvtUitleg')}</div>
+                  </div>
+                )}
               </div>
 
               <div>

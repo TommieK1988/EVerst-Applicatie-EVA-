@@ -152,6 +152,16 @@ export default function VerlofGoedkeurenKnop({ initieelAantal = 0 }: { initieelA
                           {' '}· {a.uursoortNaam} · {periode(a.startDatum, a.eindDatum)}{venster(a)} · {uur(a.urenTotaal)} uur
                         </span>
                       </div>
+                      {a.tvtBeschikbaar != null && (
+                        <div style={{
+                          fontFamily: 'var(--font-ui)', fontSize: 12, marginTop: 2,
+                          color: a.tvtBeschikbaar < a.urenTotaal ? 'var(--error-600, #c0392b)' : 'var(--fg-muted)',
+                        }}>
+                          {a.tvtBeschikbaar < a.urenTotaal
+                            ? `Te weinig tijd-voor-tijdsaldo: ${uur(Math.max(0, a.tvtBeschikbaar))} uur beschikbaar.`
+                            : `Tijd-voor-tijdsaldo: ${uur(a.tvtBeschikbaar)} uur beschikbaar.`}
+                        </div>
+                      )}
                       {a.toelichting && (
                         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--fg-muted)', marginTop: 2 }}>
                           {a.toelichting}
