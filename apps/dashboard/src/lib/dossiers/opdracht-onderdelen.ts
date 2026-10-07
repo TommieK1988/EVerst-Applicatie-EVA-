@@ -7,6 +7,7 @@ import { getDossierBewaking } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { kiesAanneemsom } from './aanneemsom'
 import { getDossierMeerwerk, stuurMeerwerkNaarBouw7 } from './meerwerk'
+import { zetStelpostInBouw7 } from './meerwerk-bouw7'
 import { getServicedeskRegie } from './servicedesk'
 import { isDossierAfgesloten, opRegie } from '@/components/dossiers/types'
 import {
@@ -469,6 +470,7 @@ export async function zetOptieInOpdracht(
     .update({ in_opdracht: inOpdracht, updated_at: new Date().toISOString() })
     .eq('id', onderdeelId)
   if (error) return { ok: false, error: error.message }
+  await zetStelpostInBouw7(onderdeelId) // best effort; de sync haalt een mislukte poging in
   revalidatePath(`/opdrachten/${rij.dossier_id}/informatie`)
   return { ok: true }
 }
@@ -595,6 +597,9 @@ export async function maakStelpost(
     .single()
   if (error) return { ok: false, error: error.message }
 
+  // Buiten de aanneemsom = extra omzet → meteen als stelpost-meerwerkregel naar Bouw7. Best effort;
+  // mislukt het, dan haalt de eerstvolgende Bouw7-sync het in.
+  await zetStelpostInBouw7(ins.id)
   revalidatePath(`/opdrachten/${dossierId}/informatie`)
   return { ok: true, id: ins.id }
 }
@@ -692,6 +697,7 @@ export async function updateStelpost(
 
   const { error } = await supabase.from('opdracht_onderdelen').update(velden).eq('id', onderdeelId)
   if (error) return { ok: false, error: error.message }
+  await zetStelpostInBouw7(onderdeelId)
   revalidatePath(`/opdrachten/${rij.dossier_id}/informatie`)
   return { ok: true }
 }
@@ -724,6 +730,10 @@ export async function verwijderStelpost(
     return { ok: false, error: 'Deze stelpost is al verrekend. Verwijder eerst de bijbehorende meerwerkregel.' }
   }
 
+  // Staat hij als meerwerkregel in Bouw7, dan die eerst op Niet akkoord: na het verwijderen weet
+  // EVA niet meer welke Bouw7-regel erbij hoorde.
+  const b7 = await zetStelpostInBouw7(onderdeelId, { vervalt: true })
+  if (!b7.ok) return { ok: false, error: `De stelpost staat ook in Bouw7 en kon daar niet worden afgemeld: ${b7.error}` }
   const { error } = await supabase.from('opdracht_onderdelen').delete().eq('id', onderdeelId)
   if (error) return { ok: false, error: error.message }
   revalidatePath(`/opdrachten/${rij.dossier_id}/informatie`)

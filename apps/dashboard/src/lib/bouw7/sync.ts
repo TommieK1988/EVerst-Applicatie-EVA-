@@ -2865,12 +2865,30 @@ export async function syncMeerwerk(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
 
     const { data: dossierData } = await supabase.from('dossiers').select('id, bouw7_id').not('bouw7_id', 'is', null)
     const dossierMap = new Map<string, string>((dossierData ?? []).map((d: { id: string; bouw7_id: string }) => [String(d.bouw7_id), d.id]))
+    const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
+
+    // Eerst EVA → Bouw7: EVA-meerwerkregels die nog niet in Bouw7 staan alsnog aanmaken (mislukt bij
+    // toevoegen, of van vóór het automatisch doorzetten). Dynamisch geïmporteerd: meerwerk-bouw7 trekt
+    // de dossier-actions binnen, die op hun beurt weer de sync raken.
+    const { haalMeerwerkInNaarBouw7 } = await import('@/lib/dossiers/meerwerk-bouw7')
+    const inhaal = await haalMeerwerkInNaarBouw7(scopeDossierIds ?? undefined)
+    result.fouten += inhaal.fouten
 
     // Eén bulk-sweep over álle projecten; daarna filteren op gekoppelde dossiers (+ scope).
     const lines = await fetchAllPages<Bouw7AdditionalWorkLine>(bouw7, '/list/additional-work-lines')
+
+    // Bouw7-regels die EVA zelf heeft aangemaakt — een meerwerkregel met bron='eva' of een stelpost —
+    // horen niet nog eens als import binnen te komen. Bij een stelpost zou dat hem dubbel laten tellen;
+    // bij een meerwerkregel blokkeerde de unieke bronsleutel het, maar telde het elke run als fout.
+    const evaGekoppeld = await haalAlleRijen<{ bouw7_line_id: number }>((van, tot) => supabase.from('meerwerk_regels')
+      .select('bouw7_line_id').eq('bron', 'eva').not('bouw7_line_id', 'is', null).order('id').range(van, tot))
+    const stelpostGekoppeld = await haalAlleRijen<{ bouw7_line_id: number }>((van, tot) => supabase.from('opdracht_onderdelen')
+      .select('bouw7_line_id').not('bouw7_line_id', 'is', null).order('id').range(van, tot))
+    const vanEva = new Set<string>([...evaGekoppeld, ...stelpostGekoppeld].map(r => String(r.bouw7_line_id)))
+
     const relevant = lines.filter(l => {
       const pid = l.projectId != null ? String(l.projectId) : null
-      return !!pid && dossierMap.has(pid) && (!scoped || scoped.has(pid))
+      return !!pid && dossierMap.has(pid) && (!scoped || scoped.has(pid)) && !vanEva.has(String(l.id))
     })
 
     // Bestaande bron='bouw7_line'-regels (scoped), gemapt op bouw7_line_id.
@@ -2878,7 +2896,6 @@ export async function syncMeerwerk(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       .select('id, dossier_id, volgnummer, bouw7_line_id, omschrijving, bedrag_excl_btw, begroot_bedrag, is_stelpost, status, bouw7_nummer')
       .eq('bron', 'bouw7_line')
       .not('bouw7_line_id', 'is', null)
-    const scopeDossierIds = scopeNaarDossierIds(scoped, dossierMap)
     if (scopeDossierIds) {
       bq = scopeDossierIds.length ? bq.in('dossier_id', scopeDossierIds) : bq.eq('dossier_id', '00000000-0000-0000-0000-000000000000')
     }

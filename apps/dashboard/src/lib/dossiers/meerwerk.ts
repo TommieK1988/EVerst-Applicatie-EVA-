@@ -11,7 +11,7 @@ import type {
   MeerwerkTermijnWijze,
 } from '@everts/database'
 import { getServicedeskRegie } from './servicedesk'
-import { bouw7VoorDossier, koppelCalculatieProject } from './actions'
+import { koppelCalculatieProject } from './actions'
 import { assertDossierBewerkbaar } from './guards'
 import { vereisSessie, getCurrentMedewerker } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeel, portaalGebruikerNaam } from '@/lib/portaal/auth'
@@ -22,6 +22,7 @@ import { leesMeerwerkOfferte, leesTermijnschemaPerOfferte } from './meerwerk-off
 import { overnameBijAkkoord } from './meerwerk-werkbegroting'
 import type { TermijnschemaRegel } from './termijnen-schema'
 import { heeftVariabelBedrag, metMandaat, werkelijkExcl } from './meerwerk-bedrag'
+import { maakMeerwerkInBouw7, updateMeerwerkInBouw7, type Bouw7AanmaakResultaat } from './meerwerk-bouw7'
 
 /** Statussen die als goedgekeurd meerwerk meetellen in het contracttotaal. */
 const GOEDGEKEURD: MeerwerkStatus[] = ['akkoord', 'voltooid']
@@ -684,116 +685,10 @@ export async function maakMeerwerkCalculatie(
   return { ok: true, projectId, dossierId: regel.dossier_id, omschrijving: regel.omschrijving }
 }
 
-// ─── Nieuwe meerwerkregel naar Bouw7 schrijven (POST additional-work-line) ─────
+// ─── Meerwerkregel naar Bouw7 (de schrijfcode staat in meerwerk-bouw7.ts) ─────
 
-/** EVA-status → Bouw7-meerwerkstatus. */
-const EVA_STATUS_NAAR_BOUW7: Record<MeerwerkStatus, number> = {
-  aangevraagd: 0,        // Geregistreerd
-  offerte_verstuurd: 0,  // (geen Bouw7-equivalent) → Geregistreerd
-  akkoord: 1,            // Akkoord
-  afgewezen: 2,          // Niet akkoord
-  voltooid: 3,           // Opgeleverd
-}
-
-/**
- * Bouwt de Bouw7 additional-work-line-body uit een EVA-regel. `executor` (Aangevraagd door) = de
- * Bouw7-klant van het dossier; ontbreekt die, dan wordt het veld weggelaten (leeg in Bouw7).
- * `id` wordt door de aanroeper toegevoegd bij een update.
- */
-async function bouwBouw7MeerwerkBody(regel: MeerwerkRegel): Promise<Record<string, unknown>> {
-  const supabase = createAdminClient() as any
-  const { data: dossier } = await supabase
-    .from('dossiers')
-    .select('klant:relaties(bouw7_id)')
-    .eq('id', regel.dossier_id)
-    .single()
-  const executorId = dossier?.klant?.bouw7_id
-
-  const mw = await getDossierMeerwerk(regel.dossier_id)
-  const view = mw.regels.find(r => r.id === regel.id)
-  const verkoop = rond(view?.effectiefExcl ?? (Number(regel.bedrag_excl_btw) || 0))
-  const begroot = rond(regel.begroot_bedrag != null ? Number(regel.begroot_bedrag) : 0)
-
-  const body: Record<string, unknown> = {
-    description: regel.omschrijving,
-    cost: String(verkoop),
-    budgetAmount: String(begroot),
-    date: (regel.created_at ? String(regel.created_at) : new Date().toISOString()).slice(0, 10),
-    // Bouw7 valideert `note` als NotBlank (leeg/ontbrekend => 400). Zonder factuurreferentie
-    // vullen we daarom de omschrijving in.
-    note: regel.factuurreferentie?.trim() || regel.omschrijving?.trim() || 'Meerwerk',
-    status: EVA_STATUS_NAAR_BOUW7[regel.status] ?? 0,
-    isProvisional: !!regel.is_stelpost,
-  }
-  if (executorId) body.executor = { id: Number(executorId) }
-  return body
-}
-
-/**
- * Schrijft een EVA-meerwerkregel als echte meerwerkregel naar Bouw7
- * (`POST /project/{projectId}/additional-work-line`, Heimdall — upsert; `id` weggelaten = create).
- * Na aanmaken worden het teruggegeven Bouw7-id + MW-nummer op de EVA-regel vastgelegd (en de
- * bronsleutel, tegen dubbele import). Regels die al aan een Bouw7-regel hangen worden overgeslagen.
- */
+/** Handmatig/elders aangeroepen aanmaken in Bouw7 — met sessiegate, want dit is een server action. */
 export async function stuurMeerwerkNaarBouw7(regelId: string): Promise<Bouw7AanmaakResultaat> {
   await vereisSessie()
   return maakMeerwerkInBouw7(regelId)
-}
-type Bouw7AanmaakResultaat = { ok: true; nummer: string | null } | { ok: false; error: string }
-
-/** Zonder sessiegate: ook het akkoord van een opdrachtgever in het portaal komt hier langs. */
-async function maakMeerwerkInBouw7(regelId: string): Promise<Bouw7AanmaakResultaat> {
-  const supabase = createAdminClient() as any
-  const { data: regel } = await supabase.from('meerwerk_regels').select('*').eq('id', regelId).single()
-  if (!regel) return { ok: false, error: 'Meerwerkregel niet gevonden.' }
-  if (regel.bouw7_line_id) return { ok: true, nummer: regel.bouw7_nummer ?? null }
-
-  const ctx = await bouw7VoorDossier(regel.dossier_id)
-  if (!ctx) return { ok: true, nummer: null } // dossier zonder Bouw7-project: niets te schrijven, geen fout
-  const { client, bouw7Id } = ctx
-
-  const body = await bouwBouw7MeerwerkBody(regel as MeerwerkRegel)
-
-  let created: { id?: number; number?: string }
-  try {
-    created = await client.post<{ id?: number; number?: string }>(`/project/${bouw7Id}/additional-work-line`, body)
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Aanmaken in Bouw7 mislukt.' }
-  }
-  if (!created?.id) return { ok: false, error: 'Bouw7 gaf geen meerwerkregel-id terug.' }
-
-  await supabase
-    .from('meerwerk_regels')
-    .update({
-      bouw7_line_id: created.id,
-      bouw7_nummer: created.number ?? null,
-      bouw7_bron_sleutel: `line:${created.id}`,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', regelId)
-
-  // De regel bestaat nu ook in Bouw7 en telt daar mee in de projectcijfers.
-  if (regel.dossier_id) {
-    await ververSnapshotsNaSchrijven(regel.dossier_id, ['athena_control'], ['athena_financial'])
-  }
-  revalidatePath(`/opdrachten/${regel.dossier_id}/meerwerk`)
-  return { ok: true, nummer: created.number ?? null }
-}
-
-/**
- * Werkt een al aan Bouw7 gekoppelde meerwerkregel bij (zelfde POST-endpoint mét `id` = update in het
- * Bouw7-upsertpatroon). Gebruikt voor het terugschrijven van o.a. statuswijzigingen. Best effort.
- */
-async function updateMeerwerkInBouw7(regel: MeerwerkRegel): Promise<{ ok: boolean; error?: string }> {
-  if (regel.bouw7_line_id == null) return { ok: true }
-  const ctx = await bouw7VoorDossier(regel.dossier_id)
-  if (!ctx) return { ok: false, error: 'Geen Bouw7-koppeling.' }
-  const body = await bouwBouw7MeerwerkBody(regel)
-  body.id = regel.bouw7_line_id
-  try {
-    await ctx.client.post(`/project/${ctx.bouw7Id}/additional-work-line`, body)
-    return { ok: true }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Bouw7-update mislukt.' }
-  }
 }
