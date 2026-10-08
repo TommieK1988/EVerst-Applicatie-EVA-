@@ -15,9 +15,12 @@ import type {
   RelatieInkoopPrijsafspraak,
   OmzetData,
 } from '@everts/database'
+import { organisatieTypeLabels } from '@everts/database'
 import { BOUW7_RELATIE_VELDEN, beschermdeVelden } from './sync-velden'
 import { markeerHandmatig, ontmarkeerHandmatig, BOUW7_BANK_VELDEN } from '@/lib/bouw7/handmatige-velden'
 import { schrijfBouw7Relatie, BOUW7_RELATIE_SCHRIJFVELDEN } from '@/lib/bouw7/contact-write'
+import { bouw7RollenVanRelatie, zorgVoorBouw7Rollen } from '@/lib/bouw7/relatie-rollen'
+import { legRelatieSpiegelVast } from '@/lib/bouw7/relatie-spiegel'
 
 type ActionResult = { ok: true; waarschuwing?: string } | { ok: false; error: string }
 
@@ -106,6 +109,7 @@ export async function createOrganisatie(input: {
 
   // Direct in Bouw7 aanmaken (best-effort): het Bouw7-id is nodig om later een project aan
   // deze relatie te koppelen. Faalt de Bouw7-kant, dan blijft de EVA-relatie gewoon bestaan.
+  // Eén Bouw7-contact per type: Bouw7 kent per contact maar één rol (zie relatie-rollen.ts).
   try {
     const { maakBouw7Relatie } = await import('@/lib/bouw7/create-contact')
     const bouw7Id = await maakBouw7Relatie({
@@ -122,7 +126,9 @@ export async function createOrganisatie(input: {
       opmerkingen: input.opmerkingen,
     })
     if (bouw7Id) {
-      await supabase.from('relaties').update({ bouw7_id: String(bouw7Id), bouw7_sync_status: 'synced' }).eq('id', data.id)
+      // Via de spiegel, niet alleen relaties.bouw7_id: de sync sleutelt op de spiegeltabel.
+      await legRelatieSpiegelVast({ relatieId: data.id, bouw7Id, bouw7Type: input.types[0] ?? 'opdrachtgever' })
+      if (input.types.length > 1) await zorgVoorBouw7Rollen(data.id)
     }
   } catch {
     // Bouw7 optioneel bij aanmaken; niet blokkerend.
@@ -194,13 +200,54 @@ export async function updateOrganisatieTypes(
 ): Promise<ActionResult> {
   if (types.length === 0) return { ok: false, error: 'Selecteer minimaal één type.' }
   const supabase = createAdminClient() as any
+
+  // Een rol die in Bouw7 een eigen contact heeft kan hier niet weg: de sync zet hem terug zolang
+  // dat contact bestaat, en het contact verwijderen is onomkeerbaar.
+  const inBouw7 = await bouw7RollenVanRelatie(id).catch(() => [] as OrganisatieType[])
+  const weg = inBouw7.filter(t => !types.includes(t))
+  if (weg.length > 0) {
+    return { ok: false, error: `${weg.map(t => organisatieTypeLabels[t]).join(' en ')} staat in Bouw7 als eigen contact. Haal het daar weg; dan verdwijnt het hier ook.` }
+  }
+
   const { error } = await supabase
     .from('relaties')
     .update({ types })
     .eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+
+  // Nieuw type bij een relatie die in Bouw7 staat → daar een extra contact met dezelfde gegevens.
+  let waarschuwing: string | undefined
+  if (inBouw7.length > 0 && types.some(t => !inBouw7.includes(t))) {
+    const res = await zorgVoorBouw7Rollen(id)
+    if (res.fouten.length > 0) waarschuwing = `Opgeslagen in EVA, maar niet in Bouw7 aangemaakt. ${res.fouten.join(' ')}`
+  }
   revalidatePath(`/relaties/${id}`)
+  return { ok: true, waarschuwing }
+}
+
+/** De rollen waarin deze relatie in Bouw7 een contact heeft (voor het typesblok). */
+export async function getBouw7Rollen(id: string): Promise<OrganisatieType[]> {
+  try {
+    await vereisRecht('relaties', 'lezen')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return []
+    throw e
+  }
+  return bouw7RollenVanRelatie(id).catch(() => [])
+}
+
+/** Herkansing: maak de Bouw7-contacten aan voor types die er nog geen hebben. */
+export async function maakOntbrekendeBouw7Rollen(id: string): Promise<ActionResult> {
+  try {
+    await vereisRecht('relaties', 'schrijven')
+  } catch (e) {
+    if (e instanceof GeenToegangError) return { ok: false, error: 'Geen rechten om relaties te bewerken.' }
+    throw e
+  }
+  const res = await zorgVoorBouw7Rollen(id)
+  revalidatePath(`/relaties/${id}`)
+  if (res.fouten.length > 0) return { ok: false, error: res.fouten.join(' ') }
   return { ok: true }
 }
 

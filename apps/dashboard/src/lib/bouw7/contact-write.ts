@@ -95,82 +95,123 @@ export async function schrijfBouw7Relatie(relatieId: string, velden: readonly st
       .maybeSingle()
     if (!r?.bouw7_id) return { ok: false, error: 'Relatie staat nog niet in Bouw7.', geschreven }
 
+    // Alle Bouw7-contacten van deze relatie: een bedrijf dat ook leverancier is staat daar twee
+    // keer (één contact per rol, zie relatie-rollen.ts) en die moeten gelijk blijven. Een veld
+    // telt pas als geschreven wanneer elk contact het heeft overgenomen.
+    const { data: spiegels } = await supabase
+      .from('relatie_bouw7_koppelingen')
+      .select('bouw7_id')
+      .eq('relatie_id', relatieId)
+    const contactIds = [...new Set([String(r.bouw7_id), ...((spiegels ?? []) as { bouw7_id: string }[]).map(s => s.bouw7_id)])]
+      .map(Number).filter(Number.isFinite)
+
     const client = await getBouw7Client()
-    const detail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${Number(r.bouw7_id)}`)
-
-    const body: Record<string, unknown> = { id: Number(r.bouw7_id) }
-    const verwacht = new Map<string, { lees: keyof Bouw7Contact; waarde: string }>()
-    let verwachtTermijn: string | null = null
-    for (const k of velden) {
-      if (k === 'betalingstermijn_dagen') {
-        const divisies = detail.contactDivisions ?? []
-        if (divisies.length === 0) continue // geen administratie om de termijn op te zetten
-        verwachtTermijn = r.betalingstermijn_dagen != null ? String(r.betalingstermijn_dagen) : ''
-        body.contactDivisions = divisies.map(d => ({ ...d, paymentConditionSales: verwachtTermijn || null }))
-        continue
+    const niet = new Set<string>()
+    const wel = new Set<string>()
+    for (const id of contactIds) {
+      let uit: { geschreven: string[]; nietOvergenomen: string[] }
+      try {
+        uit = await schrijfEenContact(client, supabase, relatieId, id, r, velden)
+      } catch (e) {
+        // Een tweede contact dat in Bouw7 is weggegooid mag de write naar de rest niet blokkeren.
+        if (id !== Number(r.bouw7_id) && e instanceof Error && /\(404\)/.test(e.message)) continue
+        throw e
       }
-      if (k === 'btw_nummer') {
-        body.vatNumber = btwNorm(r.btw_nummer)
-        verwacht.set(k, { lees: 'vatNumber', waarde: btwNorm(r.btw_nummer) })
-        continue
-      }
-      if (k === 'adres_straat') {
-        body.streetName = norm(r.adres_straat)
-        body.houseNumber = ''
-        verwacht.set(k, { lees: 'streetName', waarde: norm(r.adres_straat) })
-        continue
-      }
-      if (k === 'iban') {
-        const { data: bank } = await supabase.from('relatie_bankgegevens').select('iban').eq('relatie_id', relatieId).maybeSingle()
-        body.accountNumber = norm(bank?.iban)
-        verwacht.set(k, { lees: 'iban', waarde: norm(bank?.iban) })
-        continue
-      }
-      const def = RELATIE_VELDEN[k]
-      if (!def) continue
-      const waarde = r[k] ?? ''
-      body[def.post] = waarde
-      verwacht.set(k, { lees: def.lees, waarde: norm(waarde) })
+      uit.geschreven.forEach(v => wel.add(v))
+      uit.nietOvergenomen.forEach(v => niet.add(v))
     }
-    if (verwacht.size === 0 && verwachtTermijn === null) return { ok: true, geschreven, nietOvergenomen: [] }
-
-    // Verplicht maatwerkveld aanvullen als het op dit contact nog leeg is.
-    const waarden = detail.customAttributeValues ?? []
-    const soort = waarden.find(v => v.customAttribute?.id === SOORT_OPDRACHTGEVER_ATTR_ID)
-    if (!norm(soort?.value)) {
-      body.customAttributeValues = [
-        ...waarden
-          .filter(v => v.customAttribute?.id != null && v.customAttribute.id !== SOORT_OPDRACHTGEVER_ATTR_ID)
-          .map(v => ({ customAttribute: { id: v.customAttribute!.id }, value: v.value ?? '' })),
-        { customAttribute: { id: SOORT_OPDRACHTGEVER_ATTR_ID }, value: soortOpdrachtgever(r.naam ?? '', r.types ?? []) },
-      ]
-    }
-
-    await client.post('/contact', body)
-
-    // Terugleescontrole: welke velden nam Bouw7 echt over?
-    const na = (await client.get<Bouw7ListResponse<Bouw7Contact>>('/list/contacts', { q: `id = ${Number(r.bouw7_id)}` })).items?.[0]
-    const nietOvergenomen: string[] = []
-    for (const [k, v] of verwacht) {
-      const gelezen = na ? na[v.lees] : undefined
-      // Straat komt terug als `streetName houseNumber`; vergelijk zonder het lege huisnummer.
-      const gelezenNorm = k === 'adres_straat' ? norm(`${na?.streetName ?? ''} ${na?.houseNumber ?? ''}`)
-        : k === 'btw_nummer' ? btwNorm(gelezen)
-        : norm(gelezen)
-      if (na && gelezenNorm === v.waarde) geschreven.push(k)
-      else nietOvergenomen.push(k)
-    }
-    if (verwachtTermijn !== null) {
-      // De termijn staat alleen op het detailrecord.
-      const naDetail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${Number(r.bouw7_id)}`)
-      const alle = (naDetail.contactDivisions ?? []).every(d => norm(d.paymentConditionSales) === verwachtTermijn)
-      if (alle) geschreven.push('betalingstermijn_dagen')
-      else nietOvergenomen.push('betalingstermijn_dagen')
-    }
+    const nietOvergenomen = [...niet]
+    geschreven.push(...[...wel].filter(v => !niet.has(v)))
     return { ok: true, geschreven, nietOvergenomen }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Onbekende fout bij bijwerken van de relatie in Bouw7.', geschreven }
   }
+}
+
+/** Eén Bouw7-contact bijwerken en teruglezen. Zie `schrijfBouw7Relatie`. */
+async function schrijfEenContact(
+  client: Awaited<ReturnType<typeof getBouw7Client>>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  relatieId: string,
+  bouw7Id: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r: any,
+  velden: readonly string[],
+): Promise<{ geschreven: string[]; nietOvergenomen: string[] }> {
+  const geschreven: string[] = []
+  const nietOvergenomen: string[] = []
+  const detail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${bouw7Id}`)
+
+  const body: Record<string, unknown> = { id: bouw7Id }
+  const verwacht = new Map<string, { lees: keyof Bouw7Contact; waarde: string }>()
+  let verwachtTermijn: string | null = null
+  for (const k of velden) {
+    if (k === 'betalingstermijn_dagen') {
+      const divisies = detail.contactDivisions ?? []
+      if (divisies.length === 0) continue // geen administratie om de termijn op te zetten
+      verwachtTermijn = r.betalingstermijn_dagen != null ? String(r.betalingstermijn_dagen) : ''
+      body.contactDivisions = divisies.map(d => ({ ...d, paymentConditionSales: verwachtTermijn || null }))
+      continue
+    }
+    if (k === 'btw_nummer') {
+      body.vatNumber = btwNorm(r.btw_nummer)
+      verwacht.set(k, { lees: 'vatNumber', waarde: btwNorm(r.btw_nummer) })
+      continue
+    }
+    if (k === 'adres_straat') {
+      body.streetName = norm(r.adres_straat)
+      body.houseNumber = ''
+      verwacht.set(k, { lees: 'streetName', waarde: norm(r.adres_straat) })
+      continue
+    }
+    if (k === 'iban') {
+      const { data: bank } = await supabase.from('relatie_bankgegevens').select('iban').eq('relatie_id', relatieId).maybeSingle()
+      body.accountNumber = norm(bank?.iban)
+      verwacht.set(k, { lees: 'iban', waarde: norm(bank?.iban) })
+      continue
+    }
+    const def = RELATIE_VELDEN[k]
+    if (!def) continue
+    const waarde = r[k] ?? ''
+    body[def.post] = waarde
+    verwacht.set(k, { lees: def.lees, waarde: norm(waarde) })
+  }
+  if (verwacht.size === 0 && verwachtTermijn === null) return { geschreven, nietOvergenomen: [] }
+
+  // Verplicht maatwerkveld aanvullen als het op dit contact nog leeg is.
+  const waarden = detail.customAttributeValues ?? []
+  const soort = waarden.find(v => v.customAttribute?.id === SOORT_OPDRACHTGEVER_ATTR_ID)
+  if (!norm(soort?.value)) {
+    body.customAttributeValues = [
+      ...waarden
+        .filter(v => v.customAttribute?.id != null && v.customAttribute.id !== SOORT_OPDRACHTGEVER_ATTR_ID)
+        .map(v => ({ customAttribute: { id: v.customAttribute!.id }, value: v.value ?? '' })),
+      { customAttribute: { id: SOORT_OPDRACHTGEVER_ATTR_ID }, value: soortOpdrachtgever(r.naam ?? '', r.types ?? []) },
+    ]
+  }
+
+  await client.post('/contact', body)
+
+  // Terugleescontrole: welke velden nam Bouw7 echt over?
+  const na = (await client.get<Bouw7ListResponse<Bouw7Contact>>('/list/contacts', { q: `id = ${bouw7Id}` })).items?.[0]
+  for (const [k, v] of verwacht) {
+    const gelezen = na ? na[v.lees] : undefined
+    // Straat komt terug als `streetName houseNumber`; vergelijk zonder het lege huisnummer.
+    const gelezenNorm = k === 'adres_straat' ? norm(`${na?.streetName ?? ''} ${na?.houseNumber ?? ''}`)
+      : k === 'btw_nummer' ? btwNorm(gelezen)
+      : norm(gelezen)
+    if (na && gelezenNorm === v.waarde) geschreven.push(k)
+    else nietOvergenomen.push(k)
+  }
+  if (verwachtTermijn !== null) {
+    // De termijn staat alleen op het detailrecord.
+    const naDetail = await client.get<Bouw7ContactDetailVoorWrite>(`/contact/${bouw7Id}`)
+    const alle = (naDetail.contactDivisions ?? []).every(d => norm(d.paymentConditionSales) === verwachtTermijn)
+    if (alle) geschreven.push('betalingstermijn_dagen')
+    else nietOvergenomen.push('betalingstermijn_dagen')
+  }
+  return { geschreven, nietOvergenomen }
 }
 
 /** EVA-kolom → { schrijfveld, leesveld } voor contactpersonen. */

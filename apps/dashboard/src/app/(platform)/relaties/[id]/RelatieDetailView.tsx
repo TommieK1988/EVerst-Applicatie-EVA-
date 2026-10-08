@@ -25,7 +25,6 @@ import {
 } from '@/components/ui'
 import {
   updateOrganisatieGegevens,
-  updateOrganisatieTypes,
   herstelBouw7Velden,
   upsertFactuuradres,
   deleteFactuuradres,
@@ -40,6 +39,7 @@ import {
   upsertInkoopPrijsafspraak,
   deleteInkoopPrijsafspraak,
 } from '@/lib/relaties/actions'
+import { TypesBlok } from './TypesBlok'
 import { ontkoppelContactpersoonVanOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 import { ontkoppelContactpersoonVanFactuuradres } from '@/lib/relaties/factuuradres-contactpersonen'
 import { volledigeNaam, type FactuuradresContact } from '@/lib/relaties/factuuradres-contactpersonen-types'
@@ -80,88 +80,12 @@ function Rij({ label, waarde }: { label: string; waarde?: string | null }) {
 
 /* ─── Type badges ────────────────────────────────────────────────────── */
 
-const ALLE_TYPES: OrganisatieType[] = ['opdrachtgever', 'leverancier', 'onderaannemer']
-
 function TypeBadgeRij({ types }: { types: OrganisatieType[] }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {types.map(t => (
         <Badge key={t} tone={organisatieTypeTone[t]}>{organisatieTypeLabels[t]}</Badge>
       ))}
-    </div>
-  )
-}
-
-/* ─── Types bewerken blok ────────────────────────────────────────────── */
-
-function TypesBlok({ relatieId, initial, bouw7Type }: {
-  relatieId: string
-  initial: OrganisatieType[]
-  /** Type dat uit Bouw7 komt; dat blijft staan, de rest beheert EVA zelf. */
-  bouw7Type: OrganisatieType | null
-}) {
-  const [types, setTypes] = useState<OrganisatieType[]>(initial)
-  const [bezig, setBezig] = useState(false)
-  const router = useRouter()
-
-  async function opslaan(nieuweTypes: OrganisatieType[]) {
-    if (nieuweTypes.length === 0) return
-    setBezig(true)
-    const res = await updateOrganisatieTypes(relatieId, nieuweTypes)
-    setBezig(false)
-    if (!res.ok) { toast.error(res.error); return }
-    setTypes(nieuweTypes)
-    router.refresh()
-    toast.success('Types bijgewerkt')
-  }
-
-  function toggle(type: OrganisatieType) {
-    const nieuweTypes = types.includes(type)
-      ? types.filter(t => t !== type)
-      : [...types, type]
-    if (nieuweTypes.length === 0) return
-    opslaan(nieuweTypes)
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {ALLE_TYPES.map(t => {
-          const actief = types.includes(t)
-          // Het Bouw7-type is niet uit te zetten: de sync zet het bij de volgende run terug.
-          const vast = t === bouw7Type
-          return (
-            <button
-              key={t}
-              onClick={() => !bezig && !vast && toggle(t)}
-              disabled={bezig || vast || (actief && types.length === 1)}
-              title={vast ? 'Dit type komt uit Bouw7 en kan alleen daar gewijzigd worden.' : undefined}
-              style={{
-                padding: '4px 12px', borderRadius: 20, border: 'none',
-                cursor: bezig ? 'wait' : vast ? 'default' : 'pointer',
-                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600,
-                transition: 'all 0.15s',
-                opacity: bezig ? 0.6 : 1,
-                background: actief
-                  ? (t === 'opdrachtgever' ? '#ecfaf0' : t === 'leverancier' ? '#eff8ff' : '#fff6ec')
-                  : 'var(--bg-subtle)',
-                color: actief
-                  ? (t === 'opdrachtgever' ? '#0a5e28' : t === 'leverancier' ? '#175cd3' : '#b85a00')
-                  : 'var(--fg-muted)',
-                outline: actief ? '2px solid currentColor' : '1px solid var(--border)',
-                outlineOffset: actief ? -1 : 0,
-              }}
-            >
-              {organisatieTypeLabels[t]}
-            </button>
-          )
-        })}
-      </div>
-      {bouw7Type && (
-        <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
-          {organisatieTypeLabels[bouw7Type]} komt uit Bouw7. Zet je er zelf een type bij, dan blijft dat in EVA staan.
-        </p>
-      )}
     </div>
   )
 }

@@ -31,7 +31,7 @@ export function soortOpdrachtgever(naam: string, types: OrganisatieType[]): stri
 }
 
 /** Bouw7 contactType-naam → EVA-organisatietype (spiegelt mapContactType in sync.ts). */
-function mapType(typeName?: string): OrganisatieType {
+export function mapType(typeName?: string): OrganisatieType {
   switch ((typeName ?? '').toLowerCase()) {
     case 'supplier':      return 'leverancier'
     case 'subcontractor': return 'onderaannemer'
@@ -56,6 +56,8 @@ export type Bouw7RelatieCreateInput = {
   btw_nummer?: string | null
   email?: string | null
   telefoon?: string | null
+  mobiel?: string | null
+  iban?: string | null
   adres_straat?: string | null
   adres_huisnummer?: string | null
   adres_postcode?: string | null
@@ -69,20 +71,41 @@ export type Bouw7RelatieCreateInput = {
  * Het primaire EVA-type (eerste in `types`, default opdrachtgever) bepaalt het contactType.
  */
 export async function maakBouw7Relatie(input: Bouw7RelatieCreateInput): Promise<number | null> {
+  const res = await maakBouw7RelatieOfFout(input)
+  if ('error' in res) {
+    console.error('[create-contact] relatie aanmaken in Bouw7 mislukt:', res.error)
+    return null
+  }
+  return res.id
+}
+
+/**
+ * Zelfde als `maakBouw7Relatie`, maar met de reden als het misgaat. Met `rol` maak je het contact
+ * in een andere rol dan het eerste type aan: Bouw7 geeft een contact precies één type, dus een
+ * bedrijf dat ook leverancier is krijgt daar een tweede contact (zie relatie-rollen.ts).
+ * `soort` overschrijft de afgeleide "Soort opdrachtgever", zodat dat tweede contact dezelfde
+ * waarde draagt als het eerste.
+ */
+export async function maakBouw7RelatieOfFout(
+  input: Bouw7RelatieCreateInput & { rol?: OrganisatieType; soort?: string | null },
+): Promise<{ id: number } | { error: string }> {
   try {
     const client = await getBouw7Client()
-    const evaType = input.types[0] ?? 'opdrachtgever'
+    const evaType = input.rol ?? input.types[0] ?? 'opdrachtgever'
     const contactTypeId = await resolveContactTypeId(client, evaType)
-    if (contactTypeId == null) return null // zonder geldig type geen create
+    if (contactTypeId == null) return { error: `Geen Bouw7-contacttype gevonden voor ${evaType}.` }
 
     const body: Record<string, unknown> = {
       name: input.naam,
       contactType: { id: contactTypeId },
     }
     if (input.kvk_nummer)      body.cocNumber = input.kvk_nummer
-    if (input.btw_nummer)      body.vatNumber = input.btw_nummer
+    // Met punten weigert Bouw7 het nummer ("not a valid VAT number").
+    if (input.btw_nummer)      body.vatNumber = input.btw_nummer.replace(/[\s.\-]/g, '').toUpperCase()
     if (input.email)           body.email = input.email
     if (input.telefoon)        body.phoneNumber = input.telefoon
+    if (input.mobiel)          body.mobileNumber = input.mobiel
+    if (input.iban)            body.accountNumber = input.iban
     if (input.adres_straat)    body.streetName = input.adres_straat
     if (input.adres_huisnummer)body.houseNumber = input.adres_huisnummer
     if (input.adres_postcode)  body.zipCode = input.adres_postcode
@@ -97,14 +120,15 @@ export async function maakBouw7Relatie(input: Bouw7RelatieCreateInput): Promise<
       d => /soortopdrachtgever/i.test((d.propertyName ?? '').replace(/^ca/, '')) || /soort opdrachtgever/i.test(d.name ?? ''),
     )
     if (soortAttrId != null) {
-      body.customAttributeValues = [{ customAttribute: { id: soortAttrId }, value: soortOpdrachtgever(input.naam, input.types) }]
+      const soort = input.soort?.trim() || soortOpdrachtgever(input.naam, input.types)
+      body.customAttributeValues = [{ customAttribute: { id: soortAttrId }, value: soort }]
     }
 
     const created = await client.post<{ id?: number }>('/contact', body)
-    return created?.id ?? null
+    if (!created?.id) return { error: 'Bouw7 gaf geen contact-id terug.' }
+    return { id: created.id }
   } catch (e) {
-    console.error('[create-contact] relatie aanmaken in Bouw7 mislukt:', e)
-    return null
+    return { error: e instanceof Error ? e.message : 'Onbekende fout bij aanmaken in Bouw7.' }
   }
 }
 
