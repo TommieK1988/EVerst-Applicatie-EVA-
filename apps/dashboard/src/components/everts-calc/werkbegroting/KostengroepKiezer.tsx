@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search, Check, X } from 'lucide-react'
+import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 
 export interface KostengroepOptie {
   value: string
@@ -38,7 +39,7 @@ export default function KostengroepKiezer({
   const [open,   setOpen]   = useState(false)
   const [zoek,   setZoek]   = useState('')
   const [actief, setActief] = useState(0)
-  const [pos,    setPos]    = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pos,    setPos]    = useState<(PaneelPlek & { left: number; width: number }) | null>(null)
 
   const knopRef = useRef<HTMLButtonElement>(null)
   const lijstRef = useRef<HTMLDivElement>(null)
@@ -49,7 +50,8 @@ export default function KostengroepKiezer({
     const r = el.getBoundingClientRect()
     const breedte = Math.max(r.width, 260)
     setPos({
-      top:   r.bottom + 2,
+      // Zoekveld (~33px) + lijst (max 256px) + 'nieuwe naam'-regel.
+      ...plaatsZwevendPaneel(r, { hoogte: 330 }),
       left:  Math.min(r.left, window.innerWidth - breedte - 8),
       width: breedte,
     })
@@ -139,10 +141,10 @@ export default function KostengroepKiezer({
       {open && pos && createPortal(
         <div
           ref={lijstRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width }}
-          className="z-[100] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+          style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight, left: pos.left, width: pos.width }}
+          className="z-[100] flex flex-col bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
         >
-          <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-100">
+          <div className="flex shrink-0 items-center gap-1.5 px-2 py-1.5 border-b border-slate-100">
             <Search className="w-3 h-3 text-slate-300 flex-shrink-0" />
             <input
               autoFocus
@@ -159,7 +161,7 @@ export default function KostengroepKiezer({
             )}
           </div>
 
-          <div className="max-h-64 overflow-y-auto py-1">
+          <div className="max-h-64 min-h-0 overflow-y-auto py-1">
             <button
               type="button"
               onClick={() => kies(undefined)}

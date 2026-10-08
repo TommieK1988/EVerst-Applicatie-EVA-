@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { Meetregel } from '@/lib/everts-calc/types'
 import { berekenHoeveelheid, isRegelActief } from '@/lib/everts-calc/meetstaat-utils'
+import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 
 interface SchilderData {
   onderdelen: { id: string; naam: string; code: string | null }[]
@@ -69,7 +70,7 @@ function ZoekInvoer({
   const [open, setOpen] = useState(false)
   const [inputVal, setInputVal] = useState(value ?? '')
   const [gemarkeerd, setGemarkeerd] = useState(0)
-  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [dropPos, setDropPos] = useState<(PaneelPlek & { left: number; width: number }) | null>(null)
 
   // Sync inputVal wanneer value extern wijzigt (bijv. carry-over behandeling)
   useEffect(() => { setInputVal(value ?? '') }, [value])
@@ -118,7 +119,7 @@ function ZoekInvoer({
   const openDropdown = () => {
     if (ref.current) {
       const r = ref.current.getBoundingClientRect()
-      setDropPos({ top: r.bottom + 1, left: r.left, width: Math.max(r.width, 200) })
+      setDropPos({ ...plaatsZwevendPaneel(r, { hoogte: 208, afstand: 1 }), left: r.left, width: Math.max(r.width, 200) })
     }
     setGemarkeerd(0)
     setOpen(true)
@@ -179,8 +180,8 @@ function ZoekInvoer({
       />
       {open && gefilterd.length > 0 && dropPos && (
         <div
-          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, zIndex: 9999 }}
-          className="max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl"
+          style={{ position: 'fixed', top: dropPos.top, bottom: dropPos.bottom, maxHeight: dropPos.maxHeight, left: dropPos.left, minWidth: dropPos.width, zIndex: 9999 }}
+          className="overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl"
         >
           {gefilterd.slice(0, 25).map((o, i) => (
             <div

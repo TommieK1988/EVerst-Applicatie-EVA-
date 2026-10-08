@@ -42,7 +42,9 @@ const SelectContent = React.forwardRef<
       className={cn(
         'relative z-50 min-w-[240px] overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_12px_24px_-6px_rgba(16,24,40,0.12),0_4px_6px_-2px_rgba(16,24,40,0.04)]',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-        position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
+        // Zonder maximale hoogte groeit een lange lijst onder de viewport uit, en omdat Radix
+        // de pagina-scroll vergrendelt kun je dan nergens meer scrollen. De Viewport scrolt zelf.
+        position === 'popper' && 'max-h-[min(20rem,var(--radix-select-content-available-height))] data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className,
       )}
       {...props}

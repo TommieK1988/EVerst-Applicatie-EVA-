@@ -40,6 +40,7 @@ import { CSS } from '@dnd-kit/utilities'
 import type { KolomConfig, GebruikerLayout, TabelWerkstand } from '@everts/database/platform-types'
 import { slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
 import { laadWerkstand, bewaarWerkstand } from '@/app/actions/werkstand'
+import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 import {
   type KolomBasis, type TabelStand,
   standaardStand, standUitLayout, standUitWerkstand, werkstandUitStand,
@@ -284,7 +285,7 @@ function MultiSelectFilter({
   onChange: (v: string[]) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pos, setPos] = useState<(PaneelPlek & { left: number; width: number }) | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
 
@@ -310,7 +311,7 @@ function MultiSelectFilter({
   function toggleOpen() {
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 170) })
+      setPos({ ...plaatsZwevendPaneel(r, { hoogte: 260, afstand: 4 }), left: r.left, width: Math.max(r.width, 170) })
     }
     setOpen(o => !o)
   }
@@ -345,10 +346,10 @@ function MultiSelectFilter({
         <div
           ref={popRef}
           style={{
-            position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 400,
+            position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, minWidth: pos.width, zIndex: 400,
             background: 'white', border: '1px solid var(--border)', borderRadius: 8,
             boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '4px 0',
-            maxHeight: 260, overflowY: 'auto',
+            maxHeight: pos.maxHeight, overflowY: 'auto',
           }}
         >
           {opties.map(o => {

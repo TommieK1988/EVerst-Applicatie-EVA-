@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import { Spinner } from '@/components/ui/spinner'
 import { useDialogen } from '@/components/ui/dialogen'
+import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
 } from '@/components/ui/dialog'
@@ -119,7 +120,7 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
 }) {
   const [open, setOpen] = useState(false)
   const [zoek, setZoek] = useState('')
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [pos, setPos] = useState<(PaneelPlek & { left: number }) | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [materialen, setMaterialen] = useState<Materiaal[]>([])
 
@@ -139,7 +140,7 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
   const openDropdown = () => {
     if (btnRef.current) {
       const r = btnRef.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 2, left: r.left })
+      setPos({ ...plaatsZwevendPaneel(r, { hoogte: 260 }), left: r.left })
     }
     setOpen(true)
     setZoek('')
@@ -167,10 +168,10 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
       </button>
       {open && pos && (
         <div
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 320 }}
-          className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+          style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight, left: pos.left, zIndex: 9999, width: 320 }}
+          className="flex flex-col bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
         >
-          <div className="p-2 border-b border-slate-100">
+          <div className="shrink-0 p-2 border-b border-slate-100">
             <input
               autoFocus
               type="text"
@@ -180,7 +181,7 @@ function MateriaalBibliotheekZoeker({ onSelect }: {
               className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:border-everts"
             />
           </div>
-          <div className="max-h-52 overflow-y-auto">
+          <div className="max-h-52 min-h-0 overflow-y-auto">
             {materialen.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-4">Materialen bibliotheek is leeg</p>
             ) : gefilterd.length === 0 ? (
