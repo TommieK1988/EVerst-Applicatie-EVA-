@@ -17,6 +17,7 @@ import { meldWerkToegewezen } from '@/lib/dossiers/servicedesk-acties'
 import { herberekenDeadlines } from '../taken/actions/deadlines'
 import { dagenTussen, nlTijdstip, roostertijdenOp, verschuifNlDagen } from '@/lib/planning/nl-tijd'
 import { zoekDubbeleInplanning, zoekDubbeleInplanningVoorDossier, type DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
+import { maakUrenRekenaar } from '@/lib/planning/werkuren-server'
 
 const db = () => createAdminClient() as any
 
@@ -327,10 +328,17 @@ export async function updatePlanningActiviteit(
     // Move: beide datums gewijzigd — schuif items evenveel kalenderdagen op, kloktijd blijft.
     const dagen = dagenTussen(huidigeStart, nieuweStart!)
     if (dagen !== 0) {
-      for (const item of items) {
-        const ns = verschuifNlDagen(item.start_dt, dagen)
-        const ne = verschuifNlDagen(item.eind_dt, dagen)
-        await supabase.from('planning_items').update({ start_dt: ns, eind_dt: ne }).eq('id', item.id)
+      const nieuw = items.map(item => ({
+        ...item, start_dt: verschuifNlDagen(item.start_dt, dagen), eind_dt: verschuifNlDagen(item.eind_dt, dagen),
+      }))
+      // Een andere week heeft andere werkdagen (een weekend of verlof ertussen): uren opnieuw.
+      const urenVan = await maakUrenRekenaar(supabase, nieuw)
+      for (const item of nieuw) {
+        const ns = item.start_dt
+        const ne = item.eind_dt
+        const uren = urenVan(item)
+        await supabase.from('planning_items')
+          .update({ start_dt: ns, eind_dt: ne, ...(uren > 0 ? { uren } : {}) }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
         verschovenIds.push(item.id)
         itemsVerschoven++
@@ -347,6 +355,7 @@ export async function updatePlanningActiviteit(
     const links = startGewijzigd
     const grensDag = (links ? nieuweStart : nieuweDeadline)!
     const roosters = await roostersVan([...new Set(items.map(i => i.medewerker_id))])
+    const urenVan  = await maakUrenRekenaar(supabase, items)
 
     for (const item of items) {
       const tijden   = roostertijdenOp(roosters.get(item.medewerker_id) ?? [], grensDag)
@@ -361,7 +370,12 @@ export async function updatePlanningActiviteit(
         await supabase.from('planning_items').delete().eq('id', item.id)
       } else if (teCroppen) {
         const grens = new Date(grensMs).toISOString()
-        await supabase.from('planning_items').update(links ? { start_dt: grens } : { eind_dt: grens }).eq('id', item.id)
+        const ingekort = links ? { ...item, start_dt: grens } : { ...item, eind_dt: grens }
+        const uren = urenVan(ingekort)
+        await supabase.from('planning_items').update({
+          ...(links ? { start_dt: grens } : { eind_dt: grens }),
+          ...(uren > 0 ? { uren } : {}),
+        }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
         itemsVerschoven++
       }
@@ -662,10 +676,14 @@ export async function kopieerPlanningItem(
   if (bronErr || !bron) return { ok: false, error: bronErr?.message ?? 'Planitem niet gevonden' }
   await assertDossierBewerkbaar(bron.planning_activiteiten?.dossier_id ?? null)
 
+  // De kopie krijgt de uren van zíjn periode en zíjn medewerker, niet die van het origineel:
+  // een tweedaags blok naar een vrijdag kopiëren is één dag, en roosters verschillen.
+  const uren = (await maakUrenRekenaar(supabase, [doel]))(doel) || bron.uren
+
   const budget = await checkBudget(
     bron.planning_activiteiten?.dossier_id ?? '',
     bron.planning_activiteiten?.uursoort_id ?? null,
-    bron.uren,
+    uren,
   )
   if (!budget.ok) return budget
 
@@ -676,7 +694,7 @@ export async function kopieerPlanningItem(
       medewerker_id: doel.medewerker_id,
       start_dt:      doel.start_dt,
       eind_dt:       doel.eind_dt,
-      uren:          bron.uren,
+      uren,
       bron:          'eva',
     })
     .select('*')
@@ -1089,13 +1107,18 @@ export async function verschuifPlanningFase(
 
     const { data: items } = await supabase
       .from('planning_items')
-      .select('id, start_dt, eind_dt')
+      .select('id, medewerker_id, start_dt, eind_dt')
       .eq('activiteit_id', a.id)
 
-    for (const item of items ?? []) {
+    const verschoven = ((items ?? []) as { id: string; medewerker_id: string; start_dt: string; eind_dt: string }[])
+      .map(item => ({ ...item, start_dt: schuifTijdstip(item.start_dt, delta_dagen), eind_dt: schuifTijdstip(item.eind_dt, delta_dagen) }))
+    const urenVan = await maakUrenRekenaar(supabase, verschoven)
+    for (const item of verschoven) {
+      const uren = urenVan(item)
       await supabase.from('planning_items').update({
-        start_dt: schuifTijdstip(item.start_dt, delta_dagen),
-        eind_dt:  schuifTijdstip(item.eind_dt,  delta_dagen),
+        start_dt: item.start_dt,
+        eind_dt:  item.eind_dt,
+        ...(uren > 0 ? { uren } : {}),
       }).eq('id', item.id)
       verschovenIds.push(item.id)
       iShift++
@@ -1178,6 +1201,13 @@ export async function kopieerPlanningFase(
     if (error) return { ok: false, error: error.message }
     bronItems = (data ?? []) as PlanningItem[]
   }
+
+  // De kopieën staan `dagen` later: in die periode kunnen andere werkdagen vallen.
+  const geschoven = bronItems.map(item => ({
+    ...item, start_dt: schuifTijdstip(item.start_dt, dagen), eind_dt: schuifTijdstip(item.eind_dt, dagen),
+  }))
+  const urenVan = await maakUrenRekenaar(supabase, geschoven)
+  bronItems = geschoven.map(item => ({ ...item, uren: urenVan(item) || item.uren }))
 
   // Budget: één controle per uursoort over álle te kopiëren uren samen.
   if (bronItems.length > 0 && !opties.overrule) {
@@ -1275,8 +1305,8 @@ export async function kopieerPlanningFase(
       .insert(bronItems.map(item => ({
         activiteit_id:  nieuweIdVan.get(item.activiteit_id),
         medewerker_id:  item.medewerker_id,
-        start_dt:       schuifTijdstip(item.start_dt, dagen),
-        eind_dt:        schuifTijdstip(item.eind_dt, dagen),
+        start_dt:       item.start_dt,
+        eind_dt:        item.eind_dt,
         uren:           item.uren,
         overrule:       item.overrule || !!opties.overrule,
         overrule_reden: opties.overrule ? `Fase "${fase.naam}" gekopieerd boven budget` : item.overrule_reden,

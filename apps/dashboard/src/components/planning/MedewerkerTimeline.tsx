@@ -39,9 +39,13 @@ import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import { AfwezigheidTellerLabel, AfwezigheidTellerRij } from './AfwezigheidTellerRij'
 import {
-  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, roosterOpDag, werkvensterOpDag,
+  DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
 } from './conflict'
+import { berekenPlanUren } from '@/lib/planning/werkuren'
+import {
+  UrenToelichting, formVanEntry, roosterTijden, urenVolgensRooster,
+} from './planitem-uren'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -133,10 +137,12 @@ function volledigeNaam(m: Pick<Medewerker, 'voornaam' | 'tussenvoegsel' | 'achte
 // ─── PlanningItemEditDialog ───────────────────────────────────────────────────
 
 function PlanningItemEditDialog({
-  entry, medewerkers, dossierMap, balkLabel, onClose, onSaved, onKopieer,
+  entry, medewerkers, roosters, afwezigheid, dossierMap, balkLabel, onClose, onSaved, onKopieer,
 }: {
   entry:       PlanningItemVerrijkt & { dossier_id?: string }
   medewerkers: Medewerker[]
+  roosters:    MedewerkerRooster[]
+  afwezigheid: MedewerkerAfwezigheid[]
   dossierMap:  Record<string, string>
   balkLabel:   BalkLabel
   onClose:     () => void
@@ -145,17 +151,13 @@ function PlanningItemEditDialog({
 }) {
   const [isPending, startTransition] = useTransition()
   const { bevestig } = useDialogen()
-  const startDt = parseISO(entry.start_dt)
-  const eindDt  = parseISO(entry.eind_dt)
 
-  const [form, setForm] = useState({
-    medewerker_id: entry.medewerker_id,
-    start_datum:   format(startDt, 'yyyy-MM-dd'),
-    start_tijd:    format(startDt, 'HH:mm'),
-    eind_datum:    format(eindDt,  'yyyy-MM-dd'),
-    eind_tijd:     format(eindDt,  'HH:mm'),
-    uren:          String(entry.uren),
-  })
+  const [form, setForm] = useState(() => formVanEntry(entry, roosters))
+  // De uren volgen de periode en het rooster. Typt de planner zelf een getal, dan blijft dat
+  // staan — ook als hij daarna de datums nog aanpast.
+  const [urenHandmatig, setUrenHandmatig] = useState(false)
+  const berekend = urenVolgensRooster(form, roosters, afwezigheid)
+  const uren = urenHandmatig ? form.uren : String(berekend)
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -166,7 +168,7 @@ function PlanningItemEditDialog({
         medewerker_id: form.medewerker_id,
         dossier_id:    entry.dossier_id ?? '',
         uursoort_id:   entry.planning_activiteiten?.uursoort_id ?? null,
-        uren:          Number(form.uren),
+        uren:          Number(uren),
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Planitem bijgewerkt')
@@ -275,9 +277,13 @@ function PlanningItemEditDialog({
           {/* Uren */}
           <div>
             <label style={dialogLabelStyle}>Uren</label>
-            <input type="number" className="eva-input" value={form.uren}
-              min="0" max="24" step="0.5"
-              onChange={e => setForm(f => ({ ...f, uren: e.target.value }))} required />
+            <input type="number" className="eva-input" value={uren}
+              min="0" step="0.25"
+              onChange={e => { setUrenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
+            <UrenToelichting
+              handmatig={urenHandmatig} uren={Number(uren)} berekend={berekend} opgeslagen={entry.uren}
+              onTerug={() => setUrenHandmatig(false)}
+            />
           </div>
 
           {/* Actions — mag wrappen zodat de knoppen nooit buiten de modal vallen (rechter groep
@@ -419,33 +425,14 @@ function ConflictDialog({
 
 // ─── NieuwPlanItemDialog ──────────────────────────────────────────────────────
 
-const tijdVan = (min: number) =>
-  `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
-
-/**
- * Start- en eindtijd plus uren volgens het werkrooster van de medewerker op `datum`.
- * Uren = contracturen per week gedeeld door het aantal werkdagen: het werkvenster bevat
- * de pauze (07:00–16:00 is 8 uur werk, niet 9). Zonder rooster: 07:00–16:00, 8 uur.
- */
-function roosterTijden(medewerker_id: string, datum: string, roosters: MedewerkerRooster[]) {
-  const eigen  = roosters.filter(r => r.medewerker_id === medewerker_id)
-  const dag    = parseISO(datum)
-  const { van, tot } = werkvensterOpDag(dag, eigen)
-  const actief = roosterOpDag(dag, eigen)
-  const contract = Number(actief?.contracturen_per_week) || 0 // numeric-kolom kan als string binnenkomen
-  const perDag = actief?.werkdagen?.length && contract > 0
-    ? Math.round((contract / actief.werkdagen.length) * 2) / 2
-    : 8
-  return { start_tijd: tijdVan(van), eind_tijd: tijdVan(tot), uren: String(perDag) }
-}
-
 function NieuwPlanItemDialog({
-  medewerker_id, datum, medewerkers, roosters, dossierMap, uursoorten, onClose, onSaved,
+  medewerker_id, datum, medewerkers, roosters, afwezigheid, dossierMap, uursoorten, onClose, onSaved,
 }: {
   medewerker_id: string
   datum:         string
   medewerkers:   Medewerker[]
   roosters:      MedewerkerRooster[]
+  afwezigheid:   MedewerkerAfwezigheid[]
   dossierMap:    Record<string, string>
   uursoorten:    PlanningUursoort[]
   onClose:       () => void
@@ -461,11 +448,16 @@ function NieuwPlanItemDialog({
     uursoort_id:   '',
     start_datum:   datum,
     eind_datum:    datum,
+    uren:          '',
     ...roosterTijden(medewerker_id, datum, roosters),
   }))
-  // Zodra iemand zelf een tijd of uren intypt, overschrijft een andere startdatum dat niet meer.
+  // Zodra iemand zelf een tijd intypt, overschrijft een andere startdatum dat niet meer.
   // Een andere medewerker kiezen wél: dat is een bewuste keuze voor diens rooster.
   const [tijdenHandmatig, setTijdenHandmatig] = useState(false)
+  // Uren volgen de hele periode (niet alleen de eerste dag), tot de planner er zelf een typt.
+  const [urenHandmatig, setUrenHandmatig] = useState(false)
+  const berekend = urenVolgensRooster(form, roosters, afwezigheid)
+  const uren = urenHandmatig ? form.uren : String(berekend)
 
   const [codes, setCodes]           = useState<PlanningBewakingscode[] | null>(null)
   const [codesLaden, setCodesLaden] = useState(false)
@@ -520,7 +512,7 @@ function NieuwPlanItemDialog({
         uursoort_id:        form.uursoort_id || null,
         start_dt:           new Date(`${form.start_datum}T${form.start_tijd}`).toISOString(),
         eind_dt:            new Date(`${form.eind_datum}T${form.eind_tijd}`).toISOString(),
-        uren:               Number(form.uren),
+        uren:               Number(uren),
         overrule:           overschrijding != null, // tweede poging = bewust overrulen
       })
       if (!result.ok) {
@@ -702,9 +694,11 @@ function NieuwPlanItemDialog({
           {/* Uren */}
           <div>
             <label style={dialogLabelStyle}>Uren *</label>
-            <input type="number" className="eva-input" value={form.uren}
-              min="0" step="0.5"
-              onChange={e => { setOverschrijding(null); setTijdenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
+            <input type="number" className="eva-input" value={uren}
+              min="0" step="0.25"
+              onChange={e => { setOverschrijding(null); setUrenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
+            <UrenToelichting handmatig={urenHandmatig} uren={Number(uren)} berekend={berekend}
+              onTerug={() => { setOverschrijding(null); setUrenHandmatig(false) }} />
           </div>
 
           {overschrijding && (
@@ -1518,6 +1512,10 @@ export default function MedewerkerTimeline({
     }
 
     const { start: nieuwStart, eind: nieuwEind } = verplaatsNaarDag(entry, cellData.datum, cellData.medewerker_id)
+    // Andere dagen (een weekend ertussen) of een ander rooster: de uren gaan mee.
+    const nieuweUren = berekenPlanUren(
+      cellData.medewerker_id, nieuwStart.toISOString(), nieuwEind.toISOString(), roosters, afwezigheid,
+    ) || entry.uren
 
     const result = await verplaatsPlanningItem(entry.id, {
       start_dt:      nieuwStart.toISOString(),
@@ -1525,14 +1523,17 @@ export default function MedewerkerTimeline({
       medewerker_id: cellData.medewerker_id !== entry.medewerker_id ? cellData.medewerker_id : undefined,
       dossier_id,
       uursoort_id:   entry.planning_activiteiten?.uursoort_id ?? null,
-      uren:          entry.uren,
+      uren:          nieuweUren,
     })
 
     if (!result.ok) { toast.error(result.error); return }
 
     setEntries(prev => prev.map(e => {
       if (e.id !== entry.id) return e
-      return { ...e, start_dt: nieuwStart.toISOString(), eind_dt: nieuwEind.toISOString(), medewerker_id: cellData.medewerker_id }
+      return {
+        ...e, start_dt: nieuwStart.toISOString(), eind_dt: nieuwEind.toISOString(),
+        medewerker_id: cellData.medewerker_id, uren: nieuweUren,
+      }
     }))
     startTransition(() => router.refresh())
   }
@@ -1540,16 +1541,18 @@ export default function MedewerkerTimeline({
   async function onResizedEntry(id: string, ns: string, ne: string) {
     const entry = entries.find(e => e.id === id)
     if (!entry) return
+    // Een dag langer is een werkdag meer: de uren rekken mee met de balk.
+    const nieuweUren = berekenPlanUren(entry.medewerker_id, ns, ne, roosters, afwezigheid) || entry.uren
     const result = await verplaatsPlanningItem(id, {
       start_dt:    ns,
       eind_dt:     ne,
       medewerker_id: entry.medewerker_id,
       dossier_id:  entry.dossier_id ?? '',
       uursoort_id: entry.planning_activiteiten?.uursoort_id ?? null,
-      uren:        entry.uren,
+      uren:        nieuweUren,
     })
     if (!result.ok) { toast.error(result.error); return }
-    setEntries(prev => prev.map(e => e.id === id ? { ...e, start_dt: ns, eind_dt: ne } : e))
+    setEntries(prev => prev.map(e => e.id === id ? { ...e, start_dt: ns, eind_dt: ne, uren: nieuweUren } : e))
     startTransition(() => router.refresh())
   }
 
@@ -1873,6 +1876,8 @@ export default function MedewerkerTimeline({
         <PlanningItemEditDialog
           entry={editingEntry}
           medewerkers={medewerkers}
+          roosters={roosters}
+          afwezigheid={afwezigheid}
           dossierMap={dossierMap}
           balkLabel={balkLabel}
           onClose={() => setEditingEntry(null)}
@@ -1893,6 +1898,7 @@ export default function MedewerkerTimeline({
           datum={nieuwItem.datum}
           medewerkers={medewerkers}
           roosters={roosters}
+          afwezigheid={afwezigheid}
           dossierMap={dossierMap}
           uursoorten={uursoorten}
           onClose={() => setNieuwItem(null)}

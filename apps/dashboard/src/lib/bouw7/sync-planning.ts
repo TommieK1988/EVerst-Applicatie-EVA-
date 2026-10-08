@@ -7,6 +7,7 @@ import { isActiefDossier, type DossierActiefVelden } from '@/lib/dossiers/actief
 import { herberekenDeadlines } from '@/app/(platform)/taken/actions/deadlines'
 import { evaEigenPlanItemIds } from './plan-item-write'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { berekenPlanUren, type PlanAfwezigheid, type PlanRooster } from '@/lib/planning/werkuren'
 import type { Bouw7Client, Bouw7PlanItem, Bouw7PlanItemDetail, Bouw7PlanItemEmployee } from './client'
 
 // De gegenereerde Supabase-types lopen achter op de nieuwe bron/bouw7_id-kolommen;
@@ -75,17 +76,6 @@ function nlVandaag(): string {
 /** Standaard werkdag-tijden als een medewerker (nog) geen rooster heeft. */
 const DEFAULT_DAGSTART = '07:00:00'
 const DEFAULT_DAGEIND  = '16:00:00'
-
-/**
- * Hele-dag-plan-item: Bouw7 zet start én eind op 00:00:00 (of `isAllDay`). Alleen deze items
- * krijgen roostertijden; items met een echte kloktijd (07:00 e.d.) blijven ongemoeid.
- */
-function isHeleDag(pi: Bouw7PlanItem): boolean {
-  if (pi.isAllDay) return true
-  const st = (pi.startDate ?? '').slice(11, 19)
-  const et = (pi.endDate ?? '').slice(11, 19)
-  return (!st || st === '00:00:00') && (!et || et === '00:00:00')
-}
 
 /** Plan-items van één Bouw7-project (alle pagina's, via Apollo-search). */
 export async function fetchPlanItems(projectId: string, client?: Bouw7Client): Promise<Bouw7PlanItem[]> {
@@ -303,19 +293,32 @@ export async function syncDossierPlanning(
     // De toewijzingen komen uit de plan-item-details (Apollo-search levert ze niet).
     const empMap = await resolveMedewerkers(supabase, [...detailMap.values()], nu)
 
-    // Roosters van de toegewezen medewerkers ophalen. Toekomstige hele-dag-items krijgen
-    // hun roostertijden (bv. 07:30–16:15) i.p.v. 00:00 — anders "start werkdag om middernacht".
-    // Historische hele-dag-items blijven bewust op 00:00 (geen roostertijd terugprojecteren).
+    // Roosters en verlof van de toegewezen medewerkers: lopende en toekomstige blokken krijgen
+    // roostertijden i.p.v. 00:00 (anders "start werkdag om middernacht") en uren per persoon.
     const vandaagNL = nlVandaag()
     const medIds = [...new Set(empMap.values())]
     type RoosterVenster = { vanaf: string; tot: string | null; dagstart: string; dageind: string }
     const roosterPerMed = new Map<string, RoosterVenster[]>()
+    let planRoosters: PlanRooster[] = []
+    let planAfwezigheid: PlanAfwezigheid[] = []
     if (medIds.length > 0) {
-      const { data: roosterRows } = await supabase
-        .from('medewerker_roosters')
-        .select('medewerker_id, geldig_vanaf, geldig_tot, dagstart, dageind')
-        .in('medewerker_id', medIds)
-      for (const r of (roosterRows ?? []) as (RoosterVenster & { medewerker_id: string; geldig_vanaf: string; geldig_tot: string | null })[]) {
+      // Begrensd op de toegewezen medewerkers (en het verlof op vandaag en later): klein.
+      const [{ data: roosterRows }, { data: afwRows }] = await Promise.all([
+        supabase
+          .from('medewerker_roosters')
+          .select('medewerker_id, geldig_vanaf, geldig_tot, dagstart, dageind, werkdagen, contracturen_per_week')
+          .in('medewerker_id', medIds),
+        supabase
+          .from('medewerker_afwezigheid')
+          .select('medewerker_id, start_datum, eind_datum')
+          .in('medewerker_id', medIds)
+          .gte('eind_datum', vandaagNL)
+          .order('start_datum')
+          .limit(1000),
+      ])
+      planRoosters = (roosterRows ?? []) as PlanRooster[]
+      planAfwezigheid = (afwRows ?? []) as PlanAfwezigheid[]
+      for (const r of planRoosters) {
         const arr = roosterPerMed.get(r.medewerker_id) ?? []
         arr.push({ vanaf: r.geldig_vanaf, tot: r.geldig_tot, dagstart: r.dagstart, dageind: r.dageind })
         roosterPerMed.set(r.medewerker_id, arr)
@@ -465,13 +468,21 @@ export async function syncDossierPlanning(
         // zou anders de hele batch laten mislukken en álle planitems van die activiteit wissen.
         const start = toTimestamp(pi.startDate)
         const eind = eindExclusief(pi.endDate)
-        const uren = pi.hours ?? 0
-        if (!start || !eind || eind <= start || uren <= 0) {
+        const bouw7Uren = pi.hours ?? 0
+        if (!start || !eind || eind <= start || bouw7Uren <= 0) {
           result.overgeslagen = (result.overgeslagen ?? 0) + 1
           continue
         }
-        // Toekomstig hele-dag-item → roostertijden (per medewerker, want roosters verschillen).
-        const heleDagToekomst = isHeleDag(pi) && (pi.startDate?.slice(0, 10) ?? '') >= vandaagNL
+        // Lopend of toekomstig blok (einddag vandaag of later) → middernacht-kanten krijgen de
+        // roostertijd, per medewerker want roosters verschillen. Per kant: een blok dat Bouw7
+        // op "ma 00:00 → do 16:15" heeft staan begint ma op de roosterstart, niet om middernacht.
+        // Tot okt 2026 gold dit alleen voor blokken die nog moesten beginnen, en alleen als
+        // béíde kanten 00:00 waren — een lopend blok stond daardoor in EVA en op de telefoon
+        // op 00:00. Afgelopen blokken blijven bewust zoals Bouw7 ze heeft (geen roostertijd
+        // terugprojecteren in de historie).
+        const lopendOfLater = (pi.endDate?.slice(0, 10) ?? '') >= vandaagNL
+        const startMiddernacht = pi.isAllDay || (pi.startDate ?? '').slice(11, 19) === '00:00:00'
+        const eindMiddernacht  = pi.isAllDay || (pi.endDate ?? '').slice(11, 19) === '00:00:00'
         const emps = detailMap.get(pi.id)?.employees ?? []
         for (const emp of emps) {
           const medewerkerId = empMap.get(String(emp.id))
@@ -481,13 +492,21 @@ export async function syncDossierPlanning(
           }
           let itemStart = start
           let itemEind = eind
-          if (heleDagToekomst && pi.startDate && pi.endDate) {
-            const { start: ds, eind: de } = roostertijden(medewerkerId, pi.startDate.slice(0, 10))
-            const rs = toTimestamp(`${pi.startDate.slice(0, 10)} ${ds}`)
-            const re = toTimestamp(`${pi.endDate.slice(0, 10)} ${de}`)
+          if (lopendOfLater && pi.startDate && pi.endDate) {
+            const startDag = pi.startDate.slice(0, 10)
+            const eindDag  = pi.endDate.slice(0, 10)
+            const rs = startMiddernacht ? toTimestamp(`${startDag} ${roostertijden(medewerkerId, startDag).start}`) : start
+            const re = eindMiddernacht  ? toTimestamp(`${eindDag} ${roostertijden(medewerkerId, eindDag).eind}`) : eind
             // Alleen overnemen als het een geldig interval blijft (eind > start).
-            if (rs && re && re > rs) { itemStart = rs; itemEind = re }
+            if (rs && re && new Date(re).getTime() > new Date(rs).getTime()) { itemStart = rs; itemEind = re }
           }
+          // Uren: Bouw7's `hours` hoort bij het hele plan-item en wordt daar zelden bijgewerkt
+          // als het blok langer of korter wordt (8 u op een blok van twee dagen; dezelfde 37,5 u
+          // op elk van vier man). Voor lopend en toekomstig werk rekent EVA ze per persoon uit
+          // het rooster (lib/planning/werkuren.ts); de historie houdt het Bouw7-getal.
+          const uren = lopendOfLater
+            ? berekenPlanUren(medewerkerId, itemStart, itemEind, planRoosters, planAfwezigheid) || bouw7Uren
+            : bouw7Uren
           itemRows.push({
             activiteit_id: act.id,
             medewerker_id: medewerkerId,

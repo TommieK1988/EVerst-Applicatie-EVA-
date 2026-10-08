@@ -13,8 +13,9 @@ import { getMijnTaken } from '@/lib/taken/services/taken'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 import type { CurrentMedewerker } from '@/lib/auth/rechten'
 import {
-  dagVanDatum, dagVanTijdstip, tijdVanTijdstip, type AgendaItem,
+  dagVanDatum, dagVanTijdstip, type AgendaItem,
 } from './agenda-model'
+import { blokkenPerDag, type PlanRooster } from '@/lib/planning/werkuren'
 
 /**
  * Datalaag van de mobiele agenda (`/m/planning`): vier bronnen → één lijst
@@ -34,6 +35,10 @@ const GROEN = '#009439'
 
 /** Dagen die we extra terugkijken om meerdaagse blokken te vangen die vóór het venster begonnen. */
 const MARGE_DAGEN = 31
+
+/** Minuten na middernacht → 'HH:mm'. */
+const minuutNaarTijd = (min: number): string =>
+  `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.round(min % 60)).padStart(2, '0')}`
 
 function verschuif(dag: string, dagen: number): string {
   const d = new Date(`${dag}T12:00:00`)
@@ -67,36 +72,45 @@ async function haalPlanitems(medewerkerId: string, van: string, tot: string): Pr
 
   if (error) return []
 
+  // Het rooster, om een meerdaags blok per dag te kunnen tonen (zie hieronder). Eén
+  // medewerker heeft hooguit een handvol roosterperiodes.
+  const { data: roosterRijen } = await db()
+    .from('medewerker_roosters')
+    .select('medewerker_id, geldig_vanaf, geldig_tot, dagstart, dageind, werkdagen, contracturen_per_week')
+    .eq('medewerker_id', medewerkerId)
+    .order('geldig_vanaf')
+  const roosters = (roosterRijen ?? []) as PlanRooster[]
+
   const items: AgendaItem[] = []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const rij of (data ?? []) as any[]) {
     const startDag = dagVanTijdstip(rij.start_dt)
-    if (!startDag) continue
-    const eindDag = dagVanTijdstip(rij.eind_dt, true) ?? startDag
+    if (!startDag || !rij.eind_dt) continue
 
     const activiteit = rij.planning_activiteiten
     const dossier = activiteit?.dossiers
     const uursoort = activiteit?.planning_uursoorten
 
-    const startTijd = tijdVanTijdstip(rij.start_dt)
-    const eindTijd = tijdVanTijdstip(rij.eind_dt)
-    // Bouw7 zet dagblokken weg als 00:00 → 00:00; die tijden zeggen niets en
-    // horen bovenaan de dag te staan in plaats van bij "07:00".
-    const heleDag = startTijd === '00:00' && (eindTijd === '00:00' || eindTijd === null)
-
     const klant = dossier?.relaties?.naam ?? null
     const nummer = dossier?.dossiernummer ?? null
 
-    items.push({
-      id: `plan:${rij.id}`,
+    // Eén kaart per werkdag, met de tijden van díe dag. Een blok van ma 14:00 tot vr 16:15
+    // stond hiervoor op élke dag als "14:00 – 16:15" (en een Bouw7-dagblok als "00:00"); nu
+    // is dat ma 14:00–16:15, di t/m do de werkdag volgens het rooster, vr tot 16:15. Dagen
+    // waarop niet gewerkt wordt (het weekend in een blok over twee weken) vallen weg.
+    // Dezelfde lezing als de uren (lib/planning/werkuren.ts).
+    const dagen = blokkenPerDag(rij.medewerker_id, rij.start_dt, rij.eind_dt, roosters)
+    for (const { datum, blok } of dagen) items.push({
+      // Per dag een eigen sleutel: `dedupeItems` zou dezelfde id op een volgende dag weggooien.
+      id: dagen.length > 1 ? `plan:${rij.id}:${datum}` : `plan:${rij.id}`,
       bron: 'planitem',
       titel: activiteit?.titel ?? 'Werk',
       subtitel: [klant, nummer].filter(Boolean).join(' · ') || null,
-      startDag,
-      eindDag: eindDag < startDag ? startDag : eindDag,
-      heleDag,
-      startTijd: heleDag ? null : startTijd,
-      eindTijd: heleDag ? null : eindTijd,
+      startDag: datum,
+      eindDag: datum,
+      heleDag: false,
+      startTijd: minuutNaarTijd(blok.van),
+      eindTijd: minuutNaarTijd(blok.tot),
       // LET OP — bewust géén uren. `planning_items.uren` is bij Bouw7-planning het
       // bloktotaal dat ongewijzigd op de regel van élke toegewezen medewerker staat
       // (zie DetailplanningClient), dus met vier man op één blok toont iedereen

@@ -192,6 +192,9 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
   const startTijden = roosterTijden(item.medewerker_id, roosters)
   const s0 = splitsMoment(item.start_dt)
   const e0 = splitsMoment(item.eind_dt)
+  // Een eind op middernacht is exclusief: het blok loopt t/m de dag ervóór. Zonder deze stap
+  // werd het eind met de roostertijd op díe dag gezet en groeide het blok bij opslaan een dag.
+  if (e0.tijd === '00:00' && e0.datum > s0.datum) e0.datum = format(addDays(parseISO(e0.datum), -1), 'yyyy-MM-dd')
   const [start,     setStart]     = useState(s0.datum)
   const [eind,      setEind]      = useState(e0.datum)
   const [startTijd, setStartTijd] = useState(s0.tijd === '00:00' ? startTijden.start : s0.tijd)
@@ -218,17 +221,21 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
     setStartTijd(t.start); setEindTijd(t.eind)
   }, [medId])
 
+  // Uren volgen de periode én de tijden: een middag op de eerste dag is geen volle werkdag.
   useEffect(() => {
-    if (!medId || !start || !eind) return
-    const berekend = berekenPlanUren(medId, `${start}T08:00:00`, `${eind}T17:00:00`, roosters, afwezigheid)
+    if (!medId || !start || !eind || !startTijd || !eindTijd) return
+    const berekend = berekenPlanUren(medId, samenMoment(start, startTijd), samenMoment(eind, eindTijd), roosters, afwezigheid)
     if (berekend > 0) setUren(berekend)
-  }, [medId, start, eind])
+  }, [medId, start, eind, startTijd, eindTijd])
 
   const werkdagenLijst = (rooster?.werkdagen as number[] | undefined) ?? []
   const dagUren = rooster && werkdagenLijst.length > 0
     ? Number(rooster.contracturen_per_week) / werkdagenLijst.length
     : 8
-  const werkdagen = dagUren > 0 ? Math.round(uren / dagUren) : 0
+  // Alleen als "n werkdagen × daguren" het hele verhaal is; met een halve eerste of laatste dag
+  // zou dat een afgerond, dus verkeerd, aantal dagen tonen.
+  const werkdagen = dagUren > 0 && Number.isInteger(Math.round((uren / dagUren) * 100) / 100)
+    ? Math.round(uren / dagUren) : 0
 
   const tijdVeld = (waarde: string, zet: (v: string) => void) => (
     <input className="eva-input" type="time" value={waarde} step={300}
@@ -269,7 +276,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
               <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                 {werkdagen > 0
                   ? `${werkdagen} werkdag${werkdagen === 1 ? '' : 'en'} × ${fmtUren(dagUren)} u`
-                  : 'Werkdagen in de periode × contracturen per dag'}
+                  : 'Werkdagen volgens rooster; eerste en laatste dag naar de tijden hierboven'}
               </div>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
@@ -330,7 +337,8 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
 
   function herbereken(newMedId: string, newStart: string, newEind: string) {
     if (!newMedId || roosters.length === 0) return
-    const berekend = berekenPlanUren(newMedId, `${newStart}T08:00:00`, `${newEind}T17:00:00`, roosters, afwezigheid)
+    const t = roosterTijden(newMedId, roosters)
+    const berekend = berekenPlanUren(newMedId, samenMoment(newStart, t.start), samenMoment(newEind, t.eind), roosters, afwezigheid)
     if (berekend > 0) setUren(String(berekend))
   }
 
@@ -932,18 +940,22 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
     const midMs   = Math.round((startMs + eindMs) / 2)
     const midIso  = new Date(midMs).toISOString()
     if (midMs <= startMs || midMs >= eindMs) { toast.error('Te kort om te splitsen'); return }
-    const halfUren = Math.round((item.uren / 2) * 100) / 100
+    // Elke helft krijgt de uren van zijn eigen stuk; een blok van ma–wo knipt anders "de helft
+    // van de uren" door een werkdag heen terwijl het midden 's nachts kan vallen.
+    const urenVan = (s: string, e: string) => berekenPlanUren(item.medewerker_id, s, e, roosters, afwezigheid)
+    const uren1 = urenVan(item.start_dt, midIso) || Math.round((item.uren / 2) * 100) / 100
+    const uren2 = urenVan(midIso, item.eind_dt) || Math.round((item.uren / 2) * 100) / 100
     // Eerste helft: bestaande item inkorten
     const r1 = await verplaatsPlanningItem(item.id, {
       start_dt: item.start_dt, eind_dt: midIso,
-      medewerker_id: item.medewerker_id, dossier_id, uursoort_id, uren: halfUren,
+      medewerker_id: item.medewerker_id, dossier_id, uursoort_id, uren: uren1,
     })
     if (!r1.ok) { toast.error(r1.error); return }
-    onUpdated(item.id, { eind_dt: midIso, uren: halfUren })
+    onUpdated(item.id, { eind_dt: midIso, uren: uren1 })
     // Tweede helft: nieuw item
     const r2 = await maakPlanningItem({
       activiteit_id: activiteit.id, medewerker_id: item.medewerker_id,
-      start_dt: midIso, eind_dt: item.eind_dt, uren: halfUren,
+      start_dt: midIso, eind_dt: item.eind_dt, uren: uren2,
       dossier_id, uursoort_id,
     })
     if (!r2.ok) { toast.error(r2.error); return }
