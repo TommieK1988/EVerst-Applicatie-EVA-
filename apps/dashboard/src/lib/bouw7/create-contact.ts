@@ -30,6 +30,22 @@ export function soortOpdrachtgever(naam: string, types: OrganisatieType[]): stri
   return 'Bedrijf'
 }
 
+const LANDCODES: Record<string, string> = {
+  nederland: 'NL', belgie: 'BE', 'belgië': 'BE', duitsland: 'DE', frankrijk: 'FR',
+  luxemburg: 'LU', 'verenigd koninkrijk': 'GB', spanje: 'ES', polen: 'PL', australie: 'AU', 'australië': 'AU',
+}
+
+/**
+ * Land zoals Bouw7 het wil: een code van twee letters (`countryCode`, max. 2 tekens). In EVA staat
+ * soms "Nederland" — de terugval van de sync als Bouw7 geen land heeft — en daarop weigert Bouw7
+ * de hele write. Onbekende namen geven null; dan gaat het veld niet mee.
+ */
+export function landcode(land?: string | null): string | null {
+  const t = (land ?? '').trim()
+  if (/^[a-z]{2}$/i.test(t)) return t.toUpperCase()
+  return LANDCODES[t.toLowerCase()] ?? null
+}
+
 /** Bouw7 contactType-naam → EVA-organisatietype (spiegelt mapContactType in sync.ts). */
 export function mapType(typeName?: string): OrganisatieType {
   switch ((typeName ?? '').toLowerCase()) {
@@ -110,7 +126,7 @@ export async function maakBouw7RelatieOfFout(
     if (input.adres_huisnummer)body.houseNumber = input.adres_huisnummer
     if (input.adres_postcode)  body.zipCode = input.adres_postcode
     if (input.adres_plaats)    body.city = input.adres_plaats
-    if (input.adres_land)      body.countryCode = input.adres_land
+    if (landcode(input.adres_land)) body.countryCode = landcode(input.adres_land)
     if (input.opmerkingen)     body.information = input.opmerkingen
 
     // Verplicht maatwerkveld (zie `soortOpdrachtgever`). Id via de definitielijst; ontbreekt

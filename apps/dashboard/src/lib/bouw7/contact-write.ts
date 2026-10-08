@@ -17,7 +17,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7Client } from './sync'
 import type { Bouw7Contact, Bouw7ContactPerson, Bouw7ListResponse } from './client'
-import { soortOpdrachtgever } from './create-contact'
+import { soortOpdrachtgever, landcode } from './create-contact'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -157,6 +157,13 @@ async function schrijfEenContact(
     if (k === 'btw_nummer') {
       body.vatNumber = btwNorm(r.btw_nummer)
       verwacht.set(k, { lees: 'vatNumber', waarde: btwNorm(r.btw_nummer) })
+      continue
+    }
+    if (k === 'adres_land') {
+      const code = landcode(r.adres_land)
+      if (!code) continue // onbekende landnaam: niet sturen, Bouw7 zou de hele write weigeren
+      body.countryCode = code
+      verwacht.set(k, { lees: 'countryCode', waarde: code })
       continue
     }
     if (k === 'adres_straat') {
