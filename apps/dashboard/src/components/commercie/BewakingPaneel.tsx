@@ -28,6 +28,7 @@ import {
   type VerkoopkansInvoer,
 } from '@/lib/commercie/types'
 import { legUitkomstVast, slaStapOp } from '@/lib/commercie/actions'
+import { zetCommercieelEigenaar } from '@/lib/commercie/eigenaar'
 import { VerkoopkansVelden } from './VerkoopkansVelden'
 
 type Medewerker = { id: string; naam: string }
@@ -84,7 +85,15 @@ export function BewakingPaneel(props: Props) {
         <CardBody className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
           <Veld label="Offertebedrag" waarde={eur(props.bedrag)} />
           <Veld label="Klant" waarde={props.klant ?? '—'} />
-          <Veld label="Commercieel eigenaar" waarde={props.eigenaarNaam ?? 'Nog niet bepaald'} />
+          {afgerond ? (
+            <Veld label="Commercieel eigenaar" waarde={props.eigenaarNaam ?? 'Nog niet bepaald'} />
+          ) : (
+            <EigenaarVeld
+              dossierId={dossierId}
+              eigenaarId={kaart?.eigenaar_id ?? null}
+              medewerkers={medewerkers}
+            />
+          )}
           <Veld label="Nu aan zet" waarde={props.actiehouderNaam ?? '—'} />
 
           <div className="sm:col-span-2 lg:col-span-4">
@@ -145,6 +154,43 @@ function Veld({ label, waarde }: { label: string; waarde: string }) {
       <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
       <div className="mt-0.5 truncate text-sm text-neutral-900" title={waarde}>{waarde}</div>
     </div>
+  )
+}
+
+/**
+ * De eigenaar is direct op de kaart te wijzigen: hem omzetten hoort niet te vragen om ook een
+ * volgende stap in te vullen, zoals de dialoog "Volgende actie" doet.
+ */
+function EigenaarVeld(props: { dossierId: string; eigenaarId: string | null; medewerkers: Medewerker[] }) {
+  const [waarde, setWaarde] = React.useState(props.eigenaarId ?? '')
+  const [bezig, setBezig] = React.useState(false)
+  React.useEffect(() => setWaarde(props.eigenaarId ?? ''), [props.eigenaarId])
+
+  async function wijzig(nieuw: string) {
+    const vorige = waarde
+    setWaarde(nieuw)
+    setBezig(true)
+    const res = await zetCommercieelEigenaar(props.dossierId, nieuw || null)
+    setBezig(false)
+    if (res.ok) toast.success('Eigenaar opgeslagen')
+    else { setWaarde(vorige); toast.error(res.error) }
+  }
+
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+        Commercieel eigenaar
+      </span>
+      <select
+        className="mt-0.5 h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px] disabled:opacity-60"
+        value={waarde}
+        disabled={bezig}
+        onChange={e => wijzig(e.target.value)}
+      >
+        <option value="">Nog niet bepaald</option>
+        {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
+      </select>
+    </label>
   )
 }
 

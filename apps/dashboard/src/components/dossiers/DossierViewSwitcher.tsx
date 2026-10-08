@@ -51,6 +51,10 @@ const SOORT_LABEL: Record<SoortKeuze, string> = {
   project:     'Projecten',
 }
 
+/** Sleutel voor "geen commercieel eigenaar" in het eigenaarfilter; kan nooit een naam zijn. */
+const GEEN_EIGENAAR = '__geen__'
+const eigenaarSleutel = (d: DossierRij) => d.bewaking_eigenaar ?? GEEN_EIGENAAR
+
 function IconTrechter({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -131,6 +135,8 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   // (servicedesk-dossiers vs. reguliere projecten).
   const [geselecteerdeControllers, setGeselecteerdeControllers] = React.useState<string[]>([])
   const [soorten, setSoorten] = React.useState<SoortKeuze[]>([])
+  // Commercieel eigenaar (uit de offertebewaking) — alleen op de sectie met bewaking.
+  const [geselecteerdeEigenaren, setGeselecteerdeEigenaren] = React.useState<string[]>([])
   const [filterOpen, setFilterOpen] = React.useState(false)
   const filterRef = React.useRef<HTMLDivElement>(null)
 
@@ -173,6 +179,12 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   function toggleSoort(keuze: SoortKeuze) {
     setSoorten(prev =>
       prev.includes(keuze) ? prev.filter(s => s !== keuze) : [...prev, keuze]
+    )
+  }
+
+  function toggleEigenaar(sleutel: string) {
+    setGeselecteerdeEigenaren(prev =>
+      prev.includes(sleutel) ? prev.filter(n => n !== sleutel) : [...prev, sleutel]
     )
   }
 
@@ -253,6 +265,21 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     return map
   }, [dossiers])
 
+  const aantalPerEigenaar = React.useMemo(() => {
+    const map: Record<string, number> = {}
+    if (!toonBewaking) return map
+    for (const d of dossiers) {
+      if (d.intern) continue
+      const sleutel = eigenaarSleutel(d)
+      map[sleutel] = (map[sleutel] ?? 0) + 1
+    }
+    return map
+  }, [dossiers, toonBewaking])
+  const uniekeEigenaren = React.useMemo(
+    () => Object.keys(aantalPerEigenaar).filter(n => n !== GEEN_EIGENAAR).sort(),
+    [aantalPerEigenaar],
+  )
+
   // Aantallen per soort (interne dossiers tellen niet mee — die staan al in de Intern-popup).
   const soortAantallen = React.useMemo(() => {
     let servicedesk = 0
@@ -283,10 +310,13 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         && !geselecteerdeControllers.includes(d.controller_naam ?? '')) {
         return false
       }
+      if (geselecteerdeEigenaren.length > 0 && !geselecteerdeEigenaren.includes(eigenaarSleutel(d))) {
+        return false
+      }
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, soorten, sectie])
+  }, [dossiers, geselecteerdeLeiders, alleenNietToegewezen, geselecteerdeControllers, geselecteerdeEigenaren, soorten, sectie])
 
   // Interne dossiers (Intern-toggle aan) worden verborgen op het bord/lijst en
   // alleen via de Intern-popup getoond.
@@ -357,14 +387,15 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
 
   // Soort + controller zitten samen onder één knop rechtsboven; de personen-chips
   // blijven links staan omdat je daar het vaakst op wisselt.
-  const aantalActieveFilters = soorten.length + geselecteerdeControllers.length
-  const toontFilterMenu = toontSoort || toontControllers
+  const toontEigenaren = !!toonBewaking && Object.keys(aantalPerEigenaar).length > 0
+  const aantalActieveFilters = soorten.length + geselecteerdeControllers.length + geselecteerdeEigenaren.length
+  const toontFilterMenu = toontSoort || toontControllers || toontEigenaren
 
   const filterMenu = toontFilterMenu ? (
     <div ref={filterRef} style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
       <button
         onClick={() => setFilterOpen(o => !o)}
-        title="Filter op soort en controller"
+        title={toontEigenaren ? 'Filter op soort, controller en commercieel eigenaar' : 'Filter op soort en controller'}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '4px 10px',
@@ -448,11 +479,46 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
             </>
           )}
 
+          {toontEigenaren && (
+            <>
+              {(toontSoort || toontControllers) && (
+                <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
+              )}
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+                textTransform: 'uppercase', color: 'var(--neutral-400)',
+                padding: '4px 8px 2px',
+              }}>
+                Commercieel eigenaar
+              </div>
+              {uniekeEigenaren.map(naam => (
+                <FilterRij
+                  key={naam}
+                  actief={geselecteerdeEigenaren.includes(naam)}
+                  kleur={crewKleur(crewInitialen(naam))}
+                  label={naam}
+                  aantal={aantalPerEigenaar[naam] ?? 0}
+                  initialen={crewInitialen(naam)}
+                  onClick={() => toggleEigenaar(naam)}
+                />
+              ))}
+              {(aantalPerEigenaar[GEEN_EIGENAAR] ?? 0) > 0 && (
+                <FilterRij
+                  actief={geselecteerdeEigenaren.includes(GEEN_EIGENAAR)}
+                  kleur="#d97706"
+                  label="Niet toegewezen"
+                  aantal={aantalPerEigenaar[GEEN_EIGENAAR] ?? 0}
+                  onClick={() => toggleEigenaar(GEEN_EIGENAAR)}
+                />
+              )}
+            </>
+          )}
+
           {aantalActieveFilters > 0 && (
             <>
               <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
               <button
-                onClick={() => { setSoorten([]); setGeselecteerdeControllers([]) }}
+                onClick={() => { setSoorten([]); setGeselecteerdeControllers([]); setGeselecteerdeEigenaren([]) }}
                 style={{
                   width: '100%', padding: '5px 8px', borderRadius: 6,
                   border: 'none', background: 'transparent', cursor: 'pointer',
@@ -540,6 +606,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
             setGeselecteerdeLeiders([])
             setAlleenNietToegewezen(false)
             setGeselecteerdeControllers([])
+            setGeselecteerdeEigenaren([])
             setSoorten([])
           }}
           style={{
@@ -564,7 +631,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   if (view === 'bewaking' && toonBewaking) {
     // Bewust zónder de slicerbalk: die filtert op projectleider/controller, terwijl deze lijst
     // om de commerciële actiehouder draait. Twee filterbalken met verschillende betekenis
-    // boven elkaar is precies hoe een scherm onbruikbaar wordt.
+    // boven elkaar is precies hoe een scherm onbruikbaar wordt. Het filtermenu (soort,
+    // controller, commercieel eigenaar) staat wél naast de weergaveknoppen: die filters werken
+    // hier ook, en een filter dat werkt zonder dat je hem ziet, laat dossiers onverklaard weg.
     return (
       <BewakingWerklijst
         dossiers={zichtbareDossiers}
@@ -574,7 +643,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         layouts={[]}
         user_id={user_id}
         mijnMedewerkerId={mijnMedewerkerId ?? null}
-        viewToggle={toggle}
+        viewToggle={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{filterMenu}{toggle}</div>}
         extraActies={extraActies}
       />
     )

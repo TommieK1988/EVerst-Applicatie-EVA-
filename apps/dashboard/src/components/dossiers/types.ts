@@ -108,6 +108,8 @@ export type DossierRij = Dossier & {
   bewaking_actiehouder_id?: string | null
   /** Id van de commercieel eigenaar. */
   bewaking_eigenaar_id?: string | null
+  /** Naam van de commercieel eigenaar; draagt het eigenaarfilter op het Offertes-bord. */
+  bewaking_eigenaar?: string | null
   /** True zodra er een bewakingskaart bestaat; onderscheidt "niets afgesproken" van "geen kaart". */
   bewaking_actief?: boolean
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */

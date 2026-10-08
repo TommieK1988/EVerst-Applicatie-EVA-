@@ -247,6 +247,7 @@ type BewakingVerrijking = {
   bewaking_actiehouder: string | null
   bewaking_actiehouder_id: string | null
   bewaking_eigenaar_id: string | null
+  bewaking_eigenaar: string | null
   bewaking_actief: boolean
 }
 
@@ -266,7 +267,7 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
   )
 
   const rijen = resultaten.flatMap(({ data }) => data ?? [])
-  const houderIds = [...new Set(rijen.map(r => r.actiehouder_id).filter(Boolean))] as string[]
+  const houderIds = [...new Set(rijen.flatMap(r => [r.actiehouder_id, r.eigenaar_id]).filter(Boolean))] as string[]
   const namen = new Map<string, string>()
   if (houderIds.length > 0) {
     const { data: mensen } = await supabase
@@ -289,6 +290,7 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
       bewaking_actiehouder: r.actiehouder_id ? namen.get(r.actiehouder_id) ?? null : null,
       bewaking_actiehouder_id: r.actiehouder_id ?? null,
       bewaking_eigenaar_id: r.eigenaar_id ?? null,
+      bewaking_eigenaar:    r.eigenaar_id ? namen.get(r.eigenaar_id) ?? null : null,
       bewaking_actief:      true,
     })
   }
