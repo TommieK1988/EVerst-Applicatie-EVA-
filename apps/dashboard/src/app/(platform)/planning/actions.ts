@@ -338,7 +338,7 @@ export async function updatePlanningActiviteit(
         const ne = item.eind_dt
         const uren = urenVan(item)
         await supabase.from('planning_items')
-          .update({ start_dt: ns, eind_dt: ne, ...(uren > 0 ? { uren } : {}) }).eq('id', item.id)
+          .update({ start_dt: ns, eind_dt: ne, uren }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
         verschovenIds.push(item.id)
         itemsVerschoven++
@@ -374,7 +374,7 @@ export async function updatePlanningActiviteit(
         const uren = urenVan(ingekort)
         await supabase.from('planning_items').update({
           ...(links ? { start_dt: grens } : { eind_dt: grens }),
-          ...(uren > 0 ? { uren } : {}),
+          uren,
         }).eq('id', item.id)
         await spiegelNaarBouw7(item.id)
         itemsVerschoven++
@@ -513,12 +513,23 @@ export async function verwijderPlanningActiviteit(
 
 // ─── Planning Items ───────────────────────────────────────────────────────────
 
+/**
+ * Geplande uren van één blok, altijd door de server uitgerekend uit periode + rooster
+ * (`lib/planning/werkuren.ts`). Wat een scherm als `uren` meestuurt wordt genegeerd: het
+ * urenveld is geen invoer maar een uitkomst, zodat het nooit meer uit de pas loopt met de
+ * datums. Een blok dat helemaal in het weekend valt is 0 uur.
+ */
+async function planUren(blok: { medewerker_id: string; start_dt: string; eind_dt: string }): Promise<number> {
+  return (await maakUrenRekenaar(db(), [blok]))(blok)
+}
+
 const itemSchema = z.object({
   activiteit_id:  z.string().uuid(),
   medewerker_id:  z.string().uuid(),
   start_dt:       z.string(), // ISO timestamp
   eind_dt:        z.string(), // ISO timestamp
-  uren:           z.number().min(0),
+  /** Genegeerd: de server rekent de uren zelf uit (`planUren`). */
+  uren:           z.number().min(0).optional(),
   overrule:       z.boolean().optional(),
   overrule_reden: z.string().optional(),
 })
@@ -532,9 +543,10 @@ export async function maakPlanningItem(
   const parsed = itemSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
   await assertDossierBewerkbaar(input.dossier_id)
+  const uren = await planUren(parsed.data)
 
   if (!input.overrule) {
-    const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, input.uren)
+    const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, uren)
     if (!budget.ok) return budget
   }
 
@@ -545,7 +557,7 @@ export async function maakPlanningItem(
       medewerker_id:  parsed.data.medewerker_id,
       start_dt:       parsed.data.start_dt,
       eind_dt:        parsed.data.eind_dt,
-      uren:           parsed.data.uren,
+      uren,
       overrule:       parsed.data.overrule ?? false,
       overrule_reden: parsed.data.overrule_reden ?? null,
     })
@@ -572,7 +584,8 @@ const snelItemSchema = z.object({
   uursoort_id:        z.string().uuid().nullable().optional(),
   start_dt:           z.string(),
   eind_dt:            z.string(),
-  uren:               z.number().min(0),
+  /** Genegeerd: de server rekent de uren zelf uit (`planUren`). */
+  uren:               z.number().min(0).optional(),
   overrule:           z.boolean().optional(),
 })
 
@@ -594,9 +607,10 @@ export async function maakSnelPlanningItem(
   const supabase = db()
 
   const titel = inp.titel?.trim() || inp.bewakingscode_naam?.trim() || inp.bewakingscode
+  const uren = await planUren(inp)
 
   if (!inp.overrule) {
-    const budget = await checkBudget(inp.dossier_id, inp.uursoort_id ?? null, inp.uren)
+    const budget = await checkBudget(inp.dossier_id, inp.uursoort_id ?? null, uren)
     if (!budget.ok) return budget
   }
 
@@ -638,7 +652,7 @@ export async function maakSnelPlanningItem(
       medewerker_id: inp.medewerker_id,
       start_dt:      inp.start_dt,
       eind_dt:       inp.eind_dt,
-      uren:          inp.uren,
+      uren,
       overrule:      inp.overrule ?? false,
       bron:          'eva',
     })
@@ -678,7 +692,7 @@ export async function kopieerPlanningItem(
 
   // De kopie krijgt de uren van zíjn periode en zíjn medewerker, niet die van het origineel:
   // een tweedaags blok naar een vrijdag kopiëren is één dag, en roosters verschillen.
-  const uren = (await maakUrenRekenaar(supabase, [doel]))(doel) || bron.uren
+  const uren = await planUren(doel)
 
   const budget = await checkBudget(
     bron.planning_activiteiten?.dossier_id ?? '',
@@ -714,7 +728,8 @@ export async function verplaatsPlanningItem(
     medewerker_id?: string
     dossier_id:     string
     uursoort_id?:   string | null
-    uren:           number
+    /** Genegeerd: de server rekent de uren zelf uit (`planUren`). */
+    uren?:          number
     overrule?:      boolean
     overrule_reden?: string
   },
@@ -723,15 +738,23 @@ export async function verplaatsPlanningItem(
   | { ok: false; error: string; overschrijding?: true; beschikbare_uren?: number }
 > {
   await assertDossierBewerkbaar(input.dossier_id)
+  let medewerker_id = input.medewerker_id
+  if (!medewerker_id) {
+    const { data: huidig } = await db().from('planning_items').select('medewerker_id').eq('id', id).maybeSingle()
+    medewerker_id = huidig?.medewerker_id as string | undefined
+  }
+  if (!medewerker_id) return { ok: false, error: 'Planitem niet gevonden' }
+  const uren = await planUren({ medewerker_id, start_dt: input.start_dt, eind_dt: input.eind_dt })
+
   if (!input.overrule) {
-    const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, input.uren, id)
+    const budget = await checkBudget(input.dossier_id, input.uursoort_id ?? null, uren, id)
     if (!budget.ok) return budget
   }
 
   const update: Record<string, unknown> = {
     start_dt: input.start_dt,
     eind_dt:  input.eind_dt,
-    uren:     input.uren,
+    uren,
   }
   if (input.medewerker_id) update.medewerker_id = input.medewerker_id
   if (input.overrule)       update.overrule       = true
@@ -773,8 +796,9 @@ function afwezigheidssoort(
 }
 
 const splitsSchema = z.object({
-  deel1: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0) }),
-  deel2: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0) }),
+  // `uren` wordt genegeerd: elk deel krijgt de uren van zijn eigen periode.
+  deel1: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0).optional() }),
+  deel2: z.object({ start_dt: z.string(), eind_dt: z.string(), uren: z.number().min(0).optional() }),
 })
 
 /**
@@ -812,9 +836,14 @@ export async function splitsPlanningItem(
   // Eerst het origineel inkorten, dan pas het tweede deel erbij: staat de insert even in de
   // weg (bijv. een controle verderop), dan heeft het dossier nooit méér uren gepland staan
   // dan voor de splitsing.
+  const urenVan = await maakUrenRekenaar(supabase, [
+    { medewerker_id: bron.medewerker_id, ...deel1 }, { medewerker_id: bron.medewerker_id, ...deel2 },
+  ])
+  const uren1 = urenVan({ medewerker_id: bron.medewerker_id, ...deel1 })
+  const uren2 = urenVan({ medewerker_id: bron.medewerker_id, ...deel2 })
   const { error: updErr } = await supabase
     .from('planning_items')
-    .update({ start_dt: deel1.start_dt, eind_dt: deel1.eind_dt, uren: deel1.uren })
+    .update({ start_dt: deel1.start_dt, eind_dt: deel1.eind_dt, uren: uren1 })
     .eq('id', id)
   if (updErr) return { ok: false, error: updErr.message }
 
@@ -825,7 +854,7 @@ export async function splitsPlanningItem(
       medewerker_id: bron.medewerker_id,
       start_dt:      deel2.start_dt,
       eind_dt:       deel2.eind_dt,
-      uren:          deel2.uren,
+      uren:          uren2,
       bron:          'eva',
     })
     .select('id')
@@ -1118,7 +1147,7 @@ export async function verschuifPlanningFase(
       await supabase.from('planning_items').update({
         start_dt: item.start_dt,
         eind_dt:  item.eind_dt,
-        ...(uren > 0 ? { uren } : {}),
+        uren,
       }).eq('id', item.id)
       verschovenIds.push(item.id)
       iShift++
@@ -1207,7 +1236,7 @@ export async function kopieerPlanningFase(
     ...item, start_dt: schuifTijdstip(item.start_dt, dagen), eind_dt: schuifTijdstip(item.eind_dt, dagen),
   }))
   const urenVan = await maakUrenRekenaar(supabase, geschoven)
-  bronItems = geschoven.map(item => ({ ...item, uren: urenVan(item) || item.uren }))
+  bronItems = geschoven.map(item => ({ ...item, uren: urenVan(item) }))
 
   // Budget: één controle per uursoort over álle te kopiëren uren samen.
   if (bronItems.length > 0 && !opties.overrule) {

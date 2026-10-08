@@ -64,32 +64,30 @@ export function formVanEntry(entry: PlanningItemVerrijkt, roosters: MedewerkerRo
   }
 }
 
-/** Regel onder het urenveld: waar het getal vandaan komt, en de weg terug naar het rooster. */
-export function UrenToelichting({ handmatig, uren, berekend, opgeslagen, onTerug }: {
-  handmatig:   boolean
+/**
+ * Het urenveld: alleen-lezen. De uren zijn een uitkomst van periode + rooster, geen invoer —
+ * de server rekent ze bij opslaan zelf ook zo uit.
+ */
+export function UrenVeld({ uren, opgeslagen, labelStijl }: {
   uren:        number
-  berekend:    number
   /** Wat er nu in de database staat (alleen bij bewerken). */
   opgeslagen?: number
-  onTerug:     () => void
+  labelStijl:  React.CSSProperties
 }) {
-  const stijl: React.CSSProperties = { margin: '4px 0 0', fontSize: 11, color: 'var(--fg-muted)' }
-  if (handmatig) {
-    if (uren === berekend) return null
-    return (
-      <p style={stijl}>
-        Volgens rooster {berekend} u.{' '}
-        <button type="button" onClick={onTerug} className="eva-btn-ghost" style={{ padding: 0, fontSize: 11 }}>
-          Rooster aanhouden
-        </button>
-      </p>
-    )
-  }
-  const afwijking = opgeslagen != null && Number(opgeslagen) !== berekend
+  const afwijking = opgeslagen != null && Number(opgeslagen) !== uren
   return (
-    <p style={stijl}>
-      Werkdagen volgens het rooster; eerste en laatste dag naar de tijden hierboven.
-      {afwijking && ` Stond op ${Number(opgeslagen)} u — opslaan zet het recht.`}
-    </p>
+    <div>
+      <div style={labelStijl}>Uren</div>
+      <div style={{
+        padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)',
+        fontSize: 13, fontWeight: 600, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums',
+      }}>
+        {String(uren).replace('.', ',')} u
+      </div>
+      <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--fg-muted)' }}>
+        Berekend: werkdagen volgens het rooster, eerste en laatste dag naar de tijden hierboven.
+        {afwijking && ` Stond op ${String(Number(opgeslagen)).replace('.', ',')} u — opslaan zet het recht.`}
+      </p>
+    </div>
   )
 }

@@ -225,7 +225,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
   useEffect(() => {
     if (!medId || !start || !eind || !startTijd || !eindTijd) return
     const berekend = berekenPlanUren(medId, samenMoment(start, startTijd), samenMoment(eind, eindTijd), roosters, afwezigheid)
-    if (berekend > 0) setUren(berekend)
+    setUren(berekend)
   }, [medId, start, eind, startTijd, eindTijd])
 
   const werkdagenLijst = (rooster?.werkdagen as number[] | undefined) ?? []
@@ -336,10 +336,10 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   const [busy,  setBusy]  = useState(false)
 
   function herbereken(newMedId: string, newStart: string, newEind: string) {
-    if (!newMedId || roosters.length === 0) return
+    if (!newMedId) return
     const t = roosterTijden(newMedId, roosters)
     const berekend = berekenPlanUren(newMedId, samenMoment(newStart, t.start), samenMoment(newEind, t.eind), roosters, afwezigheid)
-    if (berekend > 0) setUren(String(berekend))
+    setUren(String(berekend))
   }
 
   async function opslaan() {
@@ -909,9 +909,7 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
     const aMax = activiteit.deadline       ? startOfDay(addDays(parseISO(activiteit.deadline), 1)).getTime() - 1 : null
     if (aMin != null && new Date(ns).getTime() < aMin) { toast.error('Planitem valt buiten activiteit-startdatum'); return }
     if (aMax != null && new Date(ne).getTime() > aMax) { toast.error('Planitem valt buiten activiteit-deadline'); return }
-    const nieuweUren = roosters.length > 0
-      ? berekenPlanUren(drag.medewerker_id, ns, ne, roosters, afwezigheid) || drag.origUren
-      : drag.origUren
+    const nieuweUren = berekenPlanUren(drag.medewerker_id, ns, ne, roosters, afwezigheid)
     onUpdated(item.id, { start_dt: ns, eind_dt: ne, uren: nieuweUren })
     const result = await verplaatsPlanningItem(item.id, { start_dt: ns, eind_dt: ne, medewerker_id: drag.medewerker_id, dossier_id, uursoort_id: drag.uursoort_id, uren: nieuweUren })
     if (!result.ok) { toast.error(result.error); onUpdated(item.id, { start_dt: drag.origStartDt, eind_dt: drag.origEindDt, uren: drag.origUren }); return }
@@ -943,8 +941,8 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
     // Elke helft krijgt de uren van zijn eigen stuk; een blok van ma–wo knipt anders "de helft
     // van de uren" door een werkdag heen terwijl het midden 's nachts kan vallen.
     const urenVan = (s: string, e: string) => berekenPlanUren(item.medewerker_id, s, e, roosters, afwezigheid)
-    const uren1 = urenVan(item.start_dt, midIso) || Math.round((item.uren / 2) * 100) / 100
-    const uren2 = urenVan(midIso, item.eind_dt) || Math.round((item.uren / 2) * 100) / 100
+    const uren1 = urenVan(item.start_dt, midIso)
+    const uren2 = urenVan(midIso, item.eind_dt)
     // Eerste helft: bestaande item inkorten
     const r1 = await verplaatsPlanningItem(item.id, {
       start_dt: item.start_dt, eind_dt: midIso,

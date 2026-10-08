@@ -24,6 +24,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { getBouw7ClientOfNull } from './config'
 import type { Bouw7Client } from './client'
+import { maakUrenRekenaar } from '@/lib/planning/werkuren-server'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -425,17 +426,23 @@ async function schrijfBouw7ItemWijziging(client: Bouw7Client, ctx: ItemContext):
   // Zusterrijen meeschuiven (zelfde plan-item onder dezelfde activiteit).
   const { data: zusters } = await db()
     .from('planning_items')
-    .select('id')
+    .select('id, medewerker_id')
     .eq('activiteit_id', ctx.activiteitId)
     .eq('bron', 'bouw7')
     .like('bouw7_id', `${ctx.bouw7Id}:%`)
     .neq('id', ctx.itemId)
-  const zusterIds = ((zusters ?? []) as { id: string }[]).map(z => z.id)
-  if (zusterIds.length > 0) {
-    await db()
-      .from('planning_items')
-      .update({ start_dt: ctx.startDt, eind_dt: ctx.eindDt, uren: ctx.hours, bouw7_laatst_sync: nu })
-      .in('id', zusterIds)
+  const zusterRijen = (zusters ?? []) as { id: string; medewerker_id: string }[]
+  if (zusterRijen.length > 0) {
+    // Zelfde blok, maar ieder met de uren van zijn eigen rooster: Bouw7's `hours` hoort bij
+    // het hele plan-item, niet bij één persoon.
+    const blokken = zusterRijen.map(z => ({ medewerker_id: z.medewerker_id, start_dt: ctx.startDt, eind_dt: ctx.eindDt }))
+    const urenVan = await maakUrenRekenaar(db(), blokken)
+    for (const blok of blokken.map((b, i) => ({ ...b, id: zusterRijen[i].id }))) {
+      await db()
+        .from('planning_items')
+        .update({ start_dt: ctx.startDt, eind_dt: ctx.eindDt, uren: urenVan(blok), bouw7_laatst_sync: nu })
+        .eq('id', blok.id)
+    }
   }
 }
 

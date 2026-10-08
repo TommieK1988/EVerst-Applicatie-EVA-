@@ -21,8 +21,8 @@ import { nlDelen, plusDagen } from './nl-tijd'
  *    niet dagstart–dageind: het verschil is de pauze. 37,5 u op 07:30–16:15 is 7,5 u per dag.
  *  - Een **halve dag** telt de kloktijd, minus het deel van de pauze dat erin valt. De pauze
  *    ligt vanaf 12:00 (of midden in de werkdag als 12:00 erbuiten valt). Ma 14:00–16:15 = 2,25 u.
- *  - Niet-werkdagen tellen niet mee, behalve als het planitem alleen op die dag staat
- *    (zaterdag 08:00–12:00 ingepland = 4 u).
+ *  - Niet-werkdagen tellen niet mee — ook niet als het hele blok erop staat: een blok dat
+ *    volledig in het weekend (of op een vaste vrije dag) valt is 0 uur.
  *  - Het rooster dat **op die dag geldt**; is er geen, dan het meest recente. Roosters bestaan
  *    vaak pas vanaf recent, terwijl er ook in het verleden gepland is — zonder terugval zouden
  *    die dagen stilzwijgend op 0 uur uitkomen.
@@ -125,11 +125,7 @@ export function blokOpDag(
   if (datum === e.datum && e.minuut === 0) return null
 
   const wd = werkdagOp(medewerker_id, datum, roosters)
-  // Een niet-werkdag telt alleen als het planitem helemaal op die dag staat: dan is iemand
-  // bewust op zaterdag (of op zijn vrije vrijdag) ingepland. In een meerdaags blok is het de
-  // vrije dag die er toevallig tussen valt.
-  const laatsteDag = e.minuut === 0 ? plusDagen(e.datum, -1) : e.datum
-  if (!wd.werkdag && s.datum !== laatsteDag) return null
+  if (!wd.werkdag) return null
 
   const van = eigenStart ? s.minuut : wd.van
   const tot = eigenEind ? e.minuut : wd.tot

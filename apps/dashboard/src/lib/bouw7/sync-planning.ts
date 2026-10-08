@@ -469,7 +469,7 @@ export async function syncDossierPlanning(
         const start = toTimestamp(pi.startDate)
         const eind = eindExclusief(pi.endDate)
         const bouw7Uren = pi.hours ?? 0
-        if (!start || !eind || eind <= start || bouw7Uren <= 0) {
+        if (!start || !eind || eind <= start) {
           result.overgeslagen = (result.overgeslagen ?? 0) + 1
           continue
         }
@@ -504,9 +504,10 @@ export async function syncDossierPlanning(
           // als het blok langer of korter wordt (8 u op een blok van twee dagen; dezelfde 37,5 u
           // op elk van vier man). Voor lopend en toekomstig werk rekent EVA ze per persoon uit
           // het rooster (lib/planning/werkuren.ts); de historie houdt het Bouw7-getal.
+          // Een blok dat helemaal in het weekend valt is 0 uur (sinds okt 2026 toegestaan).
           const uren = lopendOfLater
-            ? berekenPlanUren(medewerkerId, itemStart, itemEind, planRoosters, planAfwezigheid) || bouw7Uren
-            : bouw7Uren
+            ? berekenPlanUren(medewerkerId, itemStart, itemEind, planRoosters, planAfwezigheid)
+            : Math.max(0, bouw7Uren)
           itemRows.push({
             activiteit_id: act.id,
             medewerker_id: medewerkerId,

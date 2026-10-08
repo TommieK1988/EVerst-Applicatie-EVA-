@@ -50,13 +50,17 @@ describe('berekenPlanUren', () => {
     expect(uren('marc', nl('2026-10-19', '07:30'), nl('2026-10-19', '12:00'))).toBe(4.5)
   })
 
-  it('werk op een eigen kloktijd buiten het rooster telt gewoon mee', () => {
-    // zaterdag 08:00–12:00
-    expect(uren('marc', nl('2026-10-24', '08:00'), nl('2026-10-24', '12:00'))).toBe(4)
+  it('werk na de werkdag (eigen kloktijd buiten het rooster) telt gewoon mee', () => {
+    // maandag 17:00–19:00
+    expect(uren('marc', nl('2026-10-19', '17:00'), nl('2026-10-19', '19:00'))).toBe(2)
   })
 
-  it('een hele zaterdag als Bouw7-dagblok telt als één werkdag', () => {
-    expect(uren('marc', nl('2026-10-17', '00:00'), nl('2026-10-18', '00:00'))).toBe(7.5)
+  it('een blok helemaal in het weekend is 0 uur', () => {
+    expect(uren('marc', nl('2026-10-24', '08:00'), nl('2026-10-24', '12:00'))).toBe(0)
+  })
+
+  it('een hele zaterdag als Bouw7-dagblok is 0 uur', () => {
+    expect(uren('marc', nl('2026-10-17', '00:00'), nl('2026-10-18', '00:00'))).toBe(0)
   })
 
   it('rooster per medewerker: vrijdag is geen werkdag voor de parttimer', () => {

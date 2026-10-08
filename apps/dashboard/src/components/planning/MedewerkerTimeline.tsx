@@ -44,7 +44,7 @@ import {
 } from './conflict'
 import { berekenPlanUren } from '@/lib/planning/werkuren'
 import {
-  UrenToelichting, formVanEntry, roosterTijden, urenVolgensRooster,
+  UrenVeld, formVanEntry, roosterTijden, urenVolgensRooster,
 } from './planitem-uren'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -153,11 +153,8 @@ function PlanningItemEditDialog({
   const { bevestig } = useDialogen()
 
   const [form, setForm] = useState(() => formVanEntry(entry, roosters))
-  // De uren volgen de periode en het rooster. Typt de planner zelf een getal, dan blijft dat
-  // staan — ook als hij daarna de datums nog aanpast.
-  const [urenHandmatig, setUrenHandmatig] = useState(false)
-  const berekend = urenVolgensRooster(form, roosters, afwezigheid)
-  const uren = urenHandmatig ? form.uren : String(berekend)
+  // De uren zijn een uitkomst van periode + rooster; de server rekent ze bij opslaan zelf uit.
+  const uren = urenVolgensRooster(form, roosters, afwezigheid)
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -168,7 +165,6 @@ function PlanningItemEditDialog({
         medewerker_id: form.medewerker_id,
         dossier_id:    entry.dossier_id ?? '',
         uursoort_id:   entry.planning_activiteiten?.uursoort_id ?? null,
-        uren:          Number(uren),
       })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Planitem bijgewerkt')
@@ -275,16 +271,7 @@ function PlanningItemEditDialog({
           </div>
 
           {/* Uren */}
-          <div>
-            <label style={dialogLabelStyle}>Uren</label>
-            <input type="number" className="eva-input" value={uren}
-              min="0" step="0.25"
-              onChange={e => { setUrenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
-            <UrenToelichting
-              handmatig={urenHandmatig} uren={Number(uren)} berekend={berekend} opgeslagen={entry.uren}
-              onTerug={() => setUrenHandmatig(false)}
-            />
-          </div>
+          <UrenVeld uren={uren} opgeslagen={entry.uren} labelStijl={dialogLabelStyle} />
 
           {/* Actions — mag wrappen zodat de knoppen nooit buiten de modal vallen (rechter groep
               blijft rechts uitgelijnd via marginLeft:auto, ook wanneer hij naar een 2e regel wrapt). */}
@@ -448,21 +435,20 @@ function NieuwPlanItemDialog({
     uursoort_id:   '',
     start_datum:   datum,
     eind_datum:    datum,
-    uren:          '',
     ...roosterTijden(medewerker_id, datum, roosters),
   }))
   // Zodra iemand zelf een tijd intypt, overschrijft een andere startdatum dat niet meer.
   // Een andere medewerker kiezen wél: dat is een bewuste keuze voor diens rooster.
   const [tijdenHandmatig, setTijdenHandmatig] = useState(false)
-  // Uren volgen de hele periode (niet alleen de eerste dag), tot de planner er zelf een typt.
-  const [urenHandmatig, setUrenHandmatig] = useState(false)
-  const berekend = urenVolgensRooster(form, roosters, afwezigheid)
-  const uren = urenHandmatig ? form.uren : String(berekend)
+  // Uren volgen de hele periode (niet alleen de eerste dag); de server rekent ze zelf ook uit.
+  const uren = urenVolgensRooster(form, roosters, afwezigheid)
 
   const [codes, setCodes]           = useState<PlanningBewakingscode[] | null>(null)
   const [codesLaden, setCodesLaden] = useState(false)
   const [codesFout, setCodesFout]   = useState<string | null>(null)
   const [overschrijding, setOverschrijding] = useState<string | null>(null)
+  // Andere periode = andere uren: een eerdere budgetwaarschuwing gaat dan niet meer over dit getal.
+  useEffect(() => { setOverschrijding(null) }, [uren])
 
   // Bewakingscodes van het gekozen dossier live uit Bouw7 ophalen.
   useEffect(() => {
@@ -512,7 +498,6 @@ function NieuwPlanItemDialog({
         uursoort_id:        form.uursoort_id || null,
         start_dt:           new Date(`${form.start_datum}T${form.start_tijd}`).toISOString(),
         eind_dt:            new Date(`${form.eind_datum}T${form.eind_tijd}`).toISOString(),
-        uren:               Number(uren),
         overrule:           overschrijding != null, // tweede poging = bewust overrulen
       })
       if (!result.ok) {
@@ -692,14 +677,7 @@ function NieuwPlanItemDialog({
           </div>
 
           {/* Uren */}
-          <div>
-            <label style={dialogLabelStyle}>Uren *</label>
-            <input type="number" className="eva-input" value={uren}
-              min="0" step="0.25"
-              onChange={e => { setOverschrijding(null); setUrenHandmatig(true); setForm(f => ({ ...f, uren: e.target.value })) }} required />
-            <UrenToelichting handmatig={urenHandmatig} uren={Number(uren)} berekend={berekend}
-              onTerug={() => { setOverschrijding(null); setUrenHandmatig(false) }} />
-          </div>
+          <UrenVeld uren={uren} labelStijl={dialogLabelStyle} />
 
           {overschrijding && (
             <div style={{
@@ -1515,7 +1493,7 @@ export default function MedewerkerTimeline({
     // Andere dagen (een weekend ertussen) of een ander rooster: de uren gaan mee.
     const nieuweUren = berekenPlanUren(
       cellData.medewerker_id, nieuwStart.toISOString(), nieuwEind.toISOString(), roosters, afwezigheid,
-    ) || entry.uren
+    )
 
     const result = await verplaatsPlanningItem(entry.id, {
       start_dt:      nieuwStart.toISOString(),
@@ -1523,7 +1501,6 @@ export default function MedewerkerTimeline({
       medewerker_id: cellData.medewerker_id !== entry.medewerker_id ? cellData.medewerker_id : undefined,
       dossier_id,
       uursoort_id:   entry.planning_activiteiten?.uursoort_id ?? null,
-      uren:          nieuweUren,
     })
 
     if (!result.ok) { toast.error(result.error); return }
@@ -1542,14 +1519,13 @@ export default function MedewerkerTimeline({
     const entry = entries.find(e => e.id === id)
     if (!entry) return
     // Een dag langer is een werkdag meer: de uren rekken mee met de balk.
-    const nieuweUren = berekenPlanUren(entry.medewerker_id, ns, ne, roosters, afwezigheid) || entry.uren
+    const nieuweUren = berekenPlanUren(entry.medewerker_id, ns, ne, roosters, afwezigheid)
     const result = await verplaatsPlanningItem(id, {
       start_dt:    ns,
       eind_dt:     ne,
       medewerker_id: entry.medewerker_id,
       dossier_id:  entry.dossier_id ?? '',
       uursoort_id: entry.planning_activiteiten?.uursoort_id ?? null,
-      uren:        nieuweUren,
     })
     if (!result.ok) { toast.error(result.error); return }
     setEntries(prev => prev.map(e => e.id === id ? { ...e, start_dt: ns, eind_dt: ne, uren: nieuweUren } : e))
