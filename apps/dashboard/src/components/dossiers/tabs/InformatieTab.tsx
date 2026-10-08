@@ -33,6 +33,7 @@ import {
 import type { OpdrachtOnderdeelGrondslag as StelpostGrondslag } from '@everts/database'
 import ServicedeskInfoPaneel from './ServicedeskInfoPaneel'
 import BonActies from '../servicedesk/BonActies'
+import BonOpenOpdrachten from '../servicedesk/BonOpenOpdrachten'
 import OffertePaneel from './OffertePaneel'
 import DossierNotitiesBlok from './DossierNotitiesBlok'
 import { PortaalChatBlok } from './PortaalChatBlok'
@@ -2070,6 +2071,7 @@ export function InformatieTab({
                 alleenLezen={readOnly}
               />
             }
+            wacht={<BonOpenOpdrachten dossierId={dossier.id} alleenLezen={readOnly} />}
           />
         )}
 

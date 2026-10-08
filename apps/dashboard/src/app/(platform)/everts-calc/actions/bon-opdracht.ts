@@ -3,27 +3,30 @@
 /**
  * Opdrachten van een servicedeskbon die accordering nodig hebben.
  *
- * Een bon heeft geen Werkbegroting-tab (zie `servicedesk-tabs.ts`), maar boven de inkoopdrempel
- * moet een opdracht wél geaccordeerd zijn (`lib/goedkeuring/inkoop.ts`). Het bestelvenster
- * stuurde de regels eerst naar Bouw7 en liep pas dáárna op die poort vast. Op 20267.00636 leverde
- * dat drie keer dezelfde opdracht van € 7.990 op in Bouw7 en geen enkel contract: de knop om
- * accordering aan te vragen stond op een scherm dat de bon niet laat zien.
+ * Boven de inkoopdrempel (`lib/goedkeuring/inkoop.ts`) moet een opdracht op een bon geaccordeerd
+ * zijn. Dat akkoord gaat over **de opdracht zelf** — deze partij, dit bedrag — en niet over een
+ * werkbegroting: een bon heeft er geen die iemand beoordeelt (zie `servicedesk-tabs.ts`). De
+ * regels staan onder water wel in de werkbegroting-tabellen, omdat de weg naar Bouw7 daarlangs
+ * loopt; daar houdt het op. Zie `lib/goedkeuring/bestelling.ts`.
  *
- * Nu legt het venster de opdracht vast en vraagt het accordering aan vóórdat er iets naar Bouw7
- * gaat. De opdracht blijft als concept op de bon staan (`getOpenBonOpdrachten`), en na het akkoord
- * maak je hem daar af (`maakBonOpdrachtVanConcept`) — met precies de gegevens die je al had
- * ingevuld. Onder water lopen alle stappen door de bestaande acties, zodat de poortwachters op
- * één plek blijven: `maakBestellingInBouw7` controleert de accordering zelf nog een keer.
+ * Het bestelvenster legt de opdracht vast en vraagt het akkoord aan vóórdat er iets naar Bouw7
+ * gaat. Eerder stuurde het de regels eerst en liep het pas dáárna vast: op 20267.00636 stond
+ * dezelfde opdracht van € 7.990 zo drie keer in Bouw7, zonder contract. De opdracht blijft als
+ * concept op de bon staan (`getOpenBonOpdrachten`); de beoordelaar keurt hem daar goed of stuurt
+ * hem terug, en daarna maakt de aanvrager hem af (`maakBonOpdrachtVanConcept`) met precies de
+ * gegevens die al waren ingevuld. `maakBestellingInBouw7` controleert het akkoord zelf nog een keer.
  */
 
 import { createAdminClient } from '@everts/database/server'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { inkoopAccorderingVereist } from '@/lib/goedkeuring/inkoop'
-import { berekenWerkbegrotingStatus } from '@/lib/goedkeuring/werkbegroting-status'
 import { bepaalBeoordelingsRoute, haalBeoordelaar } from '@/lib/goedkeuring/beoordelaars'
-import { vraagGoedkeuringAan } from '@/lib/goedkeuring/actions'
+import { bepaalBeoordeelContext } from '@/lib/goedkeuring/autorisatie'
+import { bestellingAccordering } from '@/lib/goedkeuring/bestelling'
+import { vraagGoedkeuringAan, keurGoed, keurAf } from '@/lib/goedkeuring/actions'
 import type { BeoordelaarRef } from '@/lib/goedkeuring/types'
 import { bestellingBedrag } from '@/lib/everts-calc/calculations'
+import { hashComponentenSet } from '@/lib/everts-calc/goedkeuring-hash'
 import type { WerkbegrotingBestelling, WerkbegrotingComponent } from '@/lib/everts-calc/types'
 import {
   syncWerkbegrotingNaarSupabase, syncBestellingenNaarSupabase, laadWerkbegrotingSnapshot,
@@ -47,30 +50,29 @@ export type BonAccordering =
 /** Moet deze opdracht geaccordeerd worden, en is dat al gebeurd? */
 async function accorderingNodig(
   werkbegrotingId: string,
+  bestellingId: string,
   componenten: WerkbegrotingComponent[],
 ): Promise<{ nodig: boolean; drempel: number | null; bedrag: number }> {
   const bedrag = bestellingBedrag(componenten)
   const acc = await inkoopAccorderingVereist(werkbegrotingId, bedrag)
   if (!acc.vereist) return { nodig: false, drempel: acc.drempel, bedrag }
-  const status = await berekenWerkbegrotingStatus(werkbegrotingId)
-  const goedgekeurd = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
-  const regelIds = [...new Set(componenten.map(c => c.werkbegroting_regel_id))]
-  return { nodig: regelIds.some(id => goedgekeurd.get(id) !== true), drempel: acc.drempel, bedrag }
+  const stand = await bestellingAccordering(bestellingId, await hashComponentenSet(componenten))
+  return { nodig: !stand.geldig, drempel: acc.drempel, bedrag }
 }
 
 async function vraagAan(opts: {
   dossierId: string
-  werkbegrotingId: string
+  bestellingId: string
   omschrijving: string
   bedrag: number
   drempel: number | null
   beoordelaarId: string | null
 }): Promise<BonAccordering> {
   const res = await vraagGoedkeuringAan({
-    objectType: 'werkbegroting',
-    objectId: opts.werkbegrotingId,
+    objectType: 'bestelling',
+    objectId: opts.bestellingId,
     dossierId: opts.dossierId,
-    toelichting: `Opdracht "${opts.omschrijving}" van ${euro(opts.bedrag)} op deze servicedeskbon.`,
+    toelichting: `Opdracht "${opts.omschrijving}" van ${euro(opts.bedrag)}.`,
     beoordelaarId: opts.beoordelaarId,
   })
   if (!res.ok) {
@@ -118,11 +120,11 @@ export async function accorderingVoorBonOpdracht(
 
   const ids = new Set(bestelling.component_ids)
   const componenten = payload.componenten.filter(c => ids.has(c.id) && !c.is_verwijderd)
-  const acc = await accorderingNodig(payload.wb.id, componenten)
+  const acc = await accorderingNodig(payload.wb.id, bestelling.id, componenten)
   if (!acc.nodig) return { ok: true, status: 'vrij' }
 
   return vraagAan({
-    dossierId, werkbegrotingId: payload.wb.id, omschrijving: bestelling.omschrijving,
+    dossierId, bestellingId: bestelling.id, omschrijving: bestelling.omschrijving,
     bedrag: acc.bedrag, drempel: acc.drempel, beoordelaarId,
   })
 }
@@ -135,12 +137,17 @@ export type OpenBonOpdracht = {
   bedrag: number
   /**
    * `klaar`: kan naar Bouw7. `wacht`: ligt bij de beoordelaar. `aanvragen`: accordering nodig
-   * maar niet (meer) aangevraagd — nooit gedaan, of teruggestuurd.
+   * maar niet (meer) aangevraagd — nooit gedaan, teruggestuurd, of de opdracht is na het akkoord
+   * gewijzigd.
    */
   staat: 'klaar' | 'wacht' | 'aanvragen'
   beoordelaarNaam: string | null
   /** Opmerking van de beoordelaar bij terugsturen. */
   teruggestuurd: string | null
+  /** De open aanvraag (bij `wacht`), voor goedkeuren of terugsturen. */
+  goedkeuringId: string | null
+  /** Mag de ingelogde gebruiker deze aanvraag beoordelen? */
+  magBeoordelen: boolean
 }
 
 /**
@@ -169,7 +176,7 @@ export async function getOpenBonOpdrachten(dossierId: string): Promise<OpenBonOp
   const compIds = [...new Set((koppels ?? []).map(k => k.component_id))]
   const { data: compRijen } = compIds.length > 0
     ? await db.from('werkbegroting_componenten')
-        .select('id, werkbegroting_regel_id, norm_hoeveelheid, tarief, is_verwijderd').in('id', compIds)
+        .select('id, norm_hoeveelheid, tarief, is_verwijderd').in('id', compIds)
     : { data: [] }
   const compById = new Map((compRijen ?? []).map(c => [c.id, c]))
 
@@ -178,23 +185,6 @@ export async function getOpenBonOpdrachten(dossierId: string): Promise<OpenBonOp
     ? await db.from('relaties').select('id, naam').in('id', relatieIds)
     : { data: [] }
   const relatieNaam = new Map((relaties ?? []).map(r => [r.id, r.naam as string | null]))
-
-  const { data: rondes } = await db.from('goedkeuringen')
-    .select('id, status, beoordelaar_id, ronde')
-    .eq('object_type', 'werkbegroting').eq('object_id', wb.id)
-    .order('ronde', { ascending: false }).limit(1)
-  const laatste = rondes?.[0] ?? null
-  const beoordelaar = laatste?.status === 'aangevraagd' && laatste.beoordelaar_id
-    ? await haalBeoordelaar(laatste.beoordelaar_id) : null
-  let teruggestuurd: string | null = null
-  if (laatste?.status === 'afgekeurd') {
-    const { data: opm } = await db.from('goedkeuring_opmerkingen').select('tekst')
-      .eq('goedkeuring_id', laatste.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-    teruggestuurd = opm?.tekst ?? 'Teruggestuurd door de beoordelaar.'
-  }
-
-  const status = await berekenWerkbegrotingStatus(wb.id)
-  const goedgekeurd = new Map(status.regels.map(r => [r.regel_id, r.goedgekeurd]))
 
   const uit: OpenBonOpdracht[] = []
   for (const b of bestellingen) {
@@ -205,11 +195,28 @@ export async function getOpenBonOpdrachten(dossierId: string): Promise<OpenBonOp
     // Een bestelling waarvan alles is weggehaald, is geen opdracht meer.
     if (comps.length === 0) continue
     const bedrag = comps.reduce((s, c) => s + Number(c.norm_hoeveelheid ?? 0) * Number(c.tarief ?? 0), 0)
-    const acc = await inkoopAccorderingVereist(wb.id, bedrag)
-    const alles = comps.every(c => goedgekeurd.get(c.werkbegroting_regel_id) === true)
-    const staat: OpenBonOpdracht['staat'] = !acc.vereist || alles
+
+    const vereist = (await inkoopAccorderingVereist(wb.id, bedrag)).vereist
+    const acc = vereist ? await bestellingAccordering(b.id) : null
+    const laatste = acc?.laatste ?? null
+    const staat: OpenBonOpdracht['staat'] = !vereist || acc?.geldig
       ? 'klaar'
       : laatste?.status === 'aangevraagd' ? 'wacht' : 'aanvragen'
+
+    let beoordelaarNaam: string | null = null
+    let magBeoordelen = false
+    if (staat === 'wacht' && laatste) {
+      const wie = laatste.gedelegeerd_aan ?? laatste.beoordelaar_id
+      beoordelaarNaam = wie ? (await haalBeoordelaar(wie))?.naam ?? null : null
+      magBeoordelen = (await bepaalBeoordeelContext(dossierId, { ...laatste, meekijkers: laatste.meekijkers ?? [] })).magBeoordelen
+    }
+    let teruggestuurd: string | null = null
+    if (staat === 'aanvragen' && laatste?.status === 'afgekeurd') {
+      const { data: opm } = await db.from('goedkeuring_opmerkingen').select('tekst')
+        .eq('goedkeuring_id', laatste.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      teruggestuurd = opm?.tekst ?? 'Teruggestuurd door de beoordelaar.'
+    }
+
     uit.push({
       id: b.id,
       omschrijving: b.omschrijving ?? '',
@@ -217,11 +224,31 @@ export async function getOpenBonOpdrachten(dossierId: string): Promise<OpenBonOp
       soort: (b.soort as OpenBonOpdracht['soort']) ?? null,
       bedrag,
       staat,
-      beoordelaarNaam: staat === 'wacht' ? beoordelaar?.naam ?? null : null,
-      teruggestuurd: staat === 'aanvragen' ? teruggestuurd : null,
+      beoordelaarNaam,
+      teruggestuurd,
+      goedkeuringId: staat === 'wacht' ? laatste?.id ?? null : null,
+      magBeoordelen,
     })
   }
   return uit
+}
+
+/** Een opdracht op de bon goedkeuren. Wie mag, bepaalt `keurGoed` (controller, directie, aangewezen). */
+export async function keurBonOpdrachtGoed(
+  goedkeuringId: string,
+  opmerking?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisSessie()
+  return keurGoed(goedkeuringId, { opmerking })
+}
+
+/** Terugsturen naar de aanvrager, met een verplichte opmerking. */
+export async function stuurBonOpdrachtTerug(
+  goedkeuringId: string,
+  opmerking: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await vereisSessie()
+  return keurAf(goedkeuringId, opmerking)
 }
 
 /** De opdracht met precies de componenten en regels die erbij horen, uit Supabase. */
@@ -269,10 +296,12 @@ export async function vraagAccorderingVoorBonConcept(
   await vereisSessie()
   const c = await laadConcept(dossierId, bestellingId)
   if (!c.ok) return c
-  const acc = await accorderingNodig(c.payload.wb.id, c.payload.componenten.filter(x => !x.is_verwijderd))
+  const acc = await accorderingNodig(
+    c.payload.wb.id, bestellingId, c.payload.componenten.filter(x => !x.is_verwijderd),
+  )
   if (!acc.nodig) return { ok: true, status: 'vrij' }
   return vraagAan({
-    dossierId, werkbegrotingId: c.payload.wb.id, omschrijving: c.bestelling.omschrijving,
+    dossierId, bestellingId, omschrijving: c.bestelling.omschrijving,
     bedrag: acc.bedrag, drempel: acc.drempel, beoordelaarId,
   })
 }
@@ -295,7 +324,7 @@ export async function maakBonOpdrachtVanConcept(
   const { bestelling, payload } = c
 
   // Wacht hij nog op akkoord, dan hier stoppen — vóór er bestelregels naar Bouw7 gaan.
-  const acc = await accorderingNodig(payload.wb.id, payload.componenten.filter(x => !x.is_verwijderd))
+  const acc = await accorderingNodig(payload.wb.id, bestellingId, payload.componenten.filter(x => !x.is_verwijderd))
   if (acc.nodig) {
     return { ok: false, reden: 'niet_goedgekeurd', error: 'Deze opdracht is nog niet geaccordeerd.' }
   }
@@ -316,7 +345,8 @@ export async function maakBonOpdrachtVanConcept(
 /**
  * Een opdracht die niet doorgaat van de bon halen. De regels gaan in de werkbegroting op
  * verwijderd, en stonden ze al als bestelregel in Bouw7, dan zet de push ze daar op nul — anders
- * blijven ze als verwachte kosten op de kostengroep staan.
+ * blijven ze als verwachte kosten op de kostengroep staan. Een open accorderingsaanvraag gaat
+ * mee: die zou anders bij de beoordelaar blijven liggen voor iets dat niet meer bestaat.
  */
 export async function gooiBonConceptWeg(
   dossierId: string,
@@ -351,6 +381,10 @@ export async function gooiBonConceptWeg(
     const sync = await syncWerkbegrotingNaarSupabase(payload)
     if (!sync.gelukt) return { ok: false, error: `Opslaan mislukt: ${sync.fout}` }
   }
+
+  await createAdminClient().from('goedkeuringen')
+    .update({ status: 'ingetrokken' })
+    .eq('object_type', 'bestelling').eq('object_id', bestellingId).eq('status', 'aangevraagd')
 
   const weg = await verwijderBestellingUitEva(dossierId, bestellingId)
   if (!weg.ok) return { ok: false, error: weg.error }

@@ -316,13 +316,17 @@ async function notificeerBeoordelaar(opts: {
   }
 
   const isWb = opts.objectType === 'werkbegroting'
-  const onderwerp = isWb ? 'de werkbegroting' : 'de offerte'
+  const isOpdracht = opts.objectType === 'bestelling'
+  const onderwerp = isWb ? 'de werkbegroting' : isOpdracht ? 'een opdracht' : 'de offerte'
   // De beoordelaar landt op het scherm waar de accordeerknop staat: de Calculatie-tab van het
   // dossier, die de offerte inline opent. Niet meer op de losse preview onder /everts-calc --
   // die geeft een 404 zodra de offerte er niet meer is.
   // Een servicedeskbon heeft geen Werkbegroting-tab, maar het scherm staat er wel op zijn
   // eigen adres. Onder /opdrachten zou het dossier in de verkeerde omgeving openen.
-  const url = isWb
+  // Een opdracht op een bon beoordeel je op de bon zelf, onder "Opdrachten in de wacht".
+  const url = isOpdracht
+    ? (opts.dossierId ? `/servicedesk/${opts.dossierId}` : null)
+    : isWb
     ? (opts.dossierId
         ? `/${dossierSegment(hoofdstatus, servicedeskSubstatus) === 'servicedesk' ? 'servicedesk' : 'opdrachten'}/${opts.dossierId}/werkbegroting`
         : null)
@@ -333,7 +337,7 @@ async function notificeerBeoordelaar(opts: {
   await maakNotificatie({
     user_id:      beoordelaar.authUserId,
     type:         'algemeen',
-    titel:        isWb ? 'Werkbegroting ter goedkeuring' : 'Offerte ter goedkeuring',
+    titel:        isWb ? 'Werkbegroting ter goedkeuring' : isOpdracht ? 'Opdracht ter goedkeuring' : 'Offerte ter goedkeuring',
     body:         `${opts.aanvragerNaam ?? 'Een collega'} vraagt je goedkeuring op ${onderwerp}${dossierTitel ? ` van ${dossierTitel}` : ''}.`,
     url,
     dossier_id:   opts.dossierId ?? null,
@@ -381,6 +385,11 @@ export async function keurGoed(
     await ververWordVersie(g.object_id).catch(() => null)
     const { berekenOfferteHash } = await import('./offerte')
     objectHash = await berekenOfferteHash(g.object_id)
+  }
+  // Opdracht op een bon: zelfde idee, over de componenten van de opdracht.
+  if (!objectHash && g.object_type === 'bestelling') {
+    const { berekenBestellingHash } = await import('./bestelling')
+    objectHash = await berekenBestellingHash(g.object_id)
   }
 
   const { error } = await db
@@ -444,6 +453,7 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
   }
 
   const isWb = g.object_type === 'werkbegroting'
+  const onderwerp = isWb ? 'De werkbegroting' : g.object_type === 'bestelling' ? 'De opdracht' : 'De offerte'
   // Op een bon wacht de opdracht onder "Opdrachten in de wacht" op de Bon-tab; daar maak je
   // hem af, niet op de werkbegroting.
   const url = g.dossier_id
@@ -453,10 +463,10 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
   await maakNotificatie({
     user_id:      authUserId,
     type:         'algemeen',
-    titel:        isWb ? 'Werkbegroting goedgekeurd' : 'Offerte goedgekeurd',
+    titel:        `${onderwerp.replace(/^De /, '').replace(/^./, c => c.toUpperCase())} goedgekeurd`,
     body:         dossierTitel
-      ? `${isWb ? 'De werkbegroting' : 'De offerte'} van ${dossierTitel} is goedgekeurd.`
-      : `${isWb ? 'De werkbegroting' : 'De offerte'} is goedgekeurd.`,
+      ? `${onderwerp} van ${dossierTitel} is goedgekeurd.`
+      : `${onderwerp} is goedgekeurd.`,
     url,
     dossier_id:   g.dossier_id ?? null,
     dossier_naam: dossierTitel,

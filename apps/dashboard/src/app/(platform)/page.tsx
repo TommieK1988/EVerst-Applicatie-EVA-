@@ -50,7 +50,7 @@ export default async function HomePage() {
     getGoedkeurenWidget().catch(() => ({
       ligtBijJou: [], afgehandeld: [], inkoopSyncOp: null,
       inkoop: { aantal: 0, bedrag: 0, eersteVervaldatum: null },
-      aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0 },
+      aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0, opdracht: 0 },
     })),
   ])
 

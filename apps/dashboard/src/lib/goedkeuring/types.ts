@@ -1,6 +1,10 @@
-/** Gedeelde types voor de goedkeuringsworkflow (werkbegroting + offerte). */
+/** Gedeelde types voor de goedkeuringsworkflow (werkbegroting, offerte, opdracht op een bon). */
 
-export type GoedkeuringObjectType = 'werkbegroting' | 'offerte'
+/**
+ * `bestelling` is één opdracht of bestelling op een servicedeskbon (`werkbegroting_bestellingen.id`);
+ * zie `lib/goedkeuring/bestelling.ts`.
+ */
+export type GoedkeuringObjectType = 'werkbegroting' | 'offerte' | 'bestelling'
 
 export type GoedkeuringStatus = 'aangevraagd' | 'goedgekeurd' | 'afgekeurd' | 'ingetrokken'
 
@@ -105,11 +109,13 @@ export function naarRegelSnapshot(rij: {
 export const BEOORDEEL_TAAK_TITEL: Record<GoedkeuringObjectType, string> = {
   werkbegroting: 'Werkbegroting controleren',
   offerte: 'Offerte controleren',
+  bestelling: 'Opdracht controleren',
 }
 
 export const AFKEUR_TAAK_TITEL: Record<GoedkeuringObjectType, string> = {
   werkbegroting: 'Werkbegroting aanpassen na afkeuring',
   offerte: 'Offerte aanpassen na afkeuring',
+  bestelling: 'Opdracht aanpassen na afkeuring',
 }
 
 /** Afdeling waarvan leden altijd mogen accorderen (vervanging bij afwezigheid controller). */

@@ -33,12 +33,14 @@ const SOORT_LABEL: Record<GoedkeurenSoort, string> = {
   inkoopfactuur: 'Inkoopfactuur',
   offerte: 'Offerte',
   werkbegroting: 'Werkbegroting',
+  opdracht: 'Opdracht',
 }
 
 const SOORT_KLEUR: Record<GoedkeurenSoort, string> = {
   inkoopfactuur: '#0f766e',
   offerte: '#2563eb',
   werkbegroting: '#7c3aed',
+  opdracht: '#c2410c',
 }
 
 const UREN_KLEUR = '#f59e0b'
@@ -108,6 +110,7 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
     aantallen.inkoopfactuur ? `${aantallen.inkoopfactuur} inkoop` : null,
     aantallen.offerte ? `${aantallen.offerte} offerte` : null,
     aantallen.werkbegroting ? `${aantallen.werkbegroting} begroting` : null,
+    aantallen.opdracht ? `${aantallen.opdracht} opdracht` : null,
     uren === null ? 'uren…' : uren.fout ? null : (uren.aantal ? `${uren.aantal} uren` : null),
   ].filter(Boolean)
 

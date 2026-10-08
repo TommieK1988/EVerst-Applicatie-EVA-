@@ -38,6 +38,12 @@ type Props = {
    * weten.
    */
   acties?: React.ReactNode
+  /**
+   * Opdrachten die op de bon wachten (`BonOpenOpdrachten`), in de derde kolom onder de
+   * mandaatmeter. Daar stond meestal niets — een bon zonder mandaat heeft geen meter — terwijl
+   * de lijst onder de knoppen het rechterblok onnodig lang maakte.
+   */
+  wacht?: React.ReactNode
 }
 
 /** Veldlabel boven een cijfer of keuze — DS: uppercase, 10px, letterspacing 0.08em. */
@@ -146,7 +152,7 @@ function Regel({ label, bedrag }: { label: string; bedrag: number }) {
 }
 
 export default function ServicedeskInfoPaneel({
-  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie, acties,
+  dossierId, titel, createdAt, initieelMandaat, initieleFacturatiemethode, isMutatie, acties, wacht,
 }: Props) {
   const router = useRouter()
   const [mandaat, setMandaat]       = useState<string>(initieelMandaat != null ? String(initieelMandaat) : '')
@@ -274,7 +280,9 @@ export default function ServicedeskInfoPaneel({
 
             {/* Kolom 3 — hoe het mandaat ervoor staat én waar dat bedrag vandaan komt. Dat waren
                 twee losse dingen op twee plekken: de meter in een balk boven de tabs, de opbouw
-                hier. Je las dan een percentage zonder te zien waardoor het vol liep. */}
+                hier. Je las dan een percentage zonder te zien waardoor het vol liep.
+                Daaronder de opdrachten die op de bon wachten. */}
+            <div className="flex min-w-0 flex-col gap-4">
             {status?.mandaat != null && status.mandaat > 0 && (
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
                 <MandaatMeter mandaat={status.mandaat} totaal={status.totaal} />
@@ -294,6 +302,8 @@ export default function ServicedeskInfoPaneel({
                 </div>
               </div>
             )}
+            {wacht}
+            </div>
 
           </div>
 
