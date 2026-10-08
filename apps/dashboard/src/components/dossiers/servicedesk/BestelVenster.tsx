@@ -45,11 +45,11 @@ import {
   stuurWerkbegrotingBestelregelsBouw7, laadWerkbegrotingSnapshot, type WerkbegrotingPayload,
 } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
-import {
-  maakBestellingInBouw7, getBestellingMailConcept, verstuurBestelling,
-} from '@/app/(platform)/everts-calc/actions/bestellingen'
+import { maakBestellingInBouw7 } from '@/app/(platform)/everts-calc/actions/bestellingen'
+import { accorderingVoorBonOpdracht } from '@/app/(platform)/everts-calc/actions/bon-opdracht'
 import { getInkoopSjablonen, type SjabloonKeuze } from '@/app/(platform)/everts-calc/actions/bestelling-document'
-import MailFotoBijlagen, { alsBijlagen, type MailFoto } from '@/components/mail/MailFotoBijlagen'
+import OpdrachtMailVenster from './OpdrachtMailVenster'
+import AccorderingVenster, { type AccorderingStand } from './AccorderingVenster'
 
 type Soort = 'oa_contract' | 'inkooporder'
 type Regel = { id: string; omschrijving: string; aantal: string; eenheid: string; prijs: string; mandaat: boolean }
@@ -108,8 +108,14 @@ export default function BestelVenster({
   const [huidig, setHuidig] = useState(0)
 
   const [bestelling, setBestelling] = useState<WerkbegrotingBestelling | null>(null)
-  const [mail, setMail] = useState({ to: '', cc: '', onderwerp: '', bericht: '' })
-  const [fotos, setFotos] = useState<MailFoto[]>([])
+  /**
+   * De opdracht moet eerst geaccordeerd worden. `opnieuw` vraagt het nog eens aan met een
+   * gekozen beoordelaar (als het dossier geen controller heeft).
+   */
+  const [akkoord, setAkkoord] = useState<{
+    stand: AccorderingStand
+    opnieuw: (beoordelaarId: string) => Promise<void>
+  } | null>(null)
 
   const wbRef = useRef<{ wb: Werkbegroting; volgendeVolgorde: number } | null>(null)
   const concepten = useRef<Partial<Record<Groep['sleutel'], Concept>>>({})
@@ -207,6 +213,34 @@ export default function BestelVenster({
     return wbRef.current
   }
 
+  /** De opdracht zoals hij in de werkbegroting komt, met wat er in het opdrachtvenster is ingevuld. */
+  function bestellingUit(
+    g: OpdrachtGegevens, werkbegrotingId: string, id: string, omschrijving: string, componentIds: string[],
+  ): WerkbegrotingBestelling {
+    return {
+      id,
+      werkbegroting_id: werkbegrotingId,
+      omschrijving,
+      status: 'concept',
+      relatie_id: relatie?.id,
+      component_ids: componentIds,
+      soort,
+      levering_datum: g.leveringDatum.trim() || null,
+      levering_tekst: g.leveringTekst.trim() || null,
+      oplever_datum: g.opleverDatum.trim() || null,
+      betaalafspraak: g.betaalafspraak.trim() || null,
+      termijnschema: g.termijnschema,
+      afspraken: g.afspraken.trim() || null,
+      inhouding_pct: g.inhoudingPct,
+      boete_tekst: g.boeteTekst.trim() || null,
+      werkadres: g.werkadres.trim() || null,
+      interne_notitie: g.interneNotitie.trim() || null,
+      sjabloon_id: g.sjabloonId,
+      is_reservering: false,
+      mandaat_bedrag: g.mandaatBedrag,
+    }
+  }
+
   /**
    * De regels vastleggen en er een concept-contract van maken in Bouw7.
    *
@@ -275,7 +309,39 @@ export default function BestelVenster({
         wb, regels: [wbRegel], componenten, wijzigingen: [], dossierId, geladenOp: NIETS_GEZIEN,
       }
 
-      // 2. Bestelregels naar Bouw7. Ontbrekende PSL's maakt deze stap zelf aan.
+      // 2. Accordering, vóór er iets naar Bouw7 gaat. Boven de inkoopdrempel weigert
+      //    `maakBestellingInBouw7` een niet-geaccordeerde opdracht; stuurden we de bestelregels
+      //    eerst, dan bleven die bij elke poging als verwachte kosten in Bouw7 staan.
+      const b = bestellingUit(g, wb.id, concept.bestellingId, omschrijving,
+        groep.regels.map(r => concept.componenten.get(r.id)!.id))
+      const acc = await accorderingVoorBonOpdracht(dossierId, payload, b)
+      if (!acc.ok) { toast.error(acc.error, { duration: 8000 }); return }
+      if (acc.status !== 'vrij') {
+        // Vastgelegd en wachtend op akkoord: terug naar de regels kan niet meer.
+        aangemaakt.current.add(groep.sleutel)
+        onKlaar()
+        const opnieuw = async (beoordelaarId: string) => {
+          setBezig(true)
+          try {
+            const r = await accorderingVoorBonOpdracht(dossierId, payload, b, beoordelaarId)
+            if (!r.ok) { toast.error(r.error, { duration: 8000 }); return }
+            onKlaar()
+            if (r.status === 'vrij') {
+              setAkkoord(null)
+              toast('Er is geen accordering meer nodig. Maak de opdracht af op de bon.')
+              volgende()
+              return
+            }
+            setAkkoord({ stand: r, opnieuw })
+          } finally {
+            setBezig(false)
+          }
+        }
+        setAkkoord({ stand: acc, opnieuw })
+        return
+      }
+
+      // 3. Bestelregels naar Bouw7. Ontbrekende PSL's maakt deze stap zelf aan.
       const push = await stuurWerkbegrotingBestelregelsBouw7(dossierId, payload)
 
       // De Bouw7-ids terugzetten, óók na een halve mislukking: zonder die ids zou de volgende
@@ -288,30 +354,7 @@ export default function BestelVenster({
       if (!push.ok) { toast.error(`Bestelregels naar Bouw7 sturen mislukt: ${push.error}`, { duration: 8000 }); return }
       if (push.fouten.length > 0) toast.error(push.fouten.join('\n'), { duration: 8000 })
 
-      // 3. Het contract.
-      const b: WerkbegrotingBestelling = {
-        id: concept.bestellingId,
-        werkbegroting_id: wb.id,
-        omschrijving,
-        status: 'concept',
-        relatie_id: relatie.id,
-        component_ids: groep.regels.map(r => concept.componenten.get(r.id)!.id),
-        soort,
-        levering_datum: g.leveringDatum.trim() || null,
-        levering_tekst: g.leveringTekst.trim() || null,
-        oplever_datum: g.opleverDatum.trim() || null,
-        betaalafspraak: g.betaalafspraak.trim() || null,
-        termijnschema: g.termijnschema,
-        afspraken: g.afspraken.trim() || null,
-        inhouding_pct: g.inhoudingPct,
-        boete_tekst: g.boeteTekst.trim() || null,
-        werkadres: g.werkadres.trim() || null,
-        interne_notitie: g.interneNotitie.trim() || null,
-        sjabloon_id: g.sjabloonId,
-        is_reservering: false,
-        mandaat_bedrag: g.mandaatBedrag,
-      }
-
+      // 4. Het contract.
       const res = await maakBestellingInBouw7(dossierId, b, payload)
       if (!res.ok) {
         if (res.reden === 'niet_goedgekeurd') toast.error(`Niet geaccordeerd: ${(res.regels ?? []).join(', ')}`, { duration: 8000 })
@@ -323,14 +366,6 @@ export default function BestelVenster({
       const metContract = { ...b, bouw7_contract_id: res.contractId, bouw7_nummer: res.nummer }
       setBestelling(metContract)
       toast.success(`${res.nummer ?? 'Opdracht'} staat als concept in Bouw7 — verstuur hem nu`)
-
-      // Mailconcept meteen ophalen; faalt dat, dan blijft de stap gewoon staan met lege velden.
-      try {
-        const c = await getBestellingMailConcept(dossierId, metContract.id, metContract.sjabloon_id ?? null)
-        setMail({ to: c.to, cc: '', onderwerp: c.onderwerp, bericht: c.bericht })
-      } catch {
-        setMail({ to: '', cc: '', onderwerp: '', bericht: '' })
-      }
       setStap('mail')
       onKlaar()
     } catch (e) {
@@ -363,32 +398,36 @@ export default function BestelVenster({
     setStap('regels')
   }
 
-  async function verstuur() {
-    if (!bestelling) return
-    if (!mail.to.trim()) { toast.error('Vul het e-mailadres van de partij in.'); return }
-    setBezig(true)
-    try {
-      const res = await verstuurBestelling(dossierId, bestelling.id, {
-        ...mail, sjabloonId: bestelling.sjabloon_id ?? null, fotos: alsBijlagen(fotos),
-      })
-      if (!res.ok) { toast.error(res.error, { duration: 8000 }); return }
-      toast.success(res.bonWaarschuwing
-        ? `Verstuurd, maar de leverbon niet aangemaakt: ${res.bonWaarschuwing}`
-        : 'Verstuurd')
-      fotos.forEach(f => URL.revokeObjectURL(f.url))
-      setFotos([])
-      onKlaar()
-      volgende()
-    } finally {
-      setBezig(false)
-    }
-  }
-
   // Een mandaatopdracht krijgt een sjabloon met "mandaat"/"regie" in de naam als dat bestaat.
   const standaardSjabloon = (g: Groep | null): string | null => {
     if (sjablonen.length === 0) return null
     const eigen = g?.sleutel === 'mandaat' ? sjablonen.find(s => /mandaat|regie/i.test(s.naam)) : undefined
     return (eigen ?? sjablonen[0]).id
+  }
+
+  if (akkoord) {
+    return (
+      <AccorderingVenster
+        stand={akkoord.stand}
+        bezig={bezig}
+        onKies={id => void akkoord.opnieuw(id)}
+        onSluit={() => { setAkkoord(null); volgende() }}
+      />
+    )
+  }
+
+  if (stap === 'mail' && bestelling) {
+    return (
+      <OpdrachtMailVenster
+        key={bestelling.id}
+        dossierId={dossierId}
+        bestelling={bestelling}
+        titel={`${groep?.sleutel === 'mandaat' ? 'Mandaatopdracht' : 'Opdracht'} versturen${volgnummer ? ` (${volgnummer})` : ''}`}
+        laterLabel={huidig + 1 < groepen.length ? 'Later versturen, door naar de volgende' : 'Later versturen'}
+        onLater={volgende}
+        onVerstuurd={() => { onKlaar(); volgende() }}
+      />
+    )
   }
 
   if (stap === 'opdracht' && groep) {
@@ -424,20 +463,13 @@ export default function BestelVenster({
         className="w-full max-w-3xl rounded-xl border border-neutral-200 bg-white p-5 shadow-lg
                    dark:border-neutral-700 dark:bg-neutral-900"
       >
-        <h2 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-100">
-          {stap === 'mail'
-            ? `${groep?.sleutel === 'mandaat' ? 'Mandaatopdracht' : 'Opdracht'} versturen${volgnummer ? ` (${volgnummer})` : ''}`
-            : 'Opdracht uitzetten'}
-        </h2>
+        <h2 className="mb-1 text-base font-semibold text-neutral-900 dark:text-neutral-100">Opdracht uitzetten</h2>
         <p className="mb-4 text-[11.5px] text-neutral-500">
-          {stap === 'mail'
-            ? `${bestelling?.bouw7_nummer ?? 'De opdracht'} staat als concept in Bouw7.`
-            : kostengroep
-              ? `De regels komen op kostengroep ${kostengroep.code} van deze bon.`
-              : 'Deze bon heeft nog geen kostengroep.'}
+          {kostengroep
+            ? `De regels komen op kostengroep ${kostengroep.code} van deze bon.`
+            : 'Deze bon heeft nog geen kostengroep.'}
         </p>
 
-        {stap === 'regels' ? (
           <>
             <div className="mb-4 grid grid-cols-2 gap-3">
               <label>
@@ -550,40 +582,6 @@ export default function BestelVenster({
               <Button variant="primary" onClick={naarOpdracht} disabled={bezig}>Volgende</Button>
             </div>
           </>
-        ) : (
-          <>
-            <div className="mb-3 grid grid-cols-2 gap-3">
-              <label>
-                <span className={kop}>Aan</span>
-                <input value={mail.to} onChange={e => setMail(m => ({ ...m, to: e.target.value }))} className={veld} />
-              </label>
-              <label>
-                <span className={kop}>Cc</span>
-                <input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))} className={veld} />
-              </label>
-            </div>
-            <label className="mb-3 block">
-              <span className={kop}>Onderwerp</span>
-              <input value={mail.onderwerp} onChange={e => setMail(m => ({ ...m, onderwerp: e.target.value }))} className={veld} />
-            </label>
-            <label className="mb-4 block">
-              <span className={kop}>Bericht</span>
-              <textarea
-                value={mail.bericht} onChange={e => setMail(m => ({ ...m, bericht: e.target.value }))}
-                rows={6} className={veld}
-              />
-            </label>
-            <div className="mb-4">
-              <MailFotoBijlagen fotos={fotos} onChange={setFotos} disabled={bezig} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={volgende} disabled={bezig}>
-                {huidig + 1 < groepen.length ? 'Later versturen, door naar de volgende' : 'Later versturen'}
-              </Button>
-              <Button variant="primary" onClick={verstuur} loading={bezig} disabled={bezig}>Versturen</Button>
-            </div>
-          </>
-        )}
       </div>
     </div>
   )

@@ -6,7 +6,7 @@ import { bepaalBeoordeelContext } from './autorisatie'
 import { bepaalBeoordelingsRoute, haalBeoordelaar, magBeoordelaarZijn } from './beoordelaars'
 import { maakBeoordeelTaak, sluitBeoordeelTaken, type BeoordeelTaakResultaat } from './taken'
 import { berekenWerkbegrotingStatus } from './werkbegroting-status'
-import { offerteHref } from '@/lib/dossiers/href'
+import { dossierSegment, offerteHref } from '@/lib/dossiers/href'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import {
   AFKEUR_TAAK_TITEL, BEOORDEEL_TAAK_TITEL, naarRegelSnapshot,
@@ -320,8 +320,12 @@ async function notificeerBeoordelaar(opts: {
   // De beoordelaar landt op het scherm waar de accordeerknop staat: de Calculatie-tab van het
   // dossier, die de offerte inline opent. Niet meer op de losse preview onder /everts-calc --
   // die geeft een 404 zodra de offerte er niet meer is.
+  // Een servicedeskbon heeft geen Werkbegroting-tab, maar het scherm staat er wel op zijn
+  // eigen adres. Onder /opdrachten zou het dossier in de verkeerde omgeving openen.
   const url = isWb
-    ? (opts.dossierId ? `/opdrachten/${opts.dossierId}/werkbegroting` : null)
+    ? (opts.dossierId
+        ? `/${dossierSegment(hoofdstatus, servicedeskSubstatus) === 'servicedesk' ? 'servicedesk' : 'opdrachten'}/${opts.dossierId}/werkbegroting`
+        : null)
     : offerteHref(opts.objectId, opts.dossierId
         ? { id: opts.dossierId, hoofdstatus, servicedeskSubstatus }
         : null)
@@ -431,14 +435,19 @@ async function notificeerAanvrager(g: Goedkeuring): Promise<void> {
   if (!authUserId) return
 
   let dossierTitel: string | null = null
+  let isBon = false
   if (g.dossier_id) {
-    const { data: dossier } = await db.from('dossiers').select('titel, dossiernummer').eq('id', g.dossier_id).maybeSingle()
+    const { data: dossier } = await db.from('dossiers')
+      .select('titel, dossiernummer, servicedesk_substatus').eq('id', g.dossier_id).maybeSingle()
     dossierTitel = dossier ? [dossier.dossiernummer, dossier.titel].filter(Boolean).join(' — ') : null
+    isBon = !!dossier?.servicedesk_substatus
   }
 
   const isWb = g.object_type === 'werkbegroting'
+  // Op een bon wacht de opdracht onder "Opdrachten in de wacht" op de Bon-tab; daar maak je
+  // hem af, niet op de werkbegroting.
   const url = g.dossier_id
-    ? (isWb ? `/opdrachten/${g.dossier_id}/werkbegroting` : `/opdrachten/${g.dossier_id}`)
+    ? (isBon ? `/servicedesk/${g.dossier_id}` : isWb ? `/opdrachten/${g.dossier_id}/werkbegroting` : `/opdrachten/${g.dossier_id}`)
     : null
 
   await maakNotificatie({

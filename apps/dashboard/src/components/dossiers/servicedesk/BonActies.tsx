@@ -28,6 +28,7 @@ import type { ServicedeskSubstatus } from '../types'
 import MandaatVerhogingModal from './MandaatVerhogingModal'
 import InplannenModal from './InplannenModal'
 import BestelVenster from './BestelVenster'
+import BonOpenOpdrachten from './BonOpenOpdrachten'
 import StatusStapKnop from './StatusStapKnop'
 
 /**
@@ -59,6 +60,8 @@ export default function BonActies({
   const [mandaatOpen, setMandaatOpen] = useState<null | 'aanvragen' | 'toekennen'>(null)
   const [planOpen, setPlanOpen] = useState(false)
   const [bestelOpen, setBestelOpen] = useState(false)
+  /** Ververst de opdrachten in de wacht na het bestelvenster. */
+  const [opdrachtVersie, setOpdrachtVersie] = useState(0)
 
   const wacht = !alleenLezen && substatus === 'wacht_op_opdrachtgever'
   const stap = alleenLezen || wacht ? null : volgendeStap(substatus)
@@ -196,13 +199,20 @@ export default function BonActies({
         ))}
       </div>
 
+      <BonOpenOpdrachten
+        dossierId={dossierId}
+        versie={opdrachtVersie}
+        alleenLezen={alleenLezen}
+        onGewijzigd={() => router.refresh()}
+      />
+
       {bestelOpen && (
         <BestelVenster
           dossierId={dossierId}
           calcProjectId={calcProjectId}
           kostengroep={kostengroep}
-          onSluit={() => setBestelOpen(false)}
-          onKlaar={() => router.refresh()}
+          onSluit={() => { setBestelOpen(false); setOpdrachtVersie(v => v + 1) }}
+          onKlaar={() => { router.refresh(); setOpdrachtVersie(v => v + 1) }}
         />
       )}
 
