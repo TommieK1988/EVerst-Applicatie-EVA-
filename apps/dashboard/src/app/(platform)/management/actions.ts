@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { syncManagementProjecten } from '@/lib/bouw7/sync-management'
 import { syncDaysOff } from '@/lib/bouw7/sync'
-import { getCurrentMedewerker } from '@/lib/auth/rechten'
+import { getCurrentMedewerker, vereisModuleToegang } from '@/lib/auth/rechten'
+import { getWerkVerloop, type WerkVerloopPunt } from '@/lib/dashboard/snapshot-queries'
 import {
   getManagementProjecten,
   getManagementAk,
@@ -126,4 +127,12 @@ export async function stelMaandcijfersVast(
 
   revalidatePath('/management')
   return { ok: true, periode }
+}
+
+/* ── Verloop van één werk over de vastgestelde maanden ────────────── */
+
+export async function haalWerkVerloop(bouw7Id: string): Promise<WerkVerloopPunt[]> {
+  await vereisModuleToegang('management')
+  if (!bouw7Id) return []
+  return getWerkVerloop(bouw7Id)
 }

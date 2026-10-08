@@ -1,15 +1,26 @@
-'use client'
+import DashboardPagina from '@/components/management/DashboardPagina'
+import { getSnapshotPeriodes, getSnapshotRegels, alsWerkCijfers } from '@/lib/dashboard/snapshot-queries'
+import { maandParam } from '@/components/management/maand'
 
-import { useMemo } from 'react'
-import { useManagementData } from '@/components/management/ManagementShell'
-import { berekenManagementKpi } from '@/lib/dashboard/aggregaties'
-import DashboardView from '@/components/management/DashboardView'
+/**
+ * Live dashboard. De vergelijking voor "grote wijzigingen" loopt standaard tegen de laatst
+ * vastgestelde maand; `?vergelijk=YYYY-MM` kiest een eerdere.
+ */
+export default async function ManagementDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vergelijk?: string }>
+}) {
+  const { vergelijk } = await searchParams
+  const periodes = await getSnapshotPeriodes()
+  const gekozen = periodes.find(p => maandParam(p.periode) === vergelijk) ?? periodes[0] ?? null
+  const regels = gekozen ? (await getSnapshotRegels(gekozen.id)).map(alsWerkCijfers) : null
 
-export default function ManagementDashboardPage() {
-  const { projecten, akData, doelstellingen } = useManagementData()
-  const kpi = useMemo(
-    () => berekenManagementKpi(projecten, akData, doelstellingen),
-    [projecten, akData, doelstellingen],
+  return (
+    <DashboardPagina
+      periodes={periodes.map(p => p.periode)}
+      gekozen={gekozen?.periode ?? null}
+      vorigeRegels={regels}
+    />
   )
-  return <DashboardView kpi={kpi} />
 }

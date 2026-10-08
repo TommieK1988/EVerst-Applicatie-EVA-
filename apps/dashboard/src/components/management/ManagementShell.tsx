@@ -19,6 +19,7 @@ type ManagementLayouts = {
   lopend: GebruikerLayout[]
   gereed: GebruikerLayout[]
   servicedesk: GebruikerLayout[]
+  historie: GebruikerLayout[]
 }
 
 export type ManagementData = {

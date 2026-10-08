@@ -32,7 +32,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
   const [
     projecten, akData, doelstellingen, laatstGesynchroniseerd,
     funnel, commercie, calculators, snapshots,
-    lopend, gereed, servicedesk,
+    lopend, gereed, servicedesk, historie,
   ] = await Promise.all([
     getManagementProjecten(),
     getManagementAk(),
@@ -45,6 +45,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
     user_id ? laadLayouts(user_id, 'management-lopend') : [],
     user_id ? laadLayouts(user_id, 'management-gereed') : [],
     user_id ? laadLayouts(user_id, 'management-servicedesk') : [],
+    user_id ? laadLayouts(user_id, 'management-historie') : [],
   ])
 
   return (
@@ -59,7 +60,7 @@ export default async function ManagementViewsLayout({ children }: { children: Re
         snapshots={snapshots}
         laatstGesynchroniseerd={laatstGesynchroniseerd}
         user_id={user_id}
-        layouts={{ lopend, gereed, servicedesk }}
+        layouts={{ lopend, gereed, servicedesk, historie }}
       >
         {children}
       </ManagementShell>

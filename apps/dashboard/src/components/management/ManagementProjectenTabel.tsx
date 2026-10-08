@@ -17,6 +17,8 @@ type Props = {
   scherm: string
   layouts: GebruikerLayout[]
   user_id: string | null
+  /** Standaard: dossier openen (Financieel-tab). */
+  onRijKlik?: (p: ManagementProject) => void
 }
 
 function uniek(items: (string | null)[]): string[] {
@@ -123,7 +125,7 @@ function TotalenBalk({ rows, variant }: { rows: ManagementProject[]; variant: Pr
 
 /* ── Component ───────────────────────────────────────────────────── */
 
-export default function ManagementProjectenTabel({ rows, variant, scherm, layouts, user_id }: Props) {
+export default function ManagementProjectenTabel({ rows, variant, scherm, layouts, user_id, onRijKlik }: Props) {
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
 
   const slicers = useMemo<SlicerDef[]>(() => [
@@ -165,7 +167,7 @@ export default function ManagementProjectenTabel({ rows, variant, scherm, layout
           layouts={layouts}
           user_id={user_id}
           selecteerbaar={false}
-          onRijKlik={openDossierTab}
+          onRijKlik={onRijKlik ?? openDossierTab}
         />
       </div>
     </div>

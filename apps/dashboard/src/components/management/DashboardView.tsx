@@ -23,7 +23,11 @@ const C_BLAUW  = CHART_COLORS[3]  // #2e90fa
 
 /* ── Dashboard View (live én snapshot) ───────────────────────────── */
 
-export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
+export default function DashboardView({ kpi, naKpi }: {
+  kpi: ManagementKpi
+  /** Optioneel blok direct onder de KPI-rij (live dashboard: grote wijzigingen). */
+  naKpi?: React.ReactNode
+}) {
   const {
     totaalProjecten, aantalLopend, aantalGereed,
     totaalResultaatGerealiseerd, totaalResultaatOpdracht,
@@ -76,6 +80,8 @@ export default function DashboardView({ kpi }: { kpi: ManagementKpi }) {
           }}
         />
       </div>
+
+      {naKpi}
 
       {/* Pivot + Jaarresultaat */}
       <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 360px' }}>

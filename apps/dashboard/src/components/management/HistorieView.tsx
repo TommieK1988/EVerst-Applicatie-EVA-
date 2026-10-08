@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
+import Link from 'next/link'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
@@ -8,32 +9,21 @@ import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { ChartCard, CHART_COLORS, CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS } from '@/components/ui/chart'
-import { ArrowLeft } from 'lucide-react'
 import { cn } from '@everts/ui'
-import DashboardView from './DashboardView'
-import { fEur, fEurK, fPct, pvTh, pvTd, type MaandSnapshotSamenvatting } from '@/lib/dashboard/aggregaties'
+import { useManagementData } from './ManagementShell'
+import SnapshotDetail, { type SnapshotDetailData } from './SnapshotDetail'
+import { maandLabel, maandKort, maandParam } from './maand'
+import { fEur, fEurK, fPct, pvTh, pvTd } from '@/lib/dashboard/aggregaties'
 
 const C_GROEN = CHART_COLORS[0]
 const C_BLAUW = CHART_COLORS[3]
 
-function maandLabel(periode: string): string {
-  const m = /^(\d{4})-(\d{2})/.exec(periode)
-  if (!m) return periode
-  return new Date(Number(m[1]), Number(m[2]) - 1, 1)
-    .toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })
-}
-function maandKort(periode: string): string {
-  const m = /^(\d{4})-(\d{2})/.exec(periode)
-  if (!m) return periode
-  return new Date(Number(m[1]), Number(m[2]) - 1, 1)
-    .toLocaleDateString('nl-NL', { month: 'short', year: '2-digit' })
-}
 function fDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default function HistorieView({ snapshots }: { snapshots: MaandSnapshotSamenvatting[] }) {
-  const [selected, setSelected] = useState<string | null>(null)
+export default function HistorieView({ detail: detailData }: { detail: SnapshotDetailData | null }) {
+  const { snapshots } = useManagementData()
 
   // snapshots komen nieuw→oud; trend wil oud→nieuw
   const oplopend = useMemo(() => [...snapshots].reverse(), [snapshots])
@@ -56,30 +46,9 @@ export default function HistorieView({ snapshots }: { snapshots: MaandSnapshotSa
     )
   }
 
-  // Detailweergave van één vastgestelde maand (read-only, hergebruikt het dashboard)
-  const detail = selected ? snapshots.find(s => s.periode === selected) : null
-  if (detail) {
-    return (
-      <div className="flex flex-col gap-4 pb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[15px] font-bold text-neutral-900">Vastgestelde cijfers — {maandLabel(detail.periode)}</div>
-            <div className="text-[12px] text-neutral-500">
-              Vastgesteld op {fDatum(detail.vastgesteld_op)}{detail.vastgesteld_door_naam ? ` door ${detail.vastgesteld_door_naam}` : ''}
-              {detail.opmerking ? ` · ${detail.opmerking}` : ''}
-            </div>
-          </div>
-          <Button variant="outline" size="md" onClick={() => setSelected(null)}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Terug naar overzicht
-          </Button>
-        </div>
-        <div className="rounded-md bg-info-50 px-3 py-2 text-[12px] text-info-700">
-          Dit zijn de bevroren cijfers zoals vastgesteld — niet de huidige live-stand.
-        </div>
-        <DashboardView kpi={detail.kpi} />
-      </div>
-    )
-  }
+  // Detailweergave van één vastgestelde maand (?periode=YYYY-MM)
+  const detail = detailData ? snapshots.find(s => s.periode === detailData.periode) : null
+  if (detail && detailData) return <SnapshotDetail snapshot={detail} data={detailData} />
 
   return (
     <div className="flex flex-col gap-4 pb-6">
@@ -142,7 +111,9 @@ export default function HistorieView({ snapshots }: { snapshots: MaandSnapshotSa
                         {fDatum(s.vastgesteld_op)}{s.vastgesteld_door_naam ? ` · ${s.vastgesteld_door_naam}` : ''}
                       </td>
                       <td className={cn(pvTd, 'text-right')}>
-                        <Button variant="ghost" size="sm" onClick={() => setSelected(s.periode)}>Bekijk</Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/management/historie?periode=${maandParam(s.periode)}`}>Bekijk</Link>
+                        </Button>
                       </td>
                     </tr>
                   )
