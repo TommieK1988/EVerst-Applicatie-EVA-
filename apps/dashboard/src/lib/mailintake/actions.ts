@@ -22,6 +22,7 @@ import { zetOfferteGewonnenUitBericht, toetsOfferteDossier } from './opdracht'
 
 import { maakDossierUitBericht, koppelAanDossier, onthoudAlias } from './aanmaken'
 import { proefAanmaak } from './proef'
+import { haalDeelDossiers } from './splitsen'
 import { haalPostbusOp } from './ophalen'
 import { verwerkBericht } from './verwerken'
 import { maakWerkzaamhedenSamenvatting } from './werkzaamheden-uitvoeren'
@@ -90,6 +91,8 @@ export async function maakDossierVanBericht(
     actie?: { titel: string; medewerkerId: string | null; dagen: number } | null
     /** Waar het dossier terechtkomt: aanvraag, opdracht of servicedesk. */
     fase?: DossierFase
+    /** Eén van meerdere dossiers uit dit bericht; het bericht blijft dan open. */
+    deel?: { bijlageIds: string[] | null; werkadres: string } | null
   },
   /** Het voorstel uit de proef; waartegen er na het aanmaken wordt teruggelezen. */
   proef?: Awaited<ReturnType<typeof proefAanmaak>>,
@@ -132,6 +135,7 @@ export async function maakDossierVanBericht(
     fase: velden.fase ?? 'aanvraag',
     calculatorId: velden.calculatorId ?? null,
     actie: velden.actie ?? null,
+    deel: velden.deel ?? null,
     automatisch: false,
     medewerkerId: medewerker.id,
     behandelaarId: (bericht.postbus as { standaard_behandelaar_id: string | null } | null)?.standaard_behandelaar_id ?? null,
@@ -356,7 +360,9 @@ export async function heropenBericht(berichtId: string): Promise<{ ok: boolean; 
   const { data: b } = await supabase
     .from('mailintake_berichten').select('status, dossier_id').eq('id', berichtId).maybeSingle()
   if (!b) return { ok: false, error: 'Bericht niet gevonden.' }
-  if (b.dossier_id) return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
+  if (b.dossier_id || (await haalDeelDossiers(berichtId)).length) {
+    return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
+  }
 
   // Terug naar `nieuw` en niet rechtstreeks naar `wacht_op_mens`: jij zegt dat het
   // werk is, dus EVA hoort het opnieuw te lezen en dít keer door te zoeken tot hij
@@ -422,7 +428,11 @@ export async function leesOpnieuw(berichtId: string): Promise<{ ok: boolean; err
   const supabase = createAdminClient()
 
   const { data: b } = await supabase.from('mailintake_berichten').select('dossier_id').eq('id', berichtId).maybeSingle()
-  if (b?.dossier_id) return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
+  // Ook na een eerste deel van een gesplitst bericht: herlezen kan er dan
+  // automatisch nóg een dossier van maken, over een adres dat al bestaat.
+  if (b?.dossier_id || (await haalDeelDossiers(berichtId)).length) {
+    return { ok: false, error: 'Aan dit bericht hangt al een dossier.' }
+  }
 
   await supabase.from('mailintake_berichten')
     .update({ status: 'nieuw', pogingen: 0, laatste_fout: null, updated_at: new Date().toISOString() })

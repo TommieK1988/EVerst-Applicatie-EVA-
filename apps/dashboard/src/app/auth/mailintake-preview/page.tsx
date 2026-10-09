@@ -278,6 +278,45 @@ function meerwerkVariant() {
   }
 }
 
+/**
+ * Eén mail, twee klussen: een beheerder vraagt offertes voor twee panden. Zo kwam
+ * het splitsen er; daarvoor werd dit één dossier en stond het tweede adres alleen
+ * in de opmerkingen. `metDeel` toont het scherm nadat het eerste dossier er al is.
+ */
+function splitsVariant(metDeel: boolean) {
+  const velden = {
+    ...VELDEN,
+    omschrijving: 'Schilderwerk buitenzijde, offerte aanleveren',
+    werkadres_straat: 'Kleiweg', werkadres_huisnummer: '40', werkadres_postcode: '2801 GL',
+    werkadres_stad: 'Gouda', mandaat_bedrag: null,
+    meerdere_werkadressen: true,
+    overige_werkadressen: [
+      { straat: 'Turfmarkt', huisnummer: '18', postcode: null, stad: 'Gouda',
+        omschrijving: 'Houtrotherstel kozijnen en schilderwerk voorgevel' },
+    ],
+  }
+  return {
+    ...DETAIL,
+    bericht: {
+      ...DETAIL.bericht,
+      onderwerp: 'Fwd: aanleveren offertes',
+      soort: 'offerteaanvraag',
+      soort_vertrouwen: 0.9,
+    },
+    extractie: { velden, gekeurde_velden: { ...velden, meerdereWerkadressen: true }, vertrouwen: ZEKERHEID },
+    log: [
+      ...(metDeel ? [{
+        id: 'l2', moment: '2026-10-09T09:40:00+00:00', actor: 'medewerker', actie: 'dossier_aangemaakt',
+        details: {
+          dossier_id: 'voorbeeld-deel-1', dossiernummer: '20261.00828', deel: true,
+          werkadres: 'Kleiweg 40, Gouda', fase: 'aanvraag',
+        },
+      }] : []),
+      { ...DETAIL.log[0], details: { redenen: ['De mail betreft werk op meerdere adressen; dat wordt niet één dossier.'] } },
+    ],
+  }
+}
+
 /** Zoals `getAntwoordConcept` hem zou opleveren voor de opdrachtbon hierboven. */
 const ANTWOORD = {
   aan: 'bv@vvebeheer.nl',
@@ -290,7 +329,7 @@ const ANTWOORD = {
 }
 
 export default function Voorbeeld() {
-  const [scenario, setScenario] = React.useState<'aanvraag' | 'opdrachtbon' | 'offerte' | 'meerwerk' | 'leeg'>('aanvraag')
+  const [scenario, setScenario] = React.useState<'aanvraag' | 'opdrachtbon' | 'offerte' | 'meerwerk' | 'leeg' | 'splits' | 'splits2'>('aanvraag')
   const [antwoord, setAntwoord] = React.useState(false)
   const knop = (actief: boolean) => ({
     padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
@@ -309,6 +348,8 @@ export default function Voorbeeld() {
           ['offerte', 'C — opdracht op offerte'],
           ['meerwerk', 'D — meerwerk'],
           ['leeg', 'E — lege lezing'],
+          ['splits', 'F — twee adressen'],
+          ['splits2', 'G — tweede dossier'],
         ] as const).map(([k, label]) => (
           <button key={k} type="button" style={knop(scenario === k)} onClick={() => setScenario(k)}>
             {label}
@@ -345,6 +386,8 @@ export default function Voorbeeld() {
             offerte: opdrachtOpOfferteVariant(),
             meerwerk: meerwerkVariant(),
             leeg: legeVariant(),
+            splits: splitsVariant(false),
+            splits2: splitsVariant(true),
           }[scenario] as never}
           objectTreffer={null}
           werkmaatschappijen={WERKMAATSCHAPPIJEN}

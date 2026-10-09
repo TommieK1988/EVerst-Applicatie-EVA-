@@ -12,10 +12,15 @@ import Anthropic from '@anthropic-ai/sdk'
  * terug te laten zeggen staat de misvatting er terwijl je er nog naar kijkt. Het
  * antwoord wordt opgeslagen naast de afspraak, zodat later navraag mogelijk blijft.
  *
- * Het tweede doel is nee zeggen. "Splits deze mail op in twee aanvragen" of "stuur
- * de klant een antwoord" zijn redelijke opdrachten die het intakeformulier niet kan
- * uitvoeren: het model vult velden in en doet verder niets. Dan hoort daar een eerlijk
- * antwoord op te komen in plaats van een stilzwijgend half resultaat.
+ * Het tweede doel is nee zeggen. "Stuur de klant een antwoord" is een redelijke
+ * opdracht die het intakeformulier niet kan uitvoeren: het model vult velden in en
+ * doet verder niets. Dan hoort daar een eerlijk antwoord op te komen in plaats van
+ * een stilzwijgend half resultaat.
+ *
+ * Splitsen kán wel, en daar zei EVA eerst ook nee tegen -- met als gevolg dat een
+ * mail over twee panden één dossier werd en het tweede adres zoekraakte. Het
+ * formulier draagt de eerste klus en somt de andere op; het behandelscherm maakt er
+ * per klus een dossier van (zie `splitsen.ts`).
  *
  * WAAROM HAIKU EN NIET HET GROTE MODEL
  * Dit is begrijpend lezen van twee regels tekst, en iemand staat ernaar te kijken.
@@ -38,9 +43,14 @@ contactpersoon, werkadres, omschrijving, scope, categorie, referenties, datums, 
 mandaat, regie, factuuradres, opmerkingen. Een aanwijzing kan je daarin sturen: waar je op let,
 hoe je iets uitlegt, welk veld je waar uit haalt.
 
+Je kunt ook één mail opsplitsen in meerdere aanvragen op dezelfde opdrachtgever, bijvoorbeeld
+één per werkadres. Dan vul je het formulier voor de eerste klus en zet je de andere adressen
+met hun werk ernaast; op het behandelscherm maakt de medewerker er per klus een dossier van,
+elk met een eigen Bouw7-project. Zeg daar dus gewoon ja tegen.
+
 WAT JE NIET KUNT
-Je maakt zelf geen dossier aan, je verstuurt niets, je wijzigt geen bestaande dossiers, en je
-kunt één mail niet opsplitsen in twee aanvragen -- er is één formulier per bericht. Je kunt ook
+Je maakt zelf geen dossier aan -- dat doet de medewerker, met één klik per dossier --, je
+verstuurt niets en je wijzigt geen bestaande dossiers. Je kunt ook
 niet buiten de vaste lijsten om: de categorie en de werkmaatschappij komen uit een vaste lijst,
 het werkadres wordt tegen de landelijke adressen gecontroleerd, en bedragen worden op
 redelijkheid getoetst. Een afspraak kan die controles niet uitzetten.
@@ -96,7 +106,10 @@ export async function legWerkafspraakUit(
     // Of de afspraak helemaal kan, leidt het scherm hieruit af in plaats van het
     // model er een apart veld voor te laten vullen: één antwoord is minder dat
     // scheef kan lopen. De woorden komen uit de instructie hierboven.
-    const kanNiet = /\b(kan ik niet|lukt niet|niet mogelijk|niet zelf|niet opsplitsen|geen dossier|verstuur geen)\b/i
+    // "niet zelf" en "geen dossier" stonden hier ook, maar die zegt EVA nu bij elke
+    // splitsvraag ("ik maak niet zelf een dossier aan, dat doe jij") terwijl het
+    // splitsen gewoon kan -- dan kleurde een haalbare aanwijzing als half.
+    const kanNiet = /\b(kan ik niet|lukt niet|niet mogelijk|niet opsplitsen|verstuur geen)\b/i
     return { uitleg, volledig: !kanNiet.test(uitleg) }
   } catch {
     return null

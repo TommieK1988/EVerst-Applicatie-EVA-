@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { bouwTekstBlok } from './prompt'
+import { SYSTEM_PROMPT, bouwTekstBlok } from './prompt'
+import { extractieSchema } from './schema'
 
 /**
  * De werkafspraken en de aanwijzing zijn de enige invoer in de prompt die van
@@ -64,17 +65,57 @@ describe('werkafspraken in de prompt', () => {
     expect(t.indexOf('<aanwijzing>')).toBeLessThan(t.indexOf(MAILTEKST))
   })
 
-  it('zegt bij een aanwijzing wat er niet kan', () => {
-    const t = bouwTekstBlok({ ...BASIS, aanwijzing: 'Splits deze mail op in twee aanvragen.' })
+  it('zegt ja tegen splitsen en wijst de weg', () => {
+    const t = bouwTekstBlok({ ...BASIS, aanwijzing: 'Maak hier 2 offerte aanvragen van.' })
       .replace(/\s+/g, ' ')
-    // Dit is het geval waar de gebruiker mee kwam. Het formulier kan het niet, en
-    // dan hoort het model te doen wat het wél kan en dat te melden.
-    expect(t).toMatch(/de mail opsplitsen/)
+    // Dit is het geval waar de gebruiker mee kwam: twee werkadressen in één mail.
+    // EVA zei eerst dat het niet kon en het tweede adres raakte zoek. Nu kan het,
+    // en dan moet het model weten in welke velden de tweede klus hoort.
+    expect(t).toMatch(/op te splitsen in meerdere aanvragen, dan kan dat/)
+    expect(t).toMatch(/meerdere_werkadressen op true/)
+    expect(t).toMatch(/overige_werkadressen/)
+    expect(t).not.toMatch(/kunt -- de mail opsplitsen/)
+  })
+
+  it('zegt bij een aanwijzing nog steeds wat er niet kan', () => {
+    const t = bouwTekstBlok({ ...BASIS, aanwijzing: 'Stuur de klant een bevestiging.' })
+      .replace(/\s+/g, ' ')
+    // Versturen kan het formulier niet; dan doet het model wat het wél kan en meldt
+    // het de rest.
+    expect(t).toMatch(/iets versturen/)
     expect(t).toMatch(/dan doe je wat je wél kunt/)
   })
 
   it('laat een lege of witruimte-aanwijzing weg', () => {
     expect(bouwTekstBlok({ ...BASIS, aanwijzing: '   ' })).not.toContain('<aanwijzing>')
     expect(bouwTekstBlok({ ...BASIS, aanwijzing: null })).not.toContain('<aanwijzing>')
+  })
+})
+
+describe('meerdere klussen in één mail', () => {
+  it('vraagt het model om de andere adressen apart op te sommen', () => {
+    const t = SYSTEM_PROMPT.replace(/\s+/g, ' ')
+    // Stond het tweede adres alleen in de opmerkingen, dan werd het nooit een dossier.
+    expect(t).toMatch(/overige_werkadressen/)
+    expect(t).toMatch(/nooit alleen in de opmerkingen/)
+  })
+
+  it('neemt de overige werkadressen mee uit het antwoord van het model', () => {
+    const res = extractieSchema.parse({
+      soort: 'offerteaanvraag', soort_vertrouwen: 0.9, samenvatting: 'Twee panden',
+      meerdere_werkadressen: true,
+      overige_werkadressen: [{ straat: 'Kleiweg', huisnummer: '12', stad: 'Gouda', omschrijving: 'Schilderwerk' }],
+    })
+    expect(res.overige_werkadressen).toEqual([
+      { straat: 'Kleiweg', huisnummer: '12', postcode: null, stad: 'Gouda', omschrijving: 'Schilderwerk' },
+    ])
+  })
+
+  it('laat een kapotte lijst niet de hele lezing breken', () => {
+    const res = extractieSchema.parse({
+      soort: 'offerteaanvraag', soort_vertrouwen: 0.9, samenvatting: 'x',
+      overige_werkadressen: 'Kleiweg 12',
+    })
+    expect(res.overige_werkadressen).toEqual([])
   })
 })

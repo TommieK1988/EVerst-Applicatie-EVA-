@@ -104,6 +104,18 @@ export const extractieSchema = z.object({
   factuuradres_postcode: korteTekst,
   factuuradres_plaats: korteTekst,
   meerdere_werkadressen: z.boolean().catch(false),
+  /**
+   * De andere klussen in een verzamelmail: elk een eigen dossier op dezelfde
+   * opdrachtgever. Het formulier zelf draagt de eerste; dit is het voorvullen van
+   * de rest. Gaat langs dezelfde adrescontrole als het eerste adres.
+   */
+  overige_werkadressen: z.array(z.object({
+    straat: korteTekst,
+    huisnummer: korteTekst,
+    postcode: korteTekst,
+    stad: korteTekst,
+    omschrijving: tekst,
+  })).max(20).catch([]),
 
   bijlage_rollen: z.array(z.object({
     bestandsnaam: z.string().trim().max(300),
@@ -331,7 +343,25 @@ export const LEVER_EXTRACTIE_TOOL = {
           'true alleen bij een echte verzamelopdracht: werk op locaties in verschillende straten '
           + 'of verschillende plaatsen, die elk een eigen dossier horen te worden. '
           + 'Meerdere huisnummers in dezelfde straat ("Steenlaan 32, 34 en 36") is één locatie '
-          + 'en dus false; zet die nummers gewoon samen in het huisnummerveld.',
+          + 'en dus false; zet die nummers gewoon samen in het huisnummerveld. '
+          + 'Ook true als de aanwijzing van de medewerker vraagt om de mail te splitsen.',
+      },
+      overige_werkadressen: {
+        type: 'array',
+        description:
+          'Alleen bij meerdere_werkadressen = true: de klussen op de ándere adressen, elk met '
+          + 'het werk dat dáár moet gebeuren. Het eerste adres staat in de werkadres-velden en '
+          + 'herhaal je hier niet. Elk adres wordt een eigen dossier op dezelfde opdrachtgever.',
+        items: {
+          type: 'object',
+          properties: {
+            straat: { type: 'string' },
+            huisnummer: { type: 'string' },
+            postcode: { type: 'string' },
+            stad: { type: 'string' },
+            omschrijving: { type: 'string', description: 'Wat er op dit adres moet gebeuren.' },
+          },
+        },
       },
       bijlage_rollen: {
         type: 'array',

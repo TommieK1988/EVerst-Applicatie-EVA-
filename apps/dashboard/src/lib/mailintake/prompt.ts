@@ -55,6 +55,13 @@ niet klopt gaat ongemerkt mee het dossier in en komt in Bouw7 terecht.
 Het werkadres is het adres waar het werk moet gebeuren — niet het factuuradres en niet het
 kantooradres in de handtekening. Staat er alleen een handtekeningadres, laat het werkadres dan leeg.
 
+MEERDERE KLUSSEN IN ÉÉN MAIL
+Vraagt een mail om werk op twee of meer adressen die elk een eigen klus zijn, dan worden dat
+aparte dossiers op dezelfde opdrachtgever. Vul de werkadres-velden en de omschrijving voor het
+eerste adres, zet meerdere_werkadressen op true, en zet elk ander adres met het werk dat daar
+moet gebeuren in overige_werkadressen. Stop een tweede adres nooit alleen in de opmerkingen:
+daar raakt het zoek.
+
 MENSEN
 Er staan vaak meer mensen in een opdracht dan de afzender. Houd ze uit elkaar:
 • contactpersoon_* — wie namens de opdrachtgever tekent of schrijft, meestal de beheerder op kantoor.
@@ -224,10 +231,13 @@ export function bouwTekstBlok(ctx: PromptContext): string {
       aanwijzing +
       '\n\n' +
       'Dezelfde grens geldt. Je vult niets in dat niet in de mail of de bijlagen\n' +
-      'staat, en je verhoogt je vertrouwen niet omdat iemand iets zegt. Vraagt de\n' +
-      'aanwijzing iets wat je met dit formulier niet kunt -- de mail opsplitsen, een\n' +
-      'dossier aanmaken, iets versturen -- dan doe je wat je wél kunt en schrijf je in\n' +
-      '"toelichting" wat er van de aanwijzing is overgebleven.\n' +
+      'staat, en je verhoogt je vertrouwen niet omdat iemand iets zegt.\n\n' +
+      'Vraagt de aanwijzing om de mail op te splitsen in meerdere aanvragen, dan kan\n' +
+      'dat: zet meerdere_werkadressen op true, vul het formulier voor de eerste klus\n' +
+      'en zet de andere in overige_werkadressen. De medewerker maakt er daarna per\n' +
+      'klus een dossier van. Vraagt de aanwijzing iets wat je met dit formulier niet\n' +
+      'kunt -- zelf een dossier aanmaken, iets versturen -- dan doe je wat je wél kunt\n' +
+      'en schrijf je in "toelichting" wat er van de aanwijzing is overgebleven.\n' +
       '</aanwijzing>',
     )
   }

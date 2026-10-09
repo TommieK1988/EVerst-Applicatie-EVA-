@@ -33,6 +33,9 @@ import type { ProefResultaat } from './proef'
 import type { DossierFase } from '@/components/dossiers/fase-plaatsing'
 import { planNabehandeling, voerNabehandelingUit } from './nabehandeling'
 
+/** Een id dat nooit bestaat: een lege `.in()` is in PostgREST geen "niets". */
+const NUL_ID = '00000000-0000-0000-0000-000000000000'
+
 export interface AanmaakInvoer {
   berichtId: string
   relatieId: string
@@ -75,6 +78,12 @@ export interface AanmaakInvoer {
   medewerkerId: string | null
   /** De standaard behandelaar van de postbus; krijgt de controletaak. */
   behandelaarId?: string | null
+  /**
+   * Eén van meerdere dossiers uit dit bericht; zie `splitsen-actions.ts`. Het
+   * bericht blijft dan open tot de behandelaar het afrondt, en alleen de bijlagen
+   * die voor dit deel zijn aangevinkt gaan mee (null = allemaal).
+   */
+  deel?: { bijlageIds: string[] | null; werkadres: string } | null
 }
 
 export type AanmaakResultaat =
@@ -124,6 +133,11 @@ export type AanmaakResultaat =
 export async function zetBijlagenInSharePoint(
   berichtId: string,
   dossierId: string,
+  /**
+   * Bij een gesplitst bericht krijgt elk dossier zijn eigen set: dan telt niet of
+   * een stuk al eens geplaatst is, en gaan alleen de gekozen bijlagen mee.
+   */
+  deel?: { bijlageIds: string[] | null },
 ): Promise<{ geuploaded: number; mislukt: number; fout: string | null }> {
   const supabase = createAdminClient()
 
@@ -144,13 +158,14 @@ export async function zetBijlagenInSharePoint(
   const datumVan = new Map(leden.map(m => [m.id, (m.ontvangen_op ?? '').slice(0, 10)]))
   const datum = datumVan.get(berichtId) || new Date().toISOString().slice(0, 10)
 
-  const { data: rijen } = await supabase
+  let vraag = supabase
     .from('mailintake_bijlagen')
     .select('id, bericht_id, bestandsnaam, content_type, opslag_pad, grootte_bytes, is_inline')
     .in('bericht_id', leden.map(m => m.id))
     .not('opslag_pad', 'is', null)
-    .is('naar_sharepoint_op', null)
-    .limit(50)
+  if (!deel) vraag = vraag.is('naar_sharepoint_op', null)
+  if (deel?.bijlageIds) vraag = vraag.in('id', deel.bijlageIds.length ? deel.bijlageIds : [NUL_ID])
+  const { data: rijen } = await vraag.limit(50)
 
   // Dezelfde zeef als de voorvertoning. Zonder dit belooft het scherm dat
   // image001.jpg buiten de dossiermap blijft terwijl de upload hem er wel in zet
@@ -160,7 +175,7 @@ export async function zetBijlagenInSharePoint(
     grootteBytes: r.grootte_bytes, isInline: Boolean(r.is_inline),
   }).mee)
 
-  const mailsTeDoen = leden.filter(m => !m.mail_naar_sharepoint_op)
+  const mailsTeDoen = deel ? leden : leden.filter(m => !m.mail_naar_sharepoint_op)
   if (!bestanden.length && !mailsTeDoen.length) return { geuploaded: 0, mislukt: 0, fout: null }
 
   const RUIMTE = 20 * 1024 * 1024
@@ -448,7 +463,11 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // "welke dossiers komen uit mail, en hoeveel daarvan zijn achteraf vervallen?"
   await supabase.from('dossiers').update({ mailintake_bericht_id: inv.berichtId }).eq('id', dossierId)
 
-  await supabase.from('mailintake_berichten').update({
+  // Een deel laat het bericht open: het gaat pas op 'verwerkt' als de behandelaar
+  // het afrondt. `dossier_id` blijft dan leeg -- de delen hangen via
+  // `dossiers.mailintake_bericht_id` aan het bericht, en anders zet de
+  // bewakingscron de niet-gekozen bijlagen alsnog in het eerste dossier.
+  if (!inv.deel) await supabase.from('mailintake_berichten').update({
     status: 'verwerkt',
     besluit: inv.automatisch ? 'automatisch_aangemaakt' : 'handmatig_aangemaakt',
     dossier_id: dossierId,
@@ -470,6 +489,7 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
       bouw7_ok: res.bouw7.ok,
       bouw7_fout: res.bouw7.error ?? null,
       automatisch: inv.automatisch,
+      ...(inv.deel ? { deel: true, werkadres: inv.deel.werkadres, fase: inv.fase ?? 'aanvraag' } : {}),
     },
   })
 
@@ -500,7 +520,7 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
   // De bijlagen horen bij het dossier, niet bij de mailbox. Best-effort: mislukt
   // dit, dan blijft het dossier gewoon staan en probeert de bewakingscron opnieuw.
   if (mochtUploaden) {
-    await zetBijlagenInSharePoint(inv.berichtId, dossierId).catch(() => {})
+    await zetBijlagenInSharePoint(inv.berichtId, dossierId, inv.deel ?? undefined).catch(() => {})
   }
 
   // Bij een automatisch dossier hoort altijd een mens die er nog naar kijkt.
@@ -509,9 +529,11 @@ export async function maakDossierUitBericht(inv: AanmaakInvoer): Promise<Aanmaak
     await meldAutomatischAangemaakt(dossierId, inv.berichtId, res.data.dossiernummer ?? null).catch(() => {})
   }
 
-  // De mail mag nu uit het zicht (§ nabehandeling).
-  await planNabehandeling(inv.berichtId)
-  await voerNabehandelingUit(inv.berichtId).catch(() => {})
+  // De mail mag nu uit het zicht (§ nabehandeling) -- bij een deel pas na afronden.
+  if (!inv.deel) {
+    await planNabehandeling(inv.berichtId)
+    await voerNabehandelingUit(inv.berichtId).catch(() => {})
+  }
 
   return {
     ok: true,

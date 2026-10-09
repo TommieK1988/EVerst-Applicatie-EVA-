@@ -13,13 +13,13 @@ import React, { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-import { Button, Card, useDialogen } from '@/components/ui'
+import { useDialogen } from '@/components/ui'
 import { zoekRelaties, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import { getContactpersonenVoorOrganisatie } from '@/lib/relaties/contactpersonen-actions'
 // Er is geen route /dossiers/<id>: een dossier woont onder zijn sectie.
 import { dossierHref, dossierSegment } from '@/lib/dossiers/href'
 import {
-  maakDossierVanBericht, proefDossierVanBericht, koppelBerichtAanDossier, getBijlageUrl,
+  maakDossierVanBericht, proefDossierVanBericht, getBijlageUrl,
 } from '@/lib/mailintake/actions'
 import {
   DUPLICAAT_TWIJFEL, MAIL_SOORT_LABELS, bepaalRoute, heeftOfferteTreffer,
@@ -31,7 +31,6 @@ import { FASE_PLAATSINGEN, type DossierFase } from '@/components/dossiers/fase-p
 import RechterKolom from './panelen/RechterKolom'
 import AfgehandeldBalk from './panelen/AfgehandeldBalk'
 import AndereWeg from './panelen/AndereWeg'
-import WerkzaamhedenBlok from './panelen/WerkzaamhedenBlok'
 import TwijfelPaneel, { bouwTwijfelVelden } from './panelen/TwijfelPaneel'
 import { Voorvertoning, Afwijkingen } from './panelen/voorvertoning'
 import { bouwVeldenVoorAanmaak } from './panelen/aanmaak-velden'
@@ -39,14 +38,14 @@ import { useFase } from './panelen/fase-keuze'
 import { useKoppelen } from './formulier/gebruik-koppelen'
 import { useWerkmaatschappij } from './panelen/gebruik-werkmaatschappij'
 import { useWerkadres } from './panelen/gebruik-werkadres'
-import WerkadresBlok from './panelen/WerkadresBlok'
 import { useWeglegActies } from './panelen/wegleg-acties'
-import { klein, kop, veldStijl, Veld } from './panelen/velden'
-import { FormSection } from '@/components/ui/form-field'
+import { useSplitsen } from './panelen/gebruik-splitsen'
+import SplitsPaneel from './panelen/SplitsPaneel'
+import TochOfferte from './panelen/TochOfferte'
+import { kop } from './panelen/velden'
 import AanvraagFormulier from './formulier/AanvraagFormulier'
-import { VELD_VAN_INVOER, type FormulierWaarden } from './formulier/IntakeFormulier'
-import RollenSectie, { type Rolbezetting, type RolSleutel } from './formulier/RollenSectie'
-import TermijnenSectie from './formulier/TermijnenSectie'
+import type { FormulierWaarden } from './formulier/IntakeFormulier'
+import type { Rolbezetting, RolSleutel } from './formulier/RollenSectie'
 import MeerwerkSectie from './formulier/MeerwerkSectie'
 import type { VeldSleutel } from '@/lib/mailintake/veld-eisen'
 import { useOordelen } from './formulier/gebruik-oordelen'
@@ -184,6 +183,13 @@ export default function BerichtBehandelen({
     scope: b.gevraagde_werkzaamheden ?? '',
     buitenScope: b.buiten_scope ?? '',
     aandachtspunten: b.aandachtspunten ?? '',
+  })
+
+  // Eén bericht, meerdere dossiers op dezelfde opdrachtgever; zie `gebruik-splitsen.ts`.
+  const splitsen = useSplitsen({
+    berichtId: b.id, log: detail.log, velden, gekeurd, bijlagen: detail.bijlagen, adres,
+    zetOmschrijving: setOmschrijving,
+    zetScope: scope => setProjectOmschrijving(p => ({ ...p, scope })),
   })
 
   // Voorkeur: wat er al aan het bericht hangt; anders de verse treffer.
@@ -411,13 +417,17 @@ export default function BerichtBehandelen({
 
   const compleet = magAfhandelen(oordelen)
   const ontbreekt = ontbrekendeVelden(oordelen)
-  const topDuplicaat = detail.duplicaten[0]
+  // Een dossier dat net uit ditzelfde bericht kwam is geen duplicaat maar een vorig deel.
+  const topDuplicaat = detail.duplicaten
+    .find(d => !splitsen.delen.some(x => x.dossierId === d.dossierId))
   const heeftDuplicaatWaarschuwing = (topDuplicaat?.score ?? 0) >= DUPLICAAT_TWIJFEL
 
   // ── Acties ─────────────────────────────────────────────────────────────────
 
   async function aanmaken() {
     if (!klantId) return
+
+    if (!(await splitsen.magEenDossier())) return
 
     // Dit is de kern van de harde eis: nooit stil langs een duplicaat heen.
     if (heeftDuplicaatWaarschuwing) {
@@ -479,7 +489,8 @@ export default function BerichtBehandelen({
       })
       if (!akkoord) return
 
-      const res = await maakDossierVanBericht(b.id, teVersturen, proef)
+      const deel = splitsen.deelVoorAanmaak()
+      const res = await maakDossierVanBericht(b.id, { ...teVersturen, deel }, proef)
 
       if (!res.ok) { toast.error(res.error ?? 'Aanmaken mislukt'); return }
 
@@ -507,6 +518,8 @@ export default function BerichtBehandelen({
             'Je kunt dat later opnieuw proberen vanaf de dossierpagina.',
         })
       }
+      // Een deel: op het scherm blijven, het volgende adres staat klaar.
+      if (deel) { splitsen.naAanmaken(deel.werkadres); return }
       // Naar de sectie waar het dossier werkelijk terechtkwam. Stond vast op
       // 'aanvraag'; sinds de fase te kiezen is zou dat op een opdracht- of
       // servicedeskdossier het verkeerde scherm openen. Niet op de fasenaam maar op
@@ -577,7 +590,8 @@ export default function BerichtBehandelen({
       {afgehandeld && (
         <AfgehandeldBalk
           status={b.status}
-          dossiernummer={b.dossier?.dossiernummer ?? null}
+          dossiernummer={b.dossier?.dossiernummer
+            ?? (splitsen.delen.map(d => d.dossiernummer).filter(Boolean).join(', ') || null)}
           magSchrijven={magSchrijven}
           bezig={inActie}
           onHeropen={heropen}
@@ -630,6 +644,11 @@ export default function BerichtBehandelen({
             waardoor het scherm per bericht een ander scherm leek. */}
         <div style={kop}>Voorstel</div>
 
+        {/* Meerdere dossiers uit één bericht. Niet bij meerwerk of een te winnen
+            offerte: daar hoort de mail bij één bestaand dossier. */}
+        {b.soort !== 'meerwerk' && (route !== 'offerte_winnen' || forceerNieuw) && (
+          <SplitsPaneel s={splitsen} bewerkbaar={bewerkbaar} bezig={inActie} />
+        )}
 
         {/* Eén formulier voor beide routes. Wat verschilt is de dossier-sectie
             en de kleur van de velden, niet welke velden er staan. */}
@@ -733,22 +752,10 @@ export default function BerichtBehandelen({
         />
 
         {kanTochOfferte && (
-          <details
-            open={offerteOpen}
-            onToggle={e => setOfferteOpen((e.target as HTMLDetailsElement).open)}
-            style={{
-            border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px',
-            background: 'var(--surface)',
-          }}>
-            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              Hoort dit toch bij een offerte van ons?
-            </summary>
-            <p style={{ ...klein, margin: '6px 0 10px' }}>
-              {isRegie
-                ? 'Deze opdracht wordt op nacalculatie afgerekend, dus EVA maakt er een nieuw dossier van. Blijkt het tóch het akkoord op een offerte, dan zet je die hier op gewonnen.'
-                : 'EVA stelt een nieuw dossier voor. Hoort deze opdracht bij een offerte die wij al hebben uitgebracht, zet die dan hier op gewonnen.'}
-            </p>
-            <OpdrachtPaneel
+            <TochOfferte
+              open={offerteOpen}
+              setOpen={setOfferteOpen}
+              isRegie={isRegie}
               berichtId={b.id}
               kandidaten={detail.duplicaten}
               relatieId={klantId}
@@ -763,7 +770,6 @@ export default function BerichtBehandelen({
               }}
               onKlaar={dossierId => router.push(dossierHref(dossierId, 'opdracht'))}
             />
-          </details>
         )}
 
         </div>
