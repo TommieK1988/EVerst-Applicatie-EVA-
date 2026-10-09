@@ -249,9 +249,12 @@ function Lightbox({ fotos, index, onIndex, onClose }: {
 /* ─── Galerij ─────────────────────────────────────────────────────────────── */
 
 export default function Fotogalerij({
-  fotos, inPortaal, onTogglePortaal,
+  fotos, inApp, onToggleApp, inPortaal, onTogglePortaal,
 }: {
   fotos: BestandRij[]
+  /** Sleutels van foto's die in de mobiele app staan (opt-in), zelfde vinkje als in de bestandenlijst. */
+  inApp?: Set<string>
+  onToggleApp?: (rij: BestandRij, zichtbaar: boolean) => void
   /**
    * Sleutels van foto's die in het klantportaal staan (opt-in). Ontbreekt de
    * prop, dan verschijnen de vinkjes niet — bijvoorbeeld voor wie geen recht op
@@ -267,6 +270,9 @@ export default function Fotogalerij({
   // buiten bereik vallen.
   const index = Math.min(huidige, Math.max(0, fotos.length - 1))
   const foto = fotos[index]
+
+  const toonApp = !!inApp && !!onToggleApp
+  const toonPortaal = !!inPortaal && !!onTogglePortaal
 
   const vorige = () => setHuidige((index - 1 + fotos.length) % fotos.length)
   const volgende = () => setHuidige((index + 1) % fotos.length)
@@ -311,6 +317,7 @@ export default function Fotogalerij({
           <span>Foto&apos;s</span>
           <span className="text-[11px] font-normal text-neutral-400">
             {fotos.length} afbeelding{fotos.length === 1 ? '' : 'en'}
+            {inApp && inApp.size > 0 && ` · ${fotos.filter(f => inApp.has(f.sleutel)).length} in de app`}
             {inPortaal && inPortaal.size > 0 && ` · ${inPortaal.size} in het portaal`}
           </span>
         </div>
@@ -328,6 +335,14 @@ export default function Fotogalerij({
 
         {/* Bestandsnamen als navigatie: klikken zet de preview op die foto. */}
         <div className="border-t border-neutral-100 pt-2 lg:border-t-0 lg:pt-0">
+          {/* Twee vinkjes naast elkaar zijn zonder kop niet uit elkaar te houden. */}
+          {(toonApp || toonPortaal) && (
+            <div className="flex items-center gap-2 px-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.03em] text-neutral-400">
+              <span className="flex-1" />
+              {toonApp && <span className="w-12 text-center" title="Zichtbaar in de mobiele app voor de buitendienst">In app</span>}
+              {toonPortaal && <span className="w-12 text-center" title="Zichtbaar voor de opdrachtgever in het klantportaal">Portaal</span>}
+            </div>
+          )}
           <div className="max-h-[196px] overflow-y-auto lg:max-h-[60vh]">
             {fotos.map((f, i) => (
               <div
@@ -353,15 +368,29 @@ export default function Fotogalerij({
                   <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{f.datum ?? ''}</span>
                   <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{formatteerGrootte(f.grootte)}</span>
                 </button>
-                {inPortaal && onTogglePortaal && (
-                  <input
-                    type="checkbox"
-                    checked={inPortaal.has(f.sleutel)}
-                    onChange={e => onTogglePortaal(f, e.target.checked)}
-                    title="Zichtbaar voor de opdrachtgever in het klantportaal"
-                    aria-label={`${f.naam} zichtbaar in het klantportaal`}
-                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand-600"
-                  />
+                {toonApp && (
+                  <span className="flex w-12 shrink-0 justify-center">
+                    <input
+                      type="checkbox"
+                      checked={inApp!.has(f.sleutel)}
+                      onChange={e => onToggleApp!(f, e.target.checked)}
+                      title="Zichtbaar in de mobiele app voor de buitendienst"
+                      aria-label={`${f.naam} zichtbaar in de app`}
+                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                    />
+                  </span>
+                )}
+                {toonPortaal && (
+                  <span className="flex w-12 shrink-0 justify-center">
+                    <input
+                      type="checkbox"
+                      checked={inPortaal!.has(f.sleutel)}
+                      onChange={e => onTogglePortaal!(f, e.target.checked)}
+                      title="Zichtbaar voor de opdrachtgever in het klantportaal"
+                      aria-label={`${f.naam} zichtbaar in het klantportaal`}
+                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                    />
+                  </span>
                 )}
               </div>
             ))}

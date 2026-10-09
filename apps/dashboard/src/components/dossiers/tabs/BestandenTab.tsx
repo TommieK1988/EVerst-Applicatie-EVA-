@@ -509,6 +509,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
         <Fotogalerij
           fotos={fotos}
+          inApp={inApp}
+          onToggleApp={toggleApp}
           inPortaal={inPortaal ?? undefined}
           onTogglePortaal={inPortaal ? togglePortaal : undefined}
         />
