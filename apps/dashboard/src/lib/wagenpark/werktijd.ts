@@ -152,6 +152,21 @@ export function saldoLabel(uren: number): string {
   return `${teken}${minutenLabel(Math.abs(minuten))}`
 }
 
+/** Vanaf hoeveel minuten verschil een dagsaldo kleur krijgt (strikt groter dan). */
+export const SALDO_KLEUR_DREMPEL_MIN = 10
+
+/**
+ * Tekstkleur voor een dagsaldo: groen bij meer dan 10 minuten langer aanwezig
+ * dan geschreven, rood bij meer dan 10 minuten korter. Daartussen grijs.
+ * Op hele minuten, zodat de kleur klopt met het getoonde label.
+ */
+export function saldoKleur(uren: number): string {
+  const minuten = Math.round(uren * 60)
+  if (minuten < -SALDO_KLEUR_DREMPEL_MIN) return 'text-red-700'
+  if (minuten > SALDO_KLEUR_DREMPEL_MIN) return 'text-emerald-700'
+  return 'text-slate-500'
+}
+
 /** De werktijd-data van een bevinding, of null als het er geen is. */
 export function werktijdData(b: BevindingAchtig): WerktijdData | null {
   if (!(WERKTIJD_REGELS as readonly string[]).includes(b.regel_code)) return null

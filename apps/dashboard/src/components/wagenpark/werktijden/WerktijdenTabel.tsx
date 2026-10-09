@@ -6,7 +6,7 @@ import type { GebruikerLayout } from '@everts/database/platform-types'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import {
   minutenLabel, urenLabel, teltMee, omrekening, UREN_PER_WERKDAG,
-  SOORT_LABEL, dagSaldoUren, saldoLabel,
+  SOORT_LABEL, dagSaldoUren, saldoLabel, saldoKleur,
 } from '@/lib/wagenpark/werktijd'
 import { telSaldo } from '@/lib/wagenpark/werktijd-samenvatting'
 
@@ -261,9 +261,8 @@ export default function WerktijdenTabel({
           ),
       },
       {
-        // Waar het om draait: aanwezig min verantwoord. Kleur alleen bij een
-        // afwijking van meer dan een half uur — kleinere verschillen zitten
-        // binnen de meetfout van een rittenregistratie.
+        // Waar het om draait: aanwezig min verantwoord. Kleur bij een afwijking
+        // van meer dan 10 minuten (zie `saldoKleur`).
         key: 'saldo',
         label: 'Saldo',
         breedte: 110,
@@ -294,8 +293,7 @@ export default function WerktijdenTabel({
               </span>
             )
           }
-          const kleur =
-            saldo <= -0.5 ? 'text-red-700' : saldo >= 0.5 ? 'text-emerald-700' : 'text-slate-500'
+          const kleur = saldoKleur(saldo)
           return (
             <span
               className={`tabular-nums font-medium ${kleur}`}

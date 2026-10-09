@@ -9,7 +9,7 @@ import {
 } from '@/components/ui'
 import { formatDatumMetDag } from '@/lib/wagenpark/utils'
 import {
-  minutenLabel, urenLabel, SOORT_LABEL, teltMee, dagSaldoUren, saldoLabel,
+  minutenLabel, urenLabel, SOORT_LABEL, teltMee, dagSaldoUren, saldoLabel, saldoKleur,
 } from '@/lib/wagenpark/werktijd'
 import {
   handelWerktijdSignaalAf,
@@ -314,13 +314,7 @@ export default function DagPaneel({
                   <p className="mt-2 text-sm">
                     <span className="text-slate-500">Saldo aanwezig − arbeidsuren: </span>
                     <span
-                      className={`font-semibold tabular-nums ${
-                        saldo <= -0.5
-                          ? 'text-red-700'
-                          : saldo >= 0.5
-                            ? 'text-emerald-700'
-                            : 'text-slate-600'
-                      }`}
+                      className={`font-semibold tabular-nums ${saldoKleur(saldo)}`}
                     >
                       {saldoLabel(saldo)}
                     </span>
