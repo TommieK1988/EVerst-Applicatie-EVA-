@@ -21,5 +21,6 @@ export {
   parseHM,
   type AfwezigInfo,
   type AnkerKeuzes,
+  type BepalendeKeten,
   type RoosterInfo,
 } from './werkdag'

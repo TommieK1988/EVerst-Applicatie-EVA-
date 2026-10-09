@@ -13,7 +13,7 @@ import React from 'react'
 import { Flag, MapPin } from 'lucide-react'
 import { formatKm } from '@/lib/wagenpark/utils'
 import type { DagRit } from '@/app/(platform)/wagenpark/actions/werktijd-ritten'
-import type { WerktijdAfwijking } from '@/lib/wagenpark/werktijd-dag'
+import type { WerktijdRegel } from '@/lib/wagenpark/werktijd-anker'
 
 /** "23 min" / "1 u 12" — duur van een rit. */
 function duurLabel(seconden: number | null): string {
@@ -47,18 +47,14 @@ const RIT_TYPE_STIJL: Record<string, string> = {
 export default function RittenLijst({
   ritten,
   fout,
-  teLaat,
-  teVroeg,
   bezig,
   onKies,
   onWisselType,
 }: {
   ritten: DagRit[] | null
   fout: string | null
-  teLaat: WerktijdAfwijking | null
-  teVroeg: WerktijdAfwijking | null
   bezig: boolean
-  onKies: (afwijking: WerktijdAfwijking, trip_id: string) => void
+  onKies: (regel: WerktijdRegel, trip_id: string) => void
   onWisselType: (trip_id: string, nieuwType: 'zakelijk' | 'prive' | null) => void
 }) {
   if (fout) {
@@ -92,20 +88,18 @@ export default function RittenLijst({
               <RitTypeKnop rit={r} bezig={bezig} onWissel={onWisselType} />
               <span className="ml-auto inline-flex items-center gap-2">
                 <AnkerKnop
-                  afwijking={teLaat}
                   woord="de aankomst"
                   isAnker={r.bepaalt_aankomst}
                   zakelijk={zakelijk}
                   bezig={bezig}
-                  onKies={() => teLaat && onKies(teLaat, r.id)}
+                  onKies={() => onKies('R9', r.id)}
                 />
                 <AnkerKnop
-                  afwijking={teVroeg}
                   woord="het vertrek"
                   isAnker={r.bepaalt_vertrek}
                   zakelijk={zakelijk}
                   bezig={bezig}
-                  onKies={() => teVroeg && onKies(teVroeg, r.id)}
+                  onKies={() => onKies('R10', r.id)}
                 />
                 {!zakelijk && (
                   <span
@@ -132,19 +126,19 @@ export default function RittenLijst({
 /**
  * "bepaalt de aankomst" per rit.
  *
- * Alleen zichtbaar als er een afwijking van die soort IS: zonder bevinding valt
- * er niets te herrekenen, en een knop die stilletjes niets doet is erger dan
- * geen knop.
+ * Op elke zakelijke rit, ook op een dag zonder afwijking: wie niet ziet wélke
+ * rit de aankomsttijd levert, kan de uitkomst niet controleren — en een dag die
+ * op tijd lijkt doordat de verkeerde rit telde, moet je evengoed kunnen
+ * rechtzetten. De rit die het nu bepaalt staat er als groene vlag; de andere
+ * zakelijke ritten als knop.
  */
 function AnkerKnop({
-  afwijking,
   woord,
   isAnker,
   zakelijk,
   bezig,
   onKies,
 }: {
-  afwijking: WerktijdAfwijking | null
   woord: string
   isAnker: boolean
   zakelijk: boolean
@@ -159,7 +153,7 @@ function AnkerKnop({
       </span>
     )
   }
-  if (!afwijking || !zakelijk) return null
+  if (!zakelijk) return null
   return (
     <button
       type="button"

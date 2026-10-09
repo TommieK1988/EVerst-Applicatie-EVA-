@@ -41,42 +41,6 @@ async function huidigeAuthUserId(): Promise<string | null> {
   }
 }
 
-type Signaal = { regel_code: WerktijdRegel; datum: string; user_id_ulu: string }
-
-/** De dag waar een bevinding over gaat, of een foutmelding. */
-async function laadSignaal(
-  bevinding_id: string,
-): Promise<{ ok: true; signaal: Signaal } | { ok: false; error: string }> {
-  const rijen = await pgQuery<{
-    regel_code: string
-    datum: string
-    user_id_ulu: string | null
-  }>(
-    `select b.regel_code,
-            b.periode_start::text     as datum,
-            b.data->>'user_id_ulu'    as user_id_ulu
-       from public.compliance_bevindingen b
-      where b.id = $1::uuid`,
-    [bevinding_id],
-  )
-  const rij = rijen[0]
-  if (!rij) return { ok: false, error: 'Signaal niet gevonden.' }
-  if (rij.regel_code !== 'R9' && rij.regel_code !== 'R10') {
-    return { ok: false, error: 'Dit signaal kent geen bepalende rit.' }
-  }
-  if (!rij.user_id_ulu) {
-    return { ok: false, error: 'Bij dit signaal is geen bestuurder vastgelegd.' }
-  }
-  return {
-    ok: true,
-    signaal: {
-      regel_code: rij.regel_code,
-      datum: rij.datum,
-      user_id_ulu: rij.user_id_ulu,
-    },
-  }
-}
-
 function ververs(): void {
   revalidatePath('/wagenpark/ritten')
   revalidatePath('/wagenpark/bestuurders', 'layout')
@@ -84,15 +48,22 @@ function ververs(): void {
 }
 
 /**
- * Wijs een andere rit aan als de rit die de aankomst (R9) of het vertrek (R10)
- * bepaalt.
+ * Wijs een rit aan als de rit die de aankomst (R9) of het vertrek (R10) van een
+ * werkdag bepaalt.
  *
- * Geeft het id terug van de bevinding die daarna de tijd draagt. Dat is meestal
- * een ándere rij dan degene waar je op klikte: de minuten en de ernst zijn
- * herberekend en de bevinding hangt nu aan de aangewezen rit.
+ * Op (bestuurder, datum) en niet op een signaal: ook een dag zónder afwijking
+ * heeft een aankomst en een vertrek, en die moet je evengoed kunnen rechtzetten
+ * — een dag die op tijd lijkt doordat de verkeerde rit telde, is net zo fout.
+ * De regels laten een handmatig aangewezen dag altijd staan (desnoods met nul
+ * minuten), zodat de keuze zichtbaar en omkeerbaar blijft.
+ *
+ * Geeft het id terug van de bevinding die daarna de tijd draagt, of null als de
+ * dag geen signaal oplevert (geen werkdag volgens het rooster, verlof).
  */
-export async function kiesWerktijdAnker(
-  bevinding_id: string,
+export async function kiesWerktijdAnkerOpDag(
+  user_id_ulu: string,
+  datum: string,
+  regel_code: WerktijdRegel,
   trip_id: string,
   toelichting = '',
 ): Promise<AnkerResultaat> {
@@ -100,10 +71,9 @@ export async function kiesWerktijdAnker(
   if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
-
-  const gevonden = await laadSignaal(bevinding_id)
-  if (!gevonden.ok) return gevonden
-  const { regel_code, datum, user_id_ulu } = gevonden.signaal
+  if (regel_code !== 'R9' && regel_code !== 'R10') {
+    return { ok: false, error: 'Onbekende werktijdregel.' }
+  }
 
   // De rit moet van deze bestuurder op deze dag zijn, én zakelijk. Een privérit
   // telt niet mee in de werkdag-regels: de keuze zou stil worden genegeerd en de
@@ -136,28 +106,22 @@ export async function kiesWerktijdAnker(
     [user_id_ulu, datum, regel_code, trip_id, toelichting.trim(), await huidigeAuthUserId()],
   )
 
-  try {
-    const { ankerBevindingId } = await herbouwWerktijdDag(user_id_ulu, datum, regel_code)
-    ververs()
-    return { ok: true, bevinding_id: ankerBevindingId }
-  } catch (e: unknown) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : 'De dag kon niet worden herberekend.',
-    }
-  }
+  return herbouw(user_id_ulu, datum, regel_code)
 }
 
 /** Terug naar wat de ketenregel er zelf van maakt. */
-export async function herstelWerktijdAnker(bevinding_id: string): Promise<AnkerResultaat> {
+export async function herstelWerktijdAnkerOpDag(
+  user_id_ulu: string,
+  datum: string,
+  regel_code: WerktijdRegel,
+): Promise<AnkerResultaat> {
   await vereisRecht('wagenpark', 'schrijven')
   if (!(await magWerktijdenZien())) {
     return { ok: false, error: 'Alleen directie en beheer kunnen werktijden aanpassen.' }
   }
-
-  const gevonden = await laadSignaal(bevinding_id)
-  if (!gevonden.ok) return gevonden
-  const { regel_code, datum, user_id_ulu } = gevonden.signaal
+  if (regel_code !== 'R9' && regel_code !== 'R10') {
+    return { ok: false, error: 'Onbekende werktijdregel.' }
+  }
 
   await pgQuery(
     `delete from public.werktijd_anker_keuzes
@@ -165,6 +129,14 @@ export async function herstelWerktijdAnker(bevinding_id: string): Promise<AnkerR
     [user_id_ulu, datum, regel_code],
   )
 
+  return herbouw(user_id_ulu, datum, regel_code)
+}
+
+async function herbouw(
+  user_id_ulu: string,
+  datum: string,
+  regel_code: WerktijdRegel,
+): Promise<AnkerResultaat> {
   try {
     const { ankerBevindingId } = await herbouwWerktijdDag(user_id_ulu, datum, regel_code)
     ververs()

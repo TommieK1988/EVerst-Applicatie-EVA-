@@ -29,12 +29,13 @@ import {
   bouwKetens,
   ankerKeuzeSleutel,
   parseHM,
+  type BepalendeKeten,
 } from '@everts/wagenpark-core/compliance'
 import { pgQuery } from '@/lib/wagenpark/db'
 import { ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
 
 /** Standaard-ketenpauze, gelijk aan de terugval in R9/R10 zelf. */
-const KETEN_PAUZE_STANDAARD = 5
+export const KETEN_PAUZE_STANDAARD = 5
 
 /** Waarom een dag geen bruikbaar venster oplevert. Bepaalt de tooltip. */
 export type GeenVensterReden = 'geen_ritten' | 'een_keten' | 'geen_tijden' | 'omgekeerd'
@@ -167,7 +168,7 @@ const KEUZES_SQL = `
 `
 
 /** De ketenpauze uit de regelconfiguratie; zonder configuratie de terugval. */
-const KETEN_PAUZE_SQL = `
+export const KETEN_PAUZE_SQL = `
   select code, (drempel_config->>'keten_pauze_min')::int as keten_pauze_min
     from public.handboek_regels
    where code in ('R9', 'R10')
@@ -261,20 +262,25 @@ function hm(minuten: number): string {
   return `${u}:${m}`
 }
 
-function bepaalVenster(
-  dagRitten: RitRij[],
-  ctx: {
-    userId: string
-    datum: string
-    pauzeR9: number
-    pauzeR10: number
-    ankerKeuzes: Map<string, string>
-    roosterPauzes: PauzeRij[]
-  },
-): DagAanwezigheid {
-  // De ketenregel werkt op `UluTrip`; de query levert alleen de velden die hij
-  // aanraakt (id, start_tijd, stop_tijd). De cast houdt de query klein — een
-  // kwartaal aan volledige ritrijen hoeft hier niet doorheen.
+/**
+ * De bepalende ritketens van één bestuurder-dag: welke rit de aankomst en welke
+ * het vertrek bepaalt, automatisch of zoals een mens hem aanwees.
+ *
+ * Eén plek voor zowel het aanwezigheidsvenster als de ritmarkering in het
+ * zijpaneel, met dezelfde bouwstenen als R9/R10. Zo kan het paneel nooit een
+ * andere rit als bepalend aanwijzen dan de rit waar de aankomsttijd vandaan komt.
+ *
+ * `vertrek` is null als er maar één keten is en niemand zelf een rit aanwees:
+ * dan is alleen de heenreis bekend en is er geen vertrek af te leiden (zelfde
+ * uitzondering als R10). `aantalKetensVertrek` zegt waarom.
+ */
+export function bepaalDagAnkers(
+  dagRitten: Pick<UluTrip, 'id' | 'start_tijd' | 'stop_tijd'>[],
+  ctx: { userId: string; datum: string; pauzeR9: number; pauzeR10: number; ankerKeuzes: Map<string, string> },
+): { aankomst: BepalendeKeten | null; vertrek: BepalendeKeten | null; aantalKetensVertrek: number } {
+  // De ketenregel werkt op `UluTrip`, maar raakt alleen id, start_tijd en
+  // stop_tijd aan. De cast houdt de query klein — een kwartaal aan volledige
+  // ritrijen hoeft hier niet doorheen.
   const trips = dagRitten as unknown as UluTrip[]
 
   const ketensAankomst = bouwKetens(trips, ctx.pauzeR9)
@@ -291,6 +297,25 @@ function bepaalVenster(
     'vertrek',
     ctx.ankerKeuzes.get(ankerSleutel(ctx.userId, ctx.datum, 'R10')),
   )
+  return {
+    aankomst,
+    vertrek: vertrek && (ketensVertrek.length >= 2 || vertrek.handmatig) ? vertrek : null,
+    aantalKetensVertrek: ketensVertrek.length,
+  }
+}
+
+function bepaalVenster(
+  dagRitten: RitRij[],
+  ctx: {
+    userId: string
+    datum: string
+    pauzeR9: number
+    pauzeR10: number
+    ankerKeuzes: Map<string, string>
+    roosterPauzes: PauzeRij[]
+  },
+): DagAanwezigheid {
+  const { aankomst, vertrek, aantalKetensVertrek } = bepaalDagAnkers(dagRitten, ctx)
 
   const geldendePauzes = pauzesOpDag(ctx.roosterPauzes, ctx.datum)
   const pauzeInRooster = geldendePauzes.length > 0
@@ -304,15 +329,14 @@ function bepaalVenster(
     reden,
   })
 
-  if (!aankomst || !vertrek) return leeg('geen_ritten')
-  if (aankomst.minuten == null || vertrek.minuten == null) return leeg('geen_tijden')
-
+  if (!aankomst) return leeg('geen_ritten')
   // Een keten = alleen de heenreis bekend. Zonder deze uitzondering leest R10's
   // terugval (het begin van diezelfde keten) als een vertrek van voor de
   // aankomst, en zou een dag van min tien uur op het scherm komen. Zelfde
   // uitzondering als R10 zelf maakt; wees iemand de rit handmatig aan, dan telt
-  // die keuze wel.
-  if (ketensVertrek.length < 2 && !vertrek.handmatig) return leeg('een_keten')
+  // die keuze wel (`bepaalDagAnkers` laat `vertrek` dan staan).
+  if (!vertrek) return leeg(aantalKetensVertrek < 2 ? 'een_keten' : 'geen_ritten')
+  if (aankomst.minuten == null || vertrek.minuten == null) return leeg('geen_tijden')
 
   const bruto = vertrek.minuten - aankomst.minuten
   if (bruto <= 0) return leeg('omgekeerd')

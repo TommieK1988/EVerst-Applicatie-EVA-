@@ -20,8 +20,8 @@ import {
   type DagRit,
 } from '@/app/(platform)/wagenpark/actions/werktijd-ritten'
 import {
-  kiesWerktijdAnker,
-  herstelWerktijdAnker,
+  kiesWerktijdAnkerOpDag,
+  herstelWerktijdAnkerOpDag,
   zetRitTypeVoorWerkdag,
 } from '@/app/(platform)/wagenpark/actions/werktijd-anker'
 import {
@@ -34,6 +34,7 @@ import {
   type WerktijdRij,
 } from '@/lib/wagenpark/werktijd-dag'
 import RittenLijst from '@/components/wagenpark/werktijden/DagRitten'
+import type { WerktijdRegel } from '@/lib/wagenpark/werktijd-anker'
 
 /**
  * Eén werkdag ter controle: wat het rooster zei, wat de auto deed, en wat er die
@@ -110,24 +111,25 @@ export default function DagPaneel({
    * gegevens ophalen, en de ritten in dit paneel ook — de ketenmarkering is
    * verschoven.
    */
-  function verzetAnker(afwijking: WerktijdAfwijking, trip_id: string | null) {
+  function verzetAnker(regel: WerktijdRegel, trip_id: string | null) {
+    if (!rij) return
     startTransition(async () => {
       const res = trip_id
-        ? await kiesWerktijdAnker(afwijking.id, trip_id)
-        : await herstelWerktijdAnker(afwijking.id)
+        ? await kiesWerktijdAnkerOpDag(rij.user_id_ulu, rij.datum, regel, trip_id)
+        : await herstelWerktijdAnkerOpDag(rij.user_id_ulu, rij.datum, regel)
       if (!res.ok) {
         toast.error(res.error)
         return
       }
       toast.success(
         trip_id
-          ? afwijking.soort === 'te_laat'
+          ? regel === 'R9'
             ? 'Aankomst opnieuw bepaald'
             : 'Vertrek opnieuw bepaald'
           : 'Terug naar de automatische bepaling',
       )
       setHerlaad((n) => n + 1)
-      onVervangen(rij?.id ?? null)
+      onVervangen(rij.id)
     })
   }
 
@@ -333,23 +335,20 @@ export default function DagPaneel({
                 <RittenLijst
                   ritten={ritten}
                   fout={rittenFout}
-                  teLaat={rij.teLaat}
-                  teVroeg={rij.teVroeg}
                   bezig={bezig}
                   onKies={verzetAnker}
                   onWisselType={wisselRitType}
                 />
-                {afwijkingen.map((a) => {
-                  const handmatig = a.soort === 'te_laat' ? handmatigAnker.R9 : handmatigAnker.R10
-                  if (!handmatig) return null
+                {(['R9', 'R10'] as const).map((regel) => {
+                  if (!handmatigAnker[regel]) return null
                   return (
-                    <p key={a.id} className="mt-2 text-xs text-slate-600">
-                      De rit die {a.soort === 'te_laat' ? 'de aankomst' : 'het vertrek'} bepaalt is
+                    <p key={regel} className="mt-2 text-xs text-slate-600">
+                      De rit die {regel === 'R9' ? 'de aankomst' : 'het vertrek'} bepaalt is
                       handmatig aangewezen.{' '}
                       <button
                         type="button"
                         disabled={bezig}
-                        onClick={() => verzetAnker(a, null)}
+                        onClick={() => verzetAnker(regel, null)}
                         className="underline text-green-700 hover:text-green-800 disabled:opacity-50"
                       >
                         Terug naar automatisch
@@ -358,7 +357,10 @@ export default function DagPaneel({
                   )
                 })}
                 <p className="mt-2 text-xs text-slate-500">
-                  Klopt zakelijk of privé niet? Klik op het label om te wisselen. Alleen zakelijke
+                  De groene vlag wijst de rit aan waar de aankomst- of vertrektijd vandaan komt.
+                  Klopt die niet? Klik op een andere zakelijke rit op &ldquo;bepaalt de
+                  aankomst&rdquo; of &ldquo;bepaalt het vertrek&rdquo;; de dag wordt erop
+                  herrekend. Klopt zakelijk of privé niet? Klik op het label om te wisselen. Alleen zakelijke
                   ritten tellen mee in de werkdag, dus de aankomst, het vertrek en het saldo van
                   deze dag worden meteen opnieuw uitgerekend.
                 </p>

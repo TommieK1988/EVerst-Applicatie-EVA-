@@ -21,6 +21,13 @@
 import { pgQuery } from '@/lib/wagenpark/db'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { magWerktijdenZien, ritTypeEffectiefSql } from '@/lib/wagenpark/privacy'
+import type { UluTrip } from '@everts/wagenpark-core'
+import { ankerKeuzeSleutel } from '@everts/wagenpark-core/compliance'
+import {
+  bepaalDagAnkers,
+  KETEN_PAUZE_SQL,
+  KETEN_PAUZE_STANDAARD,
+} from '@/lib/wagenpark/werktijd-aanwezigheid'
 
 export type DagRit = {
   id: string
@@ -64,24 +71,13 @@ export type RittenBijDag =
   | { ok: false; error: string }
 
 /**
- * De ritten van die dag, met per rit of hij de aankomst of het vertrek bepaalt.
- *
- * De ankermarkering komt uit de bevindingen van die dag: `keten_trip_ids` zegt
- * welke ritten bij de bepalende verplaatsing hoorden en `trip_id` welke rit de
- * tijd droeg. Is er die dag geen signaal, dan blijven die vlaggen leeg — er is
- * dan niets te herrekenen en het paneel toont alleen de ritten.
+ * De ritten van die dag. Welke rit de aankomst en het vertrek bepaalt rekenen
+ * we hierna uit met `bepaalDagAnkers` — niet uit de bevindingen. Die bestaan
+ * alleen op dagen mét een afwijking, en dan stond er op een gewone dag geen
+ * enkele rit gemarkeerd: de logica achter "aangekomen om 07:32" was nergens te
+ * zien en niet te corrigeren.
  */
 const RITTEN_SQL = `
-  with ankers as (
-    select b.regel_code,
-           b.trip_id,
-           array(select jsonb_array_elements_text(b.data->'keten_trip_ids')) as keten
-      from public.compliance_bevindingen b
-     where b.regel_code in ('R9', 'R10')
-       and b.data->>'keten_rol' = 'anker'
-       and b.periode_start = $2::date
-       and b.data->>'user_id_ulu' = $1
-  )
   select t.id::text                       as id,
          t.start_tijd::text               as start_tijd,
          t.stop_tijd::text                as stop_tijd,
@@ -91,16 +87,17 @@ const RITTEN_SQL = `
          t.duur_seconden,
          t.kenteken,
          (${ritTypeEffectiefSql('t')})::text as rit_type,
-         t.rit_type_override::text        as rit_type_override,
-         coalesce((select t.id::text = any(a.keten) from ankers a where a.regel_code = 'R9'), false)  as in_keten_aankomst,
-         coalesce((select t.id::text = any(a.keten) from ankers a where a.regel_code = 'R10'), false) as in_keten_vertrek,
-         coalesce((select t.id = a.trip_id from ankers a where a.regel_code = 'R9'), false)           as bepaalt_aankomst,
-         coalesce((select t.id = a.trip_id from ankers a where a.regel_code = 'R10'), false)          as bepaalt_vertrek
+         t.rit_type_override::text        as rit_type_override
     from public.ulu_trips t
    where t.user_id_ulu::text = $1
      and t.start_datum = $2::date
    order by t.start_tijd, t.stop_tijd
 `
+
+type KaleRit = Omit<
+  DagRit,
+  'in_keten_aankomst' | 'in_keten_vertrek' | 'bepaalt_aankomst' | 'bepaalt_vertrek'
+>
 
 export async function laadRittenVanDag(
   user_id_ulu: string,
@@ -117,15 +114,42 @@ export async function laadRittenVanDag(
   }
 
   try {
-    const [ritten, keuzes] = await Promise.all([
-      pgQuery<DagRit>(RITTEN_SQL, [user_id_ulu, datum]),
-      pgQuery<{ regel_code: string }>(
-        `select regel_code
+    const [kaal, keuzes, ketenPauzes] = await Promise.all([
+      pgQuery<KaleRit>(RITTEN_SQL, [user_id_ulu, datum]),
+      pgQuery<{ regel_code: string; trip_id: string }>(
+        `select regel_code, trip_id::text as trip_id
            from public.werktijd_anker_keuzes
           where user_id_ulu::text = $1 and datum = $2::date`,
         [user_id_ulu, datum],
       ),
+      pgQuery<{ code: string; keten_pauze_min: number | null }>(KETEN_PAUZE_SQL, []),
     ])
+
+    const ankerKeuzes = new Map<string, string>()
+    for (const k of keuzes) {
+      ankerKeuzes.set(
+        ankerKeuzeSleutel(user_id_ulu as unknown as UluTrip['user_id_ulu'], datum, k.regel_code),
+        k.trip_id,
+      )
+    }
+    const pauze = (code: string) =>
+      ketenPauzes.find((r) => r.code === code)?.keten_pauze_min ?? KETEN_PAUZE_STANDAARD
+
+    // Alleen zakelijke ritten tellen mee in de werkdag, net als in R9/R10.
+    const { aankomst, vertrek } = bepaalDagAnkers(
+      kaal.filter((r) => r.rit_type === 'zakelijk') as unknown as UluTrip[],
+      { userId: user_id_ulu, datum, pauzeR9: pauze('R9'), pauzeR10: pauze('R10'), ankerKeuzes },
+    )
+    const ketenAankomst = new Set(aankomst?.keten.map((t) => t.id) ?? [])
+    const ketenVertrek = new Set(vertrek?.keten.map((t) => t.id) ?? [])
+
+    const ritten: DagRit[] = kaal.map((r) => ({
+      ...r,
+      in_keten_aankomst: ketenAankomst.has(r.id),
+      in_keten_vertrek: ketenVertrek.has(r.id),
+      bepaalt_aankomst: aankomst?.anker.id === r.id,
+      bepaalt_vertrek: vertrek?.anker.id === r.id,
+    }))
 
     return {
       ok: true,
