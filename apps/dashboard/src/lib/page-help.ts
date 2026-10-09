@@ -1169,7 +1169,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Alle openstaande acties die aan jou zijn toegewezen, verzameld uit alle lopende dossiers. Dé werklijst om je eigen dag te plannen — gesorteerd op deadline zodat het meest urgente bovenaan staat.',
     sections: [
       { title: 'Werken met de lijst', body: 'Klik op een actie om direct naar het tabblad Acties van het bijbehorende dossier te springen. De lijst toont alleen jouw acties; de kolom "Toegewezen aan" is daarom verborgen.' },
-      { title: 'Filteren en sorteren', body: 'Filter op fase, status (Open, In behandeling, Wacht op, Gereed, Vervallen), prioriteit en deadline (Overschreden, Deze week, Later, Geen). Standaard staat de lijst op deadline oplopend.' },
+      { title: 'Filteren en sorteren', body: 'Filter op fase, status (Open, In behandeling, Wacht op, Gereed, Vervallen), prioriteit en deadline (Overschreden, Deze week, Later, Geen). Standaard staat de lijst op deadline oplopend. Mag je de acties van collega’s zien, dan kies je met "Acties van" tussen alleen jouw acties en alle acties, en zoom je met "Toegewezen aan" in op één of meer personen (of op "Niet toegewezen").' },
       { title: 'Kolommen', body: 'Naast de actie zie je het dossiernummer, de dossiertitel, fase, prioriteit, actielijst en de betrokken rollen (projectleider, uitvoerder, calculator, werkvoorbereider). Via "Kolommen beheren" kies je wat zichtbaar is.' },
     ],
   }],

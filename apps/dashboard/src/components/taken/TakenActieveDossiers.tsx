@@ -177,6 +177,11 @@ export default function TakenActieveDossiers({
       [...arr].sort((a, b) => volgorde.indexOf(a) - volgorde.indexOf(b))
 
     const deadline: SlicerDef = { key: 'deadline', label: 'Deadline', opties: DEADLINE_OPTIES }
+    const toegewezen: SlicerDef = { key: 'toegewezen', label: 'Toegewezen aan',
+      opties: [
+        ...personen.map(p => ({ value: p, label: p })),
+        { value: NIET_TOEGEWEZEN, label: 'Niet toegewezen' },
+      ] }
 
     if (isMijnTaken) {
       return [
@@ -187,6 +192,9 @@ export default function TakenActieveDossiers({
             { value: SCOPE_ALLE, label: 'Alle acties' },
           ],
         }] : []),
+        // Met alle_zien-recht staan de acties van collega's in de dataset: dan wil je
+        // ook per persoon kunnen inzoomen.
+        ...(magAlleTaken ? [toegewezen] : []),
         deadline,
       ]
     }
@@ -196,11 +204,7 @@ export default function TakenActieveDossiers({
       { key: 'status', label: 'Status',
         opties: ord(statussen, ['open', 'in_behandeling', 'wacht_op', 'gereed', 'vervallen'])
           .map(s => ({ value: s, label: STATUS_META[s]?.label ?? s })) },
-      { key: 'toegewezen', label: 'Toegewezen aan',
-        opties: [
-          ...personen.map(p => ({ value: p, label: p })),
-          { value: NIET_TOEGEWEZEN, label: 'Niet toegewezen' },
-        ] },
+      toegewezen,
       deadline,
     ]
   }, [data, isMijnTaken, magAlleTaken])
