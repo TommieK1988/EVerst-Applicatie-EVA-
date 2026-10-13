@@ -19,6 +19,7 @@ import BibliotheekDrawer from './BibliotheekDrawer'
 import CufImportModal from './CufImportModal'
 import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
+import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
 import { offerteKeuzesBestaan } from '@/lib/everts-calc/offerte-keuzes'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
@@ -115,6 +116,7 @@ export default function CalculatieHoofdscherm({
   const [pendingOfferteType, setPendingOfferteType]   = useState<QuoteType | null>(null)
   const sluitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
+  const [schermRef, schermHoogte] = usePasInScrollvlak()
 
   /* ── Boom-hover handlers ─────────────────────────────────────────── */
   const handleBoomEnter = useCallback(() => {
@@ -424,7 +426,7 @@ export default function CalculatieHoofdscherm({
   const ddItem = 'flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md'
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-56px)] bg-slate-50">
+    <div ref={schermRef} className="flex flex-col h-[calc(100dvh-56px)] bg-slate-50" style={schermHoogte ? { height: schermHoogte } : undefined}>
 
       {/* ─── Bevroren banner ── */}
       {readOnly && (
