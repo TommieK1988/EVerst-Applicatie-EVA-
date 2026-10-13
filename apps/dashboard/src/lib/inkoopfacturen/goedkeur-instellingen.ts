@@ -4,7 +4,9 @@
  * Instellingen van de EVA-goedkeuring van inkoopfacturen: vanaf wanneer EVA nieuwe facturen
  * overneemt, de route per administratie (vaste goedkeurder, drempel, drempelgoedkeurder) en de
  * goedkeurder per 4xxx-grootboekrekening voor overhead.
- * Alleen met `inkoopfacturen: beheren`.
+ *
+ * Gevoelig: alleen voor beheerders (`instellingen: beheren`, in de praktijk Directie) — bewust níét
+ * `inkoopfacturen: beheren`, want dat heeft ook de administratie. Scherm: /instellingen/inkoop-goedkeuring.
  */
 
 import { revalidatePath } from 'next/cache'
@@ -46,7 +48,7 @@ async function haalKostenrekeningen(): Promise<{ nummer: string; naam: string }[
 }
 
 export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
-  await vereisRecht('inkoopfacturen', 'beheren')
+  await vereisRecht('instellingen', 'beheren')
   const [{ data: inst }, { data: regels }, { data: ms }, facturen, { data: gb }, rekeningen] = await Promise.all([
     db().from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle(),
     db().from('inkoop_goedkeur_regels').select('divisie_bouw7_id, terugval_goedkeurder_id, drempel_excl, drempel_goedkeurder_id'),
@@ -83,7 +85,7 @@ export async function slaGoedkeurInstellingenOp(input: {
   grootboek: { nummer: string; goedkeurder_id: string }[]
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const { medewerker } = await vereisRecht('inkoopfacturen', 'beheren')
+    const { medewerker } = await vereisRecht('instellingen', 'beheren')
 
     if (input.evaVanaf && Number.isNaN(Date.parse(input.evaVanaf))) {
       return { ok: false, error: 'De startdatum is geen geldige datum.' }

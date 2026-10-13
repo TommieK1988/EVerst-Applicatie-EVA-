@@ -8,7 +8,6 @@ import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { Button } from '@/components/ui'
 import InkoopfactuurPaneel from '@/components/inkoopfacturen/InkoopfactuurPaneel'
 import FactuurVenster from '@/components/inkoopfacturen/FactuurVenster'
-import GoedkeurInstellingenDialoog from '@/components/inkoopfacturen/GoedkeurInstellingenDialoog'
 import { ververAlleInkoopfacturen, markeerBetalen, type ActieResultaat } from '@/lib/inkoopfacturen/actions'
 import { inkoopStatusLabel, INKOOP_STATUS_BETAALBAAR } from '@/lib/bouw7/inkoop-status'
 import { vervalKleur, dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
@@ -242,7 +241,6 @@ export default function InkoopfacturenOverzicht({
   const [factuurVenster, setFactuurVenster] = useState<InkoopfactuurRij | null>(null)
   const [selectie, setSelectie] = useState<InkoopfactuurRij[]>([])
   const [melding, setMelding] = useState<string | null>(null)
-  const [instellingenOpen, setInstellingenOpen] = useState(false)
   const router = useRouter()
 
   const kolommen = useMemo(() => maakKolommen(setFactuurVenster), [])
@@ -307,9 +305,6 @@ export default function InkoopfacturenOverzicht({
           <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>
             {basis.length} facturen · {euro(totaalExcl)} excl. · <strong>{euro(totaalIncl)}</strong> incl.
           </span>
-          {magBetalen && (
-            <Button variant="ghost" size="sm" onClick={() => setInstellingenOpen(true)}>Goedkeurroute</Button>
-          )}
           <SyncKnop
             laatsteSync={laatsteSync}
             onSync={async (): Promise<SyncUitkomst> => {
@@ -367,10 +362,6 @@ export default function InkoopfacturenOverzicht({
         onClose={() => setGeopend(null)}
         onGewijzigd={() => router.refresh()}
       />
-
-      {magBetalen && (
-        <GoedkeurInstellingenDialoog open={instellingenOpen} onClose={() => setInstellingenOpen(false)} />
-      )}
 
       <FactuurVenster rij={factuurVenster} onClose={() => setFactuurVenster(null)} />
     </div>

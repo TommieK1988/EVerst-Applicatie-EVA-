@@ -1,13 +1,8 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
-import {
-  Button, Combobox, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader,
-  DialogTitle, FormField, Input, type ComboboxOption,
-} from '@/components/ui'
-import {
-  getGoedkeurInstellingen, slaGoedkeurInstellingenOp, type GoedkeurInstellingen,
-} from '@/lib/inkoopfacturen/goedkeur-instellingen'
+import React, { useMemo, useState } from 'react'
+import { Button, Card, CardBody, Combobox, FormField, Input, type ComboboxOption } from '@/components/ui'
+import { slaGoedkeurInstellingenOp, type GoedkeurInstellingen } from '@/lib/inkoopfacturen/goedkeur-instellingen'
 import type { GoedkeurRegel } from '@/lib/inkoopfacturen/goedkeur-route'
 import { nlDelen, nlTijdstip } from '@/lib/planning/nl-tijd'
 
@@ -15,9 +10,12 @@ import { nlDelen, nlTijdstip } from '@/lib/planning/nl-tijd'
  * De route van de EVA-goedkeuring: vanaf wanneer EVA nieuwe facturen overneemt, wie facturen
  * zonder projectleider krijgt, en boven welk bedrag er een tweede akkoord nodig is. Per
  * administratie mag je afwijken; een leeg veld volgt de standaard.
+ *
+ * Staat bewust in Bedrijfsinstellingen en niet op het inkoopscherm: wie wat mag goedkeuren is
+ * gevoelig, en is daarom alleen voor `instellingen: beheren` (pagina én server-actions).
  */
 
-type Props = { open: boolean; onClose: () => void }
+type Props = { data: GoedkeurInstellingen }
 
 const LEEG = (divisie: number | null): GoedkeurRegel => ({
   divisie_bouw7_id: divisie, terugval_goedkeurder_id: null, drempel_excl: null, drempel_goedkeurder_id: null,
@@ -35,27 +33,16 @@ function Persoon({ opties, waarde, onChange, leeg }: {
   )
 }
 
-export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
-  const [data, setData] = useState<GoedkeurInstellingen | null>(null)
-  const [vanaf, setVanaf] = useState('')
-  const [regels, setRegels] = useState<GoedkeurRegel[]>([])
-  const [grootboek, setGrootboek] = useState<{ nummer: string; goedkeurder_id: string | null }[]>([])
+export default function GoedkeurrouteBeheer({ data }: Props) {
+  const [vanaf, setVanaf] = useState(data.evaVanaf ? nlDelen(data.evaVanaf).datum : '')
+  const [regels, setRegels] = useState<GoedkeurRegel[]>(() => [
+    data.regels.find(r => r.divisie_bouw7_id == null) ?? LEEG(null),
+    ...data.administraties.map(a => data.regels.find(r => r.divisie_bouw7_id === a.id) ?? LEEG(a.id)),
+  ])
+  const [grootboek, setGrootboek] = useState<{ nummer: string; goedkeurder_id: string | null }[]>(data.grootboek)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    setFout(null)
-    getGoedkeurInstellingen().then(d => {
-      setData(d)
-      setVanaf(d.evaVanaf ? nlDelen(d.evaVanaf).datum : '')
-      setGrootboek(d.grootboek)
-      setRegels([
-        d.regels.find(r => r.divisie_bouw7_id == null) ?? LEEG(null),
-        ...d.administraties.map(a => d.regels.find(r => r.divisie_bouw7_id === a.id) ?? LEEG(a.id)),
-      ])
-    }).catch(e => setFout(e instanceof Error ? e.message : 'Laden mislukt'))
-  }, [open])
+  const [opgeslagen, setOpgeslagen] = useState(false)
 
   const opties: ComboboxOption[] = useMemo(
     () => (data?.medewerkers ?? []).map(m => ({ value: m.id, label: m.naam, sub: m.afdeling ?? undefined })),
@@ -78,7 +65,7 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
   }
 
   async function opslaan() {
-    setBezig(true); setFout(null)
+    setBezig(true); setFout(null); setOpgeslagen(false)
     // Middernacht NL-tijd: de server draait op UTC, zie lib/planning/nl-tijd.ts.
     const gekozen = grootboek.filter(g => g.nummer)
     if (gekozen.some(g => !g.goedkeurder_id)) { setBezig(false); setFout('Kies bij elke grootboekrekening een goedkeurder, of haal de regel weg.'); return }
@@ -89,26 +76,13 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
     })
     setBezig(false)
     if (!res.ok) { setFout(res.error); return }
-    onClose()
+    setOpgeslagen(true)
   }
 
   return (
-    <Dialog open={open} onOpenChange={o => { if (!o && !bezig) onClose() }}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <div className="pr-8">
-            <DialogTitle>Goedkeurroute inkoopfacturen</DialogTitle>
-            <DialogDescription>
-              Stap 1 is de projectleider van het dossier. Overhead (geen projectleider) gaat naar de
-              goedkeurder van de 4000-grootboekrekening, en anders naar de vaste goedkeurder. Boven de
-              drempel (excl. btw) volgt een tweede akkoord.
-            </DialogDescription>
-          </div>
-        </DialogHeader>
-
-        <DialogBody className="space-y-4">
-          {!data && !fout && <p className="text-[13px] text-neutral-500">Laden…</p>}
-          {data && (
+    <Card style={{ maxWidth: 880 }}>
+      <CardBody>
+        <div className="space-y-4">
             <>
               <FormField upper label="EVA keurt goed vanaf" helper="Facturen die vanaf deze datum in Bouw7 binnenkomen en daar geen goedkeurder hebben, keurt EVA goed. Oudere facturen worden in Bouw7 afgemaakt. Leeg = EVA neemt nog niets over.">
                 <Input type="date" value={vanaf} onChange={e => setVanaf(e.target.value)} style={{ maxWidth: 200 }} />
@@ -141,9 +115,6 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
                 )
               })}
             </>
-          )}
-          {fout && <p className="text-[13px] text-error-700">{fout}</p>}
-          {data && (
             <div className="rounded-lg border border-neutral-200 p-3">
               <div className="mb-1 text-[13px] font-semibold text-neutral-900">Overhead per grootboekrekening</div>
               <p className="mb-3 text-xs text-neutral-500">
@@ -170,14 +141,14 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
                 Rekening toevoegen
               </Button>
             </div>
-          )}
-        </DialogBody>
 
-        <DialogFooter>
-          <Button variant="secondary" size="sm" disabled={bezig} onClick={onClose}>Annuleren</Button>
-          <Button size="sm" disabled={bezig || !data} onClick={opslaan}>Opslaan</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          {fout && <p className="text-[13px] text-error-700">{fout}</p>}
+          <div className="flex items-center gap-3">
+            <Button size="sm" disabled={bezig} onClick={opslaan}>Opslaan</Button>
+            {opgeslagen && <span className="text-[13px] text-success-700">Opgeslagen.</span>}
+          </div>
+        </div>
+      </CardBody>
+    </Card>
   )
 }

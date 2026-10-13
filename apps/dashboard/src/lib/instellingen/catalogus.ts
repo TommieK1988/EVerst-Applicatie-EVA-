@@ -214,6 +214,15 @@ export const INSTELLINGEN_SECTIES: InstellingSectie[] = [
         synoniemen: ['regie', 'opslag', 'stelpost', 'marge', 'factuur', 'debiteur', 'reden', 'onbetaald', 'aanmaning', 'standaardregel', 'factuurregel', 'losse regel', 'voorrijkosten', 'opstartkosten'],
       },
       {
+        href: '/instellingen/inkoop-goedkeuring',
+        titel: 'Goedkeurroute inkoopfacturen',
+        omschrijving: 'Wie welke inkoopfactuur goedkeurt: projectleider, per grootboekrekening, een vaste goedkeurder en een tweede akkoord boven een drempel.',
+        module: 'inkoopfacturen',
+        guard: { module: 'instellingen', niveau: 'beheren' },
+        alleenBeheerder: true,
+        synoniemen: ['inkoop', 'factuur', 'goedkeuren', 'fiatteren', 'accorderen', 'grootboek', 'drempel', 'route', 'crediteur'],
+      },
+      {
         href: '/instellingen/btw-kostensoorten',
         titel: 'BTW-tarieven & kostensoorten',
         omschrijving: 'De twee vaste Bouw7-lijsten achter calculatie, offertes, facturen en inkoop. Alleen lezen.',

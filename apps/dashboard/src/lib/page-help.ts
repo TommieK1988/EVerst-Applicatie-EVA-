@@ -407,6 +407,18 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Financieel: Goedkeurroute inkoopfacturen (Bedrijfsinstellingen) ───────
+  [/^\/instellingen\/inkoop-goedkeuring$/, {
+    title: 'Goedkeurroute inkoopfacturen',
+    description: 'Wie welke inkoopfactuur goedkeurt in EVA. Alleen voor beheerders, omdat dit bepaalt wie akkoord mag geven op uitgaven.',
+    sections: [
+      { title: 'EVA keurt goed vanaf', body: 'Facturen die vanaf deze datum in Bouw7 binnenkomen en daar geen goedkeurder hebben, keurt EVA goed. Facturen die al in de goedkeuring van Bouw7 zaten, worden daar afgemaakt. Leeg betekent: EVA neemt nog niets over.' },
+      { title: 'Volgorde', body: 'Een projectfactuur gaat naar de projectleider van het dossier. Overhead gaat naar de goedkeurder van de 4000-grootboekrekening op de factuur (bij meerdere rekeningen telt het hoogste bedrag), en anders naar de vaste goedkeurder van de administratie.' },
+      { title: 'Tweede akkoord', body: 'Boven de drempel (excl. btw) moet nog iemand akkoord geven: de persoon die je kiest, of iemand uit Directie. Is dat dezelfde persoon als bij de eerste stap, dan vervalt de tweede stap.' },
+      { title: 'Per administratie', body: 'Een leeg veld bij een administratie volgt de standaard. Vul je iets in, dan geldt dat alleen voor die B.V.' },
+    ],
+  }],
+
   // ── Financieel: Inkoopfacturen ─────────────────────────────────────────
   [/^\/inkoop\/facturen$/, {
     title: 'Inkoopfacturen',
@@ -417,7 +429,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Wie ziet wat', body: 'Met het recht "Inkoopfacturen: alle" zie je álle facturen. Zonder dat recht zie je de facturen die aan een project hangen — opdrachten én servicedesk — plus de facturen waarvan jij zelf de goedkeurder bent. Facturen zonder project (abonnementen, leasing, verzekeringen) blijven dan verborgen.' },
       { title: 'Goedkeuren in EVA', body: 'Nieuwe facturen keur je in EVA goed: open de factuur en kies Akkoord of Bezwaar (bij bezwaar is een reden verplicht). Eerst keurt de projectleider van het dossier. Facturen zonder projectleider (overhead) gaan naar de goedkeurder van hun 4000-grootboekrekening, zoals autokosten of software, en anders naar een vaste goedkeurder. Boven een ingesteld bedrag volgt nog een tweede akkoord. Na het laatste akkoord zet EVA de factuur in Bouw7 op Goedgekeurd, met jouw naam en het tijdstip als tekst bij de factuur. Ben je er niet, dan kun je de factuur overdragen aan een collega.' },
       { title: 'Oudere facturen', body: 'Facturen die al in de goedkeuring van Bouw7 zaten, worden daar afgemaakt. In het zijpaneel zie je dan de keten uit Bouw7 en een knop om de factuur in Bouw7 te openen.' },
-      { title: 'Goedkeurroute instellen', body: 'Met beheerrechten stel je via de knop Goedkeurroute in vanaf welke datum EVA nieuwe facturen overneemt, wie facturen zonder projectleider goedkeurt (ook per 4000-grootboekrekening) en vanaf welk bedrag er een tweede akkoord nodig is. Per administratie mag je daarvan afwijken.' },
+      { title: 'Goedkeurroute instellen', body: 'Wie welke factuur goedkeurt, stel je in onder Bedrijfsinstellingen → Goedkeurroute inkoopfacturen. Dat scherm is alleen voor beheerders.' },
       { title: 'Notities', body: 'Een notitie die je in EVA plaatst blijft in EVA. Dat is expres: de opmerking bij de factuur in Bouw7 is gereserveerd voor wie hem goedkeurde of afkeurde, en waarom.' },
       { title: 'Betalen', body: 'Directie vinkt bij een goedgekeurde factuur aan dat hij betaald mag worden. Op het tabblad Betalen staat vervolgens de lijst voor wie de betaling uitvoert. Facturen die nog ter goedkeuring liggen kunnen niet worden aangevinkt.' },
     ],
