@@ -202,8 +202,8 @@ export default function TotalsBar({
           </div>
         </div>
 
-        {/* Verkoopprijs excl. BTW */}
-        <div className="px-4 py-2.5 flex-1 min-w-0">
+        {/* Verkoopprijs excl. BTW — `ml-auto` duwt hem rechts, naast BTW en totaal */}
+        <div className="ml-auto px-4 py-2.5 min-w-0 flex-shrink-0">
           <div className="text-white/50 text-xs mb-0.5">VP excl. BTW</div>
           <div className="font-bold  text-base text-everts-light">{formatEuro(verkoopprijs_live)}</div>
         </div>
