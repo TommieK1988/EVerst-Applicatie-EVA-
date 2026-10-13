@@ -4,6 +4,7 @@ import {
   slaMeetregelAggregaatOp, verwijderMeetregelAggregaat,
 } from './local-store'
 import { nieuweId } from './utils'
+import { normaliseerBestekcode } from './bestekcode'
 
 // ─── HOEVEELHEID ─────────────────────────────────────────────────────────────
 
@@ -56,14 +57,7 @@ export function isRegelActief(r: Meetregel): boolean {
 
 // ─── BESTEKSCODE ─────────────────────────────────────────────────────────────
 
-/**
- * Eén schrijfwijze per code: ' s-01 ' en 'S-01' horen bij hetzelfde cumulatief.
- * Hoofdletters, spaties aan de randen weg en dubbele spaties samengevoegd. Een
- * dubbele punt mag niet, want die scheidt de delen van de aggregatiesleutel.
- */
-export function normaliseerBestekcode(code: string | null | undefined): string {
-  return (code ?? '').replace(/:/g, '').replace(/\s+/g, ' ').trim().toUpperCase()
-}
+export { normaliseerBestekcode } from './bestekcode'
 
 // ─── AGGREGATIE SLEUTEL ───────────────────────────────────────────────────────
 

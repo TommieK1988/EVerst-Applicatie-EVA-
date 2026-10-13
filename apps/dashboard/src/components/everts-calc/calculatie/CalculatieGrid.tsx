@@ -36,6 +36,7 @@ import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwer
 import { slaRegelOpAlsRecept } from '@/app/(platform)/everts-calc/actions/bibliotheek'
 import { haalHuidigeGebruikerId } from '@/app/(platform)/everts-calc/actions/layouts-calc'
 import { laadLayouts, slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
+import { useBewaarLaatsteKolommen, LAATST_SCHERM } from './kolom-geheugen'
 
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import type { KolomConfig, GebruikerLayout } from '@everts/database/platform-types'
@@ -87,7 +88,7 @@ type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Comp
 // ─── Kolom definities ─────────────────────────────────────────────────────────
 
 type ColId =
-  'kostengroep' | 'omschrijving' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
+  'kostengroep' | 'omschrijving' | 'code' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
   'uur_eenh' | 'min_eenh' | 'tarief_ab' | 'bedrag_ab' |
   'prijs_mt' | 'bedrag_mt' | 'prijs_oa' | 'bedrag_oa' |
   'tot_uren' |
@@ -104,6 +105,7 @@ interface ColDef {
 const COL_DEFS: ColDef[] = [
   { id: 'kostengroep',  label: 'Kostengroep',  dw: 100, minW: 60,  align: 'left' },
   { id: 'omschrijving', label: 'Omschrijving', dw: 260, minW: 100, align: 'left' },
+  { id: 'code',         label: 'Code', title: 'Bestekscode uit de meetstaat', dw: 56, minW: 40, align: 'left' },
   { id: 'aant',         label: 'Aant.',        dw: 56,  minW: 40,  align: 'right' },
   { id: 'eenh',         label: 'Eenh.',        dw: 44,  minW: 36,  align: 'left' },
   { id: 'stelpost',     label: 'STP', title: 'Stelpost (provisorische som)', dw: 32, minW: 28, align: 'center' },
@@ -156,8 +158,14 @@ function stateNaarLayout(order: ColId[], hidden: Set<ColId>, widths: Record<ColI
 function layoutNaarState(cfg: KolomConfig[]): { colOrder: ColId[]; hiddenCols: Set<ColId>; colWidths: Record<ColId, number> } {
   const geldig = cfg.filter(c => (c.key as ColId) in COL_MAP)
   const gesorteerd = [...geldig].sort((a, b) => a.volgorde - b.volgorde).map(c => c.key as ColId)
-  // Ontbrekende kolommen (nieuw sinds opslaan) achteraan toevoegen, zichtbaar
-  const colOrder = [...gesorteerd, ...DEFAULT_ORDER.filter(id => !gesorteerd.includes(id))]
+  // Ontbrekende kolommen (nieuw sinds opslaan) zichtbaar toevoegen, direct achter hun
+  // standaard-buurman: een nieuwe kolom als Code hoort naast Omschrijving, niet achteraan.
+  const colOrder = [...gesorteerd]
+  DEFAULT_ORDER.forEach((id, i) => {
+    if (colOrder.includes(id)) return
+    const voorganger = i > 0 ? colOrder.indexOf(DEFAULT_ORDER[i - 1]) : -1
+    colOrder.splice(voorganger + 1, 0, id)
+  })
   const hiddenCols = new Set<ColId>(
     geldig.filter(c => !c.zichtbaar).map(c => c.key as ColId).filter(id => !NON_HIDEABLE_COLS.includes(id)),
   )
@@ -1302,6 +1310,15 @@ function CalculatieregelRij({
           )}
         </td>
       )
+      case 'code': return (
+        <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
+          {regel.bestekcode && (
+            <span className="text-xs font-semibold text-info-700 px-1 py-0.5 block truncate" title="Bestekscode uit de meetstaat">
+              {regel.bestekcode}
+            </span>
+          )}
+        </td>
+      )
       case 'eenh': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {regel.meetstaat_aggregaat_id ? (
@@ -2252,6 +2269,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [colNamen,      setColNamen]      = useState<Partial<Record<ColId, string>>>({})
   const [namenRijId,    setNamenRijId]    = useState<string | null>(null)
 
+  const [laatstRijId, setLaatstRijId] = useState<string | null>(null)
+  const [kolomGeheugenKlaar, setKolomGeheugenKlaar] = useState(false)
+  useBewaarLaatsteKolommen({
+    userId, rijId: laatstRijId, onRijId: setLaatstRijId, actiefLayoutId, klaar: kolomGeheugenKlaar,
+    kolommen: stateNaarLayout(colOrder, hiddenCols, colWidths),
+  })
+
   const pasLayoutToe = useCallback((cfg: KolomConfig[], layoutId: string | null) => {
     const { colOrder: o, hiddenCols: h, colWidths: w } = layoutNaarState(cfg)
     setColOrder(o); setHiddenCols(h); setColWidths(w); setActiefLayoutId(layoutId)
@@ -2264,14 +2288,21 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       const id = await haalHuidigeGebruikerId()
       if (afgebroken || !id) return
       setUserId(id)
-      const [rijen, namenRijen] = await Promise.all([
+      const [rijen, namenRijen, laatstRijen] = await Promise.all([
         laadLayouts(id, LAYOUT_SCHERM),
         laadLayouts(id, NAMEN_SCHERM),
+        laadLayouts(id, LAATST_SCHERM),
       ])
       if (afgebroken) return
       setLayouts(rijen)
+      // De laatst gebruikte indeling wint van de standaard-layout (zie kolom-geheugen.ts).
+      const laatst = laatstRijen[0]
       const standaard = rijen.find(l => l.is_standaard)
-      if (standaard) pasLayoutToe(standaard.kolommen, standaard.id)
+      if (laatst) {
+        setLaatstRijId(laatst.id)
+        pasLayoutToe(laatst.kolommen, rijen.some(l => l.id === laatst.naam) ? laatst.naam : null)
+      } else if (standaard) pasLayoutToe(standaard.kolommen, standaard.id)
+      setKolomGeheugenKlaar(true)
 
       const namenRij = namenRijen[0]
       if (namenRij) {

@@ -29,6 +29,8 @@ export interface CodeGroep {
   /** Genormaliseerde bestekscode; `ZONDER_CODE` voor regels zonder code. */
   code: string
   regels: Calculatieregel[]
+  /** Opgetelde hoeveelheid per eenheid (meestal één), voor een gevoel bij de post en om uitschieters te zien. */
+  totalen: { eenheid: string; hoeveelheid: number }[]
   /** Unieke gekoppelde behandelingen; `null` = een regel zonder behandeling. */
   behandelingIds: (string | null)[]
 }
@@ -56,10 +58,14 @@ export function groepeerPerBestekcode(
 
     let g = groepen.get(sleutel)
     if (!g) {
-      g = { sleutel, onderdeel, type, code, regels: [], behandelingIds: [] }
+      g = { sleutel, onderdeel, type, code, regels: [], totalen: [], behandelingIds: [] }
       groepen.set(sleutel, g)
     }
     g.regels.push(r)
+
+    const totaal = g.totalen.find(t => t.eenheid === r.eenheid)
+    if (totaal) totaal.hoeveelheid = +(totaal.hoeveelheid + r.hoeveelheid).toFixed(4)
+    else g.totalen.push({ eenheid: r.eenheid, hoeveelheid: r.hoeveelheid })
 
     const beh = r.schilderbehandeling_id ?? null
     if (!g.behandelingIds.includes(beh)) g.behandelingIds.push(beh)
@@ -108,7 +114,8 @@ export function planKoppeling(
       schilderbehandeling_id: behandeling.id,
       schilderbehandeling: undefined,
       omschrijving: agg
-        ? calculatieregelOmschrijving(agg.onderdeel, agg.type, behandeling.naam, regel.bestekcode)
+        // De code staat in zijn eigen kolom, niet in de omschrijving.
+        ? calculatieregelOmschrijving(agg.onderdeel, agg.type, behandeling.naam)
         : regel.omschrijving,
       gemarkeerd: combinatie ? regel.gemarkeerd : true,
     }

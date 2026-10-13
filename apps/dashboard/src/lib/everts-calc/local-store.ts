@@ -21,6 +21,7 @@ import type {
 } from './types'
 import { isTekstregel } from './types'
 import { nieuweId } from './utils'
+import { zonderCodeInOmschrijving } from './bestekcode'
 import { kopieerMeetstaten } from './meetstaat-kopie'
 
 const KEYS = {
@@ -300,7 +301,8 @@ export function hydrateCalculatie(
 
   sla(KEYS.scenarios,        [...getScenarios().filter(s => s.project_id !== projectId), ...scenarios])
   sla(KEYS.groepen,          [...getGroepen().filter(g => !projectScenarioIds.has(g.scenario_id)), ...groepen])
-  sla(KEYS.calculatieregels, [...getCalculatieregels().filter(r => !projectGroepIds.has(r.groep_id)), ...regels])
+  // Oude regels droegen de bestekscode nog in de omschrijving; die heeft nu een eigen kolom.
+  sla(KEYS.calculatieregels, [...getCalculatieregels().filter(r => !projectGroepIds.has(r.groep_id)), ...regels.map(zonderCodeInOmschrijving)])
   sla(KEYS.componentregels,  [...getComponentregels().filter(c => !projectRegelIds.has(c.calculatieregel_id)), ...componenten])
 
   // Meetstaten horen bij hetzelfde project en reizen mee in de snapshot; oudere
