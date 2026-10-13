@@ -10,6 +10,7 @@ import {
   SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
 import { Alert } from '@/components/ui/alert'
 import toast from 'react-hot-toast'
 import StructuurBoom from './StructuurBoom'
@@ -516,6 +517,8 @@ export default function CalculatieHoofdscherm({
                 <span className="hidden lg:inline">Meetstaat</span>
               </a>
             </Button>
+            <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
+              onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
 
             <span className="w-px h-4 bg-slate-200 mx-0.5" />
 

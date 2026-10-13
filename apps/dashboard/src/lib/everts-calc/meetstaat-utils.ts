@@ -54,29 +54,53 @@ export function isRegelActief(r: Meetregel): boolean {
   )
 }
 
+// ─── BESTEKSCODE ─────────────────────────────────────────────────────────────
+
+/**
+ * Eén schrijfwijze per code: ' s-01 ' en 'S-01' horen bij hetzelfde cumulatief.
+ * Hoofdletters, spaties aan de randen weg en dubbele spaties samengevoegd. Een
+ * dubbele punt mag niet, want die scheidt de delen van de aggregatiesleutel.
+ */
+export function normaliseerBestekcode(code: string | null | undefined): string {
+  return (code ?? '').replace(/:/g, '').replace(/\s+/g, ' ').trim().toUpperCase()
+}
+
 // ─── AGGREGATIE SLEUTEL ───────────────────────────────────────────────────────
 
+/**
+ * groep::onderdeel::type::bestekscode::behandeling.
+ *
+ * De behandeling kies je sinds de bestekscode niet meer in de meetstaat maar in de
+ * calculatie, dus bij nieuwe regels is dat deel leeg. Hij blijft in de sleutel
+ * voor oude meetstaten: zo houden hun aggregaten dezelfde sleutel en daarmee de
+ * koppeling naar hun calculatieregel. Anders levert een her-sync dubbele regels op.
+ */
 export function aggregaatSleutel(r: Meetregel): string | null {
   if (!isRegelActief(r)) return null
   const o = (r.onderdeel ?? '').toLowerCase().trim()
   const t = (r.type ?? '').toLowerCase().trim()
+  const c = normaliseerBestekcode(r.bestekcode)
   const b = (r.behandeling ?? '').toLowerCase().trim()
-  return `${r.groep_id}::${o}::${t}::${b}`
+  return `${r.groep_id}::${o}::${t}::${c}::${b}`
 }
 
 // ─── CALCULATIEREGEL OMSCHRIJVING ─────────────────────────────────────────────
 
+/** 'Kozijnen hout - 10-20cm [S-01] : OHD 03'. Code en behandeling vallen weg als ze leeg zijn. */
 export function calculatieregelOmschrijving(
-  onderdeel: string, type: string, behandeling: string
+  onderdeel: string, type: string, behandeling: string, bestekcode?: string
 ): string {
   const typeStr = type.trim() ? ` - ${type.trim()}` : ''
-  return `${onderdeel.trim()}${typeStr} : ${behandeling.trim()}`
+  const code = normaliseerBestekcode(bestekcode)
+  const codeStr = code ? ` [${code}]` : ''
+  const behStr = behandeling.trim() ? ` : ${behandeling.trim()}` : ''
+  return `${onderdeel.trim()}${typeStr}${codeStr}${behStr}`
 }
 
 // ─── HERBEREKENING AGGREGAAT ──────────────────────────────────────────────────
 
 export function herberekeningAggregaat(meetstaatId: string, sleutel: string): void {
-  const [groep_id, onderdeel, type, behandeling] = sleutel.split('::')
+  const [groep_id, onderdeel, type, bestekcode, behandeling] = sleutel.split('::')
 
   // Haal alle actieve regels op met deze sleutel
   const regels = getMeetregels(meetstaatId).filter(r => {
@@ -84,7 +108,8 @@ export function herberekeningAggregaat(meetstaatId: string, sleutel: string): vo
     const o = (r.onderdeel ?? '').toLowerCase().trim()
     const t = (r.type ?? '').toLowerCase().trim()
     const b = (r.behandeling ?? '').toLowerCase().trim()
-    return r.groep_id === groep_id && o === onderdeel && t === type && b === behandeling
+    return r.groep_id === groep_id && o === onderdeel && t === type
+      && normaliseerBestekcode(r.bestekcode) === bestekcode && b === behandeling
   })
 
   const totaal = regels.reduce((s, r) => s + berekenHoeveelheid(r), 0)
@@ -95,6 +120,7 @@ export function herberekeningAggregaat(meetstaatId: string, sleutel: string): vo
       a.groep_id === groep_id &&
       a.onderdeel.toLowerCase().trim() === onderdeel &&
       a.type.toLowerCase().trim() === type &&
+      normaliseerBestekcode(a.bestekcode) === bestekcode &&
       a.behandeling.toLowerCase().trim() === behandeling
     )
   })
@@ -128,6 +154,7 @@ export function herberekeningAggregaat(meetstaatId: string, sleutel: string): vo
       onderdeel: eersteRegel.onderdeel ?? '',
       type: eersteRegel.type ?? '',
       behandeling: eersteRegel.behandeling ?? '',
+      bestekcode,
       onderdeel_id: eersteRegel?.onderdeel_id,
       type_id: eersteRegel?.type_id,
       behandeling_id: eersteRegel?.behandeling_id,

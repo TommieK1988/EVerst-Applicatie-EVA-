@@ -11,7 +11,7 @@ import {
 import { nieuweId } from '@/lib/everts-calc/utils'
 import {
   berekenHoeveelheid, isRegelActief, aggregaatSleutel, herberekeningAggregaat,
-  calculatieregelOmschrijving,
+  calculatieregelOmschrijving, normaliseerBestekcode,
 } from '@/lib/everts-calc/meetstaat-utils'
 import MeetregelRij, { LAATSTE_KOL } from './MeetregelRij'
 import ElementOpslaanDialog from './ElementOpslaanDialog'
@@ -76,6 +76,12 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   const [elementTeller, setElementTeller] = useState(0)
   const bladRef = useRef<HTMLDivElement>(null)
   const groep = groepen.find(g => g.id === groepId)
+  // Codes die al ergens in deze meetstaat staan; de code-cel stelt ze voor, zodat
+  // dezelfde bestekscode ook op dezelfde manier geschreven wordt.
+  const codeLijstId = `bestekcodes-${meetstaatId}`
+  const bekendeCodes = Array.from(new Set(
+    [...getMeetregels(meetstaatId), ...regels].map(r => normaliseerBestekcode(r.bestekcode)).filter(Boolean)
+  )).sort()
 
   // Laad regels voor deze groep
   useEffect(() => {
@@ -87,8 +93,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
     const legeRij: Meetregel = {
       ...nieuweLegeRegel(meetstaatId, groepId, (laatste?.volgorde ?? 0) + 10),
       element: laatste?.element,
-      behandeling_id: laatste?.behandeling_id,
-      behandeling: laatste?.behandeling,
+      bestekcode: laatste?.bestekcode,
     }
     setRegels([...sorted, legeRij])
     // Zet focus op eerste lege rij
@@ -98,7 +103,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   }, [meetstaatId, groepId])
 
   /**
-   * Zorgt voor precies één lege regel onderaan, die het element en de behandeling
+   * Zorgt voor precies één lege regel onderaan, die het element en de bestekscode
    * van de regel erboven spiegelt. Bij het opmeten hoort een reeks regels bij
    * hetzelfde element, en dat wil je niet elke keer opnieuw typen.
    *
@@ -118,8 +123,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
     return [...gevuld, {
       ...lege,
       element: laatste?.element,
-      behandeling_id: laatste?.behandeling_id,
-      behandeling: laatste?.behandeling,
+      bestekcode: laatste?.bestekcode,
     }]
   }, [meetstaatId, groepId])
 
@@ -165,7 +169,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         if (sleutel) herberekeningAggregaat(meetstaatId, sleutel)
         onWijziging?.()
 
-        // De lege slotregel neemt hier vanzelf element en behandeling over.
+        // De lege slotregel neemt hier vanzelf element en bestekscode over.
         const resultaat = metLegeSlotregel(prev.map(r => r.id === id ? definitief : r))
 
         // Focus volgende (lege) rij
@@ -361,6 +365,9 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
       </div>
 
       {/* Grid */}
+      <datalist id={codeLijstId}>
+        {bekendeCodes.map(c => <option key={c} value={c} />)}
+      </datalist>
       <div ref={bladRef} onKeyDown={onBladKeyDown} className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-sm" style={{ minWidth: '1220px' }}>
           <thead className="sticky top-0 z-10">
@@ -380,7 +387,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
               <th className="min-w-[140px] px-2 py-2 text-left font-medium">Element</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Onderdeel</th>
               <th className="min-w-[140px] px-2 py-2 text-left font-medium">Type</th>
-              <th className="min-w-[200px] px-2 py-2 text-left font-medium">Behandeling</th>
+              <th className="min-w-[96px] px-2 py-2 text-left font-medium" title="Bestekscode; de behandeling koppel je per code in de calculatie">Code</th>
               <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">B (m)</th>
               <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">H (m)</th>
               <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
@@ -412,6 +419,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                 onEnter={() => onEnter(r.id)}
                 onVerwijder={() => onVerwijder(r.id)}
                 schilderData={schilderData}
+                codeLijstId={codeLijstId}
               />
             ))}
           </tbody>
@@ -465,7 +473,7 @@ function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; gr
     <div className="flex flex-wrap gap-2">
       {aggregaten.map((agg) => (
         <div key={agg.id} className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-          <span className="text-slate-600">{calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling)}</span>
+          <span className="text-slate-600">{calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling, agg.bestekcode)}</span>
           <span className=" font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>
           {agg.is_gesynchroniseerd && <span className="text-green-500">✓</span>}
           {!agg.is_gesynchroniseerd && <span className="text-amber-400">●</span>}

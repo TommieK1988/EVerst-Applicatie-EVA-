@@ -8,13 +8,13 @@ import {
   getMeetstaten, maakNieuweMeetstaat, slaMeetstaatOp,
   getMeetregelAggregaten, slaMeetregelAggregaatOp,
   slaCalculatieregelOp, getCalculatieregels,
-  getComponentregels, slaComponentregelOp, verwijderComponentregel,
 } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot, bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Meetstaat, Groep, Calculatieregel, Scenario } from '@/lib/everts-calc/types'
-import { calculatieregelOmschrijving } from '@/lib/everts-calc/meetstaat-utils'
+import { calculatieregelOmschrijving, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
+import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combinatie'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
@@ -180,19 +180,37 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
       let bijgewerkt = 0
 
       for (const agg of aggregaten) {
-        const omschrijving = calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling)
+        const bestekcode = normaliseerBestekcode(agg.bestekcode) || undefined
+        const omschrijving = calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling, bestekcode)
 
-        // Zoek bijpassende schilder combinatie via IDs
+        // Zoek bijpassende schilder combinatie via IDs. Alleen oude meetstaten dragen
+        // nog een behandeling; nieuwe koppelen die in de calculatie per bestekscode.
         const combinaties = agg.type_id ? (combinatiesPerType.get(agg.type_id) ?? []) : []
-        const combinatie = agg.behandeling_id
-          ? combinaties.find(c => c.behandeling_id === agg.behandeling_id)
-          : combinaties.find(c => c.behandeling.naam.toLowerCase() === agg.behandeling.toLowerCase())
+        const combinatie = !agg.behandeling_id && !agg.behandeling.trim()
+          ? undefined
+          : agg.behandeling_id
+            ? combinaties.find(c => c.behandeling_id === agg.behandeling_id)
+            : combinaties.find(c => c.behandeling.naam.toLowerCase() === agg.behandeling.toLowerCase())
 
         let calculatieregelId: string
 
         if (agg.calculatieregel_id) {
           // Bijwerken bestaande calculatieregel
           const bestaand = bestaandeRegels.find(r => r.id === agg.calculatieregel_id)
+          if (bestaand && bestaand.schilderbehandeling_id) {
+            // In de calculatie al een behandeling gekoppeld: alleen de hoeveelheid
+            // volgt de meetstaat. Omschrijving en normen zijn van de calculator.
+            slaCalculatieregelOp({
+              ...bestaand,
+              hoeveelheid: agg.totaal_hoeveelheid,
+              eenheid: agg.eenheid as Calculatieregel['eenheid'],
+              meetstaat_aggregaat_id: agg.id,
+              bestekcode,
+            })
+            slaMeetregelAggregaatOp({ ...agg, is_gesynchroniseerd: true })
+            bijgewerkt++
+            continue
+          }
           if (bestaand) {
             slaCalculatieregelOp({
               ...bestaand,
@@ -200,7 +218,9 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
               hoeveelheid: agg.totaal_hoeveelheid,
               eenheid: agg.eenheid as Calculatieregel['eenheid'],
               meetstaat_aggregaat_id: agg.id,
+              bestekcode,
             })
+            slaMeetregelAggregaatOp({ ...agg, is_gesynchroniseerd: true })
             calculatieregelId = bestaand.id
             bijgewerkt++
           } else {
@@ -218,6 +238,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
             opslag_pct: undefined,
             gemarkeerd: false,
             meetstaat_aggregaat_id: agg.id,
+            bestekcode,
           }
           slaCalculatieregelOp(nieuweRegel)
           slaMeetregelAggregaatOp({
@@ -229,58 +250,8 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
           aangemaakt++
         }
 
-        // Maak componentregels aan vanuit schilder normen (vervangt bestaande)
-        if (combinatie) {
-          // Verwijder bestaande componentregels voor deze calculatieregel
-          getComponentregels(calculatieregelId).forEach(c => verwijderComponentregel(c.id))
-
-          // Arbeid normen
-          combinatie.arbeid_normen.forEach(n => {
-            if (n.cost_per_unit > 0) {
-              slaComponentregelOp({
-                id: nieuweId(),
-                calculatieregel_id: calculatieregelId,
-                type: 'arbeid',
-                norm_hoeveelheid: n.minutes_per_unit / 60,
-                tarief: n.hour_rate,
-                omschrijving: n.omschrijving ?? undefined,
-              })
-            }
-          })
-
-          // Materiaal normen (niet-onderaanneming)
-          combinatie.materiaal_normen
-            .filter(n => n.norm_type !== 'onderaanneming')
-            .forEach(n => {
-              if (n.cost_per_unit > 0) {
-                slaComponentregelOp({
-                  id: nieuweId(),
-                  calculatieregel_id: calculatieregelId,
-                  type: 'materieel',
-                  norm_hoeveelheid: n.quantity_per_unit,
-                  tarief: n.unit_price,
-                  eenheid: (n.eenheid ?? undefined) as Calculatieregel['eenheid'] | undefined,
-                  omschrijving: n.naam ?? undefined,
-                })
-              }
-            })
-
-          // Onderaanneming normen
-          combinatie.materiaal_normen
-            .filter(n => n.norm_type === 'onderaanneming')
-            .forEach(n => {
-              if (n.cost_per_unit > 0) {
-                slaComponentregelOp({
-                  id: nieuweId(),
-                  calculatieregel_id: calculatieregelId,
-                  type: 'onderaanneming',
-                  norm_hoeveelheid: 1,
-                  tarief: n.unit_price,
-                  omschrijving: n.naam ?? undefined,
-                })
-              }
-            })
-        }
+        // Componentregels uit de schilder normen (vervangt bestaande)
+        if (combinatie) vervangNormenUitCombinatie(calculatieregelId, combinatie)
       }
 
       slaMeetstaatOp({ ...meetstaat, status: 'gesynchroniseerd' })

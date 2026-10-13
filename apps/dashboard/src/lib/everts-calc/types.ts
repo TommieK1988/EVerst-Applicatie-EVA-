@@ -284,6 +284,9 @@ export interface Calculatieregel {
   schilderbehandeling_id?: string  // gekozen schilder_behandelingen.id — de bron; tekst wordt pas bij de offerte bevroren
   schilderbehandeling?: string  // legacy snapshot van de behandelingstekst (oude regels zonder _id); fallback bij import
   meetstaat_aggregaat_id?: string  // gekoppeld aan MeetregelAggregaat (indicator: uit meetstaat)
+  /** Bestekscode uit de meetstaat (genormaliseerd, bijv. 'S-01'). Hierop koppel je in
+   *  bulk een behandeling; leeg = regel uit de meetstaat zonder code. */
+  bestekcode?: string
   werkomschrijving_afbeeldingen?: string[]  // base64 afbeeldingen bij de werkomschrijving
   kostengroep?: string  // optionele groeperingslabel voor werkbegroting (bijv. 'Bouwplaats')
 }
@@ -354,6 +357,9 @@ export interface Meetregel {
   /** @deprecated oude naam van `opmerking`; wordt bij het hydrateren omgezet. */
   omschrijving?: string
   bestek_kenmerk?: string         // RAL, spec, besteksreferentie
+  /** Bestekscode (bijv. 'S-01'). Splitst het cumulatief per onderdeel/type; in de
+   *  calculatie koppel je per code in één keer een behandeling. */
+  bestekcode?: string
   // Maatvoering
   breedte?: number
   hoogte?: number
@@ -378,7 +384,11 @@ export interface MeetregelAggregaat {
   // Aggregatiesleutel (vrije tekst fase 1)
   onderdeel: string
   type: string
+  /** Alleen nog gevuld bij meetstaten van vóór de bestekscode; nieuwe regels kiezen
+   *  geen behandeling meer in de meetstaat maar in de calculatie. */
   behandeling: string
+  /** Genormaliseerde bestekscode; leeg/afwezig = zonder code. */
+  bestekcode?: string
   // Schilder bibliotheek IDs (worden gevuld zodra meetregels met IDs beschikbaar zijn)
   onderdeel_id?: string
   type_id?: string

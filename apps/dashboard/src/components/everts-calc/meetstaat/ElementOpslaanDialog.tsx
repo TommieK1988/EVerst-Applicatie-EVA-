@@ -77,7 +77,7 @@ export default function ElementOpslaanDialog({
             {regels.map(r => (
               <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
                 <span className="flex-1 min-w-0 truncate text-slate-700">
-                  {[r.onderdeel, r.type, r.behandeling].filter(Boolean).join(' · ') || 'Regel zonder onderdeel'}
+                  {[r.onderdeel, r.type, r.bestekcode, r.behandeling].filter(Boolean).join(' · ') || 'Regel zonder onderdeel'}
                 </span>
                 <span className="flex-shrink-0 font-semibold text-slate-500">
                   {berekenHoeveelheid({ ...r, aantal: 1 }).toFixed(2)} {r.eenheid}
