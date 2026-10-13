@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bepaalStappen, besluitRegel, korteDatumTijd, regelVoorDivisie, voegRegelToe, type GoedkeurRegel,
+  bepaalStappen, besluitRegel, kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie, voegRegelToe,
+  type GoedkeurRegel,
 } from './goedkeur-route'
 
 const standaard: GoedkeurRegel = {
@@ -58,5 +59,30 @@ describe('tekstregel voor Bouw7', () => {
     expect(voegRegelToe('', regel)).toBe(regel)
     expect(voegRegelToe(null, regel)).toBe(regel)
     expect(voegRegelToe(`REF. : JOHN\n${regel}`, regel)).toBe(`REF. : JOHN\n${regel}`)
+  })
+})
+
+describe('grootboek (overhead)', () => {
+  it('ontleedt de Bouw7-naam', () => {
+    expect(ontleedGrootboekNaam('(4400) Autokosten direkt personeel')).toEqual({ nummer: '4400', naam: 'Autokosten direkt personeel' })
+    expect(ontleedGrootboekNaam('Iets zonder nummer')).toEqual({ nummer: null, naam: 'Iets zonder nummer' })
+  })
+  it('alleen 4xxx telt, hoogste bedrag wint', () => {
+    expect(kiesGrootboek([
+      { nummer: '6200', naam: 'Materiaal', bedrag: 9000 },
+      { nummer: '4400', naam: 'Auto', bedrag: 100 },
+      { nummer: '4350', naam: 'Software', bedrag: 80 },
+      { nummer: '4350', naam: 'Software', bedrag: 80 },
+    ])).toEqual({ nummer: '4350', naam: 'Software' })
+    expect(kiesGrootboek([{ nummer: '0300', naam: 'Computers', bedrag: 500 }])).toBeNull()
+  })
+  it('creditregels tellen op hun absolute bedrag', () => {
+    expect(kiesGrootboek([{ nummer: '4400', naam: 'Auto', bedrag: -300 }, { nummer: '4350', naam: 'Software', bedrag: 200 }])?.nummer).toBe('4400')
+  })
+  it('overhead met grootboekgoedkeurder; projectleider gaat altijd voor', () => {
+    expect(bepaalStappen({ projectleiderId: null, grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0])
+      .toEqual({ stap: 1, soort: 'grootboek', goedkeurder_id: 'bas' })
+    expect(bepaalStappen({ projectleiderId: 'pl', grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0].soort)
+      .toBe('projectleider')
   })
 })

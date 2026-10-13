@@ -39,6 +39,7 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
   const [data, setData] = useState<GoedkeurInstellingen | null>(null)
   const [vanaf, setVanaf] = useState('')
   const [regels, setRegels] = useState<GoedkeurRegel[]>([])
+  const [grootboek, setGrootboek] = useState<{ nummer: string; goedkeurder_id: string | null }[]>([])
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
 
@@ -48,6 +49,7 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
     getGoedkeurInstellingen().then(d => {
       setData(d)
       setVanaf(d.evaVanaf ? nlDelen(d.evaVanaf).datum : '')
+      setGrootboek(d.grootboek)
       setRegels([
         d.regels.find(r => r.divisie_bouw7_id == null) ?? LEEG(null),
         ...d.administraties.map(a => d.regels.find(r => r.divisie_bouw7_id === a.id) ?? LEEG(a.id)),
@@ -60,6 +62,17 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
     [data],
   )
 
+  const rekeningOpties: ComboboxOption[] = useMemo(() => {
+    const lijst = data?.rekeningen ?? []
+    // Een ingestelde rekening die Bouw7 niet (meer) teruggeeft blijft kiesbaar, anders verdwijnt hij uit beeld.
+    const extra = grootboek.filter(g => !lijst.some(r => r.nummer === g.nummer)).map(g => ({ nummer: g.nummer, naam: '' }))
+    return [...lijst, ...extra].map(r => ({ value: r.nummer, label: r.naam ? `${r.nummer} ${r.naam}` : r.nummer }))
+  }, [data, grootboek])
+
+  function wijzigGrootboek(i: number, veld: Partial<{ nummer: string; goedkeurder_id: string | null }>) {
+    setGrootboek(gs => gs.map((g, j) => (j === i ? { ...g, ...veld } : g)))
+  }
+
   function wijzig(divisie: number | null, veld: Partial<GoedkeurRegel>) {
     setRegels(rs => rs.map(r => (r.divisie_bouw7_id === divisie ? { ...r, ...veld } : r)))
   }
@@ -67,7 +80,13 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
   async function opslaan() {
     setBezig(true); setFout(null)
     // Middernacht NL-tijd: de server draait op UTC, zie lib/planning/nl-tijd.ts.
-    const res = await slaGoedkeurInstellingenOp({ evaVanaf: vanaf ? nlTijdstip(vanaf, '00:00') : null, regels })
+    const gekozen = grootboek.filter(g => g.nummer)
+    if (gekozen.some(g => !g.goedkeurder_id)) { setBezig(false); setFout('Kies bij elke grootboekrekening een goedkeurder, of haal de regel weg.'); return }
+    const res = await slaGoedkeurInstellingenOp({
+      evaVanaf: vanaf ? nlTijdstip(vanaf, '00:00') : null,
+      regels,
+      grootboek: gekozen.map(g => ({ nummer: g.nummer, goedkeurder_id: g.goedkeurder_id! })),
+    })
     setBezig(false)
     if (!res.ok) { setFout(res.error); return }
     onClose()
@@ -80,8 +99,9 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
           <div className="pr-8">
             <DialogTitle>Goedkeurroute inkoopfacturen</DialogTitle>
             <DialogDescription>
-              Stap 1 is altijd de projectleider van het dossier. Zonder dossier of projectleider gaat de
-              factuur naar de vaste goedkeurder. Boven de drempel (excl. btw) volgt een tweede akkoord.
+              Stap 1 is de projectleider van het dossier. Overhead (geen projectleider) gaat naar de
+              goedkeurder van de 4000-grootboekrekening, en anders naar de vaste goedkeurder. Boven de
+              drempel (excl. btw) volgt een tweede akkoord.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -123,6 +143,34 @@ export default function GoedkeurInstellingenDialoog({ open, onClose }: Props) {
             </>
           )}
           {fout && <p className="text-[13px] text-error-700">{fout}</p>}
+          {data && (
+            <div className="rounded-lg border border-neutral-200 p-3">
+              <div className="mb-1 text-[13px] font-semibold text-neutral-900">Overhead per grootboekrekening</div>
+              <p className="mb-3 text-xs text-neutral-500">
+                Alleen 4000-rekeningen, voor alle administraties. Staan er meerdere op één factuur, dan telt de
+                rekening met het hoogste bedrag. Niet ingesteld = de vaste goedkeurder.
+              </p>
+              {data.rekeningenFout && (
+                <p className="mb-2 text-xs text-error-700">De rekeningen uit Bouw7 konden niet worden geladen: {data.rekeningenFout}</p>
+              )}
+              <div className="space-y-2">
+                {grootboek.map((g, i) => (
+                  <div key={i} className="grid items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <Combobox options={rekeningOpties} value={g.nummer || undefined}
+                      onChange={v => wijzigGrootboek(i, { nummer: v })}
+                      placeholder="Kies een rekening" searchPlaceholder="Zoek op nummer of naam" emptyText="Geen rekening gevonden" />
+                    <Persoon opties={opties} waarde={g.goedkeurder_id} leeg="Kies een goedkeurder"
+                      onChange={v => wijzigGrootboek(i, { goedkeurder_id: v })} />
+                    <Button variant="ghost" size="sm" onClick={() => setGrootboek(gs => gs.filter((_, j) => j !== i))}>Weghalen</Button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="secondary" size="sm" className="mt-2"
+                onClick={() => setGrootboek(gs => [...gs, { nummer: '', goedkeurder_id: null }])}>
+                Rekening toevoegen
+              </Button>
+            </div>
+          )}
         </DialogBody>
 
         <DialogFooter>

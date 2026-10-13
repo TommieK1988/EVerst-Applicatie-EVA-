@@ -393,6 +393,14 @@ totaal-velden). Live opgehaald, géén opslag — defensief met `.catch` per bro
 > **Kosten: één call per factuur** → alleen on-demand ophalen (bij het uitklappen van een regel), niet
 > in bulk voor een heel dossier (>100 facturen komt voor). Zie `getInkoopFactuurDetail`.
 > De factuur is voor de gebruiker te openen in Bouw7: `https://start.bouw7.nl/purchase-invoice#/view/{id}`.
+>
+> **Grootboekrekening per factuurregel** (geverifieerd 13-10-2026). `lines[].ledger` is het Exact-GUID
+> van de rekening, niet het nummer. Vertalen via
+> `GET /organization/general-ledger-accounts?branch={vestigingId}` → `[{ id, code: <GUID>, name: "(6200) Materiaal leveranciers OHW" }]`.
+> **Zonder `?branch=` geeft onze app-sleutel een lege lijst** (`division`/`divisionId`/`branchId` ook leeg) —
+> de UI krijgt de lijst via de vestiging van de ingelogde medewerker. Vestigingen: `GET /list/branches`
+> (5249/5250/5513/5514, één per administratie). Een GUID hoort bij één administratie: hetzelfde nummer
+> heeft per B.V. een eigen GUID. Alle 67 GUIDs op de 680 open facturen waren zo te vertalen.
 
 > **Termijnen zijn een twee-traps-query** (geverifieerd jul 2026). `statement.project.id` is **niet**
 > HQL-mapped op `ProjectInvoiceTermListItem` → **HTTP 400**. Haal eerst de termijnstaat op met

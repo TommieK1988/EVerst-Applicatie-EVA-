@@ -22,8 +22,10 @@ import { getBouw7Client } from '@/lib/bouw7/sync'
 import { schrijfBesluitNaarBouw7 } from '@/lib/bouw7/inkoopfactuur-besluit'
 import { nlDelen } from '@/lib/planning/nl-tijd'
 import {
-  bepaalStappen, besluitRegel, korteDatumTijd, regelVoorDivisie, type GoedkeurRegel,
+  bepaalStappen, besluitRegel, kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie,
+  type GoedkeurRegel,
 } from './goedkeur-route'
+import type { Bouw7Client } from '@/lib/bouw7/client'
 
 const db = () => createAdminClient()
 
@@ -56,12 +58,59 @@ export async function logGebeurtenis(
   await db().from('inkoopfactuur_gebeurtenissen').insert({ inkoopfactuur_id: inkoopfactuurId, actie, medewerker_id: medewerkerId, detail: detail as Json })
 }
 
+/** Goedkeurder per 4xxx-grootboeknummer (alleen overhead). */
+export async function getGrootboekGoedkeurders(): Promise<Map<string, string>> {
+  const { data } = await db().from('inkoop_goedkeur_grootboek').select('grootboek_nummer, goedkeurder_id')
+  return new Map((data ?? []).map(r => [r.grootboek_nummer, r.goedkeurder_id]))
+}
+
+type Grootboekrekening = { id: number; code: string; name: string }
+
+/**
+ * GUID → "(4400) Autokosten …", per vestiging. Zonder `?branch=` geeft Bouw7 onze sleutel een lege
+ * lijst (ENDPOINTS.md). Eén call per vestiging per run.
+ */
+export function maakGrootboekOpzoeker(bouw7: Bouw7Client): (branchId: number, guid: string) => Promise<string | null> {
+  const perBranch = new Map<number, Promise<Map<string, string>>>()
+  return async (branchId, guid) => {
+    if (!perBranch.has(branchId)) {
+      perBranch.set(branchId, bouw7.get<Grootboekrekening[]>(`/organization/general-ledger-accounts?branch=${branchId}`)
+        .then(l => new Map((Array.isArray(l) ? l : []).map(g => [g.code, g.name])))
+        .catch(() => new Map()))
+    }
+    return (await perBranch.get(branchId)!).get(guid) ?? null
+  }
+}
+
+type Detail = {
+  approval?: { id?: number } | null
+  branch?: { id?: number } | null
+  lines?: { ledger?: string | null; subTotal?: string | number | null }[]
+}
+
+/** Het grootboek dat de goedkeurder bepaalt: de 4xxx-rekening met het hoogste bedrag. */
+async function grootboekVan(detail: Detail, zoek: (b: number, g: string) => Promise<string | null>): Promise<{ nummer: string; naam: string } | null> {
+  const branch = detail.branch?.id
+  if (branch == null) return null
+  const regels = await Promise.all((detail.lines ?? []).filter(l => l.ledger).map(async l => {
+    const volledig = await zoek(branch, l.ledger!)
+    const { nummer, naam } = ontleedGrootboekNaam(volledig ?? '')
+    return { nummer, naam, bedrag: Number(l.subTotal ?? 0) || 0 }
+  }))
+  return kiesGrootboek(regels)
+}
+
 type Kandidaat = {
   id: string; bouw7_invoice_id: string; dossier_id: string | null; divisie_bouw7_id: number | null; bedrag_excl: number | null
 }
 
 /** Maak de EVA-stappen aan voor één factuur en zet de eerste open. */
-export async function maakRoute(f: Kandidaat, regels: GoedkeurRegel[]): Promise<void> {
+export async function maakRoute(
+  f: Kandidaat,
+  regels: GoedkeurRegel[],
+  grootboek: { nummer: string; naam: string } | null = null,
+  grootboekGoedkeurders: Map<string, string> = new Map(),
+): Promise<void> {
   let projectleiderId: string | null = null
   if (f.dossier_id) {
     const { data: d } = await db().from('dossiers').select('project_manager_id').eq('id', f.dossier_id).maybeSingle()
@@ -73,6 +122,7 @@ export async function maakRoute(f: Kandidaat, regels: GoedkeurRegel[]): Promise<
   }
   const stappen = bepaalStappen({
     projectleiderId,
+    grootboekGoedkeurderId: grootboek ? grootboekGoedkeurders.get(grootboek.nummer) ?? null : null,
     bedragExcl: f.bedrag_excl == null ? null : Number(f.bedrag_excl),
     regel: regelVoorDivisie(regels, f.divisie_bouw7_id),
   })
@@ -85,10 +135,12 @@ export async function maakRoute(f: Kandidaat, regels: GoedkeurRegel[]): Promise<
   const eerste = stappen[0].goedkeurder_id
   await db().from('inkoopfacturen').update({
     goedkeuring_bron: 'eva',
+    grootboek_nummer: grootboek?.nummer ?? null,
+    grootboek_naam: grootboek?.naam ?? null,
     huidige_goedkeurder_id: eerste,
     huidige_goedkeurder_naam: await medewerkerNaam(eerste),
   }).eq('id', f.id)
-  await logGebeurtenis(f.id, 'route_bepaald', null, { stappen })
+  await logGebeurtenis(f.id, 'route_bepaald', null, { stappen, grootboek })
 }
 
 /**
@@ -165,11 +217,13 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
     if (lijst.length > 0) {
       const bouw7 = await getBouw7Client()
       const regels = await getGoedkeurRegels()
+      const grootboekGoedkeurders = await getGrootboekGoedkeurders()
+      const zoekGrootboek = maakGrootboekOpzoeker(bouw7)
       for (const f of lijst) {
         try {
           // Het approval-object staat alleen op het detail. Heeft Bouw7 tóch een keten aangemaakt
           // (workflow nog aan), dan blijft de factuur van Bouw7 — nooit twee goedkeurders tegelijk.
-          const detail = await bouw7.get<{ approval?: { id?: number } | null }>(
+          const detail = await bouw7.get<Detail>(
             `/purchase-invoicing/purchase-invoice/${f.bouw7_invoice_id}`,
           )
           if (detail?.approval?.id != null) {
@@ -178,7 +232,7 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
               .eq('id', f.id)
             continue
           }
-          await maakRoute(f, regels)
+          await maakRoute(f, regels, await grootboekVan(detail, zoekGrootboek), grootboekGoedkeurders)
           uit.toegewezen++
         } catch {
           // Volgende run opnieuw; één factuur mag de rest niet tegenhouden.

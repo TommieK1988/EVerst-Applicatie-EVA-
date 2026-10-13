@@ -83,7 +83,9 @@ export default function EvaGoedkeuringSectie({ inkoopfactuurId, onGewijzigd }: P
               <span style={{ fontSize: 13, fontWeight: 600 }}>
                 {s.stap}. {s.goedkeurder_naam ?? <em style={{ fontWeight: 400 }}>niemand aangewezen — Directie</em>}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{STAP_SOORT_LABEL[s.soort]}</span>
+              <span style={{ fontSize: 12, color: 'var(--fg-soft)' }}>
+                {STAP_SOORT_LABEL[s.soort]}{s.soort === 'grootboek' && data.grootboek ? ` ${data.grootboek}` : ''}
+              </span>
               <Badge tone={badge.tone} size="sm" style={{ marginLeft: 'auto' }}>{badge.label}</Badge>
             </div>
             {s.beoordeeld_op && (

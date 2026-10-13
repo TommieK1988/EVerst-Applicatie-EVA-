@@ -42,6 +42,8 @@ export type EvaGoedkeuring = {
   besluitOp: string | null
   bouw7BijgewerktOp: string | null
   bouw7Fout: string | null
+  /** De 4xxx-rekening die de route bepaalde, bv. "4400 Autokosten direkt personeel". */
+  grootboek: string | null
   /** De ingelogde gebruiker mag de open stap afhandelen. */
   magBeslissen: boolean
   /** De ingelogde gebruiker mag de open stap aan iemand anders geven. */
@@ -70,7 +72,7 @@ export async function getEvaGoedkeuring(inkoopfactuurId: string): Promise<EvaGoe
 
   const [{ data: f }, { data: rijen }] = await Promise.all([
     db().from('inkoopfacturen')
-      .select('goedkeuring_bron, eva_besluit, eva_besluit_op, bouw7_bijgewerkt_op, laatste_vote_fout')
+      .select('goedkeuring_bron, eva_besluit, eva_besluit_op, bouw7_bijgewerkt_op, laatste_vote_fout, grootboek_nummer, grootboek_naam')
       .eq('id', inkoopfactuurId).maybeSingle(),
     db().from('inkoop_goedkeur_stappen')
       .select('id, stap, soort, status, goedkeurder_id, beoordeeld_door, beoordeeld_op, toelichting')
@@ -99,6 +101,7 @@ export async function getEvaGoedkeuring(inkoopfactuurId: string): Promise<EvaGoe
     besluitOp: f?.eva_besluit_op ?? null,
     bouw7BijgewerktOp: f?.bouw7_bijgewerkt_op ?? null,
     bouw7Fout: f?.laatste_vote_fout ?? null,
+    grootboek: f?.grootboek_nummer ? [f.grootboek_nummer, f.grootboek_naam].filter(Boolean).join(' ') : null,
     magBeslissen: !!ikBen && !f?.eva_besluit,
     magOverdragen: !!ikBen && !f?.eva_besluit,
   }

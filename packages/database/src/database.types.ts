@@ -5288,6 +5288,27 @@ export type Database = {
           },
         ]
       }
+      inkoop_goedkeur_grootboek: {
+        Row: {
+          goedkeurder_id: string
+          grootboek_nummer: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          goedkeurder_id: string
+          grootboek_nummer: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          goedkeurder_id?: string
+          grootboek_nummer?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       inkoop_goedkeur_regels: {
         Row: {
           divisie_bouw7_id: number | null
@@ -5362,6 +5383,8 @@ export type Database = {
       }
       inkoopfacturen: {
         Row: {
+          grootboek_naam: string | null
+          grootboek_nummer: string | null
           bouw7_bijgewerkt_op: string | null
           eva_besluit: string | null
           eva_besluit_door: string | null
@@ -5433,6 +5456,8 @@ export type Database = {
           vestiging_naam: string | null
         }
         Insert: {
+          grootboek_naam?: string | null
+          grootboek_nummer?: string | null
           bouw7_bijgewerkt_op?: string | null
           eva_besluit?: string | null
           eva_besluit_door?: string | null
@@ -5504,6 +5529,8 @@ export type Database = {
           vestiging_naam?: string | null
         }
         Update: {
+          grootboek_naam?: string | null
+          grootboek_nummer?: string | null
           bouw7_bijgewerkt_op?: string | null
           eva_besluit?: string | null
           eva_besluit_door?: string | null
