@@ -4,8 +4,13 @@ import { getSchilderDropdownData } from '@/lib/everts-calc/services/schilderwerk
 
 export const metadata: Metadata = { title: 'Meetstaat' }
 
-export default async function MeetstaaatPage(props: { params: Promise<{ id: string }> }) {
+export default async function MeetstaaatPage(props: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ naam?: string; nummer?: string }>
+}) {
   const params = await props.params;
+  // Naam en nummer reizen mee vanuit de calculatie; ze staan alleen op de afdruk.
+  const { naam, nummer } = await props.searchParams
   const schilderData = await getSchilderDropdownData().catch(
     () => ({ onderdelen: [], types: [], behandelingen: [], combinaties: [] })
   )
@@ -14,6 +19,7 @@ export default async function MeetstaaatPage(props: { params: Promise<{ id: stri
     <MeetstaaatHoofdscherm
       projectId={params.id}
       schilderData={schilderData}
+      printKop={{ naam, nummer }}
     />
   )
 }
