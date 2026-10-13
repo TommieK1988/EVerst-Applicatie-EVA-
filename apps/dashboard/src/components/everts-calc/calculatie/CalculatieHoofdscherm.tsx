@@ -4,13 +4,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  GitBranch, Ruler, CloudUpload, Check, Undo2,
+  GitBranch, CloudUpload, Check, Undo2,
   ChevronsUp, ChevronsDown, Keyboard, BookOpen, Paintbrush, Package, X,
   FileUp, FileDown, ChevronDown, Library, Table2,
   SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
+import MeetstaatKnop from './MeetstaatKnop'
 import { Alert } from '@/components/ui/alert'
 import toast from 'react-hot-toast'
 import StructuurBoom from './StructuurBoom'
@@ -511,12 +512,10 @@ export default function CalculatieHoofdscherm({
             <span className="w-px h-4 bg-slate-200 mx-0.5" />
 
             {/* Meetstaat */}
-            <Button variant="outline" size="sm" asChild title="Schildermeetstaat openen">
-              <a href={`/everts-calc/meetstaat/${projectId}?${new URLSearchParams({ naam: projectNaam, nummer: projectNummer })}`} target="_blank" rel="noopener noreferrer">
-                <Ruler className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Meetstaat</span>
-              </a>
-            </Button>
+            <MeetstaatKnop projectId={projectId} projectNaam={projectNaam} projectNummer={projectNummer}
+              terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
+              bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
+              onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
             <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
               onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
 
