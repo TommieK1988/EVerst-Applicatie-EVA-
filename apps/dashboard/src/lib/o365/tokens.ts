@@ -16,6 +16,7 @@
 import { createAdminClient } from '@everts/database/server'
 
 import { fetchMetDeadline } from '@/lib/net/deadline'
+import { heeftTodoScope, todoActief } from './scopes'
 
 export type O365TokenFout = 'geen_koppeling' | 'verlopen' | 'refresh_mislukt'
 
@@ -145,7 +146,7 @@ async function markeerVerlopen(medewerkerId: string, reden: string): Promise<voi
     .eq('medewerker_id', medewerkerId)
 }
 
-export type KoppelingStatus = 'geen' | 'bruikbaar' | 'verlopen' | 'onbekend'
+export type KoppelingStatus = 'geen' | 'bruikbaar' | 'verlopen' | 'onvolledig' | 'onbekend'
 
 /**
  * Staat de mailkoppeling van deze medewerker nog? Gebruikt bij het inloggen: is hij
@@ -159,6 +160,13 @@ export type KoppelingStatus = 'geen' | 'bruikbaar' | 'verlopen' | 'onbekend'
 export async function controleerKoppeling(medewerkerId: string): Promise<KoppelingStatus> {
   try {
     await getValidAccessToken(medewerkerId)
+    // Werkt, maar mist een recht dat EVA inmiddels vraagt (To Do): ook dan herkoppelen.
+    // Een refresh-token levert nooit méér rechten dan bij het koppelen verleend zijn.
+    if (todoActief()) {
+      const { data } = await createAdminClient()
+        .from('medewerker_o365_tokens').select('scopes').eq('medewerker_id', medewerkerId).maybeSingle()
+      if (!heeftTodoScope(data?.scopes)) return 'onvolledig'
+    }
     return 'bruikbaar'
   } catch (e) {
     if (e instanceof O365TokenError && e.reden === 'geen_koppeling') return 'geen'

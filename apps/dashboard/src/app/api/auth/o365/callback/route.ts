@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, isBeheerder, getEffectieveRechten } from '@/lib/auth/rechten'
 import { fetchMetDeadline } from '@/lib/net/deadline'
 import { veiligNextPad } from '@/lib/auth/next-pad'
+import { heeftTodoScope } from '@/lib/o365/scopes'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
@@ -75,6 +76,8 @@ export async function GET(request: NextRequest) {
     refresh_token?: string
     expires_in: number
     token_type: string
+    /** Wat Microsoft werkelijk verleende, spatiegescheiden (bijv. "Mail.Send Tasks.ReadWrite User.Read"). */
+    scope?: string
   }
 
   // Fetch user info
@@ -107,7 +110,11 @@ export async function GET(request: NextRequest) {
     .update({ o365_user_id: o365UserId, o365_email: o365Email, o365_tenant_id: o365TenantId })
     .eq('id', medewerker_id)
 
-  // Upsert tokens
+  // Upsert tokens. Opslaan wat Microsoft verleende, niet wat we vroegen: daarop beslist
+  // controleerKoppeling of een stille herkoppeling nodig is.
+  const verleend = tokens.scope
+    ? [...new Set(['offline_access', ...tokens.scope.split(' ').map(s => s.replace(/^https:\/\/graph\.microsoft\.com\//i, '')).filter(Boolean)])]
+    : ['offline_access', 'User.Read', 'Mail.Send']
   await supabase
     .from('medewerker_o365_tokens')
     .upsert({
@@ -115,7 +122,9 @@ export async function GET(request: NextRequest) {
       access_token:     tokens.access_token,
       refresh_token:    tokens.refresh_token ?? null,
       token_expires_at: tokenExpiresAt,
-      scopes:           ['offline_access', 'User.Read', 'Mail.Send'],
+      scopes:           verleend,
+      // To Do-acties staan aan zodra Microsoft het recht erop geeft; uit te zetten per lijst.
+      ...(heeftTodoScope(verleend) ? { todo_sync_actief: true } : {}),
       updated_at:       new Date().toISOString(),
       // Verse koppeling: een eerdere weigering door Microsoft is hiermee opgelost.
       verlopen_op:      null,

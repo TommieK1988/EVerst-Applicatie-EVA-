@@ -1170,6 +1170,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     sections: [
       { title: 'Werken met de lijst', body: 'Klik op een actie om direct naar het tabblad Acties van het bijbehorende dossier te springen. De lijst toont alleen jouw acties; de kolom "Toegewezen aan" is daarom verborgen.' },
       { title: 'Filteren en sorteren', body: 'Filter op fase, status (Open, In behandeling, Wacht op, Gereed, Vervallen), prioriteit en deadline (Overschreden, Deze week, Later, Geen). Standaard staat de lijst op deadline oplopend. Mag je de acties van collega’s zien, dan kies je met "Acties van" tussen alleen jouw acties en alle acties, en zoom je met "Toegewezen aan" in op één of meer personen (of op "Niet toegewezen").' },
+      { title: 'Microsoft To Do', body: 'Taken die je in Microsoft To Do of Outlook aanmaakt, staan hier ook, gegroepeerd per To Do-lijst. Afvinken, een andere titel of een nieuwe deadline gaat in beide richtingen mee; verwijder je de actie hier, dan verdwijnt hij ook uit To Do. In het detailpaneel koppel je de actie aan een dossier. Met "Lijsten" kies je welke To Do-lijsten meedoen; "Gemarkeerde e-mail" doet nooit mee. Acties uit EVA zelf komen niet in To Do.' },
       { title: 'Kolommen', body: 'Naast de actie zie je het dossiernummer, de dossiertitel, fase, prioriteit, actielijst en de betrokken rollen (projectleider, uitvoerder, calculator, werkvoorbereider). Via "Kolommen beheren" kies je wat zichtbaar is.' },
     ],
   }],

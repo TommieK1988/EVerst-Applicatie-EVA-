@@ -94,6 +94,7 @@ export default function TakenActieveDossiers({
   variant = 'overzicht',
   magAlleTaken = false,
   beginSortering,
+  kopExtra,
 }: {
   data: TaakRij[]
   layouts: GebruikerLayout[]
@@ -106,6 +107,8 @@ export default function TakenActieveDossiers({
   /** Alleen zinvol bij variant 'mijn-taken': schakelt de scope-slicer (mijn/alle) vrij. */
   magAlleTaken?: boolean
   beginSortering?: { id: string; desc: boolean }[]
+  /** Extra regel onder de kop, bijv. de Microsoft To Do-balk op Mijn acties. */
+  kopExtra?: React.ReactNode
 }) {
   const router = useRouter()
   const isMijnTaken = variant === 'mijn-taken'
@@ -395,6 +398,8 @@ export default function TakenActieveDossiers({
         </p>
       </div>
 
+      {kopExtra}
+
       <SlicerBalk
         slicers={slicers}
         waarde={slicer}
@@ -446,7 +451,11 @@ export default function TakenActieveDossiers({
         groepering={groeperen ? {
           // Medewerker-taken hebben geen dossier_id; zonder eigen sleutel zouden ze
           // allemaal in één naamloze groep vallen.
-          sleutel: r => r.medewerker_id ? `medewerker:${r.medewerker_id}` : r.dossier_id,
+          // To Do-acties zonder dossier: één groep per To Do-lijst. Koppel je er een dossier
+          // aan, dan schuift hij vanzelf naar die dossiergroep.
+          sleutel: r => r.medewerker_id ? `medewerker:${r.medewerker_id}`
+            : !r.dossier_id && r.todo_lijst_naam ? `todo:${r.todo_lijst_naam}`
+            : r.dossier_id,
           kop: groepKop,
         } : undefined}
       />

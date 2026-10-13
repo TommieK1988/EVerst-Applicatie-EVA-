@@ -696,6 +696,8 @@ export interface DbTask {
   medewerker_id: string | null
   parent_task_id: string | null
   titel: string
+  /** Naam van de Microsoft To Do-lijst als de actie daaruit komt; anders null. */
+  todo_lijst_naam?: string | null
   omschrijving: Record<string, unknown> | null  // Tiptap JSON
   status: TaskStatus
   prioriteit: TaskPrioriteit
@@ -810,6 +812,8 @@ export interface TaakMetDetails extends DbTask {
   // dossier_id zit al op DbTask; hier alleen de afgeleide weergavevelden
   dossier_naam?: string | null
   dossier_sectie?: string | null
+  /** Id van de gekoppelde Microsoft To Do-taak (voor de link "Open in To Do"). */
+  todo_task_id?: string | null
 }
 
 export interface ActielijstMetTaken extends DbTaskList {

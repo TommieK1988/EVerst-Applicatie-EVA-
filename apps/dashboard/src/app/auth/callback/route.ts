@@ -70,7 +70,7 @@ export async function GET(request: Request) {
           controleerKoppeling(medewerker.id),
           new Promise(resolve => setTimeout(() => resolve('onbekend'), KOPPELING_CHECK_MS)),
         ])
-        if (koppeling === 'verlopen') {
+        if (koppeling === 'verlopen' || koppeling === 'onvolledig') {
           const herstel = new URLSearchParams({ medewerker_id: medewerker.id, terug: next, stil: '1' })
           return NextResponse.redirect(`${origin}/api/auth/o365?${herstel}`)
         }

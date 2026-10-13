@@ -9172,6 +9172,50 @@ export type Database = {
           },
         ]
       }
+      medewerker_todo_lijsten: {
+        Row: {
+          actief: boolean
+          created_at: string
+          delta_link: string | null
+          id: string
+          laatst_gesynct: string | null
+          medewerker_id: string
+          naam: string
+          todo_list_id: string
+          wellknown_name: string | null
+        }
+        Insert: {
+          actief?: boolean
+          created_at?: string
+          delta_link?: string | null
+          id?: string
+          laatst_gesynct?: string | null
+          medewerker_id: string
+          naam: string
+          todo_list_id: string
+          wellknown_name?: string | null
+        }
+        Update: {
+          actief?: boolean
+          created_at?: string
+          delta_link?: string | null
+          id?: string
+          laatst_gesynct?: string | null
+          medewerker_id?: string
+          naam?: string
+          todo_list_id?: string
+          wellknown_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medewerker_todo_lijsten_medewerker_id_fkey"
+            columns: ["medewerker_id"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medewerker_rooster_pauzes: {
         Row: {
           created_at: string | null
@@ -16152,6 +16196,7 @@ export type Database = {
           medewerker_id: string
           task_id: string
           todo_completed: boolean | null
+          todo_gewijzigd_op: string | null
           todo_list_id: string
           todo_task_id: string
         }
@@ -16162,6 +16207,7 @@ export type Database = {
           medewerker_id: string
           task_id: string
           todo_completed?: boolean | null
+          todo_gewijzigd_op?: string | null
           todo_list_id: string
           todo_task_id: string
         }
@@ -16172,6 +16218,7 @@ export type Database = {
           medewerker_id?: string
           task_id?: string
           todo_completed?: boolean | null
+          todo_gewijzigd_op?: string | null
           todo_list_id?: string
           todo_task_id?: string
         }
@@ -16241,6 +16288,7 @@ export type Database = {
           prioriteit: string
           status: string
           titel: string
+          todo_lijst_naam: string | null
           updated_at: string | null
           volgorde: number | null
         }
@@ -16278,6 +16326,7 @@ export type Database = {
           prioriteit?: string
           status?: string
           titel: string
+          todo_lijst_naam?: string | null
           updated_at?: string | null
           volgorde?: number | null
         }
@@ -16315,6 +16364,7 @@ export type Database = {
           prioriteit?: string
           status?: string
           titel?: string
+          todo_lijst_naam?: string | null
           updated_at?: string | null
           volgorde?: number | null
         }

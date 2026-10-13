@@ -5,6 +5,7 @@ import { X, Calendar, Trash2, MessageSquare, ChevronDown, Plus, Check, Clock, Us
 import { cn } from '@/lib/taken/utils'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 import { aanmakerZin } from '@/lib/taken/herkomst'
+import TaakTodoHerkomst from './TaakTodoHerkomst'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee, getToolboxToewijzingVoorTaak } from '@/app/(platform)/taken/actions/taken'
@@ -147,7 +148,11 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   }
 
   const handleVerwijderen = async () => {
-    if (!await bevestig({ titel: `Actie "${taak.titel}" verwijderen?`, bevestigLabel: 'Verwijderen', destructief: true })) return
+    if (!await bevestig({
+      titel: `Actie "${taak.titel}" verwijderen?`,
+      omschrijving: taak.todo_lijst_naam ? 'De taak verdwijnt ook uit Microsoft To Do.' : undefined,
+      bevestigLabel: 'Verwijderen', destructief: true,
+    })) return
     startTransition(async () => {
       await verwijderTaak(taak.id)
       onSluit()
@@ -305,6 +310,10 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {taak.todo_lijst_naam && (
+          <TaakTodoHerkomst taakId={taak.id} lijstNaam={taak.todo_lijst_naam} todoTaakId={taak.todo_task_id ?? null}
+            dossierId={taak.dossier_id} dossierNaam={taak.dossier_naam ?? null} />
+        )}
         {/* Status & prioriteit */}
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -20,8 +20,15 @@ Office 365-account koppelt en mails verstuurt vanuit EVA.
 | `User.Read`     | al goed   | Naam + mailadres van de medewerker ophalen bij het koppelen          |
 | `Mail.Send`     | al goed   | Offertes en dossiermails versturen namens de medewerker              |
 | **`Mail.Read`** | **TOEVOEGEN** | Verzonden mail teruglezen om als .eml in het dossier te archiveren |
+| **`Tasks.ReadWrite`** | **TOEVOEGEN** | Microsoft To Do-taken van de medewerker in "Mijn acties" tonen, en afvinken, titel en deadline terugschrijven |
 
-→ **Toe te voegen: `Mail.Read` (Delegated).**
+→ **Toe te voegen: `Mail.Read` en `Tasks.ReadWrite` (Delegated), beide met admin consent.**
+
+**Volgorde bij `Tasks.ReadWrite`: eerst Azure, dan EVA.** EVA vraagt dit recht pas als
+de omgevingsvariabele **`O365_TODO_ACTIEF=1`** in Vercel staat. Zet die pas ná de admin
+consent: dan krijgt elke medewerker het recht bij de eerstvolgende login via de stille
+herkoppeling, zonder toestemmingsscherm. Andersom (variabele eerst) krijgt iedereen bij
+het inloggen een toestemmingsvraag die hij in deze tenant niet mag goedkeuren.
 
 ---
 

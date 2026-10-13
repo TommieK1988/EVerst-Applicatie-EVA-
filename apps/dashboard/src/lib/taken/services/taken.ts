@@ -45,6 +45,8 @@ export type TaakRij = {
   /** Gevuld bij taken die aan een medewerker hangen i.p.v. aan een dossier. */
   medewerker_id: string | null
   medewerker_naam: string | null
+  /** Naam van de To Do-lijst bij een actie uit Microsoft To Do. */
+  todo_lijst_naam: string | null
 }
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
@@ -314,6 +316,21 @@ export async function getTaak(id: string): Promise<TaakMetDetails | null> {
     if (mw) aanmakerNaam = [mw.voornaam, mw.tussenvoegsel, mw.achternaam].filter(Boolean).join(' ')
   }
 
+  // Actie uit Microsoft To Do: de link terug, en de dossiernaam voor de dossierkiezer.
+  let todoTaakId: string | null = null
+  let dossierNaam: string | null = null
+  if ((data as { todo_lijst_naam?: string | null }).todo_lijst_naam) {
+    const admin = createAdminClient()
+    const { data: k } = await admin
+      .from('task_todo_sync').select('todo_task_id').eq('task_id', id).maybeSingle()
+    todoTaakId = k?.todo_task_id ?? null
+    const dossierId = (data as { dossier_id?: string | null }).dossier_id
+    if (dossierId) {
+      const { data: d } = await admin.from('dossiers').select('titel').eq('id', dossierId).maybeSingle()
+      dossierNaam = (d as { titel?: string } | null)?.titel ?? null
+    }
+  }
+
   return {
     ...(data as any),
     assignees: (data as any).task_assignees ?? [],
@@ -322,6 +339,8 @@ export async function getTaak(id: string): Promise<TaakMetDetails | null> {
     attachments_count: ((data as any).task_attachments ?? []).length,
     lijst: (data as any).lijst ?? undefined,
     aangemaakt_door_naam: aanmakerLabel(herkomst, aanmakerNaam),
+    todo_task_id: todoTaakId,
+    ...(dossierNaam ? { dossier_naam: dossierNaam } : {}),
   }
 }
 
@@ -678,6 +697,7 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
       // overgeslagen); medewerker-taken komen hier per definitie niet in voor.
       medewerker_id: null,
       medewerker_naam: null,
+      todo_lijst_naam: (t.todo_lijst_naam as string | null) ?? null,
     })
   }
 
@@ -760,6 +780,7 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
     const medewerkerId = effMedewerker(t)
     const medewerkerNaam = medewerkerId ? medewerkerNamen.get(medewerkerId) ?? 'Onbekend' : null
     const toegewezen_ids = ((t.task_assignees as { user_id: string }[]) ?? []).map(a => a.user_id)
+    const todoLijst = (t.todo_lijst_naam as string | null) ?? null
 
     rijen.push({
       id: t.id as string,
@@ -779,8 +800,8 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
       dossier_id: dossierId ?? '',
       // Medewerker-taken vullen de dossierkolommen met hun eigen context, zodat ze
       // niet als naamloze groep in "Mijn taken" belanden.
-      dossiernummer: ctx?.dossiernummer ?? (medewerkerId ? 'Medewerker' : null),
-      dossier_titel: ctx?.titel ?? medewerkerNaam ?? '—',
+      dossiernummer: ctx?.dossiernummer ?? (medewerkerId ? 'Medewerker' : todoLijst ? 'To Do' : null),
+      dossier_titel: ctx?.titel ?? medewerkerNaam ?? todoLijst ?? '—',
       dossier_sectie: ctx?.sectie ?? 'opdrachten',
       dossier_fase: ctx?.fase_label ?? '—',
       dossier_substatus: ctx?.substatus_label ?? null,
@@ -794,6 +815,7 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
       verwacht_einddatum: ctx?.verwacht_einddatum ?? null,
       medewerker_id: medewerkerId,
       medewerker_naam: medewerkerNaam,
+      todo_lijst_naam: todoLijst,
     })
   }
 

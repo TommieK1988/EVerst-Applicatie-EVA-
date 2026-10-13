@@ -6,6 +6,7 @@ import {
 } from '@/lib/auth/rechten'
 import { getMijnTakenRijen, getAlleTakenRijen } from '@/lib/taken/services/taken'
 import TakenActieveDossiers from '@/components/taken/TakenActieveDossiers'
+import TodoKoppelingBalk from '@/components/taken/TodoKoppelingBalk'
 
 export const metadata: Metadata = { title: 'Mijn acties' }
 
@@ -45,6 +46,7 @@ export default async function MijnTakenPage() {
       variant="mijn-taken"
       magAlleTaken={magAlleTaken}
       beginSortering={[{ id: 'deadline', desc: false }]}
+      kopExtra={<TodoKoppelingBalk />}
     />
   )
 }

@@ -12,6 +12,8 @@ export type HerkomstBron = {
   aangemaakt_door: string | null
   bouw7_todo_id?: number | null
   mailintake_bericht_id?: string | null
+  /** Naam van de Microsoft To Do-lijst waar de actie vandaan komt. */
+  todo_lijst_naam?: string | null
 }
 
 /**
@@ -26,6 +28,9 @@ export type HerkomstBron = {
  * herkenbaar op de actie staat.
  */
 export function aanmakerLabel(bron: HerkomstBron, naam?: string | null): string {
+  // Vóór de naam: een To Do-actie draagt de eigenaar als aanmaker, maar "aangemaakt
+  // door jezelf" zegt minder dan waar hij vandaan komt.
+  if (bron.todo_lijst_naam) return 'To Do'
   if (naam) return naam
   if (bron.bouw7_todo_id != null) return 'Bouw7'
   if (bron.mailintake_bericht_id) return 'Postvak'
@@ -41,5 +46,6 @@ export function aanmakerZin(label: string | null): string | null {
   if (label === 'Automatisch') return 'Automatisch aangemaakt'
   if (label === 'Bouw7')       return 'Aangemaakt in Bouw7'
   if (label === 'Postvak')     return 'Aangemaakt vanuit het postvak'
+  if (label === 'To Do')       return 'Aangemaakt in Microsoft To Do'
   return `Aangemaakt door ${label}`
 }

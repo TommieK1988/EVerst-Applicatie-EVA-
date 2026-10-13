@@ -5,6 +5,7 @@ import { createClient } from '@/lib/taken/supabase/server'
 import { createAdminClient } from '@everts/database/server'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { spiegelTaakstatusNaarBouw7 } from '@/lib/bouw7/todo-write'
+import { spiegelNaarTodo, todoKoppeling, verwijderUitTodo } from '@/lib/o365/todo-write'
 import { activeerSjabloon } from './sjablonen'
 import { herberekenSjabloonInstanties } from './deadlines'
 import { getTaak } from '@/lib/taken/services/taken'
@@ -383,6 +384,8 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
   // Uit Bouw7 geïmporteerde taak → het vinkje ook daar zetten. Fail-soft: lukt de write niet,
   // dan blijft de EVA-status staan (de sync draait hem niet meer terug, zie tasks.bouw7_todo_done).
   await spiegelTaakstatusNaarBouw7(id, status).catch(() => {})
+  // Uit Microsoft To Do overgenomen actie → daar ook afvinken (fail-soft, zie lib/o365/todo-write.ts).
+  await spiegelNaarTodo(id, { status })
 
   revalidatePath('/taken')
   if (oud?.lijst_id) revalidatePath(`/taken/lijsten/${oud.lijst_id}`)
@@ -446,6 +449,8 @@ export async function updateTaak(id: string, data: {
   formulier_template_id?: string | null
   bezoek_ronde?: boolean
   opname_ronde?: boolean
+  /** Losse actie (bijv. uit To Do) handmatig aan een dossier koppelen; null = loskoppelen. */
+  dossier_id?: string | null
 }): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -478,6 +483,7 @@ export async function updateTaak(id: string, data: {
   if (data.formulier_template_id  !== undefined) updatePayload.formulier_template_id  = data.formulier_template_id
   if (data.bezoek_ronde           !== undefined) updatePayload.bezoek_ronde           = data.bezoek_ronde
   if (data.opname_ronde           !== undefined) updatePayload.opname_ronde           = data.opname_ronde
+  if (data.dossier_id             !== undefined) updatePayload.dossier_id             = data.dossier_id
 
   const { error } = await supabase
     .from('tasks')
@@ -498,6 +504,13 @@ export async function updateTaak(id: string, data: {
   if (data.status !== undefined && data.status !== oud?.status) {
     await spiegelTaakstatusNaarBouw7(id, data.status).catch(() => {})
   }
+
+  // Komt de actie uit To Do, dan gaan status, titel en deadline daar mee.
+  await spiegelNaarTodo(id, {
+    status:   data.status !== undefined && data.status !== oud?.status ? data.status : undefined,
+    titel:    data.titel !== undefined && data.titel !== oud?.titel ? data.titel : undefined,
+    deadline: data.deadline !== undefined && data.deadline !== oud?.deadline ? data.deadline : undefined,
+  })
 
   // Aan de herhaling van een sjabloontaak draaien raakt ook de keren die al op lopende
   // dossiers klaarstaan; die zijn met de oude instelling berekend. Meteen narekenen,
@@ -526,8 +539,13 @@ export async function verwijderTaak(id: string): Promise<void> {
   const { data: taak } = await supabase
     .from('tasks').select('lijst_id, titel').eq('id', id).single()
 
+  // Vóór het verwijderen: de To Do-koppeling verdwijnt met de actie mee.
+  const todo = await todoKoppeling(id)
+
   const { error } = await supabase.from('tasks').delete().eq('id', id)
   if (error) throw new Error(`Fout bij verwijderen taak: ${error.message}`)
+
+  await verwijderUitTodo(todo)
 
   revalidatePath('/taken')
   if (taak?.lijst_id) revalidatePath(`/taken/lijsten/${taak.lijst_id}`)

@@ -65,6 +65,10 @@
       "schedule": "0 22 * * *"
     },
     {
+      "path": "/api/cron/todo",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/mailintake/ophalen",
       "schedule": "*/10 * * * *"
     },
