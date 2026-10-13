@@ -56,6 +56,12 @@ export type InkoopfactuurRij = {
   huidige_goedkeurder_id: string | null
   bouw7_approval_id: string | null
 
+  /** Wie keurt goed: de oude Bouw7-keten, of EVA (zie goedkeuren.ts). Null = nog niet bepaald. */
+  goedkeuring_bron: 'bouw7' | 'eva' | null
+  eva_besluit: 'goedgekeurd' | 'afgekeurd' | null
+  /** Gezet zodra het EVA-besluit in Bouw7 staat; leeg met een besluit = Bouw7 loopt achter. */
+  bouw7_bijgewerkt_op: string | null
+
   /** Aangemerkt door de directie om mee te gaan in de eerstvolgende betaling. */
   markering_betalen: boolean
   betalen_op: string | null

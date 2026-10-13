@@ -300,6 +300,7 @@ export async function syncInkoopfacturen(
       bouw7_sync_hash: string | null
       status: string
       huidige_goedkeurder_id: string | null
+      goedkeuring_bron: string | null
     }
 
     const [dossierRows, relatieRows, medewerkerRows, bestaand] = await Promise.all([
@@ -317,7 +318,7 @@ export async function syncInkoopfacturen(
           .not('bouw7_id', 'is', null).order('id').range(van, tot)),
       haalAlleRijen<BestaandeRij>((van, tot) =>
         supabase.from('inkoopfacturen')
-          .select('id, bouw7_invoice_id, bouw7_sync_hash, status, huidige_goedkeurder_id')
+          .select('id, bouw7_invoice_id, bouw7_sync_hash, status, huidige_goedkeurder_id, goedkeuring_bron')
           .order('id').range(van, tot)),
     ])
 
@@ -360,9 +361,13 @@ export async function syncInkoopfacturen(
 
     // Update uitsluitend de Bouw7-bronkolommen; opmerkingen, audit en betaalronde blijven staan.
     for (const r of teUpdaten) {
+      // Bij een EVA-goedkeuring is de goedkeurder van EVA; de Bouw7-lijst kent hem niet en zou de
+      // naam leegmaken.
+      const bron: BronRij = { ...r.bron }
+      if (bestaandByInvoice.get(r.invoiceId)?.goedkeuring_bron === 'eva') delete bron.huidige_goedkeurder_naam
       const { error } = await supabase
         .from('inkoopfacturen')
-        .update(r.bron)
+        .update(bron)
         .eq('bouw7_invoice_id', r.invoiceId)
       if (error) { result.fouten++; result.foutMelding = error.message }
     }
@@ -392,6 +397,8 @@ export async function syncInkoopfacturen(
       .select('id, bouw7_invoice_id')
       .eq('status', 'open')
       .in('bouw7_status', INKOOP_STATUS_WORKFLOW_LOOPT)
+      // EVA-facturen hebben geen Bouw7-keten; ververApproval zou hun goedkeurder wissen.
+      .or('goedkeuring_bron.is.null,goedkeuring_bron.eq.bouw7')
       .order('approval_laatst_gelezen_op', { ascending: true, nullsFirst: true })
       .limit(maxDetails)
 
@@ -402,6 +409,15 @@ export async function syncInkoopfacturen(
       const gelukt = await ververApproval(bouw7, supabase, rij, medewerkerByBouw7, nu)
       if (!gelukt) result.fouten++
     })
+
+    // ── Bouw7 of EVA: nieuwe facturen toewijzen, EVA-routes bijhouden (lib/inkoopfacturen/route.ts) ──
+    try {
+      const { routeerInkoopfacturen } = await import('@/lib/inkoopfacturen/route')
+      await routeerInkoopfacturen()
+    } catch (e: unknown) {
+      result.fouten++
+      result.foutMelding = `Goedkeurroutes: ${e instanceof Error ? e.message : 'onbekende fout'}`
+    }
   } catch (e: unknown) {
     result.foutMelding = e instanceof Error ? e.message : 'Onbekende fout'
     result.fouten++
@@ -424,7 +440,7 @@ export async function ververEenInkoopfactuur(inkoopfactuurId: string): Promise<v
 
   const { data: rij } = await supabase
     .from('inkoopfacturen')
-    .select('id, bouw7_invoice_id')
+    .select('id, bouw7_invoice_id, goedkeuring_bron')
     .eq('id', inkoopfactuurId)
     .maybeSingle()
   if (!rij) return
@@ -438,7 +454,7 @@ export async function ververEenInkoopfactuur(inkoopfactuurId: string): Promise<v
     medewerkerRows.map(m => [String(m.bouw7_id), m.id])
   )
 
-  await ververApproval(bouw7, supabase, rij, medewerkerByBouw7, nu)
+  if (rij.goedkeuring_bron !== 'eva') await ververApproval(bouw7, supabase, rij, medewerkerByBouw7, nu)
 
   // De lijstvelden (status, betaaldatum, bedragen) komen uit de lijst-call; die is te duur voor
   // één factuur. Het detail geeft status en datePaid ook terug — genoeg om de rij bij te trekken.

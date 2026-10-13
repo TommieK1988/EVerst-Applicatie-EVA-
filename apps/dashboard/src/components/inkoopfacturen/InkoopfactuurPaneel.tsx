@@ -10,6 +10,7 @@ import {
 } from '@/lib/inkoopfacturen/actions'
 import { inkoopStatusLabel, approvalStatusLabel, BOUW7_APPROVAL_STATUS } from '@/lib/bouw7/inkoop-status'
 import { dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
+import EvaGoedkeuringSectie from './EvaGoedkeuringSectie'
 
 function euro(n: number | null): string {
   if (n == null) return '—'
@@ -40,9 +41,12 @@ type Props = {
   /** Opent het factuurdocument in een venster i.p.v. een nieuw tabblad. */
   onFactuurOpenen: (rij: InkoopfactuurRij) => void
   onClose: () => void
+  /** Na een besluit in EVA: de lijst opnieuw laden. */
+  onGewijzigd?: () => void
 }
 
-export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpenen, onClose }: Props) {
+export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpenen, onClose, onGewijzigd }: Props) {
+  const evaKeurt = rij?.goedkeuring_bron === 'eva'
   const [detail, setDetail] = useState<InkoopfactuurDetail | null>(null)
   const [laden, setLaden] = useState(false)
   const [nieuweOpmerking, setNieuweOpmerking] = useState('')
@@ -139,9 +143,11 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
                 )}
               </section>
 
-              <section style={{ marginBottom: 20 }}>
+              {evaKeurt && <EvaGoedkeuringSectie inkoopfactuurId={rij.id} onGewijzigd={() => onGewijzigd?.()} />}
+
+              {!evaKeurt && <section style={{ marginBottom: 20 }}>
                 <h4 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '0 0 8px' }}>
-                  Fiattering
+                  Fiattering in Bouw7
                 </h4>
                 {laden && <p style={{ fontSize: 13, color: 'var(--fg-soft)' }}>Laden…</p>}
                 {!laden && (detail?.goedkeurders.length ?? 0) === 0 && (
@@ -172,7 +178,7 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
                     </div>
                   </div>
                 ))}
-              </section>
+              </section>}
 
               <section style={{ marginBottom: 20 }}>
                 <h4 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '0 0 8px' }}>
@@ -212,19 +218,18 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
               </section>
 
               {/*
-                Accorderen kan nog niet vanuit EVA. Of Bouw7 een stem namens een medewerker
-                accepteert vanaf onze API-sleutel is nog niet vastgesteld (fase 0); tot die
-                uitkomst er is, wijst het paneel bewust door naar Bouw7 in plaats van een
-                knop te tonen die misschien niets doet.
+                Facturen met een Bouw7-keten worden in Bouw7 afgemaakt: stemmen namens een
+                medewerker kan onze API-sleutel niet (WRITE-ENDPOINTS §7c). Nieuwe facturen
+                zonder keten keurt EVA zelf goed — zie EvaGoedkeuringSectie hierboven.
               */}
-              {magAccorderen && rij.mijn_beurt && (
+              {!evaKeurt && rij.mijn_beurt && (
                 <section style={{
                   padding: 12, borderRadius: 8, border: '1px solid var(--border)',
                   background: 'var(--bg-soft, transparent)',
                 }}>
                   <p style={{ fontSize: 13, margin: '0 0 8px' }}>
-                    <strong>Jij bent aan zet.</strong> Accorderen vanuit EVA wordt nu gebouwd;
-                    tot die tijd keur je deze factuur goed in Bouw7.
+                    <strong>Jij bent aan zet.</strong> Deze factuur zat al in de goedkeuring van
+                    Bouw7 en wordt daar afgemaakt.
                   </p>
                   <a
                     href={`https://start.bouw7.nl/purchase-invoice#/view/${rij.bouw7_invoice_id}`}

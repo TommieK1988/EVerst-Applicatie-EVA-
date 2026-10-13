@@ -1018,7 +1018,49 @@ nuttig om te bewijzen dát planning schrijfbaar is; voor EVA is `POST /plan-item
 
 ---
 
-## 7c. Inkoopfactuur accorderen — ⛔ KAN NIET met onze app-sleutel (uitgezocht sep 2026)
+## 7c. Inkoopfactuur accorderen — stemmen kan niet; status + tekst wél (okt 2026)
+
+### Update 13 okt 2026: de route zonder Bouw7-workflow is getest
+
+Besluit (Tom): de goedkeuringsstap in Bouw7 gaat eruit; EVA keurt zelf goed en zet in Bouw7 de
+**status** plus een **tekstregel** met wie en wanneer. Daarmee vervalt het bezwaar uit
+"De status omzetten is NIET hetzelfde als fiatteren" hieronder (er staat wél een naam onder), en
+verschuift §2c: EVA schrijft voortaan `status` (alleen 2 en 5) en `comments`. Bedrag, BTW,
+factuurnummer en boekstuk blijven van Bouw7.
+
+Live getest op factuur 10694576 (Pellicaan, € 284,19, status 1, open keten) en volledig
+teruggezet; daarna identiek aan de backup op `updatedAt/By` na:
+
+```
+POST /purchase-invoice                      body = volledig detail-document uit
+                                            GET /purchase-invoicing/purchase-invoice/{id}
+                                            met alleen `comments` gewijzigd   → 200, document terug
+PUT  /purchase-invoice/{id}/update-status/2  zonder body → 200 {}
+PUT  /purchase-invoice/{id}/update-status/5  zonder body → 200 {}
+PUT  /purchase-invoice/{id}/update-status/1  zonder body → 200 {}   (terugzetten kan dus)
+```
+
+- Fiscale kern ongewijzigd bij alle vier: factuurnummer, datums, regels/bedragen, `isBooked`,
+  `bookNumber`, `exactId`, leverancier, administratie, PDF.
+- `comments` is platte tekst (geen HTML) en bevat vaak tekst die van de leveranciersfactuur is
+  overgenomen ("REF. : JOHN") — **aanvullen, nooit overschrijven**.
+- **De status raakt het `approval`-object niet.** Een open Bouw7-keten blijft open staan
+  (`isApproved: false`, goedkeurder op 0) terwijl de factuur op 2 staat. Facturen mét een
+  Bouw7-keten dus in Bouw7 laten afmaken; EVA neemt alleen facturen zonder `approval` over.
+- `updatedBy` wordt "Beheerder EOB <abonnementen@everts.chat>" — de naam van de EVA-gebruiker
+  staat daarom in `comments`.
+- Exact: alle facturen zijn al geboekt (`isBooked`, `exactId`) vóór de goedkeuring; de status
+  stuurt alleen de betaalbaarheid (status 2 = te betalen).
+- **Gebouwd (okt 2026):** `lib/bouw7/inkoopfactuur-besluit.ts` (de write, tekst vóór status),
+  `lib/inkoopfacturen/route.ts` (Bouw7 of EVA, route na elke sync, herhalen bij een mislukte
+  write), `lib/inkoopfacturen/goedkeuren.ts` (akkoord/bezwaar/overdragen). EVA neemt alleen
+  facturen over die ná `bedrijfsinstellingen.overige.inkoop_goedkeuring_eva_vanaf` zijn
+  aangemaakt én geen `approval` hebben; zonder die datum doet EVA niets.
+- Nog open: op welke status komt een nieuwe factuur binnen als de standaardworkflow
+  (`/approval-template/default-settings`, workflow 3560, `approver1.type = 3` = projectleider)
+  weg is? Moet 0 of 1 zijn — landt hij op 2, dan is hij betaalbaar zonder akkoord.
+
+### Oorspronkelijk onderzoek (sep 2026)
 
 **Status: half.** Het endpoint bestaat en zit op Heimdall (dus bereikbaar met onze app-key), maar
 de body-vorm is nog niet gecaptured. Er is dus nog **niets geschreven**.

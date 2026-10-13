@@ -114,7 +114,8 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
           .select('id, bedrag_incl, vervaldatum', { count: 'exact' })
           .eq('status', 'open')
           .eq('huidige_goedkeurder_id', medewerker.id)
-          .in('bouw7_status', INKOOP_STATUS_WORKFLOW_LOOPT)
+          // Een EVA-goedkeuring kan op Bouw7-status 0 (concept) staan; die telt wél mee.
+          .or(`bouw7_status.in.(${INKOOP_STATUS_WORKFLOW_LOOPT.join(',')}),goedkeuring_bron.eq.eva`)
           .order('vervaldatum', { ascending: true, nullsFirst: false })
           .limit(500)
       : Promise.resolve({ data: [], count: 0 }),

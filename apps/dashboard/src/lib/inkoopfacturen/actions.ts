@@ -41,6 +41,7 @@ const LIJST_SELECT = [
   'bouw7_opmerking', 'ordernummer', 'bon_nummer', 'is_geboekt_in_exact', 'keten_verloopt_op',
   'bewakingscode', 'bewakingscode_naam',
   'huidige_goedkeurder_naam', 'huidige_goedkeurder_id', 'bouw7_approval_id',
+  'goedkeuring_bron', 'eva_besluit', 'bouw7_bijgewerkt_op',
   'markering_betalen', 'betalen_op',
 ].join(',')
 
