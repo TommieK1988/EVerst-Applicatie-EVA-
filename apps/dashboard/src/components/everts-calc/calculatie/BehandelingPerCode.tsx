@@ -54,9 +54,9 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
   useEffect(() => { laadBehandelingen().then(setBibliotheek).catch(() => setBibliotheek([])) }, [])
 
   const [keuzes, setKeuzes] = useState<Map<string, SchilderBehandeling>>(new Map())
-  const kies = (code: string, b: SchilderBehandeling | null) => setKeuzes(prev => {
+  const kies = (sleutel: string, b: SchilderBehandeling | null) => setKeuzes(prev => {
     const volgend = new Map(prev)
-    if (b) volgend.set(code, b); else volgend.delete(code)
+    if (b) volgend.set(sleutel, b); else volgend.delete(sleutel)
     return volgend
   })
 
@@ -64,7 +64,7 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
   const [combinaties, setCombinaties] = useState<Map<string, SchilderCombinatie[]>>(new Map())
   const [laden, setLaden] = useState(false)
   const gekozenRegels = useMemo(
-    () => groepen.filter(g => keuzes.has(g.code)).flatMap(g => g.regels),
+    () => groepen.filter(g => keuzes.has(g.sleutel)).flatMap(g => g.regels),
     [groepen, keuzes],
   )
   useEffect(() => {
@@ -83,7 +83,7 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
   }, [gekozenRegels, aggregaten, combinaties])
 
   const stappen: KoppelStap[] = useMemo(() => groepen.flatMap(g => {
-    const b = keuzes.get(g.code)
+    const b = keuzes.get(g.sleutel)
     return b ? planKoppeling(g.regels, aggregaten, combinaties, { id: b.id, naam: b.naam }) : []
   }), [groepen, keuzes, aggregaten, combinaties])
 
@@ -113,9 +113,9 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
       <DialogContent size="xl">
         <DialogHeader>
           <div>
-            <DialogTitle>Behandeling per bestekscode</DialogTitle>
+            <DialogTitle>Behandeling per onderdeel en code</DialogTitle>
             <DialogDescription>
-              Kies per code één behandeling uit de bibliotheek. Alle regels uit de meetstaat met die code krijgen hem in één keer.
+              Per onderdeel en type, en daarbinnen per bestekscode, kies je één behandeling uit de bibliotheek. Alle regels uit de meetstaat op die post krijgen hem in één keer, over alle groepen heen.
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -129,9 +129,9 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                  <th className="py-2 pr-2">Onderdeel · type</th>
                   <th className="w-24 py-2 pr-2">Code</th>
                   <th className="w-16 py-2 pr-2">Regels</th>
-                  <th className="py-2 pr-2">Onderdelen</th>
                   <th className="w-40 py-2 pr-2">Huidige behandeling</th>
                   <th className="w-72 py-2">Nieuwe behandeling</th>
                 </tr>
@@ -139,12 +139,12 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
               <tbody>
                 {groepen.map(g => (
                   <CodeRij
-                    key={g.code || '—'}
+                    key={g.sleutel}
                     groep={g}
-                    keuze={keuzes.get(g.code)}
+                    keuze={keuzes.get(g.sleutel)}
                     bibliotheek={bibliotheek}
                     naamVan={naamVan}
-                    onKies={b => kies(g.code, b)}
+                    onKies={b => kies(g.sleutel, b)}
                   />
                 ))}
               </tbody>
@@ -184,22 +184,20 @@ function CodeRij({ groep, keuze, bibliotheek, naamVan, onKies }: {
   naamVan: (id: string) => SchilderBehandeling | undefined
   onKies: (b: SchilderBehandeling | null) => void
 }) {
-  const zichtbaar = groep.onderdelen.slice(0, 3)
-  const meer = groep.onderdelen.length - zichtbaar.length
   const [enige] = groep.behandelingIds
 
   return (
     <tr className={`border-b border-neutral-200 align-top ${keuze ? 'bg-brand-50' : ''}`}>
+      <td className="py-3 pr-2 text-[13px] text-neutral-800">
+        {groep.onderdeel}
+        {groep.type && <span className="text-neutral-500"> · {groep.type}</span>}
+      </td>
       <td className="py-3 pr-2">
         {groep.code === ZONDER_CODE
           ? <span className="text-xs text-neutral-500">zonder code</span>
           : <span className="font-mono text-[13px] font-semibold text-info-700">{groep.code}</span>}
       </td>
       <td className="py-3 pr-2 font-mono text-[13px] tabular-nums">{groep.regels.length}</td>
-      <td className="py-3 pr-2 text-xs text-neutral-700">
-        {zichtbaar.join(' · ')}
-        {meer > 0 && <span className="text-neutral-400"> +{meer}</span>}
-      </td>
       <td className="py-3 pr-2">
         {groep.behandelingIds.length > 1
           ? <Badge tone="warning" size="md">Gemengd ({groep.behandelingIds.length})</Badge>

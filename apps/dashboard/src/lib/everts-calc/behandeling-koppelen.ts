@@ -12,15 +12,23 @@ import { isTekstregel } from './types'
 import type { SchilderCombinatie } from './services/schilderwerk'
 import { calculatieregelOmschrijving, normaliseerBestekcode } from './meetstaat-utils'
 
-/** Sleutel van de groep regels zonder bestekscode. */
+/** Code van regels zonder bestekscode. */
 export const ZONDER_CODE = ''
 
+/**
+ * Eén post om een behandeling aan te koppelen: hetzelfde onderdeel en type, en
+ * daarbinnen dezelfde bestekscode. Kozijnen en boeidelen met code S-01 zijn twee
+ * posten: een behandeling hoort bij een onderdeel/type (daar hangen de normen aan),
+ * de code verfijnt dat alleen. Over groepen (locaties) heen tellen ze wel samen.
+ */
 export interface CodeGroep {
+  /** Unieke sleutel: onderdeel::type::code, in kleine letters. */
+  sleutel: string
+  onderdeel: string
+  type: string
   /** Genormaliseerde bestekscode; `ZONDER_CODE` voor regels zonder code. */
   code: string
   regels: Calculatieregel[]
-  /** Unieke 'Onderdeel type'-labels, in volgorde van voorkomen. */
-  onderdelen: string[]
   /** Unieke gekoppelde behandelingen; `null` = een regel zonder behandeling. */
   behandelingIds: (string | null)[]
 }
@@ -39,28 +47,31 @@ export function groepeerPerBestekcode(
 
   for (const r of regels) {
     if (isTekstregel(r) || !r.meetstaat_aggregaat_id) continue
+    const agg = aggPerId.get(r.meetstaat_aggregaat_id)
+    // Zonder aggregaat (meetstaat verwijderd) blijft alleen de omschrijving over.
+    const onderdeel = (agg ? agg.onderdeel : r.omschrijving).trim()
+    const type = (agg?.type ?? '').trim()
     const code = normaliseerBestekcode(r.bestekcode)
-    let g = groepen.get(code)
+    const sleutel = `${onderdeel.toLowerCase()}::${type.toLowerCase()}::${code}`
+
+    let g = groepen.get(sleutel)
     if (!g) {
-      g = { code, regels: [], onderdelen: [], behandelingIds: [] }
-      groepen.set(code, g)
+      g = { sleutel, onderdeel, type, code, regels: [], behandelingIds: [] }
+      groepen.set(sleutel, g)
     }
     g.regels.push(r)
-
-    const agg = aggPerId.get(r.meetstaat_aggregaat_id)
-    const label = agg ? `${agg.onderdeel} ${agg.type}`.trim() : r.omschrijving
-    if (label && !g.onderdelen.includes(label)) g.onderdelen.push(label)
 
     const beh = r.schilderbehandeling_id ?? null
     if (!g.behandelingIds.includes(beh)) g.behandelingIds.push(beh)
   }
 
-  // Codes op volgorde (S-2 vóór S-10); de groep zonder code als laatste.
-  return Array.from(groepen.values()).sort((a, b) => {
-    if (a.code === ZONDER_CODE) return 1
-    if (b.code === ZONDER_CODE) return -1
-    return a.code.localeCompare(b.code, 'nl', { numeric: true })
-  })
+  // Op onderdeel en type; daarbinnen codes op volgorde (S-2 vóór S-10) en zonder code als laatste.
+  const vergelijk = (a: string, b: string) => a.localeCompare(b, 'nl', { numeric: true })
+  return Array.from(groepen.values()).sort((a, b) =>
+    vergelijk(a.onderdeel, b.onderdeel)
+    || vergelijk(a.type, b.type)
+    || (a.code === ZONDER_CODE ? 1 : 0) - (b.code === ZONDER_CODE ? 1 : 0)
+    || vergelijk(a.code, b.code))
 }
 
 export interface KoppelStap {

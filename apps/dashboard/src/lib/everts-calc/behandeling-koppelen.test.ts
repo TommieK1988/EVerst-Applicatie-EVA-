@@ -73,32 +73,45 @@ describe('bestekscode in de meetstaat', () => {
   })
 })
 
-describe('groeperen per bestekscode', () => {
-  const aggs = [agg({ id: 'a1' }), agg({ id: 'a2', onderdeel: 'Boeideel hout', type: '>20cm' }), agg({ id: 'a3' })]
+describe('groeperen per onderdeel, type en code', () => {
+  const aggs = [
+    agg({ id: 'a1' }),
+    agg({ id: 'a2', onderdeel: 'Boeideel hout', type: '>20cm' }),
+    agg({ id: 'a3' }),
+    agg({ id: 'a4', groep_id: 'g2' }),
+  ]
   const regels = [
     regel({ id: 'r1', meetstaat_aggregaat_id: 'a1', bestekcode: 'S-10' }),
-    regel({ id: 'r2', meetstaat_aggregaat_id: 'a2', bestekcode: 'S-2', schilderbehandeling_id: 'b1' }),
+    regel({ id: 'r2', meetstaat_aggregaat_id: 'a2', bestekcode: 'S-10', schilderbehandeling_id: 'b1' }),
     regel({ id: 'r3', meetstaat_aggregaat_id: 'a3' }),
-    regel({ id: 'r4', meetstaat_aggregaat_id: 'a1', bestekcode: 'S-10', schilderbehandeling_id: 'b1' }),
+    regel({ id: 'r4', meetstaat_aggregaat_id: 'a1', bestekcode: 'S-2', schilderbehandeling_id: 'b1' }),
+    regel({ id: 'r5', meetstaat_aggregaat_id: 'a4', bestekcode: 'S-10', schilderbehandeling_id: 'b1' }),
     regel({ id: 'handmatig', omschrijving: 'Bouwplaatskosten' }),
     regel({ id: 'tekst', soort: 'tekst', meetstaat_aggregaat_id: 'a1' }),
   ]
   const groepen = groepeerPerBestekcode(regels, aggs)
+  const label = (g: (typeof groepen)[number]) => `${g.onderdeel} ${g.type} ${g.code || '-'}`
 
-  it('zet codes numeriek op volgorde en zonder code achteraan', () => {
-    expect(groepen.map(g => g.code)).toEqual(['S-2', 'S-10', ZONDER_CODE])
+  it('houdt verschillende onderdelen met dezelfde code apart', () => {
+    expect(groepen.map(label)).toEqual([
+      'Boeideel hout >20cm S-10',
+      'Kozijnen hout 10-20cm S-2',
+      'Kozijnen hout 10-20cm S-10',
+      'Kozijnen hout 10-20cm -',
+    ])
+  })
+
+  it('telt dezelfde post over groepen (locaties) heen samen', () => {
+    const kozijnS10 = groepen.find(g => label(g) === 'Kozijnen hout 10-20cm S-10')!
+    expect(kozijnS10.regels.map(r => r.id)).toEqual(['r1', 'r5'])
+    expect(kozijnS10.behandelingIds).toEqual([null, 'b1'])
   })
 
   it('neemt alleen regels uit de meetstaat mee', () => {
     const alle = groepen.flatMap(g => g.regels.map(r => r.id))
     expect(alle).not.toContain('handmatig')
     expect(alle).not.toContain('tekst')
-    expect(groepen[2].regels.map(r => r.id)).toEqual(['r3'])
-  })
-
-  it('ziet een gemengde huidige behandeling', () => {
-    expect(groepen[1].behandelingIds).toEqual([null, 'b1'])
-    expect(groepen[0].behandelingIds).toEqual(['b1'])
+    expect(groepen.find(g => g.code === ZONDER_CODE)?.regels.map(r => r.id)).toEqual(['r3'])
   })
 
   it('weet welke types het nodig heeft', () => {
