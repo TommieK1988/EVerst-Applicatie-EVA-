@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { groepeerPerBestekcode, planKoppeling, benodigdeTypeIds, ZONDER_CODE } from './behandeling-koppelen'
 import { aggregaatSleutel, calculatieregelOmschrijving, normaliseerBestekcode } from './meetstaat-utils'
 import { componentregelsUitCombinatie } from './normen-uit-combinatie'
+import { zonderCodeInOmschrijving } from './bestekcode'
 import type { Calculatieregel, Meetregel, MeetregelAggregaat } from './types'
 import type { SchilderCombinatie } from './services/schilderwerk'
 
@@ -105,6 +106,8 @@ describe('groeperen per onderdeel, type en code', () => {
     const kozijnS10 = groepen.find(g => label(g) === 'Kozijnen hout 10-20cm S-10')!
     expect(kozijnS10.regels.map(r => r.id)).toEqual(['r1', 'r5'])
     expect(kozijnS10.behandelingIds).toEqual([null, 'b1'])
+    // Hoeveelheden tellen op: twee regels van 10 m¹.
+    expect(kozijnS10.totalen).toEqual([{ eenheid: 'm¹', hoeveelheid: 20 }])
   })
 
   it('neemt alleen regels uit de meetstaat mee', () => {
@@ -116,6 +119,16 @@ describe('groeperen per onderdeel, type en code', () => {
 
   it('weet welke types het nodig heeft', () => {
     expect(benodigdeTypeIds(regels, aggs)).toEqual(['t-kozijn'])
+  })
+})
+
+describe('code uit de omschrijving', () => {
+  it('haalt alleen de eigen code tussen blokhaken weg', () => {
+    expect(zonderCodeInOmschrijving({ omschrijving: 'Houten kozijn - 10-20cm [2,5] : OHD 53', bestekcode: '2,5' }).omschrijving)
+      .toBe('Houten kozijn - 10-20cm : OHD 53')
+    expect(zonderCodeInOmschrijving({ omschrijving: 'Kozijn [zie tekening]', bestekcode: 'S-01' }).omschrijving)
+      .toBe('Kozijn [zie tekening]')
+    expect(zonderCodeInOmschrijving({ omschrijving: 'Kozijn [S-01]' }).omschrijving).toBe('Kozijn [S-01]')
   })
 })
 
@@ -131,7 +144,7 @@ describe('koppelen', () => {
   it('koppelt de behandeling en vindt de combinatie', () => {
     expect(stappen[0].combinatie?.id).toBe('t-kozijn-b1')
     expect(stappen[0].nieuw.schilderbehandeling_id).toBe('b1')
-    expect(stappen[0].nieuw.omschrijving).toBe('Kozijnen hout - 10-20cm [S-01] : OHD 03')
+    expect(stappen[0].nieuw.omschrijving).toBe('Kozijnen hout - 10-20cm : OHD 03')
     expect(stappen[0].nieuw.gemarkeerd).toBeFalsy()
   })
 

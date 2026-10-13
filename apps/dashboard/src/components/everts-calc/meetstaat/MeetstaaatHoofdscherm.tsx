@@ -16,6 +16,7 @@ import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Meetstaat, Groep, Calculatieregel, Scenario } from '@/lib/everts-calc/types'
 import { calculatieregelOmschrijving, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combinatie'
+import { zonderCodeInOmschrijving } from '@/lib/everts-calc/bestekcode'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
@@ -213,7 +214,8 @@ export default function MeetstaaatHoofdscherm({
 
       for (const agg of aggregaten) {
         const bestekcode = normaliseerBestekcode(agg.bestekcode) || undefined
-        const omschrijving = calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling, bestekcode)
+        // De code krijgt in de calculatie een eigen kolom; niet ook nog in de omschrijving.
+        const omschrijving = calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling)
 
         // Zoek bijpassende schilder combinatie via IDs. Alleen oude meetstaten dragen
         // nog een behandeling; nieuwe koppelen die in de calculatie per bestekscode.
@@ -233,7 +235,7 @@ export default function MeetstaaatHoofdscherm({
             // In de calculatie al een behandeling gekoppeld: alleen de hoeveelheid
             // volgt de meetstaat. Omschrijving en normen zijn van de calculator.
             slaCalculatieregelOp({
-              ...bestaand,
+              ...zonderCodeInOmschrijving(bestaand),
               hoeveelheid: agg.totaal_hoeveelheid,
               eenheid: agg.eenheid as Calculatieregel['eenheid'],
               meetstaat_aggregaat_id: agg.id,

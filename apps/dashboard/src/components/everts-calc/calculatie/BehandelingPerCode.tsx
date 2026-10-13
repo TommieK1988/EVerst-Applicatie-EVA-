@@ -132,6 +132,7 @@ function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, 
                   <th className="py-2 pr-2">Onderdeel · type</th>
                   <th className="w-24 py-2 pr-2">Code</th>
                   <th className="w-16 py-2 pr-2">Regels</th>
+                  <th className="w-28 py-2 pr-4 text-right">Hoeveelheid</th>
                   <th className="w-40 py-2 pr-2">Huidige behandeling</th>
                   <th className="w-72 py-2">Nieuwe behandeling</th>
                 </tr>
@@ -198,6 +199,11 @@ function CodeRij({ groep, keuze, bibliotheek, naamVan, onKies }: {
           : <span className="font-mono text-[13px] font-semibold text-info-700">{groep.code}</span>}
       </td>
       <td className="py-3 pr-2 font-mono text-[13px] tabular-nums">{groep.regels.length}</td>
+      <td className="py-3 pr-4 text-right font-mono text-[13px] tabular-nums whitespace-nowrap">
+        {groep.totalen.map(t => (
+          <div key={t.eenheid}>{t.hoeveelheid.toLocaleString('nl-NL', { maximumFractionDigits: 2 })} {t.eenheid}</div>
+        ))}
+      </td>
       <td className="py-3 pr-2">
         {groep.behandelingIds.length > 1
           ? <Badge tone="warning" size="md">Gemengd ({groep.behandelingIds.length})</Badge>
