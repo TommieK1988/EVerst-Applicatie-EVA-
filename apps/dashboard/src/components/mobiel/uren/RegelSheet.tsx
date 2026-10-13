@@ -7,6 +7,7 @@ import { useDatumLocale } from '@/i18n/client'
 import { useVertalingen } from '@/components/vertalen/useVertaling'
 import type { UursoortOptie, WeekRegel, RegelInvoer } from '@/lib/uren/weekstaat'
 import { getDossierOpties, type DossierOptie } from '@/lib/uren/weekstaat'
+import type { KantoorOptie } from '@/lib/uren/kantoor-opties'
 import ProjectZoeker from './ProjectZoeker'
 import { getBewakingscodesVoorUurlog, type BewakingscodeOptie } from '@/lib/dossiers/actions'
 
@@ -33,7 +34,7 @@ const labelStijl: React.CSSProperties = {
 const CATEGORIEEN = ['werk', 'tijd_voor_tijd', 'afwezig', 'feestdag'] as const
 
 export default function RegelSheet({
-  datum, uursoorten, regel, kantoor, onSluit, onBewaar,
+  datum, uursoorten, regel, kantoor, kantoorOpties, vorigeKantoorId, onSluit, onBewaar,
 }: {
   datum: string
   uursoorten: UursoortOptie[]
@@ -42,6 +43,10 @@ export default function RegelSheet({
    * Werkt hij een keer op een project, dan zet hij "Op een project" aan en kiest hij er een.
    */
   kantoor: boolean
+  /** Voor welke werkmaatschappij het kantoorwerk is. Alleen bij meer dan één valt er te kiezen. */
+  kantoorOpties: KantoorOptie[]
+  /** De werkmaatschappij van de laatste kantoorregel deze week: de standaard voor een nieuwe. */
+  vorigeKantoorId: string | null
   /** Gevuld = bewerken, leeg = nieuw. */
   regel: WeekRegel | null
   onSluit: () => void
@@ -58,6 +63,11 @@ export default function RegelSheet({
   const [opProject, setOpProject] = useState(
     kantoor && !!regel?.dossier_id && regel.categorie === 'werk' && !regel.indirect,
   )
+  const heeftKantoorKeuze = kantoorOpties.length > 1
+  const [kantoorId, setKantoorId] = useState(() => {
+    const kan = (id: string | null | undefined) => kantoorOpties.some(o => o.dossierId === id) ? id! : null
+    return kan(regel?.dossier_id) ?? kan(vorigeKantoorId) ?? kantoorOpties[0]?.dossierId ?? ''
+  })
   const [bezig, setBezig] = useState(false)
 
   const [dossiers, setDossiers] = useState<DossierOptie[]>([])
@@ -116,6 +126,7 @@ export default function RegelSheet({
       bewakingscode: kiestProject ? (code || null) : null,
       bouw7_psl_id: kiestProject ? (codes.find(c => c.code === code)?.pslId ?? null) : null,
       opmerking: opmerking || null,
+      kantoor_dossier_id: kantoor && isWerk && !kiestProject && heeftKantoorKeuze ? (kantoorId || null) : null,
     })
     setBezig(false)
     if (!r.ok) { toast.error(r.error ?? t('regel.opslaanMislukt')); return }
@@ -189,6 +200,27 @@ export default function RegelSheet({
               <p style={{ fontSize: 12.5, color: '#6b757c', margin: '8px 0 0', lineHeight: 1.45 }}>
                 {opProject ? t('regel.kantoorProjectUitleg') : t('regel.kantoorUitleg')}
               </p>
+            </div>
+          )}
+
+          {isWerk && kantoor && !opProject && heeftKantoorKeuze && (
+            <div>
+              <label style={labelStijl}>{t('regel.kantoorVoor')}</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {kantoorOpties.map(o => (
+                  <button key={o.dossierId} type="button"
+                    onClick={() => setKantoorId(o.dossierId)}
+                    style={{
+                      flex: '1 1 40%', padding: '10px 8px', borderRadius: 9, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 700, lineHeight: 1.3,
+                      border: `1.5px solid ${kantoorId === o.dossierId ? '#009439' : 'var(--border)'}`,
+                      background: kantoorId === o.dossierId ? 'rgba(0,148,57,0.08)' : 'transparent',
+                      color: kantoorId === o.dossierId ? '#009439' : '#6b757c',
+                    }}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

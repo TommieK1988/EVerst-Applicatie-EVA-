@@ -3,6 +3,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { isoWeekdag, weekDagen } from './rooster'
+import { bepaalKantoorOpties, type KantoorOptie, type WerkmaatschappijRij } from './kantoor-opties'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -118,6 +119,12 @@ export type UrenBestemming = {
   werkmaatschappijId: string | null
   gewerktDossierId: string | null
   nietGewerktDossierId: string | null
+  /**
+   * Waar kantoorwerk heen mag (zie `bepaalKantoorOpties`). Meestal één; wie voor meer
+   * werkmaatschappijen kantoorwerk doet (`medewerkers.kantoor_werkmaatschappij_ids`) kiest per regel.
+   * De eerste is de standaard en staat ook in `gewerktDossierId`.
+   */
+  kantoorOpties: KantoorOptie[]
 }
 
 export async function getUrenBestemming(medewerkerId: string): Promise<UrenBestemming> {
@@ -125,7 +132,7 @@ export async function getUrenBestemming(medewerkerId: string): Promise<UrenBeste
   const [{ data: mw }, inst] = await Promise.all([
     supabase
       .from('medewerkers')
-      .select('afdeling, extern, werkmaatschappij_id, bedrijfsgegevens(indirect_uren_dossier_id, indirect_gewerkt_dossier_id)')
+      .select('afdeling, extern, werkmaatschappij_id, kantoor_werkmaatschappij_ids, bedrijfsgegevens(indirect_uren_dossier_id, indirect_gewerkt_dossier_id)')
       .eq('id', medewerkerId)
       .maybeSingle(),
     getUrenInstellingen(),
@@ -135,12 +142,20 @@ export async function getUrenBestemming(medewerkerId: string): Promise<UrenBeste
     | null
     | undefined
   const extern = !!mw?.extern
+  const standaard = extern ? inst.extern_kantoor_dossier_id : wm?.indirect_gewerkt_dossier_id ?? null
+  const gekozen = (mw?.kantoor_werkmaatschappij_ids ?? []) as string[]
+  // Een handvol rijen: alleen de aangevinkte werkmaatschappijen.
+  const { data: wms } = gekozen.length
+    ? await supabase.from('bedrijfsgegevens').select('id, naam, indirect_gewerkt_dossier_id').in('id', gekozen)
+    : { data: [] }
+  const kantoorOpties = bepaalKantoorOpties(gekozen, (wms ?? []) as WerkmaatschappijRij[], standaard)
   return {
     extern,
     kantoor: !!mw?.afdeling && inst.indirecte_afdelingen.includes(mw.afdeling),
     werkmaatschappijId: mw?.werkmaatschappij_id ?? null,
-    gewerktDossierId: extern ? inst.extern_kantoor_dossier_id : wm?.indirect_gewerkt_dossier_id ?? null,
+    gewerktDossierId: kantoorOpties[0]?.dossierId ?? standaard,
     nietGewerktDossierId: extern ? null : wm?.indirect_uren_dossier_id ?? null,
+    kantoorOpties,
   }
 }
 

@@ -27,6 +27,7 @@ import { BOEKBAAR_FILTER } from './boekbaar'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 import { zetOverurenRegels } from './overuren'
 import { berekenTvtSaldo } from './tvt-saldo'
+import type { KantoorOptie } from './kantoor-opties'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
@@ -95,6 +96,8 @@ export type Weekstaat = {
   kantoor: boolean
   /** Extern (ZZP): alleen gewerkte uren, geen norm en geen tijd-voor-tijdsaldo. */
   extern: boolean
+  /** Waar kantoorwerk heen mag; bij meer dan één kiest hij per regel (zie `getUrenBestemming`). */
+  kantoorOpties: KantoorOptie[]
 }
 
 /* ── Interne helpers ──────────────────────────────────────────────── */
@@ -267,6 +270,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     kmTarieven: { auto: inst.km_vergoeding_auto, bromfiets: inst.km_vergoeding_bromfiets },
     kantoor: bestemming.kantoor,
     extern: bestemming.extern,
+    kantoorOpties: bestemming.kantoorOpties,
   }
 }
 
@@ -445,6 +449,8 @@ export type RegelInvoer = {
   bewakingscode?: string | null
   bouw7_psl_id?: number | null
   opmerking?: string | null
+  /** Kantoorwerk zonder project: voor welke werkmaatschappij (een van `kantoorOpties`). */
+  kantoor_dossier_id?: string | null
 }
 
 /**
@@ -543,7 +549,14 @@ async function bouwRegel(
   }
 
   if (!bestemming.werkmaatschappijId && !bestemming.extern) throw new Error(t('fout.geenWerkmaatschappij'))
-  const indirect = categorie === 'werk' ? bestemming.gewerktDossierId : bestemming.nietGewerktDossierId
+  let indirect = categorie === 'werk' ? bestemming.gewerktDossierId : bestemming.nietGewerktDossierId
+  // Kantoorwerk voor een andere werkmaatschappij: alleen een die bij deze medewerker is aangevinkt.
+  if (categorie === 'werk' && invoer.kantoor_dossier_id) {
+    if (!bestemming.kantoorOpties.some(o => o.dossierId === invoer.kantoor_dossier_id)) {
+      throw new Error(t('fout.ongeldigKantoorProject'))
+    }
+    indirect = invoer.kantoor_dossier_id
+  }
   if (!indirect) throw new Error(t('fout.geenIndirectDossier'))
   return {
     medewerker_id: medewerkerId,

@@ -1122,6 +1122,11 @@ export type Medewerker = {
    * uren, maar deze persoon. Leeg = via het dossier.
    */
   uren_goedkeurder_id: string | null
+  /**
+   * Werkmaatschappijen waarvoor deze medewerker kantoorwerk doet. Leeg = de eigen; meer dan één =
+   * hij kiest per urenregel in de app. Zie lib/uren/kantoor-opties.ts.
+   */
+  kantoor_werkmaatschappij_ids: string[]
   // Persoonlijke accountinstellingen
   notificatie_voorkeuren: NotificatieVoorkeuren
   voorkeuren: GebruikerVoorkeuren

@@ -5288,8 +5288,85 @@ export type Database = {
           },
         ]
       }
+      inkoop_goedkeur_regels: {
+        Row: {
+          divisie_bouw7_id: number | null
+          drempel_excl: number | null
+          drempel_goedkeurder_id: string | null
+          id: string
+          terugval_goedkeurder_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          divisie_bouw7_id?: number | null
+          drempel_excl?: number | null
+          drempel_goedkeurder_id?: string | null
+          id?: string
+          terugval_goedkeurder_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          divisie_bouw7_id?: number | null
+          drempel_excl?: number | null
+          drempel_goedkeurder_id?: string | null
+          id?: string
+          terugval_goedkeurder_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      inkoop_goedkeur_stappen: {
+        Row: {
+          beoordeeld_door: string | null
+          beoordeeld_op: string | null
+          created_at: string
+          goedkeurder_id: string | null
+          id: string
+          inkoopfactuur_id: string
+          soort: string
+          stap: number
+          status: string
+          toelichting: string | null
+          updated_at: string
+        }
+        Insert: {
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
+          created_at?: string
+          goedkeurder_id?: string | null
+          id?: string
+          inkoopfactuur_id: string
+          soort: string
+          stap: number
+          status?: string
+          toelichting?: string | null
+          updated_at?: string
+        }
+        Update: {
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
+          created_at?: string
+          goedkeurder_id?: string | null
+          id?: string
+          inkoopfactuur_id?: string
+          soort?: string
+          stap?: number
+          status?: string
+          toelichting?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inkoopfacturen: {
         Row: {
+          bouw7_bijgewerkt_op: string | null
+          eva_besluit: string | null
+          eva_besluit_door: string | null
+          eva_besluit_op: string | null
+          goedkeuring_bron: string | null
           approval_index: number | null
           approval_is_goedgekeurd: boolean | null
           approval_kan_accorderen: boolean | null
@@ -5356,6 +5433,11 @@ export type Database = {
           vestiging_naam: string | null
         }
         Insert: {
+          bouw7_bijgewerkt_op?: string | null
+          eva_besluit?: string | null
+          eva_besluit_door?: string | null
+          eva_besluit_op?: string | null
+          goedkeuring_bron?: string | null
           approval_index?: number | null
           approval_is_goedgekeurd?: boolean | null
           approval_kan_accorderen?: boolean | null
@@ -5422,6 +5504,11 @@ export type Database = {
           vestiging_naam?: string | null
         }
         Update: {
+          bouw7_bijgewerkt_op?: string | null
+          eva_besluit?: string | null
+          eva_besluit_door?: string | null
+          eva_besluit_op?: string | null
+          goedkeuring_bron?: string | null
           approval_index?: number | null
           approval_is_goedgekeurd?: boolean | null
           approval_kan_accorderen?: boolean | null
@@ -9442,6 +9529,7 @@ export type Database = {
           handtekening_url: string | null
           id: string
           in_dienst_vanaf: string | null
+          kantoor_werkmaatschappij_ids: string[]
           kleur: string | null
           mobiel: string | null
           notificatie_voorkeuren: Json
@@ -9501,6 +9589,7 @@ export type Database = {
           handtekening_url?: string | null
           id?: string
           in_dienst_vanaf?: string | null
+          kantoor_werkmaatschappij_ids?: string[]
           kleur?: string | null
           mobiel?: string | null
           notificatie_voorkeuren?: Json
@@ -9560,6 +9649,7 @@ export type Database = {
           handtekening_url?: string | null
           id?: string
           in_dienst_vanaf?: string | null
+          kantoor_werkmaatschappij_ids?: string[]
           kleur?: string | null
           mobiel?: string | null
           notificatie_voorkeuren?: Json

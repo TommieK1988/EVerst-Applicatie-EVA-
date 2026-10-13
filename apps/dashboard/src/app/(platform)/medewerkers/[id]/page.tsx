@@ -120,7 +120,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
       .order('skill_naam', { ascending: true }),
     supabase
       .from('bedrijfsgegevens')
-      .select('id, naam')
+      .select('id, naam, indirect_gewerkt_dossier_id')
       .eq('type', 'werkmaatschappij')
       .order('naam'),
     supabase
@@ -221,7 +221,7 @@ export default async function MedewerkerDetailPage(props: { params: Promise<{ id
     pauzes: r.medewerker_rooster_pauzes ?? [],
   })) as RoosterMetPauzes[]
   const skills = (skillsRes.data ?? []) as MedewerkerSkill[]
-  const werkmaatschappijen = (werkmaatschappijenRes.data ?? []) as Pick<Bedrijfsgegevens, 'id' | 'naam'>[]
+  const werkmaatschappijen = (werkmaatschappijenRes.data ?? []) as (Pick<Bedrijfsgegevens, 'id' | 'naam'> & { indirect_gewerkt_dossier_id: string | null })[]
   const relaties = (relatiesRes.data ?? []) as Pick<Relatie, 'id' | 'naam' | 'types'>[]
   const functies = (functiesRes.data ?? []) as MedewerkerFunctie[]
   const afdelingen = (afdelingenRes.data ?? []) as MedewerkerAfdeling[]

@@ -255,6 +255,8 @@ const gegevensSchema = z.object({
    * lib/uren/bouw7-goedkeuring.ts. Leeg = via het dossier.
    */
   uren_goedkeurder_id: z.string().uuid().nullable().or(z.literal('')).transform(v => v || null),
+  /** Voor welke werkmaatschappijen hij kantoorwerk doet; zie lib/uren/kantoor-opties.ts. */
+  kantoor_werkmaatschappij_ids: z.array(z.string().uuid()).default([]),
 })
 
 export async function updateMedewerkerGegevens(

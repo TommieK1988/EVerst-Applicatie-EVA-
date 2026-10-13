@@ -9,6 +9,7 @@ import type {
 } from '@everts/database/platform-types'
 import { updateMedewerkerGegevens } from '@/app/(platform)/medewerkers/[id]/actions'
 import { Button, Input } from '@/components/ui'
+import KantoorWerkmaatschappijenVeld from './KantoorWerkmaatschappijenVeld'
 
 type FormState = {
   voornaam: string
@@ -41,6 +42,7 @@ type FormState = {
   ploeg_id: string
   standaard_uursoort_id: string
   uren_goedkeurder_id: string
+  kantoor_werkmaatschappij_ids: string[]
 }
 
 function toForm(m: Medewerker): FormState {
@@ -75,6 +77,7 @@ function toForm(m: Medewerker): FormState {
     ploeg_id:            m.ploeg_id ?? '',
     standaard_uursoort_id: m.standaard_uursoort_id ?? '',
     uren_goedkeurder_id: m.uren_goedkeurder_id ?? '',
+    kantoor_werkmaatschappij_ids: m.kantoor_werkmaatschappij_ids ?? [],
   }
 }
 
@@ -321,7 +324,8 @@ export default function MedewerkerGegevensForm({
   magTarieven,
 }: {
   medewerker: Medewerker
-  werkmaatschappijen: Pick<Bedrijfsgegevens, 'id' | 'naam'>[]
+  /** Met het gewerkt-indirecte project: alleen daarop is kantoorwerk te boeken. */
+  werkmaatschappijen: (Pick<Bedrijfsgegevens, 'id' | 'naam'> & { indirect_gewerkt_dossier_id: string | null })[]
   relaties: Pick<Relatie, 'id' | 'naam' | 'types'>[]
   functies: MedewerkerFunctie[]
   afdelingen: MedewerkerAfdeling[]
@@ -577,6 +581,14 @@ export default function MedewerkerGegevensForm({
                   {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
                 </select>
               ) : <Waarde value={werkmaatschappijen.find(w => w.id === m.werkmaatschappij_id)?.naam} />}
+            </Veld>
+            <Veld label="Kantooruren voor" span>
+              <KantoorWerkmaatschappijenVeld
+                werkmaatschappijen={werkmaatschappijen}
+                waarde={editing ? state.kantoor_werkmaatschappij_ids : (m.kantoor_werkmaatschappij_ids ?? [])}
+                editing={editing}
+                onChange={ids => set('kantoor_werkmaatschappij_ids', ids)}
+              />
             </Veld>
             <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', paddingBottom: 6 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: editing ? 'pointer' : 'default', fontFamily: 'var(--font-ui)', fontSize: 13 }}>

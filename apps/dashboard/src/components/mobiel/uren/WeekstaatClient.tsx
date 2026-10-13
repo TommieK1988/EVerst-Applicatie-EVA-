@@ -339,6 +339,11 @@ export default function WeekstaatClient({
           regel={sheet.regel}
           uursoorten={uursoorten}
           kantoor={staat.kantoor}
+          kantoorOpties={staat.kantoorOpties}
+          // Wie voor twee bedrijven werkt, doet dat meestal een tijdje voor hetzelfde: de laatste
+          // kantoorregel van de week is de beste gok voor de volgende.
+          vorigeKantoorId={[...staat.regels].reverse()
+            .find(r => staat.kantoorOpties.some(o => o.dossierId === r.dossier_id))?.dossier_id ?? null}
           onSluit={() => setSheet(null)}
           onBewaar={bewaarRegel}
         />
