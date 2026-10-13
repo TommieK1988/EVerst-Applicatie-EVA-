@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { Groep, Meetregel, Meetstaat } from '@/lib/everts-calc/types'
 import { getMeetregels } from '@/lib/everts-calc/local-store'
@@ -12,9 +12,11 @@ import { platteGroepen, subtreeIds } from '@/lib/everts-calc/groep-boom'
  * meetregels en de totalen per onderdeel/type/behandeling.
  *
  * Het invoerscherm zelf is niet af te drukken: dat toont één groep tegelijk, in
- * invoervelden, binnen een shell die op schermhoogte afkapt. Deze weergave staat
- * daarom via een portal los in <body>; bij afdrukken verbergt de stijl hieronder al
- * het andere. Op het scherm is hij onzichtbaar.
+ * invoervelden, binnen een shell die op schermhoogte afkapt. Deze weergave leeft
+ * daarom in een eigen, onzichtbaar iframe dat los wordt afgedrukt (zelfde patroon
+ * als de offertevoorvertoning). Bewust níet via print-CSS op de app zelf: de eerste
+ * versie verborg bij afdrukken alles in <body>, en in Safari bleef de app daarna
+ * zwart en onbruikbaar. Zo raakt afdrukken het scherm niet meer aan.
  */
 
 const fmt = (n: number | undefined | null, dec = 2) =>
@@ -50,15 +52,63 @@ const th: CSSProperties = {
 const td: CSSProperties = { padding: '3px 6px', borderBottom: '1px solid #e3e8ea', verticalAlign: 'top' }
 const getal: CSSProperties = { ...td, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
 
-export default function MeetstaatPrint({ meetstaat, groepen, projectNaam, projectNummer }: {
+interface Props {
   meetstaat: Meetstaat
   groepen: Groep[]
   projectNaam?: string
   projectNummer?: string
-}) {
-  const [gemount, setGemount] = useState(false)
-  useEffect(() => { setGemount(true) }, [])
-  if (!gemount) return null
+}
+
+export interface MeetstaatPrintHandle { afdrukken: () => void }
+
+const IFRAME_DOC = '<!doctype html><html lang="nl"><head><meta charset="utf-8"></head><body></body></html>'
+
+const MeetstaatPrint = forwardRef<MeetstaatPrintHandle, Props>(function MeetstaatPrint(props, ref) {
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const [doel, setDoel] = useState<HTMLElement | null>(null)
+
+  // Pas na `load` is het srcdoc-document definitief; daarvóór kan de browser het
+  // nog vervangen en zou de portal in een weggegooid document landen.
+  const opLaden = useCallback(() => {
+    const doc = frameRef.current?.contentDocument
+    if (!doc) return
+    // Stylesheets mee voor het lettertype (Montserrat komt via next/font binnen).
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(n => {
+      doc.head.appendChild(n.cloneNode(true))
+    })
+    doc.body.style.fontFamily = getComputedStyle(document.body).fontFamily
+    setDoel(doc.body)
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    afdrukken: () => {
+      const w = frameRef.current?.contentWindow
+      if (!w) return
+      w.document.title = `Meetstaat ${props.meetstaat.code}`
+      w.focus()
+      w.print()
+    },
+  }), [props.meetstaat.code])
+
+  return (
+    <>
+      <iframe
+        ref={frameRef}
+        title="Meetstaat afdrukken"
+        aria-hidden
+        tabIndex={-1}
+        srcDoc={IFRAME_DOC}
+        onLoad={opLaden}
+        style={{ position: 'absolute', width: 0, height: 0, border: 0, visibility: 'hidden' }}
+      />
+      {doel && createPortal(<Afdruk {...props} />, doel)}
+    </>
+  )
+})
+
+export default MeetstaatPrint
+
+function Afdruk({ meetstaat, groepen, projectNaam, projectNummer }: Props) {
 
   const regels = getMeetregels(meetstaat.id)
     .filter(r => !r.is_leeg && isRegelActief(r))
@@ -78,17 +128,13 @@ export default function MeetstaatPrint({ meetstaat, groepen, projectNaam, projec
 
   const heeftOverride = regels.some(r => r.hoeveelheid_override !== undefined && r.hoeveelheid_override !== null)
 
-  return createPortal(
+  return (
     <div className="meetstaat-print">
       <style>{`
-        .meetstaat-print { display: none; }
-        @media print {
-          @page { size: A4 landscape; margin: 12mm; }
-          body > *:not(.meetstaat-print) { display: none !important; }
-          .meetstaat-print { display: block; color: #161b20; background: #fff; font-size: 9pt; }
-          .meetstaat-print tr { break-inside: avoid; }
-          .meetstaat-print thead { display: table-header-group; }
-        }
+        @page { size: A4 landscape; margin: 12mm; }
+        html, body { margin: 0; background: #fff; }
+        .meetstaat-print { color: #161b20; font-size: 9pt; }
+        .meetstaat-print tr { break-inside: avoid; }
       `}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #009439', paddingBottom: 8, marginBottom: 12 }}>
@@ -154,7 +200,7 @@ export default function MeetstaatPrint({ meetstaat, groepen, projectNaam, projec
                   )
                 })}
               </tbody>
-              <tbody style={{ breakInside: 'avoid' }}>
+              <tbody>
                 {totalenPerPost(blok.regels).map(t => (
                   <tr key={`${t.omschrijving}::${t.eenheid}`} style={{ background: '#f1f4f5' }}>
                     <td style={td} />
@@ -171,7 +217,6 @@ export default function MeetstaatPrint({ meetstaat, groepen, projectNaam, projec
       {heeftOverride && (
         <p style={{ fontSize: '8pt', color: '#6b757c', marginTop: 8 }}>* Hoeveelheid handmatig ingevuld, niet berekend uit de maten.</p>
       )}
-    </div>,
-    document.body,
+    </div>
   )
 }

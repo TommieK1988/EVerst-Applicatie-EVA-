@@ -18,7 +18,7 @@ import { calculatieregelOmschrijving } from '@/lib/everts-calc/meetstaat-utils'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
-import MeetstaatPrint from './MeetstaatPrint'
+import MeetstaatPrint, { type MeetstaatPrintHandle } from './MeetstaatPrint'
 import toast from 'react-hot-toast'
 import { haalSchilderDropdownData, haalCombinaties } from '@/app/(platform)/everts-calc/actions/schilderwerk'
 import type { SchilderCombinatie } from '@/lib/everts-calc/services/schilderwerk'
@@ -46,6 +46,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
   const [openenOpen, setOpenenOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [wijzigingsTeller, setWijzigingsTeller] = useState(0)
+  const printRef = useRef<MeetstaatPrintHandle>(null)
 
   // ─── Opslaan naar Supabase ────────────────────────────────────────────────
   // De meetstaat reist mee in de calculatie-snapshot van dit project. Elke
@@ -380,7 +381,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
           {/* Afdrukken: de hele meetstaat, alle groepen (zie MeetstaatPrint) */}
           {meetstaat && (
             <button
-              onClick={() => window.print()}
+              onClick={() => printRef.current?.afdrukken()}
               title="Hele meetstaat afdrukken"
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
                          text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
@@ -475,6 +476,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
 
       {meetstaat && (
         <MeetstaatPrint
+          ref={printRef}
           meetstaat={meetstaat}
           groepen={groepen}
           projectNaam={printKop?.naam}
