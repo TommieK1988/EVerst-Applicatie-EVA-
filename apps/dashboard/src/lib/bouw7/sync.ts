@@ -753,6 +753,11 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
       const verseMap = new Map<string, string>(
         (verseCps ?? []).map((c: { id: string; bouw7_id: string }) => [c.bouw7_id, c.id])
       )
+      // Een geadopteerde persoon kan al een primaire spiegel hebben (zijn bouw7_id is later
+      // verschoven); een tweede primaire botst op cp_b7_koppeling_primair_idx en gooit dan de
+      // hele batch weg — zo faalde de contactpersonen-sync weken achtereen.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const heeftPrimair = new Set((dbSpiegels ?? []).filter((s: any) => s.is_primair).map((s: any) => s.contactpersoon_id as string))
       const spiegelRows = nieuweSpiegels
         .map(s => ({
           contactpersoon_id: s.persoonId ?? verseMap.get(s.cpBouw7Id),
@@ -761,7 +766,7 @@ export async function syncContacts(opts?: { mode?: SyncMode }): Promise<SyncCont
           organisatie_id:    relatieIdMap.get(s.orgBouw7Id) ?? null,
           bouw7_sync_hash:   null,   // wordt bij de eerstvolgende run gezet
           bouw7_laatst_sync: new Date().toISOString(),
-          is_primair:        true,
+          is_primair:        !s.persoonId || !heeftPrimair.has(s.persoonId),
         }))
         .filter(r => r.contactpersoon_id != null)
       for (let i = 0; i < spiegelRows.length; i += 500) {
