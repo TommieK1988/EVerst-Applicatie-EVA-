@@ -22,6 +22,7 @@ import type {
 import { isTekstregel } from './types'
 import { nieuweId } from './utils'
 import { zonderCodeInOmschrijving } from './bestekcode'
+import { kopieerMeetstaten } from './meetstaat-kopie'
 
 const KEYS = {
   werkbegrotingen: 'werkbegrotingen',
@@ -184,15 +185,33 @@ export function kopieerScenario(scenarioId: string, naam?: string): Scenario | n
   }
 
   // Calculatieregels + componentregels kopiëren met geremapte foreign-keys.
+  const regelIdMap = new Map<string, string>()
   for (const g of bronGroepen) {
     for (const r of getCalculatieregels(g.id)) {
       const nieuweRegelId = nieuweId()
+      regelIdMap.set(r.id, nieuweRegelId)
       slaCalculatieregelOp({ ...r, id: nieuweRegelId, groep_id: groepIdMap.get(g.id)! })
       for (const c of getComponentregels(r.id)) {
         slaComponentregelOp({ ...c, id: nieuweId(), calculatieregel_id: nieuweRegelId })
       }
     }
   }
+
+  // Meetstaten gaan mee, zodat de nieuwe versie zijn eigen meetstaat heeft (zie meetstaat-kopie).
+  const ms = kopieerMeetstaten({
+    bronScenarioId: scenarioId, nieuwScenarioId: nieuwScenario.id, groepIdMap, regelIdMap,
+    meetstaten: getMeetstaten(), meetregels: getMeetregels(),
+    aggregaten: getMeetregelAggregaten(), elementen: getMeetstaatElementen(),
+  })
+  sla(KEYS.meetstaten, [...getMeetstaten(), ...ms.meetstaten])
+  sla(KEYS.meetregels, [...getMeetregels(), ...ms.meetregels])
+  sla(KEYS.meetregel_aggregaten, [...getMeetregelAggregaten(), ...ms.aggregaten])
+  sla(KEYS.meetstaat_elementen, [...getMeetstaatElementen(), ...ms.elementen])
+  const nieuweRegelIds = new Set(regelIdMap.values())
+  sla(KEYS.calculatieregels, getCalculatieregels().map(r =>
+    nieuweRegelIds.has(r.id) && r.meetstaat_aggregaat_id
+      ? { ...r, meetstaat_aggregaat_id: ms.aggregaatIdMap.get(r.meetstaat_aggregaat_id) }
+      : r))
 
   return nieuwScenario
 }

@@ -25,6 +25,8 @@ import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/syn
 
 interface Props {
   projectId: string
+  /** Scenario dat de calculatie open heeft (revisie, meerwerk); daarin synchroniseert de meetstaat. */
+  scenarioId: string
   projectNaam: string
   projectNummer: string
   /** Waar de meetstaat in een los venster naar terugwijst. */
@@ -38,7 +40,7 @@ interface Props {
 }
 
 export default function MeetstaatKnop({
-  projectId, projectNaam, projectNummer, terugUrl, isVuil, bewaarEerst, onNaMeetstaat,
+  projectId, scenarioId, projectNaam, projectNummer, terugUrl, isVuil, bewaarEerst, onNaMeetstaat,
 }: Props) {
   const [overlayOpen, setOverlayOpen] = useState(false)
   const vensterOpen = useRef(false)
@@ -53,12 +55,12 @@ export default function MeetstaatKnop({
     // het venster leest de calculatie van de server, en die moet dan actueel zijn.
     const venster = window.open('', '_blank')
     await bewaarEerst()
-    const q = new URLSearchParams({ naam: projectNaam, nummer: projectNummer, terug: terugUrl })
+    const q = new URLSearchParams({ naam: projectNaam, nummer: projectNummer, terug: terugUrl, scenario: scenarioId })
     const url = `/everts-calc/meetstaat/${projectId}?${q}`
     if (venster) venster.location.href = url
     else window.open(url, '_blank')
     vensterOpen.current = true
-  }, [bewaarEerst, projectId, projectNaam, projectNummer, terugUrl])
+  }, [bewaarEerst, projectId, scenarioId, projectNaam, projectNummer, terugUrl])
 
   // Terug in dit tabblad na een los meetstaatvenster: de serverversie inlezen.
   const naHerlaadRef = useRef(onNaMeetstaat)
@@ -129,6 +131,7 @@ export default function MeetstaatKnop({
         <div className="fixed inset-0 z-50 bg-slate-50">
           <MeetstaaatHoofdscherm
             projectId={projectId}
+            scenarioId={scenarioId}
             ingebed
             onSluit={sluitOverlay}
             printKop={{ naam: projectNaam, nummer: projectNummer }}

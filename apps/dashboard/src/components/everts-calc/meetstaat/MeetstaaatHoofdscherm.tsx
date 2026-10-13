@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  maakStandaardScenario, getGroepen, hydrateCalculatie,
+  maakStandaardScenario, getScenarios, getGroepen, hydrateCalculatie,
   getMeetstaten, maakNieuweMeetstaat, slaMeetstaatOp,
   getMeetregelAggregaten, slaMeetregelAggregaatOp,
   slaCalculatieregelOp, getCalculatieregels,
@@ -32,10 +32,15 @@ interface SchilderData {
   combinaties: { id: string; onderdeel_id: string; type_id: string; behandeling_id: string }[]
 }
 
+const BEVROREN_MELDING =
+  'Deze calculatie is verzonden en bevroren. Reviseer de calculatie en open de meetstaat vanuit de nieuwe versie.'
+
 export default function MeetstaaatHoofdscherm({
-  projectId, onSluit, schilderData: schilderDataProp, printKop, ingebed = false, terug,
+  projectId, scenarioId, onSluit, schilderData: schilderDataProp, printKop, ingebed = false, terug,
 }: {
   projectId: string
+  /** Scenario dat de calculatie open heeft (revisie, meerwerk). Leeg of onbekend = het standaardscenario. */
+  scenarioId?: string
   /** Project waar de meetstaat bij hoort, voor de kop van de afdruk en de contextregel. */
   printKop?: { naam?: string; nummer?: string }
   /** Overlay in de calculatie: sluiten brengt je terug naar het rekenblad. */
@@ -113,10 +118,17 @@ export default function MeetstaaatHoofdscherm({
           if (actief && snap) hydrateCalculatie(projectId, snap)
         } catch { /* zonder snapshot starten we met een vers scenario */ }
       }
-      if (actief) setScenario(maakStandaardScenario(projectId))
+      if (!actief) return
+      // Alleen een scenario van dít project; anders terugvallen op de standaard.
+      const gekozen = scenarioId ? getScenarios(projectId).find(s => s.id === scenarioId) : undefined
+      setScenario(gekozen ?? maakStandaardScenario(projectId))
     })()
     return () => { actief = false }
-  }, [projectId, ingebed])
+  }, [projectId, scenarioId, ingebed])
+
+  // Een verzonden calculatie is bevroren; de server gooit wijzigingen aan zijn regels
+  // weg. Synchroniseren zou dus "gelukt" melden terwijl er niets blijft staan.
+  const bevroren = !!scenario?.bevroren_op
 
   // Haal schilderdata op als die niet als prop is meegegeven (bijv. vanuit calculatie-overlay)
   useEffect(() => {
@@ -191,6 +203,7 @@ export default function MeetstaaatHoofdscherm({
   // Sync aggregaten naar calculatieregels + componentregels
   const handleSync = useCallback(async () => {
     if (!meetstaat || !scenario) return
+    if (bevroren) { toast.error(BEVROREN_MELDING); return }
     setIsSyncing(true)
 
     try {
@@ -308,7 +321,7 @@ export default function MeetstaaatHoofdscherm({
     } finally {
       setIsSyncing(false)
     }
-  }, [meetstaat, scenario, bewaarNu, naarCalculatie])
+  }, [meetstaat, scenario, bevroren, bewaarNu, naarCalculatie])
 
   const aggregaten = meetstaat ? getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0) : []
   const ongesyncCount = aggregaten.filter(a => !a.is_gesynchroniseerd).length
@@ -345,6 +358,14 @@ export default function MeetstaaatHoofdscherm({
             }`}>
               {meetstaat.status}
             </span>
+            {scenario?.meerwerk_regel_id ? (
+              <span className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-500 border-slate-200">Meerwerk</span>
+            ) : (scenario?.versie ?? 1) > 1 && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-500 border-slate-200">v{scenario?.versie}</span>
+            )}
+            {bevroren && (
+              <span title={BEVROREN_MELDING} className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-300">Bevroren</span>
+            )}
           </div>
         ) : (
           <span className="text-sm text-slate-400 italic">Geen meetstaat actief</span>
@@ -399,9 +420,10 @@ export default function MeetstaaatHoofdscherm({
           {meetstaat && (
             <button
               onClick={handleSync}
-              disabled={isSyncing || ongesyncCount === 0}
+              disabled={isSyncing || ongesyncCount === 0 || bevroren}
+              title={bevroren ? BEVROREN_MELDING : undefined}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
-                ongesyncCount > 0
+                ongesyncCount > 0 && !bevroren
                   ? 'bg-everts text-white hover:bg-everts/90'
                   : 'bg-slate-100 text-slate-400 cursor-default'
               }`}

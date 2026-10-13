@@ -512,7 +512,7 @@ export default function CalculatieHoofdscherm({
             <span className="w-px h-4 bg-slate-200 mx-0.5" />
 
             {/* Meetstaat */}
-            <MeetstaatKnop projectId={projectId} projectNaam={projectNaam} projectNummer={projectNummer}
+            <MeetstaatKnop projectId={projectId} scenarioId={scenario.id} projectNaam={projectNaam} projectNummer={projectNummer}
               terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
               bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
               onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
