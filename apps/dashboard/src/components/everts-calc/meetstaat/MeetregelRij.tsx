@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { Meetregel } from '@/lib/everts-calc/types'
-import { berekenHoeveelheid, isRegelActief } from '@/lib/everts-calc/meetstaat-utils'
+import { berekenHoeveelheid, isRegelActief, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 
 interface SchilderData {
@@ -32,6 +32,8 @@ interface Props {
   onEnter: () => void
   onVerwijder: () => void
   schilderData?: SchilderData
+  /** id van de <datalist> met de bestekscodes die al in deze meetstaat voorkomen. */
+  codeLijstId?: string
 }
 
 // ─── KOLOMADRESSEN ───────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ interface Props {
 // prullenbak zijn geen navigatiedoel. MeetregelGrid gebruikt dezelfde nummering.
 
 export const KOL = {
-  element: 0, onderdeel: 1, type: 2, behandeling: 3,
+  element: 0, onderdeel: 1, type: 2, code: 3,
   breedte: 4, hoogte: 5, breedteAantal: 6, hoogteAantal: 7,
   factor: 8, aantal: 9, opmerking: 10,
 } as const
@@ -209,7 +211,7 @@ function ZoekInvoer({
 
 export default function MeetregelRij({
   regel, volgnummer, rijIndex, isActief, moetFocussen, onGefocust, isGeselecteerd, onSelecteer,
-  onFocus, onWijzig, onEnter, onVerwijder, schilderData,
+  onFocus, onWijzig, onEnter, onVerwijder, schilderData, codeLijstId,
 }: Props) {
   const eersteRef = useRef<HTMLInputElement>(null)
   const actief = isRegelActief(regel)
@@ -230,16 +232,6 @@ export default function MeetregelRij({
     ? regel.onderdeel_id
       ? schilderData.types.filter(t => t.onderdeel_id === regel.onderdeel_id)
       : []
-    : []
-
-  const beschikbareBehandelingen = schilderData
-    ? (() => {
-        if (!regel.type_id) return []
-        const combIds = schilderData.combinaties
-          .filter(c => c.type_id === regel.type_id)
-          .map(c => c.behandeling_id)
-        return schilderData.behandelingen.filter(b => combIds.includes(b.id))
-      })()
     : []
 
   const ni = (kol: number, value: number | undefined, onChange: (v: number | undefined) => void, placeholder = '', cls = '') => (
@@ -363,20 +355,33 @@ export default function MeetregelRij({
         </div>
       </td>
 
-      {/* Behandeling */}
+      {/* Bestekscode — de behandeling kies je in de calculatie, per code in één keer */}
       <td className="px-1 py-0.5">
-        {schilderData && beschikbareBehandelingen.length > 0
-          ? <ZoekInvoer
-              value={regel.behandeling}
-              opties={beschikbareBehandelingen}
-              placeholder="Behandeling..."
-              celAdres={cel(KOL.behandeling)}
-              onFocus={onFocus}
-              onEnter={onEnter}
-              onSelect={(id, naam) => onWijzig({ behandeling: naam ?? '', behandeling_id: id })}
-            />
-          : ti(KOL.behandeling, regel.behandeling, v => onWijzig({ behandeling: v }), 'Behandeling...')
-        }
+        <input
+          type="text" data-cel={cel(KOL.code)} list={codeLijstId}
+          value={regel.bestekcode ?? ''} placeholder="Code..."
+          onChange={e => onWijzig({ bestekcode: e.target.value })}
+          onBlur={e => {
+            // De lege slotregel niet aanraken: die spiegelt alleen de regel erboven.
+            if (regel.is_leeg) return
+            const genormaliseerd = normaliseerBestekcode(e.target.value)
+            if (genormaliseerd !== (regel.bestekcode ?? '')) onWijzig({ bestekcode: genormaliseerd || undefined })
+          }}
+          onFocus={onFocus}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
+          className="w-full text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-transparent border-0
+            hover:bg-white hover:border hover:border-slate-200
+            focus:bg-white focus:border focus:border-everts/40 focus:outline-none
+            placeholder:font-normal placeholder:normal-case placeholder-slate-300 text-blue-700"
+        />
+        {regel.behandeling && (
+          <span
+            className="block truncate px-1.5 text-[10px] text-slate-400"
+            title="Behandeling uit een oudere meetstaat. Een behandeling kies je voortaan in de calculatie, per bestekscode."
+          >
+            {regel.behandeling}
+          </span>
+        )}
       </td>
 
       {/* B */}

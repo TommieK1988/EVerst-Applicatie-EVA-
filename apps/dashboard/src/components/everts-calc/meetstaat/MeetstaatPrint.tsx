@@ -4,12 +4,12 @@ import { forwardRef, useCallback, useImperativeHandle, useRef, useState, type CS
 import { createPortal } from 'react-dom'
 import type { Groep, Meetregel, Meetstaat } from '@/lib/everts-calc/types'
 import { getMeetregels } from '@/lib/everts-calc/local-store'
-import { berekenHoeveelheid, isRegelActief, calculatieregelOmschrijving } from '@/lib/everts-calc/meetstaat-utils'
+import { berekenHoeveelheid, isRegelActief, calculatieregelOmschrijving, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { platteGroepen, subtreeIds } from '@/lib/everts-calc/groep-boom'
 
 /**
  * Afdrukversie van de héle meetstaat: alle groepen onder elkaar, met per groep de
- * meetregels en de totalen per onderdeel/type/behandeling.
+ * meetregels en de totalen per onderdeel/type/bestekscode.
  *
  * Het invoerscherm zelf is niet af te drukken: dat toont één groep tegelijk, in
  * invoervelden, binnen een shell die op schermhoogte afkapt. Deze weergave leeft
@@ -36,7 +36,8 @@ interface Totaal { omschrijving: string; eenheid: string; hoeveelheid: number }
 function totalenPerPost(regels: Meetregel[]): Totaal[] {
   const map = new Map<string, Totaal>()
   for (const r of regels) {
-    const omschrijving = calculatieregelOmschrijving(r.onderdeel ?? '', r.type ?? '', r.behandeling ?? '')
+    // Zelfde splitsing als de aggregaten: per onderdeel/type/bestekscode.
+    const omschrijving = calculatieregelOmschrijving(r.onderdeel ?? '', r.type ?? '', r.behandeling ?? '', r.bestekcode)
     const sleutel = `${omschrijving.toLowerCase()}::${r.eenheid}`
     const t = map.get(sleutel) ?? { omschrijving, eenheid: r.eenheid, hoeveelheid: 0 }
     t.hoeveelheid += berekenHoeveelheid(r)
@@ -168,7 +169,7 @@ function Afdruk({ meetstaat, groepen, projectNaam, projectNummer }: Props) {
                   <th style={th}>Element</th>
                   <th style={th}>Onderdeel</th>
                   <th style={th}>Type</th>
-                  <th style={th}>Behandeling</th>
+                  <th style={th}>Code</th>
                   <th style={th}>Opmerking</th>
                   <th style={{ ...th, textAlign: 'right' }}>Breedte</th>
                   <th style={{ ...th, textAlign: 'right' }}>Hoogte</th>
@@ -187,7 +188,8 @@ function Afdruk({ meetstaat, groepen, projectNaam, projectNummer }: Props) {
                       <td style={td}>{r.element}</td>
                       <td style={td}>{r.onderdeel}</td>
                       <td style={td}>{r.type}</td>
-                      <td style={td}>{r.behandeling}</td>
+                      {/* Oude meetstaten dragen nog een behandeling; die blijft dan zichtbaar. */}
+                      <td style={td}>{[normaliseerBestekcode(r.bestekcode), r.behandeling].filter(Boolean).join(' · ')}</td>
                       <td style={td}>{opmerking}</td>
                       <td style={getal}>{maat(r.breedte, r.breedte_aantal, r.eenheid)}</td>
                       <td style={getal}>{maat(r.hoogte, r.hoogte_aantal, r.eenheid)}</td>
