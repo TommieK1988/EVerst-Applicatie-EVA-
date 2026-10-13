@@ -1,5 +1,6 @@
 'use client'
 
+import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 import React, { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -452,33 +453,36 @@ function DossierPicker({ value, currentLabel, projectKeuze, onChange }: {
   }
 
   return (
-    <div className="relative">
-      <Input inputSize="md" value={zoek} placeholder="Zoek op projectnummer, naam of opdrachtgever…"
-        autoFocus={open}
-        onChange={e => setZoek(e.target.value)}
-        onFocus={() => setOpen(true)} />
-      {open && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-neutral-500">Geen projecten gevonden</div>
-          ) : filtered.map(p => (
-            <button
-              key={p.bouw7_id}
-              type="button"
-              onClick={() => { onChange(p); setOpen(false); setZoek('') }}
-              className="flex w-full flex-col items-start gap-0.5 border-b border-neutral-100 px-3 py-2 text-left last:border-b-0 hover:bg-brand-50"
-            >
-              <span className="text-[12px] font-medium text-neutral-900">
-                {p.projectnummer} — {p.projectnaam}
-              </span>
-              <span className="text-[11px] text-neutral-500">
-                {[p.opdrachtgever, p.filiaal].filter(Boolean).join(' · ') || '—'}
-              </span>
-            </button>
-          ))}
+    <ZwevendeLijst
+      open={open}
+      onSluit={() => setOpen(false)}
+      anker={
+        <div>
+          <Input inputSize="md" value={zoek} placeholder="Zoek op projectnummer, naam of opdrachtgever…"
+            autoFocus={open}
+            onChange={e => setZoek(e.target.value)}
+            onFocus={() => setOpen(true)} />
         </div>
-      )}
-    </div>
+      }
+    >
+      {filtered.length === 0 ? (
+        <div className="px-3 py-2 text-[12px] text-neutral-500">Geen projecten gevonden</div>
+      ) : filtered.map(p => (
+        <button
+          key={p.bouw7_id}
+          type="button"
+          onClick={() => { onChange(p); setOpen(false); setZoek('') }}
+          className="flex w-full flex-col items-start gap-0.5 border-b border-neutral-100 px-3 py-2 text-left last:border-b-0 hover:bg-brand-50"
+        >
+          <span className="text-[12px] font-medium text-neutral-900">
+            {p.projectnummer} — {p.projectnaam}
+          </span>
+          <span className="text-[11px] text-neutral-500">
+            {[p.opdrachtgever, p.filiaal].filter(Boolean).join(' · ') || '—'}
+          </span>
+        </button>
+      ))}
+    </ZwevendeLijst>
   )
 }
 

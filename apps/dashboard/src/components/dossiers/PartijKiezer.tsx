@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui'
 import { zoekRelaties } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { RelatieRef } from '@/lib/everts-calc/types'
 import type { UitvraagSoort } from '@everts/database'
+import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 
 type Props = {
   soort: UitvraagSoort
@@ -71,53 +72,53 @@ export default function PartijKiezer({ soort, naam, onKies, onWis, disabled, pla
     )
   }
 
+  const toonLijst = open && zoekterm.trim().length >= 2 && (resultaten.length > 0 || !bezig)
+
   return (
-    <div className="relative">
-      <div className="flex items-center gap-1.5 rounded border border-neutral-200 bg-white px-1.5 focus-within:border-brand-500">
-        <Search className="w-3 h-3 flex-shrink-0 text-neutral-400" />
-        <input
-          className="flex-1 min-w-0 bg-transparent py-1 text-[12.5px] text-neutral-800 outline-none placeholder:text-neutral-400"
-          value={zoekterm}
-          disabled={disabled}
-          placeholder={placeholder ?? (soort === 'leverancier' ? 'Zoek leverancier…' : 'Zoek onderaannemer…')}
-          onChange={bijTypen}
-          onFocus={() => zoekterm.trim().length >= 2 && setOpen(true)}
-          // Vertraagd sluiten: anders is de knop weg vóór de klik erop landt.
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />
-        {bezig && <Spinner size="sm" className="flex-shrink-0" />}
-      </div>
-
-      {open && resultaten.length > 0 && (
-        <div className="absolute left-0 top-full z-50 mt-0.5 max-h-52 w-72 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg">
-          {resultaten.map(r => (
-            <button
-              key={r.id}
-              type="button"
-              className="w-full px-3 py-1.5 text-left hover:bg-neutral-50"
-              onMouseDown={() => {
-                onKies(r.id, r.naam)
-                setZoekterm('')
-                setResultaten([])
-                setOpen(false)
-              }}
-            >
-              <p className="truncate text-[12.5px] font-medium text-neutral-800">{r.naam}</p>
-              {r.email
-                ? <p className="truncate text-[11px] text-neutral-400">{r.email}</p>
-                : <p className="text-[11px] text-warning-600">Geen e-mailadres bekend</p>}
-            </button>
-          ))}
+    <ZwevendeLijst
+      open={toonLijst}
+      onSluit={() => setOpen(false)}
+      breedte={288}
+      className="py-1"
+      anker={
+        <div className="flex items-center gap-1.5 rounded border border-neutral-200 bg-white px-1.5 focus-within:border-brand-500">
+          <Search className="w-3 h-3 flex-shrink-0 text-neutral-400" />
+          <input
+            className="flex-1 min-w-0 bg-transparent py-1 text-[12.5px] text-neutral-800 outline-none placeholder:text-neutral-400"
+            value={zoekterm}
+            disabled={disabled}
+            placeholder={placeholder ?? (soort === 'leverancier' ? 'Zoek leverancier…' : 'Zoek onderaannemer…')}
+            onChange={bijTypen}
+            onFocus={() => zoekterm.trim().length >= 2 && setOpen(true)}
+            // Vertraagd sluiten: anders is de knop weg vóór de klik erop landt.
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+          />
+          {bezig && <Spinner size="sm" className="flex-shrink-0" />}
         </div>
+      }
+    >
+      {resultaten.length > 0 ? resultaten.map(r => (
+        <button
+          key={r.id}
+          type="button"
+          className="w-full px-3 py-1.5 text-left hover:bg-neutral-50"
+          onMouseDown={() => {
+            onKies(r.id, r.naam)
+            setZoekterm('')
+            setResultaten([])
+            setOpen(false)
+          }}
+        >
+          <p className="truncate text-[12.5px] font-medium text-neutral-800">{r.naam}</p>
+          {r.email
+            ? <p className="truncate text-[11px] text-neutral-400">{r.email}</p>
+            : <p className="text-[11px] text-warning-600">Geen e-mailadres bekend</p>}
+        </button>
+      )) : (
+        <p className="px-3 py-1 text-[12px] text-neutral-500">
+          Geen actieve {soort === 'leverancier' ? 'leverancier' : 'onderaannemer'} gevonden.
+        </p>
       )}
-
-      {open && !bezig && zoekterm.trim().length >= 2 && resultaten.length === 0 && (
-        <div className="absolute left-0 top-full z-50 mt-0.5 w-72 rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-lg">
-          <p className="text-[12px] text-neutral-500">
-            Geen actieve {soort === 'leverancier' ? 'leverancier' : 'onderaannemer'} gevonden.
-          </p>
-        </div>
-      )}
-    </div>
+    </ZwevendeLijst>
   )
 }

@@ -5,6 +5,7 @@ import { X, Search } from 'lucide-react'
 import { Spinner } from '@/components/ui'
 import { zoekRelaties } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import type { RelatieRef } from '@/lib/everts-calc/types'
+import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 
 interface Props {
   type: 'leverancier' | 'onderaannemer'
@@ -57,46 +58,47 @@ export default function RelatieZoekveld({ type, relatieId, relatieNaam, onSelect
     )
   }
 
+  // Tijdens het zoeken nog niets tonen; "geen resultaten" pas als de zoekopdracht klaar is.
+  const toonLijst = open && zoekterm.length >= 2 && (resultaten.length > 0 || !isZoeken)
+
   return (
-    <div className="relative">
-      <div className="flex items-center gap-1">
-        <Search className="flex-shrink-0 w-2.5 h-2.5 text-slate-300" />
-        <input
-          ref={inputRef}
-          className="flex-1 min-w-0 text-xs px-1 py-0.5 rounded border-0 bg-transparent hover:bg-white hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-slate-300 focus:outline-none text-slate-600 placeholder:text-slate-300"
-          value={zoekterm}
-          placeholder={type === 'leverancier' ? 'Leverancier...' : 'Onderaannemer...'}
-          onChange={handleInput}
-          onFocus={() => zoekterm.length >= 2 && setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />
-        {isZoeken && <Spinner size="sm" className="flex-shrink-0" />}
-      </div>
-
-      {open && resultaten.length > 0 && (
-        <div className="absolute left-0 top-full mt-0.5 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 max-h-40 overflow-y-auto">
-          {resultaten.map(r => (
-            <button
-              key={r.id}
-              className="w-full text-left px-3 py-1.5 hover:bg-everts-50 transition-colors"
-              onMouseDown={() => {
-                onSelecteer(r.id, r.naam)
-                setZoekterm('')
-                setOpen(false)
-              }}
-            >
-              <p className="text-xs font-medium text-slate-700 truncate">{r.naam}</p>
-              {r.email && <p className="text-[10px] text-slate-400 truncate">{r.email}</p>}
-            </button>
-          ))}
+    <ZwevendeLijst
+      open={toonLijst}
+      onSluit={() => setOpen(false)}
+      breedte={224}
+      className="py-1"
+      anker={
+        <div className="flex items-center gap-1">
+          <Search className="flex-shrink-0 w-2.5 h-2.5 text-slate-300" />
+          <input
+            ref={inputRef}
+            className="flex-1 min-w-0 text-xs px-1 py-0.5 rounded border-0 bg-transparent hover:bg-white hover:border hover:border-slate-200 focus:bg-white focus:border focus:border-slate-300 focus:outline-none text-slate-600 placeholder:text-slate-300"
+            value={zoekterm}
+            placeholder={type === 'leverancier' ? 'Leverancier...' : 'Onderaannemer...'}
+            onChange={handleInput}
+            onFocus={() => zoekterm.length >= 2 && setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+          />
+          {isZoeken && <Spinner size="sm" className="flex-shrink-0" />}
         </div>
+      }
+    >
+      {resultaten.length > 0 ? resultaten.map(r => (
+        <button
+          key={r.id}
+          className="w-full text-left px-3 py-1.5 hover:bg-everts-50 transition-colors"
+          onMouseDown={() => {
+            onSelecteer(r.id, r.naam)
+            setZoekterm('')
+            setOpen(false)
+          }}
+        >
+          <p className="text-xs font-medium text-slate-700 truncate">{r.naam}</p>
+          {r.email && <p className="text-[10px] text-slate-400 truncate">{r.email}</p>}
+        </button>
+      )) : (
+        <p className="px-3 py-1 text-xs text-slate-400">Geen resultaten gevonden</p>
       )}
-
-      {open && !isZoeken && zoekterm.length >= 2 && resultaten.length === 0 && (
-        <div className="absolute left-0 top-full mt-0.5 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 px-3 py-2">
-          <p className="text-xs text-slate-400">Geen resultaten gevonden</p>
-        </div>
-      )}
-    </div>
+    </ZwevendeLijst>
   )
 }

@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,38 +220,38 @@ const MEET_EENHEDEN = ['m²', 'm¹', 'm³', 'st', 'post', 'uur', 'dag', 'ltr', '
 function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: string) => void }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded
-          bg-everts/10 text-everts hover:bg-everts/20 border border-everts/20 transition-colors"
-      >
-        {huidig || '—'}
-        <ChevronDown className="w-3 h-3" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-[61] p-1.5 flex flex-wrap gap-1 w-52">
-            {MEET_EENHEDEN.map(e => (
-              <button
-                key={e}
-                onClick={() => { onChange(e); setOpen(false) }}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  huidig === e
-                    ? 'bg-everts text-white'
-                    : ['m²', 'm¹', 'm³'].includes(e)
-                      ? 'border border-everts/20 text-everts hover:bg-everts/10'
-                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <ZwevendeLijst
+      open={open}
+      onSluit={() => setOpen(false)}
+      breedte={208}
+      className="p-1.5 flex flex-wrap gap-1"
+      anker={
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded
+            bg-everts/10 text-everts hover:bg-everts/20 border border-everts/20 transition-colors"
+        >
+          {huidig || '—'}
+          <ChevronDown className="w-3 h-3" />
+        </button>
+      }
+    >
+      {MEET_EENHEDEN.map(e => (
+        <button
+          key={e}
+          onClick={() => { onChange(e); setOpen(false) }}
+          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            huidig === e
+              ? 'bg-everts text-white'
+              : ['m²', 'm¹', 'm³'].includes(e)
+                ? 'border border-everts/20 text-everts hover:bg-everts/10'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          {e}
+        </button>
+      ))}
+    </ZwevendeLijst>
   )
 }
 
