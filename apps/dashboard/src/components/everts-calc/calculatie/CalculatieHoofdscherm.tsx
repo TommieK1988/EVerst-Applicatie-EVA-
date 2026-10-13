@@ -512,7 +512,7 @@ export default function CalculatieHoofdscherm({
 
             {/* Meetstaat */}
             <Button variant="outline" size="sm" asChild title="Schildermeetstaat openen">
-              <a href={`/everts-calc/meetstaat/${projectId}`} target="_blank" rel="noopener noreferrer">
+              <a href={`/everts-calc/meetstaat/${projectId}?${new URLSearchParams({ naam: projectNaam, nummer: projectNummer })}`} target="_blank" rel="noopener noreferrer">
                 <Ruler className="w-3.5 h-3.5" />
                 <span className="hidden lg:inline">Meetstaat</span>
               </a>

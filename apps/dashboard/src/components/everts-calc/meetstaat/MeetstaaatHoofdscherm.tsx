@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, X } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, X, Printer } from 'lucide-react'
 import {
   maakStandaardScenario, getGroepen, hydrateCalculatie,
   getMeetstaten, maakNieuweMeetstaat, slaMeetstaatOp,
@@ -18,6 +18,7 @@ import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combina
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
+import MeetstaatPrint from './MeetstaatPrint'
 import toast from 'react-hot-toast'
 import { haalSchilderDropdownData, haalCombinaties } from '@/app/(platform)/everts-calc/actions/schilderwerk'
 import type { SchilderCombinatie } from '@/lib/everts-calc/services/schilderwerk'
@@ -29,9 +30,11 @@ interface SchilderData {
   combinaties: { id: string; onderdeel_id: string; type_id: string; behandeling_id: string }[]
 }
 
-export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit, schilderData: schilderDataProp }: {
+export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit, schilderData: schilderDataProp, printKop }: {
   projectId: string
   projectNaam?: string
+  /** Project waar de meetstaat bij hoort, voor de kop van de afdruk. */
+  printKop?: { naam?: string; nummer?: string }
   onSluit?: () => void
   schilderData?: SchilderData
 }) {
@@ -345,6 +348,19 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
             <span className="hidden sm:inline">Openen</span>
           </button>
 
+          {/* Afdrukken: de hele meetstaat, alle groepen (zie MeetstaatPrint) */}
+          {meetstaat && (
+            <button
+              onClick={() => window.print()}
+              title="Hele meetstaat afdrukken"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
+                         text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Afdrukken</span>
+            </button>
+          )}
+
           {/* Sync naar calculatie */}
           {meetstaat && (
             <button
@@ -426,6 +442,15 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
             )}
           </div>
         </div>
+      )}
+
+      {meetstaat && (
+        <MeetstaatPrint
+          meetstaat={meetstaat}
+          groepen={groepen}
+          projectNaam={printKop?.naam}
+          projectNummer={printKop?.nummer}
+        />
       )}
 
       {/* Modal: meetstaat openen */}
