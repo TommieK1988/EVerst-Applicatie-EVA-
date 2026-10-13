@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { zoekDossiers } from '@/lib/dossiers/actions'
+import { ZwevendeLijst, isInZwevendeLijst } from '@/components/ui/zwevende-lijst'
 
 /**
  * Zoekveld om zelf een dossier te kiezen voor een parkeerkost.
@@ -54,6 +55,7 @@ export default function DossierKiezer({
   useEffect(() => {
     if (!open) return
     const buiten = (e: MouseEvent) => {
+      if (isInZwevendeLijst(e.target)) return
       if (wrapper.current && !wrapper.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', buiten)
@@ -73,42 +75,45 @@ export default function DossierKiezer({
   }
 
   return (
-    <div ref={wrapper} className="relative">
-      <div className="flex items-center gap-1 rounded border bg-white px-2 py-1">
-        <Search className="w-3 h-3 text-slate-400 shrink-0" />
-        <input
-          autoFocus
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          placeholder="Zoek op nummer of naam…"
-          className="w-full text-sm outline-none"
-        />
-        <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700 shrink-0">
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-
-      {(resultaten.length > 0 || bezig || term.trim().length >= 2) && (
-        <div className="absolute z-20 mt-1 w-80 max-h-64 overflow-y-auto rounded-md border bg-white shadow-lg">
-          {bezig && <div className="px-3 py-2 text-xs text-slate-400">Zoeken…</div>}
-          {!bezig && resultaten.length === 0 && (
-            <div className="px-3 py-2 text-xs text-slate-400">Niets gevonden.</div>
-          )}
-          {resultaten.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => {
-                onKies({ id: d.id, label: d.titel })
-                setOpen(false)
-              }}
-              className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-            >
-              <div className="truncate">{d.titel}</div>
-              {d.klant_naam && <div className="text-xs text-slate-500 truncate">{d.klant_naam}</div>}
+    <div ref={wrapper}>
+      <ZwevendeLijst
+        open={resultaten.length > 0 || bezig || term.trim().length >= 2}
+        onSluit={() => setOpen(false)}
+        breedte={320}
+        anker={
+          <div className="flex items-center gap-1 rounded border bg-white px-2 py-1">
+            <Search className="w-3 h-3 text-slate-400 shrink-0" />
+            <input
+              autoFocus
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder="Zoek op nummer of naam…"
+              className="w-full text-sm outline-none"
+            />
+            <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700 shrink-0">
+              <X className="w-3 h-3" />
             </button>
-          ))}
-        </div>
-      )}
+          </div>
+        }
+      >
+        {bezig && <div className="px-3 py-2 text-xs text-slate-400">Zoeken…</div>}
+        {!bezig && resultaten.length === 0 && (
+          <div className="px-3 py-2 text-xs text-slate-400">Niets gevonden.</div>
+        )}
+        {resultaten.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => {
+              onKies({ id: d.id, label: d.titel })
+              setOpen(false)
+            }}
+            className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+          >
+            <div className="truncate">{d.titel}</div>
+            {d.klant_naam && <div className="text-xs text-slate-500 truncate">{d.klant_naam}</div>}
+          </button>
+        ))}
+      </ZwevendeLijst>
     </div>
   )
 }

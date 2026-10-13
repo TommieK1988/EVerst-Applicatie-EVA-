@@ -6,6 +6,7 @@ import { getActieveMaterialen } from '@/app/(platform)/everts-calc/actions/mater
 import { formatEuro } from '@/lib/everts-calc/calculations'
 import type { Materiaal } from '@/lib/everts-calc/types'
 import { Button } from '@/components/ui'
+import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 
 interface Props {
   artikelnummer?: string
@@ -76,48 +77,48 @@ export default function MateriaalZoekveld({ artikelnummer, omschrijving, onSelec
   }
 
   return (
-    <div className="relative">
-      <div className="flex items-center gap-1">
-        <Search className="flex-shrink-0 w-2.5 h-2.5 text-slate-300" />
-        <input
-          ref={inputRef}
-          className="flex-1 min-w-0 text-xs px-1 py-0.5 rounded border-0 bg-transparent
-            hover:bg-white hover:border hover:border-slate-200
-            focus:bg-white focus:border focus:border-slate-300 focus:outline-none
-            text-slate-600 placeholder:text-slate-300"
-          value={zoekterm}
-          placeholder="Materiaal zoeken…"
-          onChange={handleInput}
-          onFocus={() => zoekterm.length >= 1 && setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />
-      </div>
-
-      {open && resultaten.length > 0 && (
-        <div className="absolute left-0 top-full mt-0.5 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 max-h-52 overflow-y-auto">
-          {resultaten.map(m => (
-            <button
-              key={m.id}
-              className="w-full text-left px-3 py-1.5 hover:bg-orange-50 transition-colors border-b border-slate-50 last:border-0"
-              onMouseDown={() => { onSelecteer(m); setZoekterm(''); setOpen(false) }}
-            >
-              <p className="text-xs font-medium text-slate-700 truncate">{m.omschrijving}</p>
-              <p className="text-[10px] text-slate-400 truncate">
-                {[m.artikelnummer, m.leverancier].filter(Boolean).join(' · ')}
-                {m.eenheid && <span className="ml-1">· {m.eenheid}</span>}
-                <span className="ml-1 font-semibold text-orange-600">· {formatEuro(m.kostprijs)}</span>
-              </p>
-            </button>
-          ))}
+    <ZwevendeLijst
+      open={open && zoekterm.length >= 1}
+      onSluit={() => setOpen(false)}
+      breedte={288}
+      className="py-1"
+      anker={
+        <div className="flex items-center gap-1">
+          <Search className="flex-shrink-0 w-2.5 h-2.5 text-slate-300" />
+          <input
+            ref={inputRef}
+            className="flex-1 min-w-0 text-xs px-1 py-0.5 rounded border-0 bg-transparent
+              hover:bg-white hover:border hover:border-slate-200
+              focus:bg-white focus:border focus:border-slate-300 focus:outline-none
+              text-slate-600 placeholder:text-slate-300"
+            value={zoekterm}
+            placeholder="Materiaal zoeken…"
+            onChange={handleInput}
+            onFocus={() => zoekterm.length >= 1 && setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+          />
         </div>
-      )}
-
-      {open && zoekterm.length >= 1 && resultaten.length === 0 && (
-        <div className="absolute left-0 top-full mt-0.5 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 px-3 py-2">
+      }
+    >
+      {resultaten.length > 0 ? resultaten.map(m => (
+        <button
+          key={m.id}
+          className="w-full text-left px-3 py-1.5 hover:bg-orange-50 transition-colors border-b border-slate-50 last:border-0"
+          onMouseDown={() => { onSelecteer(m); setZoekterm(''); setOpen(false) }}
+        >
+          <p className="text-xs font-medium text-slate-700 truncate">{m.omschrijving}</p>
+          <p className="text-[10px] text-slate-400 truncate">
+            {[m.artikelnummer, m.leverancier].filter(Boolean).join(' · ')}
+            {m.eenheid && <span className="ml-1">· {m.eenheid}</span>}
+            <span className="ml-1 font-semibold text-orange-600">· {formatEuro(m.kostprijs)}</span>
+          </p>
+        </button>
+      )) : (
+        <div className="px-3 py-1">
           <p className="text-xs text-slate-400">Geen materialen gevonden</p>
           <p className="text-[10px] text-slate-300 mt-0.5">Voeg materialen toe via de bibliotheek</p>
         </div>
       )}
-    </div>
+    </ZwevendeLijst>
   )
 }

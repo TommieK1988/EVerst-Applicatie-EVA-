@@ -18,6 +18,7 @@ import {
 } from '@/components/ui'
 import { Search, Plus, Inbox, Euro, Clock, Users, MapPin } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
+import ZwevendeLijstVoorbeeld from './ZwevendeLijstVoorbeeld'
 import { DubbelOverzicht } from '@/components/planning/dubbel-melding'
 import type { DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
 
@@ -251,6 +252,8 @@ export default function UiPreview() {
             </PopoverBody>
           </PopoverContent>
         </Popover>
+
+        <React.Suspense fallback={null}><ZwevendeLijstVoorbeeld /></React.Suspense>
 
         <AlertDialog>
           <AlertDialogTrigger asChild><Button variant="destructive">Verwijderen</Button></AlertDialogTrigger>
