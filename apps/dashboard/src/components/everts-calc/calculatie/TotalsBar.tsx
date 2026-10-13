@@ -188,7 +188,15 @@ export default function TotalsBar({
                 disabled={readOnly}
                 onFocus={() => setOpslagFocus(true)}
                 onBlur={commitOpslag}
-                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                // Dit is het laatste veld van de pagina: een gewone Tab stuurt de focus de
+                // pagina uit (Safari zet hem op de adresbalk). Tab vangen we dus zelf af en
+                // behandelen we als Enter; de bevestiging houdt dan de focus.
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                    e.preventDefault()
+                    e.currentTarget.blur()
+                  }
+                }}
                 title="Standaard-opslag van deze calculatie; wordt op alle regels toegepast"
                 onChange={e => setOpslagEdit(e.target.value)}
                 className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
