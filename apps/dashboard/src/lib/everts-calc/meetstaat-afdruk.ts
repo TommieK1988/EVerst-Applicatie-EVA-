@@ -15,11 +15,12 @@ export const fmt = (n: number | undefined | null, dec = 2) =>
     ? ''
     : n.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: dec })
 
-export function maat(waarde: number | undefined, aantal: number | undefined, eenheid: string): string {
-  if (!waarde) return ''
-  // Breedte- en hoogte-aantallen tellen alleen mee bij m¹ (zie berekenHoeveelheid).
-  const n = eenheid === 'm¹' ? (aantal || 1) : 1
-  return n > 1 ? `${n} × ${fmt(waarde, 3)}` : fmt(waarde, 3)
+/**
+ * Hoeveel breedtes of hoogtes er gemeten zijn. Telt alleen mee bij m¹ (zie
+ * berekenHoeveelheid); bij andere eenheden blijft de cel leeg, net als bij 1.
+ */
+export function maatAantal(aantal: number | undefined, eenheid: string): string {
+  return eenheid === 'm¹' && aantal && aantal !== 1 ? fmt(aantal, 3) : ''
 }
 
 export interface AfdrukRegel {
@@ -32,6 +33,8 @@ export interface AfdrukRegel {
   opmerking: string
   breedte: string
   hoogte: string
+  breedteAantal: string
+  hoogteAantal: string
   factor: string
   aantal: string
   hoeveelheid: string
@@ -78,8 +81,10 @@ function naarAfdrukRegel(r: Meetregel, nr: number): AfdrukRegel {
     type: r.type ?? '',
     code: [normaliseerBestekcode(r.bestekcode), r.behandeling].filter(Boolean).join(' · '),
     opmerking: [r.opmerking ?? r.omschrijving, r.bestek_kenmerk].filter(Boolean).join(' — '),
-    breedte: maat(r.breedte, r.breedte_aantal, r.eenheid),
-    hoogte: maat(r.hoogte, r.hoogte_aantal, r.eenheid),
+    breedte: fmt(r.breedte, 3),
+    hoogte: fmt(r.hoogte, 3),
+    breedteAantal: maatAantal(r.breedte_aantal, r.eenheid),
+    hoogteAantal: maatAantal(r.hoogte_aantal, r.eenheid),
     factor: r.factor && r.factor !== 1 ? fmt(r.factor, 3) : '',
     aantal: fmt(r.aantal || 1),
     hoeveelheid: `${fmt(berekenHoeveelheid(r))} ${r.eenheid}`,

@@ -65,9 +65,19 @@ describe('bouwMeetstaatAfdruk', () => {
     expect(afdruk.heeftHandmatig).toBe(true)
   })
 
-  it('toont bij m¹ de aantallen per maat', () => {
-    const kozijn = afdruk.blokken[1].regels[0]
-    expect([kozijn.breedte, kozijn.hoogte, kozijn.code]).toEqual(['2 × 1,2', '2 × 2,1', 'S-01'])
+  it('zet de aantallen per maat in eigen kolommen, alleen bij m¹', () => {
+    const [kozijn, kozijnEnkel, deur] = afdruk.blokken[1].regels
+    expect([kozijn.breedte, kozijn.hoogte, kozijn.breedteAantal, kozijn.hoogteAantal, kozijn.code])
+      .toEqual(['1,2', '2,1', '2', '2', 'S-01'])
+    // 1 (of leeg) laat de cel leeg, net als een factor van 1.
+    expect([kozijnEnkel.breedteAantal, kozijnEnkel.hoogteAantal]).toEqual(['', ''])
+    // Bij m² tellen de aantallen niet mee; dan staan ze er ook niet.
+    expect([deur.breedteAantal, deur.hoogteAantal]).toEqual(['', ''])
+  })
+
+  it('schrijft een decimaal aantal met een komma', () => {
+    const r = bouwMeetstaatAfdruk([regel('g2', { onderdeel: 'Kozijn', eenheid: 'm¹', breedte: 0.97, breedte_aantal: 2.6 })], groepen)
+    expect(r.blokken[0].regels[0].breedteAantal).toBe('2,6')
   })
 })
 

@@ -40,12 +40,15 @@ const VAST: Kolom[] = [
   { kop: 'Type', breedte: 30, waarde: r => r.type },
   { kop: 'Code', breedte: 22, waarde: r => r.code },
 ]
+// Zelfde volgorde en namen als op het invoerscherm (MeetregelGrid).
 const GETALLEN: Kolom[] = [
-  { kop: 'Breedte', breedte: 19, rechts: true, waarde: r => r.breedte },
-  { kop: 'Hoogte', breedte: 19, rechts: true, waarde: r => r.hoogte },
-  { kop: 'Factor', breedte: 13, rechts: true, waarde: r => r.factor },
-  { kop: 'Aantal', breedte: 13, rechts: true, waarde: r => r.aantal },
-  { kop: 'Hoeveelheid', breedte: 26, rechts: true, waarde: r => `${r.hoeveelheid}${r.handmatig ? ' *' : ''}` },
+  { kop: 'B (m)', breedte: 15, rechts: true, waarde: r => r.breedte },
+  { kop: 'H (m)', breedte: 15, rechts: true, waarde: r => r.hoogte },
+  { kop: 'B aant.', breedte: 15, rechts: true, waarde: r => r.breedteAantal },
+  { kop: 'H aant.', breedte: 15, rechts: true, waarde: r => r.hoogteAantal },
+  { kop: 'Factor', breedte: 12, rechts: true, waarde: r => r.factor },
+  { kop: 'Aantal', breedte: 12, rechts: true, waarde: r => r.aantal },
+  { kop: 'Hoeveelheid', breedte: 24, rechts: true, waarde: r => `${r.hoeveelheid}${r.handmatig ? ' *' : ''}` },
 ]
 
 export function bouwMeetstaatPdf({ meetstaat, afdruk, projectNaam, projectNummer }: {
@@ -105,7 +108,9 @@ export function bouwMeetstaatPdf({ meetstaat, afdruk, projectNaam, projectNummer
     lettertype('semibold', 7, [77, 87, 94])
     kolommen.forEach((k, i) => {
       const x = k.rechts ? xVan[i] + k.breedte - 1 : xVan[i] + 1
-      doc.text(k.kop.toUpperCase(), x, y, { align: k.rechts ? 'right' : 'left' })
+      // Hoofdletters, maar niet de eenheid: "B (m)" mag geen "B (M)" worden.
+      const kop = k.kop.replace(/^[^(]+/, d => d.toUpperCase())
+      doc.text(kop, x, y, { align: k.rechts ? 'right' : 'left' })
     })
     y += 1.8
     doc.setDrawColor(154, 164, 171); doc.line(margeL, y, margeR, y)
