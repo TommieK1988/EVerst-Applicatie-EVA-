@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, X, Printer } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, Printer } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   maakStandaardScenario, getGroepen, hydrateCalculatie,
   getMeetstaten, maakNieuweMeetstaat, slaMeetstaatOp,
@@ -30,14 +31,21 @@ interface SchilderData {
   combinaties: { id: string; onderdeel_id: string; type_id: string; behandeling_id: string }[]
 }
 
-export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit, schilderData: schilderDataProp, printKop }: {
+export default function MeetstaaatHoofdscherm({
+  projectId, onSluit, schilderData: schilderDataProp, printKop, ingebed = false, terug,
+}: {
   projectId: string
-  projectNaam?: string
-  /** Project waar de meetstaat bij hoort, voor de kop van de afdruk. */
+  /** Project waar de meetstaat bij hoort, voor de kop van de afdruk en de contextregel. */
   printKop?: { naam?: string; nummer?: string }
+  /** Overlay in de calculatie: sluiten brengt je terug naar het rekenblad. */
   onSluit?: () => void
   schilderData?: SchilderData
+  /** Draait in het calculatietabblad zelf: het werkgeheugen is al actueel. */
+  ingebed?: boolean
+  /** Los venster: pad van de calculatie om naar terug te gaan. */
+  terug?: string
 }) {
+  const router = useRouter()
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [meetstaat, setMeetstaat] = useState<Meetstaat | null>(null)
   const [groepen, setGroepen] = useState<Groep[]>([])
@@ -53,8 +61,8 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
   const bewaarTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const vuil = useRef(false)
 
-  const bewaarNu = useCallback(async () => {
-    if (!vuil.current) return
+  const bewaarNu = useCallback(async (): Promise<boolean> => {
+    if (!vuil.current) return true
     vuil.current = false
     if (bewaarTimer.current) { clearTimeout(bewaarTimer.current); bewaarTimer.current = null }
     const res = await bewaarCalculatieSnapshot(projectId, verzamelCalculatieSnapshot(projectId))
@@ -63,6 +71,7 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
       vuil.current = true
       toast.error(`Meetstaat opslaan mislukt: ${res.fout ?? 'onbekende fout'}`)
     }
+    return res.gelukt
   }, [projectId])
 
   const planOpslag = useCallback(() => {
@@ -92,17 +101,21 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
   // De calculatie (incl. meetstaten) uit Supabase halen vóórdat we het scenario
   // bepalen. Zonder dit zou een rechtstreeks geopende meetstaat een nieuw,
   // leeg scenario aanmaken naast de bestaande calculatie.
+  // Ingebed niet: opnieuw inlezen zou niet-opgeslagen calculatiewerk in dit tabblad
+  // overschrijven met de (oudere) serverversie.
   useEffect(() => {
     let actief = true
     ;(async () => {
-      try {
-        const snap = await laadCalculatieSnapshot(projectId)
-        if (actief && snap) hydrateCalculatie(projectId, snap)
-      } catch { /* zonder snapshot starten we met een vers scenario */ }
+      if (!ingebed) {
+        try {
+          const snap = await laadCalculatieSnapshot(projectId)
+          if (actief && snap) hydrateCalculatie(projectId, snap)
+        } catch { /* zonder snapshot starten we met een vers scenario */ }
+      }
       if (actief) setScenario(maakStandaardScenario(projectId))
     })()
     return () => { actief = false }
-  }, [projectId])
+  }, [projectId, ingebed])
 
   // Haal schilderdata op als die niet als prop is meegegeven (bijv. vanuit calculatie-overlay)
   useEffect(() => {
@@ -132,6 +145,22 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
       setMeetstaat(gesorteerd[0])
     }
   }, [scenario?.id])
+
+  // Eerst opslaan, dan terug. Een los venster sluit zichzelf als de calculatie er
+  // nog is (die herlaadt bij terugkomst); anders navigeren we erheen.
+  const naarCalculatie = useCallback(async () => {
+    const opgeslagen = await bewaarNu()
+    // De overlay deelt het werkgeheugen met de calculatie, die zelf opnieuw opslaat.
+    // Een los venster houdt zijn werk alleen hier: bij een mislukte opslag blijft het open.
+    if (onSluit) { onSluit(); return }
+    if (!opgeslagen) return
+    if (window.opener && !window.opener.closed) {
+      window.opener.focus()
+      window.close()
+      return
+    }
+    router.push(terug ?? '/aanvragen')
+  }, [bewaarNu, onSluit, router, terug])
 
   const handleVervers = useCallback(() => {
     // Herlaad groepen (volgorde kan gewijzigd zijn in calculatie)
@@ -263,13 +292,21 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
       // anders staan ze alleen in deze sessie.
       vuil.current = true
       await bewaarNu()
-      toast.success(`Gesynchroniseerd: ${aangemaakt} nieuwe, ${bijgewerkt} bijgewerkte calculatieregels`)
+      toast.success(t => (
+        <span>
+          Gesynchroniseerd: {aangemaakt} nieuwe, {bijgewerkt} bijgewerkte calculatieregels.
+          <button className="ml-2 font-medium text-everts underline"
+            onClick={() => { toast.dismiss(t.id); void naarCalculatie() }}>
+            Bekijk in calculatie
+          </button>
+        </span>
+      ), { duration: 6000 })
     } catch (e) {
       toast.error('Synchronisatie mislukt')
     } finally {
       setIsSyncing(false)
     }
-  }, [meetstaat, scenario, bewaarNu])
+  }, [meetstaat, scenario, bewaarNu, naarCalculatie])
 
   const aggregaten = meetstaat ? getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0) : []
   const ongesyncCount = aggregaten.filter(a => !a.is_gesynchroniseerd).length
@@ -279,23 +316,11 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
     <div className="flex flex-col h-full bg-slate-50">
       {/* ─── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-3">
-        {onSluit ? (
-          <button
-            onClick={onSluit}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-            title="Meetstaat sluiten"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        ) : (
-          <Link
-            href="/aanvragen"
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-everts transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">{projectNaam ?? 'Aanvragen'}</span>
-          </Link>
-        )}
+        <Button variant="outline" size="sm" onClick={() => { void naarCalculatie() }}
+          title={onSluit || terug ? 'Meetstaat sluiten en terug naar de calculatie' : 'Terug naar aanvragen'}>
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{onSluit || terug ? 'Terug naar calculatie' : 'Aanvragen'}</span>
+        </Button>
 
         <div className="h-5 w-px bg-slate-200" />
 
@@ -304,6 +329,11 @@ export default function MeetstaaatHoofdscherm({ projectId, projectNaam, onSluit,
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-800">{meetstaat.naam}</span>
             <span className="text-xs  text-slate-400">{meetstaat.code}</span>
+            {(printKop?.nummer || printKop?.naam) && (
+              <span className="hidden md:inline text-xs text-slate-500 truncate max-w-[320px]">
+                · Calculatie {[printKop.nummer, printKop.naam].filter(Boolean).join(' · ')}
+              </span>
+            )}
             <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
               meetstaat.status === 'gesynchroniseerd'
                 ? 'bg-green-50 text-green-600 border-green-200'
