@@ -128,7 +128,10 @@ export default function TotalsBar({
     : ''
 
   return (
-    <div className="flex-shrink-0 bg-brand-900 border-t-2 border-brand-500 text-white">
+    /* `sticky bottom-0`: vangnet naast de gemeten schermhoogte in CalculatieHoofdscherm.
+       Valt de onderkant van het scherm toch onder de vouw (de pagina scrolt), dan blijft
+       de balk aan de onderrand van het venster plakken in plaats van mee te schuiven. */
+    <div className="sticky bottom-0 z-20 flex-shrink-0 bg-brand-900 border-t-2 border-brand-500 text-white">
       <div className="flex items-stretch gap-0 divide-x divide-white/10 overflow-x-auto">
 
         {/* Standaard uurtarief */}
