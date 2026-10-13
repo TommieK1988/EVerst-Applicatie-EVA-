@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { Montserrat, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegister from '@/components/eva/ServiceWorkerRegister'
+import TestomgevingKader from '@/components/eva/TestomgevingKader'
+import { isPreviewOmgeving } from '@/lib/omgeving/omgeving'
 import { DialoogProvider } from '@/components/ui/dialogen'
 import { NextIntlClientProvider } from 'next-intl'
 import nl from '@/i18n/berichten/nl'
@@ -23,8 +25,9 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | EVA',
-    default: 'EVA — Everts Platform',
+    // Op een preview '[TEST]' ervoor, zodat je ook aan het tabblad ziet waar je zit.
+    template: isPreviewOmgeving() ? '[TEST] %s | EVA' : '%s | EVA',
+    default: isPreviewOmgeving() ? '[TEST] EVA — Everts Platform' : 'EVA — Everts Platform',
   },
   description: 'EVA — het centrale platform van Everts Onderhoud & Renovatie',
   applicationName: 'EVA',
@@ -141,6 +144,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <DialoogProvider>{children}</DialoogProvider>
         </NextIntlClientProvider>
         <ServiceWorkerRegister />
+        <TestomgevingKader />
       </body>
     </html>
   )
