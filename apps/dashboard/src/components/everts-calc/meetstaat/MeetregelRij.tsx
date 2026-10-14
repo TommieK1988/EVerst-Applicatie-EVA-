@@ -6,6 +6,7 @@ import type { Meetregel } from '@/lib/everts-calc/types'
 import { berekenHoeveelheid, isRegelActief, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 import { normaliseerEenheid, ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
+import GetalInvoer from './GetalInvoer'
 
 interface SchilderData {
   onderdelen: { id: string; naam: string; code: string | null }[]
@@ -237,16 +238,14 @@ export default function MeetregelRij({
     : []
 
   const ni = (kol: number, value: number | undefined, onChange: (v: number | undefined) => void, placeholder = '', cls = '') => (
-    <input
-      type="number" step="0.01" min="0"
+    <GetalInvoer
       data-cel={cel(kol)}
-      value={value === undefined || value === 0 ? '' : value}
+      value={value}
       placeholder={placeholder}
-      onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); onChange(isNaN(v as number) ? undefined : v) }}
+      onChange={onChange}
       onFocus={onFocus}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
       className={`w-full h-7 text-[13px] text-right tabular-nums px-1.5 rounded-md text-neutral-900
-        [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
         ${regel.is_leeg ? 'bg-transparent border border-transparent hover:border-neutral-200' : 'bg-white border border-neutral-200 hover:border-neutral-300'}
         placeholder:text-neutral-300 focus:bg-white focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 focus:outline-none ${cls}`}
     />

@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 import { rekenMaat, normaliseerEenheid } from '@/lib/everts-calc/maat-rekenen'
+import GetalInvoer from '@/components/everts-calc/meetstaat/GetalInvoer'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,23 +121,15 @@ function Ni({ value, onChange, placeholder, onTab }: {
   placeholder?: string
   onTab?: () => void
 }) {
-  const [raw, setRaw] = useState(value === 0 ? '' : String(value))
-  useEffect(() => { setRaw(value === 0 ? '' : String(value)) }, [value])
-
+  // Zelfde invoer als de meetstaat: komma of punt, getoond met een komma.
   return (
-    <input
-      type="number"
-      step="any"
-      value={raw}
+    <GetalInvoer
+      value={value}
+      onChange={v => onChange(v ?? 0)}
       placeholder={placeholder ?? '0'}
-      className="w-full text-xs text-right  px-1.5 py-1 rounded border border-slate-200
+      className="w-full text-xs text-right tabular-nums px-1.5 py-1 rounded border border-slate-200
         focus:outline-none focus:border-everts/50 focus:ring-1 focus:ring-everts/20 bg-white
         hover:border-slate-300"
-      onChange={e => {
-        setRaw(e.target.value)
-        const v = parseFloat(e.target.value)
-        onChange(isNaN(v) ? 0 : v)
-      }}
       onKeyDown={e => { if (e.key === 'Tab' && onTab) { e.preventDefault(); onTab() } }}
     />
   )
@@ -201,7 +194,7 @@ function MeetrijRij({
       {/* Totaal */}
       <td className="px-2 py-1 text-right w-24">
         <span className={`text-xs  font-semibold ${totaal > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-          {totaal > 0 ? totaal.toFixed(3) : '—'}
+          {totaal > 0 ? totaal.toLocaleString('nl-NL', { maximumFractionDigits: 3 }) : '—'}
         </span>
       </td>
 
@@ -421,7 +414,7 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-slate-400">Totaal:</span>
                   <span className={`text-sm font-bold  ${eindtotaal > 0 ? 'text-everts' : 'text-slate-300'}`}>
-                    {eindtotaal > 0 ? eindtotaal.toFixed(2) : '—'}
+                    {eindtotaal > 0 ? eindtotaal.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                   </span>
                   <span className="text-xs font-semibold text-slate-500">{gekozenEenheid}</span>
                 </div>
