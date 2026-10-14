@@ -15,6 +15,7 @@ import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
 import { VerzamelVoorbeeldWeergave } from './VerzamelVoorbeeldWeergave'
 import { RecenteVerzamelfacturen } from './RecenteVerzamelfacturen'
 import { euro } from './format'
+import { useBonBedragen, type BedragStand } from './useBonBedragen'
 
 type Props = {
   werkmaatschappijen: Werkmaatschappij[]
@@ -46,6 +47,16 @@ export default function VerzamelfactuurScherm({ werkmaatschappijen, recent, tari
   const [bezig, startBezig] = useTransition()
 
   const partij = useMemo(() => partijen?.find(p => p.bouw7ContactId === partijId) ?? null, [partijen, partijId])
+  const bedragen = useBonBedragen(useMemo(() => (partij?.dossiers ?? []).map(d => d.id), [partij]))
+  const somGekozen = (veld: 'geboekteKosten' | 'opFactuur'): number | null => {
+    let som = 0
+    for (const id of gekozen) {
+      const b = bedragen.get(id)
+      if (b === undefined) return null
+      som += b?.[veld] ?? 0
+    }
+    return som
+  }
 
   // Werkmaatschappij gekozen → factuurpartijen ophalen.
   useEffect(() => {
@@ -194,6 +205,8 @@ export default function VerzamelfactuurScherm({ werkmaatschappijen, recent, tari
                     <th className="px-2 py-2">Omschrijving</th>
                     <th className="px-2 py-2">Referentie</th>
                     {partij.viaFactuuradres && <th className="px-2 py-2">Opdrachtgever</th>}
+                    <th className="whitespace-nowrap px-2 py-2 text-right">Geboekte kosten</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right">Op de factuur</th>
                     <th className="px-4 py-2" />
                   </tr>
                 </thead>
@@ -216,12 +229,24 @@ export default function VerzamelfactuurScherm({ werkmaatschappijen, recent, tari
                       <td className="px-2 py-2 text-neutral-700">{d.titel ?? '—'}</td>
                       <td className="px-2 py-2 text-neutral-500">{d.referentie ?? '—'}</td>
                       {partij.viaFactuuradres && <td className="px-2 py-2 text-neutral-500">{d.opdrachtgever ?? '—'}</td>}
+                      <BedragCel stand={bedragen.get(d.id)} veld="geboekteKosten" />
+                      <BedragCel stand={bedragen.get(d.id)} veld="opFactuur" />
                       <td className="px-4 py-2 text-right">
                         {d.opConcept && <Badge tone="warning">Staat al klaar in Bouw7</Badge>}
+                        <AlGefactureerd stand={bedragen.get(d.id)} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t border-neutral-200 font-semibold text-neutral-900">
+                    <td />
+                    <td colSpan={partij.viaFactuuradres ? 4 : 3} className="px-2 py-2">Gekozen bonnen</td>
+                    <SomCel som={somGekozen('geboekteKosten')} />
+                    <SomCel som={somGekozen('opFactuur')} />
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
             </CardBody>
           </Card>
@@ -307,5 +332,39 @@ export default function VerzamelfactuurScherm({ werkmaatschappijen, recent, tari
         <RecenteVerzamelfacturen rijen={recent} />
       </div>
     </div>
+  )
+}
+
+/** Bedrag in de keuzelijst: een streepje tijdens het laden, "?" als het niet op te halen was. */
+function BedragCel({ stand, veld }: { stand: BedragStand; veld: 'geboekteKosten' | 'opFactuur' }) {
+  const waarde = stand?.[veld]
+  return (
+    <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-neutral-700">
+      {stand === undefined
+        ? <span className="text-neutral-300">…</span>
+        : waarde == null
+          ? <span className="text-neutral-400" title="Niet op te halen uit Bouw7">?</span>
+          : <span className={veld === 'opFactuur' && waarde === 0 ? 'text-neutral-400' : undefined}>{euro(waarde)}</span>}
+    </td>
+  )
+}
+
+function SomCel({ som }: { som: number | null }) {
+  return (
+    <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">
+      {som == null ? <span className="font-normal text-neutral-300">…</span> : euro(som)}
+    </td>
+  )
+}
+
+/** Staat er in Bouw7 al een factuur op deze bon? Dan wil je dat zien vóór je hem aanvinkt. */
+function AlGefactureerd({ stand }: { stand: BedragStand }) {
+  const facturen = stand?.bouw7Facturen ?? []
+  if (facturen.length === 0) return null
+  const titel = facturen.map(f => `${f.nummer ?? 'concept'}: ${euro(f.bedrag)}`).join(', ')
+  return (
+    <Badge tone="info" title={titel} className="whitespace-nowrap">
+      {facturen.length === 1 ? `Al factuur ${facturen[0].nummer ?? '(concept)'}` : `${facturen.length} facturen in Bouw7`}
+    </Badge>
   )
 }

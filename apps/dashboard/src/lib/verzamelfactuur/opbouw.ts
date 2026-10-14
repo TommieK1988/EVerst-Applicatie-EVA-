@@ -28,6 +28,8 @@ export type DossierBron = {
   dossiernummer: string | null
   titel: string | null
   referentie: string | null
+  /** Regiebon: rekent af op nacalculatie, termijnen gaan dan niet mee (zie `opRegie`). */
+  opRegie: boolean
 }
 
 export type DossierOpbouw = {
@@ -54,9 +56,17 @@ export async function bouwDossierOpbouw(
     getRegieFactuurvoorstel(dossier.id),
     leesBouw7Termijnstaat(dossier.bouw7Id),
   ])
-  const termijnen = staat.termijnen.filter(t => t.invoiceLine == null && Number(t.subtotal ?? 0) !== 0)
+  const openTermijnen = staat.termijnen.filter(t => t.invoiceLine == null && Number(t.subtotal ?? 0) !== 0)
+  // Op een regiebon factureert de Verkoop-tab de nacalculatie, niet de termijnen. Een termijn die
+  // daar nog openstaat is meestal een restant van een offerte; meenemen zou dubbel factureren.
+  const termijnen = dossier.opRegie ? [] : openTermijnen
 
   const waarschuwingen = voorstel.buitenBeschouwing.map(b => `${b.omschrijving}: ${b.reden}`)
+  if (dossier.opRegie && openTermijnen.length > 0) {
+    const som = rond(openTermijnen.reduce((s, t) => s + Number(t.subtotal ?? 0), 0))
+    waarschuwingen.push(`In Bouw7 staan nog ${openTermijnen.length} open termijn${openTermijnen.length === 1 ? '' : 'en'} `
+      + `(€ ${som.toFixed(2).replace('.', ',')}). Dit is een regiebon, dus die gaan niet mee.`)
+  }
   const regels: VoorbeeldRegel[] = []
   let blokkade: string | null = null
 

@@ -12,6 +12,8 @@ import { maakConceptVerzamelfactuur } from '@/lib/bouw7/verzamelfactuur'
 import { boekRegieFactuurAf } from '@/lib/dossiers/regie-factuur-afboeken'
 import { bouwDossierOpbouw, laadBtwInfo, naarHoofdstuk, type DossierBron, type DossierOpbouw } from './opbouw'
 import { controleerVerzamelfacturen } from './opvolging'
+import { AFREKENWIJZE_VELDEN } from '@/lib/dossiers/regie-opdracht'
+import { opRegie, type AfrekenwijzeVelden } from '@/components/dossiers/types'
 import type {
   BtwGroep, Factuurpartij, KandidaatDossier, VerzamelVoorbeeld, VerzamelfactuurRij, Werkmaatschappij,
 } from './types'
@@ -120,11 +122,12 @@ async function laadSelectie(sel: Selectie): Promise<{
   if (vreemd.length > 0) {
     throw new Error('Een of meer bonnen staan niet (meer) op Kosten compleet bij deze factuurpartij. Ververs het scherm.')
   }
-  const { data } = await db().from('dossiers').select('id, bouw7_id').in('id', sel.dossierIds)
-  const bouw7 = new Map(((data ?? []) as unknown as { id: string; bouw7_id: string }[]).map(d => [d.id, Number(d.bouw7_id)]))
+  const { data } = await db().from('dossiers').select('id, bouw7_id, ' + AFREKENWIJZE_VELDEN).in('id', sel.dossierIds)
+  const rijen = new Map(((data ?? []) as unknown as (AfrekenwijzeVelden & { id: string; bouw7_id: string })[]).map(d => [d.id, d]))
   const dossiers = sel.dossierIds.map(id => {
     const d = perId.get(id)!
-    return { id, bouw7Id: bouw7.get(id)!, dossiernummer: d.dossiernummer, titel: d.titel, referentie: d.referentie }
+    const rij = rijen.get(id)!
+    return { id, bouw7Id: Number(rij.bouw7_id), dossiernummer: d.dossiernummer, titel: d.titel, referentie: d.referentie, opRegie: opRegie(rij) }
   })
   return { werkmaatschappij, partij, dossiers }
 }
