@@ -17,9 +17,6 @@ import type { AgendaEigenaar } from './mijn-agenda'
  * daarom eerst door `magCollegaAgenda`.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = () => createAdminClient() as any
-
 export type Collega = AgendaEigenaar & { naam: string }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -36,7 +33,7 @@ export async function magCollegaAgenda(medewerker: CurrentMedewerker): Promise<b
 /** Eén actieve collega, of null bij een ongeldig of onbekend id. */
 export async function haalCollega(id: string): Promise<Collega | null> {
   if (!UUID.test(id)) return null
-  const { data } = await db()
+  const { data } = await createAdminClient()
     .from('medewerkers')
     .select('id, voornaam, tussenvoegsel, achternaam, afdeling')
     .eq('id', id)
@@ -47,13 +44,12 @@ export async function haalCollega(id: string): Promise<Collega | null> {
 
 /** Alle actieve medewerkers voor de kiezer. Ruim onder de 1000: het hele bedrijf is ~50 man. */
 export async function haalCollegaLijst(): Promise<Array<{ id: string; naam: string; afdeling: string | null }>> {
-  const { data } = await db()
+  const { data } = await createAdminClient()
     .from('medewerkers')
     .select('id, voornaam, tussenvoegsel, achternaam, afdeling')
     .eq('actief', true)
     .order('voornaam')
     .order('id')
     .limit(500)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[]).map(r => ({ id: r.id, naam: volledigeNaam(r), afdeling: r.afdeling ?? null }))
+  return (data ?? []).map(r => ({ id: r.id, naam: volledigeNaam(r), afdeling: r.afdeling ?? null }))
 }
