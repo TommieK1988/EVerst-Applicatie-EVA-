@@ -31,7 +31,7 @@ export default function NaarCalculatieTabel({ meetstaatId, groepId, groepNaam }:
 }) {
   const calcRegels = getCalculatieregels()
   const alle = getMeetregelAggregaten(meetstaatId)
-  const openIds = new Set(teVerwerken(alle, new Set(calcRegels.map(r => r.id))).map(a => a.id))
+  const openIds = new Set(teVerwerken(alle, new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))).map(a => a.id))
   const hoeveelheidPerRegel = new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))
   const rijen = naarCalculatie(alle.filter(a => a.groep_id === groepId), openIds, hoeveelheidPerRegel)
 

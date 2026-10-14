@@ -1,6 +1,6 @@
 import type { Meetregel, MeetregelAggregaat } from './types'
 import {
-  getMeetregels, getMeetregelAggregaten,
+  getMeetregels, getMeetregelAggregaten, getCalculatieregels,
   slaMeetregelAggregaatOp, verwijderMeetregelAggregaat,
 } from './local-store'
 import { nieuweId } from './utils'
@@ -142,4 +142,54 @@ export function herberekeningAggregaat(meetstaatId: string, sleutel: string): vo
       aangepast_op: new Date().toISOString(),
     })
   }
+}
+
+// ─── AGGREGATEN HERBOUWEN ────────────────────────────────────────────────────
+
+/** De sleutel die bij een opgeslagen aggregaat hoort; zelfde vorm als `aggregaatSleutel`. */
+export function sleutelVanAggregaat(a: MeetregelAggregaat): string {
+  const o = a.onderdeel.toLowerCase().trim()
+  const t = a.type.toLowerCase().trim()
+  const b = a.behandeling.toLowerCase().trim()
+  return `${a.groep_id}::${o}::${t}::${normaliseerBestekcode(a.bestekcode)}::${b}`
+}
+
+/**
+ * Sleutels waarvan het opgeslagen totaal niet meer klopt met de meetregels, plus
+ * sleutels van meetregels die nog geen aggregaat hebben.
+ *
+ * Een aggregaat wordt alleen bijgewerkt als je een regel met die sleutel bewerkt.
+ * Regels die op een andere manier veranderden (oudere meetstaten, een behandeling
+ * die wegviel toen de code erbij kwam) lieten een aggregaat achter met een totaal
+ * waar geen meetregel meer bij hoort; dat verscheen dan als 'nieuw' onder Naar
+ * calculatie terwijl het niet meer bestond.
+ */
+export function afwijkendeSleutels(regels: Meetregel[], aggregaten: MeetregelAggregaat[]): string[] {
+  const som = new Map<string, number>()
+  for (const r of regels) {
+    if (r.is_leeg) continue
+    const k = aggregaatSleutel(r)
+    if (k) som.set(k, (som.get(k) ?? 0) + berekenHoeveelheid(r))
+  }
+  const afwijkend = new Set<string>()
+  const bekend = new Set<string>()
+  for (const a of aggregaten) {
+    const k = sleutelVanAggregaat(a)
+    bekend.add(k)
+    if (Math.abs(+(som.get(k) ?? 0).toFixed(4) - a.totaal_hoeveelheid) > 0.00005) afwijkend.add(k)
+  }
+  for (const k of Array.from(som.keys())) if (!bekend.has(k)) afwijkend.add(k)
+  return Array.from(afwijkend)
+}
+
+/** Brengt alle aggregaten van een meetstaat in lijn met de meetregels. True als er iets veranderde. */
+export function herbouwAggregaten(meetstaatId: string): boolean {
+  const sleutels = afwijkendeSleutels(getMeetregels(meetstaatId), getMeetregelAggregaten(meetstaatId))
+  sleutels.forEach(k => herberekeningAggregaat(meetstaatId, k))
+  return sleutels.length > 0
+}
+
+/** Hoeveelheid per calculatieregel-id in het werkgeheugen. */
+export function calculatieHoeveelheden(): Map<string, number> {
+  return new Map(getCalculatieregels().map(r => [r.id, r.hoeveelheid]))
 }

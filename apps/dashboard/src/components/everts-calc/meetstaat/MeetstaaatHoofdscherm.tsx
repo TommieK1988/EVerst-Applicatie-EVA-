@@ -14,7 +14,7 @@ import { laadCalculatieSnapshot, bewaarCalculatieSnapshot } from '@/app/(platfor
 import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Meetstaat, Groep, Calculatieregel, Scenario } from '@/lib/everts-calc/types'
-import { calculatieregelOmschrijving, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
+import { calculatieregelOmschrijving, normaliseerBestekcode, herbouwAggregaten } from '@/lib/everts-calc/meetstaat-utils'
 import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combinatie'
 import { zonderCodeInOmschrijving } from '@/lib/everts-calc/bestekcode'
 import { teVerwerken, isVervallen, meetstaatStatus } from '@/lib/everts-calc/meetstaat-verwerken'
@@ -163,6 +163,19 @@ export default function MeetstaaatHoofdscherm({
     }
   }, [scenario?.id])
 
+  // Aggregaten die niet meer kloppen met de meetregels (oude meetstaten, codes die
+  // ooit wijzigden) bij het openen rechtzetten; anders verschijnen er onder Naar
+  // calculatie codes waar geen meetregel meer bij hoort. Bevroren: alleen in beeld,
+  // niet opslaan; de server neemt geen wijzigingen meer aan.
+  const meetstaatId = meetstaat?.id
+  useEffect(() => {
+    if (!meetstaatId) return
+    if (herbouwAggregaten(meetstaatId)) {
+      setWijzigingsTeller(n => n + 1)
+      if (!bevroren) planOpslag()
+    }
+  }, [meetstaatId, bevroren, planOpslag])
+
   // Eerst opslaan, dan terug. Een los venster sluit zichzelf als de calculatie er
   // nog is (die herlaadt bij terugkomst); anders navigeren we erheen.
   const naarCalculatie = useCallback(async () => {
@@ -212,8 +225,9 @@ export default function MeetstaaatHoofdscherm({
     setIsSyncing(true)
 
     try {
+      herbouwAggregaten(meetstaat.id)
       const bestaandeRegels = getCalculatieregels()
-      const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(bestaandeRegels.map(r => r.id)))
+      const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Map(bestaandeRegels.map(r => [r.id, r.hoeveelheid])))
         .filter(a => !gekozen || gekozen.has(a.id))
 
       // Haal schilder combinaties op per uniek type_id (batch)
@@ -260,10 +274,14 @@ export default function MeetstaaatHoofdscherm({
 
         let calculatieregelId: string
 
-        if (agg.calculatieregel_id) {
-          // Bijwerken bestaande calculatieregel
-          const bestaand = bestaandeRegels.find(r => r.id === agg.calculatieregel_id)
-          if (bestaand && bestaand.schilderbehandeling_id) {
+        // De calculatieregel waar deze code al aan hing. Is die in de calculatie
+        // verwijderd, dan maken we een nieuwe: anders kon je hem nooit terugzetten.
+        const bestaand = agg.calculatieregel_id
+          ? bestaandeRegels.find(r => r.id === agg.calculatieregel_id)
+          : undefined
+
+        if (bestaand) {
+          if (bestaand.schilderbehandeling_id) {
             // In de calculatie al een behandeling gekoppeld: alleen de hoeveelheid
             // volgt de meetstaat. Omschrijving en normen zijn van de calculator.
             slaCalculatieregelOp({
@@ -277,21 +295,17 @@ export default function MeetstaaatHoofdscherm({
             bijgewerkt++
             continue
           }
-          if (bestaand) {
-            slaCalculatieregelOp({
-              ...bestaand,
-              omschrijving,
-              hoeveelheid: agg.totaal_hoeveelheid,
-              eenheid: agg.eenheid as Calculatieregel['eenheid'],
-              meetstaat_aggregaat_id: agg.id,
-              bestekcode,
-            })
-            slaMeetregelAggregaatOp({ ...agg, is_gesynchroniseerd: true })
-            calculatieregelId = bestaand.id
-            bijgewerkt++
-          } else {
-            calculatieregelId = agg.calculatieregel_id
-          }
+          slaCalculatieregelOp({
+            ...bestaand,
+            omschrijving,
+            hoeveelheid: agg.totaal_hoeveelheid,
+            eenheid: agg.eenheid as Calculatieregel['eenheid'],
+            meetstaat_aggregaat_id: agg.id,
+            bestekcode,
+          })
+          slaMeetregelAggregaatOp({ ...agg, is_gesynchroniseerd: true })
+          calculatieregelId = bestaand.id
+          bijgewerkt++
         } else {
           // Nieuwe calculatieregel aanmaken
           const nieuweRegel: Calculatieregel = {
@@ -321,7 +335,7 @@ export default function MeetstaaatHoofdscherm({
       }
 
       // Bleef er iets uitgevinkt, dan is de meetstaat nog niet helemaal verwerkt.
-      const rest = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(getCalculatieregels().map(r => r.id))).length
+      const rest = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Map(getCalculatieregels().map(r => [r.id, r.hoeveelheid]))).length
       const status = meetstaatStatus('gesynchroniseerd', rest)
       slaMeetstaatOp({ ...meetstaat, status })
       setMeetstaat(prev => prev ? { ...prev, status } : prev)
@@ -349,7 +363,7 @@ export default function MeetstaaatHoofdscherm({
   }, [meetstaat, scenario, bevroren, bewaarNu, naarCalculatie])
 
   const ongesyncCount = meetstaat
-    ? teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(getCalculatieregels().map(r => r.id))).length
+    ? teVerwerken(getMeetregelAggregaten(meetstaat.id), new Map(getCalculatieregels().map(r => [r.id, r.hoeveelheid]))).length
     : 0
   void wijzigingsTeller // zorgt dat re-render triggered bij wijzigingen
 

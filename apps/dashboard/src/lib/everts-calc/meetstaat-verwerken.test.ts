@@ -7,37 +7,40 @@ const agg = (x: Partial<MeetregelAggregaat>): MeetregelAggregaat => ({
   totaal_hoeveelheid: 0, eenheid: 'm¹', is_gesynchroniseerd: false, aangepast_op: '', ...x,
 })
 
+const ids = (as: MeetregelAggregaat[]) => as.map(a => a.id)
+
 describe('teVerwerken', () => {
-  it('neemt nieuwe en gewijzigde codes mee', () => {
-    const nieuw = agg({ id: 'n', totaal_hoeveelheid: 12 })
-    const gewijzigd = agg({ id: 'g', totaal_hoeveelheid: 12, calculatieregel_id: 'R1' })
-    expect(teVerwerken([nieuw, gewijzigd]).map(a => a.id)).toEqual(['n', 'g'])
+  const calc = new Map([['R1', 12], ['R2', 18], ['R0', 0]])
+
+  it('nieuw: hoeveelheid zonder calculatieregel', () => {
+    expect(ids(teVerwerken([agg({ id: 'n', totaal_hoeveelheid: 12 })], calc))).toEqual(['n'])
   })
 
-  it('neemt een code die naar 0 zakte mee als hij al in de calculatie staat', () => {
-    const vervallen = agg({ totaal_hoeveelheid: 0, calculatieregel_id: 'R1' })
-    expect(teVerwerken([vervallen])).toHaveLength(1)
-    expect(isVervallen(vervallen)).toBe(true)
+  it('nieuw: de calculatieregel is in de calculatie verwijderd, ook als de code als verwerkt staat', () => {
+    const terug = agg({ id: 't', totaal_hoeveelheid: 12, calculatieregel_id: 'weg', is_gesynchroniseerd: true })
+    expect(ids(teVerwerken([terug], calc))).toEqual(['t'])
   })
 
-  it('laat een vervallen code liggen als zijn calculatieregel al weg is', () => {
-    const vervallen = agg({ totaal_hoeveelheid: 0, calculatieregel_id: 'R1' })
-    expect(teVerwerken([vervallen], new Set(['R2']))).toEqual([])
-    expect(teVerwerken([vervallen], new Set(['R1']))).toHaveLength(1)
+  it('gewijzigd: calculatie wijkt af, gelijk: niets te doen', () => {
+    expect(ids(teVerwerken([
+      agg({ id: 'g', totaal_hoeveelheid: 15, calculatieregel_id: 'R1' }),
+      agg({ id: 'z', totaal_hoeveelheid: 12.001, calculatieregel_id: 'R1', is_gesynchroniseerd: false }),
+    ], calc))).toEqual(['g'])
   })
 
-  it('zet een regel niet op 0 als een actieve code er ook naar wijst', () => {
-    const oud = agg({ id: 'oud', totaal_hoeveelheid: 0, calculatieregel_id: 'R1' })
-    const nieuw = agg({ id: 'nieuw', totaal_hoeveelheid: 12, calculatieregel_id: 'R1', is_gesynchroniseerd: true })
-    expect(teVerwerken([oud, nieuw], new Set(['R1']))).toEqual([])
+  it('vervallen: code op 0, calculatieregel nog niet', () => {
+    const v = agg({ id: 'v', totaal_hoeveelheid: 0, calculatieregel_id: 'R2', is_gesynchroniseerd: true })
+    expect(ids(teVerwerken([v], calc))).toEqual(['v'])
+    expect(isVervallen(v)).toBe(true)
   })
 
-  it('laat een 0-code zonder calculatieregel en alles wat al verwerkt is liggen', () => {
+  it('niet vervallen als de regel al weg is, al op 0 staat, of een actieve code hem gebruikt', () => {
     expect(teVerwerken([
-      agg({ totaal_hoeveelheid: 0 }),
-      agg({ totaal_hoeveelheid: 12, calculatieregel_id: 'R1', is_gesynchroniseerd: true }),
-      agg({ totaal_hoeveelheid: 0, calculatieregel_id: 'R2', is_gesynchroniseerd: true }),
-    ])).toEqual([])
+      agg({ id: 'weg', totaal_hoeveelheid: 0, calculatieregel_id: 'X' }),
+      agg({ id: 'nul', totaal_hoeveelheid: 0, calculatieregel_id: 'R0' }),
+      agg({ id: 'oud', totaal_hoeveelheid: 0, calculatieregel_id: 'R1' }),
+      agg({ id: 'actief', totaal_hoeveelheid: 12, calculatieregel_id: 'R1' }),
+    ], calc)).toEqual([])
   })
 })
 

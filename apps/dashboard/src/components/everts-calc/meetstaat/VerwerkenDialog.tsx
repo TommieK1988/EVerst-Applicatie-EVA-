@@ -48,7 +48,7 @@ export default function VerwerkenDialog({
   const { perGroep, alleIds, onvolledig } = useMemo(() => {
     const calcRegels = getCalculatieregels()
     const alle = getMeetregelAggregaten(meetstaatId)
-    const open = teVerwerken(alle, new Set(calcRegels.map(r => r.id)))
+    const open = teVerwerken(alle, new Map(calcRegels.map(r => [r.id, r.hoeveelheid])))
     const openIds = new Set(open.map(a => a.id))
     const rijen = naarCalculatie(open, openIds, new Map(calcRegels.map(r => [r.id, r.hoeveelheid])))
 
