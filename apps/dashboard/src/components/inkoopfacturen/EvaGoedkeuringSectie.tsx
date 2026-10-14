@@ -68,6 +68,20 @@ export default function EvaGoedkeuringSectie({ inkoopfactuurId, onGewijzigd }: P
 
   const nogNaarBouw7 = data.besluit && !data.bouw7BijgewerktOp
 
+  const kiezer = (
+    <div style={{ marginTop: 8 }}>
+      <Combobox
+        options={opties}
+        onSearch={zoek}
+        placeholder="Kies een collega"
+        searchPlaceholder="Zoek op naam"
+        emptyText="Niemand gevonden"
+        onChange={id => { if (id) voerUit(() => draagInkoopStapOver(inkoopfactuurId, id)) }}
+        disabled={bezig}
+      />
+    </div>
+  )
+
   return (
     <section style={{ marginBottom: 20 }}>
       <h4 style={kop}>Goedkeuring in EVA</h4>
@@ -143,19 +157,23 @@ export default function EvaGoedkeuringSectie({ inkoopfactuurId, onGewijzigd }: P
               </Button>
             )}
           </div>
-          {overdragen && (
-            <div style={{ marginTop: 8 }}>
-              <Combobox
-                options={opties}
-                onSearch={zoek}
-                placeholder="Kies een collega"
-                searchPlaceholder="Zoek op naam"
-                emptyText="Niemand gevonden"
-                onChange={id => { if (id) voerUit(() => draagInkoopStapOver(inkoopfactuurId, id)) }}
-                disabled={bezig}
-              />
-            </div>
+          {overdragen && kiezer}
+        </div>
+      )}
+
+      {/* Niet zelf aan zet, wel bevoegd om de goedkeurder te wijzigen (Directie of de financiële
+          administratie): alleen overdragen, geen akkoord namens een ander. */}
+      {!data.magBeslissen && data.magOverdragen && (
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+          <p style={{ fontSize: 13, margin: '0 0 8px' }}>
+            Ligt deze factuur bij de verkeerde persoon, of is die afwezig? Leg hem bij iemand anders.
+          </p>
+          {!overdragen && (
+            <Button size="sm" variant="secondary" disabled={bezig} onClick={() => { setOverdragen(true); zoek('') }}>
+              Goedkeurder wijzigen
+            </Button>
           )}
+          {overdragen && kiezer}
         </div>
       )}
     </section>

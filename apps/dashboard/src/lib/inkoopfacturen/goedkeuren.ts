@@ -7,13 +7,15 @@
  * Facturen met een Bouw7-keten worden in Bouw7 afgemaakt; daar staat in het paneel een doorklik.
  *
  * Wie mag beslissen over de open stap: de aangewezen goedkeurder, of iemand uit Directie (ook als
- * er niemand is aangewezen). Na de laatste stap gaat het besluit naar Bouw7: eerst een tekstregel
+ * er niemand is aangewezen). Overdragen mag daarnaast de financiële administratie
+ * (`inkoopfacturen: beheren`) — die moet een vastgelopen factuur bij iemand anders kunnen leggen,
+ * maar geeft zelf geen akkoord namens een ander (besluit Tom, 14-10-2026). Na de laatste stap gaat het besluit naar Bouw7: eerst een tekstregel
  * met naam en tijdstip, dan de status — zie `lib/bouw7/inkoopfactuur-besluit.ts`.
  */
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
-import { vereisRecht, GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
+import { vereisRecht, heeftModuleToegang, GeenToegangError, type CurrentMedewerker } from '@/lib/auth/rechten'
 import { DIRECTIE_AFDELING } from '@/lib/goedkeuring/types'
 import { vereisInkoopfactuurToegang } from './actions'
 import { logGebeurtenis, medewerkerNaam, stuurBesluitNaarBouw7 } from './route'
@@ -67,8 +69,9 @@ async function openStap(inkoopfactuurId: string): Promise<{ id: string; stap: nu
 }
 
 export async function getEvaGoedkeuring(inkoopfactuurId: string): Promise<EvaGoedkeuring> {
-  const { medewerker } = await vereisRecht('inkoopfacturen', 'lezen')
+  const { medewerker, set } = await vereisRecht('inkoopfacturen', 'lezen')
   await vereisInkoopfactuurToegang(inkoopfactuurId, 'lezen')
+  const isAdministratie = heeftModuleToegang(set, 'inkoopfacturen', 'beheren')
 
   const [{ data: f }, { data: rijen }] = await Promise.all([
     db().from('inkoopfacturen')
@@ -103,7 +106,7 @@ export async function getEvaGoedkeuring(inkoopfactuurId: string): Promise<EvaGoe
     bouw7Fout: f?.laatste_vote_fout ?? null,
     grootboek: f?.grootboek_nummer ? [f.grootboek_nummer, f.grootboek_naam].filter(Boolean).join(' ') : null,
     magBeslissen: !!ikBen && !f?.eva_besluit,
-    magOverdragen: !!ikBen && !f?.eva_besluit,
+    magOverdragen: !!open && (!!ikBen || isAdministratie) && !f?.eva_besluit,
   }
 }
 
@@ -182,12 +185,14 @@ export async function beslisInkoopfactuur(
 /** Geef de open stap aan iemand anders (bijv. bij afwezigheid). */
 export async function draagInkoopStapOver(inkoopfactuurId: string, naarMedewerkerId: string): Promise<Resultaat> {
   try {
-    const { medewerker } = await vereisRecht('inkoopfacturen', 'lezen')
+    const { medewerker, set } = await vereisRecht('inkoopfacturen', 'lezen')
     await vereisInkoopfactuurToegang(inkoopfactuurId, 'lezen')
     const stap = await openStap(inkoopfactuurId)
     if (!stap) return { ok: false, error: 'Er staat geen stap open voor deze factuur.' }
-    if (stap.goedkeurder_id !== medewerker.id && !isDirectie(medewerker)) {
-      return { ok: false, error: 'Alleen de huidige goedkeurder of Directie kan deze factuur overdragen.' }
+    const magHet = stap.goedkeurder_id === medewerker.id || isDirectie(medewerker)
+      || heeftModuleToegang(set, 'inkoopfacturen', 'beheren')
+    if (!magHet) {
+      return { ok: false, error: 'Alleen de huidige goedkeurder, Directie of de financiële administratie kan deze factuur overdragen.' }
     }
     const { data: naar } = await db().from('medewerkers').select('id, actief').eq('id', naarMedewerkerId).maybeSingle()
     if (!naar || naar.actief === false) return { ok: false, error: 'Kies een actieve medewerker.' }
