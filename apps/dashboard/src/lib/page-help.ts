@@ -312,7 +312,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     description: 'Detailpagina van een opdracht. De tabbladen staan in de zijbalk gegroepeerd per fase: Dossier, Voorbereiding, Uitvoering en Financieel. Hier wordt alle activiteit rondom de uitvoering vastgelegd.',
     sections: [
       { title: 'Tabblad Planning', body: 'Stel de startdatum, eindatum en verantwoordelijke uitvoerder in. Koppel onderaannemers via de subproject-kaarten. De planning synchroniseert met de centrale planningsmodule.' },
-      { title: 'Tabblad Meerwerk', body: 'Registreer wijzigingen ten opzichte van de offerte als meer- of minderwerk. Klantakkoord vastleggen is verplicht vóór uitvoering bij bedragen boven de drempel.' },
+      { title: 'Tabblad Meerwerk', body: 'Registreer wijzigingen ten opzichte van de offerte als meer- of minderwerk. Zet een post op Akkoord zodra de klant ermee instemt; EVA legt vast wie dat deed en wanneer. Met de status Offerte verstuurd kan de klant ook zelf akkoord geven via het klantportaal.' },
       { title: 'Tabblad Financieel', body: 'Hier stel je termijnfacturen en de eindfactuur op. De eindfactuur is pas beschikbaar nadat de oplevering is goedgekeurd. Bij openstaande opleverpunten wordt een inhouding van 5% automatisch berekend.' },
       { title: 'Urenregistratie', body: 'Medewerkers schrijven uren via de werkbon. Uren zijn alleen in te voeren op opdrachten met status "In uitvoering" of "Opgeleverd onder voorbehoud". Bij ZZP/uitzend worden uren later gematcht met de inkoopfactuur.' },
       { title: 'Tabblad KAM/VGM', body: 'Kwaliteit, VCA, de oplevering en de ingevulde formulieren staan samen onder KAM/VGM, elk op een eigen knop bovenin het tabblad. Oplevering en formulieren zijn er altijd; de VCA-administratie verschijnt zodra de VCA-toggle op de Informatie-tab aanstaat.' },
@@ -1712,7 +1712,7 @@ function dossierTabHelp(root: string, tab: string, deel?: string): PageHelp | nu
       return T('Meerwerk',
         'Het meer- en minderwerk op deze opdracht: EVA-native regels met status, prijsvorm (regie/aangenomen) en factuurreferentie. De som van goedgekeurd meerwerk is leidend in het contracttotaal.',
         [
-          { title: 'Meerwerk vastleggen', body: 'Leg per post de omschrijving, het bedrag en de prijsvorm vast. Bij bedragen boven de drempel (bijv. > €500 of > 10% contractsom) is schriftelijk klantakkoord verplicht vóór uitvoering; zonder bewijs mag de post niet op "Geaccepteerd".' },
+          { title: 'Meerwerk vastleggen', body: 'Leg per post de omschrijving, het bedrag en de prijsvorm vast. Zet de post op Offerte verstuurd, dan kan de klant hem in het klantportaal goedkeuren of afwijzen. Geeft de klant op een andere manier akkoord, zet de post dan zelf op Akkoord. Bij elk besluit staat wie het nam, wanneer, en of het via het klantportaal ging. EVA controleert niet of er echt een akkoord ligt, dus zet een post pas op Akkoord als de klant heeft ingestemd.' },
           { title: 'Doorzetten naar Bouw7', body: 'Bij akkoord wordt een bewakingscode voor het meerwerk in Bouw7 aangemaakt. Het goedgekeurde bedrag telt automatisch mee in het contracttotaal en de financiële overzichten.' },
         ])
 
