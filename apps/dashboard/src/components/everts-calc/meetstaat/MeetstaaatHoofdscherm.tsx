@@ -17,6 +17,7 @@ import type { Meetstaat, Groep, Calculatieregel, Scenario } from '@/lib/everts-c
 import { calculatieregelOmschrijving, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combinatie'
 import { zonderCodeInOmschrijving } from '@/lib/everts-calc/bestekcode'
+import { teVerwerken, isVervallen, meetstaatStatus } from '@/lib/everts-calc/meetstaat-verwerken'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
@@ -207,7 +208,7 @@ export default function MeetstaaatHoofdscherm({
     setIsSyncing(true)
 
     try {
-      const aggregaten = getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0)
+      const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id))
       const bestaandeRegels = getCalculatieregels()
 
       // Haal schilder combinaties op per uniek type_id (batch)
@@ -224,8 +225,21 @@ export default function MeetstaaatHoofdscherm({
 
       let aangemaakt = 0
       let bijgewerkt = 0
+      let opNul = 0
 
       for (const agg of aggregaten) {
+        // Code vervallen: de calculatieregel gaat naar 0 en blijft zichtbaar staan.
+        // Verwijderen laten we aan de calculator; daar kan meer aan hangen dan de hoeveelheid.
+        if (isVervallen(agg)) {
+          const bestaand = bestaandeRegels.find(r => r.id === agg.calculatieregel_id)
+          if (bestaand) {
+            slaCalculatieregelOp({ ...bestaand, hoeveelheid: 0 })
+            opNul++
+          }
+          slaMeetregelAggregaatOp({ ...agg, is_gesynchroniseerd: true })
+          continue
+        }
+
         const bestekcode = normaliseerBestekcode(agg.bestekcode) || undefined
         // De code krijgt in de calculatie een eigen kolom; niet ook nog in de omschrijving.
         const omschrijving = calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling)
@@ -309,7 +323,8 @@ export default function MeetstaaatHoofdscherm({
       await bewaarNu()
       toast.success(t => (
         <span>
-          Gesynchroniseerd: {aangemaakt} nieuwe, {bijgewerkt} bijgewerkte calculatieregels.
+          Gesynchroniseerd: {aangemaakt} nieuwe, {bijgewerkt} bijgewerkte calculatieregels
+          {opNul > 0 && `, ${opNul} op 0 gezet (code vervallen)`}.
           <button className="ml-2 font-medium text-everts underline"
             onClick={() => { toast.dismiss(t.id); void naarCalculatie() }}>
             Bekijk in calculatie
@@ -323,9 +338,19 @@ export default function MeetstaaatHoofdscherm({
     }
   }, [meetstaat, scenario, bevroren, bewaarNu, naarCalculatie])
 
-  const aggregaten = meetstaat ? getMeetregelAggregaten(meetstaat.id).filter(a => a.totaal_hoeveelheid > 0) : []
-  const ongesyncCount = aggregaten.filter(a => !a.is_gesynchroniseerd).length
+  const ongesyncCount = meetstaat ? teVerwerken(getMeetregelAggregaten(meetstaat.id)).length : 0
   void wijzigingsTeller // zorgt dat re-render triggered bij wijzigingen
+
+  // Staat er na een wijziging weer iets open, dan is de meetstaat niet meer
+  // gesynchroniseerd. Ook opgeslagen, zodat 'Openen' en de afdruk het goed tonen.
+  useEffect(() => {
+    if (!meetstaat) return
+    const status = meetstaatStatus(meetstaat.status, ongesyncCount)
+    if (status === meetstaat.status) return
+    const bijgewerkt = { ...meetstaat, status }
+    slaMeetstaatOp(bijgewerkt)
+    setMeetstaat(bijgewerkt)
+  }, [meetstaat, ongesyncCount])
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
