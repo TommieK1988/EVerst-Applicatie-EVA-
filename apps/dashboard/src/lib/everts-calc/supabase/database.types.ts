@@ -3899,6 +3899,7 @@ export type Database = {
     Functions: {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      volgende_receptcode: { Args: { p_prefix: string }; Returns: string }
     }
     Enums: {
       bedrijf_type: "organisatie" | "werkmaatschappij"

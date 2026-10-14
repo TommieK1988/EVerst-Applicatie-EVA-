@@ -19983,6 +19983,7 @@ export type Database = {
       volgend_kwaliteit_afwijkingnummer: { Args: never; Returns: string }
       volgend_kwaliteit_inspectienummer: { Args: never; Returns: string }
       volgend_opnamenummer: { Args: never; Returns: string }
+      volgende_receptcode: { Args: { p_prefix: string }; Returns: string }
     }
     Enums: {
       aanvraag_substatus:
