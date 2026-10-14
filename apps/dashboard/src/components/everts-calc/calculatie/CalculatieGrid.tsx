@@ -23,6 +23,7 @@ import { type ColId, COL_DEFS, TEKSTVELDEN, COL_MAP, DEFAULT_ORDER, DEFAULT_WIDT
 import { TabelHeader, KolomNaamVeld } from './grid/TabelHeader'
 import { kiesBtwTarief } from './grid/btw-keuze'
 import { GroepSectie } from './grid/GroepSectie'
+import type { RegelActie } from './grid/ActieMenu'
 
 interface Props {
   scenarioId: string
@@ -543,24 +544,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       // Ctrl+C → kopieer naar intern klembord
       if (ctrl && !shift && e.key === 'c') {
         e.preventDefault()
-        klembordRegels.current = Array.from(geselecteerdeRegels)
-          .map(id => regels.find(r => r.id === id))
-          .filter((r): r is Calculatieregel => !!r)
-        klembordComponenten.current = componenten.filter(c =>
-          geselecteerdeRegels.has(c.calculatieregel_id)
-        )
-        toast.success(`${klembordRegels.current.length} regel${klembordRegels.current.length !== 1 ? 's' : ''} gekopieerd`)
+        kopieerNaarKlembord(Array.from(geselecteerdeRegels))
         return
       }
       // Ctrl+X → knip (kopieer + verwijder)
       if (ctrl && !shift && e.key === 'x') {
         e.preventDefault()
-        klembordRegels.current = Array.from(geselecteerdeRegels)
-          .map(id => regels.find(r => r.id === id))
-          .filter((r): r is Calculatieregel => !!r)
-        klembordComponenten.current = componenten.filter(c =>
-          geselecteerdeRegels.has(c.calculatieregel_id)
-        )
+        kopieerNaarKlembord(Array.from(geselecteerdeRegels), true)
         handleVerwijderGeselecteerd()
         toast.success(`${klembordRegels.current.length} regel${klembordRegels.current.length !== 1 ? 's' : ''} geknipt`)
         return
@@ -614,11 +604,23 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   }, [undo, geselecteerdeRegels, actiefGroepId, regels, componenten, duwSnapshot, laadAlles, onWijziging, readOnly])
 
   // ─── Multi-select acties ───────────────────────────────────────────────────
-  const handleKopieerRegels = useCallback(() => {
-    if (geselecteerdeRegels.size === 0) return
+  /** Regels in het interne klembord zetten (Ctrl+C / Ctrl+X, of Kopiëren in het regelmenu). */
+  const kopieerNaarKlembord = useCallback((ids: string[], stil = false) => {
+    const set = new Set(ids)
+    klembordRegels.current = ids
+      .map(id => regels.find(r => r.id === id))
+      .filter((r): r is Calculatieregel => !!r)
+    klembordComponenten.current = componenten.filter(c => set.has(c.calculatieregel_id))
+    const n = klembordRegels.current.length
+    if (!stil) toast.success(`${n} regel${n !== 1 ? 's' : ''} gekopieerd — plak met Ctrl+V`)
+  }, [regels, componenten])
+
+  /** Dupliceren: de geselecteerde regels, of alleen `alleen` (regelmenu). */
+  const handleKopieerRegels = useCallback((alleen?: string[]) => {
+    const ids = alleen ?? Array.from(geselecteerdeRegels)
+    if (ids.length === 0) return
     duwSnapshot()
     const nieuwRegels: Calculatieregel[] = []
-    const ids = Array.from(geselecteerdeRegels)
     ids.forEach(id => {
       const orig = regels.find(r => r.id === id)
       if (!orig) return
@@ -874,6 +876,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     onWijziging(); toast.success('Regel verwijderd')
   }, [duwSnapshot, onWijziging])
 
+  /** Acties uit het ⋯-menu van één regel. Werken op die regel, los van de selectie. */
+  const handleRegelActie = useCallback((id: string, actie: RegelActie) => {
+    if (actie === 'dupliceren') handleKopieerRegels([id])
+    else if (actie === 'kopieren') kopieerNaarKlembord([id])
+    else if (actie === 'verplaatsen') { setGeselecteerdeRegels(new Set([id])); setVerplaatsModalOpen(true) }
+    else if (actie === 'verwijderen') handleVerwijderRegel(id)
+  }, [handleKopieerRegels, kopieerNaarKlembord, handleVerwijderRegel])
+
   const handleVerwijderGroep = useCallback((id: string) => {
     duwSnapshot()
     verwijderGroep(id); laadAlles(); onWijziging(); toast.success('Groep verwijderd')
@@ -1007,7 +1017,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
           <span className="text-xs font-semibold text-everts">{geselecteerdeRegels.size} regel{geselecteerdeRegels.size !== 1 ? 's' : ''} geselecteerd</span>
           <span className="text-slate-300 text-xs">·</span>
           <button
-            onClick={handleKopieerRegels}
+            onClick={() => handleKopieerRegels()}
             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
             title="Kopieer geselecteerde regels (Ctrl+D)"
           >
@@ -1322,6 +1332,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   behandelingen={behandelingen}
                   geselecteerdeRegels={geselecteerdeRegels}
                   onSelecteerRegel={handleSelecteerRegel}
+                  onRegelActie={handleRegelActie}
                   collapseSignal={collapseSignal}
                   readOnly={readOnly}
                 />

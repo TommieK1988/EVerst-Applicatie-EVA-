@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, cloneElement } from 'react'
 import type { ReactElement } from 'react'
-import { Trash2, ChevronDown, ChevronRight, AlignLeft, Search, BookmarkPlus, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlignLeft, TriangleAlert } from 'lucide-react'
 import { standaardUurtarief } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, formatEuro, formatGetal, parseGetal } from '@/lib/everts-calc/calculations'
 import { cn } from '@/lib/everts-calc/utils'
@@ -19,6 +19,7 @@ import { OmschrijvingVeld } from './OmschrijvingVeld'
 import { WerkomschrijvingRij, RegelComponentenBlok } from './RegelDetail'
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
+import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
 
 export interface RegelRijProps {
   regel: Calculatieregel
@@ -45,6 +46,8 @@ export interface RegelRijProps {
   behandelingen?: SchilderBehandeling[]
   isGeselecteerd?: boolean
   onSelecteer?: (ctrlKey: boolean, shiftKey: boolean) => void
+  /** Acties die het grid uitvoert: dupliceren, kopiëren, verplaatsen, verwijderen. */
+  onActie?: (actie: RegelActie) => void
   isDragging?: boolean
   isDragOver?: boolean
   onDragStart?: (e: React.DragEvent) => void
@@ -59,7 +62,7 @@ export function CalculatieregelRij({
   regel, componenten, diepte, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
   onWijzig, onWijzigComponent, onWijzigComponentExtra, onVoegComponentToe, onVerwijderComponent, onVerwijder, onHerlaad,
   bibliotheekItems, behandelingen = [],
-  isGeselecteerd, onSelecteer,
+  isGeselecteerd, onSelecteer, onActie,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
   collapseSignal, readOnly = false,
 }: RegelRijProps) {
@@ -182,6 +185,7 @@ export function CalculatieregelRij({
   const [totVpEdit,    setTotVpEdit]    = useState<string | null>(null)
   const [receptModalOpen, setReceptModalOpen] = useState(false)
   const [miniMeetstaat, setMiniMeetstaat]     = useState(false)
+  const [menuOpen,      setMenuOpen]          = useState(false)
 
   // Uren zonder uurtarief: zo'n regel telt voor € 0 arbeid mee. Sinds de terugval op
   // het standaardtarief kan dat alleen nog als er nergens een tarief is ingesteld, of
@@ -235,18 +239,13 @@ export function CalculatieregelRij({
       case 'omschrijving': return (
         <td key={id} className={`py-1 ${isSP || regel.gemarkeerd ? 'italic' : ''}`} style={{ paddingLeft: `${indent}px`, paddingRight: '4px' }}>
           <div className="flex items-center gap-1">
-            {/* Drag handle */}
-            {onDragStart && (
-              <span className="flex-shrink-0 opacity-20 group-hover:opacity-60 text-slate-500 cursor-grab text-sm select-none px-0.5" title="Versleep om te herordenen">⠿</span>
+            {onSelecteer && (
+              <SelectieVinkje aan={!!isGeselecteerd} onWissel={shift => onSelecteer(!shift, shift)} label={`Selecteer ${regel.omschrijving || 'regel'}`} />
             )}
-            {/* Vergrootglas: helemaal links */}
-            <button
-              onClick={e => { e.stopPropagation(); setBiblOpen(true) }}
-              className="flex-shrink-0 p-0.5 rounded text-slate-300 hover:text-everts hover:bg-everts-50 opacity-0 group-hover:opacity-100 transition-all"
-              title="Zoeken in bibliotheek"
-            >
-              <Search className="w-3 h-3" />
-            </button>
+            {/* Sleepgreep: altijd zichtbaar, niet pas bij hover */}
+            {onDragStart && (
+              <span className="flex-shrink-0 opacity-40 hover:opacity-80 text-neutral-500 cursor-grab text-sm select-none px-0.5" title="Versleep om te herordenen">⠿</span>
+            )}
             <ActiviteitToevoegenModal
               open={biblOpen}
               onClose={() => setBiblOpen(false)}
@@ -314,15 +313,22 @@ export function CalculatieregelRij({
                     ? 'text-slate-400 hover:text-everts hover:bg-everts-50'
                     : 'text-slate-200 hover:text-slate-400'
               }`}
-              title="Componentregels tonen"
+              title={compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}
             >
-              {compsUitgeklapt
-                ? <ChevronDown className="w-3 h-3" />
-                : <ChevronRight className="w-3 h-3" />
-              }
+              <span className="flex items-center gap-0.5 text-[10.5px] font-medium whitespace-nowrap">
+                {compsUitgeklapt ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {regelComps.length === 0 ? 'normen' : `${regelComps.length} ${regelComps.length === 1 ? 'norm' : 'normen'}`}
+              </span>
             </span>
-            {regel.opmerking && !compsUitgeklapt && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Heeft interne opmerking" />
+            {regel.opmerking && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); setCompsUitgeklapt(true); setOpmerkingOpen(true) }}
+                className="flex-shrink-0 flex items-center gap-1 rounded px-1 text-[10.5px] font-medium text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                title={regel.opmerking}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> opmerking
+              </button>
             )}
             {heeftBehandeling && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Heeft schilderbehandeling" />
@@ -628,22 +634,29 @@ export function CalculatieregelRij({
         )
       }
       case 'acties': return (
-        <td key={id} className="px-1 py-1 text-center">
-          <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => setReceptModalOpen(true)}
-              className="p-1 text-slate-300 hover:text-everts rounded transition-colors"
-              title="Opslaan als recept"
-            >
-              <BookmarkPlus className="w-3 h-3" />
-            </button>
-            <button
-              onClick={onVerwijder}
-              className="p-1 text-slate-300 hover:text-red-500 rounded transition-colors"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
+        <td key={id} className="sticky right-0 bg-white px-0.5 py-0.5 text-center shadow-[-1px_0_0_theme(colors.neutral.100)]">
+          <ActieMenu
+            open={menuOpen} onOpenChange={setMenuOpen}
+            label={`Acties voor ${regel.omschrijving || 'regel'}`}
+            items={[
+              { soort: 'kop', label: 'Deze regel' },
+              { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', onSelect: () => setCompsUitgeklapt(v => !v),
+                extra: regelComps.length > 0 ? <span className="text-[10.5px] text-neutral-400">{regelComps.length}</span> : undefined },
+              { label: 'Werkomschrijving & afbeeldingen', onSelect: () => setWerkUitgeklapt(true) },
+              !readOnly && { label: 'Interne opmerking', onSelect: () => { setCompsUitgeklapt(true); setOpmerkingOpen(true) },
+                extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
+              !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
+              !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
+              !readOnly && { label: 'Uit bibliotheek toevoegen aan groep…', onSelect: () => setBiblOpen(true) },
+              !readOnly && { soort: 'scheiding' },
+              !readOnly && { label: 'Dupliceren', sneltoets: 'Ctrl D', onSelect: () => onActie?.('dupliceren') },
+              !readOnly && { label: 'Kopiëren', sneltoets: 'Ctrl C', onSelect: () => onActie?.('kopieren') },
+              !readOnly && { label: 'Verplaatsen naar groep…', sneltoets: 'Ctrl M', onSelect: () => onActie?.('verplaatsen') },
+              !readOnly && { label: 'Opslaan als recept…', onSelect: () => setReceptModalOpen(true) },
+              !readOnly && { soort: 'scheiding' },
+              !readOnly && { label: 'Verwijderen', sneltoets: 'Delete', gevaarlijk: true, onSelect: () => onActie ? onActie('verwijderen') : onVerwijder() },
+            ]}
+          />
         </td>
       )
       default: return <td key={id} />
@@ -675,6 +688,11 @@ export function CalculatieregelRij({
         onClick={e => {
           if ((e.target as HTMLElement).closest('input,select,textarea,button,a,[role="button"]')) return
           onSelecteer?.(e.ctrlKey || e.metaKey, e.shiftKey)
+        }}
+        // Rechtsklik: hetzelfde ⋯-menu, behalve in een invoerveld (daar wil je plakken).
+        onContextMenu={e => {
+          if ((e.target as HTMLElement).closest('input,textarea,select')) return
+          e.preventDefault(); setMenuOpen(true)
         }}
         style={{ cursor: onDragStart ? 'grab' : undefined }}
       >

@@ -58,6 +58,8 @@ export function TabelHeader({
                 col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                 col.thCls ?? (!col.thStyle ? 'text-slate-500' : ''),
                 dragOverCol === id ? 'border-l-2 border-everts' : '',
+                // ⋯-kolom blijft in beeld, ook als het rekenblad breder is dan het scherm.
+                id === 'acties' ? 'sticky right-0 z-[1] bg-white' : '',
               ].filter(Boolean).join(' ')}
               style={{ width: colWidths[id], ...col.thStyle }}
             >

@@ -314,10 +314,10 @@ export function ComponentRegelRij({
         </td>
       )
       case 'acties': return (
-        <td key={id} className="px-1 py-1 text-center">
+        <td key={id} className="sticky right-0 bg-white px-1 py-1 text-center shadow-[-1px_0_0_theme(colors.neutral.100)]">
           <button
             onClick={onVerwijder}
-            className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 rounded transition-colors"
+            className="p-1 text-neutral-300 hover:text-red-500 rounded transition-colors"
             title="Component verwijderen"
           >
             <Trash2 className="w-3 h-3" />

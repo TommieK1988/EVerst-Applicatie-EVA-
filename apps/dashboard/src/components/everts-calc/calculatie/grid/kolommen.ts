@@ -19,7 +19,7 @@ export interface ColDef {
 
 export const COL_DEFS: ColDef[] = [
   { id: 'kostengroep',  label: 'Kostengroep',  dw: 100, minW: 60,  align: 'left' },
-  { id: 'omschrijving', label: 'Omschrijving', dw: 260, minW: 100, align: 'left' },
+  { id: 'omschrijving', label: 'Omschrijving', dw: 320, minW: 100, align: 'left' },
   { id: 'code',         label: 'Code', title: 'Bestekscode uit de meetstaat', dw: 56, minW: 40, align: 'left' },
   { id: 'aant',         label: 'Aant.',        dw: 56,  minW: 40,  align: 'right' },
   { id: 'eenh',         label: 'Eenh.',        dw: 44,  minW: 36,  align: 'left' },

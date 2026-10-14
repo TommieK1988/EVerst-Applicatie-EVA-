@@ -1,17 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { berekenGroepKostprijs, berekenGroepVP, berekenGroepUren, berekenGroepMaterieel, berekenGroepOA, formatEuro, formatGetal } from '@/lib/everts-calc/calculations'
 import type { Groep, Calculatieregel, Componentregel, EenheidConfig } from '@/lib/everts-calc/types'
 import { isTekstregel } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
+import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import { type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, NIVEAU_INSPRING, COL_MAP } from './kolommen'
 import { TekstregelRij } from './TekstregelRij'
 import { CalculatieregelRij } from './CalculatieregelRij'
+import { ActieMenu, type RegelActie } from './ActieMenu'
+import { InvoegRij } from './InvoegRij'
 
 // ─── GroepSectie (recursief) ──────────────────────────────────────────────────
 
@@ -61,6 +64,8 @@ export interface GroepSectieProps {
   behandelingen?: SchilderBehandeling[]
   geselecteerdeRegels?: Set<string>
   onSelecteerRegel?: (regelId: string, ctrlKey: boolean, shiftKey: boolean) => void
+  /** Acties uit het ⋯-menu van een regel (dupliceren, kopiëren, verplaatsen, verwijderen). */
+  onRegelActie?: (regelId: string, actie: RegelActie) => void
   collapseSignal?: number
   readOnly?: boolean
 }
@@ -74,12 +79,13 @@ export function GroepSectie({
   dragOverGroepId, sleepRegelId, sleepRegelIds, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
-  geselecteerdeRegels, onSelecteerRegel,
+  geselecteerdeRegels, onSelecteerRegel, onRegelActie,
   collapseSignal, readOnly = false,
 }: GroepSectieProps) {
   const ingeklapt = groep.ingeklapt ?? false
   const [confirmVerwijder, setConfirmVerwijder] = useState(false)
   const [editingNaam,     setEditingNaam]     = useState(false)
+  const [biblOpen,        setBiblOpen]        = useState(false)
   const [naamEdit,        setNaamEdit]        = useState(groep.naam)
   useEffect(() => { setNaamEdit(groep.naam) }, [groep.naam])
   const [dragOverRegelId, setDragOverRegelId] = useState<string | null>(null)
@@ -194,7 +200,7 @@ export function GroepSectie({
             )}
             {groep.optioneel && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 border border-amber-300 font-medium">
-                optioneel
+                optioneel · telt niet mee
               </span>
             )}
             <span className={`text-[11px] opacity-50 ${diepte <= 1 ? 'text-white' : 'text-slate-500'}`}>
@@ -204,45 +210,40 @@ export function GroepSectie({
             <div className="flex-1" />
             {/* De groepstotalen staan bewust niet meer hier maar in een eigen rij
                 onder de groep, uitgelijnd op de bijbehorende kolommen. */}
-            <div className="opacity-0 group-hover/kop:opacity-100 flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => onWijzigGroep(groep.id, { optioneel: !groep.optioneel })}
-                title={groep.optioneel ? 'Optioneel: telt niet mee in eindtotaal' : 'Markeer als optioneel'}
-                className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                  groep.optioneel
-                    ? 'border-amber-400 text-amber-600 bg-amber-50'
-                    : diepte <= 1 ? 'border-white/30 text-white/50 hover:border-white/60 hover:text-white/80' : 'border-slate-200 text-slate-400 hover:border-amber-400 hover:text-amber-600'
-                }`}
-              >
-                OPT
-              </button>
-              <button
-                onClick={() => onVoegRegelToe(groep.id)}
-                className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-paper/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
-              >
-                <Plus className="w-3 h-3" /> Regel
-              </button>
-              <button
-                onClick={() => onVoegTekstregelToe(groep.id)}
-                title="Tekstregel — alleen tekst, telt niet mee in de calculatie maar komt wel in de offerte"
-                className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-paper/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
-              >
-                <Plus className="w-3 h-3" /> Tekst
-              </button>
-              {groep.niveau < 3 && (
+            <div className="sticky right-2 flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
+              {!readOnly && (
                 <button
-                  onClick={() => onVoegSubgroepToe(groep)}
-                  className={`text-[11px] flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/70 hover:text-white hover:bg-paper/10' : 'text-slate-400 hover:text-everts hover:bg-everts-50'}`}
+                  type="button"
+                  onClick={() => onVoegRegelToe(groep.id)}
+                  title="Regel toevoegen aan deze groep (Ctrl+R)"
+                  className={`text-[11px] font-semibold flex items-center gap-0.5 px-2 py-0.5 rounded ${diepte <= 1 ? 'text-white/80 hover:text-white hover:bg-white/15' : 'text-neutral-500 hover:text-brand-700 hover:bg-brand-50'}`}
                 >
-                  <Plus className="w-3 h-3" /> Groep
+                  <Plus className="w-3 h-3" /> Regel
                 </button>
               )}
-              <button
-                onClick={() => setConfirmVerwijder(true)}
-                className={`p-1 rounded ${diepte <= 1 ? 'text-white/40 hover:text-red-300' : 'text-slate-300 hover:text-red-500'}`}
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              <ActieMenu
+                label={`Acties voor groep ${groep.naam}`}
+                licht={diepte <= 1}
+                items={readOnly ? [
+                  { label: ingeklapt ? 'Regels uitklappen' : 'Regels inklappen', onSelect: () => onToggleInklap(groep.id) },
+                ] : [
+                  { soort: 'kop', label: 'Toevoegen' },
+                  { label: 'Regel', onSelect: () => onVoegRegelToe(groep.id), sneltoets: 'Ctrl R' },
+                  { label: 'Tekstregel', onSelect: () => onVoegTekstregelToe(groep.id), sneltoets: 'Ctrl ⇧ R' },
+                  groep.niveau < 3 && { label: 'Subgroep', onSelect: () => onVoegSubgroepToe(groep) },
+                  { label: 'Uit bibliotheek…', onSelect: () => setBiblOpen(true) },
+                  { soort: 'scheiding' },
+                  { label: 'Hernoemen', onSelect: () => setEditingNaam(true) },
+                  {
+                    label: groep.optioneel ? 'Niet meer optioneel' : 'Optioneel maken',
+                    extra: !groep.optioneel ? <span className="text-[10.5px] text-neutral-400">telt niet mee</span> : undefined,
+                    onSelect: () => onWijzigGroep(groep.id, { optioneel: !groep.optioneel }),
+                  },
+                  { label: ingeklapt ? 'Regels uitklappen' : 'Regels inklappen', onSelect: () => onToggleInklap(groep.id) },
+                  { soort: 'scheiding' },
+                  { label: 'Groep verwijderen…', gevaarlijk: true, onSelect: () => setConfirmVerwijder(true) },
+                ]}
+              />
             </div>
           </div>
         </td>
@@ -257,6 +258,7 @@ export function GroepSectie({
               onVerwijder={() => onVerwijderRegel(r.id)}
               isGeselecteerd={geselecteerdeRegels?.has(r.id)}
               onSelecteer={(ctrl, shift) => onSelecteerRegel?.(r.id, ctrl, shift)}
+              onActie={actie => onRegelActie?.(r.id, actie)}
               isDragging={sleepRegelIds.has(r.id)}
               isDragOver={dragOverRegelId === r.id}
               onDragStart={e => handleRegelDragStart(e, r.id)}
@@ -279,6 +281,7 @@ export function GroepSectie({
               behandelingen={behandelingen}
               isGeselecteerd={geselecteerdeRegels?.has(r.id)}
               onSelecteer={(ctrl, shift) => onSelecteerRegel?.(r.id, ctrl, shift)}
+              onActie={actie => onRegelActie?.(r.id, actie)}
               isDragging={sleepRegelIds.has(r.id)}
               isDragOver={dragOverRegelId === r.id}
               onDragStart={e => handleRegelDragStart(e, r.id)}
@@ -289,6 +292,16 @@ export function GroepSectie({
               readOnly={readOnly}
             />
           ))}
+          {!readOnly && (
+            <InvoegRij
+              colCount={colCount} indent={indent + 18}
+              kanSubgroep={groep.niveau < 3}
+              onRegel={() => onVoegRegelToe(groep.id)}
+              onTekstregel={() => onVoegTekstregelToe(groep.id)}
+              onSubgroep={() => onVoegSubgroepToe(groep)}
+              onBibliotheek={() => setBiblOpen(true)}
+            />
+          )}
           {subGroepen.map(sub => (
             <GroepSectie
               key={sub.id} groep={sub} diepte={diepte + 1}
@@ -310,6 +323,7 @@ export function GroepSectie({
               behandelingen={behandelingen}
               geselecteerdeRegels={geselecteerdeRegels}
               onSelecteerRegel={onSelecteerRegel}
+              onRegelActie={onRegelActie}
               collapseSignal={collapseSignal}
               readOnly={readOnly}
             />
@@ -343,6 +357,15 @@ export function GroepSectie({
           })}
         </tr>
       )}
+
+      <ActiviteitToevoegenModal
+        open={biblOpen}
+        onClose={() => setBiblOpen(false)}
+        elementId={groep.id}
+        scenarioId={scenarioId}
+        onToegevoegd={() => { setBiblOpen(false); onHerlaad() }}
+        bibliotheekItems={bibliotheekItems}
+      />
 
       <ConfirmDialog
         open={confirmVerwijder}

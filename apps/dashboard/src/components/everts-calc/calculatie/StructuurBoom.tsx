@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
-import { ChevronRight, ChevronDown, Plus, Trash2, FolderOpen, Folder, GripVertical } from 'lucide-react'
+import { ChevronRight, ChevronDown, Plus, FolderOpen, Folder, GripVertical, X } from 'lucide-react'
+import { ActieMenu } from './grid/ActieMenu'
 import toast from 'react-hot-toast'
 import { cn, nieuweId } from '@/lib/everts-calc/utils'
 import { getGroepen, slaGroepOp, verwijderGroep } from '@/lib/everts-calc/local-store'
@@ -31,6 +32,8 @@ interface Props {
   onSleepActief?: (actief: boolean) => void
   /** Bevroren calculatie: structuur is te bekijken, niet te wijzigen. */
   readOnly?: boolean
+  /** Toont een sluitknop in de kop. */
+  onSluit?: () => void
 }
 
 interface InlineFormProps {
@@ -91,7 +94,7 @@ const NIVEAU_KLEUR = ['bg-everts', 'bg-everts/70', 'bg-everts/40']
 
 export default function StructuurBoom({
   scenarioId, actiefGroepId, refreshTrigger, onSelecteer, onWijziging,
-  onVoorWijziging, onSleepActief, readOnly = false,
+  onVoorWijziging, onSleepActief, readOnly = false, onSluit,
 }: Props) {
   const [groepen,   setGroepen]   = useState<Groep[]>([])
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
@@ -410,31 +413,20 @@ export default function StructuurBoom({
           <span className="truncate">{groep.naam}</span>
         </button>
 
-        {/* Hover acties */}
-        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 pr-1">
-          {!readOnly && groep.niveau < 3 && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setToevoegen({ parentId: groep.id })}
-              title="Subgroep toevoegen"
-              className="text-slate-400 hover:text-everts"
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
-          )}
-          {!readOnly && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setConfirmId(groep.id)}
-              title="Groep verwijderen"
-              className="text-slate-300 hover:text-red-500"
-            >
-              <Trash2 className="w-3 h-3" />
-            </Button>
-          )}
-        </div>
+        {/* Acties: altijd zichtbaar, niet meer achter hover. */}
+        {!readOnly && (
+          <div className="flex items-center flex-shrink-0 pr-1">
+            <ActieMenu
+              label={`Acties voor ${groep.naam}`}
+              items={[
+                groep.niveau < 3 && { label: 'Subgroep toevoegen', onSelect: () => setToevoegen({ parentId: groep.id }) },
+                heeftKinderen && { label: isOpen ? 'Inklappen' : 'Uitklappen', onSelect: () => toggle(groep.id) },
+                { soort: 'scheiding' },
+                { label: 'Groep verwijderen…', gevaarlijk: true, onSelect: () => setConfirmId(groep.id) },
+              ]}
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -442,17 +434,17 @@ export default function StructuurBoom({
   return (
     <div className="flex flex-col h-full relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100 flex-shrink-0">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Structuur</span>
+      <div className="flex items-center gap-1 h-9 pl-3 pr-1 border-b border-neutral-200 flex-shrink-0">
+        <span className="flex-1 text-xs font-semibold text-neutral-600">Structuur</span>
         {!readOnly && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setToevoegen({ parentId: null })}
-            title="Groep toevoegen"
-            className="text-slate-400 hover:text-everts hover:bg-everts-50"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setToevoegen({ parentId: null })} className="h-7 px-2 text-xs text-brand-700">
             <Plus className="w-3.5 h-3.5" />
+            Groep
+          </Button>
+        )}
+        {onSluit && (
+          <Button variant="ghost" size="icon-sm" onClick={onSluit} title="Sluiten" className="text-neutral-400">
+            <X className="w-3.5 h-3.5" />
           </Button>
         )}
       </div>
@@ -519,6 +511,13 @@ export default function StructuurBoom({
           />
         )}
       </div>
+      {roots.length > 0 && (
+        <p className="flex-shrink-0 border-t border-neutral-100 px-3 py-2 text-[11px] leading-snug text-neutral-500">
+          {readOnly
+            ? 'Klik een naam om ernaartoe te springen.'
+            : 'Sleep een groep aan de greep om de volgorde te wijzigen. Klik een naam om ernaartoe te springen.'}
+        </p>
+      )}
       {/* Zwevend label bij de cursor. `pointer-events-none`, anders zou de hittest
           hem raken in plaats van de strook eronder. */}
       {sleepGroep && (

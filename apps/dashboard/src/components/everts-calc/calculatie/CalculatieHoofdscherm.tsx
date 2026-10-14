@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
 import MeetstaatKnop from './MeetstaatKnop'
 import { Alert } from '@/components/ui/alert'
@@ -476,19 +474,6 @@ export default function CalculatieHoofdscherm({
             navigeren en slepen terwijl je rekent. Dicht = verborgen, niet ontkoppeld: de boom
             houdt zo zijn uitgeklapte groepen. */}
         <aside className={`${boomUitgeklapt ? 'flex' : 'hidden'} w-80 xl:w-[26rem] flex-shrink-0 flex-col bg-white border-r border-slate-200`}>
-          <div className="flex items-center border-b border-slate-200 h-9 flex-shrink-0">
-            <span className="text-xs text-slate-500 font-medium px-3 flex-1 truncate">Structuur</span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleToggleBoom}
-              className="mr-1 text-slate-300"
-              title="Sluiten"
-            >
-              <X className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-
           <div className="flex-1 overflow-hidden">
             <StructuurBoom
               scenarioId={scenario.id}
@@ -498,6 +483,7 @@ export default function CalculatieHoofdscherm({
               onWijziging={handleBoomWijziging}
               onVoorWijziging={() => gridRef.current?.duwSnapshot()}
               readOnly={readOnly}
+              onSluit={handleToggleBoom}
             />
           </div>
         </aside>
