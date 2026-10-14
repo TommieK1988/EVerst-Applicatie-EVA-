@@ -49,7 +49,8 @@
     "ingediendMetSaldo": "Week ingediend. {uren} uur naar je tijd-voor-tijdsaldo.",
     "overurenTitel": "Je hebt deze week {uren} uur extra gewerkt",
     "overurenUitleg": "Die uren gaan naar je tijd-voor-tijdsaldo. Daarom staat er een regel van −{uren} uur tijd voor tijd. Zo klopt je week precies met je contract. Je hoeft hier niets voor te doen.",
-    "overurenRegel": "Overuren naar je saldo"
+    "overurenRegel": "Overuren naar je saldo",
+    "wijzigenTot": "Je kunt je week nog aanpassen tot {moment}, zolang je goedkeurder nog niets heeft goedgekeurd."
   },
   "regel": {
     "titelNieuw": "Uren toevoegen",
@@ -132,6 +133,10 @@
   },
   "fout": {
     "weekAlIngediend": "Deze week is al ingediend.",
+    "alGoedgekeurd": "Je goedkeurder heeft al uren van deze week goedgekeurd. Aanpassen kan niet meer; vraag het je goedkeurder.",
+    "wijzigTermijnVerstreken": "Deze week kun je niet meer aanpassen: dat kon tot maandag 12:00. Vraag het je goedkeurder.",
+    "goedkeuringNietTeControleren": "We kunnen nu niet controleren of je uren al zijn goedgekeurd. Probeer het zo nog eens.",
+    "bouw7VerwijderenMislukt": "Verwijderen is niet gelukt. Probeer het zo nog eens.",
     "toevoegenMislukt": "Toevoegen mislukt.",
     "wijzigenMislukt": "Wijzigen mislukt.",
     "regelNietGevonden": "Regel niet gevonden.",

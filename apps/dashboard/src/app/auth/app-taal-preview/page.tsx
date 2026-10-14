@@ -92,7 +92,7 @@ function voorbeeldWeek(kantoor = false): Weekstaat {
   return {
     weekId: 'w', weekStart: dagen[0], jaar: 2026, weekNr: 41, dagen, status: 'concept',
     contracturen: 37.5, totaalUren: 37.5, tijdVoorTijdUren: -7.5, tekort: 0, saldoMutatie: 7.5,
-    saldoNu: 12, magIndienen: true, blokkade: null, bewerkbaar: true, afkeurReden: null,
+    saldoNu: 12, magIndienen: true, blokkade: null, bewerkbaar: true, wijzigbaar: true, wijzigenTot: null, afkeurReden: null,
     regels, onkosten: [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor, extern: false,
     kantoorOpties: kantoor
       ? [{ dossierId: 'k1', label: 'Bouwbedrijf Morgenstond B.V.' }, { dossierId: 'k2', label: 'Everts Onderhoudsschilders B.V.' }]

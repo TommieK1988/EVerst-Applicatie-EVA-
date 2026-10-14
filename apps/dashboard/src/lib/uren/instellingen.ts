@@ -3,6 +3,7 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { isoWeekdag, weekDagen } from './rooster'
+import { nlTijdstip, plusDagen } from '../planning/nl-tijd'
 import { bepaalKantoorOpties, type KantoorOptie, type WerkmaatschappijRij } from './kantoor-opties'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -178,17 +179,10 @@ export function goedkeurDeadline(weekStart: string, inst: UrenInstellingen): Dat
 function deadlineVan(weekStart: string, dag: number, tijd: string, volgendeWeek: boolean): Date {
   const dagen = weekDagen(weekStart)
   let datum = dagen.find(d => isoWeekdag(d) === dag) ?? dagen[dagen.length - 1]
-  if (volgendeWeek) {
-    const d = new Date(`${datum}T12:00:00`)
-    d.setDate(d.getDate() + 7)
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    datum = `${d.getFullYear()}-${mm}-${dd}`
-  }
+  if (volgendeWeek) datum = plusDagen(datum, 7)
+  // Kloktijd in NL, niet die van de server: op Vercel (UTC) werd "12:00" anders 14:00 NL.
   const [uu = '0', mi = '0'] = tijd.split(':')
-  const dt = new Date(`${datum}T00:00:00`)
-  dt.setHours(Number(uu), Number(mi), 0, 0)
-  return dt
+  return new Date(nlTijdstip(datum, `${uu.padStart(2, '0')}:${mi.padStart(2, '0')}`))
 }
 
 /**

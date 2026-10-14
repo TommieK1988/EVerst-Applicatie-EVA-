@@ -5,8 +5,9 @@
 // Bouw7 en de loonadministratie -- en de overuren staan herkenbaar op het tijd-voor-tijdsaldo.
 // De monteur hoeft er niets voor te doen; de rekenregel staat in `verdeelOveruren`.
 //
-// De regel wordt na elke wijziging in de week opnieuw bepaald, en alleen zolang de week nog van de
-// medewerker is (concept of afgekeurd). Na indienen ligt hij vast, net als de rest van de week.
+// De regel wordt na elke wijziging in de week opnieuw bepaald, zolang de week nog van de
+// medewerker is (concept of afgekeurd). Na indienen alleen nog als de medewerker zelf iets wijzigt
+// (`naIndienen`): bij het openen van een ingediende week verschuift er niets meer.
 
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
@@ -14,25 +15,30 @@ import { getRooster, isoWeekdag, urenPerWerkdag, weekDagen } from './rooster'
 import { getUrenBestemming } from './instellingen'
 import { OVERUREN_BRON, rondUren, verdeelOveruren } from './rekenregel'
 import { bewerkbaar } from './week-guard'
+import { verwijderUitBouw7 } from './wijzigen-na-indienen'
 
 const db = () => createAdminClient()
 
 /** Zet de automatische overurenregels van een week goed. Doet niets als er niets verandert. */
-export async function zetOverurenRegels(weekId: string): Promise<void> {
+export async function zetOverurenRegels(
+  weekId: string,
+  /** Vanuit een wijziging die al langs `vereisWijzigbaar` ging: dan mag het ook na indienen. */
+  opties: { naIndienen?: boolean } = {},
+): Promise<void> {
   const supabase = db()
   const { data: week } = await supabase
     .from('uren_weken')
     .select('id, medewerker_id, week_start, status, contracturen, medewerkers!uren_weken_medewerker_id_fkey(extern)')
     .eq('id', weekId)
     .maybeSingle()
-  if (!week || !bewerkbaar(week.status)) return
+  if (!week || !(bewerkbaar(week.status) || (opties.naIndienen && week.status === 'ingediend'))) return
 
   // Eén week van één medewerker: een handvol regels.
   const { data: regels } = await supabase
     .from('uren_regels')
-    .select('id, datum, uren, bron')
+    .select('id, datum, uren, bron, bouw7_hour_log_id')
     .eq('week_id', weekId)
-  type Rij = { id: string; datum: string; uren: number | string; bron: string }
+  type Rij = { id: string; datum: string; uren: number | string; bron: string; bouw7_hour_log_id: number | null }
   const alle = (regels ?? []) as Rij[]
   const bestaand = alle.filter(r => r.bron === OVERUREN_BRON)
   const gewoon = alle
@@ -57,6 +63,13 @@ export async function zetOverurenRegels(weekId: string): Promise<void> {
   if (sleutel(gewenst) === sleutel(bestaand.map(r => ({ datum: r.datum, uren: Number(r.uren) })))) return
 
   if (bestaand.length) {
+    // Al naar Bouw7 gestuurd (ingediende week): daar eerst weg, anders staan de overuren er dubbel.
+    try {
+      await verwijderUitBouw7(bestaand.map(r => r.bouw7_hour_log_id).filter((id): id is number => id != null))
+    } catch (e) {
+      console.error('[uren] oude overurenregel niet uit Bouw7 verwijderd', weekId, e)
+      return
+    }
     await supabase.from('uren_regels').delete().in('id', bestaand.map(r => r.id))
   }
   if (!gewenst.length) return

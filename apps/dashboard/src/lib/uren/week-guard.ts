@@ -27,7 +27,7 @@ export async function eigenWeek(weekId: string) {
   const supabase = createAdminClient()
   const { data: week } = await supabase
     .from('uren_weken')
-    .select('id, medewerker_id, week_start, status, contracturen')
+    .select('id, medewerker_id, week_start, status, contracturen, goedkeuring_modus')
     .eq('id', weekId)
     .maybeSingle()
   if (!week) throw new Error('Week niet gevonden.')
@@ -36,7 +36,8 @@ export async function eigenWeek(weekId: string) {
 }
 
 /**
- * Een week is alleen te wijzigen zolang hij nog niet ingediend is (of is afgekeurd).
+ * Een week is alleen in te dienen zolang hij nog niet ingediend is (of is afgekeurd). Wijzigen
+ * kan na indienen nog even door, tot er iets is goedgekeurd: zie `./wijzigen-na-indienen`.
  *
  * Neemt bewust een gewone string: de statuskolom komt als `string` uit de database en een
  * cast op elke aanroepplek zou alleen maar ruis zijn.

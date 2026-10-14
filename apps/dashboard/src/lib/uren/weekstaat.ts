@@ -21,6 +21,9 @@ import { getUrenInstellingen, getUrenBestemming, getIndirecteDossierIds } from '
 import { berekenWeekTotalen, indienBlokkade, rondUren, OVERUREN_BRON, type UrenCategorie } from './rekenregel'
 import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
+import {
+  wijzigVenster, vereisWijzigbaar, tekortNaWijziging, verwijderUitBouw7, stuurWijzigingNaarBouw7, WEEK_JOIN,
+} from './wijzigen-na-indienen'
 import type { OnkostenSoort, Vervoermiddel } from './onkosten'
 import { signBonnen } from './bonnen'
 import { BOEKBAAR_FILTER } from './boekbaar'
@@ -86,7 +89,12 @@ export type Weekstaat = {
   saldoNu: number
   magIndienen: boolean
   blokkade: string | null
+  /** In te dienen: concept of afgekeurd. */
   bewerkbaar: boolean
+  /** Regels en kosten aan te passen; ook na indienen, tot er iets is goedgekeurd. */
+  wijzigbaar: boolean
+  /** Ingediend en nog aan te passen: tot wanneer (ISO). */
+  wijzigenTot: string | null
   afkeurReden: string | null
   regels: WeekRegel[]
   onkosten: WeekOnkosten[]
@@ -240,7 +248,10 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     : null
 
   // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
-  const bonLinks = await signBonnen((onkosten ?? []).map((o: Record<string, unknown>) => o.bon_pad as string))
+  const [bonLinks, venster] = await Promise.all([
+    signBonnen((onkosten ?? []).map((o: Record<string, unknown>) => o.bon_pad as string)),
+    wijzigVenster(week),
+  ])
 
   return {
     weekId,
@@ -255,6 +266,8 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     magIndienen: bewerkbaar(status) && !blokkade,
     blokkade,
     bewerkbaar: bewerkbaar(status),
+    wijzigbaar: venster.wijzigbaar,
+    wijzigenTot: venster.tot,
     afkeurReden: week.afkeur_reden,
     regels: nette,
     onkosten: (onkosten ?? []).map((o: Record<string, unknown>) => ({
@@ -576,12 +589,14 @@ export async function voegRegelToe(
   const t = await getAppVertaler('uren')
   try {
     const { medewerker, week, supabase } = await eigenWeek(weekId)
-    if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
+    const geweigerd = await vereisWijzigbaar(week)
+    if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
     const rij = await bouwRegel(medewerker.id, invoer)
     const { error } = await supabase.from('uren_regels').insert({ ...rij, week_id: weekId, bron: 'eva' })
     if (error) return { ok: false, error: error.message }
-    await zetOverurenRegels(weekId)
+    await zetOverurenRegels(weekId, { naIndienen: true })
+    await stuurWijzigingNaarBouw7(weekId)
 
     revalidatePath('/m/uren')
     return { ok: true }
@@ -599,22 +614,27 @@ export async function wijzigRegel(
     const supabase = db()
     const { data: bestaand } = await supabase
       .from('uren_regels')
-      .select('id, week_id, medewerker_id, bron, uren_weken(status)')
+      .select(`id, week_id, medewerker_id, bron, ${WEEK_JOIN}`)
       .eq('id', regelId)
       .maybeSingle()
     if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
     if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
-    if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
     if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
+    const geweigerd = await vereisWijzigbaar(bestaand.uren_weken)
+    if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
+    const tekort = await tekortNaWijziging(bestaand.uren_weken, regelId, invoer.uren)
+    if (tekort) return { ok: false, error: tekort }
 
     const rij = await bouwRegel(medewerker.id, invoer, { id: regelId, bron: bestaand.bron })
     // Wijkt de medewerker af van wat uit Bouw7 kwam, dan blijft dat zichtbaar voor de goedkeurder.
     const afgeweken = bestaand.bron !== 'eva'
+    // `niet_verzonden`: staat de regel al in Bouw7, dan moet de wijziging er opnieuw heen.
     const { error } = await supabase.from('uren_regels')
-      .update({ ...rij, afgeweken_van_bron: afgeweken })
+      .update({ ...rij, afgeweken_van_bron: afgeweken, bouw7_status: 'niet_verzonden' })
       .eq('id', regelId)
     if (error) return { ok: false, error: error.message }
-    await zetOverurenRegels(bestaand.week_id)
+    await zetOverurenRegels(bestaand.week_id, { naIndienen: true })
+    await stuurWijzigingNaarBouw7(bestaand.week_id)
 
     revalidatePath('/m/uren')
     return { ok: true }
@@ -631,17 +651,32 @@ export async function verwijderRegel(
   const supabase = db()
   const { data: bestaand } = await supabase
     .from('uren_regels')
-    .select('id, week_id, medewerker_id, bron, uren_weken(status)')
+    .select(`id, week_id, medewerker_id, bron, bouw7_hour_log_id, ${WEEK_JOIN}`)
     .eq('id', regelId)
     .maybeSingle()
   if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
   if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
-  if (!bewerkbaar(bestaand.uren_weken?.status)) return { ok: false, error: t('fout.weekAlIngediend') }
   if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
+  const geweigerd = await vereisWijzigbaar(bestaand.uren_weken)
+  if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
+  const tekort = await tekortNaWijziging(bestaand.uren_weken, regelId, 0)
+  if (tekort) return { ok: false, error: tekort }
+
+  // Eerst uit Bouw7: lukt dat niet, dan blijft de regel ook in EVA staan. Andersom bleef er in
+  // Bouw7 een uurregel over die niemand in EVA meer ziet, en die gewoon goedgekeurd kan worden.
+  if (bestaand.bouw7_hour_log_id != null) {
+    try {
+      await verwijderUitBouw7([bestaand.bouw7_hour_log_id])
+    } catch (e) {
+      console.error('[uren] regel niet uit Bouw7 verwijderd', regelId, e)
+      return { ok: false, error: t('fout.bouw7VerwijderenMislukt') }
+    }
+  }
 
   const { error } = await supabase.from('uren_regels').delete().eq('id', regelId)
   if (error) return { ok: false, error: error.message }
-  await zetOverurenRegels(bestaand.week_id)
+  await zetOverurenRegels(bestaand.week_id, { naIndienen: true })
+  await stuurWijzigingNaarBouw7(bestaand.week_id)
   revalidatePath('/m/uren')
   return { ok: true }
 }

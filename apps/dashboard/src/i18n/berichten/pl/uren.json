@@ -49,7 +49,8 @@
     "ingediendMetSaldo": "Tydzień wysłany. {uren} godz. trafia na Twoje saldo nadgodzin.",
     "overurenTitel": "W tym tygodniu przepracowałeś {uren} godz. więcej",
     "overurenUitleg": "Te godziny trafiają na Twoje saldo nadgodzin (czas za czas). Dlatego jest tu wiersz −{uren} godz. „czas za czas”. Dzięki temu Twój tydzień zgadza się dokładnie z umową. Nie musisz nic robić.",
-    "overurenRegel": "Nadgodziny na Twoje saldo"
+    "overurenRegel": "Nadgodziny na Twoje saldo",
+    "wijzigenTot": "Możesz jeszcze zmienić swój tydzień do {moment}, dopóki osoba zatwierdzająca niczego nie zatwierdziła."
   },
   "regel": {
     "titelNieuw": "Dodaj godziny",
@@ -132,6 +133,10 @@
   },
   "fout": {
     "weekAlIngediend": "Ten tydzień został już wysłany.",
+    "alGoedgekeurd": "Osoba zatwierdzająca zatwierdziła już godziny z tego tygodnia. Nie możesz ich już zmienić; zapytaj osobę zatwierdzającą.",
+    "wijzigTermijnVerstreken": "Tego tygodnia nie możesz już zmienić: było to możliwe do poniedziałku 12:00. Zapytaj osobę zatwierdzającą.",
+    "goedkeuringNietTeControleren": "Nie możemy teraz sprawdzić, czy Twoje godziny zostały już zatwierdzone. Spróbuj ponownie za chwilę.",
+    "bouw7VerwijderenMislukt": "Usuwanie nie powiodło się. Spróbuj ponownie za chwilę.",
     "toevoegenMislukt": "Nie udało się dodać.",
     "wijzigenMislukt": "Nie udało się zmienić.",
     "regelNietGevonden": "Nie znaleziono wpisu.",

@@ -13,7 +13,8 @@ import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { getAppVertaler } from '@/i18n/server'
-import { eigenWeek, bewerkbaar } from './week-guard'
+import { eigenWeek } from './week-guard'
+import { vereisWijzigbaar } from './wijzigen-na-indienen'
 import { getUrenInstellingen } from './instellingen'
 import {
   berekenKmBedrag, bonVerplicht, onkostenBezwaar, isOnkostenSoort, isVervoermiddel,
@@ -39,7 +40,8 @@ export async function voegOnkostenToe(
   const { medewerker, week, supabase } = await eigenWeek(weekId)
   // Foutteksten in de taal van de app: deze actie draait alleen vanuit EVA Mobiel.
   const t = await getAppVertaler('uren')
-  if (!bewerkbaar(week.status)) return { ok: false, error: t('fout.weekAlIngediend') }
+  const geweigerd = await vereisWijzigbaar(week)
+  if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
   const datum = String(formData.get('datum') ?? '')
   const soortRuw = formData.get('soort')
@@ -133,10 +135,10 @@ export async function verwijderOnkosten(
   // De weekstatus apart opvragen en niet als join: een join dwingt hier een any-cast af, en
   // een tweede eenvoudige query leest net zo goed.
   const { data: week } = await supabase
-    .from('uren_weken').select('status').eq('id', rij.week_id).maybeSingle()
-  if (!week || !bewerkbaar(week.status)) {
-    return { ok: false, error: t('fout.weekAlIngediend') }
-  }
+    .from('uren_weken').select('id, week_start, status, medewerker_id, goedkeuring_modus').eq('id', rij.week_id).maybeSingle()
+  if (!week) return { ok: false, error: t('fout.weekAlIngediend') }
+  const geweigerd = await vereisWijzigbaar(week)
+  if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
   const { error } = await supabase.from('uren_onkosten').delete().eq('id', onkostenId)
   if (error) return { ok: false, error: error.message }

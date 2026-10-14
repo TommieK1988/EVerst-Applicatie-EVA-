@@ -136,6 +136,18 @@ export default function WeekstaatClient({
           {t(`weekstaat.status.${statusSleutel}`)}
         </div>
 
+        {/* Ingediend maar nog niets goedgekeurd: aanpassen mag nog, tot de goedkeurdeadline. */}
+        {staat.wijzigenTot && (
+          <p style={{ fontSize: 13, color: '#0b4f96', margin: '10px 0 0', lineHeight: 1.45 }}>
+            {t('weekstaat.wijzigenTot', {
+              moment: new Date(staat.wijzigenTot).toLocaleString(locale, {
+                weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+                timeZone: 'Europe/Amsterdam',
+              }),
+            })}
+          </p>
+        )}
+
         {staat.status === 'afgekeurd' && staat.afkeurReden && (
           <p style={{ fontSize: 13, color: '#c0392b', margin: '10px 0 0', lineHeight: 1.45 }}>
             <strong>{t('weekstaat.reden')}</strong>{' '}
@@ -166,7 +178,7 @@ export default function WeekstaatClient({
 
           // Lege weekenddagen tonen we niet: die vullen het scherm zonder iets te zeggen.
           const isWeekend = [6, 7].includes(new Date(`${datum}T12:00:00`).getDay() || 7)
-          if (isWeekend && regels.length === 0 && dagKosten.length === 0 && !staat.bewerkbaar) return null
+          if (isWeekend && regels.length === 0 && dagKosten.length === 0 && !staat.wijzigbaar) return null
 
           return (
             <div key={datum} style={{
@@ -225,7 +237,7 @@ export default function WeekstaatClient({
                     {uur(r.uren)}
                   </span>
 
-                  {staat.bewerkbaar && !auto && (
+                  {staat.wijzigbaar && !auto && (
                     <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                       <button type="button" onClick={() => setSheet({ datum, regel: r })}
                         // eslint-disable-next-line i18next/no-literal-string -- potlood-pictogram, geen tekst
@@ -261,14 +273,14 @@ export default function WeekstaatClient({
                   <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {euro(k.bedrag)}
                   </span>
-                  {staat.bewerkbaar && (
+                  {staat.wijzigbaar && (
                     <button type="button" onClick={() => verwijderKosten(k.id)}
                       aria-label={t('weekstaat.kostenVerwijderen')} style={{ ...rijKnop, color: '#c0392b' }}>×</button>
                   )}
                 </div>
               ))}
 
-              {staat.bewerkbaar && (
+              {staat.wijzigbaar && (
                 <div style={{ display: 'flex', borderTop: dagKosten.length ? '1px solid var(--border)' : 'none' }}>
                   <button type="button" onClick={() => setSheet({ datum, regel: null })}
                     style={{
