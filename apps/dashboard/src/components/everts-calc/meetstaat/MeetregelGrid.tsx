@@ -6,15 +6,14 @@ import toast from 'react-hot-toast'
 import type { Meetregel, Groep, MeetstaatElement } from '@/lib/everts-calc/types'
 import {
   getMeetregels, slaMeetregelOp, verwijderMeetregel,
-  getMeetregelAggregaten, getMeetstaatElementen,
+  getMeetregelAggregaten, getMeetstaatElementen, getCalculatieregels,
 } from '@/lib/everts-calc/local-store'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import {
-  berekenHoeveelheid, isRegelActief, aggregaatSleutel, herberekeningAggregaat,
+  isRegelActief, aggregaatSleutel, herberekeningAggregaat,
   calculatieregelOmschrijving, normaliseerBestekcode,
 } from '@/lib/everts-calc/meetstaat-utils'
-import { isVervallen } from '@/lib/everts-calc/meetstaat-verwerken'
-import { totalenPerEenheid, totalenTekst } from '@/lib/everts-calc/meetstaat-overzicht'
+import { isVervallen, teVerwerken } from '@/lib/everts-calc/meetstaat-verwerken'
 import { ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
 import { Button } from '@/components/ui/button'
 import MeetregelRij, { LAATSTE_KOL } from './MeetregelRij'
@@ -312,9 +311,6 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   }, [meetstaatId, groepId, metLegeSlotregel, onWijziging])
 
   const actieveRegels = regels.filter(r => !r.is_leeg && isRegelActief(r))
-  // Per eenheid optellen: m¹ en m² bij elkaar optellen en er 'm²' achter zetten is
-  // een getal dat nergens op slaat.
-  const totaalTekst = totalenTekst(totalenPerEenheid(actieveRegels, berekenHoeveelheid))
   // Bestaande regels met maar een deel van de maten: die tellen niet mee, en dat moet je zien.
   const aantalOnvolledig = regels.filter(r => !r.is_leeg && ontbrekendeMaat(r)).length
 
@@ -326,7 +322,6 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
           <h2 className="text-base font-semibold text-neutral-900">{groep?.naam ?? 'Groep'}</h2>
           <p className="text-xs text-neutral-500">
             {actieveRegels.length} {actieveRegels.length === 1 ? 'meetregel' : 'meetregels'}
-            {totaalTekst && <> · <span className="tabular-nums">{totaalTekst}</span></>}
             {aantalOnvolledig > 0 && (
               <span className="font-semibold text-warning-700">
                 {' · '}{aantalOnvolledig} {aantalOnvolledig === 1 ? 'onvolledige regel telt' : 'onvolledige regels tellen'} niet mee
@@ -375,7 +370,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         {bekendeCodes.map(c => <option key={c} value={c} />)}
       </datalist>
       <div ref={bladRef} onKeyDown={onBladKeyDown} className="flex-1 overflow-auto">
-        <table className="w-full border-collapse text-sm" style={{ minWidth: '1300px' }}>
+        <table className="w-full border-collapse text-sm" style={{ minWidth: '1220px' }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-neutral-100 border-b border-neutral-200 text-[10.5px] font-semibold text-neutral-500 uppercase tracking-[0.08em]">
               <th className="w-8 px-1 py-2 text-center font-medium">
@@ -402,7 +397,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                   title="Hoogte aantal — hoeveel hoogtes je meet. Telt alleen mee bij m¹.">H aant.</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak dit binnen één element voorkomt (bijv. 2 ramen in één kozijn)">x</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak het element in totaal voorkomt">Aantal</th>
-              <th className="min-w-[152px] px-2 py-2 text-right font-medium text-everts" title="Met daaronder hoe hij berekend is">Hoev.</th>
+              <th className="w-20 px-2 py-2 text-right font-medium text-everts">Hoev.</th>
               <th className="w-12 px-1 py-2 text-center font-medium">Eenh.</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Opmerking</th>
               <th className="w-7 px-1 py-2"></th>
@@ -477,8 +472,10 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
 function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; groepId: string }) {
   // Ook een vervallen code (naar 0, staat nog in de calculatie) tot hij verwerkt is:
   // anders verdwijnt hij uit beeld terwijl de calculatie hem nog meerekent.
-  const aggregaten = getMeetregelAggregaten(meetstaatId).filter(
-    (a) => a.groep_id === groepId && (a.totaal_hoeveelheid > 0 || (isVervallen(a) && !a.is_gesynchroniseerd))
+  const alle = getMeetregelAggregaten(meetstaatId)
+  const open = new Set(teVerwerken(alle, new Set(getCalculatieregels().map(r => r.id))).map(a => a.id))
+  const aggregaten = alle.filter(
+    (a) => a.groep_id === groepId && (a.totaal_hoeveelheid > 0 || open.has(a.id))
   )
 
   if (aggregaten.length === 0) return null

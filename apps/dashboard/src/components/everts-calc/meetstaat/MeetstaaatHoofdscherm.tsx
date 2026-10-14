@@ -209,8 +209,8 @@ export default function MeetstaaatHoofdscherm({
     setIsSyncing(true)
 
     try {
-      const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id))
       const bestaandeRegels = getCalculatieregels()
+      const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(bestaandeRegels.map(r => r.id)))
 
       // Haal schilder combinaties op per uniek type_id (batch)
       const typeIds = Array.from(new Set(aggregaten.map(a => a.type_id).filter(Boolean))) as string[]
@@ -339,7 +339,9 @@ export default function MeetstaaatHoofdscherm({
     }
   }, [meetstaat, scenario, bevroren, bewaarNu, naarCalculatie])
 
-  const ongesyncCount = meetstaat ? teVerwerken(getMeetregelAggregaten(meetstaat.id)).length : 0
+  const ongesyncCount = meetstaat
+    ? teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(getCalculatieregels().map(r => r.id))).length
+    : 0
   void wijzigingsTeller // zorgt dat re-render triggered bij wijzigingen
 
   // Staat er na een wijziging weer iets open, dan is de meetstaat niet meer

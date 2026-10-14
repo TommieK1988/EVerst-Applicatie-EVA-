@@ -6,7 +6,6 @@ import type { Meetregel } from '@/lib/everts-calc/types'
 import { berekenHoeveelheid, isRegelActief, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
 import { normaliseerEenheid, ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
-import { rekenregelTekst } from '@/lib/everts-calc/meetstaat-overzicht'
 
 interface SchilderData {
   onderdelen: { id: string; naam: string; code: string | null }[]
@@ -220,7 +219,6 @@ export default function MeetregelRij({
   const hoev = berekenHoeveelheid(regel)
   const perMaatAantal = normaliseerEenheid(regel.eenheid) === 'm¹'
   const ontbreekt = regel.is_leeg ? null : ontbrekendeMaat(regel)
-  const rekenregel = hoev > 0 ? rekenregelTekst(regel) : ''
 
   const geselecteerdOnderdeel = schilderData?.onderdelen.find(o => o.id === regel.onderdeel_id)
   const geselecteerdType = schilderData?.types.find(t => t.id === regel.type_id)
@@ -426,16 +424,9 @@ export default function MeetregelRij({
       {/* Hoeveelheid */}
       <td className="px-2 py-0.5 text-right">
         {hoev > 0 ? (
-          <div className="flex flex-col items-end leading-tight">
-            <span className={`text-xs tabular-nums font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
-              {hoev.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            {rekenregel && (
-              <span className="text-[11px] tabular-nums text-neutral-500 whitespace-nowrap" title="Zo is deze hoeveelheid berekend">
-                {rekenregel}
-              </span>
-            )}
-          </div>
+          <span className={`text-xs tabular-nums font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
+            {hoev.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
         ) : ontbreekt ? (
           <span className="text-[11px] font-semibold text-amber-600" title="Deze regel telt pas mee als alle maten zijn ingevuld">
             {ontbreekt} ontbreekt
