@@ -131,7 +131,7 @@ export default function GroepenboomPanel({ groepen, actiefGroepId, meetstaatId, 
   const { perGroep, geheel } = cijfersPerGroep(meetstaatId)
 
   return (
-    <div className="w-60 flex-shrink-0 border-r border-neutral-200 bg-white flex flex-col overflow-hidden">
+    <div className="w-60 flex-shrink-0 rounded-xl border border-neutral-200 bg-white flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between">
         <span className="text-[11px] font-bold text-neutral-600 uppercase tracking-[0.10em]">Groepen</span>
         <span className="text-xs text-neutral-500">{groepen.length}</span>

@@ -315,7 +315,8 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   const aantalOnvolledig = regels.filter(r => !r.is_leeg && ontbrekendeMaat(r)).length
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full gap-4 overflow-hidden">
+      <section className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white">
       {/* Groepheader */}
       <div className="flex-shrink-0 px-4 py-3 bg-white border-b border-neutral-200 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-0">
@@ -380,7 +381,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                   onChange={e => selecteerAlles(e.target.checked)}
                   disabled={bestaandeRegels.length === 0}
                   title="Alle meetregels in deze groep selecteren"
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-everts focus:ring-everts/40 cursor-pointer
+                  className="w-3.5 h-3.5 rounded border-neutral-300 accent-brand-500 cursor-pointer
                              disabled:opacity-40 disabled:cursor-default"
                 />
               </th>
@@ -389,15 +390,15 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Onderdeel</th>
               <th className="min-w-[140px] px-2 py-2 text-left font-medium">Type</th>
               <th className="min-w-[96px] px-2 py-2 text-left font-medium" title="Bestekscode; de behandeling koppel je per code in de calculatie">Code</th>
-              <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">B (m)</th>
-              <th className="w-16 px-1 py-2 text-right font-medium text-blue-500">H (m)</th>
-              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
+              <th className="w-16 px-1 py-2 text-right font-semibold text-info-700">B (m)</th>
+              <th className="w-16 px-1 py-2 text-right font-semibold text-info-700">H (m)</th>
+              <th className="w-14 px-1 py-2 text-right font-semibold text-info-700"
                   title="Breedte aantal — hoeveel breedtes je meet. Telt alleen mee bij m¹.">B aant.</th>
-              <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
+              <th className="w-14 px-1 py-2 text-right font-semibold text-info-700"
                   title="Hoogte aantal — hoeveel hoogtes je meet. Telt alleen mee bij m¹.">H aant.</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak dit binnen één element voorkomt (bijv. 2 ramen in één kozijn)">x</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak het element in totaal voorkomt">Aantal</th>
-              <th className="w-20 px-2 py-2 text-right font-medium text-everts">Hoev.</th>
+              <th className="w-20 px-2 py-2 text-right font-semibold text-brand-700">Hoev.</th>
               <th className="w-12 px-1 py-2 text-center font-medium">Eenh.</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Opmerking</th>
               <th className="w-7 px-1 py-2"></th>
@@ -421,6 +422,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                 onVerwijder={() => onVerwijder(r.id)}
                 schilderData={schilderData}
                 codeLijstId={codeLijstId}
+                elementHerhaald={i > 0 && !!r.element && r.element === regels[i - 1].element}
               />
             ))}
           </tbody>
@@ -432,6 +434,8 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         <span><b className="font-semibold text-neutral-700">↑ ↓ ← →</b> door de cellen</span>
         <span>Vink regels aan om ze als element te bewaren</span>
       </div>
+
+      </section>
 
       <NaarCalculatieTabel meetstaatId={meetstaatId} groepId={groepId} groepNaam={groep?.naam ?? 'deze groep'} />
 

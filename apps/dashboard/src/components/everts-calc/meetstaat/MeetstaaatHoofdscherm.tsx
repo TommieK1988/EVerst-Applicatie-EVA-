@@ -422,7 +422,7 @@ export default function MeetstaaatHoofdscherm({
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex gap-4 p-4 overflow-hidden">
           {/* Groepenboom links */}
           <GroepenboomPanel
             groepen={groepen}
@@ -432,7 +432,7 @@ export default function MeetstaaatHoofdscherm({
           />
 
           {/* Meetregel grid centraal */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
             {actiefGroepId ? (
               <MeetregelGrid
                 meetstaatId={meetstaat.id}
@@ -442,7 +442,7 @@ export default function MeetstaaatHoofdscherm({
                 schilderData={schilderData}
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+              <div className="flex-1 flex items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 text-sm">
                 Kies een groep links om meetregels in te voeren
               </div>
             )}
