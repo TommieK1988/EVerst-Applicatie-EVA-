@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCw, Plus, FolderOpen, CheckCircle2, Printer } from 'lucide-react'
+import { Ruler } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   maakStandaardScenario, getScenarios, getGroepen, hydrateCalculatie,
@@ -19,6 +19,7 @@ import { vervangNormenUitCombinatie } from '@/lib/everts-calc/normen-uit-combina
 import { zonderCodeInOmschrijving } from '@/lib/everts-calc/bestekcode'
 import { teVerwerken, isVervallen, meetstaatStatus } from '@/lib/everts-calc/meetstaat-verwerken'
 import GroepenboomPanel from './GroepenboomPanel'
+import MeetstaatKopbalk from './MeetstaatKopbalk'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
 import { openMeetstaatPdf } from './meetstaat-afdrukken'
@@ -353,146 +354,45 @@ export default function MeetstaaatHoofdscherm({
   }, [meetstaat, ongesyncCount])
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* ─── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={() => { void naarCalculatie() }}
-          title={onSluit || terug ? 'Meetstaat sluiten en terug naar de calculatie' : 'Terug naar aanvragen'}>
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{onSluit || terug ? 'Terug naar calculatie' : 'Aanvragen'}</span>
-        </Button>
-
-        <div className="h-5 w-px bg-slate-200" />
-
-        {/* Meetstaat naam/code */}
-        {meetstaat ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">{meetstaat.naam}</span>
-            <span className="text-xs  text-slate-400">{meetstaat.code}</span>
-            {(printKop?.nummer || printKop?.naam) && (
-              <span className="hidden md:inline text-xs text-slate-500 truncate max-w-[320px]">
-                · Calculatie {[printKop.nummer, printKop.naam].filter(Boolean).join(' · ')}
-              </span>
-            )}
-            <span className={`text-xs px-1.5 py-0.5 rounded-full border ${
-              meetstaat.status === 'gesynchroniseerd'
-                ? 'bg-green-50 text-green-600 border-green-200'
-                : meetstaat.status === 'definitief'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
-                : 'bg-amber-50 text-amber-600 border-amber-200'
-            }`}>
-              {meetstaat.status}
-            </span>
-            {scenario?.meerwerk_regel_id ? (
-              <span className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-500 border-slate-200">Meerwerk</span>
-            ) : (scenario?.versie ?? 1) > 1 && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-50 text-slate-500 border-slate-200">v{scenario?.versie}</span>
-            )}
-            {bevroren && (
-              <span title={BEVROREN_MELDING} className="text-xs px-1.5 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-300">Bevroren</span>
-            )}
-          </div>
-        ) : (
-          <span className="text-sm text-slate-400 italic">Geen meetstaat actief</span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          {/* Ververs bibliotheekdata */}
-          <button
-            onClick={handleVervers}
-            title="Herlaad schilderbibliotheek en groepsindeling"
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Nieuwe meetstaat */}
-          <button
-            onClick={handleNieuweMeetstaat}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
-                       text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Nieuwe meetstaat</span>
-          </button>
-
-          {/* Meetstaat openen */}
-          <button
-            onClick={() => setOpenenOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
-                       text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Openen</span>
-          </button>
-
-          {/* Afdrukken: de hele meetstaat als PDF in een nieuw tabblad (zie meetstaat-afdrukken) */}
-          {meetstaat && (
-            <button
-              onClick={() => openMeetstaatPdf({
-                meetstaat, groepen, projectNaam: printKop?.naam, projectNummer: printKop?.nummer,
-              })}
-              title="Hele meetstaat afdrukken"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
-                         text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Afdrukken</span>
-            </button>
-          )}
-
-          {/* Sync naar calculatie */}
-          {meetstaat && (
-            <button
-              onClick={handleSync}
-              disabled={isSyncing || ongesyncCount === 0 || bevroren}
-              title={bevroren ? BEVROREN_MELDING : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
-                ongesyncCount > 0 && !bevroren
-                  ? 'bg-everts text-white hover:bg-everts/90'
-                  : 'bg-slate-100 text-slate-400 cursor-default'
-              }`}
-            >
-              {isSyncing
-                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                : <CheckCircle2 className="w-3.5 h-3.5" />
-              }
-              <span className="hidden sm:inline">Sync naar calculatie</span>
-              {ongesyncCount > 0 && (
-                <span className="bg-paper/20 text-white text-xs px-1.5 rounded-full">
-                  {ongesyncCount}
-                </span>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="flex flex-col h-full bg-neutral-50">
+      <MeetstaatKopbalk
+        meetstaat={meetstaat}
+        calculatie={printKop?.nummer || printKop?.naam
+          ? `Calculatie ${[printKop.nummer, printKop.naam].filter(Boolean).join(' · ')}`
+          : ''}
+        terugLabel={onSluit || terug ? 'Terug naar calculatie' : 'Aanvragen'}
+        terugTitel={onSluit || terug ? 'Meetstaat sluiten en terug naar de calculatie' : 'Terug naar aanvragen'}
+        aantalOpen={ongesyncCount}
+        isSyncing={isSyncing}
+        bevroren={bevroren}
+        bevrorenMelding={BEVROREN_MELDING}
+        meerwerk={!!scenario?.meerwerk_regel_id}
+        versie={scenario?.versie ?? 1}
+        onTerug={() => { void naarCalculatie() }}
+        onVervers={handleVervers}
+        onNieuw={handleNieuweMeetstaat}
+        onOpenen={() => setOpenenOpen(true)}
+        onAfdrukken={() => {
+          if (meetstaat) openMeetstaatPdf({ meetstaat, groepen, projectNaam: printKop?.naam, projectNummer: printKop?.nummer })
+        }}
+        onSync={() => { void handleSync() }}
+      />
 
       {/* ─── Hoofd content ───────────────────────────────────────────────── */}
       {!meetstaat ? (
         // Geen meetstaat: toon welkomscherm
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4 max-w-sm">
-            <div className="w-16 h-16 bg-everts/10 rounded-2xl flex items-center justify-center mx-auto">
-              <span className="text-3xl">📐</span>
+            <div className="w-16 h-16 bg-brand-50 rounded-xl flex items-center justify-center mx-auto">
+              <Ruler className="w-8 h-8 text-brand-700" aria-hidden="true" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-800">Geen meetstaat actief</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-lg font-semibold text-neutral-900">Geen meetstaat actief</h2>
+            <p className="text-sm text-neutral-500">
               Maak een nieuwe meetstaat aan of open een bestaande om te beginnen.
             </p>
             <div className="flex gap-2 justify-center">
-              <button
-                onClick={handleNieuweMeetstaat}
-                className="px-4 py-2 bg-everts text-white rounded-lg text-sm font-medium hover:bg-everts/90"
-              >
-                + Nieuwe meetstaat
-              </button>
-              <button
-                onClick={() => setOpenenOpen(true)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
-              >
-                Openen
-              </button>
+              <Button variant="primary" size="lg" onClick={handleNieuweMeetstaat}>Nieuwe meetstaat</Button>
+              <Button variant="outline" size="lg" onClick={() => setOpenenOpen(true)}>Openen</Button>
             </div>
           </div>
         </div>

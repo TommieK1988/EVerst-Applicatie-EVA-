@@ -14,6 +14,9 @@ import {
   calculatieregelOmschrijving, normaliseerBestekcode,
 } from '@/lib/everts-calc/meetstaat-utils'
 import { isVervallen } from '@/lib/everts-calc/meetstaat-verwerken'
+import { totalenPerEenheid, totalenTekst } from '@/lib/everts-calc/meetstaat-overzicht'
+import { ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
+import { Button } from '@/components/ui/button'
 import MeetregelRij, { LAATSTE_KOL } from './MeetregelRij'
 import ElementOpslaanDialog from './ElementOpslaanDialog'
 import ElementKiezerDialog from './ElementKiezerDialog'
@@ -311,68 +314,70 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
   const actieveRegels = regels.filter(r => !r.is_leeg && isRegelActief(r))
   // Per eenheid optellen: m¹ en m² bij elkaar optellen en er 'm²' achter zetten is
   // een getal dat nergens op slaat.
-  const totalenPerEenheid = actieveRegels.reduce<Record<string, number>>((acc, r) => {
-    acc[r.eenheid] = (acc[r.eenheid] ?? 0) + berekenHoeveelheid(r)
-    return acc
-  }, {})
-  const totaalTekst = Object.entries(totalenPerEenheid)
-    .map(([eenheid, totaal]) => `${totaal.toFixed(2)} ${eenheid}`)
-    .join(' · ')
+  const totaalTekst = totalenTekst(totalenPerEenheid(actieveRegels, berekenHoeveelheid))
+  // Bestaande regels met maar een deel van de maten: die tellen niet mee, en dat moet je zien.
+  const aantalOnvolledig = regels.filter(r => !r.is_leeg && ontbrekendeMaat(r)).length
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Groepheader */}
-      <div className="flex-shrink-0 px-4 py-2.5 bg-white border-b border-slate-200 flex items-center gap-3">
+      <div className="flex-shrink-0 px-4 py-3 bg-white border-b border-neutral-200 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold text-slate-800">{groep?.naam ?? 'Groep'}</h2>
-          <p className="text-xs text-slate-400">
+          <h2 className="text-base font-semibold text-neutral-900">{groep?.naam ?? 'Groep'}</h2>
+          <p className="text-xs text-neutral-500">
             {actieveRegels.length} {actieveRegels.length === 1 ? 'meetregel' : 'meetregels'}
-            {totaalTekst && ` · totaal ${totaalTekst}`}
-            {geselecteerd.size > 0 && ` · ${geselecteerd.size} geselecteerd`}
+            {totaalTekst && <> · <span className="tabular-nums">{totaalTekst}</span></>}
+            {aantalOnvolledig > 0 && (
+              <span className="font-semibold text-warning-700">
+                {' · '}{aantalOnvolledig} {aantalOnvolledig === 1 ? 'onvolledige regel telt' : 'onvolledige regels tellen'} niet mee
+              </span>
+            )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setKiezerOpen(true)}
+          disabled={aantalElementen === 0}
+          title={aantalElementen === 0
+            ? 'Nog geen elementen bewaard in deze meetstaat. Vink regels aan om er een te bewaren.'
+            : 'Een bewaard element in deze groep invoegen'}
+        >
+          <Boxes className="w-4 h-4" />
+          <span className="hidden sm:inline">Element invoegen</span>
+        </Button>
+      </div>
+
+      {/* Selectiebalk: wat je met aangevinkte regels kunt, verschijnt pas als je iets aanvinkt */}
+      {geselecteerd.size > 0 && (
+        <div className="flex-shrink-0 px-4 py-2 bg-brand-900 text-white flex flex-wrap items-center gap-4 text-[13px]">
+          <span className="font-semibold">
+            {geselecteerd.size} {geselecteerd.size === 1 ? 'regel' : 'regels'} geselecteerd
+          </span>
           <button
             onClick={() => setOpslaanOpen(true)}
-            disabled={geselecteerdeRegels.length === 0}
-            title={geselecteerdeRegels.length === 0
-              ? 'Vink eerst meetregels aan om ze als element te bewaren'
-              : `${geselecteerdeRegels.length} aangevinkte regels bewaren als element`}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
-                       text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors
-                       disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent
-                       disabled:hover:border-slate-200"
+            className="flex items-center gap-1.5 font-semibold text-brand-200 hover:text-white"
           >
-            <BookmarkPlus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Element opslaan</span>
+            <BookmarkPlus className="w-4 h-4" />
+            Bewaar als element
           </button>
-
           <button
-            onClick={() => setKiezerOpen(true)}
-            disabled={aantalElementen === 0}
-            title={aantalElementen === 0
-              ? 'Nog geen elementen bewaard in deze meetstaat'
-              : 'Een bewaard element in deze groep invoegen'}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-slate-200
-                       text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors
-                       disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent
-                       disabled:hover:border-slate-200"
+            onClick={() => setGeselecteerd(new Set())}
+            className="ml-auto font-medium text-neutral-300 hover:text-white"
           >
-            <Boxes className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Element toevoegen</span>
+            Selectie opheffen
           </button>
         </div>
-      </div>
+      )}
 
       {/* Grid */}
       <datalist id={codeLijstId}>
         {bekendeCodes.map(c => <option key={c} value={c} />)}
       </datalist>
       <div ref={bladRef} onKeyDown={onBladKeyDown} className="flex-1 overflow-auto">
-        <table className="w-full border-collapse text-sm" style={{ minWidth: '1220px' }}>
+        <table className="w-full border-collapse text-sm" style={{ minWidth: '1300px' }}>
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-100 text-[11px] text-slate-500 uppercase tracking-wide">
+            <tr className="bg-neutral-100 border-b border-neutral-200 text-[10.5px] font-semibold text-neutral-500 uppercase tracking-[0.08em]">
               <th className="w-8 px-1 py-2 text-center font-medium">
                 <input
                   type="checkbox"
@@ -397,7 +402,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                   title="Hoogte aantal — hoeveel hoogtes je meet. Telt alleen mee bij m¹.">H aant.</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak dit binnen één element voorkomt (bijv. 2 ramen in één kozijn)">x</th>
               <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak het element in totaal voorkomt">Aantal</th>
-              <th className="w-20 px-2 py-2 text-right font-medium text-everts">Hoev.</th>
+              <th className="min-w-[152px] px-2 py-2 text-right font-medium text-everts" title="Met daaronder hoe hij berekend is">Hoev.</th>
               <th className="w-12 px-1 py-2 text-center font-medium">Eenh.</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Opmerking</th>
               <th className="w-7 px-1 py-2"></th>
@@ -425,6 +430,12 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex-shrink-0 px-4 py-2 border-t border-neutral-200 bg-neutral-50 flex flex-wrap gap-4 text-xs text-neutral-500">
+        <span><b className="font-semibold text-neutral-700">Enter</b> volgende regel</span>
+        <span><b className="font-semibold text-neutral-700">↑ ↓ ← →</b> door de cellen</span>
+        <span>Vink regels aan om ze als element te bewaren</span>
       </div>
 
       {/* Subtotalen per aggregaat */}
