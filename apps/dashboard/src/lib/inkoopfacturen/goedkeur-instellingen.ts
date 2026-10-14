@@ -14,7 +14,10 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { getBouw7Client } from '@/lib/bouw7/sync'
-import { isKostenrekening, ontleedGrootboekNaam, type GoedkeurRegel } from './goedkeur-route'
+import {
+  ALLE_DOSSIER_ROLLEN, isKostenrekening, ontleedGrootboekNaam, type GoedkeurRegel, type ProjectRoute,
+} from './goedkeur-route'
+import { getProjectRoute } from './route'
 
 const db = () => createAdminClient()
 
@@ -22,6 +25,8 @@ export type GoedkeurInstellingen = {
   /** ISO-moment; facturen die daarna in Bouw7 zijn aangemaakt keurt EVA goed. Null = uit. */
   evaVanaf: string | null
   regels: GoedkeurRegel[]
+  /** Projectfacturen: welke dossierrol keurt, en een eigen drempel + tweede akkoord. */
+  project: ProjectRoute
   administraties: { id: number; naam: string }[]
   medewerkers: { id: string; naam: string; afdeling: string | null }[]
   /** Goedkeurder per 4xxx-nummer (overhead). */
@@ -49,7 +54,7 @@ async function haalKostenrekeningen(): Promise<{ nummer: string; naam: string }[
 
 export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
   await vereisRecht('instellingen', 'beheren')
-  const [{ data: inst }, { data: regels }, { data: ms }, facturen, { data: gb }, rekeningen] = await Promise.all([
+  const [{ data: inst }, { data: regels }, { data: ms }, facturen, { data: gb }, rekeningen, project] = await Promise.all([
     db().from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle(),
     db().from('inkoop_goedkeur_regels').select('divisie_bouw7_id, terugval_goedkeurder_id, drempel_excl, drempel_goedkeurder_id'),
     db().from('medewerkers').select('id, voornaam, tussenvoegsel, achternaam, afdeling')
@@ -60,6 +65,7 @@ export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
     db().from('inkoop_goedkeur_grootboek').select('grootboek_nummer, goedkeurder_id'),
     haalKostenrekeningen().then(r => ({ r, fout: null as string | null }))
       .catch(e => ({ r: [] as { nummer: string; naam: string }[], fout: e instanceof Error ? e.message : 'Bouw7 niet bereikbaar' })),
+    getProjectRoute(),
   ])
 
   const administraties = new Map<number, string>()
@@ -68,6 +74,7 @@ export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
   const v = (inst?.overige as Record<string, unknown> | null)?.inkoop_goedkeuring_eva_vanaf
   return {
     evaVanaf: typeof v === 'string' && v ? v : null,
+    project,
     regels: (regels ?? []).map(r => ({ ...r, drempel_excl: r.drempel_excl == null ? null : Number(r.drempel_excl) })),
     administraties: [...administraties].map(([id, naam]) => ({ id, naam })).sort((a, b) => a.naam.localeCompare(b.naam)),
     medewerkers: (ms ?? []).map(m => ({
@@ -83,6 +90,7 @@ export async function slaGoedkeurInstellingenOp(input: {
   evaVanaf: string | null
   regels: GoedkeurRegel[]
   grootboek: { nummer: string; goedkeurder_id: string }[]
+  project: ProjectRoute
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const { medewerker } = await vereisRecht('instellingen', 'beheren')
@@ -94,6 +102,13 @@ export async function slaGoedkeurInstellingenOp(input: {
       if (r.drempel_excl != null && (!Number.isFinite(r.drempel_excl) || r.drempel_excl < 0)) {
         return { ok: false, error: 'Een drempel moet een bedrag van 0 of meer zijn.' }
       }
+    }
+    const rollen = input.project.rollen
+    if (!rollen.length || rollen.some(r => !ALLE_DOSSIER_ROLLEN.includes(r)) || new Set(rollen).size !== rollen.length) {
+      return { ok: false, error: 'Kies voor projectfacturen minstens één dossierrol, elke rol één keer.' }
+    }
+    if (input.project.drempel_excl != null && (!Number.isFinite(input.project.drempel_excl) || input.project.drempel_excl < 0)) {
+      return { ok: false, error: 'De drempel voor projecten moet een bedrag van 0 of meer zijn.' }
     }
     if (input.grootboek.some(g => !isKostenrekening(g.nummer) || !g.goedkeurder_id)) {
       return { ok: false, error: 'Een goedkeurder per grootboek kan alleen bij een 4000-rekening, en vraagt een persoon.' }
@@ -135,6 +150,16 @@ export async function slaGoedkeurInstellingenOp(input: {
         : await db().from('inkoop_goedkeur_regels').insert({ ...rij, divisie_bouw7_id: r.divisie_bouw7_id })
       if (error) return { ok: false, error: error.message }
     }
+
+    const { error: e4 } = await db().from('inkoop_goedkeur_project').upsert({
+      id: true,
+      rollen,
+      drempel_excl: input.project.drempel_excl,
+      drempel_goedkeurder_id: input.project.drempel_goedkeurder_id || null,
+      updated_at: nu,
+      updated_by: medewerker.id,
+    })
+    if (e4) return { ok: false, error: e4.message }
 
     // Grootboek: de lijst is klein; vervangen is eenvoudiger en even veilig als bijwerken.
     const { error: e2 } = await db().from('inkoop_goedkeur_grootboek').delete().neq('grootboek_nummer', '')

@@ -20,7 +20,7 @@ export default async function Page() {
       <TerugNaarInstellingen />
       <PageHeader eyebrow="Financieel" title="Goedkeurroute inkoopfacturen" />
       <p className="eva-page-desc">
-        Stap 1 is de projectleider van het dossier. Overhead (geen projectleider) gaat naar de goedkeurder
+        Een projectfactuur gaat naar een dossierrol die je kiest (standaard de projectleider). Overhead gaat naar de goedkeurder
         van de 4000-grootboekrekening, en anders naar de vaste goedkeurder. Boven de drempel (excl. btw)
         volgt een tweede akkoord.
       </p>

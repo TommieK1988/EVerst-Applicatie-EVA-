@@ -6,7 +6,18 @@
  * client de types mag importeren. De server-kant staat in `goedkeuren.ts` en `route.ts`.
  */
 
-export type GoedkeurStapSoort = 'projectleider' | 'grootboek' | 'terugval' | 'drempel'
+/** De dossierrollen die een projectfactuur kunnen goedkeuren, met hun kolom op `dossiers`. */
+export const DOSSIER_ROLLEN = {
+  projectleider: { label: 'Projectleider', kolom: 'project_manager_id' },
+  teamleider:    { label: 'Teamleider',    kolom: 'teamleider_id' },
+  calculator:    { label: 'Calculator',    kolom: 'calculator_id' },
+  controller:    { label: 'Controller',    kolom: 'controller_id' },
+  uitvoerder:    { label: 'Uitvoerder',    kolom: 'uitvoerder_id' },
+} as const
+export type DossierRol = keyof typeof DOSSIER_ROLLEN
+export const ALLE_DOSSIER_ROLLEN = Object.keys(DOSSIER_ROLLEN) as DossierRol[]
+
+export type GoedkeurStapSoort = DossierRol | 'grootboek' | 'terugval' | 'drempel'
 export type GoedkeurStapStatus = 'wacht' | 'open' | 'akkoord' | 'bezwaar' | 'vervallen'
 
 /** Eén rij uit `inkoop_goedkeur_regels`. `divisie_bouw7_id: null` is de standaard. */
@@ -36,42 +47,75 @@ export type GeplandeStap = {
   goedkeurder_id: string | null
 }
 
+/** De route voor projectfacturen (`inkoop_goedkeur_project`). */
+export type ProjectRoute = {
+  /** Volgorde: de eerste rol die op het dossier is ingevuld keurt goed. */
+  rollen: DossierRol[]
+  drempel_excl: number | null
+  drempel_goedkeurder_id: string | null
+}
+
+export const STANDAARD_PROJECTROUTE: ProjectRoute = { rollen: ['projectleider'], drempel_excl: null, drempel_goedkeurder_id: null }
+
+/** De eerste ingevulde rol uit de volgorde. `dossierRollen` bevat alleen actieve medewerkers. */
+export function kiesDossierRol(
+  volgorde: DossierRol[],
+  dossierRollen: Partial<Record<DossierRol, string | null>>,
+): { rol: DossierRol; id: string } | null {
+  for (const rol of volgorde) {
+    const id = dossierRollen[rol]
+    if (id) return { rol, id }
+  }
+  return null
+}
+
 /**
  * De stappen voor één factuur.
  *
- * 1. De projectleider van het dossier — zo deed Bouw7 het ook (op 13-10-2026 gemeten: bij alle 48
- *    openstaande projectfacturen was de Bouw7-goedkeurder de EVA-projectleider). Geen dossier of
- *    geen projectleider (overhead) → de goedkeurder van de 4xxx-grootboekrekening, en is die er
- *    niet → de vaste goedkeurder van de administratie.
- * 2. Alleen boven de drempel (excl. btw): de drempelgoedkeurder, of leeg = iedereen uit Directie.
- *    Is dat dezelfde persoon als stap 1, dan vervalt de stap: twee keer dezelfde handtekening
- *    voegt niets toe.
+ * **Projectfactuur** (factuur met een EVA-dossier):
+ * 1. de eerste ingevulde dossierrol uit de projectroute — standaard de projectleider, zoals Bouw7 het
+ *    deed (13-10-2026: bij alle 48 openstaande projectfacturen was dat de Bouw7-goedkeurder). Is geen
+ *    van de rollen ingevuld → de vaste goedkeurder van de administratie;
+ * 2. boven de projectdrempel: de projectgoedkeurder, of leeg = Directie.
+ *
+ * **Overhead** (geen dossier):
+ * 1. de goedkeurder van de 4xxx-grootboekrekening, anders de vaste goedkeurder van de administratie;
+ * 2. boven de drempel van de administratie: de drempelgoedkeurder, of leeg = Directie.
+ *
+ * Is de tweede goedkeurder dezelfde persoon als de eerste, dan vervalt stap 2: twee keer dezelfde
+ * handtekening voegt niets toe.
  */
 export function bepaalStappen(input: {
-  projectleiderId: string | null
+  /** Null = overhead (geen dossier). */
+  project: { rol: { rol: DossierRol; id: string } | null; route: ProjectRoute } | null
   /** Goedkeurder van de 4xxx-grootboekrekening (alleen overhead); null = niet ingesteld. */
   grootboekGoedkeurderId?: string | null
   bedragExcl: number | null
   regel: GoedkeurRegel
 }): GeplandeStap[] {
-  const { projectleiderId, grootboekGoedkeurderId, bedragExcl, regel } = input
-  const eerste: GeplandeStap = projectleiderId
-    ? { stap: 1, soort: 'projectleider', goedkeurder_id: projectleiderId }
-    : grootboekGoedkeurderId
+  const { project, grootboekGoedkeurderId, bedragExcl, regel } = input
+  const eerste: GeplandeStap = project?.rol
+    ? { stap: 1, soort: project.rol.rol, goedkeurder_id: project.rol.id }
+    : !project && grootboekGoedkeurderId
       ? { stap: 1, soort: 'grootboek', goedkeurder_id: grootboekGoedkeurderId }
       : { stap: 1, soort: 'terugval', goedkeurder_id: regel.terugval_goedkeurder_id }
 
+  const drempel = project ? project.route.drempel_excl : regel.drempel_excl
+  const tweede = project ? project.route.drempel_goedkeurder_id : regel.drempel_goedkeurder_id
+
   const stappen = [eerste]
-  const boven = regel.drempel_excl != null && bedragExcl != null && bedragExcl >= regel.drempel_excl
-  const dubbel = regel.drempel_goedkeurder_id != null && regel.drempel_goedkeurder_id === eerste.goedkeurder_id
-  if (boven && !dubbel) {
-    stappen.push({ stap: 2, soort: 'drempel', goedkeurder_id: regel.drempel_goedkeurder_id })
-  }
+  const boven = drempel != null && bedragExcl != null && bedragExcl >= drempel
+  const dubbel = tweede != null && tweede === eerste.goedkeurder_id
+  if (boven && !dubbel) stappen.push({ stap: 2, soort: 'drempel', goedkeurder_id: tweede })
   return stappen
 }
 
 export const STAP_SOORT_LABEL: Record<GoedkeurStapSoort, string> = {
   projectleider: 'Projectleider',
+  teamleider: 'Teamleider',
+  calculator: 'Calculator',
+  controller: 'Controller',
+  uitvoerder: 'Uitvoerder',
   grootboek: 'Grootboekrekening',
   terugval: 'Vaste goedkeurder',
   drempel: 'Boven drempel',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bepaalStappen, besluitRegel, kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie, voegRegelToe,
-  type GoedkeurRegel,
+  bepaalStappen, besluitRegel, kiesDossierRol, kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie,
+  voegRegelToe, type GoedkeurRegel, type ProjectRoute,
 } from './goedkeur-route'
 
 const standaard: GoedkeurRegel = {
@@ -20,25 +20,45 @@ describe('regelVoorDivisie', () => {
   })
 })
 
+const pr = (rollen: ProjectRoute['rollen'] = ['projectleider'], drempel: number | null = null, tweede: string | null = null): ProjectRoute =>
+  ({ rollen, drempel_excl: drempel, drempel_goedkeurder_id: tweede })
+
+describe('kiesDossierRol', () => {
+  it('eerste ingevulde rol in de volgorde wint', () => {
+    expect(kiesDossierRol(['teamleider', 'projectleider'], { projectleider: 'pl', teamleider: null })).toEqual({ rol: 'projectleider', id: 'pl' })
+    expect(kiesDossierRol(['teamleider', 'projectleider'], { projectleider: 'pl', teamleider: 'tl' })).toEqual({ rol: 'teamleider', id: 'tl' })
+    expect(kiesDossierRol(['uitvoerder'], { projectleider: 'pl' })).toBeNull()
+  })
+})
+
 describe('bepaalStappen', () => {
-  it('projectleider onder de drempel: één stap', () => {
-    expect(bepaalStappen({ projectleiderId: 'pl', bedragExcl: 234.87, regel: standaard }))
+  it('projectfactuur: de gekozen rol, onder de projectdrempel één stap', () => {
+    expect(bepaalStappen({ project: { rol: { rol: 'projectleider', id: 'pl' }, route: pr() }, bedragExcl: 234.87, regel: standaard }))
       .toEqual([{ stap: 1, soort: 'projectleider', goedkeurder_id: 'pl' }])
   })
-  it('zonder projectleider: de vaste goedkeurder', () => {
-    expect(bepaalStappen({ projectleiderId: null, bedragExcl: 10, regel: standaard })[0])
+  it('projectfactuur zonder ingevulde rol: de vaste goedkeurder', () => {
+    expect(bepaalStappen({ project: { rol: null, route: pr() }, bedragExcl: 10, regel: standaard })[0])
       .toEqual({ stap: 1, soort: 'terugval', goedkeurder_id: 'robert' })
   })
-  it('op of boven de drempel: tweede stap', () => {
-    const s = bepaalStappen({ projectleiderId: 'pl', bedragExcl: 5000, regel: standaard })
-    expect(s).toHaveLength(2)
+  it('projecten gebruiken hun eigen drempel, niet die van de administratie', () => {
+    const geenProjectDrempel = bepaalStappen({ project: { rol: { rol: 'teamleider', id: 'tl' }, route: pr(['teamleider']) }, bedragExcl: 9000, regel: standaard })
+    expect(geenProjectDrempel).toHaveLength(1)
+    const s = bepaalStappen({ project: { rol: { rol: 'teamleider', id: 'tl' }, route: pr(['teamleider'], 1000, 'tom') }, bedragExcl: 1000, regel: standaard })
+    expect(s[1]).toEqual({ stap: 2, soort: 'drempel', goedkeurder_id: 'tom' })
+  })
+  it('overhead zonder grootboekgoedkeurder: de vaste goedkeurder', () => {
+    expect(bepaalStappen({ project: null, bedragExcl: 10, regel: standaard })[0])
+      .toEqual({ stap: 1, soort: 'terugval', goedkeurder_id: 'robert' })
+  })
+  it('overhead op of boven de drempel van de administratie: tweede stap', () => {
+    const s = bepaalStappen({ project: null, bedragExcl: 5000, regel: standaard })
     expect(s[1]).toEqual({ stap: 2, soort: 'drempel', goedkeurder_id: 'directie-1' })
   })
   it('geen tweede stap als het dezelfde persoon is', () => {
-    expect(bepaalStappen({ projectleiderId: 'directie-1', bedragExcl: 9000, regel: standaard })).toHaveLength(1)
+    expect(bepaalStappen({ project: null, grootboekGoedkeurderId: 'directie-1', bedragExcl: 9000, regel: standaard })).toHaveLength(1)
   })
   it('drempel zonder aangewezen persoon: stap voor Directie (null)', () => {
-    const s = bepaalStappen({ projectleiderId: 'pl', bedragExcl: 9000, regel: { ...standaard, drempel_goedkeurder_id: null } })
+    const s = bepaalStappen({ project: null, bedragExcl: 9000, regel: { ...standaard, drempel_goedkeurder_id: null } })
     expect(s[1].goedkeurder_id).toBeNull()
   })
 })
@@ -79,10 +99,10 @@ describe('grootboek (overhead)', () => {
   it('creditregels tellen op hun absolute bedrag', () => {
     expect(kiesGrootboek([{ nummer: '4400', naam: 'Auto', bedrag: -300 }, { nummer: '4350', naam: 'Software', bedrag: 200 }])?.nummer).toBe('4400')
   })
-  it('overhead met grootboekgoedkeurder; projectleider gaat altijd voor', () => {
-    expect(bepaalStappen({ projectleiderId: null, grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0])
+  it('overhead met grootboekgoedkeurder; bij een project telt het grootboek niet', () => {
+    expect(bepaalStappen({ project: null, grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0])
       .toEqual({ stap: 1, soort: 'grootboek', goedkeurder_id: 'bas' })
-    expect(bepaalStappen({ projectleiderId: 'pl', grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0].soort)
-      .toBe('projectleider')
+    expect(bepaalStappen({ project: { rol: null, route: pr() }, grootboekGoedkeurderId: 'bas', bedragExcl: 10, regel: standaard })[0].soort)
+      .toBe('terugval')
   })
 })

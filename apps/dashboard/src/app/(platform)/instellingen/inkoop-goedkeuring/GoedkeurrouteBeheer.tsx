@@ -3,7 +3,9 @@
 import React, { useMemo, useState } from 'react'
 import { Button, Card, CardBody, Combobox, FormField, Input, type ComboboxOption } from '@/components/ui'
 import { slaGoedkeurInstellingenOp, type GoedkeurInstellingen } from '@/lib/inkoopfacturen/goedkeur-instellingen'
-import type { GoedkeurRegel } from '@/lib/inkoopfacturen/goedkeur-route'
+import {
+  ALLE_DOSSIER_ROLLEN, DOSSIER_ROLLEN, type DossierRol, type GoedkeurRegel, type ProjectRoute,
+} from '@/lib/inkoopfacturen/goedkeur-route'
 import { nlDelen, nlTijdstip } from '@/lib/planning/nl-tijd'
 
 /**
@@ -40,6 +42,7 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
     ...data.administraties.map(a => data.regels.find(r => r.divisie_bouw7_id === a.id) ?? LEEG(a.id)),
   ])
   const [grootboek, setGrootboek] = useState<{ nummer: string; goedkeurder_id: string | null }[]>(data.grootboek)
+  const [project, setProject] = useState<ProjectRoute>(data.project)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
   const [opgeslagen, setOpgeslagen] = useState(false)
@@ -60,6 +63,20 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
     setGrootboek(gs => gs.map((g, j) => (j === i ? { ...g, ...veld } : g)))
   }
 
+  function verplaatsRol(i: number, richting: -1 | 1) {
+    setProject(p => {
+      const rollen = [...p.rollen]
+      const j = i + richting
+      if (j < 0 || j >= rollen.length) return p
+      ;[rollen[i], rollen[j]] = [rollen[j], rollen[i]]
+      return { ...p, rollen }
+    })
+  }
+
+  const rolOpties: ComboboxOption[] = ALLE_DOSSIER_ROLLEN
+    .filter(r => !project.rollen.includes(r))
+    .map(r => ({ value: r, label: DOSSIER_ROLLEN[r].label }))
+
   function wijzig(divisie: number | null, veld: Partial<GoedkeurRegel>) {
     setRegels(rs => rs.map(r => (r.divisie_bouw7_id === divisie ? { ...r, ...veld } : r)))
   }
@@ -73,6 +90,7 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
       evaVanaf: vanaf ? nlTijdstip(vanaf, '00:00') : null,
       regels,
       grootboek: gekozen.map(g => ({ nummer: g.nummer, goedkeurder_id: g.goedkeurder_id! })),
+      project,
     })
     setBezig(false)
     if (!res.ok) { setFout(res.error); return }
@@ -88,6 +106,43 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
                 <Input type="date" value={vanaf} onChange={e => setVanaf(e.target.value)} style={{ maxWidth: 200 }} />
               </FormField>
 
+              <div className="rounded-lg border border-neutral-200 p-3">
+                <div className="mb-1 text-[13px] font-semibold text-neutral-900">Projectfacturen</div>
+                <p className="mb-3 text-xs text-neutral-500">
+                  Een factuur met een dossier gaat naar de eerste rol in deze lijst die op het dossier is ingevuld.
+                  Is geen van deze rollen ingevuld, dan gaat hij naar de vaste goedkeurder hieronder.
+                </p>
+                <div className="space-y-1.5">
+                  {project.rollen.map((r, i) => (
+                    <div key={r} className="flex items-center gap-2">
+                      <span className="w-5 text-right text-xs text-neutral-500">{i + 1}.</span>
+                      <span className="min-w-[120px] text-[13px] text-neutral-900">{DOSSIER_ROLLEN[r].label}</span>
+                      <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => verplaatsRol(i, -1)} title="Hoger">↑</Button>
+                      <Button variant="ghost" size="sm" disabled={i === project.rollen.length - 1} onClick={() => verplaatsRol(i, 1)} title="Lager">↓</Button>
+                      <Button variant="ghost" size="sm" disabled={project.rollen.length === 1}
+                        onClick={() => setProject(p => ({ ...p, rollen: p.rollen.filter(x => x !== r) }))}>Weghalen</Button>
+                    </div>
+                  ))}
+                </div>
+                {rolOpties.length > 0 && (
+                  <div className="mt-2" style={{ maxWidth: 240 }}>
+                    <Combobox options={rolOpties} placeholder="Rol toevoegen" searchPlaceholder="Zoek een rol" emptyText="Geen rol"
+                      onChange={v => { if (v) setProject(p => ({ ...p, rollen: [...p.rollen, v as DossierRol] })) }} />
+                  </div>
+                )}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <FormField upper label="Drempel projecten excl. btw" helper="Leeg = geen tweede akkoord op projectfacturen.">
+                    <Input type="number" min={0} step={100} placeholder="Geen"
+                      value={project.drempel_excl ?? ''}
+                      onChange={e => setProject(p => ({ ...p, drempel_excl: e.target.value === '' ? null : Number(e.target.value) }))} />
+                  </FormField>
+                  <FormField upper label="Tweede akkoord projecten">
+                    <Persoon opties={opties} waarde={project.drempel_goedkeurder_id} leeg="Directie"
+                      onChange={v => setProject(p => ({ ...p, drempel_goedkeurder_id: v }))} />
+                  </FormField>
+                </div>
+              </div>
+
               {regels.map(r => {
                 const naam = r.divisie_bouw7_id == null
                   ? 'Standaard (alle administraties)'
@@ -101,12 +156,12 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
                         <Persoon opties={opties} waarde={r.terugval_goedkeurder_id} leeg={leeg}
                           onChange={v => wijzig(r.divisie_bouw7_id, { terugval_goedkeurder_id: v })} />
                       </FormField>
-                      <FormField upper label="Drempel excl. btw">
+                      <FormField upper label="Drempel overhead excl. btw">
                         <Input type="number" min={0} step={100} placeholder={r.divisie_bouw7_id == null ? 'Geen' : 'Standaard'}
                           value={r.drempel_excl ?? ''}
                           onChange={e => wijzig(r.divisie_bouw7_id, { drempel_excl: e.target.value === '' ? null : Number(e.target.value) })} />
                       </FormField>
-                      <FormField upper label="Tweede akkoord door">
+                      <FormField upper label="Tweede akkoord overhead">
                         <Persoon opties={opties} waarde={r.drempel_goedkeurder_id} leeg={r.divisie_bouw7_id == null ? 'Directie' : 'Volgt standaard'}
                           onChange={v => wijzig(r.divisie_bouw7_id, { drempel_goedkeurder_id: v })} />
                       </FormField>

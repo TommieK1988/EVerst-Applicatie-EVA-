@@ -5309,6 +5309,33 @@ export type Database = {
         }
         Relationships: []
       }
+      inkoop_goedkeur_project: {
+        Row: {
+          drempel_excl: number | null
+          drempel_goedkeurder_id: string | null
+          id: boolean
+          rollen: string[]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          drempel_excl?: number | null
+          drempel_goedkeurder_id?: string | null
+          id?: boolean
+          rollen?: string[]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          drempel_excl?: number | null
+          drempel_goedkeurder_id?: string | null
+          id?: boolean
+          rollen?: string[]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       inkoop_goedkeur_regels: {
         Row: {
           divisie_bouw7_id: number | null

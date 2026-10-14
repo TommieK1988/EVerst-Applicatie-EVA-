@@ -22,8 +22,9 @@ import { getBouw7Client } from '@/lib/bouw7/sync'
 import { schrijfBesluitNaarBouw7 } from '@/lib/bouw7/inkoopfactuur-besluit'
 import { nlDelen } from '@/lib/planning/nl-tijd'
 import {
-  bepaalStappen, besluitRegel, kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie,
-  type GoedkeurRegel,
+  ALLE_DOSSIER_ROLLEN, DOSSIER_ROLLEN, STANDAARD_PROJECTROUTE, bepaalStappen, besluitRegel, kiesDossierRol,
+  kiesGrootboek, korteDatumTijd, ontleedGrootboekNaam, regelVoorDivisie,
+  type DossierRol, type GoedkeurRegel, type ProjectRoute,
 } from './goedkeur-route'
 import type { Bouw7Client } from '@/lib/bouw7/client'
 
@@ -56,6 +57,35 @@ export async function logGebeurtenis(
   inkoopfactuurId: string, actie: string, medewerkerId: string | null, detail: Record<string, unknown> = {},
 ): Promise<void> {
   await db().from('inkoopfactuur_gebeurtenissen').insert({ inkoopfactuur_id: inkoopfactuurId, actie, medewerker_id: medewerkerId, detail: detail as Json })
+}
+
+/** De route voor projectfacturen; ontbreekt de rij, dan de standaard (alleen de projectleider). */
+export async function getProjectRoute(): Promise<ProjectRoute> {
+  const { data } = await db().from('inkoop_goedkeur_project').select('rollen, drempel_excl, drempel_goedkeurder_id').maybeSingle()
+  if (!data) return STANDAARD_PROJECTROUTE
+  const rollen = (data.rollen ?? []).filter((r): r is DossierRol => (ALLE_DOSSIER_ROLLEN as string[]).includes(r))
+  return {
+    rollen: rollen.length ? rollen : STANDAARD_PROJECTROUTE.rollen,
+    drempel_excl: data.drempel_excl == null ? null : Number(data.drempel_excl),
+    drempel_goedkeurder_id: data.drempel_goedkeurder_id,
+  }
+}
+
+/** De dossierrollen, alleen gevuld met actieve medewerkers. */
+async function dossierRollen(dossierId: string): Promise<Partial<Record<DossierRol, string | null>>> {
+  const kolommen = ALLE_DOSSIER_ROLLEN.map(r => DOSSIER_ROLLEN[r].kolom)
+  const { data: d } = await db().from('dossiers').select(kolommen.join(', ')).eq('id', dossierId).maybeSingle()
+  if (!d) return {}
+  const rij = d as unknown as Record<string, string | null>
+  const ids = [...new Set(kolommen.map(k => rij[k]).filter((v): v is string => !!v))]
+  const { data: ms } = ids.length
+    ? await db().from('medewerkers').select('id, actief').in('id', ids)
+    : { data: [] as { id: string; actief: boolean | null }[] }
+  const actief = new Set((ms ?? []).filter(m => m.actief !== false).map(m => m.id))
+  return Object.fromEntries(ALLE_DOSSIER_ROLLEN.map(r => {
+    const id = rij[DOSSIER_ROLLEN[r].kolom]
+    return [r, id && actief.has(id) ? id : null]
+  }))
 }
 
 /** Goedkeurder per 4xxx-grootboeknummer (alleen overhead). */
@@ -110,18 +140,13 @@ export async function maakRoute(
   regels: GoedkeurRegel[],
   grootboek: { nummer: string; naam: string } | null = null,
   grootboekGoedkeurders: Map<string, string> = new Map(),
+  projectRoute: ProjectRoute = STANDAARD_PROJECTROUTE,
 ): Promise<void> {
-  let projectleiderId: string | null = null
-  if (f.dossier_id) {
-    const { data: d } = await db().from('dossiers').select('project_manager_id').eq('id', f.dossier_id).maybeSingle()
-    projectleiderId = d?.project_manager_id ?? null
-    if (projectleiderId) {
-      const { data: m } = await db().from('medewerkers').select('actief').eq('id', projectleiderId).maybeSingle()
-      if (m?.actief === false) projectleiderId = null
-    }
-  }
+  const project = f.dossier_id
+    ? { rol: kiesDossierRol(projectRoute.rollen, await dossierRollen(f.dossier_id)), route: projectRoute }
+    : null
   const stappen = bepaalStappen({
-    projectleiderId,
+    project,
     grootboekGoedkeurderId: grootboek ? grootboekGoedkeurders.get(grootboek.nummer) ?? null : null,
     bedragExcl: f.bedrag_excl == null ? null : Number(f.bedrag_excl),
     regel: regelVoorDivisie(regels, f.divisie_bouw7_id),
@@ -218,6 +243,7 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
       const bouw7 = await getBouw7Client()
       const regels = await getGoedkeurRegels()
       const grootboekGoedkeurders = await getGrootboekGoedkeurders()
+      const projectRoute = await getProjectRoute()
       const zoekGrootboek = maakGrootboekOpzoeker(bouw7)
       for (const f of lijst) {
         try {
@@ -232,7 +258,7 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
               .eq('id', f.id)
             continue
           }
-          await maakRoute(f, regels, await grootboekVan(detail, zoekGrootboek), grootboekGoedkeurders)
+          await maakRoute(f, regels, await grootboekVan(detail, zoekGrootboek), grootboekGoedkeurders, projectRoute)
           uit.toegewezen++
         } catch {
           // Volgende run opnieuw; één factuur mag de rest niet tegenhouden.
