@@ -25,7 +25,7 @@ import {
 } from '@/lib/auth/rechten'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { INKOOP_STATUS_BETAALBAAR } from '@/lib/bouw7/inkoop-status'
-import { dagenTotVervaldatum, type InkoopfactuurRij } from './types'
+import { dagenTotVervaldatum, isMijnBeurt, type InkoopfactuurRij } from './types'
 
 export type ActieResultaat = { ok: true } | { ok: false; error: string }
 
@@ -142,7 +142,7 @@ export async function getInkoopfacturen(opts?: { alles?: boolean }): Promise<Ink
       ...rij,
       dossier_sectie: rij.dossier_id ? dossierSectie.get(rij.dossier_id) ?? null : null,
       dagen_tot_vervaldatum: dagenTotVervaldatum(rij.vervaldatum, vandaag),
-      mijn_beurt: rij.huidige_goedkeurder_id === medewerker.id,
+      mijn_beurt: isMijnBeurt(rij, medewerker.id),
     }
   })
 

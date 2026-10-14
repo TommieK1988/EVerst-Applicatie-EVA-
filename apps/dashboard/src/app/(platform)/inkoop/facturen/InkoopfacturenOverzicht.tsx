@@ -190,7 +190,7 @@ function maakKolommen(openFactuur: (r: InkoopfactuurRij) => void): KolomDefiniti
       </span>,
     },
     {
-      key: 'huidige_goedkeurder_naam', label: 'Huidige fiatteur', breedte: 160, filterType: 'tekst',
+      key: 'huidige_goedkeurder_naam', label: 'Fiatteur', breedte: 160, filterType: 'tekst',
       sorteerWaarde: r => (r.huidige_goedkeurder_naam ?? '').toLowerCase(),
       render: r => <span style={{ fontSize: 13 }}>{r.huidige_goedkeurder_naam ?? '—'}</span>,
     },

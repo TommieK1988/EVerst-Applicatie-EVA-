@@ -22,7 +22,6 @@
 
 import { createAdminClient } from '@everts/database/server'
 import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '@/lib/auth/rechten'
-import { INKOOP_STATUS_WORKFLOW_LOOPT } from '@/lib/bouw7/inkoop-status'
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import { dossierSegment, offerteHref } from '@/lib/dossiers/href'
 import { periodeBereik } from '@/lib/uren/types'
@@ -115,7 +114,9 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
           .eq('status', 'open')
           .eq('huidige_goedkeurder_id', medewerker.id)
           // Een EVA-goedkeuring kan op Bouw7-status 0 (concept) staan; die telt wél mee.
-          .or(`bouw7_status.in.(${INKOOP_STATUS_WORKFLOW_LOOPT.join(',')}),goedkeuring_bron.eq.eva`)
+          // Zelfde regel als `isMijnBeurt`: alleen wat echt nog ter goedkeuring ligt.
+          .is('eva_besluit', null)
+          .or('bouw7_status.eq.1,and(goedkeuring_bron.eq.eva,bouw7_status.eq.0)')
           .order('vervaldatum', { ascending: true, nullsFirst: false })
           .limit(500)
       : Promise.resolve({ data: [], count: 0 }),

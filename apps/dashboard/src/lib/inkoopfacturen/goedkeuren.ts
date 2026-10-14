@@ -168,8 +168,10 @@ export async function beslisInkoopfactuur(
       eva_besluit: keuze === 'akkoord' ? 'goedgekeurd' : 'afgekeurd',
       eva_besluit_op: nu,
       eva_besluit_door: medewerker.id,
-      huidige_goedkeurder_id: null,
-      huidige_goedkeurder_naam: null,
+      // De laatste beslisser blijft als fiatteur zichtbaar (Tom, 14-10); "aan zet" volgt uit
+      // `isMijnBeurt`, dat een besloten factuur nooit meer meetelt.
+      huidige_goedkeurder_id: medewerker.id,
+      huidige_goedkeurder_naam: [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' '),
     }).eq('id', inkoopfactuurId)
 
     const bouw7 = await stuurBesluitNaarBouw7(inkoopfactuurId, medewerker.id)

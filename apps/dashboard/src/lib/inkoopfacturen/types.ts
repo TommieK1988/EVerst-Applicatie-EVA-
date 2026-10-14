@@ -87,6 +87,20 @@ export function dagenTotVervaldatum(vervaldatum: string | null, vandaag = new Da
   return Math.round((doel - nu) / 86_400_000)
 }
 
+/**
+ * Ligt deze factuur nú bij deze medewerker ter goedkeuring? Alleen als hij op "ter goedkeuring"
+ * staat (een EVA-factuur heel even ook op concept, tot de route hem omzet) en er nog niet over is
+ * besloten. Een goedkeurder-id alleen is niet genoeg: de fiatteur blijft bewust staan na het besluit
+ * (Tom wil per factuur blijven zien wie hem goedkeurde), dus de status beslist (14-10).
+ */
+export function isMijnBeurt(
+  rij: Pick<InkoopfactuurRij, 'huidige_goedkeurder_id' | 'bouw7_status' | 'goedkeuring_bron' | 'eva_besluit'>,
+  medewerkerId: string,
+): boolean {
+  if (rij.huidige_goedkeurder_id !== medewerkerId || rij.eva_besluit) return false
+  return rij.bouw7_status === 1 || (rij.goedkeuring_bron === 'eva' && rij.bouw7_status === 0)
+}
+
 export type VervalKleur = 'verlopen' | 'bijna' | 'ok' | 'geen'
 
 export function vervalKleur(dagen: number | null): VervalKleur {
