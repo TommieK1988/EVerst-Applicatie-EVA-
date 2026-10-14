@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createHash } from 'crypto'
+import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { getBibliotheekItems } from '@/lib/everts-calc/services/bibliotheek'
 import type { PaintItemMetNormen } from '@/lib/everts-calc/services/bibliotheek'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
@@ -414,24 +415,24 @@ export async function importeerExcel(formData: FormData): Promise<{ aangemaakt: 
   let bijgewerkt = 0
   const fouten: string[] = []
 
-  // ── Haal bestaande treatments op ──────────────────────────────────────────
-  const { data: bestaandeTreatments } = await supabase
-    .from('paint_treatments')
-    .select('id, treatment_code')
+  // ── Haal bestaande treatments en items op ─────────────────────────────────
+  // Gepagineerd: paint_items zit al rond de 1000 rijen. Een afgekapte lijst
+  // laat de import bestaande items als nieuw zien. Een leesfout gooit, zodat de
+  // import niet met een lege lijst doorloopt.
+  const bestaandeTreatments = await haalAlleRijen<{ id: string; treatment_code: string | null }>((van, tot) =>
+    supabase.from('paint_treatments').select('id, treatment_code').order('id').range(van, tot))
 
   const treatmentMap = new Map<string, string>(
-    (bestaandeTreatments ?? [])
+    bestaandeTreatments
       .filter(t => t.treatment_code != null)
       .map(t => [t.treatment_code as string, t.id])
   )
 
-  // ── Haal bestaande items op ────────────────────────────────────────────────
-  const { data: bestaandeItems } = await supabase
-    .from('paint_items')
-    .select('id, item_code')
+  const bestaandeItems = await haalAlleRijen<{ id: string; item_code: string | null }>((van, tot) =>
+    supabase.from('paint_items').select('id, item_code').order('id').range(van, tot))
 
   const itemMap = new Map<string, string>(
-    (bestaandeItems ?? [])
+    bestaandeItems
       .filter(i => i.item_code != null)
       .map(i => [i.item_code as string, i.id])
   )
