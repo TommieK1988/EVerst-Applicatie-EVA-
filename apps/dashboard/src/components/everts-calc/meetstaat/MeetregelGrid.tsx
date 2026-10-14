@@ -13,6 +13,7 @@ import {
   berekenHoeveelheid, isRegelActief, aggregaatSleutel, herberekeningAggregaat,
   calculatieregelOmschrijving, normaliseerBestekcode,
 } from '@/lib/everts-calc/meetstaat-utils'
+import { isVervallen } from '@/lib/everts-calc/meetstaat-verwerken'
 import MeetregelRij, { LAATSTE_KOL } from './MeetregelRij'
 import ElementOpslaanDialog from './ElementOpslaanDialog'
 import ElementKiezerDialog from './ElementKiezerDialog'
@@ -463,8 +464,10 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
 }
 
 function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; groepId: string }) {
+  // Ook een vervallen code (naar 0, staat nog in de calculatie) tot hij verwerkt is:
+  // anders verdwijnt hij uit beeld terwijl de calculatie hem nog meerekent.
   const aggregaten = getMeetregelAggregaten(meetstaatId).filter(
-    (a) => a.groep_id === groepId && a.totaal_hoeveelheid > 0
+    (a) => a.groep_id === groepId && (a.totaal_hoeveelheid > 0 || (isVervallen(a) && !a.is_gesynchroniseerd))
   )
 
   if (aggregaten.length === 0) return null
@@ -474,7 +477,9 @@ function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; gr
       {aggregaten.map((agg) => (
         <div key={agg.id} className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
           <span className="text-slate-600">{calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling, agg.bestekcode)}</span>
-          <span className=" font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>
+          {isVervallen(agg)
+            ? <span className="font-semibold text-red-600" title="Geen meetregels meer; bij verwerken gaat de calculatieregel naar 0">vervalt → 0</span>
+            : <span className=" font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>}
           {agg.is_gesynchroniseerd && <span className="text-green-500">✓</span>}
           {!agg.is_gesynchroniseerd && <span className="text-amber-400">●</span>}
         </div>
