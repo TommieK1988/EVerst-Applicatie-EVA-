@@ -6,17 +6,17 @@ import toast from 'react-hot-toast'
 import type { Meetregel, Groep, MeetstaatElement } from '@/lib/everts-calc/types'
 import {
   getMeetregels, slaMeetregelOp, verwijderMeetregel,
-  getMeetregelAggregaten, getMeetstaatElementen, getCalculatieregels,
+  getMeetstaatElementen,
 } from '@/lib/everts-calc/local-store'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import {
   isRegelActief, aggregaatSleutel, herberekeningAggregaat,
-  calculatieregelOmschrijving, normaliseerBestekcode,
+  normaliseerBestekcode,
 } from '@/lib/everts-calc/meetstaat-utils'
-import { isVervallen, teVerwerken } from '@/lib/everts-calc/meetstaat-verwerken'
 import { ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
 import { Button } from '@/components/ui/button'
 import MeetregelRij, { LAATSTE_KOL } from './MeetregelRij'
+import NaarCalculatieTabel from './NaarCalculatieTabel'
 import ElementOpslaanDialog from './ElementOpslaanDialog'
 import ElementKiezerDialog from './ElementKiezerDialog'
 
@@ -433,13 +433,7 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
         <span>Vink regels aan om ze als element te bewaren</span>
       </div>
 
-      {/* Subtotalen per aggregaat */}
-      {actieveRegels.length > 0 && (
-        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2">
-          <p className="text-xs font-semibold text-slate-500 mb-1.5">Aggregaten voor calculatie:</p>
-          <AggregatenOverzicht meetstaatId={meetstaatId} groepId={groepId} />
-        </div>
-      )}
+      <NaarCalculatieTabel meetstaatId={meetstaatId} groepId={groepId} groepNaam={groep?.naam ?? 'deze groep'} />
 
       {opslaanOpen && (
         <ElementOpslaanDialog
@@ -465,33 +459,6 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
           onSluit={() => setKiezerOpen(false)}
         />
       )}
-    </div>
-  )
-}
-
-function AggregatenOverzicht({ meetstaatId, groepId }: { meetstaatId: string; groepId: string }) {
-  // Ook een vervallen code (naar 0, staat nog in de calculatie) tot hij verwerkt is:
-  // anders verdwijnt hij uit beeld terwijl de calculatie hem nog meerekent.
-  const alle = getMeetregelAggregaten(meetstaatId)
-  const open = new Set(teVerwerken(alle, new Set(getCalculatieregels().map(r => r.id))).map(a => a.id))
-  const aggregaten = alle.filter(
-    (a) => a.groep_id === groepId && (a.totaal_hoeveelheid > 0 || open.has(a.id))
-  )
-
-  if (aggregaten.length === 0) return null
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {aggregaten.map((agg) => (
-        <div key={agg.id} className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
-          <span className="text-slate-600">{calculatieregelOmschrijving(agg.onderdeel, agg.type, agg.behandeling, agg.bestekcode)}</span>
-          {isVervallen(agg)
-            ? <span className="font-semibold text-red-600" title="Geen meetregels meer; bij verwerken gaat de calculatieregel naar 0">vervalt → 0</span>
-            : <span className=" font-semibold text-everts">{agg.totaal_hoeveelheid.toFixed(2)} {agg.eenheid}</span>}
-          {agg.is_gesynchroniseerd && <span className="text-green-500">✓</span>}
-          {!agg.is_gesynchroniseerd && <span className="text-amber-400">●</span>}
-        </div>
-      ))}
     </div>
   )
 }
