@@ -68,7 +68,7 @@ Daarmee zakt elk bestand onder de 800 regels en de schuldteller van 33 naar 32.
 ## Volgorde
 
 Elke stap: alleen verplaatsen, geen gedrag wijzigen, type-check, lint en tests groen, kort
-nagelopen op de Render-testomgeving.
+nagelopen op de Vercel-preview van de PR.
 
 1. **Pure delen eerst**: `kolommen.ts` en `kiesBtwTarief`. Daar horen meteen tests bij
    (layout ↔ state heen en terug; BTW-keuze), want dat zijn rekenregels zonder scherm.
