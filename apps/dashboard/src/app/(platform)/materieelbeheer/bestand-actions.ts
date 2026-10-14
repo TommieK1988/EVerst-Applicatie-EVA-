@@ -83,10 +83,14 @@ export async function uploadDocument(objectId: string, formData: FormData): Prom
   }
 
   // Eerste afbeelding wordt meteen de hoofdfoto; dat scheelt een handeling.
+  // `hoofdfoto=1` (foto maken op het mobiele paspoort) vervangt een bestaande:
+  // wie daar een foto maakt, doet dat omdat de oude niet klopt. De oude blijft
+  // als document bewaard.
   if (file.type.startsWith('image/')) {
+    const vervang = formData.get('hoofdfoto') === '1'
     const { data: obj } = await client
       .from('materieel_objecten').select('hoofdfoto_path').eq('id', objectId).maybeSingle()
-    if (!(obj as { hoofdfoto_path: string | null } | null)?.hoofdfoto_path) {
+    if (vervang || !(obj as { hoofdfoto_path: string | null } | null)?.hoofdfoto_path) {
       await client.from('materieel_objecten').update({ hoofdfoto_path: pad }).eq('id', objectId)
     }
   }

@@ -145,7 +145,10 @@
     "annuleren": "Anuluj",
     "melden": "Zgłoś",
     "storingGemeld": "Awaria zgłoszona — sprzęt ma teraz status uszkodzony",
-    "stickerKoppelen": "Przypisz naklejkę"
+    "stickerKoppelen": "Przypisz naklejkę",
+    "nieuweFoto": "Zrób nowe zdjęcie",
+    "fotoBezig": "Przesyłanie zdjęcia…",
+    "fotoMislukt": "Nie udało się zapisać zdjęcia: {fout}"
   },
   "fout": {
     "algemeen": "Coś poszło nie tak",

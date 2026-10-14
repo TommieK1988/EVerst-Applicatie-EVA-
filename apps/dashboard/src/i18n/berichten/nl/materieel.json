@@ -145,7 +145,10 @@
     "annuleren": "Annuleren",
     "melden": "Melden",
     "storingGemeld": "Storing gemeld — het materieel staat nu op defect",
-    "stickerKoppelen": "Sticker koppelen"
+    "stickerKoppelen": "Sticker koppelen",
+    "nieuweFoto": "Nieuwe foto maken",
+    "fotoBezig": "Foto uploaden…",
+    "fotoMislukt": "Foto opslaan mislukt: {fout}"
   },
   "fout": {
     "algemeen": "Er ging iets mis",

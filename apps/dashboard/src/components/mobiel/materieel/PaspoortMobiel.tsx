@@ -12,6 +12,7 @@ import {
   type MaterieelCategorie, type MaterieelStatus, type Optie,
 } from '@/lib/materieel/types'
 import OptieKiezer from './OptieKiezer'
+import PaspoortFoto from './PaspoortFoto'
 import { GRIJS, kaart, primaireKnop, RAND, ROOD, secundaireKnop, veld } from './stijl'
 
 /**
@@ -107,14 +108,7 @@ export default function PaspoortMobiel({
 
   return (
     <div style={{ padding: 14 }}>
-      {fotoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={fotoUrl}
-          alt=""
-          style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 14, border: `1px solid ${RAND}`, marginBottom: 12 }}
-        />
-      )}
+      <PaspoortFoto objectId={object.id} fotoUrl={fotoUrl} magSchrijven={magSchrijven} />
 
       <div style={kaart}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
