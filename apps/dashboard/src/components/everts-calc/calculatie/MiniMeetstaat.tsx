@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
+import { rekenMaat, normaliseerEenheid } from '@/lib/everts-calc/maat-rekenen'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,11 +42,22 @@ interface Props {
 /** Eenheden waarbij de meetstaat alleen een 'Aantal' veld heeft (geen factor/dimensies) */
 const isSimple = (e: string) => !['m²', 'm¹', 'm³'].includes(e)
 
+/**
+ * Rekent met dezelfde regel als de meetstaat (`rekenMaat`). Een rij zonder één
+ * ingevuld getal telt niet: de factor staat hier standaard op 1, en zou een lege
+ * rij anders als 1 laten meetellen.
+ */
 function bereken(rij: Maatrij, eenh: MaatEenheid): number {
-  if (eenh === 'm²') return rij.dim1 * rij.dim2 * (rij.factor || 1)
-  if (eenh === 'm³') return rij.dim1 * rij.dim2 * rij.dim3 * (rij.factor || 1)
-  if (eenh === 'm¹') return rij.dim1 * (rij.factor || 1)
-  return rij.dim1   // st, post, uur, dag, … — alleen aantal
+  if (!(rij.dim1 > 0 || rij.dim2 > 0 || rij.dim3 > 0)) return 0
+  if (isSimple(eenh)) return rekenMaat({ eenheid: eenh, aantal: rij.dim1 })
+  // m¹: de lengte is één breedte. m³: lengte × breedte × hoogte.
+  return rekenMaat({
+    eenheid: eenh,
+    breedte: rij.dim1,
+    hoogte: eenh === 'm¹' ? undefined : rij.dim2,
+    diepte: eenh === 'm³' ? rij.dim3 : undefined,
+    factor: rij.factor,
+  })
 }
 
 function rijHeeftData(r: Maatrij) {
@@ -59,15 +71,13 @@ function legeRij(): Maatrij {
 function prefillRij(hoeveelheid: number, eenh: MaatEenheid): Maatrij {
   const rij = legeRij()
   if (hoeveelheid <= 0) return rij
-  if (eenh === 'm²') {
-    const z = +Math.sqrt(hoeveelheid).toFixed(2)
-    return { ...rij, dim1: z, dim2: z, factor: 1 }
-  }
-  if (eenh === 'm³') {
-    const z = +Math.cbrt(hoeveelheid).toFixed(2)
-    return { ...rij, dim1: z, dim2: z, dim3: z, factor: 1 }
-  }
-  return { ...rij, dim1: hoeveelheid, factor: 1 }
+  // De bestaande hoeveelheid × 1 (× 1). Niet als wortel verdelen over de maten:
+  // √10 afgerond is 3,16, en 3,16 × 3,16 = 9,99. Wie alleen een rij toevoegt,
+  // zou dan ongemerkt de hoeveelheid die er al stond veranderen.
+  const label = { omschrijving: 'Bestaande hoeveelheid', factor: 1 }
+  if (eenh === 'm²') return { ...rij, ...label, dim1: hoeveelheid, dim2: 1 }
+  if (eenh === 'm³') return { ...rij, ...label, dim1: hoeveelheid, dim2: 1, dim3: 1 }
+  return { ...rij, ...label, dim1: hoeveelheid }
 }
 
 // ─── Kolom headers per eenheid ────────────────────────────────────────────────
@@ -258,13 +268,14 @@ function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: str
 // ─── Hoofd component ─────────────────────────────────────────────────────────
 
 export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, onSluiten }: Props) {
-  const [gekozenEenheid, setGekozenEenheid] = useState<string>(eenheid || '')
+  const [gekozenEenheid, setGekozenEenheid] = useState<string>(normaliseerEenheid(eenheid))
   const [rijen, setRijen] = useState<Maatrij[]>([legeRij()])
 
   // Reset wanneer de dialog opent
   useEffect(() => {
     if (!open) return
-    const eenh = eenheid || ''
+    // 'm2' uit de bibliotheek is gewoon m²; anders valt de rij terug op alleen een aantal.
+    const eenh = normaliseerEenheid(eenheid)
     setGekozenEenheid(eenh)
     // Pre-fill als er al een waarde is, gevolgd door een lege rij
     setRijen(hoeveelheid > 0 ? [prefillRij(hoeveelheid, eenh), legeRij()] : [legeRij()])

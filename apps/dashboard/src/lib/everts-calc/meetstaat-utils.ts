@@ -5,6 +5,7 @@ import {
 } from './local-store'
 import { nieuweId } from './utils'
 import { normaliseerBestekcode } from './bestekcode'
+import { rekenMaat } from './maat-rekenen'
 
 // ─── HOEVEELHEID ─────────────────────────────────────────────────────────────
 
@@ -17,31 +18,14 @@ import { normaliseerBestekcode } from './bestekcode'
  * dubbel werk en een onnavolgbaar getal. `Meetregel.formule` en `Meetregel.lengte`
  * blijven alleen staan voor oude regels; ze tellen niet meer mee.
  *
- *   m¹  = ((breedte × breedte-aantal) + (hoogte × hoogte-aantal)) × factor × aantal
- *   m²  = (breedte × hoogte) × factor × aantal
- *   rest (stuks, post, uur …) = factor × aantal
+ * De rekenregel zelf staat in `rekenMaat` (maat-rekenen.ts), die de mini-meetstaat
+ * in de calculatie ook gebruikt. Een m²-regel met maar één maat levert 0 op.
  */
 export function berekenHoeveelheid(r: Meetregel): number {
   if (r.hoeveelheid_override !== undefined && r.hoeveelheid_override !== null) {
     return r.hoeveelheid_override
   }
-  const B = r.breedte ?? 0
-  const H = r.hoogte ?? 0
-  // Leeg én 0 tellen als 1 (zoals `aantal` al deed): een lege cel mag een regel
-  // nooit stil op nul zetten.
-  const N = (r.aantal || 1) * (r.factor || 1)
-
-  // m¹: optellen. Zo geef je een omtrek zelf op — 2 breedtes plus 2 hoogtes.
-  if (r.eenheid === 'm¹') {
-    return +((B * (r.breedte_aantal || 1) + H * (r.hoogte_aantal || 1)) * N).toFixed(4)
-  }
-
-  // m² en al het andere mét maten: oppervlak. De aantallen per maat horen bij m¹
-  // en spelen hier geen rol.
-  if (B && H) return +(B * H * N).toFixed(4)
-
-  // Zonder maten telt alleen het aantal.
-  return N
+  return rekenMaat(r)
 }
 
 // ─── ACTIEF CHECK ────────────────────────────────────────────────────────────
