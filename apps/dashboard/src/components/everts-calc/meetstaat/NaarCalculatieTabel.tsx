@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { getMeetregelAggregaten, getCalculatieregels } from '@/lib/everts-calc/local-store'
 import { teVerwerken } from '@/lib/everts-calc/meetstaat-verwerken'
@@ -34,6 +36,8 @@ export default function NaarCalculatieTabel({ meetstaatId, groepId, groepNaam }:
   const openIds = new Set(teVerwerken(alle, new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))).map(a => a.id))
   const hoeveelheidPerRegel = new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))
   const rijen = naarCalculatie(alle.filter(a => a.groep_id === groepId), openIds, hoeveelheidPerRegel)
+  // Inklapbaar: op een laptopscherm houdt de meetstaat zelf dan de ruimte.
+  const [open, setOpen] = useState(true)
 
   if (rijen.length === 0) return null
   const tel = telPerStatus(rijen)
@@ -43,15 +47,21 @@ export default function NaarCalculatieTabel({ meetstaatId, groepId, groepNaam }:
     .join(' · ')
 
   return (
-    <section className="flex-shrink-0 border-t border-neutral-200 bg-white flex flex-col max-h-[40%]">
-      <div className="px-4 py-2.5 border-b border-neutral-200 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-600">
+    <section className="flex-shrink-0 rounded-xl border border-neutral-200 bg-white flex flex-col max-h-[40%] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className={`px-4 py-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-left hover:bg-neutral-50 ${open ? 'border-b border-neutral-200' : ''}`}
+      >
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-600">
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
           Naar calculatie · {groepNaam}
         </span>
-        <span className="text-xs text-neutral-500">Per code wat de meetstaat oplevert, naast wat er nu in de calculatie staat</span>
+        {open && <span className="text-xs text-neutral-500">Per code wat de meetstaat oplevert, naast wat er nu in de calculatie staat</span>}
         <span className="ml-auto text-xs text-neutral-600">{samenvatting}</span>
-      </div>
-      <div className="overflow-auto">
+      </button>
+      {open && <div className="overflow-auto">
         <table className="w-full min-w-[760px] border-collapse text-[13px]">
           <thead className="sticky top-0 bg-white">
             <tr className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500 border-b border-neutral-200">
@@ -82,7 +92,7 @@ export default function NaarCalculatieTabel({ meetstaatId, groepId, groepNaam }:
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
     </section>
   )
 }

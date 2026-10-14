@@ -81,12 +81,14 @@ export default function VerwerkenDialog({
   return (
     <Dialog open onOpenChange={o => { if (!o && !bezig) onSluit() }}>
       <DialogContent size="xl" className="max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Verwerk meetstaat in calculatie</DialogTitle>
-          <DialogDescription>
-            {alleIds.length} {alleIds.length === 1 ? 'wijziging' : 'wijzigingen'} in {perGroep.length} {perGroep.length === 1 ? 'groep' : 'groepen'}.
-            Vink uit wat nog niet mee mag.
-          </DialogDescription>
+        <DialogHeader className="pr-14">
+          <div>
+            <DialogTitle>Verwerk meetstaat in calculatie</DialogTitle>
+            <DialogDescription>
+              {alleIds.length} {alleIds.length === 1 ? 'wijziging' : 'wijzigingen'} in {perGroep.length} {perGroep.length === 1 ? 'groep' : 'groepen'}.
+              Vink uit wat nog niet mee mag.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
@@ -116,7 +118,7 @@ export default function VerwerkenDialog({
                   <th className="w-8 py-2 text-left">
                     <input type="checkbox" checked={allesAan} aria-label="Alles aan of uit"
                       onChange={e => setAan(e.target.checked ? new Set(alleIds) : new Set())}
-                      className="w-3.5 h-3.5 rounded border-neutral-300 text-brand-500" />
+                      className="w-3.5 h-3.5 rounded border-neutral-300 accent-brand-500" />
                   </th>
                   <th className="py-2 pr-2 text-left w-24">Wijziging</th>
                   <th className="py-2 pr-2 text-left">Code · omschrijving</th>
@@ -135,7 +137,7 @@ export default function VerwerkenDialog({
                       <td className="py-2">
                         <input type="checkbox" checked={aan.has(a.id)} onChange={e => zet(a.id, e.target.checked)}
                           aria-label={`${calculatieregelOmschrijving(a.onderdeel, a.type, a.behandeling)} verwerken`}
-                          className="w-3.5 h-3.5 rounded border-neutral-300 text-brand-500" />
+                          className="w-3.5 h-3.5 rounded border-neutral-300 accent-brand-500" />
                       </td>
                       <td className="py-2 pr-2"><Badge tone={LABEL[status].tone} size="sm">{LABEL[status].tekst}</Badge></td>
                       <td className="py-2 pr-2 text-neutral-800">

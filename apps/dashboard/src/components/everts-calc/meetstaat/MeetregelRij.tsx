@@ -35,6 +35,8 @@ interface Props {
   schilderData?: SchilderData
   /** id van de <datalist> met de bestekscodes die al in deze meetstaat voorkomen. */
   codeLijstId?: string
+  /** Zelfde element als de regel erboven: de naam staat dan lichter. */
+  elementHerhaald?: boolean
 }
 
 // ─── KOLOMADRESSEN ───────────────────────────────────────────────────────────
@@ -176,30 +178,27 @@ function ZoekInvoer({
             else { setOpen(false); onEnter() }
           }
         }}
-        className="w-full text-xs px-1.5 py-0.5 rounded bg-transparent border-0
-          hover:bg-white hover:border hover:border-slate-200
-          focus:bg-white focus:border focus:border-everts/40 focus:outline-none
-          placeholder-slate-300 text-slate-700"
+        className="w-full h-7 text-[13px] px-2 rounded-md bg-transparent border border-transparent text-neutral-800 placeholder:text-neutral-300 hover:bg-white hover:border-neutral-200 focus:bg-white focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 focus:outline-none"
       />
       {open && gefilterd.length > 0 && dropPos && (
         <div
           style={{ position: 'fixed', top: dropPos.top, bottom: dropPos.bottom, maxHeight: dropPos.maxHeight, left: dropPos.left, minWidth: dropPos.width, zIndex: 9999 }}
-          className="overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl"
+          className="overflow-y-auto bg-white border border-neutral-200 rounded-lg shadow-md py-1"
         >
           {gefilterd.slice(0, 25).map((o, i) => (
             <div
               key={o.id}
               onMouseDown={e => { e.preventDefault(); selecteer(o) }}
-              className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer text-xs ${
-                lijstActief && i === gemarkeerd ? 'bg-everts/10' : 'hover:bg-everts/5'
+              className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[13px] ${
+                lijstActief && i === gemarkeerd ? 'bg-brand-50' : 'hover:bg-neutral-50'
               }`}
             >
               {o.code && (
-                <span className="flex-shrink-0  font-semibold text-[10px] px-1.5 py-0.5 rounded bg-everts/10 text-everts min-w-[2rem] text-center">
+                <span className="flex-shrink-0 font-semibold text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 min-w-[2rem] text-center">
                   {o.code}
                 </span>
               )}
-              <span className="text-slate-700">{o.naam}</span>
+              <span className="text-neutral-800">{o.naam}</span>
             </div>
           ))}
         </div>
@@ -212,7 +211,7 @@ function ZoekInvoer({
 
 export default function MeetregelRij({
   regel, volgnummer, rijIndex, isActief, moetFocussen, onGefocust, isGeselecteerd, onSelecteer,
-  onFocus, onWijzig, onEnter, onVerwijder, schilderData, codeLijstId,
+  onFocus, onWijzig, onEnter, onVerwijder, schilderData, codeLijstId, elementHerhaald = false,
 }: Props) {
   const eersteRef = useRef<HTMLInputElement>(null)
   const actief = isRegelActief(regel)
@@ -246,28 +245,28 @@ export default function MeetregelRij({
       onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); onChange(isNaN(v as number) ? undefined : v) }}
       onFocus={onFocus}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
-      className={`w-full text-xs text-right  px-1 py-0.5 rounded bg-transparent border-0
-        hover:bg-white hover:border hover:border-slate-200
-        focus:bg-white focus:border focus:border-everts/40 focus:outline-none ${cls}`}
+      className={`w-full h-7 text-[13px] text-right tabular-nums px-1.5 rounded-md text-neutral-900
+        [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
+        ${regel.is_leeg ? 'bg-transparent border border-transparent hover:border-neutral-200' : 'bg-white border border-neutral-200 hover:border-neutral-300'}
+        placeholder:text-neutral-300 focus:bg-white focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 focus:outline-none ${cls}`}
     />
   )
 
-  const ti = (kol: number, value: string | undefined, onChange: (v: string) => void, placeholder = '', ref?: React.RefObject<HTMLInputElement>) => (
+  const ti = (kol: number, value: string | undefined, onChange: (v: string) => void, placeholder = '', ref?: React.RefObject<HTMLInputElement>, cls = '') => (
     <input
       ref={ref} type="text" data-cel={cel(kol)} value={value ?? ''} placeholder={placeholder}
       onChange={e => onChange(e.target.value)}
       onFocus={onFocus}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
-      className="w-full text-xs px-1.5 py-0.5 rounded bg-transparent border-0
-        hover:bg-white hover:border hover:border-slate-200
-        focus:bg-white focus:border focus:border-everts/40 focus:outline-none
-        placeholder-slate-300 text-slate-700"
+      className={`w-full h-7 text-[13px] px-2 rounded-md bg-transparent border border-transparent placeholder:text-neutral-300 hover:bg-white hover:border-neutral-200 focus:bg-white focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 focus:outline-none ${cls || 'text-neutral-800'}`}
     />
   )
 
-  const rijCls = `border-b border-slate-100 transition-colors ${
-    isGeselecteerd ? 'bg-everts/10' : isActief ? 'bg-everts/5' : actief ? 'bg-white hover:bg-slate-50' : 'bg-paper/60 hover:bg-white'
-  }`
+  // Geselecteerd groen, onvolledig oranje, de lege slotregel licht; de regel waar je
+  // in werkt krijgt een groene streep links (zoals het actieve item in de navigatie).
+  const rijCls = `border-b border-neutral-100 transition-colors ${
+    isGeselecteerd ? 'bg-brand-50' : ontbreekt ? 'bg-warning-50' : regel.is_leeg ? 'bg-neutral-50/60' : 'bg-white hover:bg-neutral-50'
+  } ${isActief ? 'shadow-[inset_2px_0_0_#009439]' : ''}`
 
   return (
     <tr className={rijCls} onClick={onFocus}>
@@ -280,28 +279,30 @@ export default function MeetregelRij({
             onChange={e => onSelecteer(e.target.checked)}
             onClick={e => e.stopPropagation()}
             title="Selecteer voor 'Element opslaan'"
-            className="w-3.5 h-3.5 rounded border-slate-300 text-everts focus:ring-everts/40 cursor-pointer"
+            className="w-3.5 h-3.5 rounded border-neutral-300 accent-brand-500 cursor-pointer"
           />
         )}
       </td>
 
       {/* # */}
       <td className="px-2 py-1 text-center">
-        <span className={`text-xs  ${actief ? 'text-slate-400' : 'text-slate-200'}`}>
+        <span className={`text-xs tabular-nums ${actief ? 'text-neutral-400' : 'text-neutral-200'}`}>
           {actief ? volgnummer : ''}
         </span>
       </td>
 
       {/* Element */}
       <td className="px-1 py-0.5">
-        {ti(KOL.element, regel.element, v => onWijzig({ element: v }), 'Element...')}
+        {/* Dezelfde naam als de regel erboven staat lichter: zo zie je waar een element begint */}
+        {ti(KOL.element, regel.element, v => onWijzig({ element: v }), 'Element...', undefined,
+          elementHerhaald ? 'text-neutral-400' : 'font-semibold text-neutral-900')}
       </td>
 
       {/* Onderdeel */}
       <td className="px-1 py-0.5">
         <div className="flex items-center gap-0.5">
           {geselecteerdOnderdeel?.code && (
-            <span className="flex-shrink-0 text-[10px]  font-semibold px-1.5 py-0.5 rounded bg-everts/10 text-everts">
+            <span className="flex-shrink-0 text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-brand-50 text-brand-700">
               {geselecteerdOnderdeel.code}
             </span>
           )}
@@ -328,7 +329,7 @@ export default function MeetregelRij({
       <td className="px-1 py-0.5">
         <div className="flex items-center gap-0.5">
           {geselecteerdType?.code && (
-            <span className="flex-shrink-0 text-[10px]  font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+            <span className="flex-shrink-0 text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600">
               {geselecteerdType.code}
             </span>
           )}
@@ -353,7 +354,7 @@ export default function MeetregelRij({
                   })
                 }}
               />
-            : <span className="text-[11px] text-slate-300 px-1.5 italic">kies eerst onderdeel</span>
+            : <span className="text-xs text-neutral-300 px-2 whitespace-nowrap">kies eerst onderdeel</span>
           }
         </div>
       </td>
@@ -372,14 +373,14 @@ export default function MeetregelRij({
           }}
           onFocus={onFocus}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
-          className="w-full text-xs font-semibold uppercase px-1.5 py-0.5 rounded bg-transparent border-0
-            hover:bg-white hover:border hover:border-slate-200
-            focus:bg-white focus:border focus:border-everts/40 focus:outline-none
-            placeholder:font-normal placeholder:normal-case placeholder-slate-300 text-blue-700"
+          className={`w-full max-w-[104px] h-7 text-xs font-semibold uppercase tabular-nums px-2 rounded-md text-info-700
+            ${regel.bestekcode ? 'bg-info-50' : 'bg-transparent'} border border-transparent hover:border-neutral-200
+            focus:bg-white focus:border-brand-500 focus:ring-[3px] focus:ring-brand-100 focus:outline-none
+            placeholder:font-normal placeholder:normal-case placeholder:text-neutral-300`}
         />
         {regel.behandeling && (
           <span
-            className="block truncate px-1.5 text-[10px] text-slate-400"
+            className="block truncate px-2 text-[11px] text-neutral-400"
             title="Behandeling uit een oudere meetstaat. Een behandeling kies je voortaan in de calculatie, per bestekscode."
           >
             {regel.behandeling}
@@ -388,47 +389,47 @@ export default function MeetregelRij({
       </td>
 
       {/* B */}
-      <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(KOL.breedte, regel.breedte, v => onWijzig({ breedte: v }), '—', 'text-blue-700')}
+      <td className="px-1 py-1">
+        {ni(KOL.breedte, regel.breedte, v => onWijzig({ breedte: v }), '—')}
       </td>
 
       {/* H */}
-      <td className="px-0.5 py-0.5 bg-blue-50/30">
-        {ni(KOL.hoogte, regel.hoogte, v => onWijzig({ hoogte: v }), '—', 'text-blue-700')}
+      <td className="px-1 py-1">
+        {ni(KOL.hoogte, regel.hoogte, v => onWijzig({ hoogte: v }), '—', ontbreekt?.includes('hoogte') ? '!border-warning-500 !bg-warning-50' : '')}
       </td>
 
       {/* B aantal / H aantal — hoeveel breedtes en hoogtes je meet, zoals op de papieren
           opmeetstaat. Tellen alleen bij m¹; bij andere eenheden is er niets in te vullen
           (geen veld, dus de pijltoetsen slaan de cel over). */}
-      <td className="px-0.5 py-0.5 bg-blue-50/20">
+      <td className="px-1 py-1">
         {perMaatAantal
-          ? ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')
-          : <span className="block text-right text-xs px-1 text-slate-200" title="Alleen bij m¹">—</span>}
+          ? ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-neutral-600')
+          : <span className="block text-right text-xs px-2 text-neutral-300" title="Alleen bij m¹">—</span>}
       </td>
-      <td className="px-0.5 py-0.5 bg-blue-50/20">
+      <td className="px-1 py-1">
         {perMaatAantal
-          ? ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')
-          : <span className="block text-right text-xs px-1 text-slate-200" title="Alleen bij m¹">—</span>}
+          ? ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-neutral-600')
+          : <span className="block text-right text-xs px-2 text-neutral-300" title="Alleen bij m¹">—</span>}
       </td>
 
       {/* x (`factor`) — hoe vaak binnen één element; reist mee in een bewaard element */}
-      <td className="px-0.5 py-0.5">
+      <td className="px-1 py-1">
         {ni(KOL.factor, regel.factor, v => onWijzig({ factor: v }), '1')}
       </td>
 
       {/* Aantal */}
-      <td className="px-0.5 py-0.5">
+      <td className="px-1 py-1">
         {ni(KOL.aantal, regel.aantal === 1 && !regel.breedte && !regel.lengte ? undefined : regel.aantal, v => onWijzig({ aantal: v ?? 1 }), '1')}
       </td>
 
       {/* Hoeveelheid */}
       <td className="px-2 py-0.5 text-right">
-        {hoev > 0 ? (
-          <span className={`text-xs tabular-nums font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
+        {hoev > 0 && !regel.is_leeg ? (
+          <span className={`text-[13px] tabular-nums font-semibold ${actief ? 'text-brand-700' : 'text-neutral-300'}`}>
             {hoev.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         ) : ontbreekt ? (
-          <span className="text-[11px] font-semibold text-amber-600" title="Deze regel telt pas mee als alle maten zijn ingevuld">
+          <span className="text-xs font-semibold text-warning-700" title="Deze regel telt pas mee als alle maten zijn ingevuld">
             {ontbreekt} ontbreekt
           </span>
         ) : null}
@@ -436,7 +437,7 @@ export default function MeetregelRij({
 
       {/* Eenheid — read-only */}
       <td className="px-1 py-0.5 text-center">
-        <span className="text-xs  text-slate-400">{regel.eenheid}</span>
+        <span className="text-xs text-neutral-500">{regel.eenheid}</span>
       </td>
 
       {/* Opmerking */}
@@ -449,10 +450,10 @@ export default function MeetregelRij({
         {!regel.is_leeg && (
           <button
             onClick={e => { e.stopPropagation(); onVerwijder() }}
-            className="p-0.5 text-slate-200 hover:text-red-400 rounded transition-colors"
+            className="p-1 text-neutral-300 hover:text-error-500 rounded-md transition-colors"
             title="Verwijder regel"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </td>
