@@ -144,6 +144,9 @@ export interface Scenario {
    *  contractversie). Zo blijft het meerwerk in hetzelfde dossier-project maar apart
    *  herkenbaar (eigen blok in de versie-kiezer; offerte wordt als meerwerk gekoppeld). */
   meerwerk_regel_id?: string | null
+  /** Nakijkpunten uit de controle die met "Klopt" zijn bevestigd (sleutels uit
+   *  `lib/everts-calc/controle.ts`). Per versie: een revisie begint weer leeg. */
+  controle_bevestigd?: string[]
 }
 
 export interface Activiteit {

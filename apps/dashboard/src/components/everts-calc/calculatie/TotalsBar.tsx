@@ -161,13 +161,16 @@ export default function TotalsBar({
             <div className="flex items-center gap-1">
               <span className="text-white/50 text-xs">€</span>
               <input
+                id="calc-uurtarief"
                 type="number" step="0.50" min="0"
                 value={tariefEdit}
                 placeholder={globaalTarief > 0 ? formatGetal(globaalTarief, 2) : '—'}
                 disabled={readOnly}
                 onFocus={() => setTariefFocus(true)}
                 onBlur={commitTarief}
-                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                // preventDefault: anders klikt dezelfde Enter meteen "Annuleren" in de
+                // bevestiging die het verlaten van het veld opent.
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
                 title={globaalTarief > 0
                   ? `Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
                   : 'Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Er is nog geen standaardtarief ingesteld bij Stamgegevens → Uursoorten & uurtarieven.'}

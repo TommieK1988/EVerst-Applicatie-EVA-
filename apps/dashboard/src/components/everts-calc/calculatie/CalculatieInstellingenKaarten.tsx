@@ -32,9 +32,17 @@ interface Props {
   vereist?: boolean
   /** Aangeroepen wanneer in vereist-modus op Doorgaan wordt geklikt (beide gekozen). */
   onVoltooid?: () => void
+  /** Tekst op de Doorgaan-knop in vereist-modus. */
+  doorgaanLabel?: string
+  /** Voor een venster dat zelf de Doorgaan-knop toont (offertevenster): meldt of beide
+   *  keuzes gemaakt zijn, en geeft de functie die alles eerst wegschrijft. Dan verschijnt
+   *  de eigen knop onderaan niet. */
+  onStatus?: (klaar: boolean, bewaarNu: () => Promise<void>) => void
 }
 
-export default function CalculatieInstellingenKaarten({ projectId, dossierId, scenarioId, vereist = false, onVoltooid }: Props) {
+export default function CalculatieInstellingenKaarten({
+  projectId, dossierId, scenarioId, vereist = false, onVoltooid, doorgaanLabel = 'Doorgaan naar offerte', onStatus,
+}: Props) {
   const [scenario, setScenario]                     = useState<Scenario | null>(null)
   const [betalingscondities, setBetalingscondities] = useState<Betalingsconditie[] | null>(null)
   const [algVoorwaarden, setAlgVoorwaarden]         = useState<AlgemeneVoorwaarden[] | null>(null)
@@ -96,6 +104,11 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
 
   // Nog niet weggeschreven wijziging alsnog opslaan als het dialoog sluit.
   useEffect(() => () => { void bewaarNu() }, [bewaarNu])
+
+  const klaar = !!scenario
+    && !!betalingscondities?.some(b => b.id === scenario.betalingsconditie_id)
+    && !!algVoorwaarden?.some(av => av.id === scenario.algemene_voorwaarden_id)
+  useEffect(() => { onStatus?.(klaar, bewaarNu) }, [onStatus, klaar, bewaarNu])
 
   if (!scenario) return null
 
@@ -205,7 +218,7 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
         readOnly={!!scenario.bevroren_op}
       />
 
-      {vereist && (
+      {vereist && !onStatus && (
         <div className="flex justify-end">
           {/* Eerst de keuze vastleggen, dan pas door: het offerte-dialoog haalt bij
               openen de gedeelde calculatie op en zou een niet-opgeslagen keuze
@@ -216,7 +229,7 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
             disabled={!beideGekozen || opslaan}
             onClick={async () => { await bewaarNu(); onVoltooid?.() }}
           >
-            {opslaan ? 'Opslaan…' : 'Doorgaan naar offerte'}
+            {opslaan ? 'Opslaan…' : doorgaanLabel}
           </Button>
         </div>
       )}

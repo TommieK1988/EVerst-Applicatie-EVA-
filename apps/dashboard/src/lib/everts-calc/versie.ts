@@ -67,6 +67,8 @@ export async function reviseerCalculatie(
     versie: nieuweVersie,
     versie_root_id: rootId,
     bevroren_op: null,
+    // Een nieuwe versie wordt opnieuw nagekeken.
+    controle_bevestigd: [],
   }
   slaScenarioOp(nieuw)
 
