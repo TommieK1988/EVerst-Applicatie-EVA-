@@ -29,6 +29,7 @@ export interface Query extends PromiseLike<Resultaat<Rij[]>> {
   eq(kolom: string, waarde: unknown): Query
   neq(kolom: string, waarde: unknown): Query
   is(kolom: string, waarde: unknown): Query
+  not(kolom: string, operator: string, waarde: unknown): Query
   in(kolom: string, waarden: readonly unknown[]): Query
   gte(kolom: string, waarde: unknown): Query
   lte(kolom: string, waarde: unknown): Query

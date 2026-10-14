@@ -31,7 +31,7 @@ import { bouw7RichTextNaarTekst } from '@/lib/bouw7/rich-text'
 export const FACTUUR_STATUS_CONCEPT = 3
 
 /** Het deel van `InvoiceDocument` dat we lezen of zetten. De rest gaat ongezien mee. */
-type InvoiceDocument = {
+export type InvoiceDocument = {
   id?: number | null
   invoiceNumber?: string | null
   status?: number
@@ -46,14 +46,14 @@ type InvoiceDocument = {
   contact?: { id?: number; name?: string } | null
   chapters?: InvoiceChapter[]
 }
-type InvoiceChapter = {
+export type InvoiceChapter = {
   id?: number | null
   sortIndex?: number
   isRoot?: boolean
   name?: string
   lines?: InvoiceLine[]
 }
-type InvoiceLine = {
+export type InvoiceLine = {
   id?: number | null
   sortIndex: number
   description: string
@@ -65,7 +65,8 @@ type InvoiceLine = {
   vatTariffId: number
   /** De koppeling met verkooptermijnen. Bouw7 vult daarna zelf `invoiceLine` op de termijn. */
   projectInvoiceTermIds?: number[]
-  linkedBookingItems?: unknown[]
+  reference?: string | null
+  linkedBookingItems?: { id: number; type: string }[]
   projectId?: number | null
   ledger?: unknown
   costCenter?: unknown
@@ -105,7 +106,7 @@ const centen = (n: number): number => Math.round(n * 100)
 const bedrag = (n: number): string => (Math.round(n * 100) / 100).toFixed(2)
 
 /** Marker in de interne notitie waarmee een afgebroken poging terug te vinden is. */
-function marker(sleutel: string): string {
+export function factuurMarker(sleutel: string): string {
   return `<!-- EVA-factuur:${sleutel} -->`
 }
 
@@ -123,7 +124,7 @@ export async function vindConceptMetSleutel(
     const res = await client.get<{ items?: { id: number; note?: string | null }[] }>('/list/invoices', {
       q: `project.id = ${projectId} SORT(id, DESC) LIMIT 50`,
     })
-    const m = marker(sleutel)
+    const m = factuurMarker(sleutel)
     const gevonden = (res.items ?? []).find(i => (i.note ?? '').includes(m))
     return gevonden?.id ?? null
   } catch {
@@ -230,7 +231,7 @@ export async function maakConceptVerkoopfactuur(
   }))
   const verwachtCenten = lines.reduce((s, l) => s + centen(Number(l.subTotal)), 0)
 
-  const notitie = [invoer.interneNotitie?.trim(), marker(invoer.idempotentieSleutel)]
+  const notitie = [invoer.interneNotitie?.trim(), factuurMarker(invoer.idempotentieSleutel)]
     .filter(Boolean).join('\n')
 
   const body: InvoiceDocument = {
@@ -316,6 +317,6 @@ export async function verwijderConceptFactuur(
   }
 }
 
-function foutTekst(e: unknown): string {
+export function foutTekst(e: unknown): string {
   return e instanceof Error ? e.message : 'onbekende fout'
 }

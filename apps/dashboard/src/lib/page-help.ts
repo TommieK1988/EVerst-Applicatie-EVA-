@@ -421,6 +421,17 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     ],
   }],
 
+  // ── Financieel: Verzamelfactuur ────────────────────────────────────────
+  [/^\/facturen\/verzamelfactuur$/, {
+    title: 'Nieuwe verzamelfactuur',
+    description: 'Meerdere servicedeskbonnen van één factuurpartij op één factuur, klaargezet in Bouw7.',
+    sections: [
+      { title: 'Kiezen', body: 'Kies eerst de werkmaatschappij en dan de factuurpartij: dat is het factuuradres van de bon, of anders de opdrachtgever. Je ziet alle bonnen op Kosten compleet en vinkt aan wat mee moet.' },
+      { title: 'Regels aanpassen', body: 'De regels komen uit de bonnen zelf, precies zoals op het tabblad Verkoop. Wil je iets anders op de factuur, pas het dan daar aan en vernieuw het voorbeeld.' },
+      { title: 'Klaarzetten', body: 'De factuur komt als concept in Bouw7, met per bon een eigen kopje. De administratie controleert en verstuurt hem daar. Zodra hij een factuurnummer heeft, gaan de bonnen vanzelf naar Financieel gereed.' },
+    ],
+  }],
+
   // ── Financieel: Inkoopfacturen ─────────────────────────────────────────
   [/^\/inkoop\/facturen$/, {
     title: 'Inkoopfacturen',

@@ -1512,6 +1512,17 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       return null
     }
 
+    // Bouw7-vestiging → werkmaatschappij. De vestiging bepaalt in Bouw7 de nummerreeks en de
+    // administratie waarin gefactureerd wordt; een verzamelfactuur kan maar binnen één
+    // werkmaatschappij. Klein en vast (een handvol rijen), dus geen paginering nodig.
+    const { data: werkmaatschappijData } = await supabase
+      .from('bedrijfsgegevens')
+      .select('id, bouw7_branch_id')
+      .not('bouw7_branch_id', 'is', null)
+    const werkmaatschappijPerBranch = new Map<number, string>(
+      (werkmaatschappijData ?? []).map((b: { id: string; bouw7_branch_id: number }) => [Number(b.bouw7_branch_id), b.id]),
+    )
+
     // Gepagineerd: hierop bepaalt de sync of een Bouw7-project al een EVA-dossier heeft.
     // Een afgekapte map betekent bestaande dossiers opnieuw aanmaken — dubbele dossiers.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1523,7 +1534,7 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
       .select('id, bouw7_id, verzonden_op, bouw7_sync_hash, object_koppel_bron, object_gekoppeld_op, bouw7_projectstatus_naam, handmatige_velden, '
         // Afrekenwijze (servicedesk_substatus zit al in BOUW7_DOSSIER_VELDEN): een regieopdracht
         // krijgt geen bedrag uit de offerte.
-        + 'facturatiemethode, facturatiemethode_handmatig, bouw7_categorie_naam, '
+        + 'facturatiemethode, facturatiemethode_handmatig, bouw7_categorie_naam, werkmaatschappij_id, '
         + BOUW7_DOSSIER_VELDEN.join(', '))
       .not('bouw7_id', 'is', null)
       .order('id')
@@ -2060,6 +2071,9 @@ export async function syncProjects(opts?: { mode?: SyncMode; onlyBouw7Ids?: stri
         verwacht_startdatum:      p.startDate ?? null,
         verwacht_einddatum:       p.endDate ?? null,
         bouw7_aanmaakdatum:       p.createdAt ?? null,
+        // Bouw7 is leidend: een onbekende vestiging laat een bestaande koppeling staan.
+        werkmaatschappij_id:      (p.branch?.id ? werkmaatschappijPerBranch.get(Number(p.branch.id)) : undefined)
+                                    ?? existing?.werkmaatschappij_id ?? null,
         werkadres_straat:         [p.streetName, p.houseNumber].filter(Boolean).join(' ') || null,
         werkadres_postcode:       p.zipCode ?? null,
         werkadres_stad:           p.city ?? null,

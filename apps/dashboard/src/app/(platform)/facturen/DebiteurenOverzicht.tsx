@@ -4,6 +4,8 @@ import React, { useMemo, useState } from 'react'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
+import Link from 'next/link'
+import { Button } from '@/components/ui'
 import DebiteurPaneel from '@/components/debiteuren/DebiteurPaneel'
 import {
   ververDebiteuren,
@@ -249,7 +251,12 @@ export default function DebiteurenOverzicht({
           <Stat label="Aantal" value={String(zichtbaar.length)} />
           <Stat label="30+ dgn te laat" value={String(aantalRood)} tone={aantalRood > 0 ? '#dc2626' : undefined} />
         </div>
-        <SyncKnop laatsteSync={laatsteSync} onSync={handleVerversen} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {magBewerken && (
+            <Link href="/facturen/verzamelfactuur"><Button>Nieuwe verzamelfactuur</Button></Link>
+          )}
+          <SyncKnop laatsteSync={laatsteSync} onSync={handleVerversen} />
+        </div>
       </div>
 
       <OverzichtTabel

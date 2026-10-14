@@ -98,6 +98,17 @@ export async function runCronSync(
   const { controleerBordindeling } = await import('@/lib/dossiers/bord-controle')
   const bordcontrole = await controleerBordindeling()
 
+  // Verzamelfacturen: is een klaargezet concept inmiddels verstuurd (nummer in Bouw7), dan gaan
+  // de bonnen erop naar Financieel gereed. Best-effort, net als de stappen hieronder.
+  let verzamelfacturen: unknown
+  log.stap('verzamelfacturen')
+  try {
+    const { controleerVerzamelfacturen } = await import('@/lib/verzamelfactuur/opvolging')
+    verzamelfacturen = await controleerVerzamelfacturen()
+  } catch (e) {
+    verzamelfacturen = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   // Werkadres-coördinaten bijwerken voor "dossier openen op locatie" (mobiel).
   // Best-effort: Nominatim throttelt op ~1/s, dus per ronde begrensd — de
   // gesynchte dossiers stromen zo over meerdere cron-rondes vol. Een fout hier
@@ -147,6 +158,7 @@ export async function runCronSync(
       management,
       offertebewaking,
       bordcontrole,
+      verzamelfacturen,
       geocode,
       dossiermappen,
       duur_ms: Date.now() - startedAt,
