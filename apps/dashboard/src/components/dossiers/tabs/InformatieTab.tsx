@@ -53,7 +53,6 @@ import type { UrgenteTaak } from '@/lib/taken/supabase/database.types'
 import TaakDetailPanel from '@/components/taken/TaakDetailPanel'
 import NieuweTaakDialog from '@/components/taken/NieuweTaakDialog'
 import GevraagdeWerkzaamhedenBlok from './GevraagdeWerkzaamhedenBlok'
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { Combobox } from '@/components/ui/combobox'
 import {
   Button, Card, CardHeader, CardBody, InklapbareCard,
@@ -65,6 +64,7 @@ import {
 } from '@/components/ui'
 import { X } from 'lucide-react'
 import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 /* ─── helpers ─────────────────────────────────────────────────────── */
 const alleStatussen = [...AANVRAAG_STATUSSEN, ...OFFERTE_STATUSSEN, ...OPDRACHT_STATUSSEN, ...SERVICEDESK_ALLE_STATUSSEN]
@@ -1109,7 +1109,7 @@ function TakenBlok({
     setAfgevinkt(prev => new Set(prev).add(id))
     startTransition(async () => {
       try {
-        await updateTaakStatus(id, 'gereed')
+        await wijzigTaakStatus(id, 'gereed')
         router.refresh()
       } catch (e) {
         // optimistisch — bij fout terugdraaien, en zeggen waaróm: een actie met een doorloop

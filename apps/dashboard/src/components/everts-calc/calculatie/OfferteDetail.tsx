@@ -58,7 +58,15 @@ export default function OfferteDetail({ quoteId, dossierId, onTerug }: Props) {
     router.refresh() // lijst-statussen bijwerken
   }
 
-  useEffect(() => { laadOfferteDetailStatus(quoteId).then(setInfo).catch(() => setInfo(null)) }, [quoteId])
+  useEffect(() => {
+    laadOfferteDetailStatus(quoteId)
+      .then(status => {
+        setInfo(status)
+        // Link naar een offerte die intussen verwijderd is: terug naar de lijst.
+        if (!status) { toast.error('Deze offerte bestaat niet meer'); onTerug() }
+      })
+      .catch(() => setInfo(null))
+  }, [quoteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!volledigScherm) return

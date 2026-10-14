@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ hash: strin
       return new NextResponse(Buffer.from(data), {
         headers: {
           'Content-Type': contentType || 'application/octet-stream',
-          'Content-Disposition': `inline; filename="${naam}"`,
+          'Content-Disposition': contentDisposition('inline', naam),
           'Cache-Control': 'private, max-age=60',
         },
       })

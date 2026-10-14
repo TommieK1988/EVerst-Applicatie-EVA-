@@ -7,6 +7,7 @@ import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/Over
 import NieuweMedewerkerModal from '@/components/medewerkers/NieuweMedewerkerModal'
 import { PageHeader, Button, Badge } from '@/components/ui'
 import { IconPlus } from '@/components/eva/Icons'
+import { useMedewerkerBestandUrl } from '@/lib/medewerkers/bestand-url'
 
 type Medewerker = {
   id: string
@@ -109,8 +110,7 @@ function maakKolommen(lookups: Lookups, data: Medewerker[]): KolomDefinitie<Mede
       render: m => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {m.foto_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={m.foto_url} alt="" style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+            <MedewerkerFoto url={m.foto_url} />
           ) : (
             <div style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
@@ -480,4 +480,13 @@ export default function MedewerkersOverzicht({
       {showNieuw && <NieuweMedewerkerModal onClose={() => setShowNieuw(false)} functies={functies} werkmaatschappijen={lookups.werkmaatschappijen} />}
     </div>
   )
+}
+
+/** Profielfoto in de lijst; staat hij in de privé-bucket, dan via een ondertekende link. */
+function MedewerkerFoto({ url }: { url: string }) {
+  const src = useMedewerkerBestandUrl(url)
+  return src
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={src} alt="" style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+    : <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: 'var(--neutral-100)' }} />
 }

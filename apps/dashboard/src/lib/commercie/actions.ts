@@ -525,7 +525,7 @@ export async function legUitkomstVast(
   //     laten we de koppeling los; mislukt het (een doorloopcontrole in updateTaakStatus), dan
   //     blijft de koppeling staan en probeert de volgende uitkomst het opnieuw.
   if (kaart.taak_id) {
-    const afgerond = await updateTaakStatus(kaart.taak_id, 'gereed').then(() => true, () => false)
+    const afgerond = await updateTaakStatus(kaart.taak_id, 'gereed').then(r => r.ok, () => false)
     if (afgerond) await supabase.from('commercie_bewaking').update({ taak_id: null }).eq('id', kaart.id)
   }
 

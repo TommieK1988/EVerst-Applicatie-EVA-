@@ -45,7 +45,6 @@ import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
 import MarkdownVenster from './bestanden/MarkdownVenster'
 import SharePointKoppeling from './bestanden/SharePointKoppeling'
-import { meldFoutVanuitBrowser } from '@/lib/fouten/meld-client'
 
 /**
  * Uploaden loopt via een server-action, en die heeft een maximale payload
@@ -302,17 +301,14 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
     const gesleept = Array.from(e.dataTransfer.files)
     if (gesleept.length === 0) {
-      const soorten = Array.from(e.dataTransfer.types)
+      // Uitgezocht (sept–okt 2026, foutenlog): het nieuwe Outlook geeft bij een gesleepte mail
+      // of bijlage alleen `attachment` / `maillistrow` / `multimaillistconversationrows` plus
+      // `chromium/x-drag-id` mee — een interne verwijzing, nooit de inhoud. Er valt dus niets
+      // op te halen; de uitleg hieronder is het enige wat we kunnen doen.
       toast.error(
         'Dit komt niet als bestand binnen — Outlook geeft hier alleen een verwijzing mee. ' +
         'Sleep de bijlage eerst naar je bureaublad en van daar hierheen, of gebruik "Bestanden toevoegen".',
         { duration: 9000 },
-      )
-      // Vastleggen wát er binnenkwam, zodat we kunnen zien welke mailprogramma's dit doen
-      // en of er een bruikbare bron in zit.
-      meldFoutVanuitBrowser(
-        new Error(`Sleepactie zonder bestand naar Bestanden-tab: ${soorten.join(', ') || '(geen soorten)'}`),
-        'bestanden-slepen',
       )
       return
     }

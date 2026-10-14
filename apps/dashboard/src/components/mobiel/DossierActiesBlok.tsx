@@ -7,11 +7,11 @@ import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
 import { useVertaling } from '@/components/vertalen/useVertaling'
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { bepaalUitvoerActies } from '@/lib/taken/uitvoeracties'
 import TaakUitvoerKnop, { UitvoerBadge } from './TaakUitvoerKnop'
 import BottomSheet from './BottomSheet'
 import type { DossierTaakRegel } from '@/lib/taken/services/taken'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 /**
  * Acties-blok op de mobiele dossier-infopagina.
@@ -183,7 +183,7 @@ export default function DossierActiesBlok({ taken }: { taken: DossierTaakRegel[]
     setBezig(taak.id)
     startTransition(async () => {
       try {
-        await updateTaakStatus(taak.id, status)
+        await wijzigTaakStatus(taak.id, status)
         setDetail(null)
         // Geen optimistische streep maar een echte verversing: het afronden kan
         // vervolgacties in gang zetten (substatus, volgende sjabloontaak) die je

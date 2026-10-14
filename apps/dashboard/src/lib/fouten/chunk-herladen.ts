@@ -23,7 +23,15 @@ export function isChunkFout(error: unknown): boolean {
   return (
     /Loading (CSS )?chunk [\w-]+ failed/i.test(tekst) ||
     /Failed to fetch dynamically imported module/i.test(tekst) ||
-    /Importing a module script failed/i.test(tekst)
+    /Importing a module script failed/i.test(tekst) ||
+    // Oude pagina vraagt een webpack-module op die in de nieuwe versie anders heet. Zelfde
+    // oorzaak als een ontbrekende chunk, andere melding per browser (Chrome/Firefox/Safari).
+    /Cannot read properties of undefined \(reading 'call'\)/.test(tekst) ||
+    /can't access property "call", \w+\[\w+\] is undefined/.test(tekst) ||
+    /evaluating '\w+\[\w+\]\.call'/.test(tekst) ||
+    /__webpack_modules__\[moduleId\] is not a function/.test(tekst) ||
+    // Server action uit een oudere/nieuwere versie.
+    /Failed to find Server Action|Server Action "\w+" was not found/.test(tekst)
   )
 }
 

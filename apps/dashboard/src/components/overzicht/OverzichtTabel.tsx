@@ -643,13 +643,13 @@ export default function OverzichtTabel<T extends { id: string }>({
       <Checkbox
         checked={table.getIsAllPageRowsSelected()}
         indeterminate={table.getIsSomePageRowsSelected()}
-        onChange={table.getToggleAllPageRowsSelectedHandler() as (v: boolean) => void}
+        onChange={v => table.toggleAllPageRowsSelected(v)}
       />
     ),
     cell: ({ row }) => (
       <Checkbox
         checked={row.getIsSelected()}
-        onChange={row.getToggleSelectedHandler() as (v: boolean) => void}
+        onChange={v => row.toggleSelected(v)}
       />
     ),
   }
@@ -1251,7 +1251,7 @@ export default function OverzichtTabel<T extends { id: string }>({
                         <Checkbox
                           checked={table.getIsAllPageRowsSelected()}
                           indeterminate={table.getIsSomePageRowsSelected()}
-                          onChange={table.getToggleAllPageRowsSelectedHandler() as (v: boolean) => void}
+                          onChange={v => table.toggleAllPageRowsSelected(v)}
                         />
                       </th>
                     )}

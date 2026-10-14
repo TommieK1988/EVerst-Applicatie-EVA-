@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeelWeergave, logPortaalToegang } from '@/lib/portaal/auth'
 import { bronUitQuery, haalBestandBytes, BestandFoutError, type BestandBron } from '@/lib/dossiers/bestand-bytes'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(new Uint8Array(data), {
     headers: {
       'Content-Type': contentType,
-      'Content-Disposition': `${dispositie}; filename="${naam}"`,
+      'Content-Disposition': contentDisposition(dispositie, naam),
       // Privé: het antwoord is rechten-afhankelijk en mag niet op een gedeelde CDN
       // belanden. Thumbnails mogen langer blijven hangen dan het origineel.
       'Cache-Control': breedte ? 'private, max-age=3600' : 'private, max-age=60',

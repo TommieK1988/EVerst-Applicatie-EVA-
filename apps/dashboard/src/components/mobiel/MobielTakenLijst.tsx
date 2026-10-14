@@ -5,9 +5,9 @@ import { parseISO, isPast, isToday } from 'date-fns'
 import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import VertaalbareTekst from '@/components/vertalen/VertaalbareTekst'
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { bepaalUitvoerActies } from '@/lib/taken/uitvoeracties'
 import TaakUitvoerKnop, { UitvoerBadge } from './TaakUitvoerKnop'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 export type MobielTaak = {
   id: string
@@ -56,7 +56,7 @@ export default function MobielTakenLijst({ taken }: { taken: MobielTaak[] }) {
     setAfgevinkt(prev => new Set(prev).add(id))
     startTransition(async () => {
       try {
-        await updateTaakStatus(id, 'gereed')
+        await wijzigTaakStatus(id, 'gereed')
       } catch {
         setAfgevinkt(prev => { const n = new Set(prev); n.delete(id); return n })
       }

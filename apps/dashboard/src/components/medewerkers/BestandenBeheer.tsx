@@ -17,6 +17,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui'
+import { openMedewerkerBestand } from '@/lib/medewerkers/bestand-url'
 
 const CATEGORIE_COLORS: Record<BestandCategorie, string> = {
   contract:    '#3182ce',
@@ -180,10 +181,8 @@ export default function BestandenBeheer({
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <Button asChild variant="ghost" size="sm">
-                    <a href={b.url} target="_blank" rel="noopener noreferrer">
-                      Openen
-                    </a>
+                  <Button variant="ghost" size="sm" onClick={() => openMedewerkerBestand(b.url)}>
+                    Openen
                   </Button>
                   <Button
                     variant="outline"

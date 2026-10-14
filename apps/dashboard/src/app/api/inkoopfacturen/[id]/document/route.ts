@@ -3,6 +3,7 @@ import { getBouw7Client } from '@/lib/bouw7/sync'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisInkoopfactuurToegang } from '@/lib/inkoopfacturen/actions'
 import type { Bouw7PurchaseInvoiceDetail } from '@/lib/bouw7/client'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +57,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return new NextResponse(Buffer.from(data), {
       headers: {
         'Content-Type': contentType || 'application/pdf',
-        'Content-Disposition': `inline; filename="${naam}"`,
+        'Content-Disposition': contentDisposition('inline', naam),
         'Cache-Control': 'private, max-age=60',
       },
     })

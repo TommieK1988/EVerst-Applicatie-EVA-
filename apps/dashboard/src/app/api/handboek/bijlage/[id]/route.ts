@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisHandboekLezer } from '@/lib/handboek/auth'
 import { HANDBOEK_BUCKET } from '@/lib/handboek/bijlagen'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +56,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       'Content-Type': bijlage.mimetype || data.type || 'application/octet-stream',
       // `inline` zodat de telefoon hem in de PDF-viewer opent in plaats van te
       // downloaden; de bestandsnaam is wat je ziet als je hem tóch bewaart.
-      'Content-Disposition': `inline; filename="${bijlage.bestandsnaam.replace(/"/g, '')}"`,
+      'Content-Disposition': contentDisposition('inline', bijlage.bestandsnaam),
       'Cache-Control': 'private, max-age=300',
     },
   })

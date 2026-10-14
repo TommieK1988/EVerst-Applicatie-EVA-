@@ -20,6 +20,7 @@ import { magOnderdeelZien, heeftModuleToegang } from '@/lib/auth/rechten-shared'
 import { FEATURES } from '@/lib/features'
 import { getDossierToggles, dossierHeeftCalculatie } from '@/lib/dossiers/actions'
 import { TAB_TOGGLE_GATES } from '@/lib/dossiers/tab-gating'
+import { useMedewerkerBestandUrl } from '@/lib/medewerkers/bestand-url'
 
 
 function Wordmark({ style }: { style?: React.CSSProperties }) {
@@ -304,8 +305,9 @@ export type SidebarProps = {
 export default function Sidebar({
   density, collapsed, pinned, onToggle, onIconEnter, onMouseLeave,
   userName = 'M. Everts', userInitials = 'ME', userSub = 'Everts Team',
-  userFotoUrl, rechten,
+  userFotoUrl: fotoBron, rechten,
 }: SidebarProps) {
+  const userFotoUrl = useMedewerkerBestandUrl(fotoBron)
   const pathname  = usePathname()
   const padY      = density === 'dense' ? 6 : 9
   const width     = collapsed ? 56 : 256

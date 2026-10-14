@@ -3,6 +3,7 @@ import { createAdminClient } from '@everts/database/server'
 import { GeenToegangError } from '@/lib/auth/rechten'
 import { vereisPortaalOnderdeelWeergave } from '@/lib/portaal/auth'
 import { bouwInzendingPdf } from '@/lib/formulieren/inzending-pdf'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(pdf.bytes, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${pdf.bestandsnaam}"`,
+      'Content-Disposition': contentDisposition('inline', pdf.bestandsnaam),
       'Cache-Control': 'private, max-age=300',
     },
   })

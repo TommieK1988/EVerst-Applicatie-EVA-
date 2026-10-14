@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
 import { bronUitQuery, haalBestandBytes, BestandFoutError } from '@/lib/dossiers/bestand-bytes'
 import { leesMsg, leesMsgBijlage } from '@/lib/dossiers/msg-lezen'
+import { contentDisposition } from '@/lib/http/content-disposition'
 
 export const dynamic = 'force-dynamic'
 // De msg-parser leest de hele OLE-container in het geheugen; dat is Node-werk.
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(new Uint8Array(bijlage.data), {
       headers: {
         'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${naam}"`,
+        'Content-Disposition': contentDisposition('attachment', naam),
         'Cache-Control': 'private, max-age=60',
       },
     })

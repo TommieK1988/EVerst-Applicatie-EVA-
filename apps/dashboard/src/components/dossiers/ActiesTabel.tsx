@@ -12,8 +12,9 @@ import { EmptyState } from '@/components/ui'
 import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
 import type { DossierActieRij } from '@/lib/taken/services/taken'
 import type { TaakMetDetails, TaskStatus } from '@/lib/taken/supabase/database.types'
-import { haalTaakVoorPaneel, updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
+import { haalTaakVoorPaneel } from '@/app/(platform)/taken/actions/taken'
 import { useDossierReadOnly } from './DossierReadOnlyContext'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 /** Beoordeel-taken lopen via de goedkeuringsflow en zijn niet handmatig af te vinken. */
 const BEOORDEEL_TITELS = new Set<string>(Object.values(BEOORDEEL_TAAK_TITEL))
@@ -81,7 +82,7 @@ export default function ActiesTabel({
     setAfvinkBezigId(r.id)
     startAfvink(async () => {
       try {
-        await updateTaakStatus(r.id, nieuw)
+        await wijzigTaakStatus(r.id, nieuw)
         toast.success(nieuw === 'gereed' ? 'Actie afgerond' : 'Actie heropend')
         router.refresh()
       } catch (e) {

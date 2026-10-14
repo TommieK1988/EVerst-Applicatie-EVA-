@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { createClient } from '@everts/database/client'
 import { Button } from '@/components/ui'
 import { updateFoto } from './actions'
+import { useMedewerkerBestandUrl } from '@/lib/medewerkers/bestand-url'
 
 export default function AvatarBeheer({
   medewerker_id,
@@ -16,6 +17,7 @@ export default function AvatarBeheer({
   initials: string
 }) {
   const [url, setUrl] = useState<string | null>(initial_url)
+  const toonUrl = useMedewerkerBestandUrl(url)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -78,7 +80,7 @@ export default function AvatarBeheer({
       }}>
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="Profielfoto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={toonUrl ?? undefined} alt="Profielfoto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <span style={{ color: 'white', fontSize: 22, fontWeight: 700 }}>{initials}</span>
         )}

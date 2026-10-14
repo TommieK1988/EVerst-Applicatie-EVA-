@@ -14,7 +14,8 @@ import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier';
 import {
   getDossierSubstatus, AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, servicedeskLadder,
 } from '@/components/dossiers/types';
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken';
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
+
 
 /* ── Weergave-limieten ───────────────────────────────────────
    Widgets zijn 460px hoog zonder interne scroll; er past ±368px
@@ -265,7 +266,7 @@ export function TasksWidget({ taken }: { taken: TaakMetDetails[] }) {
     });
     startTransition(async () => {
       try {
-        await updateTaakStatus(id, 'gereed');
+        await wijzigTaakStatus(id, 'gereed');
       } catch (e) {
         // Wél terugdraaien: een actie met een doorloop (formulier, kwaliteitsronde, toolbox)
         // wordt geweigerd, en dan mag het vinkje hier niet blijven staan.

@@ -171,6 +171,8 @@ function splitsMoment(iso: string): { datum: string; tijd: string } {
 }
 
 /** Datum + tijd uit de velden terug naar één tijdstip: lokale tijd in, UTC uit. */
+const geldigeDatum = (datum: string) => /^\d{4}-\d{2}-\d{2}$/.test(datum) && !Number.isNaN(Date.parse(datum))
+
 function samenMoment(datum: string, tijd: string): string {
   return new Date(`${datum}T${tijd.length === 5 ? `${tijd}:00` : tijd}`).toISOString()
 }
@@ -223,7 +225,7 @@ function ItemEditDialog({ item, medewerkers, roosters, afwezigheid, onSave, onDe
 
   // Uren volgen de periode én de tijden: een middag op de eerste dag is geen volle werkdag.
   useEffect(() => {
-    if (!medId || !start || !eind || !startTijd || !eindTijd) return
+    if (!medId || !geldigeDatum(start) || !geldigeDatum(eind) || !startTijd || !eindTijd) return
     const berekend = berekenPlanUren(medId, samenMoment(start, startTijd), samenMoment(eind, eindTijd), roosters, afwezigheid)
     setUren(berekend)
   }, [medId, start, eind, startTijd, eindTijd])
@@ -336,7 +338,9 @@ function ToewijzenDialog({ activiteit, medewerkers, dossier_id, roosters, afwezi
   const [busy,  setBusy]  = useState(false)
 
   function herbereken(newMedId: string, newStart: string, newEind: string) {
-    if (!newMedId) return
+    // Een gewist of half getypt datumveld geeft hier '' door; daar valt niets aan te rekenen
+    // (en `samenMoment` gooit dan "Invalid time value").
+    if (!newMedId || !geldigeDatum(newStart) || !geldigeDatum(newEind)) return
     const t = roosterTijden(newMedId, roosters)
     const berekend = berekenPlanUren(newMedId, samenMoment(newStart, t.start), samenMoment(newEind, t.eind), roosters, afwezigheid)
     setUren(String(berekend))

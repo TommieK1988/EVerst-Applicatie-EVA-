@@ -13,11 +13,11 @@ import { CSS } from '@dnd-kit/utilities'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/taken/utils'
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import TaakKaart from './TaakKaart'
 import TaakDetailPanel from './TaakDetailPanel'
 import NieuweTaakDialog from './NieuweTaakDialog'
 import type { TaakMetDetails, TaskStatus, DbTaskList } from '@/lib/taken/supabase/database.types'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 // ─── Kolom-configuratie ───────────────────────────────────────────────────────
 
@@ -177,7 +177,7 @@ export default function KanbanBord({ taken, lijsten, isTemplate, context = 'doss
       const vorigeStatus = taak.status
       startTransition(async () => {
         try {
-          await updateTaakStatus(active.id as string, nieuweStatus)
+          await wijzigTaakStatus(active.id as string, nieuweStatus)
         } catch (e) {
           setLokaalTaken(prev =>
             prev.map(t => t.id === active.id ? { ...t, status: vorigeStatus } : t)

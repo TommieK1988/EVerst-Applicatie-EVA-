@@ -54,7 +54,7 @@ const NIET_MAILBAAR =
 const MAX_MAIL_BYTES = 3 * 1024 * 1024
 
 /** Laadt de toolbar-status voor de inline offerte-detailweergave in het dossier. */
-export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteDetailStatus> {
+export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteDetailStatus | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
   const { data: q } = await admin
@@ -62,7 +62,8 @@ export async function laadOfferteDetailStatus(quoteId: string): Promise<OfferteD
     .select('quote_nummer, status, type, subtotaal_ex_btw, dossier_id, project_id')
     .eq('id', quoteId)
     .maybeSingle()
-  if (!q) throw new Error('Offerte niet gevonden')
+  // Verwijderd concept waar de link (`?offerte=…`) nog naar wijst: geen fout, het scherm meldt het.
+  if (!q) return null
 
   const isIntern = q.type === 'interne_calculatie'
   // Eerst de versie van een gekoppeld Word-document ophalen: is er in Word Online

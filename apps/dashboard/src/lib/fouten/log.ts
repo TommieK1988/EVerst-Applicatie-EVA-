@@ -43,7 +43,7 @@ export function isVerwachteFout(fout: unknown): boolean {
   if (!fout || typeof fout !== 'object') return false
   const e = fout as { name?: unknown; digest?: unknown; message?: unknown }
 
-  if (e.name === 'GeenToegangError') return true
+  if (e.name === 'GeenToegangError' || e.name === 'TaakRegelFout') return true
 
   const digest = typeof e.digest === 'string' ? e.digest : ''
   if (digest.startsWith('NEXT_REDIRECT') || digest === 'NEXT_NOT_FOUND' || digest === 'DYNAMIC_SERVER_USAGE') return true
@@ -66,6 +66,9 @@ export function isVerwachteFout(fout: unknown): boolean {
 export function normaliseerMelding(melding: string): string {
   return melding
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{id}')
+    // Request-ID's van externe API's (Anthropic `req_…`, Graph `request-id`): anders werd
+    // elke mislukte vertaling een eigen regel (66 stuks op één storing).
+    .replace(/\breq_[A-Za-z0-9]+/g, '{req}')
     .replace(/\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+Z?)?/g, '{datum}')
     .replace(/\b[0-9a-f]{8,}\b/gi, '{hex}')
     .replace(/\b\d{4,}\b/g, '{n}')
@@ -115,6 +118,13 @@ function kap(waarde: string | null | undefined, max: number): string | null {
  * één rij met een teller — zie de log_fout()-functie in migratie 20260716f.
  */
 export async function logFout(invoer: FoutInvoer): Promise<void> {
+  // Een lokale dev-server schrijft naar dezelfde productiedatabase. Half afgebouwde
+  // preview-pagina's ("X is not defined") vulden zo het foutenlog van de gebruikers.
+  // Wil je het lokaal tóch zien: FOUTENLOG_DEV=1.
+  if (process.env.NODE_ENV === 'development' && process.env.FOUTENLOG_DEV !== '1') {
+    console.error('[foutenlog] (dev, niet weggeschreven)', invoer.bron, invoer.melding)
+    return
+  }
   try {
     const melding = kap(invoer.melding, MAX_MELDING) ?? 'Onbekende fout'
     const bron = kap(invoer.bron, MAX_BRON) ?? 'onbekend'

@@ -7,8 +7,8 @@ import { cn } from '@/lib/taken/utils'
 import { format, parseISO, isPast, isToday } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { TaakStatusBadge, TaakPrioriteitBadge } from './TaakStatusBadge'
-import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import type { TaakMetDetails, TaskStatus } from '@/lib/taken/supabase/database.types'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 interface Props {
   taak: TaakMetDetails
@@ -33,7 +33,7 @@ export default function TaakKaart({ taak, onClick, compact = false }: Props) {
     setLoading(true)
     const nieuweStatus: TaskStatus = taak.status === 'gereed' ? 'open' : 'gereed'
     try {
-      await updateTaakStatus(taak.id, nieuweStatus)
+      await wijzigTaakStatus(taak.id, nieuweStatus)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Fout bij wijzigen status')
     } finally {

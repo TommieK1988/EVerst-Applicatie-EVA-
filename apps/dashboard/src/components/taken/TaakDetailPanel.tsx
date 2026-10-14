@@ -8,7 +8,7 @@ import { aanmakerZin } from '@/lib/taken/herkomst'
 import TaakTodoHerkomst from './TaakTodoHerkomst'
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { updateTaak, verwijderTaak, updateTaakStatus, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee, getToolboxToewijzingVoorTaak } from '@/app/(platform)/taken/actions/taken'
+import { updateTaak, verwijderTaak, plaatsComment, maakTaak, voegAssigneeToe, verwijderAssignee, getToolboxToewijzingVoorTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import TaakCompletionActies from './TaakCompletionActies'
@@ -22,6 +22,7 @@ import {
   type DeadlineBasis,
   type HerhalingInterval,
 } from '@/lib/taken/deadlines'
+import { wijzigTaakStatus } from '@/lib/taken/wijzig-status'
 
 interface Props {
   taak: TaakMetDetails
@@ -120,7 +121,7 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
     setStatusFout(null)
     startTransition(async () => {
       try {
-        await updateTaakStatus(taak.id, status)
+        await wijzigTaakStatus(taak.id, status)
       } catch (err) {
         setStatusFout(err instanceof Error ? err.message : 'Fout bij wijzigen status')
       }
@@ -179,7 +180,15 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
   }
 
   const handleSubtaakToggle = (subId: string, huidigeStatus: string) => {
-    startTransition(() => updateTaakStatus(subId, huidigeStatus === 'gereed' ? 'open' : 'gereed'))
+    setStatusFout(null)
+    // Mét catch: een geweigerde subactie in een transition gaat anders naar de error-boundary.
+    startTransition(async () => {
+      try {
+        await wijzigTaakStatus(subId, huidigeStatus === 'gereed' ? 'open' : 'gereed')
+      } catch (err) {
+        setStatusFout(err instanceof Error ? err.message : 'Fout bij wijzigen status')
+      }
+    })
   }
 
   const handleSubtaakVerwijderen = async (subId: string, subTitel: string) => {

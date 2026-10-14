@@ -3,6 +3,7 @@ import * as React from 'react'
 import * as AvatarPrimitive from '@radix-ui/react-avatar'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@everts/ui'
+import { useMedewerkerBestandUrl } from '@/lib/medewerkers/bestand-url'
 
 /** EVA Avatar — Basiscomponenten.html (#09). Radix Avatar, deterministische kleur per naam. */
 const avatarVariants = cva(
@@ -56,7 +57,9 @@ export interface AvatarProps
   colored?: boolean
 }
 
-function Avatar({ className, size, src, name, status, colored = true, ...props }: AvatarProps) {
+function Avatar({ className, size, src: bron, name, status, colored = true, ...props }: AvatarProps) {
+  // Foto uit de privé-bucket `medewerker-bestanden`? Dan een ondertekende link.
+  const src = useMedewerkerBestandUrl(bron)
   const initials = name
     .split(' ')
     .map((w) => w[0])

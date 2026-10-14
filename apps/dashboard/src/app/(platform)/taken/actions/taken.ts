@@ -15,6 +15,7 @@ import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbT
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
 import { synchroniseerBewakingUitActies } from '@/lib/commercie/nabel-sync'
+import { TaakRegelFout } from '@/lib/taken/regel-fout'
 
 // ─── Actielijsten ─────────────────────────────────────────────────────────────
 
@@ -233,7 +234,25 @@ export async function maakTaak(data: {
   return { id: taak.id }
 }
 
-export async function updateTaakStatus(id: string, status: TaskStatus): Promise<void> {
+export type TaakStatusUitkomst = { ok: true } | { ok: false; error: string }
+
+/**
+ * Statuswijziging vanuit de interface. Een taakregel komt terug als `{ ok: false, error }`:
+ * gegooid zou de uitleg in productie onderweg wegvallen. Client-componenten gebruiken
+ * `wijzigTaakStatus()` (lib/taken/wijzig-status.ts); server-code controleert `ok` zelf.
+ */
+export async function updateTaakStatus(id: string, status: TaskStatus): Promise<TaakStatusUitkomst> {
+  try {
+    await zetTaakStatus(id, status)
+    return { ok: true }
+  } catch (e) {
+    if (e instanceof TaakRegelFout) return { ok: false, error: e.message }
+    throw e
+  }
+}
+
+/** Zet de status en gooit bij een taakregel een `TaakRegelFout`. Bewust niet geëxporteerd: één actie, één ingang. */
+async function zetTaakStatus(id: string, status: TaskStatus): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Niet ingelogd')
@@ -255,7 +274,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     .select('status, lijst_id, dossier_id, blocked_by_task_id, formulier_template_id, opname_ronde, bezoek_ronde, task_lists(dossier_id)')
     .eq('id', id)
     .maybeSingle()
-  if (!oud) throw new Error('Actie niet gevonden')
+  if (!oud) throw new TaakRegelFout('Actie niet gevonden')
 
   const medewerker = await getCurrentMedewerker()
   if (!medewerker) throw new Error('Geen actief medewerker-account')
@@ -266,7 +285,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       .eq('task_id', id)
       .eq('user_id', user.id)
       .maybeSingle()
-    if (!eigenToewijzing) throw new Error('Deze actie staat niet op jouw naam.')
+    if (!eigenToewijzing) throw new TaakRegelFout('Deze actie staat niet op jouw naam.')
   }
 
   // Blokkering valideren bij activering
@@ -274,7 +293,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
     const { data: blocker } = await admin
       .from('tasks').select('status').eq('id', oud.blocked_by_task_id).maybeSingle()
     if (blocker?.status !== 'gereed')
-      throw new Error('Deze taak is geblokkeerd door een nog niet afgeronde taak.')
+      throw new TaakRegelFout('Deze taak is geblokkeerd door een nog niet afgeronde taak.')
   }
 
   // Debiteuren-afdwingen: een >60-dagen debiteurentaak mag pas 'gereed' wanneer de verplichte
@@ -297,7 +316,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
           heeftLogboek = (count ?? 0) > 0
         }
         if (!veldenCompleet || !heeftLogboek) {
-          throw new Error('Vul eerst reden, actie, actiehouder, opvolgdatum én een opmerking in voordat je deze debiteurentaak kunt afronden.')
+          throw new TaakRegelFout('Vul eerst reden, actie, actiehouder, opvolgdatum én een opmerking in voordat je deze debiteurentaak kunt afronden.')
         }
       }
     }
@@ -318,7 +337,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
       .eq('task_id', id)
       .maybeSingle()
     if (tb && tb.status !== 'afgerond') {
-      throw new Error('Deze taak wordt automatisch afgerond zodra je de toolbox op je telefoon hebt doorlopen.')
+      throw new TaakRegelFout('Deze taak wordt automatisch afgerond zodra je de toolbox op je telefoon hebt doorlopen.')
     }
 
     if (oud?.formulier_template_id) {
@@ -328,7 +347,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
         .eq('task_id', id)
         .in('status', ['ingediend', 'goedgekeurd'])
       if (!count) {
-        throw new Error('Deze taak wordt automatisch afgerond zodra je het gekoppelde formulier hebt ingediend.')
+        throw new TaakRegelFout('Deze taak wordt automatisch afgerond zodra je het gekoppelde formulier hebt ingediend.')
       }
     }
 
@@ -341,7 +360,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
         .eq('task_id', id)
         .eq('status', 'definitief')
       if (!count) {
-        throw new Error('Deze taak wordt automatisch afgerond zodra het projectbezoek is afgerond.')
+        throw new TaakRegelFout('Deze taak wordt automatisch afgerond zodra het projectbezoek is afgerond.')
       }
     }
 
@@ -352,7 +371,7 @@ export async function updateTaakStatus(id: string, status: TaskStatus): Promise<
         .eq('task_id', id)
         .in('status', ['gereed', 'omgezet'])
       if (!count) {
-        throw new Error('Deze taak wordt automatisch afgerond zodra de opname is afgerond.')
+        throw new TaakRegelFout('Deze taak wordt automatisch afgerond zodra de opname is afgerond.')
       }
     }
   }

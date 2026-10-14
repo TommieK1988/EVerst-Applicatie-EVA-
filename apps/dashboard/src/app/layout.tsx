@@ -102,7 +102,10 @@ const CHUNK_HERLAAD_BOOTSTRAP = `(function(){
   var S='eva-chunk-herladen',V=30000,n=0;
   function isChunk(e){if(!e)return false;if(e.name==='ChunkLoadError')return true;
     var m=String(e.message||'');
-    return /Loading (CSS )?chunk [\\w-]+ failed/i.test(m)||/Failed to fetch dynamically imported module/i.test(m)||/Importing a module script failed/i.test(m);}
+    return /Loading (CSS )?chunk [\\w-]+ failed/i.test(m)||/Failed to fetch dynamically imported module/i.test(m)||/Importing a module script failed/i.test(m)
+      ||/Cannot read properties of undefined \\(reading 'call'\\)/.test(m)||/can't access property "call", \\w+\\[\\w+\\] is undefined/.test(m)
+      ||/evaluating '\\w+\\[\\w+\\]\\.call'/.test(m)||/__webpack_modules__\\[moduleId\\] is not a function/.test(m)
+      ||/Failed to find Server Action|Server Action "\\w+" was not found/.test(m);}
   function meld(melding,type,stack){if(n++>=5)return;try{fetch('/api/fouten/melden',{method:'POST',keepalive:true,
     headers:{'Content-Type':'application/json'},body:JSON.stringify({bron:'browser/onafgevangen',
     melding:String(melding||'Onbekende fout').slice(0,2000),fout_type:type||null,
@@ -116,8 +119,13 @@ const CHUNK_HERLAAD_BOOTSTRAP = `(function(){
       if(/\\/_next\\/static\\//.test(u)){meld('Bestand niet geladen: '+u,'ResourceLoadError',null);herlaad();}
       return;
     }
-    var e=ev.error;
-    meld(e&&e.message||ev.message,e&&e.name,e&&e.stack);
+    // Een <img>, <video> of <iframe> die niet laadt is geen codefout en heeft geen melding
+    // (dat werd "Onbekende fout"). De ResizeObserver-waarschuwing is onschuldig, en "Script
+    // error." zonder foutobject komt uit een extern script en zegt niets.
+    if(t&&t!==window&&t.nodeType===1)return;
+    var e=ev.error,mt=String(e&&e.message||ev.message||'');
+    if(/^ResizeObserver loop/.test(mt)||(mt==='Script error.'&&!e))return;
+    meld(mt,e&&e.name,e&&e.stack);
     if(isChunk(e))herlaad();
   },true);
   window.addEventListener('unhandledrejection',function(ev){

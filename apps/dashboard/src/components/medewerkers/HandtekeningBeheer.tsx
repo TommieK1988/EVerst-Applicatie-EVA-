@@ -7,6 +7,7 @@ import { createClient } from '@everts/database/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useMedewerkerBestandUrl } from '@/lib/medewerkers/bestand-url'
 
 type Tab = 'upload' | 'tekenen'
 
@@ -18,6 +19,7 @@ export default function HandtekeningBeheer({
   initial_url: string | null
 }) {
   const [url, setUrl] = useState<string | null>(initial_url)
+  const toonUrl = useMedewerkerBestandUrl(url)
   const [tab, setTab] = useState<Tab>('upload')
   const [showEditor, setShowEditor] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -139,7 +141,7 @@ export default function HandtekeningBeheer({
         <Card>
           <CardBody className="inline-flex flex-col gap-2 items-start">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="Handtekening" style={{ maxHeight: 80, maxWidth: 300, objectFit: 'contain' }} />
+            <img src={toonUrl ?? undefined} alt="Handtekening" style={{ maxHeight: 80, maxWidth: 300, objectFit: 'contain' }} />
             <Button
               variant="ghost"
               size="sm"
