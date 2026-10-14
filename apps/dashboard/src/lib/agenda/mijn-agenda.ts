@@ -128,7 +128,9 @@ async function haalPlanitems(medewerkerId: string, van: string, tot: string): Pr
 
 // ─── Afwezigheid ──────────────────────────────────────────────────────────────
 
-async function haalAfwezigheid(medewerkerId: string, van: string, tot: string): Promise<AgendaItem[]> {
+async function haalAfwezigheid(
+  medewerkerId: string, van: string, tot: string, verhul: boolean,
+): Promise<AgendaItem[]> {
   // Overlap-filter: verlof dat vóór het venster begon maar erin doorloopt moet mee.
   const { data, error } = await db()
     .from('medewerker_afwezigheid')
@@ -146,6 +148,25 @@ async function haalAfwezigheid(medewerkerId: string, van: string, tot: string): 
     // `start_datum`/`eind_datum` zijn date-kolommen: al lokaal, dus géén tz-conversie.
     const startDag = dagVanDatum(rij.start_datum) as string
     const heleDag = !rij.start_tijd
+    // Bij de agenda van een collega zie je dát iemand er niet is, niet waaróm: ziekte
+    // en de opmerking erbij zijn persoonsgegevens die een collega niet hoeft te weten.
+    if (verhul) return {
+      id: `afw:${rij.id}`,
+      bron: 'afwezigheid' as const,
+      titel: 'Afwezig',
+      subtitel: null,
+      startDag,
+      eindDag: dagVanDatum(rij.eind_datum) ?? startDag,
+      heleDag,
+      startTijd: heleDag ? null : (rij.start_tijd as string).slice(0, 5),
+      eindTijd: heleDag || !rij.eind_tijd ? null : (rij.eind_tijd as string).slice(0, 5),
+      kleur: '#6b7280',
+      typeLabel: 'Afwezig',
+      locatie: null,
+      dossierId: null,
+      href: null,
+      detail: null,
+    }
     return {
       id: `afw:${rij.id}`,
       bron: 'afwezigheid' as const,
@@ -180,7 +201,7 @@ const haalRegelsJaar = unstable_cache(
 )
 
 async function haalBedrijfsagenda(
-  medewerker: CurrentMedewerker, van: string, tot: string,
+  medewerker: AgendaEigenaar, van: string, tot: string,
 ): Promise<AgendaItem[]> {
   // `haalAlleRegels` werkt per kalenderjaar. Een decembervenster loopt door tot in
   // januari; zonder beide jaartallen mist die kant alles, Nieuwjaarsdag incluis.
@@ -273,19 +294,26 @@ export async function haalMijnTaakItems(authUserId: string | null): Promise<Agen
 
 // ─── Publieke ingang ──────────────────────────────────────────────────────────
 
+/** Wat de agenda van een medewerker nodig heeft: wie, en voor de doelgroep van de bedrijfsagenda de afdeling. */
+export type AgendaEigenaar = Pick<CurrentMedewerker, 'id' | 'afdeling'>
+
 /**
  * Alle agenda-items van deze medewerker binnen `[van, tot]` (beide yyyy-MM-dd,
  * inclusief). Taken zitten hier bewust níét in — die haalt de pagina één keer
  * apart op, zie `haalMijnTaakItems`.
  *
+ * `alsCollega`: iemand anders bekijkt deze agenda (zie `lib/agenda/collega-agenda.ts`).
+ * Afwezigheid verschijnt dan zonder reden. De aanroeper controleert het recht.
+ *
  * Per bron fail-soft: valt de bedrijfsagenda om, dan blijft de eigen planning staan.
  */
 export async function haalAgendaVenster(
-  medewerker: CurrentMedewerker, van: string, tot: string,
+  medewerker: AgendaEigenaar, van: string, tot: string,
+  opties: { alsCollega?: boolean } = {},
 ): Promise<AgendaItem[]> {
   const [planitems, afwezigheid, bedrijf] = await Promise.all([
     haalPlanitems(medewerker.id, van, tot).catch(() => []),
-    haalAfwezigheid(medewerker.id, van, tot).catch(() => []),
+    haalAfwezigheid(medewerker.id, van, tot, opties.alsCollega === true).catch(() => []),
     haalBedrijfsagenda(medewerker, van, tot).catch(() => []),
   ])
   return [...planitems, ...afwezigheid, ...bedrijf]

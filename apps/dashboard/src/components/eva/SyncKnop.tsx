@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { syncTijdLabel } from '@/lib/sync-tijd'
 
 /**
  * Uniforme sync-knop (EVA-standaard, overgenomen van het Management-scherm).
@@ -15,22 +16,6 @@ import { Button } from '@/components/ui/button'
  * uitkomst terug; bij `ok` wordt de route ververst zodat data + tijdstip bijwerken.
  */
 export type SyncUitkomst = { ok: boolean; melding?: string }
-
-export function syncTijdLabel(iso: string | null): string {
-  if (!iso) return 'Nooit'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return 'Nooit'
-  const nu = new Date()
-  const dagen = Math.round(
-    (new Date(nu.getFullYear(), nu.getMonth(), nu.getDate()).getTime()
-      - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000,
-  )
-  const tijd = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
-  if (dagen <= 0) return `Vandaag ${tijd}`
-  if (dagen === 1) return `Gisteren ${tijd}`
-  if (dagen === 2) return `Eergisteren ${tijd}`
-  return `${d.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${tijd}`
-}
 
 type Props = {
   laatsteSync: string | null

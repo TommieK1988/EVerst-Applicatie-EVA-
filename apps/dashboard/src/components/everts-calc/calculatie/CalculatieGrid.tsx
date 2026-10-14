@@ -47,6 +47,13 @@ interface Props {
   actiefGroepId: string | null
   onGroepActief: (id: string) => void
   onWijziging: () => void
+  /**
+   * Alleen tekst gewijzigd (omschrijving e.d.): wel opslaan, géén totalen herrekenen. Elke
+   * toetsaanslag zette anders 3–4 renders in gang (totalen, btw-balk, structuurboom); bij snel
+   * typen in een grote calculatie liep de React-updateteller vol (#185). Zonder deze prop
+   * valt hij terug op `onWijziging`.
+   */
+  onTekstWijziging?: () => void
   onUndoCountChange?: (count: number) => void
   /** Meldt of de diepste groepen allemaal ingeklapt zijn — voedt het label van de in-/uitklapknop. */
   onInklapStatusChange?: (allesIngeklapt: boolean) => void
@@ -134,6 +141,9 @@ const COL_DEFS: ColDef[] = [
  * af te lezen is. Groepen herordenen doe je in de structuurboom, niet hier.
  */
 const NIVEAU_INSPRING = 24
+
+/** Regelvelden die alleen tekst zijn: wijzigen verandert geen bedrag. */
+const TEKSTVELDEN = new Set(['omschrijving', 'werkomschrijving', 'werkomschrijving_afbeeldingen', 'opmerking'])
 
 const COL_MAP     = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Record<ColId, ColDef>
 const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
@@ -2172,7 +2182,7 @@ function GroepSectie({
 // ─── Hoofd CalculatieGrid ─────────────────────────────────────────────────────
 
 const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function CalculatieGrid(
-  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onUndoCountChange, onInklapStatusChange, bibliotheekItems = [], readOnly = false },
+  { scenarioId, scenario, actiefGroepId, onGroepActief, onWijziging, onTekstWijziging, onUndoCountChange, onInklapStatusChange, bibliotheekItems = [], readOnly = false },
   ref
 ) {
   const [groepen,     setGroepen]     = useState<Groep[]>([])
@@ -2924,8 +2934,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       if (r) slaCalculatieregelOp(r)
       return bijgewerkt
     })
-    onWijziging()
-  }, [onWijziging])
+    const alleenTekst = Object.keys(veld).every(k => TEKSTVELDEN.has(k))
+    if (alleenTekst && onTekstWijziging) onTekstWijziging()
+    else onWijziging()
+  }, [onWijziging, onTekstWijziging])
 
   const handleComponentWijzig = useCallback((
     regelId: string, type: Componentregel['type'], norm: number, tarief: number

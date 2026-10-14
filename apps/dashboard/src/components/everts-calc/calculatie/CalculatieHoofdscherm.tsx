@@ -499,6 +499,7 @@ export default function CalculatieHoofdscherm({
             actiefGroepId={actiefGroepId}
             onGroepActief={setActiefGroepId}
             onWijziging={handleWijziging}
+            onTekstWijziging={planAutoSave}
             onUndoCountChange={setUndoCount}
             onInklapStatusChange={setAllesIngeklapt}
             bibliotheekItems={bibliotheekItems}

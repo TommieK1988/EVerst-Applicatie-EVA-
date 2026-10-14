@@ -1,6 +1,12 @@
 {
   "titel": "நாட்காட்டி",
   "sub": "எனது பணி அட்டவணை",
+  "mijnAgenda": "எனது நாட்காட்டி",
+  "agendaVan": "{naam} அவர்களின் நாட்காட்டி",
+  "collegaKiezen": "சக ஊழியர்",
+  "kiezerTitel": "யாருடைய நாட்காட்டி?",
+  "zoekCollega": "பெயர் அல்லது துறை மூலம் தேடவும்",
+  "geenCollega": "சக ஊழியர் யாரும் கிடைக்கவில்லை.",
   "geenKoppeling": "இந்தக் கணக்குடன் இணைக்கப்பட்ட பணியாளர் எவரும் இல்லை.",
   "vandaagMetDatum": "இன்று · {datum}",
   "morgenMetDatum": "நாளை · {datum}",

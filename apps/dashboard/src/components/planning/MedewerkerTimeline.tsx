@@ -1187,7 +1187,20 @@ type Props = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MedewerkerTimeline({
+/**
+ * Pas na het mounten tekenen. Conflicten, verlof-/feestdagblokken en de vandaag-lijn hangen
+ * af van de lokale tijdzone: de server (UTC) zette ze 1–2 uur verschoven en tekende dus
+ * andere conflictknoppen dan de browser — een hydration-fout (React #418, args=HTML).
+ * De browserwaarden zijn de juiste, dus die rekenen we alleen daar uit.
+ */
+export default function MedewerkerTimeline(props: Props) {
+  const [gemount, setGemount] = useState(false)
+  useEffect(() => setGemount(true), [])
+  if (!gemount) return <div aria-busy style={{ minHeight: '60vh' }} />
+  return <MedewerkerTimelineInhoud {...props} />
+}
+
+function MedewerkerTimelineInhoud({
   medewerkers, entries: initialEntries, roosters, afwezigheid, dossierMap,
   projectleiders = {}, ploegNamen = {}, uursoorten = [], agendaItems = [], feestdagen = [],
   alleenGeplandeMedewerkers = false, balkLabel = 'dossier',

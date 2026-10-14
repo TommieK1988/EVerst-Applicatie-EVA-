@@ -1,6 +1,12 @@
 {
   "titel": "Agenda",
   "sub": "Mijn planning",
+  "mijnAgenda": "Mijn agenda",
+  "agendaVan": "Agenda van {naam}",
+  "collegaKiezen": "Collega",
+  "kiezerTitel": "Wiens agenda?",
+  "zoekCollega": "Zoek op naam of afdeling",
+  "geenCollega": "Geen collega gevonden.",
   "geenKoppeling": "Geen medewerker-koppeling gevonden voor dit account.",
   "vandaagMetDatum": "Vandaag · {datum}",
   "morgenMetDatum": "Morgen · {datum}",

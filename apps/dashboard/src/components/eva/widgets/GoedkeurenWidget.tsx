@@ -4,7 +4,7 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 import { WidgetShell, WidgetRij, MAX_WIDGET_RIJEN } from './index'
 import { IconCheck } from '../Icons'
-import { syncTijdLabel } from '@/components/eva/SyncKnop'
+import { syncTijdLabel } from '@/lib/sync-tijd'
 import { getUrenTeFiatterenAantal } from '@/lib/goedkeuren/widget'
 import type { GoedkeurenData, GoedkeurenItem, GoedkeurenSoort } from '@/lib/goedkeuren/widget'
 

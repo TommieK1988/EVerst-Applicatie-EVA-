@@ -1,6 +1,6 @@
 'use client'
 
-import { syncTijdLabel } from '@/components/eva/SyncKnop'
+import { syncTijdLabel } from '@/lib/sync-tijd'
 import type { SnapshotTab } from '@/lib/bouw7/snapshot-soorten'
 
 /**

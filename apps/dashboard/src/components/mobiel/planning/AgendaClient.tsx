@@ -20,7 +20,7 @@ import WeekScherm from './WeekScherm'
  * maandtik de geselecteerde dag en de scrollpositie weggooien, `MobielPullToRefresh`
  * remounten, en een swipe kun je niet aan een routewissel hangen.
  */
-export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }: {
+export default function AgendaClient({ items, peilMaand, startDag, dataSleutel, wie = null }: {
   items: AgendaItem[]
   /** 'yyyy-MM' van het venster dat de server meegaf. */
   peilMaand: string
@@ -31,6 +31,12 @@ export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }
    * zie `vingerafdruk()` voor de knipperlus die dat opleverde.
    */
   dataSleutel: string
+  /**
+   * Medewerker-id van de collega wiens agenda open staat; null = je eigen. Gaat mee naar
+   * de bijlaad-action, die het recht zelf opnieuw controleert. Geef de component ook een
+   * `key` op dit id, anders blijven bijgeladen maanden van de vorige persoon hangen.
+   */
+  wie?: string | null
 }) {
   const [peil, setPeil] = useState(() => maandUitSleutel(peilMaand))
   const [geselecteerd, setGeselecteerd] = useState(startDag)
@@ -63,7 +69,7 @@ export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }
     lopendRef.current.add(sleutel)
     if (zichtbaar) setBezigMaand(sleutel)
 
-    haalAgendaMaand(sleutel)
+    haalAgendaMaand(sleutel, wie)
       .then(nieuwe => {
         geladenRef.current.add(sleutel)
         setExtra(prev => new Map(prev).set(sleutel, nieuwe))
@@ -75,7 +81,7 @@ export default function AgendaClient({ items, peilMaand, startDag, dataSleutel }
         lopendRef.current.delete(sleutel)
         setBezigMaand(huidig => (huidig === sleutel ? null : huidig))
       })
-  }, [])
+  }, [wie])
 
   // Zichtbare maand eerst, dan de buren: doorswipen voelt dan direct in plaats van leeg.
   useEffect(() => {

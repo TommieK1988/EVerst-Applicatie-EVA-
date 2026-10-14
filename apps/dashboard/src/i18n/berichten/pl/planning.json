@@ -1,6 +1,12 @@
 {
   "titel": "Kalendarz",
   "sub": "Mój grafik",
+  "mijnAgenda": "Mój kalendarz",
+  "agendaVan": "Kalendarz: {naam}",
+  "collegaKiezen": "Kolega",
+  "kiezerTitel": "Czyj kalendarz?",
+  "zoekCollega": "Szukaj po nazwisku lub dziale",
+  "geenCollega": "Nie znaleziono kolegi.",
   "geenKoppeling": "Nie znaleziono pracownika powiązanego z tym kontem.",
   "vandaagMetDatum": "Dziś · {datum}",
   "morgenMetDatum": "Jutro · {datum}",

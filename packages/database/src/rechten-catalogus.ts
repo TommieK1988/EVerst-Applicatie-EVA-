@@ -204,10 +204,12 @@ export const RECHTEN_CATALOGUS = [
     key: 'planning',
     label: 'Planning',
     groep: 'planning',
-    kanalen: ['desktop'],
-    omschrijving: 'Projectplanning, medewerkerplanning en de bedrijfsagenda.',
+    // Ook mobiel, maar smal: je eigen agenda op /m/planning staat op geen enkel recht.
+    // Dit recht opent daar alleen de agenda van een collega.
+    kanalen: ['desktop', 'mobiel'],
+    omschrijving: 'Projectplanning, medewerkerplanning en de bedrijfsagenda. Op mobiel alleen het opzoeken van de agenda van een collega; je eigen agenda ziet iedereen.',
     niveaus: {
-      lezen: 'De planborden en de bedrijfsagenda inzien.',
+      lezen: 'De planborden en de bedrijfsagenda inzien. Op mobiel: de agenda van een collega opzoeken.',
       schrijven: 'Inplannen, verschuiven en mensen aan activiteiten toewijzen.',
       beheren: 'Ook de planningsinstellingen en de categorieën van de bedrijfsagenda.',
     },
