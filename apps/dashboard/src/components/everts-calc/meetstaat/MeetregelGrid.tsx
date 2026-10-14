@@ -394,8 +394,8 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
                   title="Breedte aantal — hoeveel breedtes je meet. Telt alleen mee bij m¹.">B aant.</th>
               <th className="w-14 px-1 py-2 text-right font-medium text-blue-400"
                   title="Hoogte aantal — hoeveel hoogtes je meet. Telt alleen mee bij m¹.">H aant.</th>
-              <th className="w-14 px-1 py-2 text-right font-medium" title="Vermenigvuldiger op de hele regel">Factor</th>
-              <th className="w-14 px-1 py-2 text-right font-medium">Aant.</th>
+              <th className="w-14 px-1 py-2 text-right font-medium" title="Vermenigvuldiger op de hele regel">Aantal</th>
+              <th className="w-14 px-1 py-2 text-right font-medium" title="Hoe vaak deze regel voorkomt">x</th>
               <th className="w-20 px-2 py-2 text-right font-medium text-everts">Hoev.</th>
               <th className="w-12 px-1 py-2 text-center font-medium">Eenh.</th>
               <th className="min-w-[160px] px-2 py-2 text-left font-medium">Opmerking</th>
