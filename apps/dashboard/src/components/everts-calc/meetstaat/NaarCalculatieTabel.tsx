@@ -36,8 +36,9 @@ export default function NaarCalculatieTabel({ meetstaatId, groepId, groepNaam }:
   const openIds = new Set(teVerwerken(alle, new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))).map(a => a.id))
   const hoeveelheidPerRegel = new Map(calcRegels.map(r => [r.id, r.hoeveelheid]))
   const rijen = naarCalculatie(alle.filter(a => a.groep_id === groepId), openIds, hoeveelheidPerRegel)
-  // Inklapbaar: op een laptopscherm houdt de meetstaat zelf dan de ruimte.
-  const [open, setOpen] = useState(true)
+  // Standaard ingeklapt: de meetregels houden de ruimte, de kop toont de samenvatting
+  // (bijv. "2 nieuw · 1 gewijzigd"). Het venster Verwerken laat alles toch nog zien.
+  const [open, setOpen] = useState(false)
 
   if (rijen.length === 0) return null
   const tel = telPerStatus(rijen)
