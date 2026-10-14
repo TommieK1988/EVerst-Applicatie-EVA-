@@ -96,7 +96,7 @@ export default function MeetstaatKopbalk({
               title={bevroren ? bevrorenMelding : aantalOpen === 0 ? 'Alles staat al in de calculatie' : undefined}
             >
               {!isSyncing && <ArrowRight className="w-4 h-4" />}
-              Sync naar calculatie
+              Verwerk in calculatie
               {aantalOpen > 0 && (
                 <span className="ml-0.5 rounded-full bg-white/20 px-2 py-0.5 text-xs tabular-nums">{aantalOpen}</span>
               )}

@@ -20,6 +20,7 @@ import { zonderCodeInOmschrijving } from '@/lib/everts-calc/bestekcode'
 import { teVerwerken, isVervallen, meetstaatStatus } from '@/lib/everts-calc/meetstaat-verwerken'
 import GroepenboomPanel from './GroepenboomPanel'
 import MeetstaatKopbalk from './MeetstaatKopbalk'
+import VerwerkenDialog from './VerwerkenDialog'
 import MeetregelGrid from './MeetregelGrid'
 import MeetstaatOpenenModal from './MeetstaatOpenenModal'
 import { openMeetstaatPdf } from './meetstaat-afdrukken'
@@ -60,6 +61,7 @@ export default function MeetstaaatHoofdscherm({
   const [schilderData, setSchilderData] = useState<SchilderData | undefined>(schilderDataProp)
   const [actiefGroepId, setActiefGroepId] = useState<string | null>(null)
   const [openenOpen, setOpenenOpen] = useState(false)
+  const [verwerkOpen, setVerwerkOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [wijzigingsTeller, setWijzigingsTeller] = useState(0)
 
@@ -202,15 +204,17 @@ export default function MeetstaaatHoofdscherm({
     setOpenenOpen(false)
   }, [])
 
-  // Sync aggregaten naar calculatieregels + componentregels
-  const handleSync = useCallback(async () => {
-    if (!meetstaat || !scenario) return
-    if (bevroren) { toast.error(BEVROREN_MELDING); return }
+  // Sync aggregaten naar calculatieregels + componentregels. `gekozen`: alleen deze
+  // aggregaten (uit het venster Verwerken); wat uitgevinkt is blijft openstaan.
+  const handleSync = useCallback(async (gekozen?: Set<string>) => {
+    if (!meetstaat || !scenario) return false
+    if (bevroren) { toast.error(BEVROREN_MELDING); return false }
     setIsSyncing(true)
 
     try {
       const bestaandeRegels = getCalculatieregels()
       const aggregaten = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(bestaandeRegels.map(r => r.id)))
+        .filter(a => !gekozen || gekozen.has(a.id))
 
       // Haal schilder combinaties op per uniek type_id (batch)
       const typeIds = Array.from(new Set(aggregaten.map(a => a.type_id).filter(Boolean))) as string[]
@@ -316,15 +320,18 @@ export default function MeetstaaatHoofdscherm({
         if (combinatie) vervangNormenUitCombinatie(calculatieregelId, combinatie)
       }
 
-      slaMeetstaatOp({ ...meetstaat, status: 'gesynchroniseerd' })
-      setMeetstaat(prev => prev ? { ...prev, status: 'gesynchroniseerd' } : prev)
+      // Bleef er iets uitgevinkt, dan is de meetstaat nog niet helemaal verwerkt.
+      const rest = teVerwerken(getMeetregelAggregaten(meetstaat.id), new Set(getCalculatieregels().map(r => r.id))).length
+      const status = meetstaatStatus('gesynchroniseerd', rest)
+      slaMeetstaatOp({ ...meetstaat, status })
+      setMeetstaat(prev => prev ? { ...prev, status } : prev)
       // De aangemaakte/bijgewerkte calculatieregels moeten direct de database in,
       // anders staan ze alleen in deze sessie.
       vuil.current = true
       await bewaarNu()
       toast.success(t => (
         <span>
-          Gesynchroniseerd: {aangemaakt} nieuwe, {bijgewerkt} bijgewerkte calculatieregels
+          Verwerkt: {aangemaakt} nieuwe, {bijgewerkt} bijgewerkte calculatieregels
           {opNul > 0 && `, ${opNul} op 0 gezet (code vervallen)`}.
           <button className="ml-2 font-medium text-everts underline"
             onClick={() => { toast.dismiss(t.id); void naarCalculatie() }}>
@@ -332,8 +339,10 @@ export default function MeetstaaatHoofdscherm({
           </button>
         </span>
       ), { duration: 6000 })
-    } catch (e) {
-      toast.error('Synchronisatie mislukt')
+      return true
+    } catch {
+      toast.error('Verwerken mislukt')
+      return false
     } finally {
       setIsSyncing(false)
     }
@@ -377,7 +386,7 @@ export default function MeetstaaatHoofdscherm({
         onAfdrukken={() => {
           if (meetstaat) openMeetstaatPdf({ meetstaat, groepen, projectNaam: printKop?.naam, projectNummer: printKop?.nummer })
         }}
-        onSync={() => { void handleSync() }}
+        onSync={() => setVerwerkOpen(true)}
       />
 
       {/* ─── Hoofd content ───────────────────────────────────────────────── */}
@@ -425,6 +434,16 @@ export default function MeetstaaatHoofdscherm({
             )}
           </div>
         </div>
+      )}
+
+      {verwerkOpen && meetstaat && (
+        <VerwerkenDialog
+          meetstaatId={meetstaat.id}
+          groepen={groepen}
+          bezig={isSyncing}
+          onVerwerk={ids => { void handleSync(ids).then(gelukt => { if (gelukt) setVerwerkOpen(false) }) }}
+          onSluit={() => setVerwerkOpen(false)}
+        />
       )}
 
       {/* Modal: meetstaat openen */}
