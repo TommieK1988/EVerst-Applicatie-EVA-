@@ -17,7 +17,11 @@ import CufImportModal from './CufImportModal'
 import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
-import { offerteKeuzesBestaan } from '@/lib/everts-calc/offerte-keuzes'
+import ControlePaneel from './ControlePaneel'
+import { useCalculatieControle } from './useCalculatieControle'
+import { wisselBevestiging, type ControleSoort } from '@/lib/everts-calc/controle'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
+import { formatGetal } from '@/lib/everts-calc/calculations'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import { serialiseerNaarCuf } from '@/lib/everts-calc/cuf-serializer'
@@ -111,8 +115,7 @@ export default function CalculatieHoofdscherm({
   const [offerteModalOpen, setOfferteModalOpen]       = useState(false)
   const [offerteModalType, setOfferteModalType]       = useState<QuoteType>('verkoopofferte')
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
-  const [instellingenVereist, setInstellingenVereist] = useState(false)
-  const [pendingOfferteType, setPendingOfferteType]   = useState<QuoteType | null>(null)
+  const [controleOpen, setControleOpen]               = useState(false)
   const gridRef       = useRef<CalculatieGridHandle>(null)
   const [schermRef, schermHoogte] = usePasInScrollvlak()
 
@@ -178,6 +181,13 @@ export default function CalculatieHoofdscherm({
     rs.forEach(r => { if (r.opslag_pct !== undefined) metEigen.add(r.id) })
     setAantalEigenOpslag(metEigen.size)
   }, [refreshTotalen, scenario])
+
+  /* ── Controle vóór de offerte ────────────────────────────────────── */
+  const controle = useCalculatieControle({
+    scenario, regels: regelsVoorBtw, componenten: componentenVoorBtw, kostprijs, verkoopprijs, versie: refreshTotalen,
+  })
+  const uurtarieven = useInstellingen().uurtarieven ?? []
+  const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
 
   /* ── Opslaan (automatisch + handmatig) ───────────────────────────── */
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -314,7 +324,10 @@ export default function CalculatieHoofdscherm({
   }
 
   const handleScenarioWijzig = (patch: Partial<Scenario>) => {
-    const bijgewerkt = { ...scenario, ...patch }
+    // Basis uit het werkgeheugen, niet de React-kopie: het venster "Voorwaarden, tekst &
+    // bijlages" schrijft daar rechtstreeks in, en een verouderde kopie zou die keuzes
+    // bij de volgende wijziging (opslag, uurtarief) weer overschrijven.
+    const bijgewerkt = { ...(getScenario(scenario.id) ?? scenario), ...patch }
     slaScenarioOp(bijgewerkt)
     setScenario(bijgewerkt)
     planAutoSave()
@@ -344,39 +357,37 @@ export default function CalculatieHoofdscherm({
     handleWijziging()
   }
 
-  /** Start het aanmaken van een offerte/begroting. Vereist eerst een gekozen
-   *  betalingsconditie én algemene voorwaarden op de calculatie; anders opent
-   *  eerst het instellingen-dialoog (verplicht-modus). Een keuze die intussen
-   *  gearchiveerd of verwijderd is telt als niet gekozen. Een interne begroting
-   *  gaat niet naar de klant en heeft geen voorwaarden of termijnen nodig. */
+  /** Start het offertevenster (Controle › Voorwaarden, tekst & bijlages › Lay-out).
+   *  Eerst een openstaande wijziging wegschrijven: het venster rekent met wat er in
+   *  het werkgeheugen staat en bewaart zijn keuzes via de gedeelde snapshot. */
   const startOfferte = async (type: QuoteType) => {
-    if (type === 'interne_calculatie') {
-      setOfferteModalType(type)
-      setOfferteModalOpen(true)
-      return
-    }
-    // Kijk naar het geopende scenario — dát is het scenario waarvan de offerte
-    // gemaakt wordt. Na een revisie is dat een ander dan het standaard-scenario.
-    const scs = getScenarios(projectId)
-    const actief = scs.find(s => s.id === scenario.id) ?? scs.find(s => s.is_standaard) ?? scs[0]
-    const geldig = await offerteKeuzesBestaan(actief?.betalingsconditie_id, actief?.algemene_voorwaarden_id)
-    if (!geldig) {
-      setPendingOfferteType(type)
-      setInstellingenVereist(true)
-      setInstellingenOpen(true)
-    } else {
-      setOfferteModalType(type)
-      setOfferteModalOpen(true)
-    }
+    if (dirtyRef.current) await saveRef.current(true)
+    setOfferteModalType(type)
+    setOfferteModalOpen(true)
   }
 
-  /** Beide keuzes gemaakt in verplicht-modus → door naar het offerte-dialoog. */
-  const handleInstellingenVoltooid = () => {
-    const type = pendingOfferteType
-    setInstellingenOpen(false)
-    setInstellingenVereist(false)
-    setPendingOfferteType(null)
-    if (type) { setOfferteModalType(type); setOfferteModalOpen(true) }
+  /** Het venster "Voorwaarden, tekst & bijlages" schrijft in het werkgeheugen; daarna de
+   *  React-kopie bijwerken, zodat de controle de nieuwe keuze ziet. */
+  const verversScenario = () => setScenario(s => (s && getScenario(s.id)) ?? s)
+
+  const handleKlopt = (sleutel: string) => {
+    if (readOnly) return
+    handleScenarioWijzig({ controle_bevestigd: wisselBevestiging(getScenario(scenario.id)?.controle_bevestigd, sleutel) })
+  }
+
+  const handleNaarRegel = (regelId: string) => {
+    setOfferteModalOpen(false)
+    setControleOpen(true)
+    gridRef.current?.toonRegel(regelId)
+  }
+
+  const tariefVoorFix = scenario.standaard_uurtarief || globaalTarief
+  const controleActies: Partial<Record<ControleSoort, { label: string; onClick: () => void }>> = {
+    arbeid_zonder_tarief: tariefVoorFix > 0
+      ? { label: `€ ${formatGetal(tariefVoorFix, 2)} per uur toepassen op alle uren`, onClick: () => handleUurtariefToepassen(tariefVoorFix) }
+      // Nog geen tarief bekend: het veld onderin aanwijzen in plaats van een bedrag te raden.
+      : { label: 'Uurtarief invullen', onClick: () => { setOfferteModalOpen(false); document.getElementById('calc-uurtarief')?.focus() } },
+    geen_voorwaarden: { label: 'Kiezen', onClick: () => setInstellingenOpen(true) },
   }
 
   /** Reviseren: maakt een nieuwe, bewerkbare versie van deze (definitieve)
@@ -453,8 +464,9 @@ export default function CalculatieHoofdscherm({
         onCufExport={handleCufExport}
         onExcelExport={handleExcelExport}
         kanOfferte={!!dossierContext && !readOnly}
+        controle={{ ...controle.tellers, open: controleOpen, onToggle: () => setControleOpen(o => !o) }}
         onStartOfferte={startOfferte}
-        onInstellingen={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
+        onInstellingen={() => setInstellingenOpen(true)}
       />
 
       {/* ─── Boom + Grid ── */}
@@ -507,6 +519,12 @@ export default function CalculatieHoofdscherm({
           />
         </div>
 
+        <ControlePaneel
+          open={controleOpen} onSluit={() => setControleOpen(false)}
+          punten={controle.punten} tellers={controle.tellers} readOnly={readOnly}
+          onNaarRegel={handleNaarRegel} onKlopt={handleKlopt} acties={controleActies}
+        />
+
         {/* Bibliotheek drawers */}
         <BibliotheekDrawer type="recepten"     open={receptenOpen}     onClose={() => setReceptenOpen(false)} />
         <BibliotheekDrawer type="schilderwerk" open={schilderwerkOpen} onClose={() => setSchilderwerkOpen(false)} />
@@ -538,7 +556,7 @@ export default function CalculatieHoofdscherm({
       {dossierContext && offerteModalOpen && (
         <OfferteAanmakenModal
           open={offerteModalOpen}
-          onClose={() => setOfferteModalOpen(false)}
+          onClose={() => { setOfferteModalOpen(false); verversScenario() }}
           projectId={projectId}
           scenarioId={scenario.id}
           dossierId={dossierContext.dossierId}
@@ -548,6 +566,14 @@ export default function CalculatieHoofdscherm({
           type={offerteModalType}
           meerwerkRegelId={scenario.meerwerk_regel_id ?? null}
           terugNaarUrl={terugNaarUrl}
+          vanServerLaden={false}
+          totaalExcl={verkoopprijs}
+          controle={{
+            punten: controle.puntenVoorOfferte,
+            acties: controleActies,
+            onKlopt: handleKlopt,
+            onNaarRegel: handleNaarRegel,
+          }}
         />
       )}
 
@@ -556,7 +582,7 @@ export default function CalculatieHoofdscherm({
         open={instellingenOpen}
         onOpenChange={(o) => {
           setInstellingenOpen(o)
-          if (!o) { setInstellingenVereist(false); setPendingOfferteType(null) }
+          if (!o) verversScenario()
         }}
       >
         <DialogContent className="max-w-5xl">
@@ -571,8 +597,6 @@ export default function CalculatieHoofdscherm({
               projectId={projectId}
               dossierId={dossierContext?.dossierId}
               scenarioId={scenario.id}
-              vereist={instellingenVereist}
-              onVoltooid={handleInstellingenVoltooid}
             />
           </DialogBody>
         </DialogContent>

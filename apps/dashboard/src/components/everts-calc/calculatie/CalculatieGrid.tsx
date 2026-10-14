@@ -88,6 +88,9 @@ export interface CalculatieGridHandle {
    * een wijziging hoort overal door te werken en niet alleen op nieuwe regels.
    */
   zetArbeidTarieven: (tarief: number) => void
+  /** Springt naar een regel: klapt de groepen erboven open, selecteert hem en scrolt
+   *  hem in beeld. Gebruikt door de controle ("Naar regel"). */
+  toonRegel: (regelId: string) => void
 }
 
 type Snapshot = { groepen: Groep[]; regels: Calculatieregel[]; componenten: Componentregel[] }
@@ -1612,6 +1615,7 @@ function CalculatieregelRij({
   return (
     <>
       <tr
+        data-regel-id={regel.id}
         className={cn(
           'group border-b border-slate-100 hover:bg-blue-100/60 transition-colors',
           rowCls,
@@ -2539,8 +2543,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     onWijziging()
   }, [readOnly, componenten, onWijziging])
 
-  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen, zetArbeidTarieven }),
-    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven])
+  const toonRegel = useCallback((regelId: string) => {
+    const regel = regels.find(r => r.id === regelId)
+    if (!regel) return
+    // De groep van de regel en alle groepen erboven open.
+    const open = new Set<string>()
+    for (let g = groepen.find(x => x.id === regel.groep_id); g; g = groepen.find(x => x.id === g!.parent_id)) open.add(g.id)
+    const bijgewerkt = groepen.map(g => (open.has(g.id) && g.ingeklapt ? { ...g, ingeklapt: false } : g))
+    bijgewerkt.forEach((g, i) => { if (g !== groepen[i]) slaGroepOp(g) })
+    setGroepen(bijgewerkt)
+    setGeselecteerdeRegels(new Set([regelId]))
+    // Na de render staat de rij in de DOM.
+    setTimeout(() => {
+      document.querySelector(`[data-regel-id="${regelId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 50)
+  }, [regels, groepen])
+
+  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel }),
+    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {

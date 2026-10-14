@@ -25,7 +25,6 @@ import {
   type CalculatieBijlage,
   type DossierPdf,
 } from '@/app/(platform)/everts-calc/actions/offerte-bijlagen'
-import { Card, CardHeader, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
@@ -149,36 +148,37 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
   const totaal = bijlagen.reduce((n, b) => n + b.bytes, 0)
 
   return (
-    <Card>
-      <CardHeader>
-        <span className="flex items-center gap-2">
-          <Paperclip className="h-4 w-4 text-slate-400" />
-          Bijlages bij de offerte
-        </span>
+    <section>
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <h4 className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          <Paperclip className="h-3.5 w-3.5" />
+          Bijlages in de PDF
+        </h4>
+        <span className="text-[11px] text-neutral-400">na de offerte, vóór de algemene voorwaarden</span>
         {bijlagen.length > 0 && (
-          <span className="text-xs text-slate-400">
+          <span className="ml-auto text-[11px] text-neutral-500">
             {bijlagen.length} {bijlagen.length === 1 ? 'bijlage' : 'bijlages'} · {toonBytes(totaal)}
           </span>
         )}
-      </CardHeader>
-      <CardBody>
+      </div>
+      <div>
         {laden ? (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Bijlages laden…
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
 
             {bijlagen.length > 0 && (
-              <ul className="space-y-2">
+              <ul className="space-y-1.5">
                 {bijlagen.map((b, i) => (
                   <li
                     key={b.id}
-                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    className="flex items-center gap-2 rounded-[10px] border border-neutral-200 bg-white px-3 py-1.5"
                   >
-                    <span className="w-5 shrink-0 text-xs font-medium text-slate-400">{i + 1}.</span>
-                    <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{b.bestandsnaam}</span>
-                    <span className="shrink-0 text-xs text-slate-400">
+                    <span className="w-5 shrink-0 text-xs font-medium text-neutral-400">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-neutral-700">{b.bestandsnaam}</span>
+                    <span className="shrink-0 text-xs text-neutral-400">
                       {b.paginas != null && `${b.paginas} ${b.paginas === 1 ? 'pagina' : "pagina's"} · `}
                       {toonBytes(b.bytes)}
                     </span>
@@ -188,7 +188,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Openen"
-                        className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>
@@ -200,7 +200,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                           title="Omhoog"
                           disabled={i === 0 || bezig}
                           onClick={() => verplaats(i, -1)}
-                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30"
+                          className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
                         >
                           <ArrowUp className="h-4 w-4" />
                         </button>
@@ -209,7 +209,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                           title="Omlaag"
                           disabled={i === bijlagen.length - 1 || bezig}
                           onClick={() => verplaats(i, 1)}
-                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30"
+                          className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-30"
                         >
                           <ArrowDown className="h-4 w-4" />
                         </button>
@@ -220,7 +220,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                           disabled={bezig}
                           onClick={() => verwijder(b)}
                         >
-                          <Trash2 className="h-4 w-4 text-slate-400" />
+                          <Trash2 className="h-4 w-4 text-neutral-400" />
                         </Button>
                       </>
                     )}
@@ -235,13 +235,14 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                   <FolderOpen className="mr-1.5 h-4 w-4" />
                   Kiezen uit de dossiermap
                 </Button>
-                <span className="text-xs text-slate-400">of sleep een bestand hieronder</span>
+                <span className="text-xs text-neutral-400">of sleep een bestand hieronder</span>
               </div>
             )}
 
             {!readOnly && (
               <FileUpload
                 accept=".pdf,application/pdf"
+                className="py-4"
                 multiple
                 onFiles={voegToe}
                 title={bezig ? 'Bezig met toevoegen…' : <>Sleep PDF&apos;s hierheen of <span className="text-brand-700 underline">blader</span></>}
@@ -250,12 +251,11 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
             )}
 
             {readOnly && bijlagen.length === 0 && (
-              <p className="text-sm text-slate-400">Geen bijlages bij deze calculatie.</p>
+              <p className="text-sm text-neutral-400">Geen bijlages bij deze calculatie.</p>
             )}
 
-            <p className="text-xs text-slate-400">
-              Deze PDF&apos;s komen in de offerte-PDF ná de offerte en vóór de algemene voorwaarden,
-              in de volgorde hierboven. Ze worden vastgelegd op het moment dat je de offerte aanmaakt.
+            <p className="text-[11.5px] text-neutral-500">
+              In de volgorde hierboven. Ze worden vastgelegd op het moment dat je de offerte aanmaakt.
             </p>
 
             {/* De bijlages worden bevroren bij het aanmaken. Wie er daarna eentje bij hangt,
@@ -277,7 +277,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
 
           </div>
         )}
-      </CardBody>
+      </div>
 
       {/* Kiezer: de PDF's die al in de dossiermap staan. Een webpagina kan het
           bestandsvenster van Windows niet in een map laten starten, dus tonen we de
@@ -289,11 +289,11 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
           </DialogHeader>
           <DialogBody>
             {dossierPdfs === null ? (
-              <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
+              <div className="flex items-center gap-2 py-6 text-sm text-neutral-400">
                 <Loader2 className="h-4 w-4 animate-spin" /> Dossiermap lezen…
               </div>
             ) : dossierPdfs.length === 0 ? (
-              <p className="py-6 text-sm text-slate-500">
+              <p className="py-6 text-sm text-neutral-500">
                 Geen PDF&apos;s gevonden in de dossiermap. Sleep het bestand in plaats daarvan
                 rechtstreeks naar het vak in de kaart.
               </p>
@@ -302,7 +302,7 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                 {dossierPdfs.map(f => (
                   <label
                     key={f.sleutel}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-neutral-200 px-3 py-2 hover:bg-neutral-50"
                   >
                     <input
                       type="checkbox"
@@ -312,10 +312,10 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
                         if (e.target.checked) next.add(f.sleutel); else next.delete(f.sleutel)
                         setGekozen(next)
                       }}
-                      className="h-4 w-4 rounded border-slate-300"
+                      className="h-4 w-4 rounded border-neutral-300"
                     />
-                    <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{f.naam}</span>
-                    <span className="shrink-0 text-xs text-slate-400">
+                    <span className="min-w-0 flex-1 truncate text-sm text-neutral-700">{f.naam}</span>
+                    <span className="shrink-0 text-xs text-neutral-400">
                       {f.bron}{f.grootte != null && ` · ${toonBytes(f.grootte)}`}
                     </span>
                   </label>
@@ -340,6 +340,6 @@ export default function OfferteBijlagenKaart({ projectId, dossierId, scenarioId,
           </DialogBody>
         </DialogContent>
       </Dialog>
-    </Card>
+    </section>
   )
 }

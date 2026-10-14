@@ -57,7 +57,7 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
         // Geen `prose`: het typography-plugin staat niet in deze build, dus die klasse
         // doet niets en lijsten zouden zonder bolletje in beeld staan. Daarom expliciet.
         class: [
-          'min-h-[420px] px-6 py-5 leading-relaxed text-sm text-slate-700 focus:outline-none',
+          'min-h-[240px] px-5 py-4 leading-relaxed text-[13px] text-neutral-800 focus:outline-none',
           '[&_p]:my-2 [&_p:first-child]:mt-0',
           '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
           '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6',
@@ -86,7 +86,7 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
   }, [readOnly, editor])
 
   if (!editor) {
-    return <div className="min-h-[470px] rounded-lg border border-slate-200 bg-slate-50" />
+    return <div className="min-h-[282px] rounded-md border border-neutral-300 bg-neutral-50" />
   }
 
   const knop = (
@@ -108,10 +108,10 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
       onMouseDown={e => e.preventDefault()}
       onClick={aan}
       className={cn(
-        'rounded p-1.5 text-slate-500 transition-colors',
-        'hover:bg-slate-100 hover:text-slate-800',
+        'rounded p-1.5 text-neutral-500 transition-colors',
+        'hover:bg-neutral-100 hover:text-neutral-800',
         'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
-        actief && 'bg-slate-200 text-slate-900',
+        actief && 'bg-neutral-200 text-neutral-900',
       )}
     >
       <Icoon className="h-4 w-4" />
@@ -119,15 +119,15 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
   )
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white focus-within:border-everts focus-within:ring-2 focus-within:ring-everts/20">
-      <div className="flex items-center gap-0.5 border-b border-slate-200 px-1.5 py-1">
+    <div className="rounded-md border border-neutral-300 bg-white focus-within:border-brand-500 focus-within:ring-[3px] focus-within:ring-brand-100">
+      <div className="flex items-center gap-0.5 border-b border-neutral-200 px-1.5 py-1">
         {knop(editor.isActive('bold'), 'Vet (Ctrl+B)', () => editor.chain().focus().toggleBold().run(), Bold)}
         {knop(editor.isActive('italic'), 'Cursief (Ctrl+I)', () => editor.chain().focus().toggleItalic().run(), Italic)}
         {knop(editor.isActive('underline'), 'Onderstreept (Ctrl+U)', () => editor.chain().focus().toggleUnderline().run(), UnderlineIcon)}
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className="mx-1 h-5 w-px bg-neutral-200" />
         {knop(editor.isActive('bulletList'), 'Opsomming', () => editor.chain().focus().toggleBulletList().run(), List)}
         {knop(editor.isActive('orderedList'), 'Genummerde lijst', () => editor.chain().focus().toggleOrderedList().run(), ListOrdered)}
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className="mx-1 h-5 w-px bg-neutral-200" />
         {knop(false, 'Ongedaan maken', () => editor.chain().focus().undo().run(), Undo2, !editor.can().undo())}
         {knop(false, 'Opnieuw', () => editor.chain().focus().redo().run(), Redo2, !editor.can().redo())}
       </div>
@@ -137,7 +137,7 @@ export default function OfferteTekstEditor({ waarde, onChange, readOnly = false,
             inhoud pas in het effect ná deze render, dus met getHTML() bleef de
             hulptekst over net geladen tekst heen staan. */}
         {leeg(waarde) && placeholder && (
-          <span className="pointer-events-none absolute left-6 top-5 text-sm text-slate-400">
+          <span className="pointer-events-none absolute left-5 top-4 text-sm text-neutral-400">
             {placeholder}
           </span>
         )}

@@ -5,7 +5,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   GitBranch, Undo2, Check, CloudUpload, TriangleAlert, ChevronDown, ChevronsUp, ChevronsDown,
   Library, BookOpen, Paintbrush, Package, Keyboard, MoreHorizontal, Copy, FileUp, FileDown, Table2,
-  FileText, ClipboardList, Receipt,
+  FileText, ClipboardList, Receipt, ListChecks,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader } from '@/components/ui/popover'
@@ -38,6 +38,8 @@ interface Props {
   onExcelExport: () => void
   /** Offerte en interne begroting: alleen binnen een dossier en niet bevroren. */
   kanOfferte: boolean
+  /** Knop Controle met tellers (rood = houdt de offerte tegen, oranje = nakijken). */
+  controle: { rood: number; oranje: number; open: boolean; onToggle: () => void }
   onStartOfferte: (type: QuoteType) => void
   onInstellingen: () => void
 }
@@ -95,14 +97,14 @@ export default function CalculatieWerkbalk(p: Props) {
 
       <span className="w-px h-4 bg-neutral-200 mx-2" />
 
-      <span className="hidden xl:inline text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400 mr-1">
+      <span className="hidden 2xl:inline text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400 mr-1">
         Toevoegen
       </span>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <Button variant="outline" size="sm" title="Bibliotheek openen">
             <Library className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Bibliotheek</span>
+            <span className="hidden 2xl:inline">Bibliotheek</span>
             <ChevronDown className="w-3 h-3 text-neutral-400" />
           </Button>
         </DropdownMenu.Trigger>
@@ -173,6 +175,20 @@ export default function CalculatieWerkbalk(p: Props) {
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+
+        <Button
+          variant="outline" size="sm" onClick={p.controle.onToggle} aria-pressed={p.controle.open}
+          className={p.controle.open ? 'border-brand-500 bg-brand-50 text-brand-700 hover:bg-brand-50' : undefined}
+          title={p.controle.rood + p.controle.oranje === 0
+            ? 'Controle: alles in orde'
+            : `Controle: ${p.controle.rood} op te lossen, ${p.controle.oranje} nakijken`}
+        >
+          <ListChecks className="w-3.5 h-3.5" />
+          <span className="hidden xl:inline">Controle</span>
+          {p.controle.rood > 0 && <Teller kleur="bg-error-500">{p.controle.rood}</Teller>}
+          {p.controle.oranje > 0 && <Teller kleur="bg-warning-500">{p.controle.oranje}</Teller>}
+          {p.controle.rood + p.controle.oranje === 0 && <Check className="w-3.5 h-3.5 text-brand-500" />}
+        </Button>
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -245,7 +261,7 @@ function Sneltoetsen() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="icon-sm" title="Sneltoetsen">
+        <Button variant="outline" size="icon-sm" title="Sneltoetsen" className="hidden xl:inline-flex">
           <Keyboard className="w-3.5 h-3.5" />
         </Button>
       </PopoverTrigger>
@@ -263,5 +279,13 @@ function Sneltoetsen() {
         </table>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function Teller({ kleur, children }: { kleur: string; children: ReactNode }) {
+  return (
+    <span className={`${kleur} min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-bold leading-[18px] text-center text-white`}>
+      {children}
+    </span>
   )
 }
