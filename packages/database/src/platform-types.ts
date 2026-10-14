@@ -1826,7 +1826,10 @@ export type OpleverMoment = {
   type: OpleverMomentType
   status: OpleverMomentStatus
   opgeleverd_op: string | null
+  /** "Algemene opmerkingen" in het opleverrapport. */
   opmerking: string | null
+  /** "Afspraken" in het opleverrapport. */
+  afspraken: string | null
   created_at: string
   updated_at: string
   created_by: string | null
@@ -1848,6 +1851,8 @@ export type OpleverPunt = {
   toegewezen_relatie_id: string | null
   deadline: string | null
   is_extra_werk: boolean
+  /** Goed uitgevoerd: alleen foto + omschrijving in het rapport, altijd status 'geaccepteerd'. */
+  is_goed: boolean
   meerwerk_regel_id: string | null
   geweigerd_reden: string | null
   afgemeld_op: string | null

@@ -22,6 +22,8 @@ import {
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
 import OpleveringMailBlok from './OpleveringMailBlok'
+import OpleveringGoedePunten from './OpleveringGoedePunten'
+import OpleveringMomentTeksten from './OpleveringMomentTeksten'
 import { PUNT_STATUSSEN, REDEN_STATUSSEN } from '@/lib/dossiers/oplever-status'
 import { splitsFotos, bewijsOntbreekt } from '@/lib/dossiers/oplever-fotos'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
@@ -625,6 +627,7 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
   }
 
   const alleGeaccepteerd = moment.aantalTotaal > 0 && moment.aantalOpen === 0
+  const opleverpunten = moment.punten.filter(p => !p.is_goed)
 
   return (
     <Card>
@@ -668,13 +671,13 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
         <OndertekenBlok moment={moment} readOnly={readOnly} onChange={onChange} />
 
         <div className="space-y-2">
-          {moment.punten.length === 0 && <LegePuntRij />}
-          {moment.punten.map(p => (
+          {opleverpunten.length === 0 && <LegePuntRij />}
+          {opleverpunten.map(p => (
             <PuntRow key={p.id} punt={p} dossierId={dossierId} toewijsbaar={toewijsbaar}
               readOnly={readOnly} onChange={onChange} />
           ))}
         </div>
-        {moment.punten.length === 0 && (
+        {opleverpunten.length === 0 && (
           <p className="mt-2 text-[12px] text-neutral-500">Nog geen opleverpunten op dit moment.</p>
         )}
 
@@ -688,6 +691,11 @@ function MomentCard({ moment, dossierId, toewijsbaar, readOnly, onChange }: {
             )}
           </div>
         )}
+
+        <OpleveringGoedePunten momentId={moment.id} punten={moment.punten.filter(p => p.is_goed)}
+          readOnly={readOnly} onChange={onChange} />
+        <OpleveringMomentTeksten key={moment.id} momentId={moment.id} opmerking={moment.opmerking}
+          afspraken={moment.afspraken} readOnly={readOnly} />
       </CardBody>
     </Card>
   )

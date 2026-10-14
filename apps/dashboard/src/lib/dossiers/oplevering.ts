@@ -55,6 +55,8 @@ export type OpleverMomentView = OpleverMoment & {
   aantalTotaal: number
   aantalOpen: number
   aantalGeaccepteerd: number
+  /** Goed uitgevoerde punten; tellen niet mee in de drie tellers hierboven. */
+  aantalGoed: number
 }
 
 export type DossierOpleveringData = {
@@ -171,7 +173,7 @@ export async function getDossierOplevering(dossierId: string): Promise<DossierOp
     const mp = puntenPerMoment.get(m.id) ?? []
     // Afgewezen en nog te beoordelen punten tellen niet mee als werk: anders blijft een moment
     // eeuwig "open" en komt het nooit op 'gereed_voor_ondertekening'.
-    const meetellend = mp.filter(p => !NIET_ACTIEVE_STATUSSEN.includes(p.status))
+    const meetellend = mp.filter(p => !p.is_goed && !NIET_ACTIEVE_STATUSSEN.includes(p.status))
     return {
       ...m,
       punten: mp,
@@ -179,6 +181,7 @@ export async function getDossierOplevering(dossierId: string): Promise<DossierOp
       aantalTotaal: meetellend.length,
       aantalOpen: meetellend.filter(p => p.status !== 'geaccepteerd').length,
       aantalGeaccepteerd: meetellend.filter(p => p.status === 'geaccepteerd').length,
+      aantalGoed: mp.filter(p => p.is_goed).length,
     }
   })
 

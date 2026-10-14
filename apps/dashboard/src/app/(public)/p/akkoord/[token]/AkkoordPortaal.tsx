@@ -21,7 +21,10 @@ export function AkkoordPortaal({ token, data }: { token: string; data: AkkoordPo
     setKlaar(true)
   }
 
-  const openPunten = (data.punten ?? []).filter(p => p.status !== 'geaccepteerd').length
+  // Goed uitgevoerde onderdelen staan er ter informatie bij, maar zijn geen opleverpunten.
+  const punten = (data.punten ?? []).filter(p => !p.is_goed)
+  const goed = (data.punten ?? []).filter(p => p.is_goed)
+  const openPunten = punten.filter(p => p.status !== 'geaccepteerd').length
 
   return (
     <div>
@@ -34,10 +37,10 @@ export function AkkoordPortaal({ token, data }: { token: string; data: AkkoordPo
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{data.moment?.titel}</div>
         <div style={{ fontSize: 12.5, color: '#6b757c', marginBottom: 12 }}>
-          {(data.punten ?? []).length} opleverpunt(en){openPunten > 0 ? ` · ${openPunten} nog niet geaccepteerd` : ' · alle punten geaccepteerd'}
+          {punten.length} opleverpunt(en){openPunten > 0 ? ` · ${openPunten} nog niet geaccepteerd` : ' · alle punten geaccepteerd'}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {(data.punten ?? []).map((p, i) => (
+          {punten.map((p, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #f1f4f3', paddingBottom: 6 }}>
               <span>
                 <span style={{ color: '#a4adb2', fontWeight: 700, marginRight: 6 }}>OP{String(p.volgnummer).padStart(2, '0')}</span>
@@ -47,6 +50,19 @@ export function AkkoordPortaal({ token, data }: { token: string; data: AkkoordPo
             </div>
           ))}
         </div>
+        {goed.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8a938f', margin: '16px 0 6px' }}>Goed uitgevoerd</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {goed.map((p, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #f1f4f3', paddingBottom: 6 }}>
+                  <span>{p.ruimte ? <strong>{p.ruimte}: </strong> : null}{p.omschrijving}</span>
+                  <span style={{ fontSize: 11, color: '#1c7a3f', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Akkoord</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {klaar ? (

@@ -10353,6 +10353,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          afspraken: string | null
           dossier_id: string
           id: string
           opgeleverd_op: string | null
@@ -10365,6 +10366,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          afspraken?: string | null
           dossier_id: string
           id?: string
           opgeleverd_op?: string | null
@@ -10377,6 +10379,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          afspraken?: string | null
           dossier_id?: string
           id?: string
           opgeleverd_op?: string | null
@@ -10491,6 +10494,7 @@ export type Database = {
           geweigerd_reden: string | null
           id: string
           is_extra_werk: boolean
+          is_goed: boolean
           meerwerk_regel_id: string | null
           melder_naam: string | null
           moment_id: string | null
@@ -10519,6 +10523,7 @@ export type Database = {
           geweigerd_reden?: string | null
           id?: string
           is_extra_werk?: boolean
+          is_goed?: boolean
           meerwerk_regel_id?: string | null
           melder_naam?: string | null
           moment_id?: string | null
@@ -10547,6 +10552,7 @@ export type Database = {
           geweigerd_reden?: string | null
           id?: string
           is_extra_werk?: boolean
+          is_goed?: boolean
           meerwerk_regel_id?: string | null
           melder_naam?: string | null
           moment_id?: string | null

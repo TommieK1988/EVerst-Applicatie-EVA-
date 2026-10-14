@@ -12,6 +12,7 @@ import HandtekeningPad from '@/components/planning/werkbon/HandtekeningPad'
 import MobielStickyFooter from '@/components/mobiel/MobielStickyFooter'
 import SpraakTextarea from '@/components/mobiel/SpraakTextarea'
 import PuntKaart from './PuntKaart'
+import { GoedPuntKaart, NieuwGoedPuntSheet, MomentTekstenBlok } from './GoedUitgevoerd'
 import BottomSheet from '../BottomSheet'
 import { GROEN, GRIJS, RAND, TEKST, AMBER, ZACHT, VLAK, veld, label, primaireKnop, secundaireKnop } from './stijl'
 
@@ -31,12 +32,15 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
   const t = useTranslations('oplevering')
   const router = useRouter()
   const [puntOpen, setPuntOpen] = useState(false)
+  const [goedOpen, setGoedOpen] = useState(false)
   const [tekenOpen, setTekenOpen] = useState(false)
   const [deelOpen, setDeelOpen] = useState(false)
 
   const herlaad = () => router.refresh()
   const alleKlaar = moment.aantalTotaal > 0 && moment.aantalOpen === 0
   const pct = moment.aantalTotaal > 0 ? (moment.aantalGeaccepteerd / moment.aantalTotaal) * 100 : 0
+  const opleverpunten = moment.punten.filter(p => !p.is_goed)
+  const goedePunten = moment.punten.filter(p => p.is_goed)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
@@ -78,12 +82,12 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
         </div>
 
         {/* Punten */}
-        {moment.punten.length === 0 ? (
+        {opleverpunten.length === 0 ? (
           <div style={{ background: 'var(--bg-elev)', border: `1px solid ${RAND}`, borderRadius: 14, padding: 20, textAlign: 'center', fontSize: 14, color: GRIJS }}>
             {t('doorloop.geenPunten')}
           </div>
         ) : (
-          moment.punten.map(p => (
+          opleverpunten.map(p => (
             <PuntKaart key={p.id} punt={p} prefix="OP" toewijsbaar={toewijsbaar} onWijzig={herlaad} />
           ))
         )}
@@ -91,6 +95,20 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
         <button type="button" onClick={() => setPuntOpen(true)} style={{ ...secundaireKnop, width: '100%' }}>
           {t('doorloop.knopPunt')}
         </button>
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: GRIJS, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 8 }}>
+          {t('goed.kop')}
+        </div>
+        {goedePunten.map((p, i) => <GoedPuntKaart key={p.id} punt={p} nr={i + 1} onWijzig={herlaad} />)}
+        <button type="button" onClick={() => setGoedOpen(true)} style={{ ...secundaireKnop, width: '100%', color: GROEN }}>
+          {t('goed.knop')}
+        </button>
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: GRIJS, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 8 }}>
+          {t('teksten.kop')}
+        </div>
+        <MomentTekstenBlok key={`${moment.opmerking}|${moment.afspraken}`} momentId={moment.id}
+          opmerking={moment.opmerking} afspraken={moment.afspraken} onWijzig={herlaad} />
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={() => setDeelOpen(true)} style={{ ...secundaireKnop, flex: 1 }}>
@@ -117,6 +135,10 @@ export default function OpleverDoorloop({ moment, dossierId, toewijsbaar, standa
           onSluit={() => setPuntOpen(false)}
           onKlaar={() => { setPuntOpen(false); herlaad() }}
         />
+      )}
+      {goedOpen && (
+        <NieuwGoedPuntSheet momentId={moment.id} onSluit={() => setGoedOpen(false)}
+          onKlaar={() => { setGoedOpen(false); herlaad() }} />
       )}
       {tekenOpen && (
         <OndertekenSheet

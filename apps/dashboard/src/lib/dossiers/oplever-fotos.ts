@@ -37,8 +37,9 @@ const AFGEROND: OpleverPuntStatus[] = ['opgelost', 'geaccepteerd']
  *
  * Levert alleen een signaal op — nergens een blokkade. Er zijn punten waar een foto niets
  * toevoegt (een administratieve correctie, een afspraak die is nagekomen); de status blijft
- * daarmee vrij te zetten.
+ * daarmee vrij te zetten. Een goed uitgevoerd punt (`isGoed`) kent geen herstel en dus ook geen
+ * na-foto.
  */
-export function bewijsOntbreekt(status: OpleverPuntStatus, fotos: OpleverFoto[]): boolean {
-  return AFGEROND.includes(status) && !fotos.some(f => f.soort === 'na')
+export function bewijsOntbreekt(status: OpleverPuntStatus, fotos: OpleverFoto[], isGoed = false): boolean {
+  return !isGoed && AFGEROND.includes(status) && !fotos.some(f => f.soort === 'na')
 }

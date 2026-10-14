@@ -102,5 +102,29 @@
       "knop": "Afwijzen"
     }
   },
+  "goed": {
+    "kop": "Goed uitgevoerd",
+    "knop": "+ Goed uitgevoerd",
+    "label": "Goed uitgevoerd",
+    "titel": "Goed uitgevoerd vastleggen",
+    "omschrijving": "Wat is er gedaan?",
+    "omschrijvingPlaceholder": "Beschrijf of spreek in wat er is gedaan",
+    "foutLeeg": "Beschrijf wat er is gedaan.",
+    "fotoToevoegen": "Foto toevoegen",
+    "fotosGekozen": "{aantal} foto(’s) gekozen",
+    "fotoMislukt": "Het punt staat erin, maar een foto lukte niet: {fout}",
+    "verwijderen": "Punt verwijderen",
+    "bevestigVerwijderen": "Dit punt verwijderen?"
+  },
+  "teksten": {
+    "kop": "Opmerkingen en afspraken",
+    "titel": "Opmerkingen en afspraken",
+    "opmerking": "Algemene opmerkingen",
+    "afspraken": "Afspraken",
+    "leeg": "Nog niets ingevuld.",
+    "uitleg": "Dit komt in het opleverrapport.",
+    "knopInvullen": "Invullen",
+    "knopOpslaan": "Opslaan"
+  },
   "sterren": "{score} van {max}"
 }

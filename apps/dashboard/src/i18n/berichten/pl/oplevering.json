@@ -102,5 +102,29 @@
       "knop": "Odrzuć"
     }
   },
+  "goed": {
+    "kop": "Dobrze wykonane",
+    "knop": "+ Dobrze wykonane",
+    "label": "Dobrze wykonane",
+    "titel": "Zapisz dobrze wykonaną pracę",
+    "omschrijving": "Co zostało zrobione?",
+    "omschrijvingPlaceholder": "Opisz lub nagraj, co zostało zrobione",
+    "foutLeeg": "Opisz, co zostało zrobione.",
+    "fotoToevoegen": "Dodaj zdjęcie",
+    "fotosGekozen": "Wybrano zdjęć: {aantal}",
+    "fotoMislukt": "Punkt został zapisany, ale zdjęcie się nie udało: {fout}",
+    "verwijderen": "Usuń punkt",
+    "bevestigVerwijderen": "Usunąć ten punkt?"
+  },
+  "teksten": {
+    "kop": "Uwagi i ustalenia",
+    "titel": "Uwagi i ustalenia",
+    "opmerking": "Uwagi ogólne",
+    "afspraken": "Ustalenia",
+    "leeg": "Jeszcze nic nie wpisano.",
+    "uitleg": "To trafi do raportu odbioru.",
+    "knopInvullen": "Uzupełnij",
+    "knopOpslaan": "Zapisz"
+  },
   "sterren": "{score} z {max}"
 }

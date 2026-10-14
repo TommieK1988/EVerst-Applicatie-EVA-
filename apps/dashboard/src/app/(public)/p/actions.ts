@@ -177,7 +177,7 @@ export type AkkoordPortaalData = {
   error?: string
   dossier?: { titel: string | null; nummer: string | null }
   moment?: { titel: string; status: string }
-  punten?: { volgnummer: number; omschrijving: string; ruimte: string | null; status: OpleverPuntStatus }[]
+  punten?: { volgnummer: number; omschrijving: string; ruimte: string | null; status: OpleverPuntStatus; is_goed: boolean }[]
   alGetekend?: boolean
 }
 
@@ -190,7 +190,7 @@ export async function getAkkoordPortaal(rawToken: string): Promise<AkkoordPortaa
   const [{ data: dossier }, { data: moment }, { data: punten }, { data: handtekeningen }] = await Promise.all([
     supabase.from('dossiers').select('titel, dossiernummer').eq('id', token.dossier_id).maybeSingle(),
     supabase.from('oplever_momenten').select('titel, status').eq('id', token.moment_id).maybeSingle(),
-    supabase.from('oplever_punten').select('volgnummer, omschrijving, ruimte, status').eq('moment_id', token.moment_id).order('volgnummer'),
+    supabase.from('oplever_punten').select('volgnummer, omschrijving, ruimte, status, is_goed').eq('moment_id', token.moment_id).order('volgnummer'),
     supabase.from('oplever_handtekeningen').select('rol').eq('moment_id', token.moment_id).eq('rol', 'opdrachtgever'),
   ])
   if (!moment) return { ok: false, error: 'Oplevermoment niet gevonden.' }

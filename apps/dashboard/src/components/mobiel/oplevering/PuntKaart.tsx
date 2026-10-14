@@ -291,7 +291,7 @@ export default function PuntKaart({ punt, prefix, toewijsbaar, onWijzig }: {
  * ter plekke — die knop blijft dus groot en voorop — maar soms staat het beeld er al, gemaakt vóór
  * de ronde of door een collega gestuurd. Dat is de tweede knop.
  */
-function FotoRij({ label, disabled, accent, onKies }: {
+export function FotoRij({ label, disabled, accent, onKies }: {
   label: string
   disabled: boolean
   accent?: string | null

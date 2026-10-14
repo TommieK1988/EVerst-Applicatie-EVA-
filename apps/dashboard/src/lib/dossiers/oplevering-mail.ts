@@ -6,7 +6,7 @@ import { opleverPuntStatusLabels, type OpleverPuntStatus } from '@everts/databas
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { verstuurMailNamensMedewerker, type MailBijlage } from '@/lib/o365/mail'
 import { getOplevermomentRapport } from './oplevering'
-import { genereerOpleverRapportPdf, opleverRapportBestandsnaam } from './oplever-rapport-pdf'
+import { genereerOpleverRapportPdf, opleverRapportBestandsnaam, KLEINE_FOTOS } from './oplever-rapport-pdf'
 import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { mailTekstNaarHtml, mailOnderwerp } from '@/lib/mail/opmaak'
 
@@ -85,7 +85,10 @@ function knop(href: string, tekst: string): string {
 export async function bouwRapportageMailHtml(momentId: string): Promise<{ onderwerp: string; bodyHtml: string } | null> {
   const rapport = await getOplevermomentRapport(momentId)
   if (!rapport) return null
-  const { dossier, moment, punten, handtekeningen } = rapport
+  const { dossier, moment, handtekeningen } = rapport
+  // Goed uitgevoerde punten zijn geen opleverpunten: alleen meetellen als regel in de samenvatting.
+  const punten = rapport.punten.filter(p => !p.is_goed)
+  const aantalGoed = rapport.punten.length - punten.length
 
   const rijen = punten.map(p => `
     <tr>
@@ -100,7 +103,8 @@ export async function bouwRapportageMailHtml(momentId: string): Promise<{ onderw
   // zonder daarbij de grammatica van een telling te hoeven regelen.
   const samenvatting =
     `Er ${punten.length === 1 ? 'is 1 opleverpunt' : `zijn ${punten.length} opleverpunten`} vastgelegd, ` +
-    `waarvan ${punten.length - open} geaccepteerd${open > 0 ? ` en ${open} nog openstaand` : ''}.`
+    `waarvan ${punten.length - open} geaccepteerd${open > 0 ? ` en ${open} nog openstaand` : ''}.` +
+    (aantalGoed ? ` Daarnaast ${aantalGoed === 1 ? 'is 1 onderdeel' : `zijn ${aantalGoed} onderdelen`} als goed uitgevoerd vastgelegd.` : '')
 
   const blokken: Record<string, string> = {
     gegevens: `
@@ -247,7 +251,9 @@ export async function verstuurOpleverMailWachtrij(
       // mislukte PDF nooit het klaarzetten blokkeert.
       const bijlagen: MailBijlage[] = []
       if (rij.soort === 'rapportage' && rij.moment_id) {
-        const pdf = await genereerOpleverRapportPdf(rij.moment_id)
+        let pdf = await genereerOpleverRapportPdf(rij.moment_id)
+        // Te groot voor Graph? Eén keer opnieuw met kleinere foto's voordat we het opgeven.
+        if (pdf && pdf.byteLength > MAX_BIJLAGE_BYTES) pdf = await genereerOpleverRapportPdf(rij.moment_id, KLEINE_FOTOS)
         if (!pdf) throw new Error('Opleverrapport kon niet worden opgebouwd (moment niet gevonden).')
         if (pdf.byteLength > MAX_BIJLAGE_BYTES) {
           throw new Error(
