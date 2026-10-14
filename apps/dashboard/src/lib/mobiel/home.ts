@@ -81,6 +81,12 @@ const WEKEN_TERUG = 6
 const MAX_SIGNALEN = 3
 
 /**
+ * Eerste week (ISO-week 40, 2026) waarover de weekstaat je aanspreekt. Alles daarvoor
+ * staat al in Bouw7; een "nog niet ingediend" voor die weken klopt niet en verwart.
+ */
+const EERSTE_SIGNAALWEEK = '2026-09-28'
+
+/**
  * Weekstaten die nog iets van je vragen.
  *
  * Bewust alleen weken waarvoor al een rij bestaat — dus weken die je zelf een keer
@@ -93,7 +99,7 @@ async function haalUrenSignalen(medewerkerId: string): Promise<UrenSignaal[]> {
   const nu = new Date()
   const grens = new Date(nu)
   grens.setDate(grens.getDate() - WEKEN_TERUG * 7)
-  const vanWeek = weekStartVan(grens)
+  const vanWeek = [weekStartVan(grens), EERSTE_SIGNAALWEEK].sort().at(-1)!
 
   type WeekRij = { id: string; week_start: string; week_nr: number; status: string }
 
