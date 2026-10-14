@@ -12,7 +12,7 @@ import { useDossierReadOnly } from '../DossierReadOnlyContext'
 function fmtTijd(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('nl-NL', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
   })
 }
 

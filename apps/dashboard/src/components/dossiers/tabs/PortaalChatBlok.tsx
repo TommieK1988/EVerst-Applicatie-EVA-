@@ -103,7 +103,7 @@ export function PortaalChatBlok({ dossierId }: { dossierId: string }) {
                   ))}
                   <p className="mt-0.5 text-[10px] text-neutral-400">
                     {new Date(b.op).toLocaleString('nl-NL', {
-                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
                     })}
                   </p>
                 </div>

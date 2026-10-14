@@ -495,7 +495,7 @@ export default function MeerwerkTab({ dossierId, naam = 'Meerwerk', nummer = '',
                           <span className="block">
                             {new Date(r.besluit_op).toLocaleString('nl-NL', {
                               day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
+                              hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
                             })}
                             {r.besluit_door_soort === 'klant' && ' · via het klantportaal'}
                           </span>

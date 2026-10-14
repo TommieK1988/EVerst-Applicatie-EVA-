@@ -56,7 +56,7 @@ function naarInvoer(f: Formulier): WerkplanInvoer {
 }
 
 const datumTijd = (iso: string) =>
-  new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' })
 
 export default function WerkplanTab({ dossierId, werkplan, betrokkenen, informatieHref }: {
   dossierId: string

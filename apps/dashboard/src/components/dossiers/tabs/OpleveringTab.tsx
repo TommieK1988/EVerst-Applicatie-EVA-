@@ -188,7 +188,7 @@ function UitlegBlok() {
 function datumTijd(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('nl-NL', {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
   })
 }
 

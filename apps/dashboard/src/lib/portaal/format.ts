@@ -24,7 +24,7 @@ export function datumTijd(waarde: string | null | undefined): string {
   const d = new Date(waarde)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString('nl-NL', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
   })
 }
 
