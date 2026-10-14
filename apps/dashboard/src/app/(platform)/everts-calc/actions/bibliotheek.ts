@@ -283,7 +283,7 @@ export async function maakRecept(data: {
     })
     .select('id')
     .single()
-  if (error) throw new Error(`Fout bij aanmaken recept: ${error.message}`)
+  if (error) throw new Error(`Fout bij aanmaken recept: ${error.message}`, { cause: error })
   revalidatePath('/bibliotheek')
   return item.id
 }
@@ -305,25 +305,30 @@ export async function slaRegelOpAlsRecept(data: {
   const supabase = await createClient()
   const FAMILIE_ID = '00000000-0000-0000-0000-000000000001'
 
-  // Genereer volgende beschikbare code voor deze categorie
+  // Volgende code voor deze categorie (XX-001). De database rekent het maximum
+  // uit; een onbegrensde select hier kapt boven 1000 rijen stil af. Slaan twee
+  // mensen tegelijk op, dan krijgen ze dezelfde code: de unieke index op
+  // item_code weigert de tweede, en die probeert het met een nieuwe code.
   const catPrefix = (data.categorie.substring(0, 2) || 'OV').toUpperCase()
-  const { data: bestaand } = await supabase
-    .from('paint_items')
-    .select('item_code')
-    .like('item_code', `${catPrefix}-%`)
-  const nummers = (bestaand ?? [])
-    .map(i => parseInt(i.item_code?.split('-')[1] ?? '0'))
-    .filter(n => !isNaN(n))
-  const next = (nummers.length > 0 ? Math.max(...nummers) : 0) + 1
-  const itemCode = `${catPrefix}-${String(next).padStart(3, '0')}`
-
-  // Maak recept aan (upsert treatment + insert item)
-  const itemId = await maakRecept({
-    item_code: itemCode,
-    full_name: data.naam,
-    default_unit: data.eenheid,
-    onderdeel: data.categorie,
-  })
+  let itemCode = ''
+  let itemId = ''
+  for (let poging = 1; ; poging++) {
+    const { data: code, error: codeErr } = await supabase.rpc('volgende_receptcode', { p_prefix: catPrefix })
+    if (codeErr || !code) throw new Error(`Fout bij bepalen receptcode: ${codeErr?.message ?? 'geen code'}`)
+    itemCode = code
+    try {
+      itemId = await maakRecept({
+        item_code: itemCode,
+        full_name: data.naam,
+        default_unit: data.eenheid,
+        onderdeel: data.categorie,
+      })
+      break
+    } catch (e) {
+      const dubbel = (e as Error).cause && ((e as Error).cause as { code?: string }).code === '23505'
+      if (!dubbel || poging >= 3) throw e
+    }
+  }
 
   // treatmentId is deterministisch berekend in maakRecept
   const catCode = catPrefix
