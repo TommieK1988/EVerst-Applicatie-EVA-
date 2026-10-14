@@ -10,16 +10,8 @@ import React, { useEffect, useState } from 'react'
 import type { VastgoedObject } from '@everts/database'
 import { objectAdresRegel } from '@/lib/objecten/adres'
 import { zoekObjecten, getObjectOpdrachtgeverNaam } from '@/lib/objecten/data'
-
-const labelStijl: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-  letterSpacing: '0.03em', color: 'var(--fg-muted)',
-}
-const inputStijl: React.CSSProperties = {
-  width: '100%', height: 36, padding: '0 10px', borderRadius: 8,
-  border: '1px solid var(--border)', background: 'var(--bg)',
-  color: 'var(--fg)', fontFamily: 'var(--font-ui)', fontSize: 14,
-}
+import { Building2, Loader2, Search } from 'lucide-react'
+import { Button, FormField, Input } from '@/components/ui'
 
 type Props = {
   gekozen: VastgoedObject | null
@@ -74,67 +66,44 @@ export default function ObjectVoorinvullen({ gekozen, onKies, onWis }: Props) {
 
   if (gekozen) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-        padding: '10px 12px', borderRadius: 8,
-        border: '1.5px solid var(--accent)', background: 'var(--bg-subtle)',
-      }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{gekozen.naam}</div>
-          <div style={{ fontSize: 12, color: 'var(--fg-muted)' }}>
-            {gekozen.objectnummer}
-            {objectAdresRegel(gekozen) ? ` · ${objectAdresRegel(gekozen)}` : ''}
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Building2 className="h-4 w-4 shrink-0 text-brand-700" />
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold text-neutral-900">{gekozen.naam}</div>
+            <div className="truncate text-xs text-neutral-600">
+              {gekozen.objectnummer}
+              {objectAdresRegel(gekozen) ? ` · ${objectAdresRegel(gekozen)}` : ''}
+            </div>
           </div>
         </div>
-        <button
-          type="button" onClick={onWis}
-          style={{
-            border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 12, color: 'var(--fg-muted)', textDecoration: 'underline',
-          }}
-        >
-          Losmaken
-        </button>
+        <Button variant="ghost" size="sm" onClick={onWis}>Losmaken</Button>
       </div>
     )
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
-      <div style={labelStijl}>Object (optioneel)</div>
-      <input
-        type="text"
-        value={term}
-        onChange={e => setTerm(e.target.value)}
-        onFocus={() => resultaten.length > 0 && setOpen(true)}
-        placeholder="Zoek een VvE, complex of pand — bv. Complex 1013 of HW1013"
-        style={{ ...inputStijl, marginTop: 4 }}
-      />
-      {bezig && (
-        <div style={{ position: 'absolute', right: 10, top: 34, fontSize: 11, color: 'var(--fg-muted)' }}>…</div>
-      )}
-      <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 4 }}>
-        Kies een object en het werkadres, de opdrachtgever en de VvE-code worden ingevuld.
-      </div>
+    <div ref={containerRef} className="relative">
+      <FormField>
+        <Input
+          value={term}
+          onChange={e => setTerm(e.target.value)}
+          onFocus={() => resultaten.length > 0 && setOpen(true)}
+          placeholder="Zoek een VvE, complex of pand — bv. Complex 1013 of HW1013"
+          prefix={<Search className="h-4 w-4" />}
+          suffix={bezig ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
+        />
+      </FormField>
 
       {open && resultaten.length > 0 && (
-        <div style={{
-          position: 'absolute', top: 62, left: 0, right: 0, zIndex: 100,
-          background: 'var(--bg-elev)', border: '1px solid var(--border)',
-          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
-          overflow: 'hidden', marginTop: 2, maxHeight: 240, overflowY: 'auto',
-        }}>
+        <div className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-60 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_12px_24px_-6px_rgba(16,24,40,0.18),0_4px_6px_-2px_rgba(16,24,40,0.06)]">
           {resultaten.map(o => (
             <button
               key={o.id} type="button" onClick={() => kies(o)}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-                padding: '8px 10px', border: 'none', background: 'transparent',
-                borderBottom: '1px solid var(--border)',
-              }}
+              className="block w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-brand-50"
             >
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{o.naam}</div>
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
+              <div className="truncate text-[13px] font-semibold text-neutral-900">{o.naam}</div>
+              <div className="truncate text-xs text-neutral-500">
                 {o.objectnummer}{objectAdresRegel(o) ? ` · ${objectAdresRegel(o)}` : ''}
               </div>
             </button>

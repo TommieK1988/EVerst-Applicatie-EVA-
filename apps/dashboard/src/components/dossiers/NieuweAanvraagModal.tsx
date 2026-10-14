@@ -1,7 +1,13 @@
 'use client'
 import React from 'react'
 import toast from 'react-hot-toast'
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui'
+import { Building2, Check, ClipboardList, FileText, Loader2, MapPin, MessageSquare, Paperclip, Search, Tag, Upload } from 'lucide-react'
+import { cn } from '@everts/ui'
+import {
+  Button, Input, Textarea, FormField,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
+} from '@/components/ui'
+import { Sectie, Rij, LinkKnop, Zoeklijst, ZoeklijstItem, selectKlasse, NieuweOrgDialog, NieuweCpDialog } from './NieuweAanvraagOnderdelen'
 import type { DossierRij } from './types'
 import { maakAanvraag, zoekRelaties, getAanvraagCategorieen, type OpdrachtgeverZoekResultaat } from '@/lib/dossiers/actions'
 import type { VastgoedObject } from '@everts/database'
@@ -65,6 +71,7 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   const [adresStatus,    setAdresStatus]    = React.useState<'idle' | 'zoeken' | 'gevonden' | 'niet_gevonden'>('idle')
   const [opmerkingen,    setOpmerkingen]    = React.useState('')
   const [bestanden,      setBestanden]      = React.useState<File[]>([])
+  const [slepen,         setSlepen]         = React.useState(false)
   const [isLaden,        setIsLaden]        = React.useState(false)
   const [nieuweOrgOpen,  setNieuweOrgOpen]  = React.useState(false)
   const [object,         setObject]         = React.useState<VastgoedObject | null>(null)
@@ -335,214 +342,184 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
     <Dialog open={open} onOpenChange={isOpen => { if (!isOpen) handleClose() }}>
       <DialogContent size="xl">
         <DialogHeader>
-          <DialogTitle>Nieuwe aanvraag</DialogTitle>
+          <div>
+            <DialogTitle>Nieuwe aanvraag</DialogTitle>
+            <DialogDescription>Wordt direct als project in Bouw7 aangemaakt, met een dossiermap in SharePoint.</DialogDescription>
+          </div>
         </DialogHeader>
 
-        <DialogBody>
-          <Groep titel="Object">
+        <DialogBody className="bg-neutral-50">
+          <Sectie titel="Object" omschrijving="Optioneel — vult werkadres, opdrachtgever en VvE-code voor je in" icoon={Building2}>
             <ObjectVoorinvullen
               gekozen={object}
               onKies={kiesObject}
               onWis={() => setObject(null)}
             />
-          </Groep>
+          </Sectie>
 
-          <Groep titel="Basisgegevens">
+          <Sectie titel="Basisgegevens" omschrijving="Voor wie, wat en wanneer" icoon={ClipboardList}>
             <Rij>
               {/* Opdrachtgever combobox */}
-              <div ref={zoekContainerRef} style={{ position: 'relative' }}>
-                <div style={labelStijl}>Opdrachtgever *</div>
-                <input
-                  type="text"
-                  value={zoekQuery}
-                  onChange={e => handleZoekInput(e.target.value)}
-                  onFocus={() => zoekResultaten.length > 0 && setZoekOpen(true)}
-                  placeholder="Zoek op bedrijf of contactpersoon..."
-                  style={{
-                    ...inputStijl, marginTop: 4,
-                    border: klantId ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                  }}
-                />
-                {zoekBezig && (
-                  <div style={{ position: 'absolute', right: 10, top: 34, fontSize: 11, color: 'var(--fg-muted)' }}>…</div>
-                )}
+              <div ref={zoekContainerRef} className="relative flex flex-col">
+                <FormField label="Opdrachtgever" upper required>
+                  <Input
+                    value={zoekQuery}
+                    onChange={e => handleZoekInput(e.target.value)}
+                    onFocus={() => zoekResultaten.length > 0 && setZoekOpen(true)}
+                    placeholder="Zoek op bedrijf of contactpersoon..."
+                    prefix={<Search className="h-4 w-4" />}
+                    suffix={zoekBezig ? <Loader2 className="h-4 w-4 animate-spin" /> : klantId ? <Check className="h-4 w-4 text-brand-600" /> : undefined}
+                    className={klantId ? 'border-brand-500 bg-brand-50/40' : undefined}
+                  />
+                </FormField>
                 {zoekOpen && zoekResultaten.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                    background: 'var(--bg-elev)', border: '1px solid var(--border)',
-                    borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
-                    overflow: 'hidden', marginTop: 2,
-                  }}>
+                  <Zoeklijst>
                     {zoekResultaten.map(rel => (
-                      <button
+                      <ZoeklijstItem
                         key={rel.id + (rel.contactpersoon?.id ?? '')}
-                        onMouseDown={e => { e.preventDefault(); selecteerRelatie(rel) }}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          width: '100%', padding: '9px 12px', border: 'none',
-                          background: 'var(--bg-elev)', cursor: 'pointer', textAlign: 'left',
-                          color: 'var(--fg)', fontSize: 13,
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-active)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '#ffffff')}
-                      >
-                        <span style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontWeight: 500 }}>{rel.naam}</span>
-                          {rel.contactpersoon && (
-                            <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{rel.contactpersoon.naam}</span>
-                          )}
-                          {rel.viaFactuuradres && (
-                            <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                              factuuradres: {rel.viaFactuuradres}
-                            </span>
-                          )}
-                        </span>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                          color: 'var(--fg-muted)', padding: '2px 6px',
-                          background: 'var(--bg-active)', borderRadius: 4,
-                        }}>{rel.types?.[0] ?? ''}</span>
-                      </button>
+                        titel={rel.naam}
+                        regels={[rel.contactpersoon?.naam, rel.viaFactuuradres ? `factuuradres: ${rel.viaFactuuradres}` : null]}
+                        badge={rel.types?.[0]}
+                        onKies={() => selecteerRelatie(rel)}
+                      />
                     ))}
-                  </div>
+                  </Zoeklijst>
                 )}
-                <div style={{ marginTop: 6 }}>
-                  <button type="button" onClick={() => setNieuweOrgOpen(true)} style={linkKnopStijl}>+ Nieuwe opdrachtgever</button>
-                </div>
+                <LinkKnop onClick={() => setNieuweOrgOpen(true)}>+ Nieuwe opdrachtgever</LinkKnop>
               </div>
 
-              <Input label="Omschrijving *" waarde={titel} onChange={setTitel} placeholder="bijv. Schilderwerk buitenzijde" />
+              <FormField label="Omschrijving" upper required>
+                <Input value={titel} onChange={e => setTitel(e.target.value)} placeholder="bijv. Schilderwerk buitenzijde" />
+              </FormField>
             </Rij>
             <Rij>
               {/* Contactpersoon-keuze binnen de gekozen opdrachtgever */}
-              <div>
-                <div style={labelStijl}>Contactpersoon</div>
-                <select
-                  value={contactpersoonId ?? ''}
-                  disabled={!klantId}
-                  onChange={e => {
-                    const id = e.target.value || null
-                    setContactpersoonId(id)
-                    setContactpersoonNaam(contactpersonenLijst.find(c => c.id === id)?.naam ?? '')
-                  }}
-                  style={{ ...inputStijl, marginTop: 4, opacity: klantId ? 1 : 0.6 }}
-                >
-                  <option value="">{klantId ? '— Selecteer —' : 'Kies eerst een opdrachtgever'}</option>
-                  {contactpersonenLijst.map(c => (
-                    <option key={c.id} value={c.id}>{c.naam}{c.functie ? ` — ${c.functie}` : ''}</option>
-                  ))}
+              <div className="flex flex-col">
+                <FormField label="Contactpersoon" upper>
+                  <select
+                    value={contactpersoonId ?? ''}
+                    disabled={!klantId}
+                    onChange={e => {
+                      const id = e.target.value || null
+                      setContactpersoonId(id)
+                      setContactpersoonNaam(contactpersonenLijst.find(c => c.id === id)?.naam ?? '')
+                    }}
+                    className={selectKlasse}
+                  >
+                    <option value="">{klantId ? '— Selecteer —' : 'Kies eerst een opdrachtgever'}</option>
+                    {contactpersonenLijst.map(c => (
+                      <option key={c.id} value={c.id}>{c.naam}{c.functie ? ` — ${c.functie}` : ''}</option>
+                    ))}
+                  </select>
+                </FormField>
+                <LinkKnop gedimd={!klantId} onClick={() => klantId ? setNieuweCpOpen(true) : toast.error('Kies eerst een opdrachtgever.')}>
+                  + Nieuwe contactpersoon
+                </LinkKnop>
+              </div>
+              <FormField label="Werkmaatschappij" upper required>
+                <select value={werkmaatschappijId} onChange={e => setWerkmaatschappijId(e.target.value)} className={selectKlasse}>
+                  <option value="">— Selecteer —</option>
+                  {werkmaatschappijen.map(w => <option key={w.id} value={w.id}>{w.naam}</option>)}
                 </select>
-                <div style={{ marginTop: 6 }}>
-                  <button type="button" onClick={() => klantId ? setNieuweCpOpen(true) : toast.error('Kies eerst een opdrachtgever.')} style={{ ...linkKnopStijl, opacity: klantId ? 1 : 0.5 }}>+ Nieuwe contactpersoon</button>
-                </div>
-              </div>
-              <Input
-                label="Werkmaatschappij *" waarde={werkmaatschappijId} onChange={setWerkmaatschappijId} type="select"
-                opties={[{ value: '', label: '— Selecteer —' }, ...werkmaatschappijen.map(w => ({ value: w.id, label: w.naam }))]}
-              />
+              </FormField>
             </Rij>
             <Rij>
-              <Input
-                label="Categorie *" waarde={categorieId} onChange={setCategorieId} type="select"
-                opties={[{ value: '', label: '— Selecteer —' }, ...catOpties.map(c => ({ value: String(c.id), label: c.name }))]}
-              />
-              <Input label="Referentie" waarde={referentie} onChange={setReferentie} placeholder="Klantreferentie" />
+              <FormField label="Categorie" upper required>
+                <select value={categorieId} onChange={e => setCategorieId(e.target.value)} className={selectKlasse}>
+                  <option value="">— Selecteer —</option>
+                  {catOpties.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Referentie" upper>
+                <Input value={referentie} onChange={e => setReferentie(e.target.value)} placeholder="Klantreferentie" />
+              </FormField>
             </Rij>
             <Rij>
-              <Input label="Aanvraagdatum" waarde={aanvraagdatum} onChange={setAanvraagdatum} type="date" />
-              <Input label="Deadline" waarde={deadline} onChange={setDeadline} type="date" />
+              <FormField label="Aanvraagdatum" upper>
+                <Input type="date" value={aanvraagdatum} onChange={e => setAanvraagdatum(e.target.value)} />
+              </FormField>
+              <FormField label="Deadline" upper>
+                <Input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} />
+              </FormField>
             </Rij>
             <Rij>
-              <Input label="VvE-code" waarde={vveCode} onChange={setVveCode} placeholder="Bijv. VVE-1234" />
+              <FormField label="VvE-code" upper>
+                <Input value={vveCode} onChange={e => setVveCode(e.target.value)} placeholder="Bijv. VVE-1234" />
+              </FormField>
             </Rij>
-          </Groep>
+          </Sectie>
 
-          <Groep titel="Werkadres">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 10 }}>
-              <div>
-                <div style={labelStijl}>Straat + huisnummer *</div>
-                <input type="text" value={straatHuisnr} onChange={e => setStraatHuisnr(e.target.value)} placeholder="bijv. Oude Delft 169A" style={{ ...inputStijl, marginTop: 4 }} />
-                {adresStatus === 'zoeken' && <div style={adresHintStijl('var(--fg-muted)')}>Adres controleren…</div>}
-                {adresStatus === 'gevonden' && <div style={adresHintStijl('var(--succes, #16a34a)')}>✓ Adres gevonden{isHuisnummerReeks(parsedAdres.huisnummer) ? ' (gebouw met meerdere huisnummers)' : ''}</div>}
-                {adresStatus === 'niet_gevonden' && <div style={adresHintStijl('var(--waarschuwing, #d97706)')}>⚠ Adres niet gevonden — controleer de gegevens</div>}
+          <Sectie titel="Werkadres" omschrijving="Postcode en huisnummer worden gecontroleerd en aangevuld" icoon={MapPin}>
+            <Rij>
+              <FormField
+                label="Straat + huisnummer" upper required
+                helper={adresStatus === 'zoeken' ? 'Adres controleren…' : undefined}
+                success={adresStatus === 'gevonden' ? `Adres gevonden${isHuisnummerReeks(parsedAdres.huisnummer) ? ' (gebouw met meerdere huisnummers)' : ''}` : undefined}
+                error={adresStatus === 'niet_gevonden' ? 'Adres niet gevonden — controleer de gegevens' : undefined}
+              >
+                <Input value={straatHuisnr} onChange={e => setStraatHuisnr(e.target.value)} placeholder="bijv. Oude Delft 169A" />
+              </FormField>
+              <FormField label="Postcode" upper required>
+                <Input value={postcode} onChange={e => setPostcode(e.target.value)} placeholder="1234 AB" />
+              </FormField>
+            </Rij>
+            <Rij>
+              <FormField label="Stad" upper required>
+                <Input value={stad} onChange={e => setStad(e.target.value)} placeholder="Plaatsnaam" />
+              </FormField>
+            </Rij>
+            <div className="flex items-center gap-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2.5">
+              <Tag className="h-4 w-4 shrink-0 text-brand-700" />
+              <div className="min-w-0 text-[13px]">
+                <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-brand-700">Projectnaam (automatisch)</span>
+                <div className={cn('truncate font-semibold', projectnaam ? 'text-neutral-900' : 'text-neutral-400')}>{projectnaam || '—'}</div>
               </div>
-              <Input label="Postcode *" waarde={postcode} onChange={setPostcode} placeholder="1234 AB" />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-              <Input label="Stad *" waarde={stad} onChange={setStad} placeholder="Plaatsnaam" />
-            </div>
-            <div style={{
-              marginTop: 12, padding: '9px 12px', borderRadius: 8,
-              background: 'var(--bg-active)', border: '1px solid var(--border)',
-              fontSize: 12, color: 'var(--fg)',
-            }}>
-              <span style={{ color: 'var(--fg-muted)' }}>Projectnaam (automatisch): </span>
-              <span style={{ fontWeight: 600 }}>{projectnaam || '—'}</span>
-            </div>
-          </Groep>
+          </Sectie>
 
-          <Groep titel="Opmerkingen">
-            <textarea
+          <Sectie titel="Opmerkingen" icoon={MessageSquare}>
+            <Textarea
               value={opmerkingen}
               onChange={e => setOpmerkingen(e.target.value)}
               placeholder="Aanvullende informatie, wensen, bijzonderheden..."
               rows={3}
-              style={{ ...inputStijl, resize: 'vertical', padding: '8px 11px' }}
             />
-          </Groep>
+          </Sectie>
 
-          <Groep titel="Meegestuurde bestanden" laatste>
+          <Sectie titel="Meegestuurde bestanden" omschrijving="Worden opgeslagen in de SharePoint-dossiermap" icoon={Paperclip}>
             <div
-              onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)' }}
-              onDragLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}
-              onDrop={e => {
-                e.preventDefault()
-                ;(e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'
-                handleFiles(e.dataTransfer.files)
-              }}
+              onDragOver={e => { e.preventDefault(); setSlepen(true) }}
+              onDragLeave={() => setSlepen(false)}
+              onDrop={e => { e.preventDefault(); setSlepen(false); handleFiles(e.dataTransfer.files) }}
               onClick={() => fileInputRef.current?.click()}
-              style={{
-                border: '2px dashed var(--border)', borderRadius: 10, padding: '18px 16px',
-                textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s',
-                background: 'var(--bg)',
-              }}
+              className={cn(
+                'cursor-pointer rounded-xl border-2 border-dashed px-4 py-5 text-center transition-colors',
+                slepen ? 'border-brand-500 bg-brand-50' : 'border-neutral-300 bg-neutral-50 hover:border-brand-300 hover:bg-brand-50/50',
+              )}
             >
-              <div style={{ fontSize: 20, opacity: 0.4, marginBottom: 5 }}>📎</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', marginBottom: 2 }}>
-                Klik of sleep bestanden hierheen
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
-                PDF, Word, afbeeldingen — worden opgeslagen in de SharePoint-dossiermap
-              </div>
+              <span className="mx-auto mb-2 grid h-9 w-9 place-items-center rounded-full bg-brand-50 text-brand-700">
+                <Upload className="h-4 w-4" />
+              </span>
+              <div className="text-[13px] font-semibold text-neutral-900">Klik of sleep bestanden hierheen</div>
+              <div className="mt-0.5 text-xs text-neutral-500">PDF, Word, afbeeldingen</div>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleFiles(e.target.files)} />
             </div>
 
             {bestanden.length > 0 && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="flex flex-col gap-2">
                 {bestanden.map((b, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '7px 12px', background: 'var(--bg)',
-                    border: '1px solid var(--border)', borderRadius: 8,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--fg-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M13 2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7l-3-5z"/>
-                        <path d="M13 2v5h5"/>
-                      </svg>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)' }}>{b.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{fmtSize(b.size)}</span>
+                  <div key={i} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FileText className="h-4 w-4 shrink-0 text-brand-700" />
+                      <span className="truncate text-xs font-semibold text-neutral-900">{b.name}</span>
+                      <span className="shrink-0 text-xs text-neutral-500">{fmtSize(b.size)}</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setBestanden(p => p.filter((_, j) => j !== i))}
-                    >×</Button>
+                    <Button variant="ghost" size="icon-sm" onClick={() => setBestanden(p => p.filter((_, j) => j !== i))}>×</Button>
                   </div>
                 ))}
               </div>
             )}
-          </Groep>
+          </Sectie>
         </DialogBody>
 
         <DialogFooter>
@@ -566,132 +543,8 @@ export function NieuweAanvraagModal({ open, onClose, onAanmaken, categorieen, we
   )
 }
 
-/* ─── Genestelde mini-dialogs (direct in Bouw7 + EVA) ────────────────── */
-function NieuweOrgDialog({ onSluit, onAanmaken, startNaam }: { onSluit: () => void; onAanmaken: (naam: string) => Promise<void>; startNaam?: string }) {
-  const [naam, setNaam] = React.useState(startNaam ?? '')
-  const [bezig, setBezig] = React.useState(false)
-  return (
-    <Dialog open onOpenChange={o => !o && onSluit()}>
-      <DialogContent size="sm">
-        <DialogHeader><DialogTitle>Nieuwe opdrachtgever</DialogTitle></DialogHeader>
-        <DialogBody>
-          <div style={labelStijl}>Bedrijfsnaam *</div>
-          <input autoFocus type="text" value={naam} onChange={e => setNaam(e.target.value)} placeholder="Bedrijfsnaam" style={{ ...inputStijl, marginTop: 4 }} />
-          <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 8 }}>Wordt direct in Bouw7 én EVA aangemaakt als opdrachtgever.</div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onSluit}>Annuleer</Button>
-          <Button variant="primary" disabled={!naam.trim() || bezig} loading={bezig} onClick={async () => { setBezig(true); try { await onAanmaken(naam) } finally { setBezig(false) } }}>Aanmaken</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function NieuweCpDialog({ onSluit, onAanmaken, orgNaam }: { onSluit: () => void; onAanmaken: (voornaam: string, achternaam: string, functie: string) => Promise<void>; orgNaam?: string }) {
-  const [voornaam, setVoornaam] = React.useState('')
-  const [achternaam, setAchternaam] = React.useState('')
-  const [functie, setFunctie] = React.useState('')
-  const [bezig, setBezig] = React.useState(false)
-  const geldig = Boolean(voornaam.trim() && achternaam.trim())
-  return (
-    <Dialog open onOpenChange={o => !o && onSluit()}>
-      <DialogContent size="sm">
-        <DialogHeader><DialogTitle>Nieuwe contactpersoon</DialogTitle></DialogHeader>
-        <DialogBody>
-          {orgNaam && <div style={{ fontSize: 12, color: 'var(--fg-muted)', marginBottom: 10 }}>Bij: <strong>{orgNaam}</strong></div>}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <div style={labelStijl}>Voornaam *</div>
-              <input autoFocus type="text" value={voornaam} onChange={e => setVoornaam(e.target.value)} style={{ ...inputStijl, marginTop: 4 }} />
-            </div>
-            <div>
-              <div style={labelStijl}>Achternaam *</div>
-              <input type="text" value={achternaam} onChange={e => setAchternaam(e.target.value)} style={{ ...inputStijl, marginTop: 4 }} />
-            </div>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <div style={labelStijl}>Functie</div>
-            <input type="text" value={functie} onChange={e => setFunctie(e.target.value)} placeholder="Bijv. Technisch beheerder" style={{ ...inputStijl, marginTop: 4 }} />
-          </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onSluit}>Annuleer</Button>
-          <Button variant="primary" disabled={!geldig || bezig} loading={bezig} onClick={async () => { setBezig(true); try { await onAanmaken(voornaam, achternaam, functie) } finally { setBezig(false) } }}>Aanmaken</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/* ─── helpers ────────────────────────────────────────────────────── */
-const labelStijl: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-}
-const inputStijl: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 8, boxSizing: 'border-box',
-  background: 'var(--bg)', border: '1px solid var(--border)',
-  color: 'var(--fg)', fontFamily: 'var(--font-ui)', fontSize: 13, outline: 'none',
-}
-const linkKnopStijl: React.CSSProperties = {
-  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-  color: 'var(--accent)', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-ui)',
-}
-function adresHintStijl(kleur: string): React.CSSProperties {
-  return { marginTop: 4, fontSize: 11, fontWeight: 500, color: kleur }
-}
-
 function fmtSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function Groep({ titel, laatste, children }: { titel: string; laatste?: boolean; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: laatste ? 0 : 22 }}>
-      <div style={{
-        fontSize: 10, fontWeight: 700, color: 'var(--fg-muted)',
-        textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10,
-      }}>
-        {titel}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Rij({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 10 }}>
-      {children}
-    </div>
-  )
-}
-
-type Optie = { value: string; label: string }
-function Input({
-  label, waarde, onChange, placeholder, type = 'text', opties, vol,
-}: {
-  label: string
-  waarde: string
-  onChange: (v: string) => void
-  placeholder?: string
-  type?: string
-  opties?: Optie[]
-  vol?: boolean
-}) {
-  const stijl: React.CSSProperties = { ...inputStijl, marginTop: 4 }
-  return (
-    <div style={{ gridColumn: vol ? '1 / -1' : undefined }}>
-      <div style={labelStijl}>{label}</div>
-      {type === 'select' && opties ? (
-        <select value={waarde} onChange={e => onChange(e.target.value)} style={stijl}>
-          {opties.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      ) : (
-        <input type={type} value={waarde} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={stijl} />
-      )}
-    </div>
-  )
 }
