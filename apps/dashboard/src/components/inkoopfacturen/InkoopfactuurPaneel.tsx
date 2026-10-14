@@ -11,6 +11,7 @@ import {
 import { inkoopStatusLabel, approvalStatusLabel, BOUW7_APPROVAL_STATUS } from '@/lib/bouw7/inkoop-status'
 import { dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
 import EvaGoedkeuringSectie from './EvaGoedkeuringSectie'
+import BewakingscodeKiezer from './BewakingscodeKiezer'
 
 function euro(n: number | null): string {
   if (n == null) return '—'
@@ -47,6 +48,11 @@ type Props = {
 
 export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpenen, onClose, onGewijzigd }: Props) {
   const evaKeurt = rij?.goedkeuring_bron === 'eva'
+  // Net gewijzigde code tonen; de rij zelf komt pas met de volgende refresh van de lijst.
+  const [nieuweCode, setNieuweCode] = useState<{ id: string; code: string; naam: string | null } | null>(null)
+  const code = nieuweCode && nieuweCode.id === rij?.id
+    ? { code: nieuweCode.code, naam: nieuweCode.naam }
+    : { code: rij?.bewakingscode ?? null, naam: rij?.bewakingscode_naam ?? null }
   const [detail, setDetail] = useState<InkoopfactuurDetail | null>(null)
   const [laden, setLaden] = useState(false)
   const [nieuweOpmerking, setNieuweOpmerking] = useState('')
@@ -128,10 +134,18 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
                 />
                 <Regel
                   label="Bewakingscode"
-                  waarde={rij.bewakingscode
-                    ? `${rij.bewakingscode}${rij.bewakingscode_naam ? ` · ${rij.bewakingscode_naam}` : ''}`
-                    : '—'}
+                  waarde={code.code ? `${code.code}${code.naam ? ` · ${code.naam}` : ''}` : '—'}
                 />
+                {/* Wijzigen mag iedereen met schrijfrecht op inkoop (o.a. de financiële administratie),
+                    niet alleen de goedkeurder — het raakt de kostenverdeling, niet de goedkeuring. */}
+                {magAccorderen && rij.bouw7_project_id != null && (
+                  <div style={{ margin: '4px 0 6px 142px' }}>
+                    <BewakingscodeKiezer inkoopfactuurId={rij.id} onGewijzigd={n => {
+                      setNieuweCode({ id: rij.id, ...n })
+                      onGewijzigd?.()
+                    }} />
+                  </div>
+                )}
                 {(rij.bon_nummer || rij.ordernummer) && (
                   <Regel label="Bon / order" waarde={rij.bon_nummer ?? rij.ordernummer} />
                 )}
