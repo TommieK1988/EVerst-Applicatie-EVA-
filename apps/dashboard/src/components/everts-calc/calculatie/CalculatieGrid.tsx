@@ -3178,7 +3178,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         `#calc-tabel[data-hcol="${id}"] [data-col="${id}"] { background-color: rgba(219,234,254,0.35) !important; }`
       ).join(' ')}</style>
 
-      {/* Kolom-layouts + kolommen-picker: gerenderd in de actiebalk (naast "Opties")
+      {/* Kolom-layouts + kolommen-picker: gerenderd in de werkbalk (naast inklappen)
           via een portal in #calc-grid-toolbar-slot. */}
       {toolbarSlot && createPortal(
         <>
@@ -3186,10 +3186,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
           <div ref={layoutMenuRef} className="relative">
             <button
               onClick={() => setLayoutMenuOpen(v => !v)}
-              className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+              className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
                 actiefLayoutId
                   ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
               }`}
               title="Kolom-layouts (per gebruiker)"
             >
@@ -3256,10 +3256,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         <div ref={colPickerRef} className="relative">
           <button
             onClick={() => setColPickerOpen(v => !v)}
-            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+            className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
               hiddenCols.size > 0
                 ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
             }`}
             title="Kolommen tonen/verbergen"
           >

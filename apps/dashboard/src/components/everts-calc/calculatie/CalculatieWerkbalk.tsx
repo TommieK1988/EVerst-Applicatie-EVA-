@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   GitBranch, Undo2, Check, CloudUpload, TriangleAlert, ChevronDown, ChevronsUp, ChevronsDown,
-  Library, BookOpen, Paintbrush, Package, Eye, MoreHorizontal, Copy, FileUp, FileDown, Table2,
+  Library, BookOpen, Paintbrush, Package, Keyboard, MoreHorizontal, Copy, FileUp, FileDown, Table2,
   FileText, ClipboardList, Receipt,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverTrigger, PopoverContent, PopoverHeader } from '@/components/ui/popover'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 
 export type BibliotheekSoort = 'recepten' | 'schilderwerk' | 'materialen'
@@ -65,8 +66,8 @@ function tijd(d: Date) {
 
 /**
  * Werkbalk van de calculatie. Links wat je tijdens het rekenen steeds gebruikt (structuur,
- * ongedaan, opslagstatus) en het blok Toevoegen; rechts de weergave, de zeldzame acties onder
- * Meer en de offerte als laatste stap.
+ * ongedaan, opslagstatus) en het blok Toevoegen; rechts inklappen, kolommen en sneltoetsen,
+ * de zeldzame acties onder Meer en de offerte als laatste stap.
  */
 export default function CalculatieWerkbalk(p: Props) {
   return (
@@ -101,7 +102,7 @@ export default function CalculatieWerkbalk(p: Props) {
         <DropdownMenu.Trigger asChild>
           <Button variant="outline" size="sm" title="Bibliotheek openen">
             <Library className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Bibliotheek</span>
+            <span className="hidden xl:inline">Bibliotheek</span>
             <ChevronDown className="w-3 h-3 text-neutral-400" />
           </Button>
         </DropdownMenu.Trigger>
@@ -122,7 +123,16 @@ export default function CalculatieWerkbalk(p: Props) {
       {p.toevoegen}
 
       <div className="ml-auto flex items-center gap-1">
-        <WeergaveMenu allesIngeklapt={p.allesIngeklapt} onToggleInklap={p.onToggleInklap} />
+        <Button
+          variant="outline" size="icon-sm" onClick={p.onToggleInklap}
+          title={p.allesIngeklapt ? 'Alles uitklappen — alle regels zichtbaar' : 'Inklappen — alleen de groepen zichtbaar'}
+        >
+          {p.allesIngeklapt ? <ChevronsDown className="w-3.5 h-3.5" /> : <ChevronsUp className="w-3.5 h-3.5" />}
+        </Button>
+        {/* Kolom-layouts en kolommen: het rekenblad zet zijn knoppen hier via een portal. */}
+        <div id="calc-grid-toolbar-slot" className="flex items-center gap-1" />
+        <Sneltoetsen />
+        <span className="w-px h-4 bg-neutral-200 mx-1" />
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -229,54 +239,29 @@ function OpslagStatus({ status, opgeslagenOp, onOpslaan }: {
   )
 }
 
-/**
- * Weergave: in- en uitklappen, kolom-layouts en kolommen, sneltoetsen. Het paneel blijft
- * gemonteerd (alleen verborgen): het rekenblad zet zijn kolomknoppen via een portal in
- * `#calc-grid-toolbar-slot` en zoekt dat element één keer op bij het openen.
- */
-function WeergaveMenu({ allesIngeklapt, onToggleInklap }: { allesIngeklapt: boolean; onToggleInklap: () => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [open])
-
+/** Sneltoetsen als naslag: op klik, niet bij hover, zodat hij niet open springt als je
+ *  er met de muis langs gaat. */
+function Sneltoetsen() {
   return (
-    <div ref={ref} className="relative">
-      <Button variant="outline" size="sm" onClick={() => setOpen(o => !o)} aria-expanded={open}
-        title="Weergave — inklappen, kolommen, sneltoetsen">
-        <Eye className="w-3.5 h-3.5" />
-        <span className="hidden xl:inline">Weergave</span>
-        <ChevronDown className="w-3 h-3 text-neutral-400" />
-      </Button>
-      <div className={`${open ? '' : 'hidden'} absolute right-0 top-full mt-1 w-80 ${ddContent}`}>
-        <div className={ddKop}>Groepen</div>
-        <button type="button" className={`${ddItem} w-[calc(100%-8px)]`} onClick={onToggleInklap}>
-          {allesIngeklapt ? <ChevronsDown className="w-3.5 h-3.5 text-neutral-400" /> : <ChevronsUp className="w-3.5 h-3.5 text-neutral-400" />}
-          {allesIngeklapt ? 'Alles uitklappen' : 'Inklappen — alleen de groepen'}
-        </button>
-        <div className={ddScheiding} />
-        <div className={ddKop}>Kolommen</div>
-        <div id="calc-grid-toolbar-slot" className="flex items-center gap-2 px-3 pb-2" />
-        <div className={ddScheiding} />
-        <div className={ddKop}>Sneltoetsen</div>
-        <table className="w-full text-xs mb-1">
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon-sm" title="Sneltoetsen">
+          <Keyboard className="w-3.5 h-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 z-[200]">
+        <PopoverHeader>Sneltoetsen</PopoverHeader>
+        <table className="w-full text-xs my-1">
           <tbody>
             {SNELTOETSEN.map(([toets, label]) => (
               <tr key={toets}>
-                <td className="px-3 py-1 font-medium text-neutral-800 whitespace-nowrap">{toets}</td>
-                <td className="px-3 py-1 text-neutral-500">{label}</td>
+                <td className="px-3.5 py-1 font-medium text-neutral-800 whitespace-nowrap">{toets}</td>
+                <td className="px-3.5 py-1 text-neutral-500">{label}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }
