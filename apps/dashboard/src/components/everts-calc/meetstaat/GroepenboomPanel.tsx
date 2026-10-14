@@ -29,7 +29,7 @@ interface GroepCijfers {
  */
 function cijfersPerGroep(meetstaatId: string): { perGroep: Map<string, GroepCijfers>; geheel: GroepCijfers } {
   const actief = getMeetregels(meetstaatId).filter(r => !r.is_leeg && isRegelActief(r))
-  const open = teVerwerken(getMeetregelAggregaten(meetstaatId), new Set(getCalculatieregels().map(r => r.id)))
+  const open = teVerwerken(getMeetregelAggregaten(meetstaatId), new Map(getCalculatieregels().map(r => [r.id, r.hoeveelheid])))
 
   const regelsPerGroep = new Map<string, Meetregel[]>()
   for (const r of actief) {

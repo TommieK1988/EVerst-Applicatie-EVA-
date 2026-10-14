@@ -2,30 +2,35 @@ import type { Meetstaat, MeetregelAggregaat } from './types'
 
 // ─── WAT MOET ER NOG NAAR DE CALCULATIE ──────────────────────────────────────
 
+// Verschillen kleiner dan een halve honderdste zijn afronding, geen wijziging.
+export const MARGE = 0.005
+
 /**
- * De aggregaten die bij de volgende verwerking iets in de calculatie veranderen.
+ * De aggregaten waarvan de calculatie afwijkt van de meetstaat, en die bij de
+ * volgende verwerking dus iets veranderen.
  *
- * Ook een code die naar 0 is gezakt (alle regels weg, of de code van de regels
- * gewijzigd): zijn calculatieregel moet naar 0. Werd zo'n aggregaat overgeslagen,
- * dan bleef de calculatieregel op zijn oude hoeveelheid staan en ging geschrapt
- * werk mee in de offerte. Maar alleen als dat echt iets verandert:
+ * Bewust vergeleken met wat er écht in de calculatie staat, niet met de vlag
+ * `is_gesynchroniseerd`. Die vlag liep uit de pas: verwijderde de calculator een
+ * regel in de calculatie, dan stond de code nog als verwerkt en kon je hem niet
+ * opnieuw doorzetten.
  *
- * - de calculatieregel bestaat nog (`regelIds`); een regel die de calculator al
- *   verwijderde is geen wijziging, alleen ruis in de teller;
- * - geen andere, actieve code wijst naar dezelfde calculatieregel; anders zou de
- *   0 de hoeveelheid van die code overschrijven.
+ * - Code met hoeveelheid, geen (bestaande) calculatieregel → nieuw.
+ * - Code met hoeveelheid, calculatieregel met een andere hoeveelheid → gewijzigd.
+ *   Ook als de calculator die hoeveelheid zelf aanpaste: dan zie je het verschil.
+ * - Code op 0, calculatieregel nog niet op 0 → vervallen. Niet als een andere,
+ *   actieve code naar dezelfde regel wijst: anders overschrijft de 0 die code.
  */
 export function teVerwerken(
-  aggregaten: MeetregelAggregaat[], regelIds?: ReadonlySet<string>,
+  aggregaten: MeetregelAggregaat[], hoeveelheidPerRegel: ReadonlyMap<string, number>,
 ): MeetregelAggregaat[] {
   const inGebruik = new Set(
     aggregaten.filter(a => a.totaal_hoeveelheid > 0 && a.calculatieregel_id).map(a => a.calculatieregel_id)
   )
   return aggregaten.filter(a => {
-    if (a.is_gesynchroniseerd) return false
-    if (a.totaal_hoeveelheid > 0) return true
     const id = a.calculatieregel_id
-    return !!id && !inGebruik.has(id) && (!regelIds || regelIds.has(id))
+    const nu = id !== undefined ? hoeveelheidPerRegel.get(id) : undefined
+    if (a.totaal_hoeveelheid > 0) return nu === undefined || Math.abs(nu - a.totaal_hoeveelheid) >= MARGE
+    return !!id && nu !== undefined && Math.abs(nu) >= MARGE && !inGebruik.has(id)
   })
 }
 
