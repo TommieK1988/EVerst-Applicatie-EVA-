@@ -104,6 +104,8 @@ export function SelectieVinkje({ aan, onWissel, label }: {
       aria-checked={aan}
       aria-label={label}
       title={aan ? 'Selectie opheffen' : 'Selecteren (Shift-klik: reeks)'}
+      // Shift-klik zou anders ook de tekst tussen de twee regels selecteren.
+      onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
       onClick={e => { e.stopPropagation(); onWissel(e.shiftKey) }}
       className={cn(
         'flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[4px] border transition-colors',

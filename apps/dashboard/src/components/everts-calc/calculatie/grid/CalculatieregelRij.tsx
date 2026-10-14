@@ -313,21 +313,20 @@ export function CalculatieregelRij({
                     ? 'text-slate-400 hover:text-everts hover:bg-everts-50'
                     : 'text-slate-200 hover:text-slate-400'
               }`}
-              title={compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}
+              title={`${compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}${regelComps.length ? ` (${regelComps.length})` : ''}`}
+              aria-label={compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}
             >
-              <span className="flex items-center gap-0.5 text-[10.5px] font-medium whitespace-nowrap">
-                {compsUitgeklapt ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                {regelComps.length === 0 ? 'normen' : `${regelComps.length} ${regelComps.length === 1 ? 'norm' : 'normen'}`}
-              </span>
+              {compsUitgeklapt ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             </span>
             {regel.opmerking && (
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); setCompsUitgeklapt(true); setOpmerkingOpen(true) }}
-                className="flex-shrink-0 flex items-center gap-1 rounded px-1 text-[10.5px] font-medium text-amber-700 hover:bg-amber-50 whitespace-nowrap"
-                title={regel.opmerking}
+                className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded hover:bg-amber-50"
+                title={`Opmerking: ${regel.opmerking}`}
+                aria-label="Opmerking tonen"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> opmerking
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               </button>
             )}
             {heeftBehandeling && !compsUitgeklapt && (
@@ -373,7 +372,7 @@ export function CalculatieregelRij({
       case 'code': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {regel.bestekcode && (
-            <span className="text-xs font-semibold text-info-700 px-1 py-0.5 block truncate" title="Bestekscode uit de meetstaat">
+            <span className="text-xs text-neutral-700 px-1 py-0.5 block truncate" title="Bestekscode uit de meetstaat">
               {regel.bestekcode}
             </span>
           )}

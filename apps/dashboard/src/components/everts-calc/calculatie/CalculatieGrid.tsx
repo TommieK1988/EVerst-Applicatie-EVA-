@@ -460,7 +460,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
+  // Anker voor Shift-klik: de laatst los aangeklikte regel.
+  const selectieAnker = useRef<string | null>(null)
   const handleSelecteerRegel = useCallback((regelId: string, ctrlKey: boolean, shiftKey: boolean) => {
+    // Reeks in de volgorde zoals hij op het scherm staat (groepen, volgorde, ingeklapt
+    // telt niet mee). De volgorde van `regels` zelf is de laadvolgorde, niet die van het blad.
+    const zichtbaar = Array.from(document.querySelectorAll<HTMLElement>('tr[data-regel-id]')).map(tr => tr.dataset.regelId!)
+    const anker = selectieAnker.current
+    if (!shiftKey || !anker) selectieAnker.current = regelId
     setGeselecteerdeRegels(prev => {
       const next = new Set(prev)
       if (ctrlKey) {
@@ -469,13 +476,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         else next.add(regelId)
       } else if (shiftKey) {
         // Shift: selecteer bereik in volgorde van alle zichtbare regels
-        const alleIds = regels.map(r => r.id)
-        const lastSelected = Array.from(prev).pop()
-        const fromIdx = lastSelected ? alleIds.indexOf(lastSelected) : -1
-        const toIdx   = alleIds.indexOf(regelId)
+        const fromIdx = anker ? zichtbaar.indexOf(anker) : -1
+        const toIdx   = zichtbaar.indexOf(regelId)
         if (fromIdx !== -1 && toIdx !== -1) {
           const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
-          for (let i = lo; i <= hi; i++) next.add(alleIds[i])
+          for (let i = lo; i <= hi; i++) next.add(zichtbaar[i])
         } else {
           next.add(regelId)
         }
@@ -485,7 +490,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       }
       return next
     })
-  }, [regels])
+  }, [])
 
   // ─── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {

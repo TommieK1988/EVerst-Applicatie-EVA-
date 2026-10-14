@@ -44,8 +44,8 @@ interface InlineFormProps {
 
 /** Inspringing per niveau (px). Ruim genoeg om de nesting in één oogopslag te zien. */
 const INSPRING = 16
-/** Hoogte van een invoegstrook tijdens het slepen — bewust royaal, dit is een mikpunt. */
-const STROOK_HOOGTE = 16
+/** Deel van een rij (boven en onder) dat "ervóór/erna" betekent; het midden is "erin". */
+const RAND = 0.3
 const AUTOSCROLL_ZONE = 48
 const AUTOSCROLL_STAP = 12
 
@@ -228,21 +228,46 @@ export default function StructuurBoom({
    * blijven alle events bij de greep, ongeacht wat eronder ligt of hertekend wordt.
    */
   const doelUitPunt = useCallback((sleepIdArg: string, x: number, y: number): Doel | null => {
+    // Invoegpunt i = vóór zichtbare rij i; i === zichtbaar.length = onderaan.
+    const strook = (i: number): Doel | null => {
+      const onder = zichtbaar[i]
+      return onder
+        ? maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
+        : maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieIn(groepen, null), 'onderaan als hoofdgroep')
+    }
+
     const raak = document.elementFromPoint(x, y)
     const vlak = raak instanceof Element ? raak.closest('[data-doel]') as HTMLElement | null : null
     const spec = vlak?.dataset.doel
-    if (!spec) return null
-
-    if (spec.startsWith('strook-')) {
-      const i = Number(spec.slice('strook-'.length))
-      const onder = zichtbaar[i]
-      return onder
-        ? maakDoel(sleepIdArg, 'strook', spec, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
-        : maakDoel(sleepIdArg, 'strook', spec, positieIn(groepen, null), 'onderaan als hoofdgroep')
+    if (!vlak || !spec) {
+      // Lege ruimte onder de laatste groep: onderaan.
+      const c = scrollRef.current
+      const rijen = c ? Array.from(c.querySelectorAll('[data-doel^="rij-"]')) : []
+      const lijst = c?.getBoundingClientRect()
+      const onderkant = rijen.length ? rijen[rijen.length - 1].getBoundingClientRect().bottom : -Infinity
+      if (lijst && x >= lijst.left && x <= lijst.right && y > onderkant && y <= lijst.bottom) {
+        return strook(zichtbaar.length)
+      }
+      return null
     }
 
-    const groep = groepen.find(g => g.id === spec.slice('rij-'.length))
-    if (!groep || subtreeIds(groepen, sleepIdArg).has(groep.id)) return null
+    // Geen stroken tussen de rijen (die lieten de lijst onder de cursor verspringen):
+    // de plek binnen de rij bepaalt het doel. Boven = ervóór, onder = erna, midden = erin.
+    const id = spec.slice('rij-'.length)
+    const i = zichtbaar.findIndex(r => r.groep.id === id)
+    const groep = zichtbaar[i]?.groep
+    if (!groep) return null
+    const r = vlak.getBoundingClientRect()
+    const fractie = (y - r.top) / r.height
+    const eigen = subtreeIds(groepen, sleepIdArg)
+    if (fractie < RAND) return eigen.has(groep.id) ? null : strook(i)
+    if (fractie > 1 - RAND) {
+      // Erna: vóór de volgende zichtbare rij die niet tot de gesleepte tak hoort.
+      let j = i + 1
+      while (j < zichtbaar.length && eigen.has(zichtbaar[j].groep.id)) j++
+      return eigen.has(groep.id) && j === i + 1 ? null : strook(j)
+    }
+    if (eigen.has(groep.id)) return null
     return maakDoel(sleepIdArg, 'rij', spec, positieIn(groepen, groep.id), `in "${groep.naam}", als laatste`)
   }, [zichtbaar, groepen, maakDoel])
 
@@ -314,26 +339,20 @@ export default function StructuurBoom({
     return () => window.removeEventListener('keydown', opEscape)
   }, [sleepId, resetSleep])
 
-  /** Invoegstrook tussen twee rijen. Alleen tijdens het slepen, want dan is het een mikpunt. */
+  /** Invoeglijn tussen twee rijen. Neemt geen ruimte in, zodat de lijst stil blijft staan. */
   const renderStrook = (index: number) => {
-    if (!sleepId) return null
-    const actief = doel?.sleutel === `strook-${index}`
+    if (!sleepId || doel?.sleutel !== `strook-${index}`) return null
     const onder  = zichtbaar[index]
     const inspring = 8 + (onder ? onder.diepte : 0) * INSPRING
     return (
-      <div
-        data-doel={`strook-${index}`}
-        className="flex items-center"
-        style={{ height: STROOK_HOOGTE, paddingLeft: inspring, paddingRight: 8 }}
-      >
-        {actief && doel?.geldig
-          ? (
-            <>
-              <span className="w-0.5 h-3 rounded-sm bg-everts flex-shrink-0" />
-              <span className="flex-1 h-0.5 rounded bg-everts" />
-            </>
-          )
-          : <span className={cn('flex-1 h-px rounded', actief ? 'bg-red-300' : 'bg-slate-200')} />}
+      <div className="relative h-0" aria-hidden>
+        <div
+          className="pointer-events-none absolute -top-px z-10 flex items-center"
+          style={{ left: inspring, right: 8 }}
+        >
+          <span className={cn('h-2 w-2 flex-shrink-0 rounded-full border-2 bg-white', doel.geldig ? 'border-everts' : 'border-red-300')} />
+          <span className={cn('h-0.5 flex-1 rounded', doel.geldig ? 'bg-everts' : 'bg-red-300')} />
+        </div>
       </div>
     )
   }
@@ -449,23 +468,6 @@ export default function StructuurBoom({
         )}
       </div>
 
-      {/* Statusstrook: staat altijd op dezelfde plek, dus nooit onder je cursor of
-          onder de groep die je sleept. */}
-      {sleepId && (
-        <div
-          className={cn(
-            'px-3 py-1.5 text-[11px] border-b flex-shrink-0 truncate',
-            doel?.geldig
-              ? 'bg-everts-50 border-everts/20 text-everts-dark'
-              : 'bg-slate-50 border-slate-200 text-slate-500',
-          )}
-        >
-          {doel
-            ? <>{doel.geldig ? '→ ' : '× '}{doel.omschrijving}</>
-            : 'Sleep naar een strook om ertussen te zetten, of op een groep om erin te zetten'}
-        </div>
-      )}
-
       {/* Boom */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-1">
         {/* Inline form voor root groep */}
@@ -511,11 +513,24 @@ export default function StructuurBoom({
           />
         )}
       </div>
+      {/* Voetregel: uitleg, en tijdens het slepen waar de groep terechtkomt. Staat
+          onderaan en heeft een vaste hoogte, zodat de lijst onder de cursor niet verspringt. */}
       {roots.length > 0 && (
-        <p className="flex-shrink-0 border-t border-neutral-100 px-3 py-2 text-[11px] leading-snug text-neutral-500">
-          {readOnly
-            ? 'Klik een naam om ernaartoe te springen.'
-            : 'Sleep een groep aan de greep om de volgorde te wijzigen. Klik een naam om ernaartoe te springen.'}
+        <p
+          className={cn(
+            'flex-shrink-0 border-t px-3 py-2 min-h-[46px] text-[11px] leading-snug',
+            !sleepId ? 'border-neutral-100 text-neutral-500'
+              : doel?.geldig ? 'border-everts/20 bg-everts-50 text-everts-dark font-semibold'
+              : 'border-neutral-200 bg-neutral-50 text-neutral-500',
+          )}
+        >
+          {sleepId
+            ? (doel
+              ? <>{doel.geldig ? '→ ' : '× '}{doel.omschrijving}</>
+              : 'Boven- of onderkant van een groep: ervóór of erna. Midden: erin.')
+            : readOnly
+              ? 'Klik een naam om ernaartoe te springen.'
+              : 'Sleep een groep aan de greep om de volgorde te wijzigen. Klik een naam om ernaartoe te springen.'}
         </p>
       )}
       {/* Zwevend label bij de cursor. `pointer-events-none`, anders zou de hittest

@@ -51,6 +51,7 @@ export function TekstregelRij({
 
   return (
     <tr
+      data-regel-id={regel.id}
       className={cn(
         'group border-b border-slate-100 bg-sky-50/40 hover:bg-sky-100/50 transition-colors',
         isGeselecteerd ? 'bg-everts/10 ring-1 ring-inset ring-everts/30' : '',
