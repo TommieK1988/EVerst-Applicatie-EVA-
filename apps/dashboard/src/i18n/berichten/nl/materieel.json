@@ -40,12 +40,8 @@
     "inventaris": "nr {nummer}"
   },
   "toevoegen": {
-    "knop": "Toevoegen",
     "stickerScannen": "Sticker scannen",
-    "titel": "Materieel toevoegen",
-    "scanUitleg": "Scan de sticker die je erop plakt; de code hangt er dan meteen aan.",
-    "zonderSticker": "Toevoegen zonder sticker",
-    "zonderStickerUitleg": "Nog geen sticker bij de hand. Koppelen kan later op het paspoort."
+    "zonderSticker": "Toevoegen zonder sticker"
   },
   "scanner": {
     "hint": "Richt op de QR-code van de sticker",
@@ -132,11 +128,18 @@
     "opJouwNaamGezet": "Op jouw naam gezet",
     "inleveren": "Inleveren",
     "ingeleverd": "Ingeleverd",
-    "waarHoortHet": "Waar hoort het?",
+    "uitgevenAan": "Uitgeven aan",
+    "uitgevenOpenen": "Uitgeven aan een collega of bus",
+    "uitgeven": "Uitgeven",
+    "bevestigOpMijnNaam": "Op jouw naam zetten?",
+    "bevestigOpMijnNaamUitleg": "Nu bij: {naam}. Daarna sta jij ervoor ingeschreven.",
+    "jaOpMijnNaam": "Ja, op mijn naam",
+    "bevestigInleveren": "Inleveren?",
+    "bevestigInleverenUitleg": "Het staat dan niet meer op jouw naam, maar op algemeen gebruik.",
+    "jaInleveren": "Ja, inleveren",
     "kiesPlaatshouder": "Kies een collega, werkplaats of bus…",
     "opAlgemeenGezet": "Op algemeen gebruik gezet",
     "uitgegeven": "Uitgegeven",
-    "toewijzen": "Toewijzen",
     "storingMelden": "Storing of schade melden",
     "watIsErAanDeHand": "Wat is er aan de hand?",
     "annuleren": "Annuleren",

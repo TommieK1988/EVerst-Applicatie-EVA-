@@ -77,6 +77,11 @@ export default function PaspoortMobiel({
   // manier om dat vast te leggen het eerst op je eigen naam zetten en daarna
   // weer inleveren.
   const [uitgifte, setUitgifte] = React.useState('')
+  const [uitgifteOpen, setUitgifteOpen] = React.useState(false)
+  // Op je naam zetten en inleveren vragen eerst om een bevestiging: de knop
+  // staat precies waar je duim landt als het paspoort na een scan opent, en een
+  // verkeerde tik schuift materieel van een collega naar jou.
+  const [bevestig, setBevestig] = React.useState<'opMijnNaam' | 'inleveren' | null>(null)
 
   // Scan éénmalig vastleggen. Zonder deze markering vuurt het in
   // ontwikkelmodus twee keer (React draait effecten dan dubbel).
@@ -150,10 +155,40 @@ export default function PaspoortMobiel({
 
       {magSchrijven && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-          {!isVanMij ? (
+          {bevestig ? (
+            <div style={{ ...kaart, marginBottom: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                {bevestig === 'opMijnNaam' ? t('paspoort.bevestigOpMijnNaam') : t('paspoort.bevestigInleveren')}
+              </div>
+              <div style={{ fontSize: 13, color: GRIJS, lineHeight: 1.45, marginTop: 4, marginBottom: 12 }}>
+                {bevestig === 'opMijnNaam'
+                  ? t('paspoort.bevestigOpMijnNaamUitleg', { naam: toegewezenNaam })
+                  : t('paspoort.bevestigInleverenUitleg')}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setBevestig(null)} style={{ ...secundaireKnop, flex: 1 }}>
+                  {t('paspoort.annuleren')}
+                </button>
+                <button
+                  type="button" disabled={bezig}
+                  onClick={async () => {
+                    const opMijnNaam = bevestig === 'opMijnNaam'
+                    await doe(
+                      () => (opMijnNaam ? zetOpMijnNaam(object.id) : neemTerug(object.id)),
+                      opMijnNaam ? t('paspoort.opJouwNaamGezet') : t('paspoort.ingeleverd'),
+                    )
+                    setBevestig(null)
+                  }}
+                  style={{ ...primaireKnop, flex: 2, opacity: bezig ? 0.6 : 1 }}
+                >
+                  {bevestig === 'opMijnNaam' ? t('paspoort.jaOpMijnNaam') : t('paspoort.jaInleveren')}
+                </button>
+              </div>
+            </div>
+          ) : !isVanMij ? (
             <button
               type="button" disabled={bezig}
-              onClick={() => doe(() => zetOpMijnNaam(object.id), t('paspoort.opJouwNaamGezet'))}
+              onClick={() => setBevestig('opMijnNaam')}
               style={{ ...primaireKnop, opacity: bezig ? 0.6 : 1 }}
             >
               {t('paspoort.opMijnNaam')}
@@ -161,17 +196,25 @@ export default function PaspoortMobiel({
           ) : (
             <button
               type="button" disabled={bezig}
-              onClick={() => doe(() => neemTerug(object.id), t('paspoort.ingeleverd'))}
+              onClick={() => setBevestig('inleveren')}
               style={{ ...secundaireKnop, opacity: bezig ? 0.6 : 1 }}
             >
               {t('paspoort.inleveren')}
             </button>
           )}
 
-          {magBeheren && (medewerkers.length > 0 || teams.length > 0) && (
+          {/* Uitgeven: kantoor zet materieel op naam van een collega, bus of
+              werkplaats (of terug op algemeen gebruik). Dicht tot je erom vraagt —
+              het is geen handeling voor elke keer dat je een paspoort opent. */}
+          {magBeheren && (medewerkers.length > 0 || teams.length > 0) && !uitgifteOpen && (
+            <button type="button" onClick={() => setUitgifteOpen(true)} style={secundaireKnop}>
+              {t('paspoort.uitgevenOpenen')}
+            </button>
+          )}
+          {magBeheren && (medewerkers.length > 0 || teams.length > 0) && uitgifteOpen && (
             <div style={kaart}>
               <div style={{ fontSize: 12, color: GRIJS, fontWeight: 600, marginBottom: 6 }}>
-                {t('paspoort.waarHoortHet')}
+                {t('paspoort.uitgevenAan')}
               </div>
               <div style={{ marginBottom: 8 }}>
                 <OptieKiezer
@@ -210,7 +253,14 @@ export default function PaspoortMobiel({
                 }}
                 style={{ ...primaireKnop, width: '100%', opacity: bezig || uitgifte === '' ? 0.5 : 1 }}
               >
-                {t('paspoort.toewijzen')}
+                {t('paspoort.uitgeven')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUitgifteOpen(false); setUitgifte('') }}
+                style={{ ...secundaireKnop, width: '100%', marginTop: 8 }}
+              >
+                {t('paspoort.annuleren')}
               </button>
             </div>
           )}

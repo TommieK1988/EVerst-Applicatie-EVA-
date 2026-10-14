@@ -40,12 +40,8 @@
     "inventaris": "nr {nummer}"
   },
   "toevoegen": {
-    "knop": "Dodaj",
     "stickerScannen": "Skanuj naklejkę",
-    "titel": "Dodaj sprzęt",
-    "scanUitleg": "Zeskanuj naklejkę, którą na nim przyklejasz; kod zostanie od razu przypisany.",
-    "zonderSticker": "Dodaj bez naklejki",
-    "zonderStickerUitleg": "Nie masz jeszcze naklejki. Możesz ją przypisać później w karcie sprzętu."
+    "zonderSticker": "Dodaj bez naklejki"
   },
   "scanner": {
     "hint": "Skieruj aparat na kod QR naklejki",
@@ -132,11 +128,18 @@
     "opJouwNaamGezet": "Przypisano do ciebie",
     "inleveren": "Zwróć",
     "ingeleverd": "Zwrócono",
-    "waarHoortHet": "Gdzie to należy?",
+    "uitgevenAan": "Wydaj komu",
+    "uitgevenOpenen": "Wydaj współpracownikowi lub do busa",
+    "uitgeven": "Wydaj",
+    "bevestigOpMijnNaam": "Przypisać do ciebie?",
+    "bevestigOpMijnNaamUitleg": "Teraz u: {naam}. Potem będzie zapisane na ciebie.",
+    "jaOpMijnNaam": "Tak, przypisz do mnie",
+    "bevestigInleveren": "Zwrócić?",
+    "bevestigInleverenUitleg": "Nie będzie już przypisane do ciebie, tylko do użytku ogólnego.",
+    "jaInleveren": "Tak, zwróć",
     "kiesPlaatshouder": "Wybierz współpracownika, warsztat lub busa…",
     "opAlgemeenGezet": "Ustawiono do użytku ogólnego",
     "uitgegeven": "Wydano",
-    "toewijzen": "Przypisz",
     "storingMelden": "Zgłoś awarię lub uszkodzenie",
     "watIsErAanDeHand": "Co się stało?",
     "annuleren": "Anuluj",

@@ -22,8 +22,9 @@ export const dynamic = 'force-dynamic'
  * Bovenaan staat wat aan jou is toegewezen: dat is waar de meeste vragen over
  * gaan en het kost geen handeling. Daaronder een zoekveld over al het materieel
  * — niet alles heeft een leesbare sticker, en dan zoek je op wat er wél op staat:
- * merk, serienummer of het nummer van de keuringssticker. Toevoegen (scannen of
- * zonder sticker) zit achter de plus onderaan, binnen duimbereik.
+ * merk, serienummer of het nummer van de keuringssticker. Onderaan, binnen
+ * duimbereik, staat de scanknop; een onbekende sticker leidt daar vanzelf naar
+ * koppelen of toevoegen. De plus ernaast is voor materieel zonder sticker.
  *
  * "Recent door mij toegevoegd" is kantoorwerk: het is de terugblik op een rij
  * invoerbeurten achter elkaar. Een app-gebruiker voegt hooguit incidenteel iets
