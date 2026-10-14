@@ -9,7 +9,8 @@ import { createClient } from '@/lib/everts-calc/supabase/client'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { Betalingsconditie } from '@/app/(platform)/everts-calc/actions/betalingscondities'
 import type { AlgemeneVoorwaarden } from '@/app/(platform)/everts-calc/actions/algemene-voorwaarden'
-import { Card, CardHeader, CardBody } from '@/components/ui/card'
+import { FormField } from '@/components/ui/form-field'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { useDialogen } from '@/components/ui/dialogen'
@@ -17,6 +18,10 @@ import OfferteBijlagenKaart from './OfferteBijlagenKaart'
 import OfferteTekstEditor from './OfferteTekstEditor'
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+/** Radix Select kent geen lege waarde; dit staat voor "geen voorkeur". */
+const GEEN = '__geen'
+
 
 interface Props {
   projectId: string
@@ -138,8 +143,10 @@ export default function CalculatieInstellingenKaarten({
     || (!!algVoorwaarden && !!scenario.algemene_voorwaarden_id && !voorwaardenId)
   const beideGekozen = !!conditieId && !!voorwaardenId
 
+  const bevroren = !!scenario.bevroren_op
+
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="flex flex-col gap-5">
 
       {verwijderd ? (
         <Alert tone="warning" title="Gekozen voorwaarden bestaan niet meer">
@@ -152,70 +159,62 @@ export default function CalculatieInstellingenKaarten({
         </Alert>
       )}
 
-      {/* ─── Offerte-instellingen ────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>Betalingscondities en voorwaarden</CardHeader>
-        <CardBody>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1.5">Betalingscondities</label>
-              <select
-                value={conditieId ?? ''}
-                onChange={e => wijzig({ betalingsconditie_id: e.target.value || null }, true)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
-              >
-                <option value="">— Geen voorkeur —</option>
-                {(betalingscondities ?? []).map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.naam}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1.5">Algemene Voorwaarden</label>
-              <select
-                value={voorwaardenId ?? ''}
-                onChange={e => wijzig({ algemene_voorwaarden_id: e.target.value || null }, true)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-everts/20 focus:border-everts bg-white"
-              >
-                <option value="">— Geen voorkeur —</option>
-                {(algVoorwaarden ?? []).map(av => (
-                  <option key={av.id} value={av.id}>
-                    {av.naam}{av.versie ? ` (${av.versie})` : ''}{av.is_standaard ? ' (standaard)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
+      {/* ─── Betalingscondities en algemene voorwaarden ─────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <FormField label="Betalingscondities" upper>
+          <Select
+            value={conditieId ?? GEEN}
+            onValueChange={v => wijzig({ betalingsconditie_id: v === GEEN ? null : v }, true)}
+            disabled={bevroren}
+          >
+            <SelectTrigger aria-label="Betalingscondities"><SelectValue placeholder="Kies…" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={GEEN}>Geen voorkeur</SelectItem>
+              {(betalingscondities ?? []).map(b => <SelectItem key={b.id} value={b.id}>{b.naam}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </FormField>
+        <FormField label="Algemene voorwaarden" upper>
+          <Select
+            value={voorwaardenId ?? GEEN}
+            onValueChange={v => wijzig({ algemene_voorwaarden_id: v === GEEN ? null : v }, true)}
+            disabled={bevroren}
+          >
+            <SelectTrigger aria-label="Algemene voorwaarden"><SelectValue placeholder="Kies…" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={GEEN}>Geen voorkeur</SelectItem>
+              {(algVoorwaarden ?? []).map(av => (
+                <SelectItem key={av.id} value={av.id}>
+                  {av.naam}{av.versie ? ` (${av.versie})` : ''}{av.is_standaard ? ' (standaard)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
+      </div>
 
       {/* ─── Inleidende tekst (per calculatie) ───────────────────────────────── */}
-      <Card>
-        <CardHeader>Inleidende tekst</CardHeader>
-        <CardBody>
-          {/* Breed en hoog: zo zie je meteen hoe de alinea's in de offerte uitvallen
-              in plaats van een smal vakje met afgebroken regels. */}
-          <OfferteTekstEditor
-            waarde={scenario.inleiding_tekst ?? ''}
-            onChange={html => wijzig({ inleiding_tekst: html })}
-            readOnly={!!scenario.bevroren_op}
-          />
-          <p className="text-xs text-slate-400 mt-2">
-            Verschijnt in de offerte op de plek van
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">{'{@inleiding}'}</code>
-            in de opmaak. Vet, cursief, onderstreept en opsommingen komen mee.
-          </p>
-        </CardBody>
-      </Card>
+      {/* Breed, en hij groeit mee met de tekst: zo zie je hoe de alinea's in de
+          offerte uitvallen in plaats van een smal vakje met afgebroken regels. */}
+      <FormField
+        label="Inleidende tekst" upper
+        helper={<>Verschijnt in de offerte op de plek van
+          <code className="mx-1 rounded bg-neutral-100 px-1 py-0.5 text-[11px]">{'{@inleiding}'}</code>
+          in de opmaak. Vet, cursief, onderstreept en opsommingen komen mee.</>}
+      >
+        <OfferteTekstEditor
+          waarde={scenario.inleiding_tekst ?? ''}
+          onChange={html => wijzig({ inleiding_tekst: html })}
+          readOnly={bevroren}
+        />
+      </FormField>
 
       {/* ─── PDF-bijlages (eigen tabel, niet de scenario-snapshot) ───────────── */}
       <OfferteBijlagenKaart
         projectId={projectId}
         dossierId={dossierId}
         scenarioId={scenario.id}
-        readOnly={!!scenario.bevroren_op}
+        readOnly={bevroren}
       />
 
       {vereist && !onStatus && (
