@@ -15,7 +15,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht, GeenToegangError } from '@/lib/auth/rechten'
-import { getDossierInkoop, hercodeerGeboekteKost } from '@/lib/dossiers/actions'
+import { getDossierBewaking, getDossierInkoop, hercodeerGeboekteKost } from '@/lib/dossiers/actions'
 import { vereisInkoopfactuurToegang } from './actions'
 import { logGebeurtenis } from './route'
 
@@ -28,6 +28,11 @@ export type BewakingscodeKeuze = {
   opties: BewakingscodeOptie[]
   /** Null = wijzigen kan; anders de reden waarom niet, in gewone taal. */
   nietWijzigbaar: string | null
+  /**
+   * Alleen codes met een prognosebedrag (Tom, 14-10-2026): daar hoort een kost thuis. Kon de
+   * prognose niet worden opgehaald, dan staat hier waarom en is de lijst ongefilterd.
+   */
+  filterMelding: string | null
 }
 
 async function factuurMetDossier(inkoopfactuurId: string) {
@@ -42,17 +47,30 @@ export async function getBewakingscodeKeuze(inkoopfactuurId: string): Promise<Be
   await vereisInkoopfactuurToegang(inkoopfactuurId, 'lezen')
   const f = await factuurMetDossier(inkoopfactuurId)
   const huidig = { code: f?.bewakingscode ?? null, naam: f?.bewakingscode_naam ?? null }
-  if (!f?.dossier_id) return { huidig, opties: [], nietWijzigbaar: 'Deze factuur hangt niet aan een dossier.' }
+  if (!f?.dossier_id) return { huidig, opties: [], nietWijzigbaar: 'Deze factuur hangt niet aan een dossier.', filterMelding: null }
 
-  const inkoop = await getDossierInkoop(f.dossier_id)
+  const [inkoop, bewaking] = await Promise.all([
+    getDossierInkoop(f.dossier_id),
+    // Correcties (CO01) zijn een bijstelling voor de maandcijfers, geen plek voor een factuur.
+    getDossierBewaking(f.dossier_id, { verbergCorrecties: true }).catch(() => null),
+  ])
   const rij = inkoop.geboekteKosten.find(r => String(r.bronId) === String(f.bouw7_invoice_id))
-  const opties = inkoop.projectcodes.map(c => ({ code: c.code, naam: c.naam, hoofdstukId: c.hoofdstukId, hoofdstukNaam: c.hoofdstukNaam }))
+  // Code + hoofdstuk: dezelfde codetekst kan in meerdere hoofdstukken staan, elk met een eigen prognose.
+  const metPrognose = bewaking?.beschikbaar
+    ? new Set(bewaking.hoofdstukken.flatMap(h => h.regels)
+        .filter(r => r.code && r.prognose > 0)
+        .map(r => `${r.code}|${r.hoofdstukId ?? ''}`))
+    : null
+  const opties = inkoop.projectcodes
+    .filter(c => !metPrognose || metPrognose.has(`${c.code}|${c.hoofdstukId ?? ''}`))
+    .map(c => ({ code: c.code, naam: c.naam, hoofdstukId: c.hoofdstukId, hoofdstukNaam: c.hoofdstukNaam }))
+  const filterMelding = metPrognose ? null : 'De prognose kon niet uit Bouw7 worden gehaald; je ziet alle bewakingscodes van het project.'
   const nietWijzigbaar =
     !rij ? 'Deze factuur staat (nog) niet bij de geboekte kosten van het dossier.'
     : rij.bonId == null ? 'Deze factuur heeft geen leverbon in Bouw7, dus er is geen bewakingscode om te wijzigen.'
     : rij.contractGebonden ? 'Deze kost hangt aan een inkooporder of OA-contract; daar bepaalt het contract de bewakingscode.'
     : null
-  return { huidig, opties, nietWijzigbaar }
+  return { huidig, opties, nietWijzigbaar, filterMelding }
 }
 
 export async function wijzigInkoopBewakingscode(

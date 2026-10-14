@@ -62,7 +62,10 @@ export function Combobox({
   }, [options])
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // `modal`: in een Dialog of Drawer vergrendelt Radix het scrollen van alles búíten dat venster,
+    // en de keuzelijst wordt naar <body> geportald — het scrollwiel deed er dan niets (bewakingscode
+    // in het inkoop-zijpaneel, 14-10-2026). Een modale popover wordt zelf de actieve scrolllaag.
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"

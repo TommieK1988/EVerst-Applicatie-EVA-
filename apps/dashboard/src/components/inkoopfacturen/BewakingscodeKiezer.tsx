@@ -72,6 +72,13 @@ export default function BewakingscodeKiezer({ inkoopfactuurId, onGewijzigd }: Pr
             <Button size="sm" disabled={bezig || !gekozen} onClick={opslaan}>{bezig ? 'Opslaan…' : 'Opslaan'}</Button>
           </div>
         ))}
+      {keuze && !keuze.nietWijzigbaar && (
+        <p style={{ fontSize: 12, color: 'var(--fg-soft)', margin: '4px 0 0' }}>
+          {keuze.filterMelding ?? (keuze.opties.length
+            ? 'Alleen bewakingscodes met een prognose.'
+            : 'Dit project heeft nog geen bewakingscodes met een prognose.')}
+        </p>
+      )}
       {klaar && <p style={{ fontSize: 12.5, color: '#0f766e', margin: '6px 0 0' }}>Bewakingscode gewijzigd, ook in Bouw7.</p>}
       {fout && <p style={{ fontSize: 12.5, color: '#dc2626', margin: '6px 0 0' }}>{fout}</p>}
     </div>
