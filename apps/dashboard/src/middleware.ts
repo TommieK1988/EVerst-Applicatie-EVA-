@@ -12,8 +12,19 @@ import { nextParameter, veiligNextPad, veiligPortaalPad } from '@/lib/auth/next-
 import {
   begrensdeFetch, controleerSessieBegrensd, authOnbereikbaarResponse,
 } from '@/lib/auth/auth-bereikbaarheid'
+import { oudeTabOmleiding } from '@/lib/dossiers/oude-tab-pad'
 
 export async function middleware(request: NextRequest) {
+  // Opgeheven dossiertab (bv. `/servicedesk/<id>/informatie`, nu een deel van Bon)? Hier
+  // omleiden en niet in de page: het dossier heeft een `loading.tsx`, dus een redirect()
+  // in de page komt midden in de stream en geeft een flits "Application error".
+  const omleiding = oudeTabOmleiding(request.nextUrl.pathname)
+  if (omleiding) {
+    const naar = new URL(omleiding, request.url)
+    if (!naar.search) naar.search = request.nextUrl.search
+    return NextResponse.redirect(naar)
+  }
+
   // Het kanaal (desktop/mobiel) volgt uit het pad en gaat als requestheader mee naar
   // de server-componenten, die er hun rechtenset mee kiezen. `set()` en niet
   // `append()`: stuurt een client de header zelf mee, dan moet hij overschreven

@@ -38,7 +38,9 @@ export function dossierPad(sectie: DossierSectie, id: string): string {
  * doen zodra het laatste segment ineens `bewaking` heet.
  */
 export function dossierOpenPad(sectie: DossierSectie, id: string): string {
-  return dossierTabPad(sectie, id, sectie === 'offerte' ? 'bewaking' : 'informatie')
+  // Een servicedeskbon heeft geen eigen Informatie-tab meer; die is een deel van Bon.
+  const tab = sectie === 'offerte' ? 'bewaking' : sectie === 'servicedesk' ? 'bon' : 'informatie'
+  return dossierTabPad(sectie, id, tab)
 }
 
 /**
