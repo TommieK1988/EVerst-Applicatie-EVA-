@@ -917,11 +917,12 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
   // ── EvertsCalc ─────────────────────────────────────────────────────────
   [/^\/everts-calc\/meetstaat\/[^/]+$/, {
     title: 'EvertsCalc — Meetstaat',
-    description: 'Invoerscherm voor de meetstaat van een schilderwerk­calculatie. Voer per werksoort de hoeveelheden in (m², stuks, meter) en EvertsCalc berekent de prijs automatisch op basis van de geselecteerde behandeling.',
+    description: 'Invoerscherm voor de meetstaat van een schilderwerk­calculatie, in de volgorde van de papieren opmeetstaat. Per code tel je de maten op; die hoeveelheden zet je daarna in één keer door naar de calculatie.',
     sections: [
-      { title: 'Posten invoeren', body: 'Selecteer de werksoort (bijv. schilderwerk kozijnen buiten), kies de behandeling (bijv. 2× lakken) en voer de hoeveelheid in. EvertsCalc berekent arbeids­uren en materiaalkosten automatisch.' },
-      { title: 'Structuur', body: 'Organiseer de meetstaat in groepen (bijv. per gevel of per verdieping). Groepen geven structuur aan de offerte en maken het voor de klant overzichtelijk.' },
-      { title: 'Importeren', body: 'Heb je al een meetstaat in Excel? Importeer hem via CUF-import (knop in de werkbalk). EVA matcht de kolommen automatisch op bekende werksoorten.' },
+      { title: 'Regels invoeren', body: 'Kies per regel het onderdeel en type, en geef de bestekscode op. Vul daarna de maten in: B en H, bij m¹ ook hoeveel breedtes en hoogtes je meet (B aant. / H aant.). x is hoe vaak iets binnen één element voorkomt (bijv. 2 ramen in één kozijn), Aantal hoe vaak het element in totaal voorkomt. Een m²-regel met maar één maat telt niet mee en toont wat er ontbreekt.' },
+      { title: 'Groepen', body: 'De groepen komen uit de calculatie (bijv. per gevel of trappenhuis). Links zie je per groep hoeveel regels er staan, of er nog wijzigingen openstaan (oranje stip) en welke groep nog niet gemeten is.' },
+      { title: 'Elementen', body: 'Vink regels aan en kies "Bewaar als element" om een stuk dat vaak terugkomt (bijv. een kozijntype) te bewaren. Met "Element invoegen" zet je het in een andere groep, met het aantal keer dat het daar voorkomt.' },
+      { title: 'Naar de calculatie', body: 'Onder elke groep staat per code wat de meetstaat oplevert naast wat er nu in de calculatie staat: nieuw, gewijzigd, vervallen of gelijk. "Verwerk in calculatie" toont eerst alle wijzigingen; vink uit wat nog niet mee mag. Een code zonder meetregels zet de calculatieregel op 0, verwijderen doe je zelf in de calculatie. De behandeling kies je in de calculatie, per code.' },
     ],
   }],
 
