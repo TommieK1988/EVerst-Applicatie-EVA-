@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { CheckCircle2, FileText, MessageSquare, Tag } from 'lucide-react'
 import {
-  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerFooter, Button,
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerFooter,
+  Badge, Button, Textarea,
 } from '@/components/ui'
+import { Sectie } from '@/components/dossiers/NieuweAanvraagOnderdelen'
 import {
   getInkoopfactuurDetail, plaatsInkoopfactuurOpmerking, ververInkoopfactuur,
   type InkoopfactuurDetail,
@@ -12,6 +15,13 @@ import { inkoopStatusLabel, approvalStatusLabel, BOUW7_APPROVAL_STATUS } from '@
 import { dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
 import EvaGoedkeuringSectie from './EvaGoedkeuringSectie'
 import BewakingscodeKiezer from './BewakingscodeKiezer'
+import Veld from './Veld'
+
+/**
+ * Zijpaneel van één inkoopfactuur. Opmaak volgt het venster "Nieuwe aanvraag": secties met een
+ * gekleurde kop, veldlabels in UPPERCASE 10,5px en de DS-klassen — de eerste versie met inline
+ * stijlen en grijze tekst op een smal paneel was slecht leesbaar.
+ */
 
 function euro(n: number | null): string {
   if (n == null) return '—'
@@ -21,19 +31,10 @@ function datum(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('nl-NL') : '—'
 }
 
-const STAP_KLEUR: Record<number, string> = {
-  [BOUW7_APPROVAL_STATUS.OPEN]:       '#f59e0b',
-  [BOUW7_APPROVAL_STATUS.AFGEKEURD]:  '#dc2626',
-  [BOUW7_APPROVAL_STATUS.GOEDGEKEURD]: '#16a34a',
-}
-
-function Regel({ label, waarde }: { label: string; waarde: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', gap: 12, fontSize: 13, padding: '3px 0' }}>
-      <span style={{ width: 130, flexShrink: 0, color: 'var(--fg-soft)' }}>{label}</span>
-      <span style={{ color: 'var(--fg)' }}>{waarde}</span>
-    </div>
-  )
+const BOUW7_STAP_TOON: Record<number, 'warning' | 'error' | 'success'> = {
+  [BOUW7_APPROVAL_STATUS.OPEN]: 'warning',
+  [BOUW7_APPROVAL_STATUS.AFGEKEURD]: 'error',
+  [BOUW7_APPROVAL_STATUS.GOEDGEKEURD]: 'success',
 }
 
 type Props = {
@@ -96,174 +97,143 @@ export default function InkoopfactuurPaneel({ rij, magAccorderen, onFactuurOpene
     await herlaad()
   }
 
+  const href = rij ? dossierHref(rij) : null
+  const projectTekst = rij ? [rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ') : ''
+
   return (
     <Drawer open={!!rij} onOpenChange={open => { if (!open) onClose() }}>
-      <DrawerContent width={520}>
+      <DrawerContent width={560}>
         {rij && (
           <>
             <DrawerHeader>
-              <DrawerTitle>{rij.factuurnummer ?? 'Inkoopfactuur'} · {euro(rij.bedrag_incl)}</DrawerTitle>
+              <DrawerTitle>{rij.leverancier_naam ?? 'Inkoopfactuur'}</DrawerTitle>
               <DrawerDescription>
-                {rij.leverancier_naam ?? '—'} · {inkoopStatusLabel(rij.bouw7_status)}
+                {rij.factuurnummer ?? '—'} · <strong className="text-neutral-900">{euro(rij.bedrag_incl)}</strong> · {inkoopStatusLabel(rij.bouw7_status)}
               </DrawerDescription>
             </DrawerHeader>
 
-            <DrawerBody>
-              {fout && (
-                <p style={{ fontSize: 13, color: '#dc2626', marginTop: 0 }}>{fout}</p>
-              )}
+            <DrawerBody className="bg-neutral-50">
+              {fout && <p className="mb-3 text-[13px] text-error-700">{fout}</p>}
 
-              <section style={{ marginBottom: 20 }}>
-                <Regel label="Leverancier"  waarde={rij.leverancier_naam ?? '—'} />
-                <Regel label="Bedrag excl." waarde={euro(rij.bedrag_excl)} />
-                <Regel label="BTW"          waarde={euro(rij.btw_bedrag)} />
-                <Regel label="Bedrag incl." waarde={<strong>{euro(rij.bedrag_incl)}</strong>} />
-                <Regel label="Factuurdatum" waarde={datum(rij.factuurdatum)} />
-                <Regel label="Vervaldatum"  waarde={datum(rij.vervaldatum)} />
-                <Regel label="Administratie" waarde={rij.divisie_naam ?? '—'} />
-                <Regel label="Vestiging"    waarde={rij.vestiging_naam ?? '—'} />
-                <Regel
-                  label="Project"
-                  waarde={
-                    rij.bouw7_project_id == null
-                      ? <em style={{ color: 'var(--fg-soft)' }}>geen project (overhead)</em>
-                      : dossierHref(rij)
-                        ? <a href={dossierHref(rij)!}>{[rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}</a>
-                        : [rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ') || '—'
-                  }
-                />
-                <Regel
-                  label="Bewakingscode"
-                  waarde={code.code ? `${code.code}${code.naam ? ` · ${code.naam}` : ''}` : '—'}
-                />
+              <Sectie titel="Factuur" omschrijving="Zoals de leverancier hem stuurde" icoon={FileText}>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <Veld label="Leverancier" breed>{rij.leverancier_naam ?? '—'}</Veld>
+                  <Veld label="Factuurnummer">{rij.factuurnummer ?? '—'}</Veld>
+                  <Veld label="Bon / order">{rij.bon_nummer ?? rij.ordernummer ?? '—'}</Veld>
+                  <Veld label="Bedrag excl.">{euro(rij.bedrag_excl)}</Veld>
+                  <Veld label="Btw">{euro(rij.btw_bedrag)}</Veld>
+                  <Veld label="Bedrag incl."><strong>{euro(rij.bedrag_incl)}</strong></Veld>
+                  <Veld label="Vervaldatum">{datum(rij.vervaldatum)}</Veld>
+                  <Veld label="Factuurdatum">{datum(rij.factuurdatum)}</Veld>
+                  <Veld label="Administratie">{rij.divisie_naam ?? '—'}</Veld>
+                  {rij.bouw7_opmerking && <Veld label="Omschrijving" breed>{rij.bouw7_opmerking}</Veld>}
+                  {rij.markering_betalen && (
+                    <Veld label="Betalen" breed><Badge tone="success" size="md">Aangemerkt om te betalen</Badge></Veld>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" className="self-start" onClick={() => onFactuurOpenen(rij)}>
+                  Factuur bekijken
+                </Button>
+              </Sectie>
+
+              <Sectie titel="Kosten" omschrijving="Waar deze factuur op geboekt staat" icoon={Tag}>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <Veld label="Project" breed>
+                    {rij.bouw7_project_id == null
+                      ? <span className="italic text-neutral-500">geen project (overhead)</span>
+                      : href
+                        ? <a href={href} className="font-semibold text-brand-700 hover:underline">{projectTekst || 'Naar het dossier'}</a>
+                        : projectTekst || '—'}
+                  </Veld>
+                  <Veld label="Bewakingscode" breed>
+                    {code.code ? <><strong>{code.code}</strong>{code.naam ? ` · ${code.naam}` : ''}</> : '—'}
+                  </Veld>
+                </div>
                 {/* Wijzigen mag iedereen met schrijfrecht op inkoop (o.a. de financiële administratie),
                     niet alleen de goedkeurder — het raakt de kostenverdeling, niet de goedkeuring. */}
                 {magAccorderen && rij.bouw7_project_id != null && (
-                  <div style={{ margin: '4px 0 6px 142px' }}>
-                    <BewakingscodeKiezer inkoopfactuurId={rij.id} onGewijzigd={n => {
-                      setNieuweCode({ id: rij.id, ...n })
-                      onGewijzigd?.()
-                    }} />
-                  </div>
+                  <BewakingscodeKiezer inkoopfactuurId={rij.id} onGewijzigd={n => {
+                    setNieuweCode({ id: rij.id, ...n })
+                    onGewijzigd?.()
+                  }} />
                 )}
-                {(rij.bon_nummer || rij.ordernummer) && (
-                  <Regel label="Bon / order" waarde={rij.bon_nummer ?? rij.ordernummer} />
-                )}
-                {rij.bouw7_opmerking && (
-                  <Regel label="Omschrijving" waarde={rij.bouw7_opmerking} />
-                )}
-                {rij.markering_betalen && (
-                  <Regel label="Betalen" waarde={<strong style={{ color: '#0f766e' }}>Aangemerkt om te betalen</strong>} />
-                )}
-              </section>
+              </Sectie>
 
               {evaKeurt && <EvaGoedkeuringSectie inkoopfactuurId={rij.id} onGewijzigd={() => onGewijzigd?.()} />}
 
-              {!evaKeurt && <section style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '0 0 8px' }}>
-                  Fiattering in Bouw7
-                </h4>
-                {laden && <p style={{ fontSize: 13, color: 'var(--fg-soft)' }}>Laden…</p>}
-                {!laden && (detail?.goedkeurders.length ?? 0) === 0 && (
-                  <p style={{ fontSize: 13, color: 'var(--fg-soft)', margin: 0 }}>
-                    Voor deze factuur loopt geen fiatteringsworkflow in Bouw7.
-                  </p>
-                )}
-                {detail?.goedkeurders.map(stap => (
-                  <div key={stap.id} style={{
-                    display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0',
-                    borderTop: '1px solid var(--border)',
-                  }}>
-                    <span style={{
-                      width: 8, height: 8, borderRadius: '50%', marginTop: 6, flexShrink: 0,
-                      background: STAP_KLEUR[stap.status ?? -1] ?? 'var(--fg-soft)',
-                    }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>
-                        {stap.volgorde != null ? `${stap.volgorde}. ` : ''}{stap.naam ?? 'Onbekend'}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--fg-soft)' }}>
-                        {approvalStatusLabel(stap.status)}
-                        {stap.besloten_op ? ` · ${datum(stap.besloten_op)}` : ''}
-                      </div>
-                      {stap.opmerking && (
-                        <p style={{ fontSize: 13, margin: '4px 0 0', whiteSpace: 'pre-wrap' }}>{stap.opmerking}</p>
-                      )}
+              {!evaKeurt && (
+                <Sectie titel="Goedkeuring in Bouw7" omschrijving="Deze factuur wordt in Bouw7 goedgekeurd" icoon={CheckCircle2}>
+                  {laden && <p className="text-[13px] text-neutral-500">Laden…</p>}
+                  {!laden && (detail?.goedkeurders.length ?? 0) === 0 && (
+                    <p className="text-[13px] text-neutral-500">Voor deze factuur loopt geen goedkeuring in Bouw7.</p>
+                  )}
+                  {(detail?.goedkeurders.length ?? 0) > 0 && (
+                    <ol className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200">
+                      {detail!.goedkeurders.map(stap => (
+                        <li key={stap.id} className="flex items-start gap-3 px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-semibold text-neutral-900">
+                              {stap.volgorde != null ? `${stap.volgorde}. ` : ''}{stap.naam ?? 'Onbekend'}
+                            </div>
+                            {stap.besloten_op && <div className="text-xs text-neutral-500">{datum(stap.besloten_op)}</div>}
+                            {stap.opmerking && <p className="mt-1 whitespace-pre-wrap text-[13px] text-neutral-800">{stap.opmerking}</p>}
+                          </div>
+                          <Badge size="md" tone={BOUW7_STAP_TOON[stap.status ?? -1] ?? 'neutral'} className="shrink-0">
+                            {approvalStatusLabel(stap.status)}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {/* Stemmen namens een medewerker kan onze API-sleutel niet (WRITE-ENDPOINTS §7c). */}
+                  {rij.mijn_beurt && (
+                    <div className="flex flex-col gap-2 rounded-lg border border-warning-100 bg-warning-50 p-3">
+                      <p className="text-[13px] text-neutral-900">
+                        <strong>Jij bent aan zet.</strong> Deze factuur zat al in de goedkeuring van Bouw7 en wordt daar afgemaakt.
+                      </p>
+                      <a href={`https://start.bouw7.nl/purchase-invoice#/view/${rij.bouw7_invoice_id}`} target="_blank" rel="noreferrer" className="self-start">
+                        <Button size="sm" variant="primary">Openen in Bouw7</Button>
+                      </a>
                     </div>
-                  </div>
-                ))}
-              </section>}
+                  )}
+                </Sectie>
+              )}
 
-              <section style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '0 0 8px' }}>
-                  Notities in EVA
-                </h4>
+              <Sectie titel="Notities" omschrijving="Blijven in EVA; komen niet in Bouw7" icoon={MessageSquare}>
                 {(detail?.opmerkingen.length ?? 0) === 0 && !laden && (
-                  <p style={{ fontSize: 13, color: 'var(--fg-soft)', margin: '0 0 8px' }}>Nog geen notities.</p>
+                  <p className="text-[13px] text-neutral-500">Nog geen notities.</p>
                 )}
-                {detail?.opmerkingen.map(o => (
-                  <div key={o.id} style={{ padding: '6px 0', borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 12, color: 'var(--fg-soft)' }}>
-                      {o.medewerker_naam ?? 'Onbekend'} · {new Date(o.created_at).toLocaleString('nl-NL')}
-                      {o.naar_bouw7 && ' · ook in Bouw7'}
-                    </div>
-                    <p style={{ fontSize: 13, margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{o.tekst}</p>
-                  </div>
-                ))}
-
+                {(detail?.opmerkingen.length ?? 0) > 0 && (
+                  <ul className="flex flex-col gap-2">
+                    {detail!.opmerkingen.map(o => (
+                      <li key={o.id} className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+                        <div className="text-xs text-neutral-500">
+                          <strong className="text-neutral-700">{o.medewerker_naam ?? 'Onbekend'}</strong> · {new Date(o.created_at).toLocaleString('nl-NL')}
+                        </div>
+                        <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-neutral-900">{o.tekst}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {magAccorderen && (
-                  <div style={{ marginTop: 10 }}>
-                    <textarea
+                  <>
+                    <Textarea
                       value={nieuweOpmerking}
                       onChange={e => setNieuweOpmerking(e.target.value)}
-                      placeholder="Notitie bij deze factuur (blijft in EVA)"
+                      placeholder="Notitie bij deze factuur"
                       rows={3}
-                      style={{
-                        width: '100%', fontSize: 13, padding: 8, borderRadius: 6,
-                        border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)',
-                        resize: 'vertical',
-                      }}
                     />
-                    <Button size="sm" variant="secondary" disabled={bezig || !nieuweOpmerking.trim()} onClick={opslaanOpmerking}>
+                    <Button size="sm" variant="outline" className="self-start" disabled={bezig || !nieuweOpmerking.trim()} onClick={opslaanOpmerking}>
                       Notitie opslaan
                     </Button>
-                  </div>
+                  </>
                 )}
-              </section>
-
-              {/*
-                Facturen met een Bouw7-keten worden in Bouw7 afgemaakt: stemmen namens een
-                medewerker kan onze API-sleutel niet (WRITE-ENDPOINTS §7c). Nieuwe facturen
-                zonder keten keurt EVA zelf goed — zie EvaGoedkeuringSectie hierboven.
-              */}
-              {!evaKeurt && rij.mijn_beurt && (
-                <section style={{
-                  padding: 12, borderRadius: 8, border: '1px solid var(--border)',
-                  background: 'var(--bg-soft, transparent)',
-                }}>
-                  <p style={{ fontSize: 13, margin: '0 0 8px' }}>
-                    <strong>Jij bent aan zet.</strong> Deze factuur zat al in de goedkeuring van
-                    Bouw7 en wordt daar afgemaakt.
-                  </p>
-                  <a
-                    href={`https://start.bouw7.nl/purchase-invoice#/view/${rij.bouw7_invoice_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button size="sm">Openen in Bouw7</Button>
-                  </a>
-                </section>
-              )}
+              </Sectie>
             </DrawerBody>
 
             <DrawerFooter>
-              <div style={{ marginRight: 'auto' }}>
-                <Button variant="secondary" size="sm" onClick={() => onFactuurOpenen(rij)}>
-                  Factuur bekijken
-                </Button>
-              </div>
-              <Button variant="ghost" size="sm" disabled={bezig} onClick={ververs}>Verversen</Button>
-              <Button variant="secondary" size="sm" onClick={onClose}>Sluiten</Button>
+              <Button variant="ghost" size="sm" disabled={bezig} onClick={ververs} className="mr-auto">Verversen uit Bouw7</Button>
+              <Button variant="outline" size="sm" onClick={onClose}>Sluiten</Button>
             </DrawerFooter>
           </>
         )}

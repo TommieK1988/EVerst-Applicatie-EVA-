@@ -6,7 +6,10 @@ import { beslisInkoopfactuur, getEvaGoedkeuring, type EvaGoedkeuring } from '@/l
 import { getInkoopfactuurDetail, plaatsInkoopfactuurOpmerking, type OpmerkingRij } from '@/lib/inkoopfacturen/actions'
 import { STAP_SOORT_LABEL } from '@/lib/inkoopfacturen/goedkeur-route'
 import { dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
+import { CheckCircle2, FileText, MessageSquare, Tag } from 'lucide-react'
+import { Sectie } from '@/components/dossiers/NieuweAanvraagOnderdelen'
 import BewakingscodeKiezer from './BewakingscodeKiezer'
+import Veld from './Veld'
 
 /**
  * Goedkeuren als werkstapel: de facturen komen één voor één voorbij, met links het document en
@@ -21,6 +24,8 @@ import BewakingscodeKiezer from './BewakingscodeKiezer'
 type Props = {
   open: boolean
   stapel: InkoopfactuurRij[]
+  /** Bij welke factuur het scherm opent (klik in de lijst); leeg = de eerste. */
+  startId?: string | null
   onClose: () => void
   /** Na elk besluit of elke wijziging: de lijst eronder opnieuw laden. */
   onGewijzigd: () => void
@@ -33,20 +38,7 @@ function datum(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('nl-NL') : '—'
 }
 
-const kop: React.CSSProperties = {
-  fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fg-soft)', margin: '16px 0 6px', fontWeight: 600,
-}
-
-function Regel({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', gap: 12, fontSize: 13, padding: '2px 0' }}>
-      <span style={{ width: 112, flexShrink: 0, color: 'var(--fg-soft)' }}>{label}</span>
-      <span style={{ color: 'var(--fg)', minWidth: 0 }}>{children}</span>
-    </div>
-  )
-}
-
-export default function GoedkeurModus({ open, stapel, onClose, onGewijzigd }: Props) {
+export default function GoedkeurModus({ open, stapel, startId, onClose, onGewijzigd }: Props) {
   const [lijst, setLijst] = useState<InkoopfactuurRij[]>([])
   const [index, setIndex] = useState(0)
   const [route, setRoute] = useState<EvaGoedkeuring | null>(null)
@@ -60,7 +52,11 @@ export default function GoedkeurModus({ open, stapel, onClose, onGewijzigd }: Pr
 
   // Momentopname bij openen: een refresh van de lijst eronder mag de stapel niet laten verspringen.
   useEffect(() => {
-    if (open) { setLijst(stapel); setIndex(0); setAfgehandeld(0); setMelding(null) }
+    if (open) {
+      setLijst(stapel)
+      setIndex(Math.max(0, startId ? stapel.findIndex(r => r.id === startId) : 0))
+      setAfgehandeld(0); setMelding(null)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -132,58 +128,76 @@ export default function GoedkeurModus({ open, stapel, onClose, onGewijzigd }: Pr
                   style={{ width: '100%', height: '100%', border: 0 }} />
               </div>
 
-              <div style={{ overflowY: 'auto', padding: '4px 16px 16px', borderLeft: '1px solid var(--border)' }}>
-                <h4 style={kop}>Factuur</h4>
-                <Regel label="Leverancier">{rij.leverancier_naam ?? '—'}</Regel>
-                <Regel label="Factuurnummer">{rij.factuurnummer ?? '—'}</Regel>
-                <Regel label="Bedrag excl.">{euro(rij.bedrag_excl)}</Regel>
-                <Regel label="Btw">{euro(rij.btw_bedrag)}</Regel>
-                <Regel label="Bedrag incl."><strong>{euro(rij.bedrag_incl)}</strong></Regel>
-                <Regel label="Factuurdatum">{datum(rij.factuurdatum)}</Regel>
-                <Regel label="Vervaldatum">{datum(rij.vervaldatum)}</Regel>
-                <Regel label="Administratie">{rij.divisie_naam ?? '—'}</Regel>
-                <Regel label="Project">
-                  {rij.bouw7_project_id == null ? <em style={{ color: 'var(--fg-soft)' }}>geen project (overhead)</em>
-                    : href ? <a href={href} target="_blank" rel="noreferrer">{[rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}</a>
-                    : [rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}
-                </Regel>
-                {rij.bouw7_opmerking && <Regel label="Opmerking">{rij.bouw7_opmerking}</Regel>}
-
-                <h4 style={kop}>Bewakingscode</h4>
-                <p style={{ fontSize: 13, margin: '0 0 6px' }}>
-                  {rij.bewakingscode ? <><strong>{rij.bewakingscode}</strong>{rij.bewakingscode_naam ? ` · ${rij.bewakingscode_naam}` : ''}</> : <span style={{ color: 'var(--fg-soft)' }}>Geen</span>}
-                </p>
-                <BewakingscodeKiezer inkoopfactuurId={rij.id} onGewijzigd={nieuw => {
-                  setLijst(l => l.map(x => (x.id === rij.id ? { ...x, bewakingscode: nieuw.code, bewakingscode_naam: nieuw.naam } : x)))
-                  onGewijzigd()
-                }} />
-
-                <h4 style={kop}>Route</h4>
-                {!route && !fout && <p style={{ fontSize: 13, color: 'var(--fg-soft)', margin: 0 }}>Laden…</p>}
-                {route?.stappen.map(s => (
-                  <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, padding: '3px 0' }}>
-                    <span>{s.stap}. {s.goedkeurder_naam ?? 'Directie'}</span>
-                    <span style={{ color: 'var(--fg-soft)', fontSize: 12 }}>
-                      {STAP_SOORT_LABEL[s.soort]}{s.soort === 'grootboek' && route.grootboek ? ` ${route.grootboek}` : ''}
-                    </span>
-                    <Badge size="sm" tone={s.status === 'open' ? 'warning' : s.status === 'akkoord' ? 'success' : s.status === 'bezwaar' ? 'error' : 'neutral'} style={{ marginLeft: 'auto' }}>
-                      {s.status === 'open' ? 'Aan zet' : s.status === 'akkoord' ? 'Akkoord' : s.status === 'bezwaar' ? 'Bezwaar' : s.status === 'wacht' ? 'Volgt' : 'Vervallen'}
-                    </Badge>
+              <div className="overflow-y-auto border-l border-neutral-200 bg-neutral-50 p-4">
+                <Sectie titel="Factuur" omschrijving="Zoals de leverancier hem stuurde" icoon={FileText}>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <Veld label="Leverancier" breed>{rij.leverancier_naam ?? '—'}</Veld>
+                    <Veld label="Factuurnummer">{rij.factuurnummer ?? '—'}</Veld>
+                    <Veld label="Administratie">{rij.divisie_naam ?? '—'}</Veld>
+                    <Veld label="Bedrag excl.">{euro(rij.bedrag_excl)}</Veld>
+                    <Veld label="Btw">{euro(rij.btw_bedrag)}</Veld>
+                    <Veld label="Bedrag incl."><strong>{euro(rij.bedrag_incl)}</strong></Veld>
+                    <Veld label="Vervaldatum">{datum(rij.vervaldatum)}</Veld>
+                    {rij.bouw7_opmerking && <Veld label="Omschrijving" breed>{rij.bouw7_opmerking}</Veld>}
                   </div>
-                ))}
+                </Sectie>
 
-                <h4 style={kop}>Notities in EVA</h4>
-                {notities.length === 0 && <p style={{ fontSize: 13, color: 'var(--fg-soft)', margin: '0 0 6px' }}>Nog geen notities.</p>}
-                {notities.map(o => (
-                  <div key={o.id} style={{ padding: '5px 0', borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 12, color: 'var(--fg-soft)' }}>{o.medewerker_naam ?? 'Onbekend'} · {new Date(o.created_at).toLocaleString('nl-NL')}</div>
-                    <p style={{ fontSize: 13, margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{o.tekst}</p>
+                <Sectie titel="Kosten" omschrijving="Waar deze factuur op geboekt staat" icoon={Tag}>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <Veld label="Project" breed>
+                      {rij.bouw7_project_id == null ? <span className="italic text-neutral-500">geen project (overhead)</span>
+                        : href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 hover:underline">{[rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ') || 'Naar het dossier'}</a>
+                        : [rij.project_nummer, rij.project_naam].filter(Boolean).join(' · ')}
+                    </Veld>
+                    <Veld label="Bewakingscode" breed>
+                      {rij.bewakingscode ? <><strong>{rij.bewakingscode}</strong>{rij.bewakingscode_naam ? ` · ${rij.bewakingscode_naam}` : ''}</> : '—'}
+                    </Veld>
                   </div>
-                ))}
-                <Textarea value={notitie} onChange={e => setNotitie(e.target.value)} rows={2} placeholder="Notitie bij deze factuur (blijft in EVA)" />
-                <div style={{ marginTop: 6 }}>
-                  <Button size="sm" variant="secondary" disabled={bezig || !notitie.trim()} onClick={bewaarNotitie}>Notitie opslaan</Button>
-                </div>
+                  {rij.bouw7_project_id != null && (
+                    <BewakingscodeKiezer inkoopfactuurId={rij.id} onGewijzigd={nieuw => {
+                      setLijst(l => l.map(x => (x.id === rij.id ? { ...x, bewakingscode: nieuw.code, bewakingscode_naam: nieuw.naam } : x)))
+                      onGewijzigd()
+                    }} />
+                  )}
+                </Sectie>
+
+                <Sectie titel="Route" omschrijving="Wie deze factuur goedkeurt" icoon={CheckCircle2}>
+                  {!route && !fout && <p className="text-[13px] text-neutral-500">Laden…</p>}
+                  {route && (
+                    <ol className="flex flex-col divide-y divide-neutral-100 rounded-lg border border-neutral-200">
+                      {route.stappen.map(s => (
+                        <li key={s.id} className="flex items-center gap-3 px-3 py-2">
+                          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-700">{s.stap}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-semibold text-neutral-900">{s.goedkeurder_naam ?? 'Directie'}</div>
+                            <div className="text-xs text-neutral-500">
+                              {STAP_SOORT_LABEL[s.soort]}{s.soort === 'grootboek' && route.grootboek ? ` · ${route.grootboek}` : ''}
+                            </div>
+                          </div>
+                          <Badge size="md" className="shrink-0" tone={s.status === 'open' ? 'warning' : s.status === 'akkoord' ? 'success' : s.status === 'bezwaar' ? 'error' : 'neutral'}>
+                            {s.status === 'open' ? 'Aan zet' : s.status === 'akkoord' ? 'Akkoord' : s.status === 'bezwaar' ? 'Bezwaar' : s.status === 'wacht' ? 'Volgt' : 'Vervallen'}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </Sectie>
+
+                <Sectie titel="Notities" omschrijving="Blijven in EVA; komen niet in Bouw7" icoon={MessageSquare}>
+                  {notities.length === 0 && <p className="text-[13px] text-neutral-500">Nog geen notities.</p>}
+                  {notities.length > 0 && (
+                    <ul className="flex flex-col gap-2">
+                      {notities.map(o => (
+                        <li key={o.id} className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+                          <div className="text-xs text-neutral-500"><strong className="text-neutral-700">{o.medewerker_naam ?? 'Onbekend'}</strong> · {new Date(o.created_at).toLocaleString('nl-NL')}</div>
+                          <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-neutral-900">{o.tekst}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Textarea value={notitie} onChange={e => setNotitie(e.target.value)} rows={2} placeholder="Notitie bij deze factuur" />
+                  <Button size="sm" variant="outline" className="self-start" disabled={bezig || !notitie.trim()} onClick={bewaarNotitie}>Notitie opslaan</Button>
+                </Sectie>
               </div>
             </div>
 
@@ -201,9 +215,9 @@ export default function GoedkeurModus({ open, stapel, onClose, onGewijzigd }: Pr
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button variant="ghost" size="sm" disabled={bezig || index === 0} onClick={() => setIndex(i => i - 1)}>Vorige</Button>
                 <Button variant="ghost" size="sm" disabled={bezig || index >= lijst.length - 1} onClick={() => setIndex(i => i + 1)}>Overslaan</Button>
-                <Button variant="secondary" size="sm" disabled={bezig || !route?.magBeslissen || !toelichting.trim()}
+                <Button variant="outline" size="sm" disabled={bezig || !route?.magBeslissen || !toelichting.trim()}
                   title={toelichting.trim() ? undefined : 'Geef eerst een reden'} onClick={() => beslis('bezwaar')}>Bezwaar</Button>
-                <Button size="sm" disabled={bezig || !route?.magBeslissen} onClick={() => beslis('akkoord')}>Akkoord</Button>
+                <Button size="sm" variant="primary" disabled={bezig || !route?.magBeslissen} onClick={() => beslis('akkoord')}>Akkoord</Button>
               </div>
             </div>
           </>

@@ -252,6 +252,14 @@ export default function InkoopfacturenOverzicht({
   // `?goedkeuren=1` (vanuit de teller op de startpagina) opent het scherm meteen.
   const zoekParams = useSearchParams()
   const [goedkeurOpen, setGoedkeurOpen] = useState(() => zoekParams.get('goedkeuren') === '1' && stapel.length > 0)
+  const [goedkeurStart, setGoedkeurStart] = useState<string | null>(null)
+
+  // Een factuur die bij jou ligt opent in het goedkeurscherm, mét het document erbij; de rest in
+  // het zijpaneel.
+  function openRij(r: InkoopfactuurRij) {
+    if (stapel.some(s => s.id === r.id)) { setGoedkeurStart(r.id); setGoedkeurOpen(true) }
+    else setGeopend(r)
+  }
 
   const kolommen = useMemo(() => maakKolommen(setFactuurVenster), [])
 
@@ -313,7 +321,7 @@ export default function InkoopfacturenOverzicht({
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
           {stapel.length > 0 && (
-            <Button size="sm" onClick={() => setGoedkeurOpen(true)}>Goedkeuren ({stapel.length})</Button>
+            <Button size="sm" onClick={() => { setGoedkeurStart(null); setGoedkeurOpen(true) }}>Goedkeuren ({stapel.length})</Button>
           )}
           <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>
             {basis.length} facturen · {euro(totaalExcl)} excl. · <strong>{euro(totaalIncl)}</strong> incl.
@@ -356,7 +364,7 @@ export default function InkoopfacturenOverzicht({
         user_id={user_id}
         dicht
         beginSortering={[{ id: 'vervaldatum', desc: false }]}
-        onRijKlik={r => setGeopend(r)}
+        onRijKlik={openRij}
         onGefilterd={setGefilterd}
         onSelectie={magBetalen ? setSelectie : undefined}
         selecteerbaar={magBetalen}
@@ -378,7 +386,7 @@ export default function InkoopfacturenOverzicht({
 
       <FactuurVenster rij={factuurVenster} onClose={() => setFactuurVenster(null)} />
 
-      <GoedkeurModus open={goedkeurOpen} stapel={stapel} onClose={() => setGoedkeurOpen(false)} onGewijzigd={() => router.refresh()} />
+      <GoedkeurModus open={goedkeurOpen} stapel={stapel} startId={goedkeurStart} onClose={() => setGoedkeurOpen(false)} onGewijzigd={() => router.refresh()} />
     </div>
   )
 }
