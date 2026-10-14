@@ -3201,6 +3201,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                 <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
                   Kolom-layouts
                 </div>
+                {/* Layout uitzetten zonder hem te verwijderen: terug naar de gewone kolommen. */}
+                <button
+                  onClick={() => { setActiefLayoutId(null); setColOrder(DEFAULT_ORDER); setColWidths(DEFAULT_WIDTHS); setHiddenCols(new Set()); setLayoutMenuOpen(false) }}
+                  className={`w-full text-left px-3 py-1 text-xs hover:bg-slate-50 ${actiefLayoutId ? 'text-slate-700' : 'text-everts font-medium bg-everts-50/60'}`}
+                  title="Geen layout — alle kolommen in de standaardvolgorde en -breedte"
+                >
+                  Standaardkolommen
+                </button>
                 {layouts.length === 0 && (
                   <div className="px-3 py-1.5 text-xs text-slate-400">Nog geen opgeslagen layouts</div>
                 )}
