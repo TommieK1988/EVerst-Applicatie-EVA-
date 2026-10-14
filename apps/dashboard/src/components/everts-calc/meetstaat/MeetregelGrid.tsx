@@ -50,14 +50,16 @@ function nieuweLegeRegel(meetstaatId: string, groepId: string, volgorde: number)
 
 /**
  * Mag links/rechts de cel verlaten, of hoort de toets bij de cursor in het veld?
- * Getalvelden verspringen altijd: hun inhoud is kort, en de cursorpositie is er
- * niet uit te lezen — Chrome gooit een fout op selectionStart bij type="number".
+ * Staat de hele inhoud geselecteerd (zo kom je een cel binnen), dan verspring je
+ * meteen; anders pas als de cursor aan de rand staat. De maatvelden zijn sinds de
+ * komma tekstvelden, dus ook daar is de cursor nu uit te lezen.
  */
 function magCelVerlaten(el: HTMLInputElement, richting: 'links' | 'rechts'): boolean {
   try {
     const start = el.selectionStart
     const eind = el.selectionEnd
     if (start === null || eind === null) return true
+    if (start === 0 && eind === el.value.length) return true
     return richting === 'links'
       ? start === 0 && eind === 0
       : start === el.value.length && eind === el.value.length
@@ -243,8 +245,8 @@ export default function MeetregelGrid({ meetstaatId, groepId, groepen, onWijzigi
       return
     }
 
-    // Verticaal altijd afvangen: zonder preventDefault telt een getalveld bij
-    // pijl omhoog/omlaag zijn eigen waarde op of af, en verandert navigeren je maten.
+    // Verticaal altijd afvangen: anders verplaatst omhoog/omlaag in een tekstveld
+    // alleen de cursor naar het begin of eind, in plaats van naar de rij erboven.
     e.preventDefault()
     const doelRij = richting === 'omhoog' ? rij - 1 : rij + 1
     if (doelRij < 0 || doelRij >= regels.length) return
