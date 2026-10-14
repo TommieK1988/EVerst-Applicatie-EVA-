@@ -411,7 +411,7 @@ export default function MeetregelRij({
           : <span className="block text-right text-xs px-1 text-slate-200" title="Alleen bij m¹">—</span>}
       </td>
 
-      {/* Factor — vermenigvuldiger op de hele regel */}
+      {/* x (`factor`) — hoe vaak binnen één element; reist mee in een bewaard element */}
       <td className="px-0.5 py-0.5">
         {ni(KOL.factor, regel.factor, v => onWijzig({ factor: v }), '1')}
       </td>
