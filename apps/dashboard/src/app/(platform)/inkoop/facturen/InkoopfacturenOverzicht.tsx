@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { SyncKnop, type SyncUitkomst } from '@/components/eva/SyncKnop'
 import { Button } from '@/components/ui'
 import InkoopfactuurPaneel from '@/components/inkoopfacturen/InkoopfactuurPaneel'
 import FactuurVenster from '@/components/inkoopfacturen/FactuurVenster'
+import GoedkeurModus from '@/components/inkoopfacturen/GoedkeurModus'
 import { ververAlleInkoopfacturen, markeerBetalen, type ActieResultaat } from '@/lib/inkoopfacturen/actions'
 import { inkoopStatusLabel, INKOOP_STATUS_BETAALBAAR } from '@/lib/bouw7/inkoop-status'
 import { vervalKleur, dossierHref, type InkoopfactuurRij } from '@/lib/inkoopfacturen/types'
@@ -242,6 +243,15 @@ export default function InkoopfacturenOverzicht({
   const [selectie, setSelectie] = useState<InkoopfactuurRij[]>([])
   const [melding, setMelding] = useState<string | null>(null)
   const router = useRouter()
+  // Werkstapel voor het goedkeurscherm: alleen wat EVA zelf goedkeurt en nu bij jou ligt.
+  const stapel = useMemo(
+    () => rijen.filter(r => r.mijn_beurt && r.goedkeuring_bron === 'eva' && !r.eva_besluit)
+      .sort((a, b) => (a.vervaldatum ?? '9999').localeCompare(b.vervaldatum ?? '9999')),
+    [rijen],
+  )
+  // `?goedkeuren=1` (vanuit de teller op de startpagina) opent het scherm meteen.
+  const zoekParams = useSearchParams()
+  const [goedkeurOpen, setGoedkeurOpen] = useState(() => zoekParams.get('goedkeuren') === '1' && stapel.length > 0)
 
   const kolommen = useMemo(() => maakKolommen(setFactuurVenster), [])
 
@@ -302,6 +312,9 @@ export default function InkoopfacturenOverzicht({
         })}
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+          {stapel.length > 0 && (
+            <Button size="sm" onClick={() => setGoedkeurOpen(true)}>Goedkeuren ({stapel.length})</Button>
+          )}
           <span style={{ fontSize: 12, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>
             {basis.length} facturen · {euro(totaalExcl)} excl. · <strong>{euro(totaalIncl)}</strong> incl.
           </span>
@@ -364,6 +377,8 @@ export default function InkoopfacturenOverzicht({
       />
 
       <FactuurVenster rij={factuurVenster} onClose={() => setFactuurVenster(null)} />
+
+      <GoedkeurModus open={goedkeurOpen} stapel={stapel} onClose={() => setGoedkeurOpen(false)} onGewijzigd={() => router.refresh()} />
     </div>
   )
 }

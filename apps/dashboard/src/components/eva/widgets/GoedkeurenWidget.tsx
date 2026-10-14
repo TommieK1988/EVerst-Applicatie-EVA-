@@ -123,7 +123,8 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
       sub: inkoop.bedrag > 0 ? `Inkoop · ${euro(inkoop.bedrag)}` : 'Inkoop',
       rechts: datumLabel(inkoop.eersteVervaldatum),
       rechtsKleur: datumLabel(inkoop.eersteVervaldatum) === 'Verlopen' ? ROOD : SOORT_KLEUR.inkoopfactuur,
-      href: '/inkoop/facturen',
+      // Opent meteen het goedkeurscherm, als er iets in EVA goed te keuren valt.
+      href: '/inkoop/facturen?goedkeuren=1',
     }] : []),
     ...(urenAantal > 0 ? [{
       sleutel: 'uren',
