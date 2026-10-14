@@ -416,6 +416,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Projectfacturen', body: 'Een factuur met een dossier gaat naar de eerste rol uit je lijst die op het dossier is ingevuld, bijvoorbeeld eerst de teamleider en anders de projectleider. Is geen van die rollen ingevuld, dan gaat hij naar de vaste goedkeurder. Projecten hebben een eigen drempel voor het tweede akkoord.' },
       { title: 'Overhead', body: 'Overhead gaat naar de goedkeurder van de 4000-grootboekrekening op de factuur (bij meerdere rekeningen telt het hoogste bedrag), en anders naar de vaste goedkeurder van de administratie.' },
       { title: 'Tweede akkoord', body: 'Boven de drempel (excl. btw; projecten en overhead elk een eigen drempel) moet nog iemand akkoord geven: de persoon die je kiest, of iemand uit Directie. Is dat dezelfde persoon als bij de eerste stap, dan vervalt de tweede stap.' },
+      { title: 'Taak bij bezwaar', body: 'Maakt iemand bezwaar tegen een factuur, dan krijgt de persoon die je hier kiest een taak (met melding) om de leverancier om een creditnota te vragen. In de taak staan de reden, de leverancier, het factuurnummer en het project.' },
       { title: 'Per administratie', body: 'Een leeg veld bij een administratie volgt de standaard. Vul je iets in, dan geldt dat alleen voor die B.V.' },
     ],
   }],

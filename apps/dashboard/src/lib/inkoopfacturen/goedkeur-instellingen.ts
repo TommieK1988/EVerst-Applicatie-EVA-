@@ -24,6 +24,8 @@ const db = () => createAdminClient()
 export type GoedkeurInstellingen = {
   /** ISO-moment; facturen die daarna in Bouw7 zijn aangemaakt keurt EVA goed. Null = uit. */
   evaVanaf: string | null
+  /** Wie een taak krijgt bij een bezwaar (financiële administratie). Null = niemand. */
+  bezwaarTaakMedewerkerId: string | null
   regels: GoedkeurRegel[]
   /** Projectfacturen: welke dossierrol keurt, en een eigen drempel + tweede akkoord. */
   project: ProjectRoute
@@ -74,6 +76,10 @@ export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
   const v = (inst?.overige as Record<string, unknown> | null)?.inkoop_goedkeuring_eva_vanaf
   return {
     evaVanaf: typeof v === 'string' && v ? v : null,
+    bezwaarTaakMedewerkerId: (() => {
+      const t = (inst?.overige as Record<string, unknown> | null)?.inkoop_bezwaar_taak_medewerker_id
+      return typeof t === 'string' && t ? t : null
+    })(),
     project,
     regels: (regels ?? []).map(r => ({ ...r, drempel_excl: r.drempel_excl == null ? null : Number(r.drempel_excl) })),
     administraties: [...administraties].map(([id, naam]) => ({ id, naam })).sort((a, b) => a.naam.localeCompare(b.naam)),
@@ -88,6 +94,7 @@ export async function getGoedkeurInstellingen(): Promise<GoedkeurInstellingen> {
 
 export async function slaGoedkeurInstellingenOp(input: {
   evaVanaf: string | null
+  bezwaarTaakMedewerkerId: string | null
   regels: GoedkeurRegel[]
   grootboek: { nummer: string; goedkeurder_id: string }[]
   project: ProjectRoute
@@ -122,7 +129,11 @@ export async function slaGoedkeurInstellingenOp(input: {
 
     // bedrijfsinstellingen.overige is een jsonb-object met meer sleutels: lees-wijzig-schrijf.
     const { data: inst } = await db().from('bedrijfsinstellingen').select('overige').eq('id', 1).maybeSingle()
-    const overige = { ...((inst?.overige as Record<string, unknown> | null) ?? {}), inkoop_goedkeuring_eva_vanaf: input.evaVanaf }
+    const overige = {
+      ...((inst?.overige as Record<string, unknown> | null) ?? {}),
+      inkoop_goedkeuring_eva_vanaf: input.evaVanaf,
+      inkoop_bezwaar_taak_medewerker_id: input.bezwaarTaakMedewerkerId || null,
+    }
     const { error: e1 } = await db().from('bedrijfsinstellingen').update({ overige }).eq('id', 1)
     if (e1) return { ok: false, error: e1.message }
 

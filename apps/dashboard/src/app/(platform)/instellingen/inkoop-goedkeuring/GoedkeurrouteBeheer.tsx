@@ -43,6 +43,7 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
   ])
   const [grootboek, setGrootboek] = useState<{ nummer: string; goedkeurder_id: string | null }[]>(data.grootboek)
   const [project, setProject] = useState<ProjectRoute>(data.project)
+  const [bezwaarTaak, setBezwaarTaak] = useState<string | null>(data.bezwaarTaakMedewerkerId)
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState<string | null>(null)
   const [opgeslagen, setOpgeslagen] = useState(false)
@@ -91,6 +92,7 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
       regels,
       grootboek: gekozen.map(g => ({ nummer: g.nummer, goedkeurder_id: g.goedkeurder_id! })),
       project,
+      bezwaarTaakMedewerkerId: bezwaarTaak,
     })
     setBezig(false)
     if (!res.ok) { setFout(res.error); return }
@@ -104,6 +106,13 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
             <>
               <FormField upper label="EVA keurt goed vanaf" helper="Facturen die vanaf deze datum in Bouw7 binnenkomen en daar geen goedkeurder hebben, keurt EVA goed. Oudere facturen worden in Bouw7 afgemaakt. Leeg = EVA neemt nog niets over.">
                 <Input type="date" value={vanaf} onChange={e => setVanaf(e.target.value)} style={{ maxWidth: 200 }} />
+              </FormField>
+
+              <FormField upper label="Taak bij bezwaar naar"
+                helper="Wie een taak krijgt als iemand bezwaar maakt tegen een factuur, om de leverancier om een creditnota te vragen. Leeg = niemand.">
+                <div style={{ maxWidth: 320 }}>
+                  <Persoon opties={opties} waarde={bezwaarTaak} leeg="Niemand" onChange={setBezwaarTaak} />
+                </div>
               </FormField>
 
               <div className="rounded-lg border border-neutral-200 p-3">

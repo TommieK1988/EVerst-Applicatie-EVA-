@@ -19,6 +19,7 @@ import { vereisRecht, heeftModuleToegang, GeenToegangError, type CurrentMedewerk
 import { DIRECTIE_AFDELING } from '@/lib/goedkeuring/types'
 import { vereisInkoopfactuurToegang } from './actions'
 import { logGebeurtenis, medewerkerNaam, stuurBesluitNaarBouw7 } from './route'
+import { maakBezwaarTaak } from './bezwaar-taak'
 import type { GoedkeurStapSoort, GoedkeurStapStatus } from './goedkeur-route'
 
 const db = () => createAdminClient()
@@ -172,6 +173,9 @@ export async function beslisInkoopfactuur(
     }).eq('id', inkoopfactuurId)
 
     const bouw7 = await stuurBesluitNaarBouw7(inkoopfactuurId, medewerker.id)
+    if (keuze === 'bezwaar') {
+      await maakBezwaarTaak(inkoopfactuurId, [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam].filter(Boolean).join(' '), reden)
+    }
     revalidatePath('/inkoop/facturen')
     if (!bouw7.ok) {
       return { ok: true, melding: `Je besluit is vastgelegd, maar Bouw7 is nog niet bijgewerkt: ${bouw7.error} EVA probeert het bij de volgende sync opnieuw.` }
