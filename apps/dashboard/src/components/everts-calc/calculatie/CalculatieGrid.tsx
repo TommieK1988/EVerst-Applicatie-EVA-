@@ -974,6 +974,9 @@ interface RegelRijProps {
   componenten: Componentregel[]
   diepte: number
   defaultOpslag: number
+  /** Uurtarief van de calculatie. Alleen als signaal: wijzigt het, dan herlezen regels
+   *  zonder eigen arbeidstarief het standaardtarief. */
+  standaardTarief?: number
   colOrder: ColId[]
   btwTarieven: BtwTariefKeuze[]
   uurtarieven: { label: string; tarief: number }[]
@@ -1002,7 +1005,7 @@ interface RegelRijProps {
 }
 
 function CalculatieregelRij({
-  regel, componenten, diepte, defaultOpslag, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
+  regel, componenten, diepte, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
   onWijzig, onWijzigComponent, onWijzigComponentExtra, onVoegComponentToe, onVerwijderComponent, onVerwijder, onHerlaad,
   bibliotheekItems, behandelingen = [],
   isGeselecteerd, onSelecteer,
@@ -1033,7 +1036,7 @@ function CalculatieregelRij({
     setAbUren(ab?.norm_hoeveelheid ?? 0)
     setAbMin((ab?.norm_hoeveelheid ?? 0) * 60)
     setAbTarief(ab?.tarief || standaardUurtarief(regel.id))
-  }, [ab?.norm_hoeveelheid, ab?.tarief, regel.id])
+  }, [ab?.norm_hoeveelheid, ab?.tarief, regel.id, standaardTarief])
   useEffect(() => { setMtPrijs(mt?.tarief ?? 0) }, [mt?.tarief])
   useEffect(() => { setOaPrijs(oa?.tarief ?? 0) }, [oa?.tarief])
   const compOpslagHash = regelComps.map(c => `${c.id}:${c.opslag_pct}`).join(',')
@@ -1833,6 +1836,7 @@ interface GroepSectieProps {
   nummers: Map<string, string>
   isActief: boolean
   defaultOpslag: number
+  standaardTarief?: number
   colOrder: ColId[]
   btwTarieven: BtwTariefKeuze[]
   uurtarieven: { label: string; tarief: number }[]
@@ -1875,7 +1879,7 @@ interface GroepSectieProps {
 
 function GroepSectie({
   groep, diepte, alleGroepen, alleRegels, alleComponenten, nummers,
-  isActief, defaultOpslag, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId, onHerlaad,
+  isActief, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId, onHerlaad,
   onKlik, onRegelWijzig, onRegelComponentWijzig, onWijzigComponentExtra,
   onVoegComponentToe, onVerwijderComponent,
   onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onToggleInklap, onVoegRegelToe, onVoegTekstregelToe, onVoegSubgroepToe,
@@ -2076,7 +2080,7 @@ function GroepSectie({
           ) : (
             <CalculatieregelRij
               key={r.id} regel={r} componenten={alleComponenten}
-              diepte={diepte + 1} defaultOpslag={defaultOpslag} colOrder={colOrder} btwTarieven={btwTarieven}
+              diepte={diepte + 1} defaultOpslag={defaultOpslag} standaardTarief={standaardTarief} colOrder={colOrder} btwTarieven={btwTarieven}
               uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={onHerlaad}
               onWijzig={onRegelWijzig} onWijzigComponent={onRegelComponentWijzig}
               onWijzigComponentExtra={onWijzigComponentExtra}
@@ -2101,7 +2105,7 @@ function GroepSectie({
             <GroepSectie
               key={sub.id} groep={sub} diepte={diepte + 1}
               alleGroepen={alleGroepen} alleRegels={alleRegels} alleComponenten={alleComponenten}
-              nummers={nummers} isActief={isActief} defaultOpslag={defaultOpslag} colOrder={colOrder} btwTarieven={btwTarieven}
+              nummers={nummers} isActief={isActief} defaultOpslag={defaultOpslag} standaardTarief={standaardTarief} colOrder={colOrder} btwTarieven={btwTarieven}
               uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={onHerlaad}
               onKlik={onKlik} onRegelWijzig={onRegelWijzig} onRegelComponentWijzig={onRegelComponentWijzig}
               onWijzigComponentExtra={onWijzigComponentExtra}
@@ -3178,7 +3182,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         `#calc-tabel[data-hcol="${id}"] [data-col="${id}"] { background-color: rgba(219,234,254,0.35) !important; }`
       ).join(' ')}</style>
 
-      {/* Kolom-layouts + kolommen-picker: gerenderd in de actiebalk (naast "Opties")
+      {/* Kolom-layouts + kolommen-picker: gerenderd in de werkbalk (naast inklappen)
           via een portal in #calc-grid-toolbar-slot. */}
       {toolbarSlot && createPortal(
         <>
@@ -3186,10 +3190,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
           <div ref={layoutMenuRef} className="relative">
             <button
               onClick={() => setLayoutMenuOpen(v => !v)}
-              className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+              className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
                 actiefLayoutId
                   ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
               }`}
               title="Kolom-layouts (per gebruiker)"
             >
@@ -3201,6 +3205,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                 <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
                   Kolom-layouts
                 </div>
+                {/* Layout uitzetten zonder hem te verwijderen: terug naar de gewone kolommen. */}
+                <button
+                  onClick={() => { setActiefLayoutId(null); setColOrder(DEFAULT_ORDER); setColWidths(DEFAULT_WIDTHS); setHiddenCols(new Set()); setLayoutMenuOpen(false) }}
+                  className={`w-full text-left px-3 py-1 text-xs hover:bg-slate-50 ${actiefLayoutId ? 'text-slate-700' : 'text-everts font-medium bg-everts-50/60'}`}
+                  title="Geen layout — alle kolommen in de standaardvolgorde en -breedte"
+                >
+                  Standaardkolommen
+                </button>
                 {layouts.length === 0 && (
                   <div className="px-3 py-1.5 text-xs text-slate-400">Nog geen opgeslagen layouts</div>
                 )}
@@ -3256,10 +3268,10 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         <div ref={colPickerRef} className="relative">
           <button
             onClick={() => setColPickerOpen(v => !v)}
-            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+            className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
               hiddenCols.size > 0
                 ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
             }`}
             title="Kolommen tonen/verbergen"
           >
@@ -3359,7 +3371,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   key={g.id} groep={g} diepte={0}
                   alleGroepen={groepen} alleRegels={regels} alleComponenten={componenten}
                   nummers={nummers} isActief={actiefGroepId === g.id}
-                  defaultOpslag={defaultOpslag} colOrder={visibleColOrder} btwTarieven={btwTarieven}
+                  defaultOpslag={defaultOpslag} standaardTarief={scenario.standaard_uurtarief} colOrder={visibleColOrder} btwTarieven={btwTarieven}
                   uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={laadAlles}
                   onKlik={onGroepActief}
                   onRegelWijzig={handleRegelWijzig}

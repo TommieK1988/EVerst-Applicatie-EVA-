@@ -25,6 +25,13 @@ interface Props {
   readOnly?: boolean
 }
 
+const VAK = 'px-3 xl:px-4 py-2 min-w-0 flex-shrink-0'
+const KOP = 'text-white/55 text-[10.5px] font-medium uppercase tracking-[0.06em] mb-0.5 whitespace-nowrap'
+
+/** Rekenteken tussen twee vakken (+ of =). */
+function Teken({ children }: { children: string }) {
+  return <span aria-hidden className="hidden xl:inline self-center px-0.5 text-sm text-white/35 flex-shrink-0">{children}</span>
+}
 
 export default function TotalsBar({
   scenario, kostprijs_live, verkoopprijs_live, regels, componenten,
@@ -122,6 +129,7 @@ export default function TotalsBar({
   // Regels met een eigen Opsl.% trekken het effectieve percentage weg van de standaard.
   const afwijkendeOpslag = Math.abs(opslag_pct - defaultOpslag) > 0.005
   const margeWidth = Math.min(100, Math.max(0, (marge_pct / 30) * 100))
+  const margeKleur = marge_pct >= 20 ? '#61ac2b' : marge_pct >= 12 ? '#ffb866' : '#fda29b'
 
   const eigenOpslagZin = aantalEigenOpslag > 0
     ? ` ${aantalEigenOpslag} ${aantalEigenOpslag === 1 ? 'regel heeft' : 'regels hebben'} nu een eigen opslag%; dat percentage vervalt.`
@@ -132,55 +140,47 @@ export default function TotalsBar({
        Valt de onderkant van het scherm toch onder de vouw (de pagina scrolt), dan blijft
        de balk aan de onderrand van het venster plakken in plaats van mee te schuiven. */
     <div className="sticky bottom-0 z-20 flex-shrink-0 bg-brand-900 border-t-2 border-brand-500 text-white">
-      <div className="flex items-stretch gap-0 divide-x divide-white/10 overflow-x-auto">
+      <div className="flex items-stretch overflow-x-auto">
 
-        {/* Standaard uurtarief */}
-        <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5 flex items-center gap-1">
-            Uurtarief AB
+        {/* Invoer: wat je instelt. Apart gezet van de uitkomsten ernaast. */}
+        <div className="flex items-stretch flex-shrink-0 bg-white/[0.06] border-r border-white/10">
+          <div className={VAK}>
+            <div className={`${KOP} flex items-center gap-1.5`}>
+              Uurtarief
+              {zonderUurtarief > 0 && (
+                <span
+                  className="flex items-center gap-1 rounded px-1 text-[10.5px] font-semibold normal-case tracking-normal whitespace-nowrap"
+                  style={{ background: 'rgba(255,184,102,0.18)', color: '#ffb866' }}
+                  title="Deze arbeidsregels hebben wel uren maar geen tarief en tellen voor € 0 mee."
+                >
+                  <TriangleAlert style={{ width: 11, height: 11 }} />
+                  {zonderUurtarief} zonder tarief
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-white/50 text-xs">€</span>
+              <input
+                type="number" step="0.50" min="0"
+                value={tariefEdit}
+                placeholder={globaalTarief > 0 ? formatGetal(globaalTarief, 2) : '—'}
+                disabled={readOnly}
+                onFocus={() => setTariefFocus(true)}
+                onBlur={commitTarief}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                title={globaalTarief > 0
+                  ? `Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
+                  : 'Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Er is nog geen standaardtarief ingesteld bij Stamgegevens → Uursoorten & uurtarieven.'}
+                onChange={e => setTariefEdit(e.target.value)}
+                className="w-16 h-6 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1.5 text-[13px] text-right text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
+              />
+              <span className="text-white/50 text-xs">/u</span>
+            </div>
           </div>
-          <div className="flex items-center gap-0.5  text-sm">
-            <span className="text-white/50 text-xs">€</span>
-            <input
-              type="number" step="0.50" min="0"
-              value={tariefEdit}
-              placeholder={globaalTarief > 0 ? formatGetal(globaalTarief, 2) : '—'}
-              disabled={readOnly}
-              onFocus={() => setTariefFocus(true)}
-              onBlur={commitTarief}
-              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-              title={globaalTarief > 0
-                ? `Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
-                : 'Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Er is nog geen standaardtarief ingesteld bij Stamgegevens → Uursoorten & uurtarieven.'}
-              onChange={e => setTariefEdit(e.target.value)}
-              className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs  text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
-            />
-            <span className="text-white/50 text-xs">/u</span>
-            {zonderUurtarief > 0 && (
-              <span
-                className="ml-1 flex items-center gap-1 rounded px-1 py-0.5 text-[11px] font-semibold whitespace-nowrap"
-                style={{ background: 'rgba(255,184,102,0.18)', color: '#ffb866' }}
-                title="Deze arbeidsregels hebben wel uren maar geen tarief en tellen voor € 0 mee."
-              >
-                <TriangleAlert style={{ width: 11, height: 11 }} />
-                {zonderUurtarief} zonder tarief
-              </span>
-            )}
-          </div>
-        </div>
 
-        {/* Kostprijs */}
-        <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5">Kostprijs</div>
-          <div className="font-semibold  text-sm">{formatEuro(kostprijs_live)}</div>
-        </div>
-
-        {/* Standaard-opslag van de calculatie (instelbaar) + wat het effectief wordt.
-            De twee lopen uiteen zodra regels een eigen Opsl.% hebben. */}
-        <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5">Opslag</div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-0.5 text-sm">
+          <div className={VAK}>
+            <div className={KOP}>Opslag</div>
+            <div className="flex items-center gap-1">
               <input
                 type="number" step="0.5" min="0" max="100"
                 value={opslagEdit}
@@ -199,55 +199,62 @@ export default function TotalsBar({
                 }}
                 title="Standaard-opslag van deze calculatie; wordt op alle regels toegepast"
                 onChange={e => setOpslagEdit(e.target.value)}
-                className="w-14 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1 py-0.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
+                className="w-16 h-6 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1.5 text-[13px] text-right text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
               />
               <span className="text-white/50 text-xs">%</span>
             </div>
-            <span className="text-white/40 text-xs whitespace-nowrap">
-              {afwijkendeOpslag ? `→ ${formatGetal(opslag_pct, 2)}% ` : ''}
-              ({opslag_euro >= 0 ? '+' : ''}{formatEuro(opslag_euro)})
-            </span>
           </div>
         </div>
 
-        {/* Verkoopprijs excl. BTW — `ml-auto` duwt hem rechts, naast BTW en totaal */}
-        <div className="ml-auto px-4 py-2.5 min-w-0 flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5">VP excl. BTW</div>
-          <div className="font-bold  text-base text-everts-light">{formatEuro(verkoopprijs_live)}</div>
+        {/* Uitkomst als rekensom: kostprijs + opslag = verkoop + btw = totaal. */}
+        <div className={VAK}>
+          <div className={KOP}>Kostprijs</div>
+          <div className="font-semibold text-sm tabular-nums">{formatEuro(kostprijs_live)}</div>
+        </div>
+        <Teken>+</Teken>
+        <div className={VAK}>
+          <div className={KOP} title={afwijkendeOpslag ? 'Regels met een eigen opslag% trekken het gemiddelde weg van de standaard' : undefined}>
+            Opslag {formatGetal(opslag_pct, Math.abs(opslag_pct - Math.round(opslag_pct)) < 0.005 ? 0 : 2)}%
+          </div>
+          <div className="text-sm text-white/80 tabular-nums">{formatEuro(opslag_euro)}</div>
+        </div>
+        <Teken>=</Teken>
+        <div className={VAK}>
+          <div className={KOP}>Verkoop excl. btw</div>
+          <div className="font-bold text-base text-everts-light tabular-nums">{formatEuro(verkoopprijs_live)}</div>
         </div>
 
         {/* BTW: per tarief (altijd read-only; instellen via rekenregels) */}
         {btw_groepen.map(g => (
-          <div key={g.tarief_id ?? `pct:${g.pct}`} className="px-4 py-2.5 min-w-0 flex-shrink-0">
-            <div className="text-white/50 text-xs mb-0.5" title={g.label}>
-              {g.verlegd ? `BTW ${g.nominaal_pct ?? g.pct}% verlegd` : `BTW ${g.pct}%`}
+          <div key={g.tarief_id ?? `pct:${g.pct}`} className="flex items-stretch flex-shrink-0">
+            <Teken>+</Teken>
+            <div className={VAK}>
+              <div className={KOP} title={g.label}>
+                {g.verlegd ? `Btw ${g.nominaal_pct ?? g.pct}% verlegd` : `Btw ${g.pct}%`}
+              </div>
+              <div className="text-sm text-white/80 tabular-nums">{formatEuro(g.btw)}</div>
             </div>
-            <div className=" text-sm text-white/80">+ {formatEuro(g.btw)}</div>
           </div>
         ))}
-
-        {/* Totaal incl. BTW */}
-        <div className="px-4 py-2.5 min-w-0 flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5">Totaal incl. BTW</div>
-          <div className="font-bold  text-base text-white">{formatEuro(totaal_incl)}</div>
+        <Teken>=</Teken>
+        <div className={VAK}>
+          <div className={KOP}>Totaal incl. btw</div>
+          <div className="font-bold text-base text-white tabular-nums">{formatEuro(totaal_incl)}</div>
         </div>
 
-        {/* Marge */}
-        <div className="px-5 py-2.5 min-w-[130px] flex-shrink-0">
-          <div className="text-white/50 text-xs mb-0.5">Marge</div>
-          <div
-            className="font-bold  text-base"
-            style={{ color: marge_pct >= 20 ? '#61ac2b' : marge_pct >= 12 ? '#ffb866' : '#fda29b' }}
-          >
-            {formatPct(marge_pct)}
+        {/* Marge — rechts, met kleur én tekst: kleur alleen zegt niet genoeg. */}
+        <div className="ml-auto px-4 xl:px-5 py-2 min-w-[120px] flex-shrink-0 border-l border-white/10">
+          <div className={KOP}>Marge</div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-bold text-base tabular-nums" style={{ color: margeKleur }}>{formatPct(marge_pct)}</span>
+            {verkoopprijs_live > 0 && marge_pct < 12 && (
+              <span className="text-[11px] font-medium whitespace-nowrap" style={{ color: margeKleur }}>onder 12%</span>
+            )}
           </div>
           <div className="mt-1 h-1 bg-paper/20 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${margeWidth}%`,
-                background: marge_pct >= 20 ? '#61ac2b' : marge_pct >= 12 ? '#ffb866' : '#fda29b',
-              }}
+              style={{ width: `${margeWidth}%`, background: margeKleur }}
             />
           </div>
         </div>

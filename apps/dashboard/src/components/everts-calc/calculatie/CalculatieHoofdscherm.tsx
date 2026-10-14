@@ -2,13 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import {
-  GitBranch, CloudUpload, Check, Undo2,
-  ChevronsUp, ChevronsDown, Keyboard, BookOpen, Paintbrush, Package, X,
-  FileUp, FileDown, ChevronDown, Library, Table2,
-  SlidersHorizontal, FileText, ClipboardList, Receipt, Copy,
-} from 'lucide-react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
 import MeetstaatKnop from './MeetstaatKnop'
@@ -17,6 +11,7 @@ import toast from 'react-hot-toast'
 import StructuurBoom from './StructuurBoom'
 import CalculatieGrid, { type CalculatieGridHandle } from './CalculatieGrid'
 import TotalsBar from './TotalsBar'
+import CalculatieWerkbalk, { type SyncStatus } from './CalculatieWerkbalk'
 import BibliotheekDrawer from './BibliotheekDrawer'
 import CufImportModal from './CufImportModal'
 import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
@@ -38,6 +33,9 @@ import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(pla
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+
+/** Structuurpaneel open of dicht: per browser onthouden, puur een gemak. */
+const BOOM_OPEN_SLEUTEL = 'eva.calculatie.structuur-open'
 
 interface Props {
   projectId: string
@@ -101,9 +99,8 @@ export default function CalculatieHoofdscherm({
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
   const [componentenVoorBtw, setComponentenVoorBtw]   = useState<Componentregel[]>([])
   const [boomUitgeklapt, setBoomUitgeklapt]           = useState(false)
-  /** Er wordt een groep versleept in de boom — het paneel mag dan niet dichtklappen. */
-  const [boomSleepActief, setBoomSleepActief]         = useState(false)
-  const [syncStatus, setSyncStatus]                   = useState<'idle' | 'bezig' | 'gelukt' | 'fout'>('idle')
+  const [syncStatus, setSyncStatus]                   = useState<SyncStatus>('idle')
+  const [opgeslagenOp, setOpgeslagenOp]               = useState<Date | null>(null)
   const [undoCount, setUndoCount]                     = useState(0)
   /** Zijn de diepste groepen allemaal ingeklapt? Bepaalt of de knop in- of uitklapt. */
   const [allesIngeklapt, setAllesIngeklapt]           = useState(false)
@@ -116,36 +113,23 @@ export default function CalculatieHoofdscherm({
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
   const [instellingenVereist, setInstellingenVereist] = useState(false)
   const [pendingOfferteType, setPendingOfferteType]   = useState<QuoteType | null>(null)
-  const sluitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
   const [schermRef, schermHoogte] = usePasInScrollvlak()
 
-  /* ── Boom-hover handlers ─────────────────────────────────────────── */
-  const handleBoomEnter = useCallback(() => {
-    if (sluitTimerRef.current) clearTimeout(sluitTimerRef.current)
-    setBoomUitgeklapt(true)
+  /* ── Structuur: open/dicht, per gebruiker onthouden ─────────────── */
+  useEffect(() => {
+    try { if (localStorage.getItem(BOOM_OPEN_SLEUTEL) === '1') setBoomUitgeklapt(true) } catch { /* geen opslag */ }
   }, [])
 
-  const handleBoomLeave = useCallback(() => {
-    // Tijdens het slepen niet sluiten: de browser stuurt bij dragstart een mouseleave,
-    // en een verdwijnend paneel breekt de sleep af omdat het sleepelement verdwijnt.
-    if (boomSleepActief) return
-    sluitTimerRef.current = setTimeout(() => setBoomUitgeklapt(false), 350)
-  }, [boomSleepActief])
-
-  const handleSluitBoom = useCallback(() => setBoomUitgeklapt(false), [])
+  const handleToggleBoom = useCallback(() => {
+    setBoomUitgeklapt(open => {
+      try { localStorage.setItem(BOOM_OPEN_SLEUTEL, open ? '0' : '1') } catch { /* geen opslag */ }
+      return !open
+    })
+  }, [])
 
   const handleToggleInklap = useCallback(() => gridRef.current?.zetInklap(!allesIngeklapt), [allesIngeklapt])
   const handleUndo         = useCallback(() => gridRef.current?.undo(), [])
-
-  /* ── Escape sluit boom ───────────────────────────────────────────── */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && boomUitgeklapt) handleSluitBoom()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [boomUitgeklapt, handleSluitBoom])
 
   /* ── Scenario laden ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -215,6 +199,7 @@ export default function CalculatieHoofdscherm({
       ])
       if (resultaat.gelukt && snapRes.gelukt) {
         setSyncStatus('gelukt')
+        setOpgeslagenOp(new Date())
         if (!stil) toast.success(`Opgeslagen: ${resultaat.groepen_geschreven} groepen, ${resultaat.regels_geschreven} regels`)
         setTimeout(() => setSyncStatus('idle'), stil ? 1500 : 3000)
       } else {
@@ -425,8 +410,6 @@ export default function CalculatieHoofdscherm({
     onScenariosGewijzigd?.(nieuw.id)
   }
 
-  const ddItem = 'flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md'
-
   return (
     <div ref={schermRef} className="flex flex-col h-[calc(100dvh-56px)] bg-slate-50" style={schermHoogte ? { height: schermHoogte } : undefined}>
 
@@ -439,247 +422,54 @@ export default function CalculatieHoofdscherm({
         </Alert>
       )}
 
-      {/* ─── Actiebalk ── */}
-      <div className="flex items-center gap-1 px-3 py-1.5 bg-white border-b border-slate-200 flex-shrink-0">
-
-            {/* Structuur toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onMouseEnter={handleBoomEnter}
-              onMouseLeave={handleBoomLeave}
-              onClick={handleBoomEnter}
-              title="Structuur van de calculatie"
-            >
-              <GitBranch className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Structuur</span>
-            </Button>
-
-            <span className="w-px h-4 bg-slate-200 mx-0.5" />
-
-            {/* In-/uitklappen */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleToggleInklap}
-              title={allesIngeklapt
-                ? 'Alles uitklappen — alle regels zichtbaar'
-                : 'Inklappen — alleen de groepen zichtbaar, zonder regels'}
-            >
-              {allesIngeklapt ? <ChevronsDown className="w-3.5 h-3.5" /> : <ChevronsUp className="w-3.5 h-3.5" />}
-              <span className="hidden lg:inline">{allesIngeklapt ? 'Uitklappen' : 'Inklappen'}</span>
-            </Button>
-
-            {/* Ongedaan */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUndo}
-              disabled={undoCount === 0 || readOnly}
-              title={readOnly ? 'Bevroren' : undoCount > 0 ? `Ongedaan (${undoCount})` : 'Niets om ongedaan te maken'}
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Ongedaan{undoCount > 0 ? ` (${undoCount})` : ''}</span>
-            </Button>
-
-            {/* Opslaan — wijzigingen worden automatisch opgeslagen; deze knop
-                forceert een directe opslag en toont de status. */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => slaCalculatieOp(false)}
-              disabled={syncStatus === 'bezig' || readOnly}
-              loading={syncStatus === 'bezig'}
-              title={readOnly ? 'Bevroren' : 'Wijzigingen worden automatisch opgeslagen — klik om nu op te slaan'}
-              className={
-                syncStatus === 'gelukt' ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-50 hover:border-green-200' :
-                syncStatus === 'fout'   ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-50 hover:border-red-200' :
-                undefined
-              }
-            >
-              {syncStatus !== 'bezig' && (
-                syncStatus === 'gelukt'
-                  ? <Check className="w-3.5 h-3.5" />
-                  : <CloudUpload className="w-3.5 h-3.5" />
-              )}
-              <span className="hidden lg:inline">
-                {syncStatus === 'bezig' ? 'Opslaan…' :
-                 syncStatus === 'gelukt' ? 'Opgeslagen' :
-                 syncStatus === 'fout'   ? 'Fout' : 'Opslaan'}
-              </span>
-            </Button>
-
-            <span className="w-px h-4 bg-slate-200 mx-0.5" />
-
-            {/* Meetstaat */}
-            <MeetstaatKnop projectId={projectId} scenarioId={scenario.id} projectNaam={projectNaam} projectNummer={projectNummer}
-              terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
-              bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
-              onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
-            <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
-              onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
-
-            <span className="w-px h-4 bg-slate-200 mx-0.5" />
-
-            {/* Bibliotheek dropdown */}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="Bibliotheek openen">
-                  <Library className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Bibliotheek</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[180px] z-[200]"
-                  align="start" sideOffset={4}
-                >
-                  <DropdownMenu.Item className={ddItem} onSelect={() => setReceptenOpen(true)}>
-                    <BookOpen className="w-3.5 h-3.5 text-slate-400" /> Recepten
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={() => setSchilderwerkOpen(true)}>
-                    <Paintbrush className="w-3.5 h-3.5 text-slate-400" /> Schilderwerk
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={() => setMaterialenOpen(true)}>
-                    <Package className="w-3.5 h-3.5 text-slate-400" /> Materialen
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-
-            <span className="w-px h-4 bg-slate-200 mx-0.5" />
-
-            {/* Sneltoetsen */}
-            <div className="relative group/keys flex-shrink-0">
-              <Button variant="outline" size="sm" title="Sneltoetsen">
-                <Keyboard className="w-3.5 h-3.5" />
-              </Button>
-              <div className="absolute left-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-lg
-                              opacity-0 invisible group-hover/keys:opacity-100 group-hover/keys:visible
-                              transition-all duration-150 z-[100] pointer-events-none group-hover/keys:pointer-events-auto">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Sneltoetsen</div>
-                </div>
-                <table className="w-full text-xs">
-                  <tbody>
-                    {[
-                      ['Ctrl+R',       'Nieuwe regel in actieve groep'],
-                      ['Ctrl+G',       'Nieuwe hoofdgroep'],
-                      ['Ctrl+C',       'Kopiëren'],
-                      ['Ctrl+X',       'Knippen'],
-                      ['Ctrl+V',       'Plakken'],
-                      ['Ctrl+D',       'Dupliceren'],
-                      ['Ctrl+M',       'Verplaatsen naar groep'],
-                      ['Ctrl+Shift+R', 'Verwijderen'],
-                      ['Ctrl+Z',       'Ongedaan maken'],
-                      ['Esc',          'Selectie opheffen'],
-                    ].map(([keys, label]) => (
-                      <tr key={keys} className="border-b border-slate-50 last:border-0">
-                        <td className="px-4 py-1.5  font-medium text-slate-800 whitespace-nowrap">{keys}</td>
-                        <td className="px-4 py-1.5 text-slate-500">{label}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Rechtercluster: kolom-layouts + kolommen (gerenderd vanuit het grid via
-                portal in #calc-grid-toolbar-slot) naast Opties. */}
-            <div className="ml-auto flex items-center gap-2">
-              <div id="calc-grid-toolbar-slot" className="flex items-center gap-2" />
-
-            {/* Offerte-instellingen & bijlages — eigen knop, niet weggestopt in Opties:
-                dit wordt bij elke offerte aangeraakt (teksten, voorwaarden, bijlages). */}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={readOnly}
-              onClick={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
-              title="Offerte-instellingen & bijlages — teksten, betalingscondities, algemene voorwaarden, PDF-bijlages"
-            >
-              <Receipt className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden lg:inline">Offerte-instellingen</span>
-            </Button>
-
-            {/* Opties dropdown — helemaal rechts */}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button variant="outline" size="sm" title="Opties — offerte aanmaken, reviseren, import/export">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Opties</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[200px] z-[200]"
-                  align="end" sideOffset={4}
-                >
-                  {/* Offerte-functies — alleen binnen een dossier en niet in alleen-lezen. */}
-                  {dossierContext && !readOnly && (
-                    <>
-                      <DropdownMenu.Item className={ddItem} onSelect={() => startOfferte('verkoopofferte')}>
-                        <FileText className="w-3.5 h-3.5 text-slate-400" /> Offerte aanmaken
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item className={ddItem} onSelect={() => startOfferte('interne_calculatie')}>
-                        <ClipboardList className="w-3.5 h-3.5 text-slate-400" /> Interne begroting
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                    </>
-                  )}
-                  {scenario?.bevroren_op && magDezeReviseren && (
-                    <DropdownMenu.Item className={ddItem} onSelect={handleReviseer}>
-                      <Copy className="w-3.5 h-3.5 text-slate-400" /> Reviseren (nieuwe versie)
-                    </DropdownMenu.Item>
-                  )}
-                  {/* Meerwerk niet: een tweede scenario bij dezelfde meerwerkregel zou de
-                      actuele meerwerk-calculatie stil vervangen (hoogste versie wint). */}
-                  {scenario && !readOnly && magReviseren === 'alles' && !scenario.meerwerk_regel_id && (
-                    <DropdownMenu.Item className={ddItem} onSelect={handleKopieer}>
-                      <Copy className="w-3.5 h-3.5 text-slate-400" /> Kopiëren (nieuwe versie)
-                    </DropdownMenu.Item>
-                  )}
-                  <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                  <DropdownMenu.Item className={ddItem} onSelect={() => setToonCufImport(true)}>
-                    <FileUp className="w-3.5 h-3.5 text-slate-400" /> Importeren (CUF / C4Y)
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={handleCufExport}>
-                    <FileDown className="w-3.5 h-3.5 text-slate-400" /> CUF exporteren
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item className={ddItem} onSelect={handleExcelExport}>
-                    <Table2 className="w-3.5 h-3.5 text-green-600" /> Excel exporteren
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-            </div>
-      </div>
+      {/* ─── Werkbalk ── */}
+      <CalculatieWerkbalk
+        readOnly={readOnly}
+        boomOpen={boomUitgeklapt}
+        onToggleBoom={handleToggleBoom}
+        undoCount={undoCount}
+        onUndo={handleUndo}
+        syncStatus={syncStatus}
+        opgeslagenOp={opgeslagenOp}
+        onOpslaan={() => slaCalculatieOp(false)}
+        onBibliotheek={soort => (soort === 'recepten' ? setReceptenOpen : soort === 'schilderwerk' ? setSchilderwerkOpen : setMaterialenOpen)(true)}
+        toevoegen={<>
+          <MeetstaatKnop projectId={projectId} scenarioId={scenario.id} projectNaam={projectNaam} projectNummer={projectNummer}
+            terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
+            bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
+            onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
+          <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
+            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+        </>}
+        allesIngeklapt={allesIngeklapt}
+        onToggleInklap={handleToggleInklap}
+        // Meerwerk niet kopiëren: een tweede scenario bij dezelfde meerwerkregel zou de
+        // actuele meerwerk-calculatie stil vervangen (hoogste versie wint).
+        kanKopieren={!readOnly && magReviseren === 'alles' && !scenario.meerwerk_regel_id}
+        onKopieer={handleKopieer}
+        kanReviseren={!!scenario.bevroren_op && magDezeReviseren}
+        onReviseer={handleReviseer}
+        onImporteer={() => setToonCufImport(true)}
+        onCufExport={handleCufExport}
+        onExcelExport={handleExcelExport}
+        kanOfferte={!!dossierContext && !readOnly}
+        onStartOfferte={startOfferte}
+        onInstellingen={() => { setInstellingenVereist(false); setInstellingenOpen(true) }}
+      />
 
       {/* ─── Boom + Grid ── */}
       <div className="relative flex flex-1 overflow-hidden">
 
-        {/* StructuurBoom flyout (overlay, niet fixed) */}
-        <aside
-          className={`absolute left-0 top-0 h-full z-50 flex flex-col bg-white border-r border-slate-200 shadow-xl transition-all duration-200 ${
-            boomUitgeklapt
-              ? 'w-80 xl:w-[26rem] opacity-100'
-              : 'w-0 overflow-hidden opacity-0 pointer-events-none'
-          }`}
-          onMouseEnter={handleBoomEnter}
-          onMouseLeave={handleBoomLeave}
-          // Tweede vangnet: zolang er iets over het paneel gesleept wordt, blijft het open,
-          // ook als er onverhoopt toch een sluittimer liep.
-          onDragOver={handleBoomEnter}
-          onDragEnter={handleBoomEnter}
-        >
+        {/* Structuur: naast het grid, op klik. Blijft open tot je hem sluit, zodat je kunt
+            navigeren en slepen terwijl je rekent. Dicht = verborgen, niet ontkoppeld: de boom
+            houdt zo zijn uitgeklapte groepen. */}
+        <aside className={`${boomUitgeklapt ? 'flex' : 'hidden'} w-80 xl:w-[26rem] flex-shrink-0 flex-col bg-white border-r border-slate-200`}>
           <div className="flex items-center border-b border-slate-200 h-9 flex-shrink-0">
             <span className="text-xs text-slate-500 font-medium px-3 flex-1 truncate">Structuur</span>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={handleSluitBoom}
+              onClick={handleToggleBoom}
               className="mr-1 text-slate-300"
               title="Sluiten"
             >
@@ -695,17 +485,13 @@ export default function CalculatieHoofdscherm({
               onSelecteer={setActiefGroepId}
               onWijziging={handleBoomWijziging}
               onVoorWijziging={() => gridRef.current?.duwSnapshot()}
-              onSleepActief={setBoomSleepActief}
               readOnly={readOnly}
             />
           </div>
         </aside>
 
         {/* Grid */}
-        <div
-          className="flex-1 flex flex-col overflow-hidden min-w-0 relative"
-          onMouseDown={() => { if (boomUitgeklapt) handleSluitBoom() }}
-        >
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <CalculatieGrid
             ref={gridRef}
             scenarioId={scenario.id}
@@ -774,7 +560,7 @@ export default function CalculatieHoofdscherm({
       >
         <DialogContent className="max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Offerte-instellingen &amp; bijlages</DialogTitle>
+            <DialogTitle>Voorwaarden, tekst &amp; bijlages</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <p className="text-xs text-slate-500 mb-3">

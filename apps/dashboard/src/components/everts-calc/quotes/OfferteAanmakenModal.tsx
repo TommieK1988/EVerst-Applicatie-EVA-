@@ -242,7 +242,7 @@ export default function OfferteAanmakenModal({
       // Niet stil falen: zonder melding lijkt de knop niets te doen.
       toast.error(isIntern
         ? 'Interne begroting aanmaken mislukt. Probeer het opnieuw.'
-        : 'Offerte aanmaken mislukt. Controleer de offerte-instellingen (betalingscondities en algemene voorwaarden) en probeer het opnieuw.')
+        : 'Offerte aanmaken mislukt. Controleer onder Offerte › Voorwaarden, tekst & bijlages de betalingscondities en algemene voorwaarden en probeer het opnieuw.')
       setLoading(false)
     }
   }
