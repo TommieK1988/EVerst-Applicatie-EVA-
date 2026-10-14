@@ -82,12 +82,12 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
       .then(res => {
         if (!res.gelukt) {
           openstaand.current = true
-          toast.error(res.fout ?? 'Opslaan van de offerte-instellingen mislukt')
+          toast.error(res.fout ?? 'Opslaan van voorwaarden en tekst mislukt')
         }
       })
       .catch((e: unknown) => {
         openstaand.current = true
-        toast.error(e instanceof Error ? e.message : 'Opslaan van de offerte-instellingen mislukt')
+        toast.error(e instanceof Error ? e.message : 'Opslaan van voorwaarden en tekst mislukt')
       })
       .finally(() => { lopend.current = null; setOpslaan(false) })
     lopend.current = taak
@@ -141,7 +141,7 @@ export default function CalculatieInstellingenKaarten({ projectId, dossierId, sc
 
       {/* ─── Offerte-instellingen ────────────────────────────────────────────── */}
       <Card>
-        <CardHeader>Offerte-instellingen</CardHeader>
+        <CardHeader>Betalingscondities en voorwaarden</CardHeader>
         <CardBody>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

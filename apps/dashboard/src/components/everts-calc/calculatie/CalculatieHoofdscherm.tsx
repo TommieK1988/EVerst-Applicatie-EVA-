@@ -560,7 +560,7 @@ export default function CalculatieHoofdscherm({
       >
         <DialogContent className="max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Offerte-instellingen &amp; bijlages</DialogTitle>
+            <DialogTitle>Voorwaarden, tekst &amp; bijlages</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <p className="text-xs text-slate-500 mb-3">

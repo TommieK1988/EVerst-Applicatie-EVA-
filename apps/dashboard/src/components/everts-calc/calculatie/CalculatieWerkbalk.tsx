@@ -176,7 +176,7 @@ export default function CalculatieWerkbalk(p: Props) {
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <Button variant="primary" size="sm" title="Offerte, interne begroting en offerte-instellingen">
+            <Button variant="primary" size="sm" title="Offerte, interne begroting en voorwaarden, tekst & bijlages">
               <FileText className="w-3.5 h-3.5" />
               Offerte
               <ChevronDown className="w-3 h-3" />
@@ -198,8 +198,8 @@ export default function CalculatieWerkbalk(p: Props) {
               <DropdownMenu.Item className={`${ddItem} items-start`} onSelect={p.onInstellingen} disabled={p.readOnly}>
                 <Receipt className="w-3.5 h-3.5 text-neutral-400 mt-px" />
                 <span>
-                  Offerte-instellingen &amp; bijlages
-                  <span className="block text-[11px] text-neutral-400">Teksten, betalingscondities, voorwaarden</span>
+                  Voorwaarden, tekst &amp; bijlages
+                  <span className="block text-[11px] text-neutral-400">Betalingscondities, inleiding, PDF-bijlages</span>
                 </span>
               </DropdownMenu.Item>
             </DropdownMenu.Content>

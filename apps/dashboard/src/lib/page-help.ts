@@ -942,7 +942,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
       { title: 'Calculatieregels', body: 'Voeg regels toe via de meetstaat (aanbevolen voor schilderwerk) of handmatig. Elke regel heeft een omschrijving, hoeveelheid, eenheid, eenheidsprijs en intern opslagnummer. Klik op een regel om te bewerken.' },
       { title: 'Structuur­boom', body: 'De knop Structuur (linksboven) opent het paneel met de groepen en subgroepen naast de regels. Het blijft open tot je weer op Structuur of het kruisje klikt, en EVA onthoudt dat de volgende keer. Sleep groepen om de opbouw te wijzigen.' },
       { title: 'Kostprijs vs. verkoopprijs', body: 'Elke regel toont naast de verkoopprijs ook de interne kostprijs en het opslag­percentage. Wijzig de marge via het percentage­veld. Het totaaloverzicht onderaan toont de totale marge.' },
-      { title: 'Opslaan', body: 'Wijzigingen worden automatisch opgeslagen. Linksboven staat wanneer dat voor het laatst gebeurde ("Opgeslagen 14:32"); klik erop om direct op te slaan. Offerte aanmaken en de offerte-instellingen zitten onder de groene knop Offerte, importeren en exporteren onder Meer.' },
+      { title: 'Opslaan', body: 'Wijzigingen worden automatisch opgeslagen. Linksboven staat wanneer dat voor het laatst gebeurde ("Opgeslagen 14:32"); klik erop om direct op te slaan. Offerte aanmaken en Voorwaarden, tekst & bijlages zitten onder de groene knop Offerte, importeren en exporteren onder Meer.' },
     ],
   }],
 
