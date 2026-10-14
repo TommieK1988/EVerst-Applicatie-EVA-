@@ -104,7 +104,7 @@ export default function GoedkeurrouteBeheer({ data }: Props) {
       <CardBody>
         <div className="space-y-4">
             <>
-              <FormField upper label="EVA keurt goed vanaf" helper="Facturen die vanaf deze datum in Bouw7 binnenkomen en daar geen goedkeurder hebben, keurt EVA goed. Oudere facturen worden in Bouw7 afgemaakt. Leeg = EVA neemt nog niets over.">
+              <FormField upper label="EVA keurt goed vanaf" helper="Vanaf deze datum keurt EVA goed: alle facturen op concept in Bouw7 (die hebben geen fiatteur, ook oudere) en nieuwe facturen zonder goedkeurder. Facturen met een goedkeurder in Bouw7 worden daar afgemaakt. Leeg = EVA neemt nog niets over.">
                 <Input type="date" value={vanaf} onChange={e => setVanaf(e.target.value)} style={{ maxWidth: 200 }} />
               </FormField>
 

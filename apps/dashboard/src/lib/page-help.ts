@@ -412,7 +412,7 @@ const PAGE_HELP: Array<[RegExp, PageHelp]> = [
     title: 'Goedkeurroute inkoopfacturen',
     description: 'Wie welke inkoopfactuur goedkeurt in EVA. Alleen voor beheerders, omdat dit bepaalt wie akkoord mag geven op uitgaven.',
     sections: [
-      { title: 'EVA keurt goed vanaf', body: 'Facturen die vanaf deze datum in Bouw7 binnenkomen en daar geen goedkeurder hebben, keurt EVA goed. Facturen die al in de goedkeuring van Bouw7 zaten, worden daar afgemaakt. Leeg betekent: EVA neemt nog niets over.' },
+      { title: 'EVA keurt goed vanaf', body: 'Vanaf deze datum keurt EVA goed: alle facturen die in Bouw7 op concept staan (geen fiatteur), ook oudere, en nieuwe facturen zonder goedkeurder in Bouw7. Facturen die al in de goedkeuring van Bouw7 zaten, worden daar afgemaakt. Leeg betekent: EVA neemt nog niets over.' },
       { title: 'Projectfacturen', body: 'Een factuur met een dossier gaat naar de eerste rol uit je lijst die op het dossier is ingevuld, bijvoorbeeld eerst de teamleider en anders de projectleider. Is geen van die rollen ingevuld, dan gaat hij naar de vaste goedkeurder. Projecten hebben een eigen drempel voor het tweede akkoord.' },
       { title: 'Overhead', body: 'Overhead gaat naar de goedkeurder van de 4000-grootboekrekening op de factuur (bij meerdere rekeningen telt het hoogste bedrag), en anders naar de vaste goedkeurder van de administratie.' },
       { title: 'Tweede akkoord', body: 'Boven de drempel (excl. btw; projecten en overhead elk een eigen drempel) moet nog iemand akkoord geven: de persoon die je kiest, of iemand uit Directie. Is dat dezelfde persoon als bij de eerste stap, dan vervalt de tweede stap.' },

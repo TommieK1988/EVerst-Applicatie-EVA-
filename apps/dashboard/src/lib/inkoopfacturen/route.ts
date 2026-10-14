@@ -5,8 +5,8 @@ import 'server-only'
  *
  * Draait na elke inkoopfacturen-sync (`syncInkoopfacturen`). Drie taken:
  *  1. **Toewijzen.** Facturen met een Bouw7-approval zijn van Bouw7 (de oude keten maakt het daar
- *     af). Facturen die ná `inkoop_goedkeuring_eva_vanaf` in Bouw7 zijn aangemaakt, op status 0/1
- *     staan en géén approval hebben, krijgen een EVA-route. Zonder ingestelde datum doet EVA niets:
+ *     af). Facturen zónder approval krijgen een EVA-route: alle concepten (status 0 = geen fiatteur),
+ *     en facturen op "ter goedkeuring" die ná `inkoop_goedkeuring_eva_vanaf` zijn aangemaakt. Zonder ingestelde datum doet EVA niets:
  *     zo verandert er niets tot de workflow in Bouw7 echt uit staat.
  *  2. **Vervallen.** Handelt iemand een EVA-factuur in Bouw7 af (status 2/4/5 of betaald), dan
  *     sluiten we de open stappen — niet stil, maar met een gebeurtenis.
@@ -264,7 +264,11 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
       .eq('status', 'open')
       .is('goedkeuring_bron', null)
       .in('bouw7_status', [0, 1])
-      .gte('bouw7_aangemaakt_op', vanaf)
+      // Concept = geen fiatteur in Bouw7 (Tom, 14-10-2026): die neemt EVA altijd over, ook van vóór
+      // de startdatum — anders bleven de 57 oude concepten na het uitzetten van de workflow
+      // voorgoed zonder goedkeurder liggen. "Ter goedkeuring" pas vanaf de startdatum: oudere hebben
+      // een Bouw7-keten die daar wordt afgemaakt (en de detailcheck hieronder vangt de rest).
+      .or(`bouw7_status.eq.0,bouw7_aangemaakt_op.gte."${vanaf}"`)
       .order('bouw7_aangemaakt_op', { ascending: true })
       .limit(MAX_TOEWIJZEN)
     const lijst = (kandidaten ?? []) as Kandidaat[]
