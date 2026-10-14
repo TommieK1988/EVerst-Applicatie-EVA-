@@ -219,8 +219,37 @@ export async function stuurBesluitNaarBouw7(inkoopfactuurId: string, medewerkerI
   return res
 }
 
-export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; vervallen: number; herhaald: number }> {
-  const uit = { toegewezen: 0, vervallen: 0, herhaald: 0 }
+async function zetEvaFacturenTerGoedkeuring(uit: { terGoedkeuring: number }): Promise<void> {
+  const { data: concepten } = await db()
+    .from('inkoopfacturen')
+    .select('id, bouw7_invoice_id')
+    .eq('goedkeuring_bron', 'eva')
+    .is('eva_besluit', null)
+    .eq('status', 'open')
+    .eq('bouw7_status', 0)
+    .limit(MAX_TOEWIJZEN)
+  if (!concepten?.length) return
+  const bouw7 = await getBouw7Client()
+  for (const f of concepten) {
+    try {
+      // Eerst de actuele status: is hij intussen in Bouw7 al verder gezet, dan niet terugzetten.
+      const d = await bouw7.get<{ status?: number; datePaid?: string | null }>(`/purchase-invoicing/purchase-invoice/${f.bouw7_invoice_id}`)
+      if (d.status !== 0 || d.datePaid) {
+        await db().from('inkoopfacturen').update({ bouw7_status: d.status ?? null }).eq('id', f.id)
+        continue
+      }
+      await bouw7.put(`/purchase-invoice/${f.bouw7_invoice_id}/update-status/1`)
+      await db().from('inkoopfacturen').update({ bouw7_status: 1 }).eq('id', f.id)
+      await logGebeurtenis(f.id, 'bouw7_bijgewerkt', null, { status: 'ter goedkeuring' })
+      uit.terGoedkeuring++
+    } catch {
+      // Volgende run opnieuw.
+    }
+  }
+}
+
+export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; vervallen: number; herhaald: number; terGoedkeuring: number }> {
+  const uit = { toegewezen: 0, vervallen: 0, herhaald: 0, terGoedkeuring: 0 }
 
   // 1a. Een Bouw7-keten bekend → Bouw7.
   await db().from('inkoopfacturen').update({ goedkeuring_bron: 'bouw7' })
@@ -266,6 +295,12 @@ export async function routeerInkoopfacturen(): Promise<{ toegewezen: number; ver
       }
     }
   }
+
+  // 1c. Zonder workflow zet Bouw7 een nieuwe factuur op concept (status 0) — gemeten 14-10-2026 op
+  //     de eerste 11 facturen na het uitzetten. Tom wil ze op "ter goedkeuring" (1): dan zie je ook
+  //     in Bouw7 dat ze op een akkoord wachten. Zelfde route als de besluit-write (WRITE-ENDPOINTS
+  //     §7c, getest). Status 1 is niet betaalbaar; dat blijft alleen 2.
+  await zetEvaFacturenTerGoedkeuring(uit)
 
   // 2. Buiten EVA om afgehandeld → open stappen vervallen.
   const { data: weg } = await db()
