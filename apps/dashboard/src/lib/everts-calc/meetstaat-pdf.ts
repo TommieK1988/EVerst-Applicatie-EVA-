@@ -46,8 +46,9 @@ const GETALLEN: Kolom[] = [
   { kop: 'H (m)', breedte: 15, rechts: true, waarde: r => r.hoogte },
   { kop: 'B aant.', breedte: 15, rechts: true, waarde: r => r.breedteAantal },
   { kop: 'H aant.', breedte: 15, rechts: true, waarde: r => r.hoogteAantal },
-  { kop: 'Factor', breedte: 12, rechts: true, waarde: r => r.factor },
-  { kop: 'Aantal', breedte: 12, rechts: true, waarde: r => r.aantal },
+  // Koppen zoals in het invoerscherm: `factor` heet daar Aantal, `aantal` heet x.
+  { kop: 'Aantal', breedte: 12, rechts: true, waarde: r => r.factor },
+  { kop: 'x', breedte: 12, rechts: true, waarde: r => r.aantal },
   { kop: 'Hoeveelheid', breedte: 24, rechts: true, waarde: r => `${r.hoeveelheid}${r.handmatig ? ' *' : ''}` },
 ]
 
