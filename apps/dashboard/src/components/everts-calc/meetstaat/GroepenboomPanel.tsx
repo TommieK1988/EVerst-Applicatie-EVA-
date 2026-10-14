@@ -3,10 +3,9 @@
 import { useMemo } from 'react'
 import { ChevronRight, Check } from 'lucide-react'
 import type { Groep, Meetregel } from '@/lib/everts-calc/types'
-import { getMeetregels, getMeetregelAggregaten } from '@/lib/everts-calc/local-store'
-import { isRegelActief, berekenHoeveelheid } from '@/lib/everts-calc/meetstaat-utils'
+import { getMeetregels, getMeetregelAggregaten, getCalculatieregels } from '@/lib/everts-calc/local-store'
+import { isRegelActief } from '@/lib/everts-calc/meetstaat-utils'
 import { teVerwerken } from '@/lib/everts-calc/meetstaat-verwerken'
-import { totalenPerEenheid, totalenTekst } from '@/lib/everts-calc/meetstaat-overzicht'
 import { EmptyState } from '@/components/ui/empty-state'
 
 interface Props {
@@ -18,19 +17,19 @@ interface Props {
 
 interface GroepCijfers {
   regels: number
-  totaal: string
   /** Codes in deze groep die nog niet in de calculatie verwerkt zijn. */
   open: number
 }
 
 /**
- * Per groep: hoeveel regels, het subtotaal per eenheid en wat er nog naar de
- * calculatie moet. Zo zie je zonder door te klikken welke gevel nog niet gemeten
- * is en waar wijzigingen openstaan.
+ * Per groep: hoeveel regels en wat er nog naar de calculatie moet. Zo zie je
+ * zonder door te klikken welke gevel nog niet gemeten is en waar wijzigingen
+ * openstaan. Bewust geen totalen: een groep telt verschillende onderdelen, en die
+ * bij elkaar opgeteld zeggen niets.
  */
 function cijfersPerGroep(meetstaatId: string): { perGroep: Map<string, GroepCijfers>; geheel: GroepCijfers } {
   const actief = getMeetregels(meetstaatId).filter(r => !r.is_leeg && isRegelActief(r))
-  const open = teVerwerken(getMeetregelAggregaten(meetstaatId))
+  const open = teVerwerken(getMeetregelAggregaten(meetstaatId), new Set(getCalculatieregels().map(r => r.id)))
 
   const regelsPerGroep = new Map<string, Meetregel[]>()
   for (const r of actief) {
@@ -47,7 +46,6 @@ function cijfersPerGroep(meetstaatId: string): { perGroep: Map<string, GroepCijf
     const regels = regelsPerGroep.get(id) ?? []
     perGroep.set(id, {
       regels: regels.length,
-      totaal: totalenTekst(totalenPerEenheid(regels, berekenHoeveelheid)),
       open: openPerGroep.get(id) ?? 0,
     })
   }
@@ -55,7 +53,6 @@ function cijfersPerGroep(meetstaatId: string): { perGroep: Map<string, GroepCijf
     perGroep,
     geheel: {
       regels: actief.length,
-      totaal: totalenTekst(totalenPerEenheid(actief, berekenHoeveelheid)),
       open: open.length,
     },
   }
@@ -107,7 +104,9 @@ function GroepRij({
             : !leeg && <Check className="w-3.5 h-3.5 flex-shrink-0 text-success-500" aria-label="Alles in calculatie" />}
         </span>
         <span className={`pl-[18px] text-xs tabular-nums truncate ${leeg ? 'text-neutral-400' : isActief ? 'text-brand-700' : 'text-neutral-500'}`}>
-          {leeg ? (c && c.open > 0 ? 'Geen regels meer' : 'Nog niet gemeten') : c.totaal}
+          {leeg
+            ? (c && c.open > 0 ? 'Geen regels meer' : 'Nog niet gemeten')
+            : `${c.regels} ${c.regels === 1 ? 'regel' : 'regels'}`}
         </span>
       </button>
       {kinderen.map(kind => (
@@ -144,7 +143,7 @@ export default function GroepenboomPanel({ groepen, actiefGroepId, meetstaatId, 
             {geheel.open > 0 && <OpenStip aantal={geheel.open} />}
           </span>
           <span className="text-xs tabular-nums text-neutral-500">
-            {geheel.regels} {geheel.regels === 1 ? 'regel' : 'regels'}{geheel.totaal && ` · ${geheel.totaal}`}
+            {geheel.regels} {geheel.regels === 1 ? 'regel' : 'regels'}
           </span>
         </div>
       )}

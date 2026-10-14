@@ -20,6 +20,18 @@ describe('teVerwerken', () => {
     expect(isVervallen(vervallen)).toBe(true)
   })
 
+  it('laat een vervallen code liggen als zijn calculatieregel al weg is', () => {
+    const vervallen = agg({ totaal_hoeveelheid: 0, calculatieregel_id: 'R1' })
+    expect(teVerwerken([vervallen], new Set(['R2']))).toEqual([])
+    expect(teVerwerken([vervallen], new Set(['R1']))).toHaveLength(1)
+  })
+
+  it('zet een regel niet op 0 als een actieve code er ook naar wijst', () => {
+    const oud = agg({ id: 'oud', totaal_hoeveelheid: 0, calculatieregel_id: 'R1' })
+    const nieuw = agg({ id: 'nieuw', totaal_hoeveelheid: 12, calculatieregel_id: 'R1', is_gesynchroniseerd: true })
+    expect(teVerwerken([oud, nieuw], new Set(['R1']))).toEqual([])
+  })
+
   it('laat een 0-code zonder calculatieregel en alles wat al verwerkt is liggen', () => {
     expect(teVerwerken([
       agg({ totaal_hoeveelheid: 0 }),
