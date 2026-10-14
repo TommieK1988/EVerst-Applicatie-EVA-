@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react'
 import type { Meetregel } from '@/lib/everts-calc/types'
 import { berekenHoeveelheid, isRegelActief, normaliseerBestekcode } from '@/lib/everts-calc/meetstaat-utils'
 import { plaatsZwevendPaneel, type PaneelPlek } from '@/components/ui/zwevend-paneel'
+import { normaliseerEenheid, ontbrekendeMaat } from '@/lib/everts-calc/maat-rekenen'
 
 interface SchilderData {
   onderdelen: { id: string; naam: string; code: string | null }[]
@@ -216,6 +217,8 @@ export default function MeetregelRij({
   const eersteRef = useRef<HTMLInputElement>(null)
   const actief = isRegelActief(regel)
   const hoev = berekenHoeveelheid(regel)
+  const perMaatAantal = normaliseerEenheid(regel.eenheid) === 'm¹'
+  const ontbreekt = regel.is_leeg ? null : ontbrekendeMaat(regel)
 
   const geselecteerdOnderdeel = schilderData?.onderdelen.find(o => o.id === regel.onderdeel_id)
   const geselecteerdType = schilderData?.types.find(t => t.id === regel.type_id)
@@ -346,7 +349,7 @@ export default function MeetregelRij({
                     // opnemer geeft breedte- en hoogte-aantallen zelf op. `formule`
                     // leegmaken ruimt hem meteen op bij oude regels.
                     formule: undefined,
-                    ...(t ? { eenheid: t.eenheid } : {}),
+                    ...(t ? { eenheid: normaliseerEenheid(t.eenheid) } : {}),
                   })
                 }}
               />
@@ -394,14 +397,18 @@ export default function MeetregelRij({
         {ni(KOL.hoogte, regel.hoogte, v => onWijzig({ hoogte: v }), '—', 'text-blue-700')}
       </td>
 
-      {/* B aantal — hoeveel breedtes je meet; telt alleen mee bij m¹ */}
+      {/* B aantal / H aantal — hoeveel breedtes en hoogtes je meet, zoals op de papieren
+          opmeetstaat. Tellen alleen bij m¹; bij andere eenheden is er niets in te vullen
+          (geen veld, dus de pijltoetsen slaan de cel over). */}
       <td className="px-0.5 py-0.5 bg-blue-50/20">
-        {ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')}
+        {perMaatAantal
+          ? ni(KOL.breedteAantal, regel.breedte_aantal, v => onWijzig({ breedte_aantal: v }), '1', 'text-blue-400')
+          : <span className="block text-right text-xs px-1 text-slate-200" title="Alleen bij m¹">—</span>}
       </td>
-
-      {/* H aantal — hoeveel hoogtes je meet; telt alleen mee bij m¹ */}
       <td className="px-0.5 py-0.5 bg-blue-50/20">
-        {ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')}
+        {perMaatAantal
+          ? ni(KOL.hoogteAantal, regel.hoogte_aantal, v => onWijzig({ hoogte_aantal: v }), '1', 'text-blue-400')
+          : <span className="block text-right text-xs px-1 text-slate-200" title="Alleen bij m¹">—</span>}
       </td>
 
       {/* Factor — vermenigvuldiger op de hele regel */}
@@ -419,6 +426,10 @@ export default function MeetregelRij({
         {hoev > 0 ? (
           <span className={`text-xs  font-semibold ${actief ? 'text-everts' : 'text-slate-300'}`}>
             {hoev.toFixed(2)}
+          </span>
+        ) : ontbreekt ? (
+          <span className="text-[11px] font-semibold text-amber-600" title="Deze regel telt pas mee als alle maten zijn ingevuld">
+            {ontbreekt} ontbreekt
           </span>
         ) : null}
       </td>
