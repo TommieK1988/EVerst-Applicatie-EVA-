@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f08-mobiel .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f08-mobiel .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f08-mobiel .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f08-mobiel .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f08-mobiel .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f08-mobiel .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f08-mobiel .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -43,8 +43,8 @@
 #f08-mobiel .copy { top: 120px; width: 620px; }
 #f08-mobiel .feats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 #f08-mobiel .phone.p1 { left: 760px; top: 140px; }
-#f08-mobiel .phone.p2 { left: 1120px; top: 200px; transform: scale(.88); transform-origin: top left; }
-#f08-mobiel .phone.p3 { left: 1440px; top: 260px; transform: scale(.76); transform-origin: top left; }
+#f08-mobiel .phone.p2 { left: 1120px; top: 200px; }
+#f08-mobiel .phone.p3 { left: 1440px; top: 260px; }
 #f08-mobiel .lang { position: absolute; top: 1010px; font-size: 22px; font-weight: 800; color: #0a5e28; letter-spacing: .1em; text-transform: uppercase; }
 
       </style>
@@ -63,6 +63,25 @@
           const R = '#f08-mobiel';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 11;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+tl.set(q('.phone.p2'), { scale: 0.88, transformOrigin: 'top left' }, 0);
+tl.set(q('.phone.p3'), { scale: 0.76, transformOrigin: 'top left' }, 0);
+A('.phone.p1', 0.4, { y: 200, d: 1.1 });
+A('.feats .chip', 2.4, { y: 16, st: 0.4, d: 0.5, e: 'back.out(1.6)' });
+A('.phone.p2', 7.2, { x: 120, y: 0, d: 0.9 });
+A('.phone.p3', 8.2, { x: 120, y: 0, d: 0.9 });
+tl.to(q('.phone.p1 .screen img'), { y: -260, duration: 3, ease: 'sine.inOut' }, 3.0);
+tl.to(q('.phone.p1 .screen img'), { y: 0, duration: 1.4, ease: 'sine.inOut' }, 6.4);
+
 
           window.__timelines["f08-mobiel"] = tl;
         })();

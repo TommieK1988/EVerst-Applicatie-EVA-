@@ -13,3 +13,12 @@
 </div>
 <div class="mail"><img src="assets/img/mail-card.png" alt="" /></div>
 <div class="inbox">1 nieuw</div>
+
+<script>
+
+K('.bg-brand', { scale: 1.12 }, { scale: 1 });
+A('.mail', 0.5, { x: 220, y: 0, d: 1.1 });
+tl.fromTo(q('.mail'), { rotation: 5 }, { rotation: 0, duration: 1.1, ease: 'power3.out' }, 0.5);
+A('.inbox', 1.4, { y: 0, s: 0.4, e: 'back.out(2)', d: 0.6 });
+
+</script>

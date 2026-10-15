@@ -3,7 +3,7 @@
 #ID .phone { left: 760px; top: 120px; }
 #ID .app { position: absolute; inset: 0; background: #fff; padding: 70px 24px 24px; }
 #ID .app img { width: 150px; border-radius: 6px; }
-#ID .app h3 { font-size: 24px; font-weight: 800; margin-top: 16px; } #ID .app p { font-size: 15px; color: #6b757c; margin-top: 4px; font-weight: 500; }
+#ID .app h3 { font-size: 24px; font-weight: 800; margin-top: 16px; } #ID .app p { font-size: 15px; color: #5b656c; margin-top: 4px; font-weight: 500; }
 #ID .q { margin-top: 18px; font-size: 16px; font-weight: 700; } #ID .stars { display: flex; gap: 6px; margin-top: 8px; }
 #ID .stars i { width: 34px; height: 34px; display: block; background: #f59e0b; clip-path: polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%); }
 #ID .stars i.off { background: #e3e8ea; }
@@ -18,7 +18,7 @@
 #ID .sc .mono { width: 52px; text-align: right; font-size: 22px; color: #0a5e28; } #ID .sc span:first-child { width: 170px; }
 #ID .m { display: flex; gap: 16px; align-items: center; font-size: 19px; font-weight: 600; }
 #ID .m .f { width: 72px; height: 72px; border-radius: 10px; background: linear-gradient(135deg,#cfe3ef,#8fb3c9); flex: none; }
-#ID .m small { display: block; color: #6b757c; font-weight: 500; font-size: 16px; margin-top: 4px; }
+#ID .m small { display: block; color: #5b656c; font-weight: 500; font-size: 16px; margin-top: 4px; }
 #ID .m .go { margin-left: auto; padding: 10px 16px; border-radius: 10px; background: #009439; color: #fff; font-size: 16px; font-weight: 800; white-space: nowrap; }
 </style>
 <div class="bg-light"></div>
@@ -39,3 +39,14 @@
   </div>
   <div class="box"><h4>Nieuwe meldingen · 2</h4><div class="m"><div class="f"></div><div>Kitnaad slaapkamerraam<small>Bewoner nr. 418</small></div><span class="go">Op opleverlijst</span></div></div>
 </div>
+
+<script>
+
+A('.phone', 0.3, { y: 200, d: 1.1 });
+tl.fromTo(q('.stars i'), { scale: 0 }, { scale: 1, duration: 0.3, ease: 'back.out(3)', stagger: 0.07 }, 1.2);
+A('.ap', 2.6, { y: 20, d: 0.5 });
+A('.desk .box', 3.8, { x: 100, y: 0, st: 1.8, d: 0.8 });
+tl.fromTo(q('.sc .bar b'), { scaleX: 0, transformOrigin: 'left center' }, { scaleX: 1, duration: 1.0, ease: 'power2.out', stagger: 0.2 }, 4.4);
+tl.fromTo(q('.m .go'), { scale: 1 }, { scale: 1.08, duration: 0.3, yoyo: true, repeat: 1 }, 7.0);
+
+</script>

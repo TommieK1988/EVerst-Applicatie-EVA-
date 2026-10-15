@@ -3,9 +3,24 @@
 #ID .window.b { left: 420px; top: 330px; width: 1404px; height: 720px; }
 #ID .window .shot img { width: 100%; }
 #ID .cursor { position: absolute; left: 1180px; top: 560px; width: 40px; }
+#ID .drag { position: absolute; left: 1000px; top: 600px; width: 240px; height: 30px; border-radius: 6px; background: #f08000; color: #fff; font-size: 15px; font-weight: 700; padding: 4px 10px; z-index: 5; box-shadow: 0 10px 20px -8px rgba(0,0,0,.4); }
+#ID .cursor { left: 1180px; top: 612px; z-index: 6; }
 </style>
 <div class="bg-light"></div>
 <div class="copy"><div class="eyebrow">Planning</div><div class="head">Plannen is slepen</div></div>
 <div class="window a"><div class="bar"><i></i><i></i><i></i><span>Projectplanning</span></div><div class="shot"><img src="assets/img/ds-planning.png" alt="" /></div></div>
 <div class="window b"><div class="bar"><i></i><i></i><i></i><span>Medewerkerplanning</span></div><div class="shot"><img src="assets/img/ds-planning-mw.png" alt="" /></div></div>
+<div class="drag">Glas zetten · 3d</div>
 <svg class="cursor" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#161b20" stroke="#fff" stroke-width="1.5"/></svg>
+
+<script>
+
+A('.window.a', 0.3, { y: 80, d: 1 });
+tl.fromTo(q('.drag'), { opacity: 0 }, { opacity: 1, duration: 0.3 }, 1.2);
+tl.fromTo(q('.drag'), { x: 0 }, { x: 240, duration: 1.4, ease: 'power2.inOut' }, 1.6);
+tl.fromTo(q('.cursor'), { opacity: 0, x: 0, y: 0 }, { opacity: 1, duration: 0.3 }, 1.2);
+tl.fromTo(q('.cursor'), { x: 0 }, { x: 240, duration: 1.4, ease: 'power2.inOut' }, 1.6);
+A('.window.b', 3.2, { x: 160, y: 0, d: 1 });
+tl.to(q('.cursor'), { opacity: 0, duration: 0.3 }, 3.2);
+
+</script>

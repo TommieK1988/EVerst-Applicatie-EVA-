@@ -3,7 +3,7 @@
 #ID .shot img { width: 1100px; }
 #ID .kpis { position: absolute; left: 1260px; top: 250px; width: 564px; display: flex; flex-direction: column; gap: 24px; }
 #ID .kpi { padding: 28px 32px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.3); }
-#ID .kpi .l { font-size: 18px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6b757c; }
+#ID .kpi .l { font-size: 18px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b656c; }
 #ID .kpi .v { font-size: 56px; font-weight: 500; color: #161b20; margin-top: 8px; }
 #ID .kpi .v.g { color: #009439; }
 #ID .badge { position: relative; }
@@ -17,3 +17,18 @@
   <div class="badge"><span class="dot">✓</span>Inkoopfactuur goedgekeurd</div>
   <div class="badge"><span class="dot">✓</span>Stuurcijfers voor management</div>
 </div>
+
+<script>
+
+A('.window', 0.3, { y: 80, d: 1 });
+K('.shot img', { scale: 1, transformOrigin: '0% 0%' }, { scale: 1.08 }, 0.3);
+A('.kpi', 1.6, { x: 80, y: 0, st: 0.4, d: 0.7 });
+const nums = document.querySelectorAll(q('.kpi .v'));
+const tgt = [141625, 44412];
+nums.forEach((el, i) => {
+  const o = { v: 0 };
+  tl.to(o, { v: tgt[i], duration: 1.6, ease: 'power2.out', onUpdate: () => { el.textContent = '€ ' + Math.round(o.v).toLocaleString('nl-NL'); } }, 1.8 + i * 0.4);
+});
+A('.badge', 4.8, { x: 60, y: 0, st: 1.2, d: 0.6 });
+
+</script>

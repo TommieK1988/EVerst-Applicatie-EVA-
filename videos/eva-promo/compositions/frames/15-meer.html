@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f15-meer .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f15-meer .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f15-meer .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f15-meer .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f15-meer .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f15-meer .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f15-meer .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -43,9 +43,9 @@
 #f15-meer .grid { position: absolute; left: 96px; top: 300px; width: 1728px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
 #f15-meer .t { height: 300px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -30px rgba(16,40,28,.3); padding: 40px; display: flex; flex-direction: column; justify-content: space-between; }
 #f15-meer .t .ic { width: 88px; height: 88px; border-radius: 20px; background: #ecfaf0; display: flex; align-items: center; justify-content: center; }
-#f15-meer .t h4 { font-size: 36px; font-weight: 800; } #f15-meer .t p { font-size: 22px; font-weight: 500; color: #6b757c; margin-top: 8px; }
+#f15-meer .t h4 { font-size: 36px; font-weight: 800; } #f15-meer .t p { font-size: 22px; font-weight: 500; color: #5b656c; margin-top: 8px; }
 #f15-meer .t.eva { background: #054f2e url(assets/img/polygon-bg.png) center / cover; border-color: #054f2e; }
-#f15-meer .t.eva h4 { color: #fff; } #f15-meer .t.eva p { color: #d2f2dd; } #f15-meer .t.eva .ic { background: rgba(255,255,255,.16); }
+#f15-meer .t.eva h4 { color: #fff; } #f15-meer .t.eva p { color: #fff; } #f15-meer .t.eva .ic { background: rgba(255,255,255,.16); }
 
       </style>
       <div id="f15-meer" data-composition-id="f15-meer" data-width="1920" data-height="1080">
@@ -65,6 +65,19 @@
           const R = '#f15-meer';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 8;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+A('.t', 0.6, { y: 50, s: 0.96, st: 0.75, d: 0.7 });
+tl.fromTo(q('.t.eva'), { scale: 1 }, { scale: 1.04, duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 5.6);
+
 
           window.__timelines["f15-meer"] = tl;
         })();

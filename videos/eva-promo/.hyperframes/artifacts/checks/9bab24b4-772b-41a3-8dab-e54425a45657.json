@@ -1,0 +1,1963 @@
+{
+  "ok": true,
+  "strict": false,
+  "browserSkipped": false,
+  "lint": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [],
+    "filesScanned": 17
+  },
+  "runtime": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 3,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "console_warning",
+        "severity": "warning",
+        "message": "GSAP target  not found. https://gsap.com",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "120.5",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0,
+        "url": "http://127.0.0.1:38653/",
+        "line": 69
+      },
+      {
+        "code": "console_warning",
+        "severity": "warning",
+        "message": "GSAP target  not found. https://gsap.com",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "120.5",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0,
+        "url": "http://127.0.0.1:38653/",
+        "line": 69
+      },
+      {
+        "code": "console_warning",
+        "severity": "warning",
+        "message": "GSAP target  not found. https://gsap.com",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "120.5",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 114.867,
+        "url": "http://127.0.0.1:38653/",
+        "line": 69
+      }
+    ]
+  },
+  "layout": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 42,
+    "findings": [
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 6.694,
+        "selector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": -26.3,
+          "top": -14.8,
+          "right": 1946.3,
+          "bottom": 1094.8,
+          "width": 1972.61,
+          "height": 1109.59
+        },
+        "containerSelector": "#f02-intro > div:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "left": 26.3,
+          "right": 26.3,
+          "top": 14.8,
+          "bottom": 14.8
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": -26.3,
+          "y": -14.8,
+          "width": 1972.61,
+          "height": 1109.59
+        },
+        "firstSeen": 6.694,
+        "lastSeen": 6.694,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          6.694
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 6.694,
+        "selector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(2)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 846.98,
+          "top": 150,
+          "right": 2026.98,
+          "bottom": 850,
+          "width": 1180,
+          "height": 700
+        },
+        "containerSelector": "#f02-intro > div:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "right": 106.98
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": 846.98,
+          "y": 150,
+          "width": 1180,
+          "height": 700
+        },
+        "firstSeen": 6.694,
+        "lastSeen": 6.694,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          6.694
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 6.694,
+        "selector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > img:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 847.98,
+          "top": 191,
+          "right": 2025.98,
+          "bottom": 853.63,
+          "width": 1178,
+          "height": 662.63
+        },
+        "containerSelector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 847.98,
+          "top": 191,
+          "right": 2025.98,
+          "bottom": 849,
+          "width": 1178,
+          "height": 658
+        },
+        "overflow": {
+          "bottom": 4.63
+        },
+        "dataAttributes": {
+          "data-hf-authored-opacity": ""
+        },
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": 847.98,
+          "y": 191,
+          "width": 1178,
+          "height": 662.63
+        },
+        "firstSeen": 6.694,
+        "lastSeen": 6.694,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          6.694
+        ]
+      },
+      {
+        "code": "panel_out_of_canvas",
+        "severity": "info",
+        "time": 6.694,
+        "selector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(2)",
+        "message": "Painted panel extends outside the composition canvas.",
+        "rect": {
+          "left": 846.98,
+          "top": 150,
+          "right": 2026.98,
+          "bottom": 850,
+          "width": 1180,
+          "height": 700
+        },
+        "containerSelector": "#main",
+        "text": "eva.everts.nl · Planning",
+        "fixHint": "Move the panel inward, or mark intentional off-canvas animation with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "right": 106.98
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": 846.98,
+          "y": 150,
+          "width": 1180,
+          "height": 700
+        },
+        "firstSeen": 6.694,
+        "lastSeen": 6.694,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          6.694
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 9.455,
+        "selector": "#f02-intro > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 913.63,
+          "top": 161,
+          "right": 1092.15,
+          "bottom": 180,
+          "width": 178.52,
+          "height": 19
+        },
+        "containerSelector": "#f03-postvak > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "eva.everts.nl · Planning",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": 913.63,
+          "y": 161,
+          "width": 178.52,
+          "height": 19
+        },
+        "firstSeen": 9.455,
+        "lastSeen": 9.455,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          9.455
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 17.904,
+        "selector": "#f03-postvak > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 228.08,
+          "bottom": 115,
+          "width": 132.08,
+          "height": 27
+        },
+        "containerSelector": "#f04-dossier > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "POSTVAK",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/03-postvak.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 132.08,
+          "height": 27
+        },
+        "firstSeen": 17.904,
+        "lastSeen": 17.904,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          17.904
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 17.904,
+        "selector": "#f03-postvak > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 1157.89,
+          "bottom": 204,
+          "width": 1061.89,
+          "height": 78
+        },
+        "containerSelector": "#f04-dossier > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Van mail naar dossier in één klik",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/03-postvak.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 1061.89,
+          "height": 78
+        },
+        "firstSeen": 17.904,
+        "lastSeen": 17.904,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          17.904
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 20.083,
+        "selector": "div.side > img:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 97,
+          "top": 251,
+          "right": 395,
+          "bottom": 1093.17,
+          "width": 298,
+          "height": 842.17
+        },
+        "containerSelector": "#f04-dossier > div:nth-of-type(1) > div:nth-of-type(3)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 96,
+          "top": 250,
+          "right": 396,
+          "bottom": 990,
+          "width": 300,
+          "height": 740
+        },
+        "overflow": {
+          "bottom": 103.17
+        },
+        "dataAttributes": {
+          "data-hf-authored-opacity": ""
+        },
+        "sourceFile": "compositions/frames/04-dossier.html",
+        "bbox": {
+          "x": 97,
+          "y": 251,
+          "width": 298,
+          "height": 842.17
+        },
+        "firstSeen": 20.083,
+        "lastSeen": 20.083,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          20.083
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 25.347,
+        "selector": "#f04-dossier > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 220.53,
+          "bottom": 115,
+          "width": 124.53,
+          "height": 27
+        },
+        "containerSelector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "DOSSIER",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/04-dossier.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 124.53,
+          "height": 27
+        },
+        "firstSeen": 25.347,
+        "lastSeen": 25.347,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          25.347
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 25.347,
+        "selector": "#f04-dossier > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 756.17,
+          "bottom": 204,
+          "width": 660.17,
+          "height": 78
+        },
+        "containerSelector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Eén dossier per klus",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/04-dossier.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 660.17,
+          "height": 78
+        },
+        "firstSeen": 25.347,
+        "lastSeen": 25.347,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          25.347
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 33.472,
+        "selector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(3)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 96,
+          "top": 250,
+          "right": 1336,
+          "bottom": 1120,
+          "width": 1240,
+          "height": 870
+        },
+        "containerSelector": "#f05-calculatie > div:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "bottom": 40
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 96,
+          "y": 250,
+          "width": 1240,
+          "height": 870
+        },
+        "firstSeen": 33.472,
+        "lastSeen": 33.472,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 33.472,
+        "selector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > img:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 56.39,
+          "top": 256.74,
+          "right": 1987.43,
+          "bottom": 1342.95,
+          "width": 1931.04,
+          "height": 1086.21
+        },
+        "containerSelector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 97,
+          "top": 291,
+          "right": 1335,
+          "bottom": 1119,
+          "width": 1238,
+          "height": 828
+        },
+        "overflow": {
+          "left": 40.61,
+          "right": 652.43,
+          "top": 34.26,
+          "bottom": 223.95
+        },
+        "dataAttributes": {
+          "data-hf-authored-opacity": ""
+        },
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 56.39,
+          "y": 256.74,
+          "width": 1931.04,
+          "height": 1086.21
+        },
+        "firstSeen": 33.472,
+        "lastSeen": 33.472,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "panel_out_of_canvas",
+        "severity": "info",
+        "time": 33.472,
+        "selector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(3)",
+        "message": "Painted panel extends outside the composition canvas.",
+        "rect": {
+          "left": 96,
+          "top": 250,
+          "right": 1336,
+          "bottom": 1120,
+          "width": 1240,
+          "height": 870
+        },
+        "containerSelector": "#main",
+        "text": "Calculatie · Meetstaat opname gevels",
+        "fixHint": "Move the panel inward, or mark intentional off-canvas animation with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "bottom": 40
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 96,
+          "y": 250,
+          "width": 1240,
+          "height": 870
+        },
+        "firstSeen": 33.472,
+        "lastSeen": 33.472,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 33.997,
+        "selector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 474.03,
+          "bottom": 115,
+          "width": 378.03,
+          "height": 27
+        },
+        "containerSelector": "#f06-offerte > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "MEETSTAAT & CALCULATIE",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 378.03,
+          "height": 27
+        },
+        "firstSeen": 33.997,
+        "lastSeen": 33.997,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          33.997
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 33.997,
+        "selector": "#f05-calculatie > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 983.69,
+          "bottom": 204,
+          "width": 887.69,
+          "height": 78
+        },
+        "containerSelector": "#f06-offerte > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Van meetstaat naar offerte",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 887.69,
+          "height": 78
+        },
+        "firstSeen": 33.997,
+        "lastSeen": 33.997,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          33.997
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 42.447,
+        "selector": "#f06-offerte > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 223.33,
+          "bottom": 115,
+          "width": 127.33,
+          "height": 27
+        },
+        "containerSelector": "#f07-planning > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "OFFERTE",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/06-offerte.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 127.33,
+          "height": 27
+        },
+        "firstSeen": 42.447,
+        "lastSeen": 42.447,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          42.447
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 42.447,
+        "selector": "#f06-offerte > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 943.44,
+          "bottom": 204,
+          "width": 847.44,
+          "height": 78
+        },
+        "containerSelector": "#f07-planning > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Gecontroleerd de deur uit",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/06-offerte.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 847.44,
+          "height": 78
+        },
+        "firstSeen": 42.447,
+        "lastSeen": 42.447,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          42.447
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 46.861,
+        "selector": "div.window.a > div:nth-of-type(2) > img:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 97,
+          "top": 291,
+          "right": 1595,
+          "bottom": 1133.63,
+          "width": 1498,
+          "height": 842.63
+        },
+        "containerSelector": "div.window.a > div:nth-of-type(2)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 97,
+          "top": 291,
+          "right": 1595,
+          "bottom": 1009,
+          "width": 1498,
+          "height": 718
+        },
+        "overflow": {
+          "bottom": 124.63
+        },
+        "dataAttributes": {
+          "data-hf-authored-opacity": ""
+        },
+        "sourceFile": "compositions/frames/07-planning.html",
+        "bbox": {
+          "x": 97,
+          "y": 291,
+          "width": 1498,
+          "height": 842.63
+        },
+        "firstSeen": 46.861,
+        "lastSeen": 46.861,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          46.861
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 46.861,
+        "selector": "div.window.b > div:nth-of-type(2) > img:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 421,
+          "top": 371,
+          "right": 1823,
+          "bottom": 1159.63,
+          "width": 1402,
+          "height": 788.63
+        },
+        "containerSelector": "div.window.b > div:nth-of-type(2)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 421,
+          "top": 371,
+          "right": 1823,
+          "bottom": 1049,
+          "width": 1402,
+          "height": 678
+        },
+        "overflow": {
+          "bottom": 110.63
+        },
+        "dataAttributes": {
+          "data-hf-authored-opacity": ""
+        },
+        "sourceFile": "compositions/frames/07-planning.html",
+        "bbox": {
+          "x": 421,
+          "y": 371,
+          "width": 1402,
+          "height": 788.63
+        },
+        "firstSeen": 46.861,
+        "lastSeen": 46.861,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          46.861
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 48.884,
+        "selector": "#f07-planning > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 673.16,
+          "bottom": 204,
+          "width": 577.16,
+          "height": 78
+        },
+        "containerSelector": "#f08-mobiel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "Plannen is slepen",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/07-planning.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 577.16,
+          "height": 78
+        },
+        "firstSeen": 48.884,
+        "lastSeen": 48.884,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          48.884
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 48.884,
+        "selector": "div.window.a > div:nth-of-type(1) > span:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 189,
+          "top": 261,
+          "right": 313.75,
+          "bottom": 280,
+          "width": 124.75,
+          "height": 19
+        },
+        "containerSelector": "#f08-mobiel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Projectplanning",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/07-planning.html",
+        "bbox": {
+          "x": 189,
+          "y": 261,
+          "width": 124.75,
+          "height": 19
+        },
+        "firstSeen": 48.884,
+        "lastSeen": 48.884,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          48.884
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 59.345,
+        "selector": "#f08-mobiel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 120,
+          "right": 271.67,
+          "bottom": 147,
+          "width": 175.67,
+          "height": 27
+        },
+        "containerSelector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "EVA MOBIEL",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/08-mobiel.html",
+        "bbox": {
+          "x": 96,
+          "y": 120,
+          "width": 175.67,
+          "height": 27
+        },
+        "firstSeen": 59.345,
+        "lastSeen": 59.345,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          59.345
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 59.345,
+        "selector": "#f08-mobiel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 158,
+          "right": 591.36,
+          "bottom": 305.11,
+          "width": 495.36,
+          "height": 147.11
+        },
+        "containerSelector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "De bouwplaats doet mee",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/08-mobiel.html",
+        "bbox": {
+          "x": 96,
+          "y": 158,
+          "width": 495.36,
+          "height": 147.11
+        },
+        "firstSeen": 59.345,
+        "lastSeen": 59.345,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          59.345
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 67.995,
+        "selector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 120,
+          "right": 416.92,
+          "bottom": 147,
+          "width": 320.92,
+          "height": 27
+        },
+        "containerSelector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "HOUTROTREGISTRATIE",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 96,
+          "y": 120,
+          "width": 320.92,
+          "height": 27
+        },
+        "firstSeen": 67.995,
+        "lastSeen": 67.995,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          67.995
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 67.995,
+        "selector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 158,
+          "right": 550.34,
+          "bottom": 305.11,
+          "width": 454.34,
+          "height": 147.11
+        },
+        "containerSelector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Elke reparatie vastgelegd",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 96,
+          "y": 158,
+          "width": 454.34,
+          "height": 147.11
+        },
+        "firstSeen": 67.995,
+        "lastSeen": 67.995,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          67.995
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 67.995,
+        "selector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 319.22,
+          "right": 735.33,
+          "bottom": 431.59,
+          "width": 639.33,
+          "height": 112.37
+        },
+        "containerSelector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Locatie, werkzaamheden en een voor- en na-foto — kantoor ziet meteen het reparatietotaal.",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 96,
+          "y": 319.22,
+          "width": 639.33,
+          "height": 112.37
+        },
+        "firstSeen": 67.995,
+        "lastSeen": 67.995,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          67.995
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 67.995,
+        "selector": "#f09-houtrot > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 792,
+          "top": 306,
+          "right": 859.64,
+          "bottom": 322,
+          "width": 67.64,
+          "height": 16
+        },
+        "containerSelector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > b:nth-of-type(1)",
+        "text": "LOCATIE",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 792,
+          "y": 306,
+          "width": 67.64,
+          "height": 16
+        },
+        "firstSeen": 67.995,
+        "lastSeen": 67.995,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          67.995
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 67.995,
+        "selector": "div.loc > span:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 804,
+          "top": 340,
+          "right": 882.89,
+          "bottom": 359,
+          "width": 78.89,
+          "height": 19
+        },
+        "containerSelector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > b:nth-of-type(1)",
+        "text": "Voorgevel",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 804,
+          "y": 340,
+          "width": 78.89,
+          "height": 19
+        },
+        "firstSeen": 67.995,
+        "lastSeen": 67.995,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          67.995
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 73.639,
+        "selector": "div.qc.photo > svg:nth-of-type(1) > rect:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 1240,
+          "top": 451,
+          "right": 1800,
+          "bottom": 681,
+          "width": 560,
+          "height": 230
+        },
+        "containerSelector": "div.qc.photo > svg:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 1249,
+          "top": 451,
+          "right": 1791,
+          "bottom": 681,
+          "width": 542,
+          "height": 230
+        },
+        "overflow": {
+          "left": 9,
+          "right": 9
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 1240,
+          "y": 451,
+          "width": 560,
+          "height": 230
+        },
+        "firstSeen": 73.639,
+        "lastSeen": 73.639,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          73.639
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 73.639,
+        "selector": "div.qc.photo > svg:nth-of-type(1) > rect:nth-of-type(2)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 1240,
+          "top": 621,
+          "right": 1800,
+          "bottom": 681,
+          "width": 560,
+          "height": 60
+        },
+        "containerSelector": "div.qc.photo > svg:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 1249,
+          "top": 451,
+          "right": 1791,
+          "bottom": 681,
+          "width": 542,
+          "height": 230
+        },
+        "overflow": {
+          "left": 9,
+          "right": 9
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 1240,
+          "y": 621,
+          "width": 560,
+          "height": 60
+        },
+        "firstSeen": 73.639,
+        "lastSeen": 73.639,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          73.639
+        ]
+      },
+      {
+        "code": "container_overflow",
+        "severity": "info",
+        "time": 73.639,
+        "selector": "div.qc.photo > svg:nth-of-type(1) > polygon:nth-of-type(1)",
+        "message": "Element extends outside a clipping layout container.",
+        "rect": {
+          "left": 1340,
+          "top": 441,
+          "right": 1700,
+          "bottom": 496,
+          "width": 360,
+          "height": 55
+        },
+        "containerSelector": "div.qc.photo > svg:nth-of-type(1)",
+        "fixHint": "Resize/reposition the child or container, or mark intentional overflow with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 1249,
+          "top": 451,
+          "right": 1791,
+          "bottom": 681,
+          "width": 542,
+          "height": 230
+        },
+        "overflow": {
+          "top": 10
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 1340,
+          "y": 441,
+          "width": 360,
+          "height": 55
+        },
+        "firstSeen": 73.639,
+        "lastSeen": 73.639,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          73.639
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 75.438,
+        "selector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 120,
+          "right": 452.36,
+          "bottom": 147,
+          "width": 356.36,
+          "height": 27
+        },
+        "containerSelector": "#f11-enquete > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "VEILIGHEID & KWALITEIT",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 96,
+          "y": 120,
+          "width": 356.36,
+          "height": 27
+        },
+        "firstSeen": 75.438,
+        "lastSeen": 75.438,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          75.438
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 75.438,
+        "selector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 158,
+          "right": 672.2,
+          "bottom": 374.22,
+          "width": 576.2,
+          "height": 216.22
+        },
+        "containerSelector": "#f11-enquete > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Ter plekke ingevuld, meteen vastgelegd",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 96,
+          "y": 158,
+          "width": 576.2,
+          "height": 216.22
+        },
+        "firstSeen": 75.438,
+        "lastSeen": 75.438,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          75.438
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 75.438,
+        "selector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 849,
+          "top": 479,
+          "right": 1039.39,
+          "bottom": 519,
+          "width": 190.39,
+          "height": 40
+        },
+        "containerSelector": "div.app > p:nth-of-type(1)",
+        "text": "Afzetting werkgebied geplaatst",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 849,
+          "y": 479,
+          "width": 190.39,
+          "height": 40
+        },
+        "firstSeen": 75.438,
+        "lastSeen": 75.438,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          75.438
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 75.438,
+        "selector": "#f10-kwaliteit > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(4)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 849,
+          "top": 565,
+          "right": 1055.89,
+          "bottom": 605,
+          "width": 206.89,
+          "height": 40
+        },
+        "containerSelector": "#f11-enquete > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3)",
+        "text": "Weersomstandigheden beoordeeld",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/10-kwaliteit.html",
+        "bbox": {
+          "x": 849,
+          "y": 565,
+          "width": 206.89,
+          "height": 40
+        },
+        "firstSeen": 75.438,
+        "lastSeen": 75.438,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          75.438
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 83.887,
+        "selector": "#f11-enquete > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 158,
+          "right": 646.8,
+          "bottom": 305.11,
+          "width": 550.8,
+          "height": 147.11
+        },
+        "containerSelector": "#f12-portaal > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Bewoners geven een cijfer",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/11-enquete.html",
+        "bbox": {
+          "x": 96,
+          "y": 158,
+          "width": 550.8,
+          "height": 147.11
+        },
+        "firstSeen": 83.887,
+        "lastSeen": 83.887,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          83.887
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 83.887,
+        "selector": "#f11-enquete > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(3)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 319.22,
+          "right": 714.22,
+          "bottom": 431.59,
+          "width": 618.22,
+          "height": 112.37
+        },
+        "containerSelector": "#f12-portaal > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(1)",
+        "text": "Eén link na de oplevering. EVA vat de cijfers samen; aandachtspunten komen met foto bij de projectleider.",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/11-enquete.html",
+        "bbox": {
+          "x": 96,
+          "y": 319.22,
+          "width": 618.22,
+          "height": 112.37
+        },
+        "firstSeen": 83.887,
+        "lastSeen": 83.887,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          83.887
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 90.325,
+        "selector": "#f12-portaal > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 321.8,
+          "bottom": 115,
+          "width": 225.8,
+          "height": 27
+        },
+        "containerSelector": "#f13-financieel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "KLANTPORTAAL",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/12-portaal.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 225.8,
+          "height": 27
+        },
+        "firstSeen": 90.325,
+        "lastSeen": 90.325,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          90.325
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 98.975,
+        "selector": "#f13-financieel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 266.64,
+          "bottom": 115,
+          "width": 170.64,
+          "height": 27
+        },
+        "containerSelector": "#f14-servicedesk > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "FINANCIEEL",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/13-financieel.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 170.64,
+          "height": 27
+        },
+        "firstSeen": 98.975,
+        "lastSeen": 98.975,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          98.975
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 98.975,
+        "selector": "#f13-financieel > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 780.42,
+          "bottom": 204,
+          "width": 684.42,
+          "height": 78
+        },
+        "containerSelector": "#f14-servicedesk > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "En dan sluit de cirkel",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/13-financieel.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 684.42,
+          "height": 78
+        },
+        "firstSeen": 98.975,
+        "lastSeen": 98.975,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          98.975
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 107.424,
+        "selector": "#f14-servicedesk > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 88,
+          "right": 292.3,
+          "bottom": 115,
+          "width": 196.3,
+          "height": 27
+        },
+        "containerSelector": "#f15-meer > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1)",
+        "text": "SERVICEDESK",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/14-servicedesk.html",
+        "bbox": {
+          "x": 96,
+          "y": 88,
+          "width": 196.3,
+          "height": 27
+        },
+        "firstSeen": 107.424,
+        "lastSeen": 107.424,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          107.424
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 107.424,
+        "selector": "#f14-servicedesk > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 96,
+          "top": 126,
+          "right": 901.83,
+          "bottom": 204,
+          "width": 805.83,
+          "height": 78
+        },
+        "containerSelector": "#f15-meer > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2)",
+        "text": "Kleine klussen, één bord",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/14-servicedesk.html",
+        "bbox": {
+          "x": 96,
+          "y": 126,
+          "width": 805.83,
+          "height": 78
+        },
+        "firstSeen": 107.424,
+        "lastSeen": 107.424,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          107.424
+        ]
+      }
+    ],
+    "duration": 120.5,
+    "samples": [
+      6.694,
+      20.083,
+      33.472,
+      46.861,
+      60.25,
+      73.639,
+      87.028,
+      100.417,
+      113.806
+    ],
+    "transitionSamples": [],
+    "transitionSamplesDropped": 0,
+    "tolerance": 2,
+    "totalIssueCount": 42,
+    "truncated": false
+  },
+  "motion": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [],
+    "enabled": false,
+    "samples": 0
+  },
+  "contrast": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 11,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.26:1; WCAG AA requires 4.5:1.",
+        "text": "eva.everts.nl · Planning",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(241,244,245)",
+        "ratio": 4.26,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(104,113,120)",
+        "large": false,
+        "selector": "div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > span",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-intro.html",
+        "bbox": {
+          "x": 939.984130859375,
+          "y": 161,
+          "width": 178.515625,
+          "height": 19
+        },
+        "time": 6.694,
+        "times": [
+          6.694
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.26:1; WCAG AA requires 4.5:1.",
+        "text": "Calculatie · Meetstaat opname gevels",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(241,244,245)",
+        "ratio": 4.26,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(104,113,120)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div > div:nth-of-type(3) > div:nth-of-type(1) > span",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 189,
+          "y": 261,
+          "width": 289.40625,
+          "height": 19
+        },
+        "time": 33.472,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.26:1; WCAG AA requires 4.5:1.",
+        "text": "Recepten",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(241,244,245)",
+        "ratio": 4.26,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(104,113,120)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div > div:nth-of-type(4) > div:nth-of-type(2) > span:nth-of-type(1)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 1409,
+          "y": 340,
+          "width": 113.1875,
+          "height": 36
+        },
+        "time": 33.472,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 3.97:1; WCAG AA requires 4.5:1.",
+        "text": "Schilderwerk",
+        "fg": "rgb(255,255,255)",
+        "bg": "rgb(0,148,57)",
+        "ratio": 3.97,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(23,23,23)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div > div:nth-of-type(4) > div:nth-of-type(2) > span:nth-of-type(2)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 1530.1875,
+          "y": 340,
+          "width": 145.765625,
+          "height": 36
+        },
+        "time": 33.472,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.26:1; WCAG AA requires 4.5:1.",
+        "text": "Materialen",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(241,244,245)",
+        "ratio": 4.26,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(104,113,120)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div > div:nth-of-type(4) > div:nth-of-type(2) > span:nth-of-type(3)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-calculatie.html",
+        "bbox": {
+          "x": 1683.953125,
+          "y": 340,
+          "width": 123.015625,
+          "height": 36
+        },
+        "time": 33.472,
+        "times": [
+          33.472
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 2.67:1; WCAG AA requires 4.5:1.",
+        "text": "VvE Laan van Meervoort · voorgevel",
+        "fg": "rgb(210,242,221)",
+        "bg": "rgb(70,163,48)",
+        "ratio": 2.67,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(37,43,39)",
+        "large": false,
+        "selector": "div > div:nth-of-type(9) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div:nth-of-type(1) > small",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 798,
+          "y": 233.10540771484375,
+          "width": 275.484375,
+          "height": 19
+        },
+        "time": 60.25,
+        "times": [
+          60.25
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.49:1; WCAG AA requires 4.5:1.",
+        "text": "Locatie",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(248,250,250)",
+        "ratio": 4.49,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(106,116,123)",
+        "large": false,
+        "selector": "div > div:nth-of-type(9) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 792,
+          "y": 306.10540771484375,
+          "width": 336,
+          "height": 16
+        },
+        "time": 60.25,
+        "times": [
+          60.25
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.49:1; WCAG AA requires 4.5:1.",
+        "text": "Werkzaamheden",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(248,250,250)",
+        "ratio": 4.49,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(106,116,123)",
+        "large": false,
+        "selector": "div > div:nth-of-type(9) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(3)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 792,
+          "y": 381.10540771484375,
+          "width": 336,
+          "height": 16
+        },
+        "time": 60.25,
+        "times": [
+          60.25
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.49:1; WCAG AA requires 4.5:1.",
+        "text": "Foto's",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(248,250,250)",
+        "ratio": 4.49,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(106,116,123)",
+        "large": false,
+        "selector": "div > div:nth-of-type(9) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(7)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/09-houtrot.html",
+        "bbox": {
+          "x": 792,
+          "y": 615.1054077148438,
+          "width": 336,
+          "height": 16
+        },
+        "time": 60.25,
+        "times": [
+          60.25
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.26:1; WCAG AA requires 4.5:1.",
+        "text": "portaal.everts.nl · VvE Laan van Meervoort 412–480",
+        "fg": "rgb(107,117,124)",
+        "bg": "rgb(241,244,245)",
+        "ratio": 4.26,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(104,113,120)",
+        "large": false,
+        "selector": "div > div:nth-of-type(12) > div > div:nth-of-type(3) > div:nth-of-type(1) > span",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/12-portaal.html",
+        "bbox": {
+          "x": 189,
+          "y": 261,
+          "width": 390.6875,
+          "height": 19
+        },
+        "time": 87.028,
+        "times": [
+          87.028
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 3.95:1; WCAG AA requires 4.5:1.",
+        "text": "Je eigen assistent in EVA",
+        "fg": "rgb(210,242,221)",
+        "bg": "rgb(17,133,50)",
+        "ratio": 3.95,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(243,251,246)",
+        "large": false,
+        "selector": "div > div:nth-of-type(15) > div > div:nth-of-type(3) > div:nth-of-type(6) > div:nth-of-type(2) > p",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/15-meer.html",
+        "bbox": {
+          "x": 1310.328125,
+          "y": 864,
+          "width": 472.671875,
+          "height": 27
+        },
+        "time": 113.806,
+        "times": [
+          113.806
+        ]
+      }
+    ],
+    "enabled": true,
+    "samples": [
+      6.694,
+      33.472,
+      60.25,
+      87.028,
+      113.806
+    ],
+    "checked": 67,
+    "passed": 56
+  },
+  "hdr": {
+    "autoPromotion": null,
+    "inspection": "available"
+  },
+  "snapshots": {
+    "enabled": false,
+    "files": [],
+    "times": [],
+    "findingFiles": []
+  }
+}

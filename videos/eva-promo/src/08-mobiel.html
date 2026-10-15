@@ -2,8 +2,8 @@
 #ID .copy { top: 120px; width: 620px; }
 #ID .feats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 #ID .phone.p1 { left: 760px; top: 140px; }
-#ID .phone.p2 { left: 1120px; top: 200px; transform: scale(.88); transform-origin: top left; }
-#ID .phone.p3 { left: 1440px; top: 260px; transform: scale(.76); transform-origin: top left; }
+#ID .phone.p2 { left: 1120px; top: 200px; }
+#ID .phone.p3 { left: 1440px; top: 260px; }
 #ID .lang { position: absolute; top: 1010px; font-size: 22px; font-weight: 800; color: #0a5e28; letter-spacing: .1em; text-transform: uppercase; }
 </style>
 <div class="bg-light"></div>
@@ -14,3 +14,16 @@
 <div class="phone p3"><div class="notch"></div><div class="screen"><img src="assets/img/phone-ta.png" alt="" /></div></div>
 <div class="phone p2"><div class="notch"></div><div class="screen"><img src="assets/img/phone-pl.png" alt="" /></div></div>
 <div class="phone p1"><div class="notch"></div><div class="screen"><img src="assets/img/phone-nl.png" alt="" /></div></div>
+
+<script>
+
+tl.set(q('.phone.p2'), { scale: 0.88, transformOrigin: 'top left' }, 0);
+tl.set(q('.phone.p3'), { scale: 0.76, transformOrigin: 'top left' }, 0);
+A('.phone.p1', 0.4, { y: 200, d: 1.1 });
+A('.feats .chip', 2.4, { y: 16, st: 0.4, d: 0.5, e: 'back.out(1.6)' });
+A('.phone.p2', 7.2, { x: 120, y: 0, d: 0.9 });
+A('.phone.p3', 8.2, { x: 120, y: 0, d: 0.9 });
+tl.to(q('.phone.p1 .screen img'), { y: -260, duration: 3, ease: 'sine.inOut' }, 3.0);
+tl.to(q('.phone.p1 .screen img'), { y: 0, duration: 1.4, ease: 'sine.inOut' }, 6.4);
+
+</script>

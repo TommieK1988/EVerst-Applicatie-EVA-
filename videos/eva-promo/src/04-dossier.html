@@ -5,7 +5,7 @@
 #ID .groups { position: absolute; left: 460px; top: 250px; display: flex; gap: 32px; }
 #ID .grp { width: 430px; padding: 32px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.25); }
 #ID .grp h3 { font-size: 30px; font-weight: 800; margin-bottom: 8px; }
-#ID .grp .n { font-size: 20px; font-weight: 700; color: #6b757c; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 24px; }
+#ID .grp .n { font-size: 20px; font-weight: 700; color: #5b656c; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 24px; }
 #ID .grp ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
 #ID .grp li { font-size: 26px; font-weight: 600; padding: 16px 20px; border-radius: 10px; background: #f8fafa; border: 1px solid #e3e8ea; display: flex; align-items: center; gap: 16px; }
 #ID .grp li::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: #009439; }
@@ -13,7 +13,7 @@
 #ID .obj { position: absolute; left: 460px; top: 790px; width: 1354px; padding: 28px 36px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea;
   box-shadow: 0 30px 60px -28px rgba(16,40,28,.25); display: flex; align-items: center; gap: 32px; }
 #ID .obj .ic { width: 88px; height: 88px; border-radius: 20px; background: #ecfaf0; display: flex; align-items: center; justify-content: center; flex: none; }
-#ID .obj h4 { font-size: 32px; font-weight: 800; } #ID .obj p { font-size: 22px; color: #6b757c; font-weight: 500; margin-top: 6px; }
+#ID .obj h4 { font-size: 32px; font-weight: 800; } #ID .obj p { font-size: 22px; color: #5b656c; font-weight: 500; margin-top: 6px; }
 #ID .obj .meta { margin-left: auto; display: flex; gap: 12px; }
 </style>
 <div class="bg-light"></div>
@@ -27,3 +27,13 @@
 <div class="obj"><div class="ic"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#009439" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M10 21v-4h4v4"/></svg></div>
 <div><div class="eyebrow" style="font-size:16px">Object</div><h4>VvE Laan van Meervoort 412–480</h4><p>Den Haag · 64 woningen · objectnr. OB-1043</p></div>
 <div class="meta"><span class="chip">3 lopende dossiers</span><span class="chip">VvE-code LvM-412</span></div></div>
+
+<script>
+
+A('.side', 0.3, { x: -80, y: 0, d: 1 });
+A('.grp', 0.8, { y: 60, st: 0.25 });
+A('.grp li', 1.3, { y: 16, st: 0.07, d: 0.5 });
+A('.obj', 3.6, { y: 80, d: 0.9 });
+A('.obj .chip', 4.4, { y: 10, st: 0.15, d: 0.5 });
+
+</script>

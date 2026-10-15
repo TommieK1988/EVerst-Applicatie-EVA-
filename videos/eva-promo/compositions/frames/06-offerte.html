@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f06-offerte .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f06-offerte .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f06-offerte .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f06-offerte .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f06-offerte .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f06-offerte .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f06-offerte .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -43,16 +43,16 @@
 #f06-offerte .doc { position: absolute; left: 96px; top: 250px; width: 1080px; height: 860px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 40px 80px -24px rgba(16,40,28,.28); padding: 56px 72px; }
 #f06-offerte .doc .hd { display: flex; justify-content: space-between; align-items: flex-start; }
 #f06-offerte .doc .hd img { width: 260px; border-radius: 6px; }
-#f06-offerte .doc .hd .r { text-align: right; font-size: 18px; color: #6b757c; font-weight: 500; line-height: 1.6; }
+#f06-offerte .doc .hd .r { text-align: right; font-size: 18px; color: #5b656c; font-weight: 500; line-height: 1.6; }
 #f06-offerte .doc h2 { font-size: 40px; font-weight: 800; margin-top: 40px; } #f06-offerte .doc .to { font-size: 20px; color: #364048; margin-top: 8px; font-weight: 500; }
 #f06-offerte .doc table { width: 100%; border-collapse: collapse; margin-top: 32px; font-size: 20px; }
-#f06-offerte .doc th { text-align: left; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #6b757c; padding: 10px 0; border-bottom: 2px solid #e3e8ea; }
+#f06-offerte .doc th { text-align: left; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #5b656c; padding: 10px 0; border-bottom: 2px solid #e3e8ea; }
 #f06-offerte .doc td { padding: 16px 0; border-bottom: 1px solid #f1f4f5; font-weight: 600; } #f06-offerte .doc td.n { text-align: right; }
 #f06-offerte .doc tr.tot td { border-bottom: none; font-size: 26px; font-weight: 800; color: #0a5e28; padding-top: 24px; }
 #f06-offerte .side { position: absolute; left: 1240px; top: 250px; width: 584px; display: flex; flex-direction: column; gap: 20px; }
 #f06-offerte .step { display: flex; align-items: center; gap: 20px; padding: 24px 28px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; font-size: 26px; font-weight: 700; }
 #f06-offerte .step .d { width: 44px; height: 44px; border-radius: 50%; background: #009439; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; flex: none; }
-#f06-offerte .step small { display: block; font-size: 18px; font-weight: 500; color: #6b757c; margin-top: 2px; }
+#f06-offerte .step small { display: block; font-size: 18px; font-weight: 500; color: #5b656c; margin-top: 2px; }
 #f06-offerte .send { margin-top: 12px; padding: 28px; border-radius: 14px; background: #009439; color: #fff; text-align: center; font-size: 30px; font-weight: 800; box-shadow: 0 20px 40px -16px rgba(0,148,57,.6); }
 #f06-offerte .badge { left: 1180px; top: 150px; }
 
@@ -83,6 +83,24 @@
           const R = '#f06-offerte';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 9;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+A('.doc', 0.3, { y: 80, d: 1 });
+A('.doc tr', 1.0, { y: 14, st: 0.12, d: 0.5 });
+A('.badge', 1.3, { y: 0, s: 0.6, e: 'back.out(1.8)', d: 0.6 });
+A('.step', 2.4, { x: 60, y: 0, st: 1.2, d: 0.6 });
+A('.send', 5.6, { y: 30, d: 0.6 });
+tl.to(q('.send'), { scale: 0.95, duration: 0.12, yoyo: true, repeat: 1 }, 6.6);
+tl.fromTo(q('.step .d'), { scale: 0.4 }, { scale: 1, duration: 0.5, ease: 'back.out(2.5)', stagger: 1.2 }, 2.6);
+
 
           window.__timelines["f06-offerte"] = tl;
         })();

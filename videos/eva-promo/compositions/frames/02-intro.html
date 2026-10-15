@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f02-intro .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f02-intro .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f02-intro .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f02-intro .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f02-intro .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f02-intro .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f02-intro .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -44,7 +44,7 @@
 #f02-intro .head { font-size: 84px; }
 #f02-intro .logo { width: 360px; border-radius: 10px; box-shadow: 0 20px 40px -20px rgba(0,0,0,.5); margin-bottom: 24px; }
 #f02-intro .window { left: 860px; top: 150px; width: 1180px; height: 700px; }
-#f02-intro .phone { left: 760px; top: 220px; transform: scale(.82); transform-origin: top left; }
+#f02-intro .phone { left: 760px; top: 220px; }
 
       </style>
       <div id="f02-intro" data-composition-id="f02-intro" data-width="1920" data-height="1080">
@@ -60,6 +60,22 @@
           const R = '#f02-intro';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 6;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+tl.set(q('.phone'), { scale: 0.82, transformOrigin: 'top left' }, 0);
+K('.bg-brand', { scale: 1.06 }, { scale: 1 });
+A('.window', 0.6, { x: 240, y: 0, d: 1.2 });
+A('.phone', 1.1, { y: 240, d: 1.1 });
+tl.to(q('.window'), { x: -40, duration: D - 1.8, ease: 'none' }, 1.8);
+
 
           window.__timelines["f02-intro"] = tl;
         })();

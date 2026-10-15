@@ -2,9 +2,9 @@
 #ID .grid { position: absolute; left: 96px; top: 300px; width: 1728px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
 #ID .t { height: 300px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -30px rgba(16,40,28,.3); padding: 40px; display: flex; flex-direction: column; justify-content: space-between; }
 #ID .t .ic { width: 88px; height: 88px; border-radius: 20px; background: #ecfaf0; display: flex; align-items: center; justify-content: center; }
-#ID .t h4 { font-size: 36px; font-weight: 800; } #ID .t p { font-size: 22px; font-weight: 500; color: #6b757c; margin-top: 8px; }
+#ID .t h4 { font-size: 36px; font-weight: 800; } #ID .t p { font-size: 22px; font-weight: 500; color: #5b656c; margin-top: 8px; }
 #ID .t.eva { background: #054f2e url(assets/img/polygon-bg.png) center / cover; border-color: #054f2e; }
-#ID .t.eva h4 { color: #fff; } #ID .t.eva p { color: #d2f2dd; } #ID .t.eva .ic { background: rgba(255,255,255,.16); }
+#ID .t.eva h4 { color: #fff; } #ID .t.eva p { color: #fff; } #ID .t.eva .ic { background: rgba(255,255,255,.16); }
 </style>
 <div class="bg-light"></div>
 <div class="copy"><div class="eyebrow">En nog veel meer</div><div class="head">Alles zit erin</div></div>
@@ -16,3 +16,10 @@
   <div class="t"><div class="ic"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#009439" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><div><h4>Mijn acties</h4><p>Samen met Microsoft To Do</p></div></div>
   <div class="t eva"><div class="ic"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><h4>Vraag EVA</h4><p>Je eigen assistent in EVA</p></div></div>
 </div>
+
+<script>
+
+A('.t', 0.6, { y: 50, s: 0.96, st: 0.75, d: 0.7 });
+tl.fromTo(q('.t.eva'), { scale: 1 }, { scale: 1.04, duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 5.6);
+
+</script>

@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f05-calculatie .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f05-calculatie .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f05-calculatie .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f05-calculatie .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f05-calculatie .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f05-calculatie .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f05-calculatie .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -45,18 +45,19 @@
 #f05-calculatie .pb { position: absolute; left: 1384px; top: 250px; width: 440px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.3); overflow: hidden; }
 #f05-calculatie .pb .h { padding: 24px 24px 12px; } #f05-calculatie .pb h4 { font-size: 28px; font-weight: 800; }
 #f05-calculatie .pb .tabs { display: flex; gap: 8px; padding: 0 24px 16px; border-bottom: 1px solid #e3e8ea; }
-#f05-calculatie .pb .tabs span { font-size: 17px; font-weight: 700; padding: 8px 14px; border-radius: 999px; color: #6b757c; background: #f1f4f5; }
-#f05-calculatie .pb .tabs span.on { background: #009439; color: #fff; }
+#f05-calculatie .pb .tabs span { font-size: 17px; font-weight: 700; padding: 8px 14px; border-radius: 999px; color: #5b656c; background: #f1f4f5; }
+#f05-calculatie .pb .tabs span.on { background: #007530; color: #fff; }
 #f05-calculatie .pb .r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid #f1f4f5; font-size: 19px; font-weight: 600; }
-#f05-calculatie .pb .r small { display: block; font-size: 15px; color: #6b757c; font-weight: 500; margin-top: 2px; }
+#f05-calculatie .pb .r small { display: block; font-size: 15px; color: #5b656c; font-weight: 500; margin-top: 2px; }
 #f05-calculatie .pb .r .mono { font-size: 19px; color: #0a5e28; white-space: nowrap; }
+#f05-calculatie .scan { position: absolute; left: 0; right: 0; top: 230px; height: 46px; background: rgba(0,148,57,.10); border-top: 2px solid rgba(0,148,57,.5); border-bottom: 2px solid rgba(0,148,57,.5); z-index: 3; }
 
       </style>
       <div id="f05-calculatie" data-composition-id="f05-calculatie" data-width="1920" data-height="1080">
 <div class="bg-light"></div>
 <div class="copy"><div class="eyebrow">Meetstaat &amp; calculatie</div><div class="head">Van meetstaat naar offerte</div></div>
 
-<div class="window"><div class="bar"><i></i><i></i><i></i><span>Calculatie · Meetstaat opname gevels</span></div><div class="shot"><img src="assets/img/pv-meetstaat.png" alt="" /></div></div>
+<div class="window"><div class="bar"><i></i><i></i><i></i><span>Calculatie · Meetstaat opname gevels</span></div><div class="shot"><img src="assets/img/pv-meetstaat.png" alt="" /><div class="scan"></div></div></div>
 <div class="pb"><div class="h"><div class="eyebrow" style="font-size:15px">Prijzenboek</div><h4>Normen &amp; prijzen</h4></div>
 <div class="tabs"><span>Recepten</span><span class="on">Schilderwerk</span><span>Materialen</span></div>
 <div class="r"><div>Kozijn buiten, 3-laags<small>norm 0,42 u/m¹</small></div><span class="mono">€ 18,40 /m¹</span></div>
@@ -71,6 +72,25 @@
           const R = '#f05-calculatie';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 9;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+A('.window', 0.3, { y: 80, d: 1 });
+K('.shot img', { scale: 1, transformOrigin: '20% 30%' }, { scale: 1.12 }, 0.3);
+tl.fromTo(q('.scan'), { y: 0, opacity: 0 }, { opacity: 1, duration: 0.3 }, 1.4);
+tl.to(q('.scan'), { y: 330, duration: 2.6, ease: 'power1.inOut' }, 1.5);
+tl.to(q('.scan'), { opacity: 0, duration: 0.4 }, 4.1);
+A('.pb', 4.3, { x: 100, y: 0, d: 0.9 });
+A('.pb .r', 4.9, { x: 30, y: 0, st: 0.18, d: 0.5 });
+tl.fromTo(q('.pb .tabs span.on'), { scale: 0.8 }, { scale: 1, duration: 0.4, ease: 'back.out(2)' }, 5.0);
+
 
           window.__timelines["f05-calculatie"] = tl;
         })();

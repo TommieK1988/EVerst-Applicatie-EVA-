@@ -1,11 +1,15 @@
 // Schrijft index.html: monteert elke frame-compositie op zijn startmoment (schetsfase).
 import { writeFileSync } from 'node:fs';
-const frames = [['01-hook',4],['02-intro',6],['03-postvak',9],['04-dossier',8],['05-calculatie',9],['06-offerte',9],['07-planning',7],['08-mobiel',11],['09-houtrot',9],['10-kwaliteit',8],['11-enquete',9],['12-portaal',7],['13-financieel',9],['14-servicedesk',9],['15-meer',8],['16-outro',6]];
-let t = 0; const hosts = [];
+import { readFileSync as rf } from 'node:fs';
+const frames = JSON.parse(rf('scripts/frames.json','utf8'));
+const X = 0.5; // overlap/crossfade tussen scènes
+let t = 0; const hosts = []; const fades = [];
 for (const [f, d] of frames) {
-  hosts.push(`      <div id="f${f}" data-composition-id="f${f}" data-composition-src="compositions/frames/${f}.html" data-start="${t}" data-duration="${d}" data-track-index="1" data-width="1920" data-height="1080"></div>`);
-  t += d;
+  hosts.push(`      <div id="f${f}" data-composition-id="f${f}" data-composition-src="compositions/frames/${f}.html" data-start="${t}" data-duration="${d}" data-track-index="${hosts.length % 2 + 1}" data-width="1920" data-height="1080"></div>`);
+  if (t > 0) fades.push(`      tl.fromTo('#f${f}', { opacity: 0 }, { opacity: 1, duration: ${X}, ease: 'power1.inOut' }, ${t});`);
+  t += d - X;
 }
+t += X;
 writeFileSync('index.html', `<!doctype html>
 <html lang="nl">
   <head>
@@ -21,9 +25,11 @@ writeFileSync('index.html', `<!doctype html>
   <body>
     <div id="main" data-composition-id="main" data-start="0" data-duration="${t}" data-width="1920" data-height="1080">
 ${hosts.join('\n')}
+      <audio id="el-bgm" src="assets/audio/muziek.m4a" data-start="0" data-duration="${t}" data-track-index="10" data-volume="0.5"></audio>
     </div>
     <script>
       const tl = gsap.timeline({ paused: true });
+${fades.join('\n')}
       window.__timelines["main"] = tl;
     </script>
   </body>

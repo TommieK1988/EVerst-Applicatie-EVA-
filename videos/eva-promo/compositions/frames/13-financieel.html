@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f13-financieel .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f13-financieel .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f13-financieel .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f13-financieel .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f13-financieel .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f13-financieel .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f13-financieel .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -44,7 +44,7 @@
 #f13-financieel .shot img { width: 1100px; }
 #f13-financieel .kpis { position: absolute; left: 1260px; top: 250px; width: 564px; display: flex; flex-direction: column; gap: 24px; }
 #f13-financieel .kpi { padding: 28px 32px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.3); }
-#f13-financieel .kpi .l { font-size: 18px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6b757c; }
+#f13-financieel .kpi .l { font-size: 18px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5b656c; }
 #f13-financieel .kpi .v { font-size: 56px; font-weight: 500; color: #161b20; margin-top: 8px; }
 #f13-financieel .kpi .v.g { color: #009439; }
 #f13-financieel .badge { position: relative; }
@@ -66,6 +66,27 @@
           const R = '#f13-financieel';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 9;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+A('.window', 0.3, { y: 80, d: 1 });
+K('.shot img', { scale: 1, transformOrigin: '0% 0%' }, { scale: 1.08 }, 0.3);
+A('.kpi', 1.6, { x: 80, y: 0, st: 0.4, d: 0.7 });
+const nums = document.querySelectorAll(q('.kpi .v'));
+const tgt = [141625, 44412];
+nums.forEach((el, i) => {
+  const o = { v: 0 };
+  tl.to(o, { v: tgt[i], duration: 1.6, ease: 'power2.out', onUpdate: () => { el.textContent = '€ ' + Math.round(o.v).toLocaleString('nl-NL'); } }, 1.8 + i * 0.4);
+});
+A('.badge', 4.8, { x: 60, y: 0, st: 1.2, d: 0.6 });
+
 
           window.__timelines["f13-financieel"] = tl;
         })();

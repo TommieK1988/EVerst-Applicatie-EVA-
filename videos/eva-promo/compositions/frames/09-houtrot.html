@@ -24,7 +24,7 @@
   box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
 #f09-houtrot .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
 #f09-houtrot .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
-#f09-houtrot .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f09-houtrot .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #5b656c; }
 #f09-houtrot .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
 #f09-houtrot .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 #f09-houtrot .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
@@ -43,10 +43,10 @@
 #f09-houtrot .copy { width: 640px; top: 120px; }
 #f09-houtrot .phone { left: 760px; top: 120px; }
 #f09-houtrot .app { position: absolute; inset: 0; background: #f8fafa; }
-#f09-houtrot .app .top { height: 150px; background: #054f2e url(assets/img/polygon-bg.png) center / cover; padding: 70px 24px 0; color: #fff; }
-#f09-houtrot .app .top b { font-size: 24px; font-weight: 800; display: block; } #f09-houtrot .app .top small { font-size: 15px; font-weight: 600; color: #d2f2dd; }
+#f09-houtrot .app .top { height: 150px; background: linear-gradient(rgba(1,58,32,.6), rgba(1,58,32,.6)), #054f2e url(assets/img/polygon-bg.png) center / cover; padding: 70px 24px 0; color: #fff; }
+#f09-houtrot .app .top b { font-size: 24px; font-weight: 800; display: block; } #f09-houtrot .app .top small { font-size: 15px; font-weight: 600; color: #fff; }
 #f09-houtrot .app .body { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
-#f09-houtrot .app .lbl { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6b757c; margin-top: 4px; }
+#f09-houtrot .app .lbl { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #5b656c; margin-top: 4px; }
 #f09-houtrot .app .loc { display: flex; gap: 6px; flex-wrap: wrap; } #f09-houtrot .app .loc span { font-size: 15px; font-weight: 700; padding: 8px 12px; border-radius: 999px; background: #ecfaf0; color: #0a5e28; }
 #f09-houtrot .app .w { background: #fff; border: 1px solid #e3e8ea; border-radius: 12px; padding: 12px 14px; display: flex; gap: 10px; align-items: center; font-size: 16px; font-weight: 600; }
 #f09-houtrot .app .w b { width: 40px; height: 32px; border-radius: 8px; background: #f1f4f5; display: flex; align-items: center; justify-content: center; font-size: 16px; }
@@ -87,6 +87,24 @@
           const R = '#f09-houtrot';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
+          const D = 9;
+          // A: binnenkomen (opacity + verschuiving), stagger optioneel.
+          const A = (sel, at, v = {}) => tl.fromTo(q(sel),
+            { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },
+            { opacity: 1, y: 0, x: 0, scale: 1, duration: v.d ?? 0.8, ease: v.e ?? 'power3.out', stagger: v.st ?? 0 }, at);
+          // K: rustige camerabeweging over de hele scène.
+          const K = (sel, from, to, at = 0, d = D) => tl.fromTo(q(sel), from, { ...to, duration: d, ease: 'sine.inOut' }, at);
+          if (document.querySelector(q('.copy'))) A('.copy > *', 0.15, { st: 0.12 });
+
+
+A('.phone', 0.3, { y: 200, d: 1.1 });
+A('.app .loc span', 1.4, { y: 10, s: 0.8, st: 0.2, d: 0.4, e: 'back.out(2)' });
+A('.app .w', 2.6, { x: -30, y: 0, st: 0.3, d: 0.5 });
+A('.app .ph div', 4.2, { y: 20, s: 0.9, st: 0.6, d: 0.6 });
+A('.desk', 5.6, { x: 100, y: 0, d: 0.9 });
+A('.desk .r', 6.1, { x: 20, y: 0, st: 0.15, d: 0.4 });
+A('.desk .t', 7.0, { y: 10, d: 0.5 });
+
 
           window.__timelines["f09-houtrot"] = tl;
         })();
