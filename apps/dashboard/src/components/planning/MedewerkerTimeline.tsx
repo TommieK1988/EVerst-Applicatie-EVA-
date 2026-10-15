@@ -757,7 +757,7 @@ function TimelineEntry({
   const kleur = kleurOverride ?? dossierKleur(dossier_id)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `timeline-entry-${entry.id}`,
-    data: { type: 'timeline-entry', entry, dossier_id, kleur },
+    data: { type: 'timeline-entry', entry, dossier_id, kleur, breedte: width },
   })
   const taakTitel = entry.planning_activiteiten?.titel ?? '—'
   /** In een dossier-detailplanning is de dossiernaam op élke balk hetzelfde; daar zegt
@@ -1854,7 +1854,7 @@ function MedewerkerTimelineInhoud({
         setActiveItem({
           entry: d.entry, dossier_id: d.dossier_id,
           kleur: d.kleur ?? dossierKleur(d.dossier_id),
-          breedte: e.active.rect.current.initial?.width ?? 160,
+          breedte: d.breedte ?? 160,
         })
       }}
       onDragOver={e => {
