@@ -2201,6 +2201,10 @@ export async function stuurWerkbegrotingBestelregelsBouw7(
         project: { id: Number(bouw7Id) },
         description: r.omschrijving || r.label,
         quantity,
+        // Altijd expliciet 1: de upsert laat een weggelaten factor staan, en Bouw7 rekent
+        // quantity × quantityFactor. Een in Bouw7 gezette factor (20261.00449: 225 × 225 uur)
+        // bleef zo bij elke push hangen en blies de verwachte kosten op tot € 2,3 mln.
+        quantityFactor: '1',
         unitPrice: String(r.prijs),
         costType: r.lineCt,
         ...(r.eenheid ? { unit: r.eenheid } : {}),
