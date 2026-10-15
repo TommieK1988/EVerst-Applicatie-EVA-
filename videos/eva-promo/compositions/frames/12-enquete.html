@@ -88,7 +88,7 @@
           const R = '#f12-enquete';
           const q = (s) => R + ' ' + s;
           const tl = gsap.timeline({ paused: true });
-          const D = 9;
+          const D = 10;
           // A: binnenkomen (opacity + verschuiving), stagger optioneel.
           const A = (sel, at, v = {}) => tl.fromTo(q(sel),
             { opacity: 0, y: v.y ?? 30, x: v.x ?? 0, scale: v.s ?? 1 },

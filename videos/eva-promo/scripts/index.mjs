@@ -1,5 +1,7 @@
 // Schrijft index.html: monteert elke frame-compositie op zijn startmoment (schetsfase).
 import { writeFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+const mediaDuur = (p) => parseFloat(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', p]).toString()).toFixed(2);
 import { readFileSync as rf } from 'node:fs';
 const frames = JSON.parse(rf('scripts/frames.json','utf8'));
 const X = 0.5; // overlap/crossfade tussen scènes
@@ -7,7 +9,7 @@ let t = 0; const hosts = []; const fades = []; const voices = [];
 for (const [f, d] of frames) {
   hosts.push(`      <div id="f${f}" data-composition-id="f${f}" data-composition-src="compositions/frames/${f}.html" data-start="${t}" data-duration="${d}" data-track-index="${hosts.length % 2 + 1}" data-width="1920" data-height="1080"></div>`);
   const vo = `assets/audio/vo-${f.slice(0, 2)}.wav`;
-  if (existsSync(vo)) voices.push(`      <audio id="el-vo-${f.slice(0, 2)}" src="${vo}" data-start="${(t + 0.4).toFixed(2)}" data-duration="${d - 0.4}" data-track-index="11" data-volume="1" data-audio-group="voiceover"></audio>`);
+  if (existsSync(vo)) voices.push(`      <audio id="el-vo-${f.slice(0, 2)}" src="${vo}" data-start="${(t + 0.4).toFixed(2)}" data-duration="${mediaDuur(vo)}" data-track-index="11" data-volume="1" data-audio-group="voiceover"></audio>`);
   if (t > 0) fades.push(`      tl.fromTo('#f${f}', { opacity: 0 }, { opacity: 1, duration: ${X}, ease: 'power1.inOut' }, ${t});`);
   t += d - X;
 }

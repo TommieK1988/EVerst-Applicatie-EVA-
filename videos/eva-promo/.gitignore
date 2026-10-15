@@ -1,3 +1,4 @@
 renders/
 .hyperframes/artifacts/
 .hyperframes/render-outputs.json
+node_modules/
