@@ -17,6 +17,7 @@ export interface TodoLijstWeergave {
   id: string
   naam: string
   actief: boolean
+  gedeeld: boolean | null
   laatst_gesynct: string | null
 }
 
@@ -35,7 +36,7 @@ export async function haalTodoStatus(): Promise<TodoStatus> {
   const koppeling = await controleerKoppeling(mw.id)
   const { data } = await createAdminClient()
     .from('medewerker_todo_lijsten')
-    .select('id, naam, actief, laatst_gesynct')
+    .select('id, naam, actief, gedeeld, laatst_gesynct')
     .eq('medewerker_id', mw.id)
     .order('naam')
     .limit(200)

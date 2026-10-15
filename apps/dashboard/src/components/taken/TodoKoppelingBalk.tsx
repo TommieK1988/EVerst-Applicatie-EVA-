@@ -87,7 +87,10 @@ export default function TodoKoppelingBalk() {
                   )}
                   {status.lijsten.map(l => (
                     <label key={l.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-neutral-50">
-                      <span className="truncate">{l.naam}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate">{l.naam}</span>
+                        {l.gedeeld && <span className="block text-xs text-neutral-500">Gedeeld: met de taken van collega's</span>}
+                      </span>
                       <Switch
                         size="sm"
                         checked={l.actief}
@@ -102,7 +105,7 @@ export default function TodoKoppelingBalk() {
                     </label>
                   ))}
                   <p className="px-2 pt-2 text-xs text-neutral-500">
-                    Uitzetten laat de acties die er al staan staan en haalt geen nieuwe meer op.
+                    Uitzetten laat de acties die er al staan staan en haalt geen nieuwe meer op. Gedeelde lijsten staan standaard uit: Microsoft geeft niet door aan wie een taak daarin is toegewezen.
                   </p>
                 </PopoverBody>
               </PopoverContent>

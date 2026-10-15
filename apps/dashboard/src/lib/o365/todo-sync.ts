@@ -46,6 +46,7 @@ interface LijstRij {
   naam: string
   actief: boolean
   delta_link: string | null
+  gedeeld?: boolean | null
 }
 
 interface KoppelRij {
@@ -95,7 +96,14 @@ export async function syncTodoVoorMedewerker(medewerkerId: string): Promise<Todo
   return res
 }
 
-/** Lijsten uit To Do overnemen: nieuwe erbij (actief), hernoemde bijwerken, verdwenen opruimen. */
+/**
+ * Lijsten uit To Do overnemen: nieuwe erbij, hernoemde bijwerken, verdwenen opruimen.
+ *
+ * Gedeelde lijsten staan standaard UIT. Iedereen in zo'n lijst ziet alle taken, en Graph
+ * geeft niet door aan wie een taak is toegewezen (ook niet in beta; de slimme weergave
+ * "Toegewezen aan mij" is via de API niet te lezen). Zonder die uitzondering stonden de
+ * taken van collega's in je eigen Mijn acties. Zelf aanzetten via "Lijsten" kan wel.
+ */
 async function werkLijstenBij(medewerkerId: string, res: TodoSyncResultaat): Promise<void> {
   const admin = createAdminClient()
   const remote = (await haalTodoLijsten(medewerkerId))
@@ -103,17 +111,31 @@ async function werkLijstenBij(medewerkerId: string, res: TodoSyncResultaat): Pro
 
   const { data: bekend } = await admin
     .from('medewerker_todo_lijsten')
-    .select('id, todo_list_id, naam, actief, delta_link')
+    .select('id, todo_list_id, naam, actief, delta_link, gedeeld')
     .eq('medewerker_id', medewerkerId)
   const bekendePerId = new Map(((bekend ?? []) as LijstRij[]).map(l => [l.todo_list_id, l]))
 
   for (const l of remote) {
     const b = bekendePerId.get(l.id)
+    const gedeeld = l.isShared === true
     if (!b) {
       await admin.from('medewerker_todo_lijsten').insert({
         medewerker_id: medewerkerId, todo_list_id: l.id, naam: l.displayName, wellknown_name: l.wellknownListName,
+        gedeeld, actief: !gedeeld,
       })
-    } else if (b.naam !== l.displayName) {
+      continue
+    }
+    if (gedeeld && b.gedeeld !== true) {
+      // Nu pas als gedeeld herkend (bestond al vóór deze regel, of is net gedeeld): uit, en de
+      // acties die eruit kwamen weer weg uit EVA. In To Do blijven ze staan; dit raakt alleen
+      // de EVA-kopie, dus geen write terug.
+      await admin.from('medewerker_todo_lijsten')
+        .update({ gedeeld: true, actief: false, delta_link: null }).eq('id', b.id)
+      res.vervallen += await verwijderUitEva(await gekoppeldeTaken(medewerkerId, l.id))
+    } else if (b.gedeeld !== gedeeld) {
+      await admin.from('medewerker_todo_lijsten').update({ gedeeld }).eq('id', b.id)
+    }
+    if (b.naam !== l.displayName) {
       await admin.from('medewerker_todo_lijsten').update({ naam: l.displayName }).eq('id', b.id)
       // De groepskop in Mijn acties volgt de nieuwe naam.
       const ids = await gekoppeldeTaken(medewerkerId, l.id)
@@ -286,6 +308,17 @@ async function werkActieBij(medewerkerId: string, stand: TaakStand, lijst: Lijst
     .eq('todo_task_id', t.id)
 
   return gewijzigd
+}
+
+/** Acties uit EVA verwijderen zonder To Do aan te raken (de koppeling gaat mee via cascade). */
+async function verwijderUitEva(taakIds: string[]): Promise<number> {
+  const admin = createAdminClient()
+  let aantal = 0
+  for (let i = 0; i < taakIds.length; i += IN_BATCH) {
+    const { data } = await admin.from('tasks').delete().in('id', taakIds.slice(i, i + IN_BATCH)).select('id')
+    aantal += (data ?? []).length
+  }
+  return aantal
 }
 
 /** Openstaande acties op vervallen; de koppeling gaat mee weg zodat er niets meer terugschrijft. */

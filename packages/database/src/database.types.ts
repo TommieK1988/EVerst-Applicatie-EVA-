@@ -9321,6 +9321,7 @@ export type Database = {
           actief: boolean
           created_at: string
           delta_link: string | null
+          gedeeld: boolean | null
           id: string
           laatst_gesynct: string | null
           medewerker_id: string
@@ -9332,6 +9333,7 @@ export type Database = {
           actief?: boolean
           created_at?: string
           delta_link?: string | null
+          gedeeld?: boolean | null
           id?: string
           laatst_gesynct?: string | null
           medewerker_id: string
@@ -9343,6 +9345,7 @@ export type Database = {
           actief?: boolean
           created_at?: string
           delta_link?: string | null
+          gedeeld?: boolean | null
           id?: string
           laatst_gesynct?: string | null
           medewerker_id?: string

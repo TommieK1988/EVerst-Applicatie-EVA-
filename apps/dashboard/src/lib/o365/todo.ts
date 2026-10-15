@@ -21,6 +21,9 @@ export interface TodoLijst {
   id: string
   displayName: string
   wellknownListName: 'none' | 'defaultList' | 'flaggedEmails' | 'unknownFutureValue'
+  /** Gedeeld met anderen: iedereen ziet alle taken, en aan wie een taak is toegewezen geeft Graph niet door. */
+  isShared?: boolean
+  isOwner?: boolean
 }
 
 export interface TodoTaak {
