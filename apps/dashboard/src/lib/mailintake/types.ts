@@ -190,6 +190,13 @@ export const AFZENDER_AUTOMATISCH = 0.85
 export const AFZENDER_ONBEKEND = 0.60
 
 /**
+ * Wat er als samenvatting komt te staan als de AI een mail niet kon lezen. Gedeeld
+ * zodat wie de samenvatting doorgeeft (zoals de melding bij koppelen) hem herkent
+ * en niet als inhoud van de mail presenteert.
+ */
+export const SAMENVATTING_ONLEESBAAR = 'EVA kon deze mail niet lezen; beoordeel hem zelf.'
+
+/**
  * Vanaf hier is de AI zeker genoeg over de soort om de automatische route in te gaan.
  *
  * Stond op 0,90. In de praktijk levert een goed gelezen opdrachtbon 0,85 tot 0,88

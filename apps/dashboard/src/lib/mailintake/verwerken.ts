@@ -37,7 +37,7 @@ import { haalWerkafsprakenVoorPrompt } from './werkafspraken'
 import { maakDossierUitBericht } from './aanmaken'
 import { faseVoorstelVoor } from '@/components/dossiers/fase-plaatsing'
 import {
-  DUPLICAAT_HARD, WERK_SOORTEN, heeftOfferteTreffer,
+  DUPLICAAT_HARD, WERK_SOORTEN, SAMENVATTING_ONLEESBAAR, heeftOfferteTreffer,
   type PostbusRij, type MailSoort,
 } from './types'
 
@@ -270,7 +270,7 @@ export async function verwerkBericht(berichtId: string): Promise<VerwerkResultaa
       const eindStatus = pogingen >= MAX_POGINGEN ? 'wacht_op_mens' : 'mislukt'
       await supabase.from('mailintake_berichten').update({
         status: eindStatus, pogingen, laatste_fout: ex.fout,
-        samenvatting: 'EVA kon deze mail niet lezen; beoordeel hem zelf.',
+        samenvatting: SAMENVATTING_ONLEESBAAR,
       }).eq('id', berichtId)
       log.mislukt(ex.fout ?? 'onbekend')
       return { ...uit, status: eindStatus, fout: ex.fout, reden: 'AI-extractie mislukt.' }
