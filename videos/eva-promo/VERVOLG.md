@@ -1,6 +1,23 @@
 # Vervolg — EVA-promovideo
 
-Stand: storyboard (16 scènes) goedgekeurd, alle scènes geanimeerd, muziek gecomponeerd,
+Stand (15 okt 2026): **eerste complete versie gerenderd** — 17 scènes, 2:29, voice-over uit
+Descript (`assets/audio/bron/voice-over-descript.mp3`, geknipt in `assets/audio/vo-01..17.wav`),
+muziek uitgespaard onder de stem. Renders staan niet in git (`renders/` is genegeerd).
+
+Een regel opnieuw ingesproken? Vervang `assets/audio/vo-NN.wav`, zet in `scripts/frames.json`
+de scèneduur op minstens stemduur + 1,2 s, en draai:
+```bash
+node scripts/wrap.mjs && node scripts/index.mjs
+node ../../.agents/skills/hyperframes-audio/scripts/carve.mjs --comp ./index.html   # index.mjs wist de carve
+npx hyperframes check && npx hyperframes render --quality delivery --output renders/eva-video.mp4
+ffmpeg -i renders/eva-video.mp4 -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 192k renders/eva-video-final.mp4
+```
+
+---
+
+## Oorspronkelijke route met Google TTS (niet gebruikt)
+
+(Historisch) storyboard goedgekeurd, alle scènes geanimeerd, muziek gecomponeerd,
 conceptrender zonder stem in `renders/concept-zonder-stem.mp4` (niet in git).
 Wat nog moet: **Nederlandse voice-over** (Google Cloud TTS) en de **eindrender**.
 

@@ -2201,7 +2201,6 @@
         {
           "id": "7ffcbdd6-24ac-4adf-82c5-b4ffd5941bf3",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/7ffcbdd6-24ac-4adf-82c5-b4ffd5941bf3.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -2223,14 +2222,15 @@
           "revision": "07d8a9bd-fa72-4608-8fbb-3224f1f96be6",
           "inputFingerprint": "2f1dbc28c7c8c10084e2676f5287c8579bdd63a722f0f51035785f53b4f14948",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "9f307bcf-e0ab-4130-a2eb-df6adfea5868"
         }
       ],
       "624d0362-795c-44ee-9426-1e884e27121b": [
         {
           "id": "526f1a66-5395-4134-bd0d-6d5a850483b1",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/526f1a66-5395-4134-bd0d-6d5a850483b1.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -2252,7 +2252,9 @@
           "revision": "624d0362-795c-44ee-9426-1e884e27121b",
           "inputFingerprint": "8898838a2c1a500be7ed462f0fe78286fbe208668852c61c7837073a6aec2b19",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "9f307bcf-e0ab-4130-a2eb-df6adfea5868"
         }
       ],
       "78791008-a262-4e68-9013-4da0b8a4579d": [
@@ -3546,13 +3548,14 @@
   },
   "renders": {
     "latest": {
-      "id": "70d81113-bbb3-4aa5-847b-f5864152fe1d",
-      "completedAt": 1792079869010,
-      "output": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/renders/concept-zonder-stem.mp4",
+      "id": "9f307bcf-e0ab-4130-a2eb-df6adfea5868",
+      "completedAt": 1792082770894,
+      "output": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/renders/eva-video.mp4",
       "status": "completed",
-      "revision": "d93f1d99-7f83-408d-b857-d7ab8cd30407"
+      "revision": "78791008-a262-4e68-9013-4da0b8a4579d"
     },
     "retainedRevisions": [
+      "78791008-a262-4e68-9013-4da0b8a4579d",
       "d93f1d99-7f83-408d-b857-d7ab8cd30407"
     ]
   },
