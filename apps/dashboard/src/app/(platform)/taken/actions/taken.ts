@@ -11,6 +11,7 @@ import { herberekenSjabloonInstanties } from './deadlines'
 import { getTaak } from '@/lib/taken/services/taken'
 import { getCurrentMedewerker } from '@/lib/auth/rechten'
 import { meldTaakToegewezen } from '@/lib/taken/meldingen'
+import { toewijzingenVoorNieuweActie } from '@/lib/taken/toewijzing'
 import type { Json, TaskStatus, TaskPrioriteit, TaskAssigneeRol, EntityType, DbTaskCompletionActie, TaakMetDetails } from '@/lib/taken/supabase/database.types'
 import type { DeadlineBasis, HerhalingInterval } from '@/lib/taken/deadlines'
 import type { DossierSubstatus } from '@/components/dossiers/types'
@@ -197,17 +198,18 @@ export async function maakTaak(data: {
 
   if (error) throw new Error(`Fout bij aanmaken taak: ${error.message}`)
 
-  // Toewijzingen vastleggen
-  if (data.assignees?.length) {
+  // Toewijzingen vastleggen — een losse actie zonder toewijzing komt bij de maker
+  const assignees = toewijzingenVoorNieuweActie(data, user.id)
+  if (assignees.length) {
     const { error: aError } = await supabase.from('task_assignees').insert(
-      data.assignees.map(a => ({
+      assignees.map(a => ({
         task_id: taak.id,
         user_id: a.user_id,
         rol:     a.rol ?? 'verantwoordelijke',
       }))
     )
     if (aError) throw new Error(`Fout bij toewijzen taak: ${aError.message}`)
-    await meldTaakToegewezen(taak.id, data.assignees.map(a => a.user_id), { doorUserId: user.id })
+    await meldTaakToegewezen(taak.id, assignees.map(a => a.user_id), { doorUserId: user.id })
   }
 
   // Audit log
