@@ -38,6 +38,8 @@ import VerlofModal from './VerlofModal'
 import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import { AfwezigheidTellerLabel, AfwezigheidTellerRij } from './AfwezigheidTellerRij'
+import LandingsBalk from './LandingsBalk'
+import { landingsPeriode, startdagOnderBalkrand } from './sleep-landing'
 import {
   DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
@@ -101,6 +103,12 @@ const dialogLabelStyle: React.CSSProperties = {
  * hetzelfde woord en gaat het juist om de activiteit ('activiteit').
  */
 type BalkLabel = 'dossier' | 'activiteit'
+
+/** Het planitem dat nu gesleept wordt, met kleur en breedte van zijn balk. */
+type SleepItem = { entry: PlanningItemVerrijkt; dossier_id: string; kleur: string; breedte: number }
+
+/** Waar een gesleept planitem landt: rij, periode en hoe hij getekend wordt. */
+type Landing = { medewerker_id: string; start_dt: string; eind_dt: string; kleur: string; kopie: boolean }
 
 export type SortKey = 'voornaam' | 'afdeling' | 'functie' | 'ploeg'
 const SORT_OPTIES: { key: SortKey; label: string }[] = [
@@ -746,7 +754,7 @@ function TimelineEntry({
   const kleur = kleurOverride ?? dossierKleur(dossier_id)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `timeline-entry-${entry.id}`,
-    data: { type: 'timeline-entry', entry, dossier_id },
+    data: { type: 'timeline-entry', entry, dossier_id, kleur },
   })
   const taakTitel = entry.planning_activiteiten?.titel ?? '—'
   /** In een dossier-detailplanning is de dossiernaam op élke balk hetzelfde; daar zegt
@@ -988,6 +996,7 @@ function TimelineRij({
   overCellId, dossierMap, projectleiders, balkLabel,
   feestdagenDagen, feestdagenNamen, atvDagen, onEditEntry, onResizedEntry,
   onOpenDossier, onStartKopie, onCelKlik, onAfwezigheidKlik, onConflictKlik, kopieerModus,
+  landing,
 }: {
   medewerker:        Medewerker
   top:               number
@@ -1012,6 +1021,8 @@ function TimelineRij({
   onAfwezigheidKlik: (afwezigheid: MedewerkerAfwezigheid) => void
   onConflictKlik:    (conflict: ConflictDetail) => void
   kopieerModus:      boolean
+  /** Waar het planitem dat nu gesleept wordt in deze rij landt (alleen op de doelrij). */
+  landing?:          Landing | null
 }) {
   const { ppd, totalW, xVoor, breedteVoor, xVoorInVenster } = layout
   const dagLenW = totalW
@@ -1120,6 +1131,26 @@ function TimelineRij({
         )
       })}
 
+      {/* Landingsplek van het planitem dat nu gesleept wordt */}
+      {landing && (() => {
+        const startDag = parseISO(landing.start_dt)
+        const left  = xBalk(landing.start_dt, startDag)
+        const width = Math.max(MIN_BAR_W, xBalk(landing.eind_dt, startDag) - left)
+        if (left + width <= 0 || left >= dagLenW) return null
+        const cLeft = Math.max(0, left)
+        return (
+          <LandingsBalk
+            left={cLeft}
+            width={Math.min(width, dagLenW - cLeft)}
+            top={top + ROW_PAD}
+            hoogte={ITEM_H}
+            kleur={landing.kleur}
+            periode={landingsPeriode(startDag, parseISO(landing.eind_dt))}
+            kopie={landing.kopie}
+          />
+        )
+      })()}
+
       {/* Conflict-gloed — overlappend werk of werk tijdens verlof/feestdag/ATV */}
       {conflicten.map((seg, i) => {
         const segDag = new Date(seg.s)
@@ -1216,8 +1247,9 @@ function MedewerkerTimelineInhoud({
   const { vs, ve, ppd } = layout
 
   const [entries,   setEntries]   = useState(initialEntries)
-  const [activeItem,    setActiveItem]    = useState<{ entry: PlanningItemVerrijkt; dossier_id: string } | null>(null)
+  const [activeItem,    setActiveItem]    = useState<SleepItem | null>(null)
   const [overCellId,    setOverCellId]    = useState<string | null>(null)
+  const [overDoel,      setOverDoel]      = useState<{ medewerker_id: string; datum: string } | null>(null)
   const [verlofModalOpen, setVerlofModalOpen] = useState(false)
   const [bewerkVerlof,    setBewerkVerlof]    = useState<MedewerkerAfwezigheid | null>(null)
   const [editingEntry,  setEditingEntry]  = useState<EntryMetDossier | null>(null)
@@ -1239,8 +1271,13 @@ function MedewerkerTimelineInhoud({
 
   // Ctrl/Alt ingedrukt tijdens slepen → kopie i.p.v. verplaatsen.
   const kopieToetsRef = useRef(false)
+  // Zelfde toets als state: de landingsbalk toont tijdens het slepen of het een kopie wordt.
+  const [kopieToets, setKopieToets] = useState(false)
   useEffect(() => {
-    const bijwerken = (e: KeyboardEvent) => { kopieToetsRef.current = e.ctrlKey || e.altKey || e.metaKey }
+    const bijwerken = (e: KeyboardEvent) => {
+      kopieToetsRef.current = e.ctrlKey || e.altKey || e.metaKey
+      setKopieToets(kopieToetsRef.current)
+    }
     window.addEventListener('keydown', bijwerken)
     window.addEventListener('keyup', bijwerken)
     return () => {
@@ -1485,9 +1522,24 @@ function MedewerkerTimelineInhoud({
     openDossierInNieuwTabblad(`/opdrachten/${entry.dossier_id}/informatie`)
   }
 
-  async function onDragEnd(event: DragEndEvent) {
+  /** Dezelfde berekening als bij loslaten, zodat de schaduwbalk precies toont wat er gebeurt. */
+  const landing: Landing | null = activeItem && overDoel ? (() => {
+    const { start, eind } = verplaatsNaarDag(activeItem.entry, overDoel.datum, overDoel.medewerker_id)
+    return {
+      medewerker_id: overDoel.medewerker_id,
+      start_dt: start.toISOString(), eind_dt: eind.toISOString(),
+      kleur: activeItem.kleur, kopie: kopieToets,
+    }
+  })() : null
+
+  function stopSlepen() {
     setActiveItem(null)
     setOverCellId(null)
+    setOverDoel(null)
+  }
+
+  async function onDragEnd(event: DragEndEvent) {
+    stopSlepen()
     const cellData = event.over?.data.current as { medewerker_id: string; datum: string } | undefined
     if (!cellData) return
     const active = event.active.data.current
@@ -1682,6 +1734,7 @@ function MedewerkerTimelineInhoud({
           onAfwezigheidKlik={a => { setBewerkVerlof(a); setVerlofModalOpen(true) }}
           onConflictKlik={conflict => setOplosConflict({ medewerkerId: m.id, conflict })}
           kopieerModus={!!kopieerBron}
+          landing={landing?.medewerker_id === m.id ? landing : null}
         />
         </Fragment>
       ))}
@@ -1761,13 +1814,22 @@ function MedewerkerTimelineInhoud({
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={startdagOnderBalkrand}
       onDragStart={e => {
         const d = e.active.data.current
-        if (d?.type?.startsWith('timeline')) setActiveItem({ entry: d.entry, dossier_id: d.dossier_id })
+        if (!d?.type?.startsWith('timeline')) return
+        setActiveItem({
+          entry: d.entry, dossier_id: d.dossier_id,
+          kleur: d.kleur ?? dossierKleur(d.dossier_id),
+          breedte: e.active.rect.current.initial?.width ?? 160,
+        })
       }}
-      onDragOver={e => setOverCellId(e.over ? String(e.over.id) : null)}
+      onDragOver={e => {
+        setOverCellId(e.over ? String(e.over.id) : null)
+        setOverDoel((e.over?.data.current as { medewerker_id: string; datum: string } | undefined) ?? null)
+      }}
       onDragEnd={onDragEnd}
-      onDragCancel={() => { setActiveItem(null); setOverCellId(null) }}
+      onDragCancel={stopSlepen}
     >
       <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
         <PlanningShell
@@ -1834,14 +1896,20 @@ function MedewerkerTimelineInhoud({
 
       <DragOverlay>
         {activeItem && (
+          // Even breed als de balk zelf: de linkerrand bepaalt de startdag (zie startdagOnderBalkrand).
           <div style={{
-            height: ITEM_H, width: 160,
-            background: dossierKleur(activeItem.dossier_id),
-            borderRadius: 5, opacity: 0.9,
-            display: 'flex', alignItems: 'center', paddingLeft: 8,
+            height: ITEM_H, width: Math.max(MIN_BAR_W, activeItem.breedte),
+            background: activeItem.kleur,
+            borderRadius: 5, opacity: 0.85,
+            display: 'flex', alignItems: 'center', paddingLeft: 8, gap: 4,
+            overflow: 'hidden', cursor: kopieToets ? 'copy' : 'grabbing',
             boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           }}>
-            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'white' }}>
+            {kopieToets && <Copy size={11} color="white" style={{ flexShrink: 0 }} />}
+            <span style={{
+              fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'white',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
               {itemLabel({ ...activeItem.entry, dossier_id: activeItem.dossier_id })}
             </span>
           </div>
