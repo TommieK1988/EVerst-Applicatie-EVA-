@@ -1687,16 +1687,12 @@
     }
   },
   "checks": {
-    "latest": {
-      "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
-      "id": "4c395357-a53d-490a-888c-fe59099b1484"
-    },
+    "latest": null,
     "revisions": {
       "dbcd35a6-dea5-4e6b-b00b-3faf47be6e50": [
         {
           "id": "9bab24b4-772b-41a3-8dab-e54425a45657",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/9bab24b4-772b-41a3-8dab-e54425a45657.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1718,14 +1714,15 @@
           "revision": "dbcd35a6-dea5-4e6b-b00b-3faf47be6e50",
           "inputFingerprint": "f3377ee0b05bad6a8024fdc96897a4d741ff078f9284f5c5934f6e68d04f2bae",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "46ca740c-daa2-4aa7-b501-d58d1c7576f5": [
         {
           "id": "98ca5db7-7e81-4c44-af94-2ff37287aacf",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/98ca5db7-7e81-4c44-af94-2ff37287aacf.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1747,14 +1744,15 @@
           "revision": "46ca740c-daa2-4aa7-b501-d58d1c7576f5",
           "inputFingerprint": "b8b5987728e5aba156c2f299b9ad1e35a5d33e22a01eb6f0b3e3c5d6205e9830",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "78522b80-161a-428b-b67e-c93fc37c4265": [
         {
           "id": "6a50e5ee-ce23-45c2-b6f3-713bae647705",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/6a50e5ee-ce23-45c2-b6f3-713bae647705.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1776,14 +1774,15 @@
           "revision": "78522b80-161a-428b-b67e-c93fc37c4265",
           "inputFingerprint": "ab569d51338f711cdb9727353d54eb988d94a5038de05372d4e65f606f4b4978",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "bb835539-dc33-498f-961f-928f054541cb": [
         {
           "id": "f98493da-0bc4-411c-ad34-9d3853dceb7d",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/f98493da-0bc4-411c-ad34-9d3853dceb7d.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1805,14 +1804,15 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "a08665a2-d5f6-41d4-becc-80041aeb7a98": [
         {
           "id": "84872f82-7749-4f85-8e13-77a092346c33",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/84872f82-7749-4f85-8e13-77a092346c33.json",
           "metadata": {
             "ok": false,
             "browserSkipped": false,
@@ -1834,14 +1834,15 @@
           "revision": "a08665a2-d5f6-41d4-becc-80041aeb7a98",
           "inputFingerprint": "1b1a917dd67a582f529d242b3e3219f55cbd235eedea67ba1a7157c5e6fe93a1",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "428ea45d-5b11-4b02-8150-7864def04313": [
         {
           "id": "5e7a6ade-159b-4906-bc14-52ab5fee30fe",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/5e7a6ade-159b-4906-bc14-52ab5fee30fe.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1863,14 +1864,15 @@
           "revision": "428ea45d-5b11-4b02-8150-7864def04313",
           "inputFingerprint": "d6191a75677aea40726691523323c66b129199a1464e6e8ca1e6be2a4443e32a",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "5a426927-55ca-41b1-b800-2e7e6cac690e": [
         {
           "id": "5e877827-f9bd-4f2e-be74-97e44e73f7c8",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/5e877827-f9bd-4f2e-be74-97e44e73f7c8.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1892,14 +1894,15 @@
           "revision": "5a426927-55ca-41b1-b800-2e7e6cac690e",
           "inputFingerprint": "b298d6f9828bb3596f5a57e157edd6b4801771975dfcbfc4d3b865eed9072557",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "6440fe44-fb83-4249-bc63-a4aa2ce03821": [
         {
           "id": "4c395357-a53d-490a-888c-fe59099b1484",
           "scope": "project",
-          "report": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/checks/4c395357-a53d-490a-888c-fe59099b1484.json",
           "metadata": {
             "ok": true,
             "browserSkipped": false,
@@ -1921,7 +1924,9 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ]
     },
@@ -1937,7 +1942,6 @@
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-0",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-00-at-1s.png",
           "time": 1,
           "metadata": {
             "width": 1920,
@@ -1952,12 +1956,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-1",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-01-at-3s.png",
           "time": 3,
           "metadata": {
             "width": 1920,
@@ -1972,12 +1977,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-2",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-02-at-5s.png",
           "time": 5,
           "metadata": {
             "width": 1920,
@@ -1992,12 +1998,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-3",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-03-at-8s.png",
           "time": 8,
           "metadata": {
             "width": 1920,
@@ -2012,12 +2019,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-4",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-04-at-12s.png",
           "time": 12,
           "metadata": {
             "width": 1920,
@@ -2032,12 +2040,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-5",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-05-at-14.5s.png",
           "time": 14.5,
           "metadata": {
             "width": 1920,
@@ -2052,12 +2061,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-6",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-06-at-17s.png",
           "time": 17,
           "metadata": {
             "width": 1920,
@@ -2072,12 +2082,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-7",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-07-at-21s.png",
           "time": 21,
           "metadata": {
             "width": 1920,
@@ -2092,12 +2103,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-8",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-08-at-24s.png",
           "time": 24,
           "metadata": {
             "width": 1920,
@@ -2112,12 +2124,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-9",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-09-at-30s.png",
           "time": 30,
           "metadata": {
             "width": 1920,
@@ -2132,12 +2145,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-10",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-10-at-33s.png",
           "time": 33,
           "metadata": {
             "width": 1920,
@@ -2152,12 +2166,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-11",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-11-at-38s.png",
           "time": 38,
           "metadata": {
             "width": 1920,
@@ -2172,12 +2187,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-12",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-12-at-41s.png",
           "time": 41,
           "metadata": {
             "width": 1920,
@@ -2192,12 +2208,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-13",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-13-at-44s.png",
           "time": 44,
           "metadata": {
             "width": 1920,
@@ -2212,12 +2229,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-14",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-14-at-48s.png",
           "time": 48,
           "metadata": {
             "width": 1920,
@@ -2232,12 +2250,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-15",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-15-at-52s.png",
           "time": 52,
           "metadata": {
             "width": 1920,
@@ -2252,12 +2271,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-16",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-16-at-56s.png",
           "time": 56,
           "metadata": {
             "width": 1920,
@@ -2272,12 +2292,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-17",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-17-at-60s.png",
           "time": 60,
           "metadata": {
             "width": 1920,
@@ -2292,12 +2313,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-18",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-18-at-63s.png",
           "time": 63,
           "metadata": {
             "width": 1920,
@@ -2312,12 +2334,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-19",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-19-at-66s.png",
           "time": 66,
           "metadata": {
             "width": 1920,
@@ -2332,12 +2355,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-20",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-20-at-70s.png",
           "time": 70,
           "metadata": {
             "width": 1920,
@@ -2352,12 +2376,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-21",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-21-at-74s.png",
           "time": 74,
           "metadata": {
             "width": 1920,
@@ -2372,12 +2397,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-22",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-22-at-77s.png",
           "time": 77,
           "metadata": {
             "width": 1920,
@@ -2392,12 +2418,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-23",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-23-at-81s.png",
           "time": 81,
           "metadata": {
             "width": 1920,
@@ -2412,12 +2439,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-24",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-24-at-85s.png",
           "time": 85,
           "metadata": {
             "width": 1920,
@@ -2432,12 +2460,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-25",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-25-at-89s.png",
           "time": 89,
           "metadata": {
             "width": 1920,
@@ -2452,12 +2481,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-26",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-26-at-93s.png",
           "time": 93,
           "metadata": {
             "width": 1920,
@@ -2472,12 +2502,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-27",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-27-at-97s.png",
           "time": 97,
           "metadata": {
             "width": 1920,
@@ -2492,12 +2523,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-28",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-28-at-101s.png",
           "time": 101,
           "metadata": {
             "width": 1920,
@@ -2512,12 +2544,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-29",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-29-at-105s.png",
           "time": 105,
           "metadata": {
             "width": 1920,
@@ -2532,12 +2565,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-30",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-30-at-109s.png",
           "time": 109,
           "metadata": {
             "width": 1920,
@@ -2552,12 +2586,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-31",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-31-at-113s.png",
           "time": 113,
           "metadata": {
             "width": 1920,
@@ -2572,12 +2607,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-32",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-32-at-117s.png",
           "time": 117,
           "metadata": {
             "width": 1920,
@@ -2592,12 +2628,13 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "17d33b44-730f-4191-bf8a-eb0ce49c3a30-33",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/e3b735eb-eb69-4909-b552-75dba6f6aace/frame-33-at-120s.png",
           "time": 120,
           "metadata": {
             "width": 1920,
@@ -2612,14 +2649,15 @@
           "revision": "bb835539-dc33-498f-961f-928f054541cb",
           "inputFingerprint": "79a350ab411d81359dac54f6b3c0e2a3eff83d1505117337450ef87e16053bda",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "6440fe44-fb83-4249-bc63-a4aa2ce03821": [
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-0",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-00-at-60.5s.png",
           "time": 60.5,
           "metadata": {
             "width": 1920,
@@ -2634,12 +2672,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-1",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-01-at-63s.png",
           "time": 63,
           "metadata": {
             "width": 1920,
@@ -2654,12 +2693,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-2",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-02-at-66s.png",
           "time": 66,
           "metadata": {
             "width": 1920,
@@ -2674,12 +2714,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-3",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-03-at-99s.png",
           "time": 99,
           "metadata": {
             "width": 1920,
@@ -2694,12 +2735,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-4",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-04-at-101.5s.png",
           "time": 101.5,
           "metadata": {
             "width": 1920,
@@ -2714,12 +2756,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-5",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-05-at-103.5s.png",
           "time": 103.5,
           "metadata": {
             "width": 1920,
@@ -2734,12 +2777,13 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         },
         {
           "scope": "full",
           "id": "56a2c405-7758-40f6-8445-88af5ff53a12-6",
-          "image": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/.hyperframes/artifacts/snapshots/5dbff0c1-4294-44bb-a7e7-b8ccfbf3fdad/frame-06-at-105.5s.png",
           "time": 105.5,
           "metadata": {
             "width": 1920,
@@ -2754,7 +2798,9 @@
           "revision": "6440fe44-fb83-4249-bc63-a4aa2ce03821",
           "inputFingerprint": "4b31fe9b0e9e3836f5793dcebbc4655e48132a3e943a1f9b660413e511142cc0",
           "inputScope": "local-project-files",
-          "attribution": "recorded-revision"
+          "attribution": "recorded-revision",
+          "status": "cleaned",
+          "cleanedAfterRender": "70d81113-bbb3-4aa5-847b-f5864152fe1d"
         }
       ],
       "d93f1d99-7f83-408d-b857-d7ab8cd30407": [
@@ -3145,13 +3191,15 @@
   },
   "renders": {
     "latest": {
-      "id": "ba86ac0c-7257-4549-a9a4-95a712724ca4",
-      "completedAt": 1792078005836,
+      "id": "70d81113-bbb3-4aa5-847b-f5864152fe1d",
+      "completedAt": 1792079869010,
       "output": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/renders/concept-zonder-stem.mp4",
       "status": "completed",
-      "revision": null
+      "revision": "d93f1d99-7f83-408d-b857-d7ab8cd30407"
     },
-    "retainedRevisions": []
+    "retainedRevisions": [
+      "d93f1d99-7f83-408d-b857-d7ab8cd30407"
+    ]
   },
   "pendingArtifactCleanup": []
 }
