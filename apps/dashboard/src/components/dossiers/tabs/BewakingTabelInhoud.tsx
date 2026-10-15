@@ -94,8 +94,10 @@ const somBron = (regels: BewakingRegel[]): ComponentBron => ({
   inkoopMaterieelAfval: som(regels, (r) => r.inkoopMaterieelAfval),
 })
 
-export function BewakingTabelInhoud({ dossierId, data, bewerkbaar }: {
+export function BewakingTabelInhoud({ dossierId, data, bewerkbaar, stand }: {
   dossierId: string
+  /** De regel "Stand Bouw7: …"; staat links op dezelfde regel als de inklapknop. */
+  stand: React.ReactNode
   data: Pick<DossierBewakingData, 'bouw7Id' | 'hoofdstukken' | 'totalen'>
   bewerkbaar: boolean
 }) {
@@ -125,10 +127,11 @@ export function BewakingTabelInhoud({ dossierId, data, bewerkbaar }: {
   return (
     <>
       <div style={{
-        display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4,
-        padding: '8px 12px', borderBottom: '1px solid var(--neutral-100)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+        padding: '18px 18px 0',
       }}>
-        <Button size="sm" variant="ghost" aria-expanded={!ingeklapt} onClick={wissel}>
+        {stand}
+        <Button size="sm" variant="ghost" aria-expanded={!ingeklapt} onClick={wissel} style={{ marginBottom: 8 }}>
           {ingeklapt ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           {ingeklapt ? 'Alles uitklappen' : 'Alles inklappen'}
         </Button>

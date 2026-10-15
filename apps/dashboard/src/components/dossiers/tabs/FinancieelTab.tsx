@@ -80,20 +80,20 @@ async function BewakingTabel({ dossierId, sectie }: { dossierId: string; sectie?
   return (
     <Card style={{ marginBottom: 16 }}>
       <CardHeader>Bewaking per bewakingscode</CardHeader>
-      <CardBody style={{ paddingBottom: 0 }}>
-        <Bouw7StandStrip
-          dossierId={dossierId}
-          tab="financieel"
-          opgehaaldOp={data.stand.opgehaaldOp}
-          ontbreekt={data.stand.ontbreekt}
-          fout={data.stand.fout}
-        />
-      </CardBody>
       <CardBody style={{ padding: 0 }}>
         <BewakingTabelInhoud
           dossierId={dossierId}
           data={{ bouw7Id: data.bouw7Id, hoofdstukken: data.hoofdstukken, totalen: data.totalen }}
           bewerkbaar={bewerkbaar}
+          stand={
+            <Bouw7StandStrip
+              dossierId={dossierId}
+              tab="financieel"
+              opgehaaldOp={data.stand.opgehaaldOp}
+              ontbreekt={data.stand.ontbreekt}
+              fout={data.stand.fout}
+            />
+          }
         />
         {uitleg && (
           <div style={{
