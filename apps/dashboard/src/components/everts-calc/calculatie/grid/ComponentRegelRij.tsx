@@ -10,7 +10,7 @@ import { GetalInput } from './GetalInput'
 // ─── ComponentRegelRij ───────────────────────────────────────────────────────
 
 export function ComponentRegelRij({
-  comp, uurtarieven, eenheden, colOrder, indent, regelOmschrijving, regelOpslag, onWijzig, onVerwijder,
+  comp, uurtarieven, eenheden, colOrder, indent, regelOmschrijving, regelOpslag, tijdfactor = 1, onWijzig, onVerwijder,
 }: {
   comp: Componentregel
   uurtarieven: { label: string; tarief: number }[]
@@ -19,6 +19,8 @@ export function ComponentRegelRij({
   indent: number
   regelOmschrijving: string
   regelOpslag: number
+  /** Tijdtoeslag van de groep: telt op de uren van een arbeidsnorm, niet op de norm zelf. */
+  tijdfactor?: number
   onWijzig: (patch: Partial<Componentregel>) => void
   onVerwijder: () => void
 }) {
@@ -51,7 +53,8 @@ export function ComponentRegelRij({
   // Vermenigvuldigen met het aantal gebeurt precies één keer, in de begrotingsregel zelf.
   // Deed de detailregel dat ook, dan stond hetzelfde aantal twee keer in de keten en week
   // de detailregel af van de rij eronder waar hij bij hoort.
-  const compBedrag      = normEdit * tariefEdit
+  const effNorm         = comp.type === 'arbeid' ? normEdit * tijdfactor : normEdit
+  const compBedrag      = effNorm * tariefEdit
   const compKpPe        = compBedrag
   const effectiefOpslag = comp.opslag_pct ?? regelOpslag
   const compVpTotaal    = compBedrag * (1 + effectiefOpslag / 100)
@@ -228,7 +231,7 @@ export function ComponentRegelRij({
       case 'tot_uren': return (
         <td key={id} className={tdBase} style={tdSt}>
           {comp.type === 'arbeid' && normEdit !== 0 && (
-            <span className=" text-xs text-blue-600">{formatGetal(normEdit, 2)}</span>
+            <span className=" text-xs text-blue-600" title={tijdfactor !== 1 ? `Norm ${formatGetal(normEdit, 3)} u, met tijdtoeslag ${formatGetal(effNorm, 3)} u` : undefined}>{formatGetal(effNorm, 2)}</span>
           )}
         </td>
       )

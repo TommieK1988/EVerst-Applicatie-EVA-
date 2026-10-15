@@ -12,6 +12,7 @@ import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, NIVEAU_INSPRING, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { TekstregelRij } from './TekstregelRij'
 import { CalculatieregelRij } from './CalculatieregelRij'
+import { tijdfactor, toeslagLabel } from '@/lib/everts-calc/tijdtoeslag'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
 import { subtreeIds } from '@/lib/everts-calc/groep-boom'
 import { InvoegRij } from './InvoegRij'
@@ -230,6 +231,14 @@ export function GroepSectie({
                 OPTIONEEL · telt niet mee
               </span>
             )}
+            {!!groep.tijdtoeslag_pct && (
+              <span
+                className={`text-[10.5px] px-1.5 py-0.5 rounded-full font-semibold ${groep.tijdtoeslag_pct > 0 ? 'bg-info-100 text-info-700' : 'bg-warning-100 text-warning-700'}`}
+                title="Tijdtoeslag op de arbeidsuren van de regels in deze groep (knop Uren)"
+              >
+                {toeslagLabel(groep.tijdtoeslag_pct)}
+              </span>
+            )}
             <span className={`text-[11px] opacity-50 ${diepte <= 1 ? 'text-white' : 'text-slate-500'}`}>
               {directeRegels.length > 0 && `${directeRegels.length} regel${directeRegels.length !== 1 ? 's' : ''}`}
               {subGroepen.length > 0 && ` · ${subGroepen.length} subgroep${subGroepen.length !== 1 ? 'en' : ''}`}
@@ -296,6 +305,7 @@ export function GroepSectie({
             />
           ) : (
             <CalculatieregelRij
+              tijdfactor={tijdfactor(groep)}
               key={r.id} regel={r} componenten={alleComponenten}
               diepte={diepte + 1} defaultOpslag={defaultOpslag} standaardTarief={standaardTarief} colOrder={colOrder} btwTarieven={btwTarieven}
               uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={onHerlaad}

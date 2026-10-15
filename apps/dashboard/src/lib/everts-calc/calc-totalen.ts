@@ -10,6 +10,7 @@ import {
   scenarioDefaultOpslag,
 } from '@/lib/everts-calc/calculations'
 import type { Groep, Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import { maakTijdfactor } from './tijdtoeslag'
 
 /** Volledige calculatie van één project (vorm van `laadCalculatieSnapshot`). */
 export type CalculatieBron = {
@@ -72,11 +73,13 @@ export function berekenCalcTotalen(bron: CalculatieBron | null, scenarioId?: str
   const kostprijs = berekenScenarioKostprijs(nietOptioneel, regels, componenten)
   const btwGroepen = berekenBtwBreakdown(
     regels.filter(r => nietOptioneelIds.has(r.groep_id)), componenten, defaultOpslag, btwDefault,
+    undefined, groepen,
   )
   const btw_bedrag = btwGroepen.reduce((s, g) => s + g.btw, 0)
 
+  const factorVan = maakTijdfactor(groepen)
   const vpVan = (r: (typeof regels)[number]) =>
-    berekenCalculatieregel(r, componenten, r.opslag_pct ?? defaultOpslag).vp_totaal
+    berekenCalculatieregel(r, componenten, r.opslag_pct ?? defaultOpslag, factorVan(r)).vp_totaal
   const stelposten_subtotaal = regels
     .filter(r => nietOptioneelIds.has(r.groep_id) && r.is_stelpost)
     .reduce((s, r) => s + vpVan(r), 0)

@@ -22,6 +22,7 @@
 import { createAdminClient } from '@everts/database/server'
 import { isTekstregel } from '@/lib/everts-calc/types'
 import type { Scenario, Groep, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import { maakTijdfactor } from '@/lib/everts-calc/tijdtoeslag'
 
 /** De vorm van `calculatie_snapshots.data` voor zover hier nodig. */
 type SnapshotVorm = {
@@ -180,6 +181,10 @@ export async function haalMeerwerkNaarWerkbegroting(regelId: string): Promise<Me
     if (regelFout) return { ok: false, error: `Regels overhalen mislukt: ${regelFout.message}` }
 
     const wbIdPerCalcId = new Map(nieuweRegels.map(r => [r.source_calculatieregel_id, r.id]))
+    // Arbeid mét de tijdtoeslag van de calculatiegroep, net als bij het aanmaken van de
+    // werkbegroting: Bouw7 en de planning kennen de toeslag niet.
+    const factorVan = maakTijdfactor((snap.groepen ?? []).filter(g => g.scenario_id === scenario.id))
+    const factorPerRegel = new Map(teKopieren.map(r => [r.id, factorVan(r)]))
     const nieuweComponenten = (snap.componenten ?? [])
       .filter(c => wbIdPerCalcId.has(c.calculatieregel_id))
       .map(c => ({
@@ -187,7 +192,7 @@ export async function haalMeerwerkNaarWerkbegroting(regelId: string): Promise<Me
         werkbegroting_regel_id: wbIdPerCalcId.get(c.calculatieregel_id) as string,
         source_component_id: c.id,
         type: c.type,
-        norm_hoeveelheid: c.norm_hoeveelheid ?? 0,
+        norm_hoeveelheid: (c.norm_hoeveelheid ?? 0) * (c.type === 'arbeid' ? (factorPerRegel.get(c.calculatieregel_id) ?? 1) : 1),
         // Arbeid rekent altijd in uren; de calculatie laat die eenheid soms leeg.
         eenheid: c.type === 'arbeid' ? 'uur' : (c.eenheid ?? null),
         tarief: c.tarief ?? 0,

@@ -167,7 +167,7 @@ export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
 }
 
 export function RegelComponentenBlok({
-  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden,
+  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden, tijdfactor = 1,
   onWijzigComponentExtra, onVerwijderComponent, onVoegComponentToe,
 }: {
   regel: Calculatieregel
@@ -177,6 +177,7 @@ export function RegelComponentenBlok({
   opslag: number
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
+  tijdfactor?: number
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
   onVerwijderComponent: (compId: string) => void
   onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string, extra?: Partial<Componentregel>) => void
@@ -193,6 +194,7 @@ export function RegelComponentenBlok({
             indent={indent}
             regelOmschrijving={regel.omschrijving}
             regelOpslag={opslag}
+            tijdfactor={tijdfactor}
             onWijzig={patch => onWijzigComponentExtra(comp.id, patch)}
             onVerwijder={() => onVerwijderComponent(comp.id)}
           />

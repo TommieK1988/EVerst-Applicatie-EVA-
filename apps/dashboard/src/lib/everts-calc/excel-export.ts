@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import type { Groep, Calculatieregel, Componentregel, Scenario } from './types'
 import { berekenCalculatieregel, berekenGroepKostprijs, berekenGroepVP, scenarioDefaultOpslag } from './calculations'
+import { tijdfactor } from './tijdtoeslag'
 
 function euro(n: number) {
   return Math.round(n * 100) / 100
@@ -46,7 +47,7 @@ function appendGroep(
 
   for (const regel of directeRegels) {
     const opslag = regel.opslag_pct ?? defaultOpslag
-    const b = berekenCalculatieregel(regel, alleComponenten, opslag)
+    const b = berekenCalculatieregel(regel, alleComponenten, opslag, tijdfactor(groep))
     rows.push([
       null,
       `${'  '.repeat(diepte + 1)}${regel.omschrijving}`,

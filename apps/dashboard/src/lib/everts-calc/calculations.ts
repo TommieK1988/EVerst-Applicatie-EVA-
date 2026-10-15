@@ -1,6 +1,7 @@
 import type { CalculatieLijn, Activiteit, Scenario, BtwGroep, Groep, Calculatieregel, Componentregel, ComponentType, WerkbegrotingRegel, WerkbegrotingComponent } from './types'
 import { isTekstregel } from './types'
 import { nominaalPercentage } from '@/lib/stamdata/btw'
+import { maakTijdfactor, tijdfactor } from './tijdtoeslag'
 
 // ─── Standaard-opslag van een calculatie ─────────────────────────────
 
@@ -54,12 +55,15 @@ export function berekenBtwBreakdown(
   defaultOpslag: number,
   btwDefault: number,
   tarieven?: { id: string; label: string; percentage: number; verlegd: boolean }[],
+  /** Voor de tijdtoeslag per groep; zonder groepen rekent hij zonder toeslag. */
+  calcGroepen: Pick<Groep, 'id' | 'tijdtoeslag_pct'>[] = [],
 ): BtwGroep[] {
   type Bucket = { pct: number; basis: number; tarief_id?: string }
   const groepen = new Map<string, Bucket>()
+  const factorVan = maakTijdfactor(calcGroepen)
   for (const r of regels) {
     const opslag = r.opslag_pct ?? defaultOpslag
-    const { vp_totaal } = berekenCalculatieregel(r, componenten, opslag)
+    const { vp_totaal } = berekenCalculatieregel(r, componenten, opslag, factorVan(r))
     if (vp_totaal === 0) continue
     const pct = r.btw_pct ?? btwDefault
     // Regel zonder tarief → het niet-verlegde tarief met hetzelfde percentage (zoals
@@ -148,10 +152,15 @@ const LEGE_BEDRAGEN: RegelBedragen = {
   arbeid_vp: 0,    materieel_vp: 0,    oa_vp: 0,
 }
 
+/**
+ * `tijdfactor`: de tijdtoeslag van de groep van de regel (1 = geen toeslag), zie
+ * tijdtoeslag.ts. Hij telt op de arbeidsnormen; materieel en OA blijven gelijk.
+ */
 export function berekenCalculatieregel(
   regel: Calculatieregel,
   componenten: Componentregel[],
-  opslag_pct = 0
+  opslag_pct = 0,
+  tijdfactor = 1,
 ): RegelBedragen {
   // Een tekstregel is puur toelichting: nooit een bedrag, ook niet als er ooit
   // componenten onder hebben gehangen (bv. een post die naar tekst is omgezet).
@@ -160,7 +169,9 @@ export function berekenCalculatieregel(
   const getAll = (type: ComponentType) =>
     componenten.filter(c => c.calculatieregel_id === regel.id && c.type === type)
 
-  const abs = getAll('arbeid')
+  const abs = tijdfactor === 1
+    ? getAll('arbeid')
+    : getAll('arbeid').map(c => ({ ...c, norm_hoeveelheid: (c.norm_hoeveelheid ?? 0) * tijdfactor }))
   const mts = getAll('materieel')
   const oas = getAll('onderaanneming')
 
@@ -208,8 +219,9 @@ export function berekenGroepKostprijs(
   alleComponenten: Componentregel[]
 ): number {
   const directeRegels = alleRegels.filter(r => r.groep_id === groepId)
+  const factor = tijdfactor(alleGroepen.find(g => g.id === groepId))
   const regelSom = directeRegels.reduce((s, r) => {
-    const { kp_totaal } = berekenCalculatieregel(r, alleComponenten)
+    const { kp_totaal } = berekenCalculatieregel(r, alleComponenten, 0, factor)
     return s + kp_totaal
   }, 0)
   const subGroepen = alleGroepen.filter(g => g.parent_id === groepId)
@@ -231,9 +243,10 @@ export function berekenGroepVP(
   defaultOpslag: number
 ): number {
   const directeRegels = alleRegels.filter(r => r.groep_id === groepId)
+  const factor = tijdfactor(alleGroepen.find(g => g.id === groepId))
   const regelSom = directeRegels.reduce((s, r) => {
     const opslag = r.opslag_pct ?? defaultOpslag
-    const { vp_totaal } = berekenCalculatieregel(r, alleComponenten, opslag)
+    const { vp_totaal } = berekenCalculatieregel(r, alleComponenten, opslag, factor)
     return s + vp_totaal
   }, 0)
   const subGroepen = alleGroepen.filter(g => g.parent_id === groepId)
@@ -250,8 +263,9 @@ export function berekenGroepUren(
   alleComponenten: Componentregel[]
 ): number {
   const directeRegels = alleRegels.filter(r => r.groep_id === groepId)
+  const factor = tijdfactor(alleGroepen.find(g => g.id === groepId))
   const regelSom = directeRegels.reduce((s, r) => {
-    const { uren_totaal } = berekenCalculatieregel(r, alleComponenten)
+    const { uren_totaal } = berekenCalculatieregel(r, alleComponenten, 0, factor)
     return s + uren_totaal
   }, 0)
   const subGroepen = alleGroepen.filter(g => g.parent_id === groepId)
@@ -268,8 +282,9 @@ export function berekenGroepMaterieel(
   alleComponenten: Componentregel[]
 ): number {
   const directeRegels = alleRegels.filter(r => r.groep_id === groepId)
+  const factor = tijdfactor(alleGroepen.find(g => g.id === groepId))
   const regelSom = directeRegels.reduce((s, r) => {
-    const { materieel_totaal } = berekenCalculatieregel(r, alleComponenten)
+    const { materieel_totaal } = berekenCalculatieregel(r, alleComponenten, 0, factor)
     return s + materieel_totaal
   }, 0)
   const subGroepen = alleGroepen.filter(g => g.parent_id === groepId)
@@ -286,8 +301,9 @@ export function berekenGroepOA(
   alleComponenten: Componentregel[]
 ): number {
   const directeRegels = alleRegels.filter(r => r.groep_id === groepId)
+  const factor = tijdfactor(alleGroepen.find(g => g.id === groepId))
   const regelSom = directeRegels.reduce((s, r) => {
-    const { oa_totaal } = berekenCalculatieregel(r, alleComponenten)
+    const { oa_totaal } = berekenCalculatieregel(r, alleComponenten, 0, factor)
     return s + oa_totaal
   }, 0)
   const subGroepen = alleGroepen.filter(g => g.parent_id === groepId)
@@ -319,11 +335,12 @@ export function berekenScenarioVP(
   defaultOpslag: number
 ): number {
   const groepIds = new Set(alleGroepen.map(g => g.id))
+  const factorVan = maakTijdfactor(alleGroepen)
   return alleRegels
     .filter(r => groepIds.has(r.groep_id))
     .reduce((s, r) => {
       const opslag = r.opslag_pct ?? defaultOpslag
-      const { vp_totaal } = berekenCalculatieregel(r, alleComponenten, opslag)
+      const { vp_totaal } = berekenCalculatieregel(r, alleComponenten, opslag, factorVan(r))
       return s + vp_totaal
     }, 0)
 }

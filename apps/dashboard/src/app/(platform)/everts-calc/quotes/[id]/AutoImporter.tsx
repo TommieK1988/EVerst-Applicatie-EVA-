@@ -6,6 +6,7 @@ import { importeerRegels } from '@/app/(platform)/everts-calc/actions/quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
 import { isTekstregel } from '@/lib/everts-calc/types'
 import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
+import { tijdfactor } from '@/lib/everts-calc/tijdtoeslag'
 
 interface Props {
   quoteId: string
@@ -73,7 +74,8 @@ export default function AutoImporter({ quoteId, hasSections, projectId, scenario
 
           for (const regel of regelsBijGroep) {
             const comps = alleComps.filter((c: { calculatieregel_id: string }) => c.calculatieregel_id === regel.id)
-            const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag)
+            // Met de tijdtoeslag van de groep, net als Offerte aanmaken.
+            const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag, tijdfactor(groep))
 
             importRegels.push({
               groep_id: groep.id,

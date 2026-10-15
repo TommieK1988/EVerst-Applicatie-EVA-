@@ -26,6 +26,7 @@ import type { EigenBewakingscode } from '@/lib/dossiers/werkbegroting-codes'
 import { magCorrecties as haalMagCorrecties, voegCorrectieKostengroepToe } from '@/lib/dossiers/correctie-bewakingscode'
 import { CORRECTIE_BEWAKINGSCODE, isCorrectieCode } from '@/components/dossiers/types'
 import SamenvoegenModal, { type SamenvoegenItem, type SamenvoegResultaat } from './SamenvoegenModal'
+import { metTijdtoeslag } from '@/lib/everts-calc/tijdtoeslag'
 
 interface Props {
   werkbegrotingId: string
@@ -638,11 +639,15 @@ export default function WerkbegrotingGrid({ werkbegrotingId, scenarioId, onWijzi
   const laad = useCallback(() => {
     const wbRegels = getWerkbegrotingRegels(werkbegrotingId)
     const regelIds = new Set(wbRegels.map(r => r.id))
-    setGroepen(getGroepen(scenarioId))
+    const scenarioGroepen = getGroepen(scenarioId)
+    const scenarioRegels = getCalculatieregelsVoorScenario(scenarioId)
+    setGroepen(scenarioGroepen)
     setRegels(wbRegels)
     setComponenten(getWerkbegrotingComponenten().filter(c => regelIds.has(c.werkbegroting_regel_id)))
-    setCalcRegels(getCalculatieregelsVoorScenario(scenarioId))
-    setCalcComponenten(getComponentregelsVoorScenario(scenarioId))
+    setCalcRegels(scenarioRegels)
+    // Alleen voor de vergelijking "calculatieprijs": met de tijdtoeslag, want de
+    // werkbegroting kreeg de arbeidsnormen ook mét toeslag mee.
+    setCalcComponenten(metTijdtoeslag(getComponentregelsVoorScenario(scenarioId), scenarioRegels, scenarioGroepen))
   }, [werkbegrotingId, scenarioId])
 
   useEffect(() => { laad() }, [laad])
