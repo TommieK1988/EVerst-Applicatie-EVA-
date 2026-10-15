@@ -658,7 +658,9 @@ dus een nieuw bericht met "RE:" in het onderwerp.
 
 Koppel je een bericht aan een dossier dat al bestaat — gewoon, als meerwerk of bij het
 winnen van een offerte — dan krijgt de **projectleider van dat dossier een melding**: van wie
-de mail komt, het onderwerp, en een link naar het dossier. Zonder die melding verdween de
+de mail komt, het onderwerp, waar hij over gaat, en een link naar het dossier. Waar hij over
+gaat is de samenvatting die EVA bij binnenkomst al maakte; is die er niet, dan staat het begin
+van de mail erin. Zonder die melding verdween de
 mail stil uit het Postvak, en merkte wie het dossier draait er pas iets van als hij toevallig
 in de dossiermap keek.
 
