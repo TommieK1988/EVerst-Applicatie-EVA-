@@ -60,6 +60,7 @@ import {
 import { getBouw7ClientOfNull } from '@/lib/bouw7/config'
 import { laadKaartBedragen, ID_BLOK } from './kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { laadBegroteArbeidPerCode } from './uren-bewaking-wb'
 import { AFREKENWIJZE_VELDEN, isRegieOpdracht, isRegieOpdrachtRij } from './regie-opdracht'
 
 type DossierResult =
@@ -4141,51 +4142,11 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
 
   const [bewaking, wbData] = await Promise.all([
     getDossierBewaking(dossierId),
-    (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createAdminClient() as any
-      const syntheticId = `wb-direct-${dossierId}`
-      const { data: werkbegrotingen } = await supabase
-        .from('werkbegrotingen')
-        .select('id, status')
-        .eq('project_id', syntheticId)
-        .order('bijgewerkt_op', { ascending: false })
-      if (!werkbegrotingen || werkbegrotingen.length === 0) return null
-
-      const statusPrio: Record<string, number> = { geaccordeerd: 0, definitief: 1, concept: 2 }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wb = [...werkbegrotingen].sort((a: any, b: any) => (statusPrio[a.status] ?? 3) - (statusPrio[b.status] ?? 3))[0]
-
-      const { data: regels } = await supabase
-        .from('werkbegroting_regels')
-        .select('id, kostengroep')
-        .eq('werkbegroting_id', wb.id)
-        .not('kostengroep', 'is', null)
-        .neq('kostengroep', '')
-      if (!regels || regels.length === 0) return null
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const regelKostengroep = new Map<string, string>(regels.map((r: any) => [r.id, r.kostengroep]))
-      const { data: componenten } = await supabase
-        .from('werkbegroting_componenten')
-        .select('werkbegroting_regel_id, norm_hoeveelheid, tarief')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .in('werkbegroting_regel_id', regels.map((r: any) => r.id))
-        .eq('type', 'arbeid')
-      if (!componenten) return null
-
-      const codeMap = new Map<string, { uren: number; bedrag: number }>()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const comp of componenten as any[]) {
-        const code = regelKostengroep.get(comp.werkbegroting_regel_id)
-        if (!code || isCorrectieCode(code)) continue
-        const uren = toGetal(comp.norm_hoeveelheid)
-        const bedrag = uren * toGetal(comp.tarief)
-        const cur = codeMap.get(code) ?? { uren: 0, bedrag: 0 }
-        codeMap.set(code, { uren: cur.uren + uren, bedrag: cur.bedrag + bedrag })
-      }
-      return codeMap.size > 0 ? codeMap : null
-    })(),
+    // Het werkbegrotingstarief is een extra kolom; een leesfout daar mag de urentabel niet breken.
+    laadBegroteArbeidPerCode(dossierId).catch((e) => {
+      console.error('[urenbewaking] werkbegroting lezen mislukt', dossierId, e)
+      return null
+    }),
   ])
 
   if (!bewaking.beschikbaar) return { ...leeg, stand: bewaking.stand }
