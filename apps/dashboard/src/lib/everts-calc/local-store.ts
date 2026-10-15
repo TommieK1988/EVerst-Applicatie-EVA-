@@ -23,6 +23,7 @@ import { isTekstregel } from './types'
 import { nieuweId } from './utils'
 import { zonderCodeInOmschrijving } from './bestekcode'
 import { kopieerMeetstaten } from './meetstaat-kopie'
+import { maakTijdfactor } from './tijdtoeslag'
 
 const KEYS = {
   werkbegrotingen: 'werkbegrotingen',
@@ -782,6 +783,15 @@ export function verwijderBestelling(id: string): void {
 // Kopieert alle calculatieregels en componenten; hoeveelheid wordt bevroren.
 // Kan alleen aangemaakt worden als de offerte de status 'gewonnen' heeft.
 
+/**
+ * Norm zoals hij de werkbegroting in gaat: arbeid mét de tijdtoeslag van de groep.
+ * De werkbegroting voedt Bouw7, de planning en de urenbewaking, en die kennen de
+ * toeslag niet; zonder dit plant de uitvoering minder uren dan er verkocht zijn.
+ */
+function wbNorm(comp: Componentregel, factor: number): number {
+  return comp.type === 'arbeid' ? (comp.norm_hoeveelheid ?? 0) * factor : comp.norm_hoeveelheid
+}
+
 export function maakWerkbegrotingVanCalculatie(
   projectId: string,
   scenarioId: string
@@ -801,7 +811,9 @@ export function maakWerkbegrotingVanCalculatie(
   }
   slaWerkbegrotingOp(wb)
 
-  const groepIds = new Set(getGroepen(scenarioId).map(g => g.id))
+  const scenarioGroepen = getGroepen(scenarioId)
+  const groepIds = new Set(scenarioGroepen.map(g => g.id))
+  const factorVan = maakTijdfactor(scenarioGroepen)
   // Tekstregels blijven achter in de calculatie: ze horen bij de offerte, niet bij
   // de uitvoering. Zo kunnen ze ook nooit als bestelregel in Bouw7 belanden.
   const regels = getCalculatieregels().filter(r => groepIds.has(r.groep_id) && !isTekstregel(r))
@@ -832,7 +844,7 @@ export function maakWerkbegrotingVanCalculatie(
         werkbegroting_regel_id: wbRegel.id,
         source_component_id: comp.id,
         type: comp.type,
-        norm_hoeveelheid: comp.norm_hoeveelheid,
+        norm_hoeveelheid: wbNorm(comp, factorVan(regel)),
         eenheid: comp.eenheid,
         tarief: comp.tarief,
         opslag_pct: comp.opslag_pct,
@@ -853,7 +865,9 @@ export function heroverhaalWerkbegroting(
   scenarioId: string,
   modus: 'volledig' | 'gewijzigd'
 ): void {
-  const groepIds   = new Set(getGroepen(scenarioId).map(g => g.id))
+  const scenarioGroepen = getGroepen(scenarioId)
+  const groepIds   = new Set(scenarioGroepen.map(g => g.id))
+  const factorVan  = maakTijdfactor(scenarioGroepen)
   // Idem als bij het aanmaken: tekstregels horen niet in de werkbegroting.
   const calcRegels = getCalculatieregels().filter(r => groepIds.has(r.groep_id) && !isTekstregel(r))
 
@@ -877,7 +891,7 @@ export function heroverhaalWerkbegroting(
         slaWerkbegrotingComponentOp({
           id: nieuweId(), werkbegroting_regel_id: wbRegel.id,
           source_component_id: comp.id, type: comp.type,
-          norm_hoeveelheid: comp.norm_hoeveelheid,
+          norm_hoeveelheid: wbNorm(comp, factorVan(regel)),
           eenheid: comp.type === 'arbeid' ? 'uur' : comp.eenheid,
           tarief: comp.tarief, opslag_pct: comp.opslag_pct,
           omschrijving: comp.omschrijving, leverancier_naam: comp.leverancier,
@@ -914,7 +928,7 @@ export function heroverhaalWerkbegroting(
             slaWerkbegrotingComponentOp({
               id: nieuweId(), werkbegroting_regel_id: wbRegel.id,
               source_component_id: comp.id, type: comp.type,
-              norm_hoeveelheid: comp.norm_hoeveelheid,
+              norm_hoeveelheid: wbNorm(comp, factorVan(calcRegel)),
               eenheid: comp.type === 'arbeid' ? 'uur' : comp.eenheid,
               tarief: comp.tarief, opslag_pct: comp.opslag_pct,
               omschrijving: comp.omschrijving, leverancier_naam: comp.leverancier,
@@ -939,7 +953,7 @@ export function heroverhaalWerkbegroting(
           slaWerkbegrotingComponentOp({
             id: nieuweId(), werkbegroting_regel_id: nieuwWbRegel.id,
             source_component_id: comp.id, type: comp.type,
-            norm_hoeveelheid: comp.norm_hoeveelheid,
+            norm_hoeveelheid: wbNorm(comp, factorVan(calcRegel)),
             eenheid: comp.type === 'arbeid' ? 'uur' : comp.eenheid,
             tarief: comp.tarief, opslag_pct: comp.opslag_pct,
             omschrijving: comp.omschrijving, leverancier_naam: comp.leverancier,

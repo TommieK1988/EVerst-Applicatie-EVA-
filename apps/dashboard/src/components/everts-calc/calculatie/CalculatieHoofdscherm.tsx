@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
+import UrenPerGroepKnop from '@/components/everts-calc/calculatie/UrenPerGroep'
 import MeetstaatKnop from './MeetstaatKnop'
 import { Alert } from '@/components/ui/alert'
 import toast from 'react-hot-toast'
@@ -36,6 +37,7 @@ import { syncCalculatieNaarSupabase, bewaarCalculatieSnapshot } from '@/app/(pla
 import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quotes'
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
+import { metTijdtoeslag } from '@/lib/everts-calc/tijdtoeslag'
 
 /** Structuurpaneel open of dicht: per browser onthouden, puur een gemak. */
 const BOOM_OPEN_SLEUTEL = 'eva.calculatie.structuur-open'
@@ -180,7 +182,9 @@ export default function CalculatieHoofdscherm({
     setKostprijs(berekenScenarioKostprijs(gs, rs, cs))
     setVerkoopprijs(berekenScenarioVP(gs, rs, cs, scenarioDefaultOpslag(scenario)))
     setRegelsVoorBtw(rs)
-    setComponentenVoorBtw(cs)
+    // Met de tijdtoeslag in de arbeidsnormen: de btw-uitsplitsing in de totalenbalk
+    // telt zo dezelfde verkoopprijs als hierboven.
+    setComponentenVoorBtw(metTijdtoeslag(cs, rs, gs))
     const metEigen = new Set(cs.filter(c => c.opslag_pct !== undefined).map(c => c.calculatieregel_id))
     rs.forEach(r => { if (r.opslag_pct !== undefined) metEigen.add(r.id) })
     setAantalEigenOpslag(metEigen.size)
@@ -454,6 +458,8 @@ export default function CalculatieHoofdscherm({
             bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
             onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
           <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
+            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+          <UrenPerGroepKnop scenarioId={scenario.id} readOnly={readOnly}
             onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
         </>}
         weergave={weergave}

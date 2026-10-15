@@ -246,6 +246,11 @@ export interface Groep {
   volgorde: number
   ingeklapt?: boolean
   optioneel?: boolean   // telt niet mee in eindtotaal
+  /**
+   * Tijdtoeslag in procenten op alle arbeidsuren van de regels direct in deze groep
+   * (−25 t/m +50; leeg = 0). De normen zelf blijven staan; zie tijdtoeslag.ts.
+   */
+  tijdtoeslag_pct?: number
 }
 
 /**

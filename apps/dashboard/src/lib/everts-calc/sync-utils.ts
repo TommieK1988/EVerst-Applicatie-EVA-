@@ -18,6 +18,7 @@ import {
 import { berekenCalculatieregel, berekeningNummers } from '@/lib/everts-calc/calculations'
 import { isTekstregel } from '@/lib/everts-calc/types'
 import type { SyncGroep, SyncRegel, CalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
+import { maakTijdfactor } from './tijdtoeslag'
 
 export function verzamelSyncData(scenarioId: string): {
   groepen: SyncGroep[]
@@ -40,8 +41,9 @@ export function verzamelSyncData(scenarioId: string): {
   // Tekstregels blijven buiten de genormaliseerde projectie: die voedt de
   // werkbegroting en rapportage, en daar heeft een regel zonder bedrag niets
   // te zoeken. De verliesloze snapshot hieronder bewaart ze wél.
+  const factorVan = maakTijdfactor(groepen)
   const syncRegels: SyncRegel[] = regels.filter(r => !isTekstregel(r)).map(r => {
-    const bedragen = berekenCalculatieregel(r, comps)
+    const bedragen = berekenCalculatieregel(r, comps, 0, factorVan(r))
     return {
       id:               r.id,
       group_id:         r.groep_id,

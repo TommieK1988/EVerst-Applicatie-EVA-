@@ -10,6 +10,7 @@
 
 import type { Groep, Calculatieregel, Componentregel, Scenario } from './types'
 import { scenarioDefaultOpslag } from './calculations'
+import { metTijdtoeslag } from './tijdtoeslag'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -162,8 +163,11 @@ export function serialiseerNaarCuf(
     .filter(g => g.parent_id === null)
     .sort((a, b) => a.volgorde - b.volgorde)
 
+  // Calc4You kent geen tijdtoeslag: de export krijgt de effectieve arbeidsnormen,
+  // zodat uren en kostprijs gelijk blijven aan de calculatie.
+  const effectief = metTijdtoeslag(componentregels, calculatieregels, groepen)
   const bundelsXml = rootGroepen
-    .map(g => renderBundel(g, groepen, calculatieregels, componentregels, scenario, '    '))
+    .map(g => renderBundel(g, groepen, calculatieregels, effectief, scenario, '    '))
     .join('\n')
 
   return [

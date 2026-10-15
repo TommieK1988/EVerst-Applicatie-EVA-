@@ -26,6 +26,7 @@ import type { RegelActie } from './grid/ActieMenu'
 import { SelectieBalk } from './grid/SelectieBalk'
 import type { Weergave, WeergaveSignaal } from './grid/weergave'
 import { NieuweGroepRij } from './grid/NieuweGroepRij'
+import { toeslagLabel } from '@/lib/everts-calc/tijdtoeslag'
 
 interface Props {
   scenarioId: string
@@ -1007,8 +1008,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       naam: nieuwGroepNaam.trim(),
       niveau: (nieuwGroepParent.niveau + 1) as 1 | 2 | 3,
       volgorde: groepen.filter(g => g.parent_id === nieuwGroepParent.id).length + 1,
+      // De tijdtoeslag schuift mee: de regels die je hierheen verplaatst, houden zo hun uren.
+      ...(nieuwGroepParent.tijdtoeslag_pct ? { tijdtoeslag_pct: nieuwGroepParent.tijdtoeslag_pct } : {}),
     }
     slaGroepOp(nieuw); laadAlles(); onWijziging()
+    if (nieuw.tijdtoeslag_pct) toast(`Tijdtoeslag ${toeslagLabel(nieuw.tijdtoeslag_pct)} overgenomen van ${nieuwGroepParent.naam}`)
     setNieuwGroepParent(null); setNieuwGroepNaam('')
     toonNieuweGroep(nieuw.id)
   }

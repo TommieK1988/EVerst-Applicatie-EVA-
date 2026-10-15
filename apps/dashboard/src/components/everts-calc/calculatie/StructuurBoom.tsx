@@ -15,6 +15,7 @@ import type { Groep } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { toeslagLabel } from '@/lib/everts-calc/tijdtoeslag'
 
 interface Props {
   scenarioId: string
@@ -166,8 +167,11 @@ export default function StructuurBoom({
       naam,
       niveau,
       volgorde: siblings.length + 1,
+      // De tijdtoeslag van de bovenliggende groep schuift mee, net als in het rekenblad.
+      ...(parentGroep?.tijdtoeslag_pct ? { tijdtoeslag_pct: parentGroep.tijdtoeslag_pct } : {}),
     }
     slaGroepOp(nieuw)
+    if (nieuw.tijdtoeslag_pct && parentGroep) toast(`Tijdtoeslag ${toeslagLabel(nieuw.tijdtoeslag_pct)} overgenomen van ${parentGroep.naam}`)
     laad()
     onWijziging()
     setToevoegen(null)

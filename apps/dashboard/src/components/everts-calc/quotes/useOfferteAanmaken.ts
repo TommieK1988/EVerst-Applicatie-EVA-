@@ -11,6 +11,7 @@ import type { QuoteType } from '@/lib/everts-calc/types-quotes'
 import type { Groep, Calculatieregel } from '@/lib/everts-calc/types'
 import { isTekstregel } from '@/lib/everts-calc/types'
 import { buildNummers, buildStructuur } from '@/lib/everts-calc/import-structuur'
+import { tijdfactor } from '@/lib/everts-calc/tijdtoeslag'
 
 export interface OfferteAanmaakOpties {
   open: boolean
@@ -175,7 +176,8 @@ export function useOfferteAanmaken({
 
         for (const regel of regelsBijGroep) {
           const comps = alleComps.filter((c: { calculatieregel_id: string }) => c.calculatieregel_id === regel.id)
-          const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag)
+          // Met de tijdtoeslag van de groep: de offerte bevriest uren en arbeid zoals verkocht.
+          const berekend = berekenCalculatieregel(regel, comps, regel.opslag_pct ?? defaultOpslag, tijdfactor(groep))
 
           importRegels.push({
             groep_id: groep.id,

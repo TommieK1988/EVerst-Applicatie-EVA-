@@ -56,6 +56,8 @@ export interface RegelRijProps {
   onDragEnd?: () => void
   weergaveSignaal?: WeergaveSignaal
   readOnly?: boolean
+  /** Tijdtoeslag van de groep (1 = geen): telt op de uren en arbeid, niet op de norm zelf. */
+  tijdfactor?: number
 }
 
 export function CalculatieregelRij({
@@ -64,7 +66,7 @@ export function CalculatieregelRij({
   bibliotheekItems,
   isGeselecteerd, onSelecteer, onActie,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
-  weergaveSignaal, readOnly = false,
+  weergaveSignaal, readOnly = false, tijdfactor = 1,
 }: RegelRijProps) {
   const regelComps = componenten.filter(c => c.calculatieregel_id === regel.id)
   const ab = regelComps.find(c => c.type === 'arbeid')
@@ -138,7 +140,7 @@ export function CalculatieregelRij({
     ...(!multiOa && oaPrijs !== 0                     ? [{ id: 'oa', calculatieregel_id: regel.id, type: 'onderaanneming' as const, norm_hoeveelheid: oaNorm, tarief: oaPrijs,  opslag_pct: oa?.opslag_pct }] : allOa),
   ]
   const { arbeid_totaal, materieel_totaal, oa_totaal, kp_pe, kp_totaal, uren_pe, uren_totaal, vp_pe, vp_totaal } =
-    berekenCalculatieregel(regel, tmpComps, opslag)
+    berekenCalculatieregel(regel, tmpComps, opslag, tijdfactor)
 
   const hasCompOverride = regelComps.some(c => c.opslag_pct !== undefined)
   const displayOpslag = hasCompOverride && kp_pe !== 0
@@ -150,7 +152,7 @@ export function CalculatieregelRij({
   // Terugrekenen totaalprijs → eenheidsprijs
   const onBedragAb = (v: number) => {
     if (abUren !== 0 && regel.hoeveelheid !== 0) {
-      const t = +(v / (abUren * regel.hoeveelheid)).toFixed(4)
+      const t = +(v / (abUren * tijdfactor * regel.hoeveelheid)).toFixed(4)
       setAbTarief(t); deb('abt', () => onWijzigComponent(regel.id, 'arbeid', abUren, t))
     }
   }
@@ -722,7 +724,7 @@ export function CalculatieregelRij({
       {compsUitgeklapt && (
         <RegelComponentenBlok
           regel={regel} regelComps={regelComps} colOrder={colOrder} indent={indent} opslag={opslag}
-          uurtarieven={uurtarieven} eenheden={eenheden}
+          uurtarieven={uurtarieven} eenheden={eenheden} tijdfactor={tijdfactor}
           onWijzigComponentExtra={onWijzigComponentExtra}
           onVerwijderComponent={onVerwijderComponent} onVoegComponentToe={onVoegComponentToe}
         />
