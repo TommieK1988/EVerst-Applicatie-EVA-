@@ -18,7 +18,7 @@ export function NormenKnop({ aantal, open, onWissel }: {
         onClick={e => { e.stopPropagation(); onWissel() }}
         title="Norm toevoegen (Ctrl+Enter)"
         aria-label="Norm toevoegen"
-        className="inline-flex h-5 min-w-[26px] items-center justify-center rounded-md border border-dashed border-neutral-300 px-1 text-[11px] font-semibold text-neutral-400 hover:border-brand-500 hover:text-brand-700"
+        className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-md border border-dashed border-neutral-300 px-1 text-[11px] font-semibold text-neutral-400 hover:border-brand-500 hover:text-brand-700"
       >
         +
       </button>
@@ -31,7 +31,7 @@ export function NormenKnop({ aantal, open, onWissel }: {
       title={`${open ? 'Normen verbergen' : 'Normen tonen'} (Ctrl+Enter)`}
       aria-expanded={open}
       className={cn(
-        'inline-flex h-5 min-w-[30px] items-center justify-center gap-0.5 rounded-md border px-1 text-[10.5px] font-semibold tabular-nums transition-colors',
+        'inline-flex h-5 min-w-[26px] items-center justify-center gap-0.5 rounded-md border px-1 text-[10.5px] font-semibold tabular-nums transition-colors',
         open
           ? 'border-brand-500 bg-brand-500 text-white'
           : 'border-brand-500/40 bg-brand-50 text-brand-700 hover:border-brand-500',
@@ -55,7 +55,7 @@ export function OmschrijvingKnop({ gevuld, open, onWissel }: {
       title={`${open ? 'Werkomschrijving verbergen' : gevuld ? 'Werkomschrijving tonen' : 'Werkomschrijving toevoegen'} (Ctrl+Shift+Enter)`}
       aria-expanded={open}
       className={cn(
-        'inline-flex h-5 min-w-[26px] items-center justify-center rounded-md px-1 text-[11px] font-semibold transition-colors',
+        'inline-flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-semibold transition-colors',
         open
           ? 'border border-brand-500 bg-brand-500 text-white'
           : gevuld

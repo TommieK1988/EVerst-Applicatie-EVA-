@@ -1,18 +1,15 @@
 'use client'
 
-import type { Dispatch, SetStateAction } from 'react'
 import { Trash2, MessageSquare, X, ImagePlus } from 'lucide-react'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import type { Calculatieregel, Componentregel, EenheidConfig } from '@/lib/everts-calc/types'
-import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
-import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { ColId } from './kolommen'
 import { ComponentRegelRij } from './ComponentRegelRij'
 import { NieuweNormInvoer } from './NieuweNormInvoer'
 
 /**
  * Het uitklapdeel onder een calculatieregel: de werkomschrijving met afbeeldingen, en
- * de normen (componentregels) met opmerking en schilderbehandeling. Staat los van de
+ * de normen (componentregels) met de lege normregel eronder. Staat los van de
  * regel zelf, zodat die rij leesbaar blijft.
  */
 
@@ -20,7 +17,7 @@ import { NieuweNormInvoer } from './NieuweNormInvoer'
  * Aantal kolommen vóór de omschrijving. De uitklaprijen (werkomschrijving, opmerking,
  * nieuwe norm, behandeling) beginnen daar, zodat hun tekst onder de regelnaam staat.
  */
-function voorOmschrijving(colOrder: ColId[]): number {
+export function voorOmschrijving(colOrder: ColId[]): number {
   return Math.max(0, colOrder.indexOf('omschrijving'))
 }
 
@@ -170,9 +167,8 @@ export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
 }
 
 export function RegelComponentenBlok({
-  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden, behandelingen,
-  schilderbehandelingOpen, setSchilderbehandelingOpen,
-  onWijzig, onWijzigComponentExtra, onVerwijderComponent, onVoegComponentToe,
+  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden,
+  onWijzigComponentExtra, onVerwijderComponent, onVoegComponentToe,
 }: {
   regel: Calculatieregel
   regelComps: Componentregel[]
@@ -181,13 +177,9 @@ export function RegelComponentenBlok({
   opslag: number
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
-  behandelingen: SchilderBehandeling[]
-  schilderbehandelingOpen: boolean
-  setSchilderbehandelingOpen: Dispatch<SetStateAction<boolean>>
-  onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
   onVerwijderComponent: (compId: string) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string, extra?: Partial<Componentregel>) => void
 }) {
   return (
       <>
@@ -208,31 +200,9 @@ export function RegelComponentenBlok({
         <tr className="border-b border-slate-100 bg-slate-50/30">
           {voorOmschrijving(colOrder) > 0 && <td colSpan={voorOmschrijving(colOrder)} />}
           <td colSpan={colOrder.length - voorOmschrijving(colOrder)} className="py-1 pr-3" style={{ paddingLeft: '16px' }}>
-            <NieuweNormInvoer onVoeg={(type, oms) => onVoegComponentToe(regel.id, type, oms || undefined)} />
+            <NieuweNormInvoer onVoeg={(type, oms, extra) => onVoegComponentToe(regel.id, type, oms || undefined, extra)} />
           </td>
         </tr>
-        {schilderbehandelingOpen && (
-          <tr className="border-b border-blue-100 bg-blue-50/30">
-            {voorOmschrijving(colOrder) > 0 && <td colSpan={voorOmschrijving(colOrder)} />}
-            <td colSpan={colOrder.length - voorOmschrijving(colOrder)} className="pr-3 py-2">
-              <SchilderbehandelingZoekveld
-                behandelingId={regel.schilderbehandeling_id}
-                behandelingTekst={regel.schilderbehandeling}
-                bibliotheek={behandelingen}
-                // Alleen de koppeling vastleggen — de tekst wordt pas bevroren bij het
-                // opstellen van de offerte, zodat de calculatie de bibliotheek volgt.
-                onSelecteer={b => onWijzig(regel.id, {
-                  schilderbehandeling_id: b.id,
-                  schilderbehandeling: undefined,
-                })}
-                onWis={() => {
-                  onWijzig(regel.id, { schilderbehandeling: undefined, schilderbehandeling_id: undefined })
-                  setSchilderbehandelingOpen(false)
-                }}
-              />
-            </td>
-          </tr>
-        )}
       </>
   )
 }

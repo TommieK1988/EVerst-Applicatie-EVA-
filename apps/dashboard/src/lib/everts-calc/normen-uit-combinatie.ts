@@ -2,8 +2,9 @@
  * normen-uit-combinatie.ts — De componentregels (arbeid, materiaal, onderaanneming)
  * van een calculatieregel opbouwen uit een combinatie in de Schilderwerkbibliotheek.
  *
- * Gedeeld door de meetstaat-sync en het koppelen van een behandeling per bestekscode,
- * zodat beide precies dezelfde normen neerzetten.
+ * Gedeeld door de meetstaat-sync en het koppelen van een behandeling (op één regel of
+ * per bestekscode), zodat alle drie precies dezelfde normen neerzetten. Arbeid rekent
+ * met het uurtarief van de calculatie, niet met dat uit de bibliotheek.
  */
 
 import type { Calculatieregel, Componentregel } from './types'
@@ -25,7 +26,10 @@ export function componentregelsUitCombinatie(
       calculatieregel_id: calculatieregelId,
       type: 'arbeid',
       norm_hoeveelheid: n.minutes_per_unit / 60,
-      tarief: n.hour_rate,
+      // Bewust 0: bij opslaan vult de store het uurtarief van déze calculatie in
+      // (standaardUurtarief). Het tarief uit de bibliotheek is van toen de norm werd
+      // gemaakt; per regel mag je daarna afwijken.
+      tarief: 0,
       omschrijving: n.omschrijving ?? undefined,
     })
   }

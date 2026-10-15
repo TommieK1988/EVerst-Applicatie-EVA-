@@ -26,6 +26,8 @@ export interface CodeGroep {
   sleutel: string
   onderdeel: string
   type: string
+  /** Type in de schilderwerkbibliotheek (daar hangen de normen aan), indien bekend. */
+  typeId?: string
   /** Genormaliseerde bestekscode; `ZONDER_CODE` voor regels zonder code. */
   code: string
   regels: Calculatieregel[]
@@ -58,7 +60,7 @@ export function groepeerPerBestekcode(
 
     let g = groepen.get(sleutel)
     if (!g) {
-      g = { sleutel, onderdeel, type, code, regels: [], totalen: [], behandelingIds: [] }
+      g = { sleutel, onderdeel, type, typeId: agg?.type_id, code, regels: [], totalen: [], behandelingIds: [] }
       groepen.set(sleutel, g)
     }
     g.regels.push(r)
@@ -91,9 +93,10 @@ export interface KoppelStap {
 }
 
 /**
- * Bepaalt per regel wat het koppelen doet. Bestaat de combinatie, dan komen de normen
- * uit de bibliotheek. Bestaat hij niet, dan krijgt de regel wel de behandeling (de
- * tekst), maar houdt hij zijn normen en wordt hij gemarkeerd zodat hij opvalt.
+ * Bepaalt per regel wat het koppelen doet. Bestaat de combinatie, dan kunnen de normen
+ * uit de bibliotheek komen. Bestaat hij niet, dan krijgt de regel wel de behandeling (de
+ * tekst) en houdt hij zijn normen; het rekenblad toont dan "geen normen" bij het label.
+ * Niet markeren: de markering (⚑) is van de calculator, voor wat híj nog moet uitzoeken.
  */
 export function planKoppeling(
   regels: Calculatieregel[],
@@ -113,16 +116,27 @@ export function planKoppeling(
       ...regel,
       schilderbehandeling_id: behandeling.id,
       schilderbehandeling: undefined,
-      omschrijving: agg
-        // De code staat in zijn eigen kolom, niet in de omschrijving.
+      // Alleen een omschrijving die EVA zelf uit de meetstaat maakte, krijgt de nieuwe
+      // naam; eigen tekst van de calculator blijft staan (het label en de offerte tonen
+      // de behandeling er dan achter). De code staat in zijn eigen kolom.
+      omschrijving: agg && isMeetstaatOmschrijving(regel.omschrijving, agg.onderdeel, agg.type)
         ? calculatieregelOmschrijving(agg.onderdeel, agg.type, behandeling.naam)
         : regel.omschrijving,
-      gemarkeerd: combinatie ? regel.gemarkeerd : true,
     }
 
     const label = agg ? `${agg.onderdeel} ${agg.type}`.trim() : regel.omschrijving
     return { regel, nieuw, combinatie, label }
   })
+}
+
+/**
+ * Is dit de omschrijving die de meetstaat-sync maakte ("Kozijn hout - 10-20cm", met of
+ * zonder " : behandeling" en een oude " [code]"), of nog leeg? Dan mag koppelen hem bijwerken.
+ */
+export function isMeetstaatOmschrijving(omschrijving: string, onderdeel: string, type: string): boolean {
+  const basis = calculatieregelOmschrijving(onderdeel, type, '').toLowerCase()
+  const tekst = omschrijving.replace(/\s\[[^\]]*\]/g, '').trim().toLowerCase()
+  return !tekst || tekst === basis || tekst.startsWith(`${basis} : `)
 }
 
 /** De type_id's waarvan de combinaties nodig zijn om deze regels te plannen. */
@@ -134,4 +148,18 @@ export function benodigdeTypeIds(regels: Calculatieregel[], aggregaten: Meetrege
     if (typeId) ids.add(typeId)
   }
   return Array.from(ids)
+}
+
+/**
+ * Heeft de bibliotheek normen voor deze behandeling op het onderdeel/type van de regel?
+ * `null` als dat niet te zeggen is: een regel die niet uit de meetstaat komt (geen type),
+ * of de combinaties zijn nog niet geladen.
+ */
+export function heeftBibliotheekNormen(
+  typeId: string | undefined,
+  behandelingId: string,
+  combinaties: { type_id: string; behandeling_id: string }[] | null,
+): boolean | null {
+  if (!typeId || !combinaties) return null
+  return combinaties.some(c => c.type_id === typeId && c.behandeling_id === behandelingId)
 }

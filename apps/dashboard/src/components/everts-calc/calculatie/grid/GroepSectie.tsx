@@ -8,7 +8,6 @@ import { isTekstregel } from '@/lib/everts-calc/types'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import { type BtwTariefKeuze } from '@/lib/stamdata/btw'
-import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, NIVEAU_INSPRING, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { TekstregelRij } from './TekstregelRij'
@@ -41,7 +40,7 @@ export interface GroepSectieProps {
   onRegelWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onRegelComponentWijzig: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string, extra?: Partial<Componentregel>) => void
   onVerwijderComponent: (compId: string) => void
   onVerwijderRegel: (id: string) => void
   onVerwijderGroep: (id: string) => void
@@ -63,8 +62,6 @@ export interface GroepSectieProps {
   onRegelDragEnd: () => void
   onRegelVerplaatsNaarPositie: (regelIds: string[], doelGroepId: string, voorRegelId: string | null) => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
-  /** Bibliotheek van schilderbehandelingen; één keer geladen door het grid. */
-  behandelingen?: SchilderBehandeling[]
   geselecteerdeRegels?: Set<string>
   onSelecteerRegel?: (regelId: string, ctrlKey: boolean, shiftKey: boolean) => void
   /** Acties uit het ⋯-menu van een regel (dupliceren, kopiëren, verplaatsen, verwijderen). */
@@ -85,7 +82,7 @@ export function GroepSectie({
   onVerwijderRegel, onVerwijderGroep, onWijzigGroep, onToggleInklap, onVoegRegelToe, onVoegTekstregelToe, onVoegSubgroepToe,
   dragOverGroepId, sleepRegelId, sleepRegelIds, onDragOver, onDrop, onDragEnd,
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
-  bibliotheekItems, behandelingen = [],
+  bibliotheekItems,
   geselecteerdeRegels, onSelecteerRegel, onRegelActie,
   weergaveSignaal, readOnly = false, nieuweGroep, onSelecteerGroep,
 }: GroepSectieProps) {
@@ -308,7 +305,6 @@ export function GroepSectie({
               onVerwijderComponent={onVerwijderComponent}
               onVerwijder={() => onVerwijderRegel(r.id)}
               bibliotheekItems={bibliotheekItems}
-              behandelingen={behandelingen}
               isGeselecteerd={geselecteerdeRegels?.has(r.id)}
               onSelecteer={(ctrl, shift) => onSelecteerRegel?.(r.id, ctrl, shift)}
               onActie={actie => onRegelActie?.(r.id, actie)}
@@ -350,7 +346,6 @@ export function GroepSectie({
               onRegelDragEnd={onRegelDragEnd}
               onRegelVerplaatsNaarPositie={onRegelVerplaatsNaarPositie}
               bibliotheekItems={bibliotheekItems}
-              behandelingen={behandelingen}
               geselecteerdeRegels={geselecteerdeRegels}
               onSelecteerRegel={onSelecteerRegel}
               onRegelActie={onRegelActie}
