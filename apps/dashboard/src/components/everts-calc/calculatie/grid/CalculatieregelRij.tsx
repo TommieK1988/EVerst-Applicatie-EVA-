@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, cloneElement } from 'react'
 import type { ReactElement } from 'react'
-import { TriangleAlert } from 'lucide-react'
+import { TriangleAlert, Ruler } from 'lucide-react'
 import { standaardUurtarief } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, formatEuro, formatGetal, parseGetal } from '@/lib/everts-calc/calculations'
 import { cn } from '@/lib/everts-calc/utils'
@@ -339,7 +339,13 @@ export function CalculatieregelRij({
               {regel.hoeveelheid === 0 ? '—' : formatGetal(regel.hoeveelheid, 2)}
             </span>
           ) : (
-            <>
+            <div className="relative">
+              {(regel.mini_meetstaat?.rijen.length ?? 0) > 0 && (
+                <Ruler
+                  aria-label="Gemeten"
+                  className="pointer-events-none absolute left-0.5 top-1/2 h-3 w-3 -translate-y-1/2 text-brand-500"
+                />
+              )}
               <GetalInput
                 waarde={regel.hoeveelheid}
                 onChange={v => onWijzig(regel.id, { hoeveelheid: v })}
@@ -355,6 +361,7 @@ export function CalculatieregelRij({
                 open={miniMeetstaat}
                 eenheid={regel.eenheid}
                 hoeveelheid={regel.hoeveelheid}
+                titel={regel.omschrijving}
                 bewaard={regel.mini_meetstaat}
                 onSluiten={() => setMiniMeetstaat(false)}
                 onBevestig={(hoeveelheid, eenheid, meting) => {
@@ -362,7 +369,7 @@ export function CalculatieregelRij({
                   setMiniMeetstaat(false)
                 }}
               />
-            </>
+            </div>
           )}
         </td>
       )

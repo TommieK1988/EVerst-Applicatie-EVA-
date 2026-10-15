@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { startToestand, maakMeting, totaalMeting, rijHeeftData } from './mini-meetstaat'
+import { startToestand, maakMeting, totaalMeting, rijHeeftData, brutoNetto } from './mini-meetstaat'
 import type { MiniMaatrij, MiniMeting } from './types'
 
 const rij = (o: Partial<MiniMaatrij>): MiniMaatrij =>
@@ -49,9 +49,37 @@ describe('startToestand', () => {
 })
 
 describe('maakMeting', () => {
-  it('bewaart alleen rijen met inhoud', () => {
-    const m = maakMeting([...dakvlakken, rij({ id: 'leeg' })], 'm²', 'nu')
-    expect(m).toEqual({ eenheid: 'm²', rijen: dakvlakken, gemeten_op: 'nu' })
+  it('bewaart alleen rijen met inhoud, en de keuze bruto of netto', () => {
+    const m = maakMeting([...dakvlakken, rij({ id: 'leeg' })], 'm²', 'bruto', 'nu')
+    expect(m).toEqual({ eenheid: 'm²', rijen: dakvlakken, gemeten_op: 'nu', gebruik: 'bruto' })
     expect(totaalMeting(m.rijen, 'm²')).toBe(284)
+  })
+})
+
+// Gevelvlak 24 × 17,2 = 412,80; 36 ramen 1,20 × 1,50 = 64,80; 12 deuren 1,00 × 2,30 = 27,60.
+const gevel = [
+  rij({ id: 'g', omschrijving: 'Gevelvlak', dim1: 24, dim2: 17.2 }),
+  rij({ id: 'r', omschrijving: 'Ramen', dim1: 1.2, dim2: 1.5, factor: 36, aftrek: true }),
+  rij({ id: 'd', omschrijving: 'Voordeuren', dim1: 1, dim2: 2.3, factor: 12, aftrek: true }),
+]
+
+describe('bruto en netto', () => {
+  it('netto is bruto min de aftrekregels', () => {
+    expect(brutoNetto(gevel, 'm²')).toEqual({ bruto: 412.8, aftrek: 92.4, netto: 320.4, heeftAftrek: true })
+    expect(totaalMeting(gevel, 'm²', 'bruto')).toBe(412.8)
+    expect(totaalMeting(gevel, 'm²', 'netto')).toBe(320.4)
+  })
+
+  it('zonder aftrekregels zijn bruto en netto gelijk', () => {
+    expect(brutoNetto(dakvlakken, 'm²')).toMatchObject({ bruto: 284, netto: 284, heeftAftrek: false })
+  })
+
+  it('opent met de bewaarde keuze en vergelijkt daarmee met de calculatie', () => {
+    const steiger = startToestand({ ...meting(gevel), gebruik: 'bruto' }, 412.8, 'm²')
+    expect(steiger.gebruik).toBe('bruto')
+    expect(steiger.afwijking).toBeNull()
+    const reinigen = startToestand(meting(gevel), 412.8, 'm²')
+    expect(reinigen.gebruik).toBe('netto')
+    expect(reinigen.afwijking).toEqual({ meting: 320.4, calculatie: 412.8 })
   })
 })

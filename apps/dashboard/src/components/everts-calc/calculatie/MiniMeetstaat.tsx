@@ -1,7 +1,11 @@
 'use client'
 
+// Mini-meetstaat: dubbelklik op een hoeveelheid in de calculatie. Opmaak volgt scherm 4
+// uit het plan "Meetstaten per object" en het design system (docs/design-system).
+// Rekenen en bewaren: lib/everts-calc/mini-meetstaat.ts.
+
 import { useState, useEffect } from 'react'
-import { Trash2, Calculator, ChevronDown } from 'lucide-react'
+import { Trash2, ChevronDown, Minus } from 'lucide-react'
 import type { Eenheid, MiniMaatrij, MiniMeting } from '@/lib/everts-calc/types'
 import {
   Dialog,
@@ -9,163 +13,132 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogBody,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
 import { normaliseerEenheid } from '@/lib/everts-calc/maat-rekenen'
 import {
-  isAlleenAantal as isSimple, berekenRij as bereken, rijHeeftData, legeRij,
-  startToestand, maakMeting,
+  isAlleenAantal, berekenRij, rijHeeftData, legeRij, startToestand, maakMeting, brutoNetto,
+  type Gebruik,
 } from '@/lib/everts-calc/mini-meetstaat'
 import GetalInvoer from '@/components/everts-calc/meetstaat/GetalInvoer'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type MaatEenheid = string
-
-type Maatrij = MiniMaatrij
 
 interface Props {
   open: boolean
   eenheid: Eenheid | string
   hoeveelheid: number
+  /** Omschrijving van de calculatieregel, voor de titel. */
+  titel?: string
   /** Eerder bewaarde meting van deze regel; de dialog opent daarmee. */
   bewaard?: MiniMeting
   onBevestig: (hoeveelheid: number, eenheid: Eenheid | undefined, meting: MiniMeting) => void
   onSluiten: () => void
 }
 
-const getal = (n: number) => n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const MEET_EENHEDEN = ['m²', 'm¹', 'm³', 'st', 'post', 'uur', 'dag', 'ltr', 'kg', 'set'] as const
 
-// ─── Kolom headers per eenheid ────────────────────────────────────────────────
+const getal = (n: number, dec = 2) =>
+  n.toLocaleString('nl-NL', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
-function kolomHeaders(eenh: MaatEenheid): { label: string; title?: string }[] {
+const datum = (iso: string) =>
+  new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+/** Kolommen na Omschrijving; de laatste twee (Totaal, verwijderen) staan vast. */
+function maatKolommen(eenh: string): { label: string; title: string; veld: 'dim1' | 'dim2' | 'dim3' | 'factor' }[] {
   if (eenh === 'm²') return [
-    { label: 'Omschrijving' },
-    { label: 'B (m)', title: 'Breedte' },
-    { label: 'H (m)', title: 'Hoogte' },
-    { label: 'F', title: 'Factor (aantal gelijke vlakken)' },
-    { label: 'Totaal' },
+    { label: 'B', title: 'Breedte (m)', veld: 'dim1' },
+    { label: 'H', title: 'Hoogte (m)', veld: 'dim2' },
+    { label: 'Aantal', title: 'Aantal gelijke vlakken', veld: 'factor' },
   ]
   if (eenh === 'm³') return [
-    { label: 'Omschrijving' },
-    { label: 'L (m)', title: 'Lengte' },
-    { label: 'B (m)', title: 'Breedte' },
-    { label: 'H (m)', title: 'Hoogte' },
-    { label: 'F', title: 'Factor' },
-    { label: 'Totaal' },
+    { label: 'L', title: 'Lengte (m)', veld: 'dim1' },
+    { label: 'B', title: 'Breedte (m)', veld: 'dim2' },
+    { label: 'H', title: 'Hoogte (m)', veld: 'dim3' },
+    { label: 'Aantal', title: 'Aantal', veld: 'factor' },
   ]
   if (eenh === 'm¹') return [
-    { label: 'Omschrijving' },
-    { label: 'L (m)', title: 'Lengte' },
-    { label: 'F', title: 'Factor (aantal)' },
-    { label: 'Totaal' },
+    { label: 'L', title: 'Lengte (m)', veld: 'dim1' },
+    { label: 'Aantal', title: 'Aantal', veld: 'factor' },
   ]
-  // st, post, uur, dag, … — alleen aantal
-  return [
-    { label: 'Omschrijving' },
-    { label: 'Aantal' },
-    { label: 'Totaal' },
-  ]
+  return [{ label: 'Aantal', title: 'Aantal', veld: 'dim1' }]
 }
 
-// ─── Nummer-input helper ──────────────────────────────────────────────────────
-
-function Ni({ value, onChange, placeholder, onTab }: {
-  value: number
-  onChange: (v: number) => void
-  placeholder?: string
-  onTab?: () => void
-}) {
-  // Zelfde invoer als de meetstaat: komma of punt, getoond met een komma.
-  return (
-    <GetalInvoer
-      value={value}
-      onChange={v => onChange(v ?? 0)}
-      placeholder={placeholder ?? '0'}
-      className="w-full text-xs text-right tabular-nums px-1.5 py-1 rounded border border-slate-200
-        focus:outline-none focus:border-everts/50 focus:ring-1 focus:ring-everts/20 bg-white
-        hover:border-slate-300"
-      onKeyDown={e => { if (e.key === 'Tab' && onTab) { e.preventDefault(); onTab() } }}
-    />
-  )
+function formule(eenh: string): string {
+  if (eenh === 'm²') return 'B × H × aantal'
+  if (eenh === 'm³') return 'L × B × H × aantal'
+  if (eenh === 'm¹') return 'L × aantal'
+  return 'som van de aantallen'
 }
 
-// ─── Meetrij component ────────────────────────────────────────────────────────
+const veldKlas =
+  'h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px] text-neutral-900 ' +
+  'placeholder:text-neutral-400 hover:border-neutral-400 focus:border-brand-500 focus:outline-none ' +
+  'focus:ring-[3px] focus:ring-brand-100'
 
-function MeetrijRij({
-  rij, eenh, totaal, isLeeg, onChange, onVerwijder,
-}: {
-  rij: Maatrij
-  eenh: MaatEenheid
+const kopKlas = 'px-2 py-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500'
+
+// ─── Eén rij ──────────────────────────────────────────────────────────────────
+
+function MaatRij({ rij, eenh, totaal, isLeeg, onChange, onVerwijder }: {
+  rij: MiniMaatrij
+  eenh: string
   totaal: number
-  isLeeg: boolean   // laatste lege rij → geen delete knop
-  onChange: (patch: Partial<Maatrij>) => void
+  isLeeg: boolean
+  onChange: (patch: Partial<MiniMaatrij>) => void
   onVerwijder: () => void
 }) {
-  const simple = isSimple(eenh)
-
   return (
-    <tr className="border-b border-slate-100 last:border-0 group/rij hover:bg-slate-50/60">
-      {/* Omschrijving */}
-      <td className="px-1.5 py-1">
+    <tr className={`group/rij border-t border-neutral-100 ${rij.aftrek ? 'bg-neutral-50' : ''}`}>
+      <td className="w-9 py-1.5 pl-2">
+        <button
+          type="button"
+          onClick={() => onChange({ aftrek: !rij.aftrek })}
+          aria-pressed={!!rij.aftrek}
+          title={rij.aftrek ? 'Aftrekregel: telt negatief mee in netto. Klik om weer op te tellen.' : 'Maak hier een aftrekregel van (bv. ramen uit een gevelvlak)'}
+          className={`grid h-7 w-7 place-items-center rounded-md border text-xs font-semibold transition-colors
+            focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-100 ${
+            rij.aftrek
+              ? 'border-warning-300 bg-warning-50 text-warning-700'
+              : 'border-neutral-200 text-neutral-400 hover:border-neutral-300 hover:text-neutral-700'}`}
+        >
+          {rij.aftrek ? <Minus className="h-3.5 w-3.5" /> : '+'}
+        </button>
+      </td>
+      <td className="px-2 py-1.5">
         <input
           type="text"
           value={rij.omschrijving}
-          placeholder={isLeeg ? 'Nieuwe meting…' : 'Omschrijving…'}
-          className={`w-full text-xs px-1.5 py-1 rounded border
-            focus:outline-none focus:border-everts/50 focus:ring-1 focus:ring-everts/20 bg-white
-            hover:border-slate-300 text-slate-700 placeholder-slate-300 transition-colors
-            ${isLeeg ? 'border-dashed border-slate-200' : 'border-slate-200'}`}
+          placeholder={isLeeg ? 'Nieuwe maat, bv. Gevelvlak' : rij.aftrek ? 'Aftrek, bv. Ramen' : 'Omschrijving'}
+          className={`${veldKlas} ${isLeeg ? 'border-dashed' : ''}`}
           onChange={e => onChange({ omschrijving: e.target.value })}
         />
       </td>
-
-      {/* dim1: breedte / lengte / aantal */}
-      <td className="px-1 py-1 w-24">
-        <Ni value={rij.dim1} onChange={v => onChange({ dim1: v })} />
+      {maatKolommen(eenh).map(k => (
+        <td key={k.veld} className="w-20 px-1 py-1.5">
+          <GetalInvoer
+            value={rij[k.veld]}
+            onChange={v => onChange({ [k.veld]: v ?? 0 })}
+            placeholder={k.veld === 'factor' ? '1' : '0'}
+            className={`${veldKlas} text-right tabular-nums`}
+          />
+        </td>
+      ))}
+      <td className={`w-24 px-2 py-1.5 text-right font-mono text-[13px] tabular-nums ${rij.aftrek ? 'text-warning-700' : 'text-neutral-900'}`}>
+        {totaal > 0 ? `${rij.aftrek ? '−' : ''}${getal(totaal)}` : <span className="text-neutral-300">—</span>}
       </td>
-
-      {/* dim2: hoogte (m²), breedte (m³) */}
-      {(eenh === 'm²' || eenh === 'm³') && (
-        <td className="px-1 py-1 w-24">
-          <Ni value={rij.dim2} onChange={v => onChange({ dim2: v })} />
-        </td>
-      )}
-
-      {/* dim3: hoogte (m³ only) */}
-      {eenh === 'm³' && (
-        <td className="px-1 py-1 w-24">
-          <Ni value={rij.dim3} onChange={v => onChange({ dim3: v })} />
-        </td>
-      )}
-
-      {/* Factor — alleen voor dimensionale eenheden */}
-      {!simple && (
-        <td className="px-1 py-1 w-16">
-          <Ni value={rij.factor} onChange={v => onChange({ factor: v })} placeholder="1" />
-        </td>
-      )}
-
-      {/* Totaal */}
-      <td className="px-2 py-1 text-right w-24">
-        <span className={`text-xs  font-semibold ${totaal > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-          {totaal > 0 ? totaal.toLocaleString('nl-NL', { maximumFractionDigits: 3 }) : '—'}
-        </span>
-      </td>
-
-      {/* Verwijder */}
-      <td className="px-1 py-1 w-7 text-center">
+      <td className="w-8 px-1 py-1.5 text-center">
         {!isLeeg && (
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={onVerwijder}
             title="Rij verwijderen"
-            className="opacity-0 group-hover/rij:opacity-100 text-slate-300 hover:text-red-400 hover:bg-transparent"
+            className="text-neutral-400 opacity-0 hover:text-error-700 group-hover/rij:opacity-100 focus-visible:opacity-100"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         )}
       </td>
@@ -173,9 +146,7 @@ function MeetrijRij({
   )
 }
 
-// ─── Eenheid kiezer ───────────────────────────────────────────────────────────
-
-const MEET_EENHEDEN = ['m²', 'm¹', 'm³', 'st', 'post', 'uur', 'dag', 'ltr', 'kg', 'set'] as const
+// ─── Eenheid kiezen ───────────────────────────────────────────────────────────
 
 function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -184,28 +155,28 @@ function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: str
       open={open}
       onSluit={() => setOpen(false)}
       breedte={208}
-      className="p-1.5 flex flex-wrap gap-1"
+      className="flex flex-wrap gap-1 p-2"
       anker={
         <button
+          type="button"
           onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded
-            bg-everts/10 text-everts hover:bg-everts/20 border border-everts/20 transition-colors"
+          className="inline-flex items-center gap-1 rounded-md border border-brand-100 bg-brand-50 px-2 py-0.5
+            text-xs font-semibold text-brand-700 hover:bg-brand-100"
         >
-          {huidig || '—'}
-          <ChevronDown className="w-3 h-3" />
+          {huidig || 'kies'}
+          <ChevronDown className="h-3 w-3" />
         </button>
       }
     >
       {MEET_EENHEDEN.map(e => (
         <button
           key={e}
+          type="button"
           onClick={() => { onChange(e); setOpen(false) }}
-          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+          className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
             huidig === e
-              ? 'bg-everts text-white'
-              : ['m²', 'm¹', 'm³'].includes(e)
-                ? 'border border-everts/20 text-everts hover:bg-everts/10'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+              ? 'border-brand-500 bg-brand-500 text-white'
+              : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50'
           }`}
         >
           {e}
@@ -215,194 +186,159 @@ function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: str
   )
 }
 
-// ─── Hoofd component ─────────────────────────────────────────────────────────
+// ─── Dialog ───────────────────────────────────────────────────────────────────
 
-export default function MiniMeetstaat({ open, eenheid, hoeveelheid, bewaard, onBevestig, onSluiten }: Props) {
+export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaard, onBevestig, onSluiten }: Props) {
   const [gekozenEenheid, setGekozenEenheid] = useState<string>(normaliseerEenheid(eenheid))
-  const [rijen, setRijen] = useState<Maatrij[]>([legeRij()])
+  const [rijen, setRijen] = useState<MiniMaatrij[]>([legeRij()])
   const [afwijking, setAfwijking] = useState<{ meting: number; calculatie: number } | null>(null)
+  const [gebruik, setGebruik] = useState<Gebruik>('netto')
 
-  // Reset wanneer de dialog opent
+  // Bij openen: de bewaarde meting, of anders de bestaande hoeveelheid als eerste rij.
   useEffect(() => {
     if (!open) return
     // 'm2' uit de bibliotheek is gewoon m²; anders valt de rij terug op alleen een aantal.
     const eenh = normaliseerEenheid(eenheid)
-    setGekozenEenheid(eenh)
-    // De bewaarde meting, of anders de bestaande hoeveelheid als eerste rij.
     const start = startToestand(bewaard, hoeveelheid, eenh)
+    setGekozenEenheid(eenh)
     setRijen(start.rijen)
+    setGebruik(start.gebruik)
     setAfwijking(start.afwijking)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Auto-append lege rij als de laatste rij data heeft
+  // Altijd een lege rij onderaan om in te typen.
   useEffect(() => {
-    const last = rijen[rijen.length - 1]
-    if (rijHeeftData(last)) {
-      setRijen(rs => [...rs, legeRij()])
-    }
+    if (rijHeeftData(rijen[rijen.length - 1])) setRijen(rs => [...rs, legeRij()])
   }, [rijen])
 
-  // Reset rijen bij eenheidswisseling (dimensies zijn incompatibel)
-  const handleEenheidWijzig = (e: string) => {
+  // Andere eenheid: de maten zijn niet om te rekenen, dus opnieuw beginnen.
+  const kiesEenheid = (e: string) => {
     setGekozenEenheid(e)
     setRijen([legeRij()])
     setAfwijking(null)
   }
 
-  const totalen = rijen.map(r => bereken(r, gekozenEenheid))
-  const eindtotaal = +(totalen.reduce((s, t) => s + t, 0)).toFixed(4)
+  const totalen = rijen.map(r => berekenRij(r, gekozenEenheid))
+  const bn = brutoNetto(rijen, gekozenEenheid)
+  const eindtotaal = gebruik === 'bruto' || !bn.heeftAftrek ? bn.bruto : bn.netto
 
-  const updateRij = (id: string, patch: Partial<Maatrij>) =>
+  const wijzigRij = (id: string, patch: Partial<MiniMaatrij>) =>
     setRijen(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
-
   const verwijderRij = (id: string) =>
     setRijen(rs => rs.length > 1 ? rs.filter(r => r.id !== id) : rs)
 
-  const handleBevestig = () => {
+  const overnemen = () => {
     if (eindtotaal <= 0) return
     const eenheidGewijzigd = gekozenEenheid !== eenheid
-    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined, maakMeting(rijen, gekozenEenheid))
+    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined, maakMeting(rijen, gekozenEenheid, gebruik))
   }
 
-  const headers = kolomHeaders(gekozenEenheid)
-  const simple = isSimple(gekozenEenheid)
-
-  const formuleHint =
-    gekozenEenheid === 'm²' ? 'Σ (B × H × F)' :
-    gekozenEenheid === 'm³' ? 'Σ (L × B × H × F)' :
-    gekozenEenheid === 'm¹' ? 'Σ (L × F)' :
-    'Σ Aantal'
+  const kolommen = maatKolommen(gekozenEenheid)
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onSluiten() }}>
-      <DialogContent
-        size="lg"
-        onOpenAutoFocus={e => e.preventDefault()}
-        className="max-h-[80vh] flex flex-col"
-      >
-        {/* Header */}
-        <DialogHeader className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100 flex-shrink-0">
-          <div className="p-1.5 rounded-lg bg-everts/10 flex-shrink-0">
-            <Calculator className="w-4 h-4 text-everts" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <DialogTitle className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              Mini meetstaat
-              <EenheidKiezer huidig={gekozenEenheid} onChange={handleEenheidWijzig} />
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400 mt-0.5">
-              {gekozenEenheid
-                ? `Bereken de totale hoeveelheid — ${formuleHint}`
-                : 'Klik op de eenheid hierboven om te beginnen'
-              }
+      <DialogContent size="lg" onOpenAutoFocus={e => e.preventDefault()} className="flex max-h-[80vh] flex-col">
+        <DialogHeader>
+          <div className="min-w-0 pr-10">
+            <DialogTitle className="truncate">Meten{titel ? ` · ${titel}` : ''}</DialogTitle>
+            <DialogDescription className="flex flex-wrap items-center gap-2">
+              <span>Eenheid</span>
+              <EenheidKiezer huidig={gekozenEenheid} onChange={kiesEenheid} />
+              {gekozenEenheid && <span>· {formule(gekozenEenheid)}</span>}
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        {/* Lege eenheid: snelle kiezer */}
-        {!gekozenEenheid && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4">
-            <p className="text-sm text-slate-500 text-center">
-              Kies de eenheid hierboven om te beginnen
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
+        <DialogBody className="flex flex-col gap-4">
+          {afwijking && (
+            <Alert tone="warning" title="De hoeveelheid is met de hand aangepast">
+              In de calculatie staat {getal(afwijking.calculatie)} {gekozenEenheid}, deze meting telt op
+              tot {getal(afwijking.meting)}. Overnemen zet de meting terug in de calculatie; Annuleren
+              laat de calculatie zoals hij is.
+            </Alert>
+          )}
+
+          {!gekozenEenheid ? (
+            <div className="flex flex-wrap justify-center gap-2 py-8">
               {MEET_EENHEDEN.map(e => (
-                <button
-                  key={e}
-                  onClick={() => setGekozenEenheid(e)}
-                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    ['m²', 'm¹', 'm³'].includes(e)
-                      ? 'border-everts/30 text-everts bg-everts/5 hover:bg-everts/10'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
+                <Button key={e} variant={isAlleenAantal(e) ? 'outline' : 'secondary'} size="md" onClick={() => setGekozenEenheid(e)}>
                   {e}
-                </button>
+                </Button>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Meetrijen tabel */}
-        {gekozenEenheid && (
-          <>
-            {afwijking && (
-              <p className="mx-4 mt-3 rounded-md border border-warning-300 bg-warning-50 px-3 py-2 text-xs text-warning-700">
-                In de calculatie staat {getal(afwijking.calculatie)} {gekozenEenheid}: die is met de hand
-                aangepast. Deze meting telt op tot {getal(afwijking.meting)}. Overnemen zet de meting terug
-                in de calculatie; Annuleren laat de calculatie zoals hij is.
-              </p>
-            )}
-            <div className="flex-1 overflow-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 sticky top-0">
-                    {headers.map((h, i) => (
-                      <th
-                        key={i}
-                        title={h.title}
-                        className={`px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide
-                          ${i === 0 ? 'text-left' : 'text-right'}`}
-                      >
-                        {h.label}
-                      </th>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-neutral-200">
+              <table className="w-full min-w-[600px] border-collapse">
+                <thead className="bg-neutral-50">
+                  <tr>
+                    <th className="w-9" aria-label="Optellen of aftrekken" />
+                    <th className={`${kopKlas} text-left`}>Omschrijving</th>
+                    {kolommen.map(k => (
+                      <th key={k.veld} title={k.title} className={`${kopKlas} text-right`}>{k.label}</th>
                     ))}
-                    <th className="w-7" />
+                    <th className={`${kopKlas} text-right`}>Totaal</th>
+                    <th className="w-8" />
                   </tr>
                 </thead>
                 <tbody>
-                  {rijen.map((rij, idx) => {
-                    const isLaatsteLeeg = idx === rijen.length - 1 && !rijHeeftData(rij)
-                    return (
-                      <MeetrijRij
-                        key={rij.id}
-                        rij={rij}
-                        eenh={gekozenEenheid}
-                        totaal={totalen[idx]}
-                        isLeeg={isLaatsteLeeg}
-                        onChange={patch => updateRij(rij.id, patch)}
-                        onVerwijder={() => verwijderRij(rij.id)}
-                      />
-                    )
-                  })}
+                  {rijen.map((rij, i) => (
+                    <MaatRij
+                      key={rij.id}
+                      rij={rij}
+                      eenh={gekozenEenheid}
+                      totaal={totalen[i]}
+                      isLeeg={i === rijen.length - 1 && !rijHeeftData(rij)}
+                      onChange={patch => wijzigRij(rij.id, patch)}
+                      onVerwijder={() => verwijderRij(rij.id)}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
+          )}
 
-            {/* Footer */}
-            <DialogFooter split className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
-              {/* Formule hint links */}
-              <span className="text-[11px] text-slate-400  hidden sm:block">
-                {simple ? 'Typ in de lege rij om te beginnen' : formuleHint}
-              </span>
-
-              <div className="flex items-center gap-4">
-                {/* Eindtotaal */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">Totaal:</span>
-                  <span className={`text-sm font-bold  ${eindtotaal > 0 ? 'text-everts' : 'text-slate-300'}`}>
-                    {eindtotaal > 0 ? eindtotaal.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500">{gekozenEenheid}</span>
-                </div>
-
-                <Button variant="ghost" size="sm" onClick={onSluiten}>
-                  Annuleren
-                </Button>
-
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleBevestig}
-                  disabled={eindtotaal <= 0}
-                >
-                  Overnemen
-                </Button>
+          {gekozenEenheid && bn.heeftAftrek && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] text-neutral-600">Gebruik in deze regel:</span>
+              <div role="radiogroup" aria-label="Bruto of netto" className="inline-flex rounded-md border border-neutral-300 p-0.5">
+                {([['bruto', bn.bruto], ['netto', bn.netto]] as const).map(([k, waarde]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={gebruik === k}
+                    onClick={() => setGebruik(k)}
+                    className={`rounded px-3 py-1 text-[13px] font-medium transition-colors
+                      focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-100 ${
+                      gebruik === k ? 'bg-brand-500 text-white' : 'text-neutral-700 hover:bg-neutral-100'}`}
+                  >
+                    {k === 'bruto' ? 'Bruto' : 'Netto'}{' '}
+                    <span className="font-mono tabular-nums">{getal(waarde)} {gekozenEenheid}</span>
+                  </button>
+                ))}
               </div>
-            </DialogFooter>
-          </>
-        )}
+              <span className="text-xs text-neutral-500">
+                {gebruik === 'bruto' ? 'Hele vlak, bv. steigerwerk.' : 'Zonder de aftrekregels, bv. reinigen of voegen.'}
+              </span>
+            </div>
+          )}
+        </DialogBody>
+
+        <DialogFooter split className="flex-wrap border-t border-neutral-100 bg-neutral-50">
+          <span className="text-xs text-neutral-500">
+            {bewaard?.rijen.length
+              ? `Bewaard bij deze regel · gemeten ${datum(bewaard.gemeten_op)}`
+              : 'De maten worden bij deze regel bewaard'}
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="whitespace-nowrap font-mono text-sm font-semibold tabular-nums text-neutral-900">
+              {eindtotaal > 0 ? `${getal(eindtotaal)} ${gekozenEenheid}` : '—'}
+            </span>
+            <Button variant="ghost" size="md" onClick={onSluiten}>Annuleren</Button>
+            <Button variant="primary" size="md" onClick={overnemen} disabled={eindtotaal <= 0}>Overnemen</Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
