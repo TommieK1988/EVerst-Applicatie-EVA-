@@ -105,6 +105,20 @@ export function positieVoor(groepen: Groep[], voorGroepId: string): Doelpositie 
   return { parentId: doel.parent_id ?? null, diepte: doel.niveau - 1, voorGroepId: doel.id }
 }
 
+/**
+ * De landingsplek "direct ná `naGroepId`, op hetzelfde niveau": bij dezelfde ouder,
+ * vóór de broer/zus die erna komt. De gesleepte groep zelf telt daarbij niet mee.
+ */
+export function positieNa(groepen: Groep[], naGroepId: string, sleepId: string): Doelpositie | null {
+  const doel = groepen.find(g => g.id === naGroepId)
+  if (!doel) return null
+  const parentId = doel.parent_id ?? null
+  const volgende = groepen
+    .filter(g => (g.parent_id ?? null) === parentId && g.id !== sleepId && g.volgorde > doel.volgorde)
+    .sort((a, b) => a.volgorde - b.volgorde)[0]
+  return { parentId, diepte: doel.niveau - 1, voorGroepId: volgende?.id ?? null }
+}
+
 /** De landingsplek "achteraan in `parentId`" — een rij zelf, of onderaan de boom (null). */
 export function positieIn(groepen: Groep[], parentId: string | null): Doelpositie | null {
   if (!parentId) return { parentId: null, diepte: 0, voorGroepId: null }

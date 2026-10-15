@@ -96,6 +96,8 @@ export interface BulletTextareaProps
   label?: React.ReactNode
   className?: string
   toolbarClassName?: string
+  /** Een regel die met "- " of "* " begint wordt meteen "• ", zoals in Word. */
+  streepjeWordtBullet?: boolean
 }
 
 export function BulletTextarea({
@@ -107,6 +109,7 @@ export function BulletTextarea({
   label,
   className,
   toolbarClassName,
+  streepjeWordtBullet = false,
   onKeyDown,
   ...props
 }: BulletTextareaProps) {
@@ -226,7 +229,15 @@ export function BulletTextarea({
       <textarea
         ref={ref}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => {
+          const v = e.target.value
+          if (streepjeWordtBullet) {
+            // "- " en "• " zijn even lang, dus de cursor kan blijven staan.
+            const metBullets = v.replace(/^([ \t]*)[-*] /gm, `$1${BULLET}`)
+            if (metBullets !== v) { pasToe(metBullets, e.target.selectionStart, e.target.selectionEnd); return }
+          }
+          onChange(v)
+        }}
         onKeyDown={toetsAanslag}
         className={cn('w-full resize-none', className)}
         {...props}

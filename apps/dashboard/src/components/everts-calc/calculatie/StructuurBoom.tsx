@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
-import { ChevronRight, ChevronDown, Plus, Trash2, FolderOpen, Folder, GripVertical } from 'lucide-react'
+import { ChevronRight, ChevronDown, Plus, FolderOpen, Folder, GripVertical, X } from 'lucide-react'
+import { ActieMenu } from './grid/ActieMenu'
 import toast from 'react-hot-toast'
 import { cn, nieuweId } from '@/lib/everts-calc/utils'
-import { getGroepen, slaGroepOp, verwijderGroep } from '@/lib/everts-calc/local-store'
-import { berekeningNummers } from '@/lib/everts-calc/calculations'
+import { getGroepen, slaGroepOp, verwijderGroep, getScenario, getCalculatieregelsVoorScenario, getComponentregelsVoorScenario } from '@/lib/everts-calc/local-store'
+import { berekeningNummers, berekenGroepVP, scenarioDefaultOpslag, formatGetal } from '@/lib/everts-calc/calculations'
 import {
-  platteGroepen, verplaatsGroep, magVerplaatsenNaar, positieVoor, positieIn, subtreeIds,
+  platteGroepen, verplaatsGroep, magVerplaatsenNaar, positieVoor, positieIn, positieNa, subtreeIds,
   type Doelpositie,
 } from '@/lib/everts-calc/groep-boom'
 import type { Groep } from '@/lib/everts-calc/types'
@@ -31,6 +32,8 @@ interface Props {
   onSleepActief?: (actief: boolean) => void
   /** Bevroren calculatie: structuur is te bekijken, niet te wijzigen. */
   readOnly?: boolean
+  /** Toont een sluitknop in de kop. */
+  onSluit?: () => void
 }
 
 interface InlineFormProps {
@@ -41,8 +44,8 @@ interface InlineFormProps {
 
 /** Inspringing per niveau (px). Ruim genoeg om de nesting in één oogopslag te zien. */
 const INSPRING = 16
-/** Hoogte van een invoegstrook tijdens het slepen — bewust royaal, dit is een mikpunt. */
-const STROOK_HOOGTE = 16
+/** Deel van een rij (boven en onder) dat "ervóór/erna" betekent; het midden is "erin". */
+const RAND = 0.3
 const AUTOSCROLL_ZONE = 48
 const AUTOSCROLL_STAP = 12
 
@@ -63,12 +66,18 @@ interface Doel {
   geldig: boolean
   /** Regel voor de statusstrook, bijv. `vóór "Afplakken" · niveau 2`. */
   omschrijving: string
+  /** Waar de invoeglijn komt: vóór zichtbare rij `index`, ingesprongen op `diepte`. */
+  lijn?: { index: number; diepte: number }
 }
 
 function InlineForm({ placeholder, onOpslaan, onAnnuleer }: InlineFormProps) {
   const [waarde, setWaarde] = useState('')
+  const ref = useRef<HTMLFormElement>(null)
+  // Het veld staat waar de groep komt; dat kan onderaan buiten beeld zijn.
+  useEffect(() => { ref.current?.scrollIntoView({ block: 'nearest' }) }, [])
   return (
     <form
+      ref={ref}
       onSubmit={e => { e.preventDefault(); if (waarde.trim()) onOpslaan(waarde.trim()) }}
       className="flex items-center gap-1 px-2 py-1"
     >
@@ -91,12 +100,14 @@ const NIVEAU_KLEUR = ['bg-everts', 'bg-everts/70', 'bg-everts/40']
 
 export default function StructuurBoom({
   scenarioId, actiefGroepId, refreshTrigger, onSelecteer, onWijziging,
-  onVoorWijziging, onSleepActief, readOnly = false,
+  onVoorWijziging, onSleepActief, readOnly = false, onSluit,
 }: Props) {
   const [groepen,   setGroepen]   = useState<Groep[]>([])
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
   const [toevoegen, setToevoegen] = useState<{ parentId: string | null } | null>(null)
   const [nummers,   setNummers]   = useState<Map<string, string>>(new Map())
+  /** Verkoopbedrag per groep (incl. subgroepen), zodat je in de boom ziet waar het geld zit. */
+  const [totalen,   setTotalen]   = useState<Map<string, number>>(new Map())
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [sleepId,   setSleepId]   = useState<string | null>(null)
   const [doel,      setDoel]      = useState<Doel | null>(null)
@@ -110,9 +121,19 @@ export default function StructuurBoom({
     const gs = getGroepen(scenarioId).sort((a, b) => a.volgorde - b.volgorde)
     setGroepen(gs)
     setNummers(berekeningNummers(gs))
+    const regels = getCalculatieregelsVoorScenario(scenarioId)
+    const comps  = getComponentregelsVoorScenario(scenarioId)
+    const opslag = scenarioDefaultOpslag(getScenario(scenarioId))
+    setTotalen(new Map(gs.map(g => [g.id, berekenGroepVP(g.id, gs, regels, comps, opslag)])))
   }, [scenarioId, refreshTrigger])
 
   useEffect(() => { laad() }, [laad])
+
+  /** Subgroep toevoegen: de ouder openklappen, anders staat het veld tussen verborgen rijen. */
+  const startSubgroep = (parentId: string) => {
+    setIngeklapt(prev => { const next = new Set(prev); next.delete(parentId); return next })
+    setToevoegen({ parentId })
+  }
 
   const toggle = (id: string) =>
     setIngeklapt(prev => {
@@ -225,21 +246,51 @@ export default function StructuurBoom({
    * blijven alle events bij de greep, ongeacht wat eronder ligt of hertekend wordt.
    */
   const doelUitPunt = useCallback((sleepIdArg: string, x: number, y: number): Doel | null => {
+    // Invoegpunt i = vóór zichtbare rij i; i === zichtbaar.length = onderaan.
+    const strook = (i: number): Doel | null => {
+      const onder = zichtbaar[i]
+      const d = onder
+        ? maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
+        : maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieIn(groepen, null), 'onderaan als hoofdgroep')
+      return d && { ...d, lijn: { index: i, diepte: onder?.diepte ?? 0 } }
+    }
+
     const raak = document.elementFromPoint(x, y)
     const vlak = raak instanceof Element ? raak.closest('[data-doel]') as HTMLElement | null : null
     const spec = vlak?.dataset.doel
-    if (!spec) return null
-
-    if (spec.startsWith('strook-')) {
-      const i = Number(spec.slice('strook-'.length))
-      const onder = zichtbaar[i]
-      return onder
-        ? maakDoel(sleepIdArg, 'strook', spec, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
-        : maakDoel(sleepIdArg, 'strook', spec, positieIn(groepen, null), 'onderaan als hoofdgroep')
+    if (!vlak || !spec) {
+      // Lege ruimte onder de laatste groep: onderaan.
+      const c = scrollRef.current
+      const rijen = c ? Array.from(c.querySelectorAll('[data-doel^="rij-"]')) : []
+      const lijst = c?.getBoundingClientRect()
+      const onderkant = rijen.length ? rijen[rijen.length - 1].getBoundingClientRect().bottom : -Infinity
+      if (lijst && x >= lijst.left && x <= lijst.right && y > onderkant && y <= lijst.bottom) {
+        return strook(zichtbaar.length)
+      }
+      return null
     }
 
-    const groep = groepen.find(g => g.id === spec.slice('rij-'.length))
-    if (!groep || subtreeIds(groepen, sleepIdArg).has(groep.id)) return null
+    // Geen stroken tussen de rijen (die lieten de lijst onder de cursor verspringen):
+    // de plek binnen de rij bepaalt het doel. Boven = ervóór, onder = erna, midden = erin.
+    const id = spec.slice('rij-'.length)
+    const i = zichtbaar.findIndex(r => r.groep.id === id)
+    const groep = zichtbaar[i]?.groep
+    if (!groep) return null
+    const r = vlak.getBoundingClientRect()
+    const fractie = (y - r.top) / r.height
+    const eigen = subtreeIds(groepen, sleepIdArg)
+    if (fractie < RAND) return eigen.has(groep.id) ? null : strook(i)
+    if (fractie > 1 - RAND) {
+      // Erna, op hetzelfde niveau als deze groep: onder de laatste subgroep kom je zo
+      // als volgende subgroep, niet als hoofdgroep vóór de groep daarna.
+      if (eigen.has(groep.id)) return null
+      const rijDiepte = zichtbaar[i].diepte
+      let j = i + 1
+      while (j < zichtbaar.length && zichtbaar[j].diepte > rijDiepte) j++
+      const d = maakDoel(sleepIdArg, 'strook', `na-${groep.id}`, positieNa(groepen, groep.id, sleepIdArg), `na "${groep.naam}"`)
+      return d && { ...d, lijn: { index: j, diepte: rijDiepte } }
+    }
+    if (eigen.has(groep.id)) return null
     return maakDoel(sleepIdArg, 'rij', spec, positieIn(groepen, groep.id), `in "${groep.naam}", als laatste`)
   }, [zichtbaar, groepen, maakDoel])
 
@@ -311,26 +362,19 @@ export default function StructuurBoom({
     return () => window.removeEventListener('keydown', opEscape)
   }, [sleepId, resetSleep])
 
-  /** Invoegstrook tussen twee rijen. Alleen tijdens het slepen, want dan is het een mikpunt. */
+  /** Invoeglijn tussen twee rijen. Neemt geen ruimte in, zodat de lijst stil blijft staan. */
   const renderStrook = (index: number) => {
-    if (!sleepId) return null
-    const actief = doel?.sleutel === `strook-${index}`
-    const onder  = zichtbaar[index]
-    const inspring = 8 + (onder ? onder.diepte : 0) * INSPRING
+    if (!sleepId || !doel?.lijn || doel.lijn.index !== index) return null
+    const inspring = 8 + doel.lijn.diepte * INSPRING
     return (
-      <div
-        data-doel={`strook-${index}`}
-        className="flex items-center"
-        style={{ height: STROOK_HOOGTE, paddingLeft: inspring, paddingRight: 8 }}
-      >
-        {actief && doel?.geldig
-          ? (
-            <>
-              <span className="w-0.5 h-3 rounded-sm bg-everts flex-shrink-0" />
-              <span className="flex-1 h-0.5 rounded bg-everts" />
-            </>
-          )
-          : <span className={cn('flex-1 h-px rounded', actief ? 'bg-red-300' : 'bg-slate-200')} />}
+      <div className="relative h-0" aria-hidden>
+        <div
+          className="pointer-events-none absolute -top-px z-10 flex items-center"
+          style={{ left: inspring, right: 8 }}
+        >
+          <span className={cn('h-2 w-2 flex-shrink-0 rounded-full border-2 bg-white', doel.geldig ? 'border-everts' : 'border-red-300')} />
+          <span className={cn('h-0.5 flex-1 rounded', doel.geldig ? 'bg-everts' : 'bg-red-300')} />
+        </div>
       </div>
     )
   }
@@ -407,76 +451,82 @@ export default function StructuurBoom({
           )}
         >
           <span className="text-slate-400 text-[10px] flex-shrink-0">{nummer}</span>
-          <span className="truncate">{groep.naam}</span>
+          <span className={cn('truncate', groep.optioneel && 'italic text-neutral-500')}>{groep.naam}</span>
+          {groep.optioneel && (
+            <span className="flex-shrink-0 rounded bg-warning-100 px-1 text-[9.5px] font-semibold tracking-wide text-warning-700" title="Telt niet mee in het totaal">
+              OPTIONEEL
+            </span>
+          )}
         </button>
+        <span className={cn(
+          'flex-shrink-0 pl-2 text-[11px] tabular-nums',
+          isActief ? 'font-semibold text-everts-dark' : groep.optioneel ? 'italic text-neutral-400' : 'text-neutral-500',
+        )}>
+          {formatGetal(totalen.get(groep.id) ?? 0, 2)}
+        </span>
 
-        {/* Hover acties */}
-        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 pr-1">
-          {!readOnly && groep.niveau < 3 && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setToevoegen({ parentId: groep.id })}
-              title="Subgroep toevoegen"
-              className="text-slate-400 hover:text-everts"
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
-          )}
-          {!readOnly && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setConfirmId(groep.id)}
-              title="Groep verwijderen"
-              className="text-slate-300 hover:text-red-500"
-            >
-              <Trash2 className="w-3 h-3" />
-            </Button>
-          )}
-        </div>
+        {/* Acties: altijd zichtbaar, niet meer achter hover. */}
+        {!readOnly && (
+          <div className="flex items-center flex-shrink-0 pr-1">
+            <ActieMenu
+              label={`Acties voor ${groep.naam}`}
+              items={[
+                groep.niveau < 3 && { label: 'Subgroep toevoegen', onSelect: () => startSubgroep(groep.id) },
+                heeftKinderen && { label: isOpen ? 'Inklappen' : 'Uitklappen', onSelect: () => toggle(groep.id) },
+                { soort: 'scheiding' },
+                { label: 'Groep verwijderen…', gevaarlijk: true, onSelect: () => setConfirmId(groep.id) },
+              ]}
+            />
+          </div>
+        )}
       </div>
     )
   }
 
+  // Plek van het invulveld voor een nieuwe subgroep: na de laatste zichtbare rij van
+  // de tak van de ouder.
+  const ouderIndex = toevoegen?.parentId ? zichtbaar.findIndex(r => r.groep.id === toevoegen.parentId) : -1
+  const formDiepte = ouderIndex >= 0 ? zichtbaar[ouderIndex].diepte : 0
+  let formNaIndex = ouderIndex
+  while (ouderIndex >= 0 && formNaIndex + 1 < zichtbaar.length && zichtbaar[formNaIndex + 1].diepte > formDiepte) formNaIndex++
+
   return (
     <div className="flex flex-col h-full relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100 flex-shrink-0">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Structuur</span>
+      <div className="flex items-center gap-1 h-9 pl-3 pr-1 border-b border-neutral-200 flex-shrink-0">
+        <span className="flex-1 text-xs font-semibold text-neutral-600">Structuur</span>
         {!readOnly && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setToevoegen({ parentId: null })}
-            title="Groep toevoegen"
-            className="text-slate-400 hover:text-everts hover:bg-everts-50"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setToevoegen({ parentId: null })} className="h-7 px-2 text-xs text-brand-700">
             <Plus className="w-3.5 h-3.5" />
+            Groep
+          </Button>
+        )}
+        {onSluit && (
+          <Button variant="ghost" size="icon-sm" onClick={onSluit} title="Sluiten" className="text-neutral-400">
+            <X className="w-3.5 h-3.5" />
           </Button>
         )}
       </div>
 
-      {/* Statusstrook: staat altijd op dezelfde plek, dus nooit onder je cursor of
-          onder de groep die je sleept. */}
-      {sleepId && (
-        <div
-          className={cn(
-            'px-3 py-1.5 text-[11px] border-b flex-shrink-0 truncate',
-            doel?.geldig
-              ? 'bg-everts-50 border-everts/20 text-everts-dark'
-              : 'bg-slate-50 border-slate-200 text-slate-500',
-          )}
-        >
-          {doel
-            ? <>{doel.geldig ? '→ ' : '× '}{doel.omschrijving}</>
-            : 'Sleep naar een strook om ertussen te zetten, of op een groep om erin te zetten'}
-        </div>
-      )}
-
       {/* Boom */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-1">
-        {/* Inline form voor root groep */}
+        {zichtbaar.map((rij, i) => (
+          <Fragment key={rij.groep.id}>
+            {renderStrook(i)}
+            {renderRij(rij)}
+            {/* Nieuwe subgroep: het veld staat onder de laatste bestaande subgroep, waar hij komt. */}
+            {toevoegen?.parentId && i === formNaIndex && (
+              <div style={{ paddingLeft: `${(formDiepte + 1) * INSPRING + 4}px` }}>
+                <InlineForm
+                  placeholder="Naam subgroep..."
+                  onOpslaan={naam => voegGroepToe(toevoegen.parentId, naam)}
+                  onAnnuleer={() => setToevoegen(null)}
+                />
+              </div>
+            )}
+          </Fragment>
+        ))}
+        {/* Nieuwe hoofdgroep: onderaan, waar hij komt. */}
         {toevoegen?.parentId === null && (
           <div className="px-2">
             <InlineForm
@@ -486,22 +536,6 @@ export default function StructuurBoom({
             />
           </div>
         )}
-
-        {zichtbaar.map((rij, i) => (
-          <Fragment key={rij.groep.id}>
-            {renderStrook(i)}
-            {renderRij(rij)}
-            {toevoegen?.parentId === rij.groep.id && (
-              <div style={{ paddingLeft: `${(rij.diepte + 1) * INSPRING + 4}px` }}>
-                <InlineForm
-                  placeholder="Naam subgroep..."
-                  onOpslaan={naam => voegGroepToe(rij.groep.id, naam)}
-                  onAnnuleer={() => setToevoegen(null)}
-                />
-              </div>
-            )}
-          </Fragment>
-        ))}
         {renderStrook(zichtbaar.length)}
 
         {roots.length === 0 && !toevoegen && (
@@ -519,6 +553,26 @@ export default function StructuurBoom({
           />
         )}
       </div>
+      {/* Voetregel: uitleg, en tijdens het slepen waar de groep terechtkomt. Staat
+          onderaan en heeft een vaste hoogte, zodat de lijst onder de cursor niet verspringt. */}
+      {roots.length > 0 && (
+        <p
+          className={cn(
+            'flex-shrink-0 border-t px-3 py-2 min-h-[46px] text-[11px] leading-snug',
+            !sleepId ? 'border-neutral-100 text-neutral-500'
+              : doel?.geldig ? 'border-everts/20 bg-everts-50 text-everts-dark font-semibold'
+              : 'border-neutral-200 bg-neutral-50 text-neutral-500',
+          )}
+        >
+          {sleepId
+            ? (doel
+              ? <>{doel.geldig ? '→ ' : '× '}{doel.omschrijving}</>
+              : 'Boven- of onderkant van een groep: ervóór of erna. Midden: erin.')
+            : readOnly
+              ? 'Klik een naam om ernaartoe te springen.'
+              : 'Sleep een groep aan de greep om de volgorde te wijzigen. Klik een naam om ernaartoe te springen.'}
+        </p>
+      )}
       {/* Zwevend label bij de cursor. `pointer-events-none`, anders zou de hittest
           hem raken in plaats van de strook eronder. */}
       {sleepGroep && (
