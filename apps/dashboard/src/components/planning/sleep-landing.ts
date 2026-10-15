@@ -1,5 +1,5 @@
 import type { CollisionDetection } from '@dnd-kit/core'
-import { format, isSameDay, isSameMonth } from 'date-fns'
+import { addDays, format, isSameDay, isSameMonth, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 
 /**
@@ -38,4 +38,20 @@ export function landingsPeriode(start: Date, eind: Date): string {
   const dag = (d: Date, metMaand: boolean) => format(d, metMaand ? 'EEEEEE d MMM' : 'EEEEEE d', { locale: nl })
   if (isSameDay(start, eind)) return dag(start, true)
   return `${dag(start, !isSameMonth(start, eind))} – ${dag(eind, true)}`
+}
+
+/**
+ * Nieuwe start/eind na het slepen van één rand van een balk over `dagen` dagen,
+ * met behoud van de kloktijd. `null` als er niets verandert of de balk
+ * leeg/omgekeerd zou worden.
+ */
+export function verschuifRand(
+  start_dt: string, eind_dt: string, rand: 'left' | 'right', dagen: number,
+): { start_dt: string; eind_dt: string } | null {
+  if (dagen === 0) return null
+  const verschoven = (iso: string) => addDays(parseISO(iso), dagen).toISOString()
+  const ns = rand === 'left'  ? verschoven(start_dt) : start_dt
+  const ne = rand === 'right' ? verschoven(eind_dt)  : eind_dt
+  if (parseISO(ns) >= parseISO(ne)) return null
+  return { start_dt: ns, eind_dt: ne }
 }

@@ -31,7 +31,7 @@ import { haalPlanningBewakingscodes } from '@/app/(platform)/planning/actions'
 import type { PlanningBewakingscode } from '@/lib/planning/bewakingscodes'
 import {
   KLEUR, MIN_BAR_W, PeriodeNav, PeriodeScrubber, PlanningShell, RIJ_HOOGTE,
-  usePlanningController, verschuifTs, type PlanningLayout, type View,
+  usePlanningController, type PlanningLayout, type View,
 } from './layout/index'
 import { crewKleur } from '@/lib/utils/crew'
 import VerlofModal from './VerlofModal'
@@ -39,7 +39,7 @@ import { Combobox, useDialogen, type ComboboxOption } from '@/components/ui'
 import ConflictOplosDialog from './ConflictOplosDialog'
 import { AfwezigheidTellerLabel, AfwezigheidTellerRij } from './AfwezigheidTellerRij'
 import LandingsBalk from './LandingsBalk'
-import { landingsPeriode, startdagOnderBalkrand } from './sleep-landing'
+import { landingsPeriode, startdagOnderBalkrand, verschuifRand } from './sleep-landing'
 import {
   DAG_MS, afwezigheidInterval, berekenConflicten, buitenRooster, werkvensterOpDag,
   type BlokInterval, type ConflictDetail, type EntryMetDossier, type WerkInterval,
@@ -734,8 +734,8 @@ const GREPEN_VANAF = HDL_W * 4
 const SLEEP_DREMPEL = 4
 
 function TimelineEntry({
-  entry, left, width, top, dossier_id, dossier_titel, kleur: kleurOverride, ppd,
-  balkLabel, onEdit, onResized, onOpenDossier, onStartKopie,
+  entry, left, width, top, dossier_id, dossier_titel, kleur: kleurOverride, dagenVoorSleep,
+  balkLabel, onEdit, onResized, onResizeVoorbeeld, onOpenDossier, onStartKopie,
 }: {
   entry:         PlanningItemVerrijkt
   left:          number
@@ -744,10 +744,13 @@ function TimelineEntry({
   dossier_id:    string
   dossier_titel: string
   kleur?:        string
-  ppd:           number
+  /** Hoeveel dagen een rand verschuift als hij `dx` pixels wordt gesleept (weekenden zijn smaller). */
+  dagenVoorSleep: (rand: 'left' | 'right', dx: number) => number
   balkLabel:     BalkLabel
   onEdit:        () => void
   onResized:     (id: string, newStartDt: string, newEindDt: string) => void
+  /** Periode die de balk krijgt als de rand nu wordt losgelaten; `null` = niet aan het rekken. */
+  onResizeVoorbeeld: (voorbeeld: { start_dt: string; eind_dt: string } | null) => void
   onOpenDossier: () => void
   onStartKopie:  () => void
 }) {
@@ -768,6 +771,7 @@ function TimelineEntry({
   const toonGrepen = width >= GREPEN_VANAF
 
   const resizeRef        = useRef<{ type: 'left' | 'right'; startX: number } | null>(null)
+  const [rekt, setRekt]  = useState(false)
   const suppressClickRef = useRef(false)
   // Enkelklik licht vertraagd zodat een dubbelklik (→ dossier) hem kan annuleren.
   const clickTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -781,25 +785,40 @@ function TimelineEntry({
     suppressClickRef.current = true
   }
 
+  /** Nieuwe periode bij de huidige muispositie, of `null` als er (nog) niets verandert. */
+  function periodeBij(ev: React.PointerEvent) {
+    if (!resizeRef.current) return null
+    const { type, startX } = resizeRef.current
+    const dx = ev.clientX - startX
+    if (Math.abs(dx) < SLEEP_DREMPEL) return null
+    return verschuifRand(entry.start_dt, entry.eind_dt, type, dagenVoorSleep(type, dx))
+  }
+
   function onResizeMove(ev: React.PointerEvent) {
     if (!resizeRef.current) return
     ev.stopPropagation()
+    const periode = periodeBij(ev)
+    setRekt(!!periode)
+    onResizeVoorbeeld(periode)
   }
 
   function onResizeUp(ev: React.PointerEvent) {
     if (!resizeRef.current) return
-    const dx   = ev.clientX - resizeRef.current.startX
-    const type = resizeRef.current.type
+    const dx      = ev.clientX - resizeRef.current.startX
+    const periode = periodeBij(ev)
     resizeRef.current = null
+    setRekt(false)
+    onResizeVoorbeeld(null)
     // Niet gesleept maar geklikt: de greep geeft de klik terug aan de balk, anders
     // opent een smal blok nooit — de greep beslaat er bijna de hele breedte van.
     if (Math.abs(dx) < SLEEP_DREMPEL) { suppressClickRef.current = false; return }
-    const days = Math.round(dx / ppd)
-    if (days === 0) return
-    let ns = entry.start_dt, ne = entry.eind_dt
-    if (type === 'left')  { ns = verschuifTs(entry.start_dt, days); if (ns >= ne) return }
-    if (type === 'right') { ne = verschuifTs(entry.eind_dt,  days); if (ne <= ns) return }
-    onResized(entry.id, ns, ne)
+    if (periode) onResized(entry.id, periode.start_dt, periode.eind_dt)
+  }
+
+  function onResizeCancel() {
+    resizeRef.current = null
+    setRekt(false)
+    onResizeVoorbeeld(null)
   }
 
   return (
@@ -826,7 +845,7 @@ function TimelineEntry({
         left, width: Math.max(0, width - 2),
         borderRadius: 5,
         background: kleur,
-        opacity: isDragging ? 0.35 : 1,
+        opacity: isDragging || rekt ? 0.35 : 1,
         cursor: 'grab',
         display: 'flex', alignItems: 'center',
         paddingLeft: 7,
@@ -849,6 +868,7 @@ function TimelineEntry({
           onPointerDown={ev => startResize(ev, 'left')}
           onPointerMove={onResizeMove}
           onPointerUp={onResizeUp}
+          onPointerCancel={onResizeCancel}
         />
       )}
       {width > 40 && (
@@ -865,6 +885,7 @@ function TimelineEntry({
           onPointerDown={ev => startResize(ev, 'right')}
           onPointerMove={onResizeMove}
           onPointerUp={onResizeUp}
+          onPointerCancel={onResizeCancel}
         />
       )}
     </div>
@@ -1024,8 +1045,12 @@ function TimelineRij({
   /** Waar het planitem dat nu gesleept wordt in deze rij landt (alleen op de doelrij). */
   landing?:          Landing | null
 }) {
-  const { ppd, totalW, xVoor, breedteVoor, xVoorInVenster } = layout
+  const { totalW, xVoor, breedteVoor, xVoorInVenster, dagVoorX } = layout
   const dagLenW = totalW
+
+  // Voorbeeld tijdens het inkorten/verlengen van een balk in deze rij.
+  const [rekLanding, setRekLanding] = useState<Landing | null>(null)
+  const getoondeLanding = landing ?? rekLanding
 
   // Uitgezoomd loopt de dagcel van dagstart tot dageind i.p.v. van 0:00 tot 24:00.
   const vulWerkdag = VULT_WERKDAG.includes(layout.view)
@@ -1121,10 +1146,17 @@ function TimelineRij({
             dossier_id={dossier_id}
             dossier_titel={titel}
             kleur={entryKleur}
-            ppd={ppd}
+            dagenVoorSleep={(rand, dx) => {
+              // De rand zelf: links de eerste pixel, rechts de laatste (eind ligt exclusief).
+              const randX = rand === 'left' ? cLeft : cLeft + cWidth - 1
+              return differenceInCalendarDays(dagVoorX(randX + dx), dagVoorX(randX))
+            }}
             balkLabel={balkLabel}
             onEdit={() => onEditEntry(entry)}
             onResized={onResizedEntry}
+            onResizeVoorbeeld={v => setRekLanding(v && {
+              medewerker_id: medewerker.id, ...v, kleur: entryKleur, kopie: false,
+            })}
             onOpenDossier={() => onOpenDossier(entry)}
             onStartKopie={() => onStartKopie(entry)}
           />
@@ -1132,7 +1164,8 @@ function TimelineRij({
       })}
 
       {/* Landingsplek van het planitem dat nu gesleept wordt */}
-      {landing && (() => {
+      {getoondeLanding && (() => {
+        const landing  = getoondeLanding
         const startDag = parseISO(landing.start_dt)
         const left  = xBalk(landing.start_dt, startDag)
         const width = Math.max(MIN_BAR_W, xBalk(landing.eind_dt, startDag) - left)

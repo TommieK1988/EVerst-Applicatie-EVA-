@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClientRect, CollisionDetection } from '@dnd-kit/core'
-import { landingsPeriode, startdagOnderBalkrand } from './sleep-landing'
+import { landingsPeriode, startdagOnderBalkrand, verschuifRand } from './sleep-landing'
 
 type Args = Parameters<CollisionDetection>[0]
 
@@ -57,5 +57,22 @@ describe('landingsPeriode', () => {
   })
   it('over de maandgrens', () => {
     expect(landingsPeriode(new Date(2026, 9, 30, 7), new Date(2026, 10, 2, 16))).toBe('vr 30 okt. – ma 2 nov.')
+  })
+})
+
+describe('verschuifRand', () => {
+  const start = '2026-10-14T05:00:00.000Z'
+  const eind  = '2026-10-16T14:00:00.000Z'
+
+  it('verlengt aan de rechterkant met behoud van kloktijd', () => {
+    expect(verschuifRand(start, eind, 'right', 2)).toEqual({ start_dt: start, eind_dt: '2026-10-18T14:00:00.000Z' })
+  })
+  it('kort in aan de linkerkant', () => {
+    expect(verschuifRand(start, eind, 'left', 1)).toEqual({ start_dt: '2026-10-15T05:00:00.000Z', eind_dt: eind })
+  })
+  it('niets bij nul dagen of als de balk omklapt', () => {
+    expect(verschuifRand(start, eind, 'right', 0)).toBeNull()
+    expect(verschuifRand(start, eind, 'left', 3)).toBeNull()
+    expect(verschuifRand(start, eind, 'right', -3)).toBeNull()
   })
 })
