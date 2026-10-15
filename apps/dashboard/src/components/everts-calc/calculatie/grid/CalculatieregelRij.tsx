@@ -304,7 +304,7 @@ export function CalculatieregelRij({
               )}
             </div>
             <BehandelingLabel
-              regel={regel} open={behandelingZichtbaar} readOnly={readOnly}
+              regel={regel} open={behandelingZichtbaar}
               onWissel={() => {
                 if (behandelingZichtbaar) { setCompsUitgeklapt(false); return }
                 setCompsUitgeklapt(true); setSchilderbehandelingOpen(true)
@@ -314,12 +314,12 @@ export function CalculatieregelRij({
         </td>
       )
       case 'normen': return (
-        <td key={id} className="px-1 py-1 text-center">
+        <td key={id} className="px-0.5 py-1 text-center">
           <NormenKnop aantal={regelComps.length} open={compsUitgeklapt} onWissel={() => setCompsUitgeklapt(v => !v)} />
         </td>
       )
       case 'omschr': return (
-        <td key={id} className="px-1 py-1 text-center">
+        <td key={id} className="px-0.5 py-1 text-center">
           <OmschrijvingKnop
             gevuld={!!(regel.werkomschrijving || regel.werkomschrijving_afbeeldingen?.length)}
             open={werkUitgeklapt}

@@ -47,9 +47,12 @@ export function NieuweNormInvoer({ onVoeg }: {
   const inputRef = useRef<HTMLInputElement>(null)
   const soort = SOORTEN.find(s => s.type === type)!
 
-  // Vooraf laden zodra de normen open staan: anders is de lijst er bij de eerste
-  // letters nog niet en wordt Enter een vrije norm. Eén keer per sessie (gecachet).
-  useEffect(() => { void laadMaterialen().then(setMaterialen) }, [])
+  // Laden zodra je in de normregel klikt of M kiest, niet al bij het openklappen:
+  // serveracties lopen na elkaar, en een grote bibliotheek zou anders bijvoorbeeld
+  // het koppelen van een behandeling laten wachten. Eén keer per sessie (gecachet).
+  const [laden, setLaden] = useState(false)
+  useEffect(() => { if (type === 'materieel') setLaden(true) }, [type])
+  useEffect(() => { if (laden) void laadMaterialen().then(setMaterialen) }, [laden])
   const treffers = useMemo(
     () => (type === 'materieel' ? zoekMaterialen(materialen, tekst) : []),
     [type, materialen, tekst],
@@ -91,6 +94,7 @@ export function NieuweNormInvoer({ onVoeg }: {
             ref={inputRef}
             value={tekst}
             onChange={e => { setTekst(e.target.value); setActief(-1); setLijstOpen(true) }}
+            onFocus={() => setLaden(true)}
             onBlur={() => setTimeout(() => setLijstOpen(false), 150)}
             onKeyDown={e => {
               if (treffers.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {

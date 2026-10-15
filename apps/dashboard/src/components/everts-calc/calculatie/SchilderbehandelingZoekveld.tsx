@@ -20,9 +20,11 @@ interface Props {
   /** Onderdeel uit de meetstaat, voor "normen voor boeidelen". */
   onderdeel?: string | null
   autoFocus?: boolean
+  /** Eén regel hoog: code en naam, de behandelingstekst alleen in de tooltip. */
+  compact?: boolean
 }
 
-export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, bibliotheek, onSelecteer, onWis, normenVoor, onderdeel, autoFocus }: Props) {
+export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, bibliotheek, onSelecteer, onWis, normenVoor, onderdeel, autoFocus, compact }: Props) {
   const [zoekterm, setZoekterm]     = useState('')
   const [resultaten, setResultaten] = useState<SchilderBehandeling[]>([])
   const [open, setOpen]             = useState(false)
@@ -88,7 +90,7 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
             {gekozen?.code && (
               <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/70 rounded px-1 py-0.5 flex-shrink-0">{gekozen.code}</span>
             )}
-            <span className="text-xs font-medium text-blue-800 truncate flex-1 min-w-0" title={label}>{label}</span>
+            <span className="text-xs font-medium text-blue-800 truncate flex-1 min-w-0" title={compact && tekst ? `${label}\n\n${tekst}` : label}>{label}</span>
             <button
               onClick={onWis}
               className="flex-shrink-0 p-0.5 text-blue-400/70 hover:text-red-500 rounded transition-colors"
@@ -97,7 +99,7 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
               <X className="w-3 h-3" />
             </button>
           </div>
-          {tekst && (
+          {tekst && !compact && (
             <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3 whitespace-pre-wrap" title={tekst}>
               {tekst}
             </p>
