@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { BewakingRegel, BewakingTotalen, DossierBewakingData } from '@/lib/dossiers/actions'
 import { Button } from '@/components/ui'
 import { BewakingProgressCel } from './VoortgangEditors'
@@ -9,8 +9,8 @@ import { ROOD, fmt, TH, TD } from './financieel-ui'
 
 /**
  * De tabel van het blok "Bewaking per bewakingscode" op het Financieel-tab. Client-side omdat
- * de vier kostencomponenten (elk Prognose | Geboekt) in en uit te klappen zijn: ingeklapt valt
- * het paar weg en krijgt de bewakingscode-kolom die ruimte. De keuze wordt per browser
+ * de vier kostencomponenten (elk Prognose | Geboekt) samen in en uit te klappen zijn: ingeklapt
+ * vallen ze weg en krijgt de bewakingscode-kolom die ruimte. De keuze wordt per browser
  * onthouden, zodat je hem niet bij elk dossier opnieuw maakt.
  */
 
@@ -41,7 +41,7 @@ const COMPONENTEN: Component[] = [
   { kop: 'Inkoop/Mat./Afval', prognose: (r) => r.inkoopMaterieelAfvalPrognose, geboekt: (r) => r.inkoopMaterieelAfval },
 ]
 
-const OPSLAG_SLEUTEL = 'eva.financieel.bewaking.ingeklapt'
+const OPSLAG_SLEUTEL = 'eva.financieel.bewaking.componenten-ingeklapt'
 const COMPONENT_BREEDTE = 5.5 // % per subkolom
 const CODE_BREEDTE = 13       // % bewakingscode-kolom als alles uitgeklapt is
 
@@ -99,24 +99,21 @@ export function BewakingTabelInhoud({ dossierId, data, bewerkbaar }: {
   data: Pick<DossierBewakingData, 'bouw7Id' | 'hoofdstukken' | 'totalen'>
   bewerkbaar: boolean
 }) {
-  const [ingeklapt, setIngeklapt] = useState<string[]>([])
+  const [ingeklapt, setIngeklapt] = useState(false)
 
   useEffect(() => {
     try {
-      const bewaard = JSON.parse(localStorage.getItem(OPSLAG_SLEUTEL) ?? '[]')
-      if (Array.isArray(bewaard)) setIngeklapt(bewaard.filter((k) => COMPONENTEN.some((c) => c.kop === k)))
-    } catch { /* geen opslag beschikbaar — alles uitgeklapt */ }
+      if (localStorage.getItem(OPSLAG_SLEUTEL) === '1') setIngeklapt(true)
+    } catch { /* geen opslag beschikbaar — uitgeklapt */ }
   }, [])
 
-  const bewaar = (nieuw: string[]) => {
+  const wissel = () => {
+    const nieuw = !ingeklapt
     setIngeklapt(nieuw)
-    try { localStorage.setItem(OPSLAG_SLEUTEL, JSON.stringify(nieuw)) } catch { /* niet erg */ }
+    try { localStorage.setItem(OPSLAG_SLEUTEL, nieuw ? '1' : '0') } catch { /* niet erg */ }
   }
-  const wissel = (kop: string) =>
-    bewaar(ingeklapt.includes(kop) ? ingeklapt.filter((k) => k !== kop) : [...ingeklapt, kop])
-  const allesIngeklapt = ingeklapt.length === COMPONENTEN.length
 
-  const zichtbaar = COMPONENTEN.filter((c) => !ingeklapt.includes(c.kop))
+  const zichtbaar = ingeklapt ? [] : COMPONENTEN
   const kolomAantal = 1 + 3 + zichtbaar.length * 2 + 3
   // De ruimte van ingeklapte componenten gaat naar de bewakingscode, zodat lange namen leesbaar worden.
   const codeBreedte = CODE_BREEDTE + (COMPONENTEN.length - zichtbaar.length) * 2 * COMPONENT_BREEDTE
@@ -131,35 +128,9 @@ export function BewakingTabelInhoud({ dossierId, data, bewerkbaar }: {
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4,
         padding: '8px 12px', borderBottom: '1px solid var(--neutral-100)',
       }}>
-        <span style={{
-          fontSize: 10.5, fontWeight: 700, color: 'var(--neutral-500)', textTransform: 'uppercase',
-          letterSpacing: '0.04em', marginRight: 4,
-        }}>
-          Componenten
-        </span>
-        {COMPONENTEN.map((c) => {
-          const open = !ingeklapt.includes(c.kop)
-          return (
-            <Button
-              key={c.kop}
-              size="sm"
-              variant={open ? 'secondary' : 'outline'}
-              aria-pressed={open}
-              title={open ? `${c.kop} inklappen` : `${c.kop} uitklappen`}
-              onClick={() => wissel(c.kop)}
-            >
-              {open ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
-              {c.kop}
-            </Button>
-          )
-        })}
-        <Button
-          size="sm"
-          variant="ghost"
-          style={{ marginLeft: 'auto' }}
-          onClick={() => bewaar(allesIngeklapt ? [] : COMPONENTEN.map((c) => c.kop))}
-        >
-          {allesIngeklapt ? 'Alles uitklappen' : 'Alles inklappen'}
+        <Button size="sm" variant="ghost" aria-expanded={!ingeklapt} onClick={wissel}>
+          {ingeklapt ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          {ingeklapt ? 'Alles uitklappen' : 'Alles inklappen'}
         </Button>
       </div>
 
@@ -187,20 +158,7 @@ export function BewakingTabelInhoud({ dossierId, data, bewerkbaar }: {
             <TH rowSpan={zichtbaar.length ? 2 : 1} right compact>Meerwerk</TH>
             <TH rowSpan={zichtbaar.length ? 2 : 1} right compact>Tot. prognose</TH>
             {zichtbaar.map((c) => (
-              <TH key={c.kop} colSpan={2} center compact groepKop groepStart>
-                <button
-                  type="button"
-                  onClick={() => wissel(c.kop)}
-                  title={`${c.kop} inklappen`}
-                  style={{
-                    all: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                    gap: 2, padding: 0, border: 'none',
-                  }}
-                >
-                  {c.kop}
-                  <ChevronLeft size={11} />
-                </button>
-              </TH>
+              <TH key={c.kop} colSpan={2} center compact groepKop groepStart>{c.kop}</TH>
             ))}
             <TH rowSpan={zichtbaar.length ? 2 : 1} right compact groepStart>Geboekte kosten</TH>
             <TH rowSpan={zichtbaar.length ? 2 : 1} right compact>Nog te verwachten</TH>
