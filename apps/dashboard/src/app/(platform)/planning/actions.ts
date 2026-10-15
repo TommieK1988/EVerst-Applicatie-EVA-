@@ -18,6 +18,7 @@ import { herberekenDeadlines } from '../taken/actions/deadlines'
 import { dagenTussen, nlTijdstip, roostertijdenOp, verschuifNlDagen } from '@/lib/planning/nl-tijd'
 import { zoekDubbeleInplanning, zoekDubbeleInplanningVoorDossier, type DubbeleInplanning } from '@/lib/planning/dubbel-ingepland'
 import { maakUrenRekenaar } from '@/lib/planning/werkuren-server'
+import { verbreedActiviteitenTotItems } from '@/lib/planning/activiteit-bereik'
 
 const db = () => createAdminClient() as any
 
@@ -566,6 +567,7 @@ export async function maakPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
+  await verbreedActiviteitenTotItems(db(), [data.id])
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   // Eigen mensen op een servicedeskbon: die staat daarmee op In voorbereiding. Aan het aanmaken
@@ -660,6 +662,7 @@ export async function maakSnelPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
+  await verbreedActiviteitenTotItems(db(), [data.id])
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   // Eigen mensen op een servicedeskbon: die staat daarmee op In voorbereiding. Aan het aanmaken
@@ -715,6 +718,7 @@ export async function kopieerPlanningItem(
     .single()
 
   if (error) return { ok: false, error: error.message }
+  await verbreedActiviteitenTotItems(db(), [data.id])
   await spiegelNaarBouw7(data.id)
   await naPlanningWijziging()
   return { ok: true, data: data as PlanningItem, dubbel: await zoekDubbeleInplanning([data.id]) }
@@ -767,6 +771,7 @@ export async function verplaatsPlanningItem(
 
   if (error) return { ok: false, error: error.message }
 
+  await verbreedActiviteitenTotItems(db(), [id])
   await spiegelNaarBouw7(id)
   await naPlanningWijziging()
   return { ok: true, dubbel: await zoekDubbeleInplanning([id]) }
@@ -870,6 +875,7 @@ export async function splitsPlanningItem(
     return { ok: false, error: insErr?.message ?? 'Het tweede deel kon niet aangemaakt worden.' }
   }
 
+  await verbreedActiviteitenTotItems(supabase, [id, nieuw.id])
   await spiegelNaarBouw7(id)
   await spiegelNaarBouw7(nieuw.id)
   await naPlanningWijziging()

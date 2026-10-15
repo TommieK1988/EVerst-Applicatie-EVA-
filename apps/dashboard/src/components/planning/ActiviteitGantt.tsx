@@ -33,6 +33,7 @@ import {
 } from './layout/index'
 import { useKleurweergave, KleurweergaveToggle, type Kleurweergave } from './KleurweergaveToggle'
 import { berekenPlanUren } from '@/lib/planning/werkuren'
+import { verbredingVoorBlokken } from '@/lib/planning/activiteit-bereik'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -908,11 +909,7 @@ function PlanItemBar({ item, activiteit, vs, ppd, totalDays, dossier_id, medewer
     if (drag.type === 'move')       { ns = verschuifTs(drag.origStartDt, days); ne = verschuifTs(drag.origEindDt, days) }
     else if (drag.type === 'left')  { ns = verschuifTs(drag.origStartDt, days); if (ns >= ne) return }
     else if (drag.type === 'right') { ne = verschuifTs(drag.origEindDt, days);  if (ne <= ns) return }
-    // Clamp: planitem mag niet buiten het datumbereik van de activiteit vallen
-    const aMin = activiteit.gewenste_start ? startOfDay(parseISO(activiteit.gewenste_start)).getTime() : null
-    const aMax = activiteit.deadline       ? startOfDay(addDays(parseISO(activiteit.deadline), 1)).getTime() - 1 : null
-    if (aMin != null && new Date(ns).getTime() < aMin) { toast.error('Planitem valt buiten activiteit-startdatum'); return }
-    if (aMax != null && new Date(ne).getTime() > aMax) { toast.error('Planitem valt buiten activiteit-deadline'); return }
+    // Buiten de activiteit slepen mag: de activiteit (en daarmee de fase) groeit mee.
     const nieuweUren = berekenPlanUren(drag.medewerker_id, ns, ne, roosters, afwezigheid)
     onUpdated(item.id, { start_dt: ns, eind_dt: ne, uren: nieuweUren })
     const result = await verplaatsPlanningItem(item.id, { start_dt: ns, eind_dt: ne, medewerker_id: drag.medewerker_id, dossier_id, uursoort_id: drag.uursoort_id, uren: nieuweUren })
@@ -2126,8 +2123,25 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
     startT(() => router.refresh())
   }
 
+  // Zelfde regel als de server (`verbreedActiviteitenTotItems`): komt een planitem buiten zijn
+  // activiteit, dan groeit die mee. Hier optimistisch, zodat balk en fase direct meeschuiven.
+  function verbreedActiviteitLokaal(activiteit_id: string, blok: { start_dt: string; eind_dt: string }) {
+    setActiviteiten(prev => prev.map(a => {
+      if (a.id !== activiteit_id) return a
+      const patch = verbredingVoorBlokken(a, [blok])
+      return patch ? { ...a, ...patch } : a
+    }))
+  }
+  function handleItemCreated(e: PlanningItemVerrijkt) {
+    setItems(prev => [...prev, e])
+    verbreedActiviteitLokaal(e.activiteit_id, e)
+  }
   function handleItemUpdated(id: string, patch: Partial<PlanningItemVerrijkt>) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
+    const item = items.find(i => i.id === id)
+    if (item && (patch.start_dt || patch.eind_dt)) {
+      verbreedActiviteitLokaal(item.activiteit_id, { start_dt: patch.start_dt ?? item.start_dt, eind_dt: patch.eind_dt ?? item.eind_dt })
+    }
     startT(() => router.refresh())
   }
   function handleItemVerwijderd(id: string) {
@@ -2383,7 +2397,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                   uursoortKleuren={uursoortKleuren}
                   onItemUpdated={handleItemUpdated}
                   onItemVerwijderd={handleItemVerwijderd}
-                  onItemCreated={e => setItems(prev => [...prev, e])}
+                  onItemCreated={handleItemCreated}
                 />
               )
             }
@@ -2406,7 +2420,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
                 onEdit={() => setEditActiviteit(row.activiteit)}
                 onVerwijder={() => handleVerwijderActiviteit(row.activiteit)}
                 onActiviteitUpdated={patch => handleActiviteitUpdate(row.activiteit.id, patch)}
-                onItemCreated={e => setItems(prev => [...prev, e])}
+                onItemCreated={handleItemCreated}
                 onItemUpdated={handleItemUpdated}
                 onItemVerwijderd={handleItemVerwijderd}
                 onTimelineClick={handleTimelineClick}
@@ -2499,7 +2513,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
           dossier_id={dossier_id}
           uursoortLabel={uursoortLabel}
           onSave={patch => handleActiviteitUpdate(editActiviteit.id, patch)}
-          onItemCreated={e => setItems(prev => [...prev, e])}
+          onItemCreated={handleItemCreated}
           onItemVerwijderd={handleItemVerwijderd}
           onAfhankelijkheidChanged={() => {
             setAfhankelijkheden([])
