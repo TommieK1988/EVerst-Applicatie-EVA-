@@ -297,6 +297,27 @@ export interface Calculatieregel {
   bestekcode?: string
   werkomschrijving_afbeeldingen?: string[]  // base64 afbeeldingen bij de werkomschrijving
   kostengroep?: string  // optionele groeperingslabel voor werkbegroting (bijv. 'Bouwplaats')
+  /** De meting uit de mini-meetstaat (dubbelklik op de hoeveelheid). Bewaard zodat je
+   *  de maten terugziet als je hem opnieuw opent; de hoeveelheid zelf blijft leidend. */
+  mini_meetstaat?: MiniMeting
+}
+
+/** Eén maatregel in de mini-meetstaat. Betekenis van dim1–3 hangt af van de eenheid:
+ *  m² = B × H, m³ = L × B × H, m¹ = L, overige eenheden = aantal (dim1). */
+export interface MiniMaatrij {
+  id: string
+  omschrijving: string
+  dim1: number
+  dim2: number
+  dim3: number
+  factor: number
+}
+
+export interface MiniMeting {
+  /** De eenheid waarin gemeten is; de rijen zijn alleen in die eenheid te lezen. */
+  eenheid: string
+  rijen: MiniMaatrij[]
+  gemeten_op: string
 }
 
 // ─── Instellingen ─────────────────────────────────────────────────────────────

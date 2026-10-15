@@ -347,15 +347,18 @@ export function CalculatieregelRij({
                   hover:bg-slate-50 hover:border hover:border-slate-200
                   focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-800"
                 onDoubleClick={e => { e.stopPropagation(); setMiniMeetstaat(true) }}
-                title="Dubbelklik om te meten"
+                title={regel.mini_meetstaat?.rijen.length
+                  ? `Gemeten (${regel.mini_meetstaat.rijen.length} ${regel.mini_meetstaat.rijen.length === 1 ? 'regel' : 'regels'}): dubbelklik om de meting te zien`
+                  : 'Dubbelklik om te meten'}
               />
               <MiniMeetstaat
                 open={miniMeetstaat}
                 eenheid={regel.eenheid}
                 hoeveelheid={regel.hoeveelheid}
+                bewaard={regel.mini_meetstaat}
                 onSluiten={() => setMiniMeetstaat(false)}
-                onBevestig={(hoeveelheid, eenheid) => {
-                  onWijzig(regel.id, { hoeveelheid, ...(eenheid ? { eenheid } : {}) })
+                onBevestig={(hoeveelheid, eenheid, meting) => {
+                  onWijzig(regel.id, { hoeveelheid, mini_meetstaat: meting, ...(eenheid ? { eenheid } : {}) })
                   setMiniMeetstaat(false)
                 }}
               />

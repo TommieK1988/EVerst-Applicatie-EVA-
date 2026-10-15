@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Trash2, Calculator, ChevronDown } from 'lucide-react'
-import { nieuweId } from '@/lib/everts-calc/utils'
-import type { Eenheid } from '@/lib/everts-calc/types'
+import type { Eenheid, MiniMaatrij, MiniMeting } from '@/lib/everts-calc/types'
 import {
   Dialog,
   DialogContent,
@@ -14,72 +13,30 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ZwevendeLijst } from '@/components/ui/zwevende-lijst'
-import { rekenMaat, normaliseerEenheid } from '@/lib/everts-calc/maat-rekenen'
+import { normaliseerEenheid } from '@/lib/everts-calc/maat-rekenen'
+import {
+  isAlleenAantal as isSimple, berekenRij as bereken, rijHeeftData, legeRij,
+  startToestand, maakMeting,
+} from '@/lib/everts-calc/mini-meetstaat'
 import GetalInvoer from '@/components/everts-calc/meetstaat/GetalInvoer'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MaatEenheid = string
 
-interface Maatrij {
-  id: string
-  omschrijving: string
-  dim1: number   // breedte (m²), lengte (m¹/m³), aantal (overig)
-  dim2: number   // hoogte (m²), breedte (m³)
-  dim3: number   // hoogte (m³ only)
-  factor: number
-}
+type Maatrij = MiniMaatrij
 
 interface Props {
   open: boolean
   eenheid: Eenheid | string
   hoeveelheid: number
-  onBevestig: (hoeveelheid: number, eenheid?: Eenheid) => void
+  /** Eerder bewaarde meting van deze regel; de dialog opent daarmee. */
+  bewaard?: MiniMeting
+  onBevestig: (hoeveelheid: number, eenheid: Eenheid | undefined, meting: MiniMeting) => void
   onSluiten: () => void
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Eenheden waarbij de meetstaat alleen een 'Aantal' veld heeft (geen factor/dimensies) */
-const isSimple = (e: string) => !['m²', 'm¹', 'm³'].includes(e)
-
-/**
- * Rekent met dezelfde regel als de meetstaat (`rekenMaat`). Een rij zonder één
- * ingevuld getal telt niet: de factor staat hier standaard op 1, en zou een lege
- * rij anders als 1 laten meetellen.
- */
-function bereken(rij: Maatrij, eenh: MaatEenheid): number {
-  if (!(rij.dim1 > 0 || rij.dim2 > 0 || rij.dim3 > 0)) return 0
-  if (isSimple(eenh)) return rekenMaat({ eenheid: eenh, aantal: rij.dim1 })
-  // m¹: de lengte is één breedte. m³: lengte × breedte × hoogte.
-  return rekenMaat({
-    eenheid: eenh,
-    breedte: rij.dim1,
-    hoogte: eenh === 'm¹' ? undefined : rij.dim2,
-    diepte: eenh === 'm³' ? rij.dim3 : undefined,
-    factor: rij.factor,
-  })
-}
-
-function rijHeeftData(r: Maatrij) {
-  return r.dim1 > 0 || r.dim2 > 0 || r.dim3 > 0 || !!r.omschrijving
-}
-
-function legeRij(): Maatrij {
-  return { id: nieuweId(), omschrijving: '', dim1: 0, dim2: 0, dim3: 0, factor: 1 }
-}
-
-function prefillRij(hoeveelheid: number, eenh: MaatEenheid): Maatrij {
-  const rij = legeRij()
-  if (hoeveelheid <= 0) return rij
-  // De bestaande hoeveelheid × 1 (× 1). Niet als wortel verdelen over de maten:
-  // √10 afgerond is 3,16, en 3,16 × 3,16 = 9,99. Wie alleen een rij toevoegt,
-  // zou dan ongemerkt de hoeveelheid die er al stond veranderen.
-  const label = { omschrijving: 'Bestaande hoeveelheid', factor: 1 }
-  if (eenh === 'm²') return { ...rij, ...label, dim1: hoeveelheid, dim2: 1 }
-  if (eenh === 'm³') return { ...rij, ...label, dim1: hoeveelheid, dim2: 1, dim3: 1 }
-  return { ...rij, ...label, dim1: hoeveelheid }
-}
+const getal = (n: number) => n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // ─── Kolom headers per eenheid ────────────────────────────────────────────────
 
@@ -260,9 +217,10 @@ function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: str
 
 // ─── Hoofd component ─────────────────────────────────────────────────────────
 
-export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, onSluiten }: Props) {
+export default function MiniMeetstaat({ open, eenheid, hoeveelheid, bewaard, onBevestig, onSluiten }: Props) {
   const [gekozenEenheid, setGekozenEenheid] = useState<string>(normaliseerEenheid(eenheid))
   const [rijen, setRijen] = useState<Maatrij[]>([legeRij()])
+  const [afwijking, setAfwijking] = useState<{ meting: number; calculatie: number } | null>(null)
 
   // Reset wanneer de dialog opent
   useEffect(() => {
@@ -270,8 +228,10 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
     // 'm2' uit de bibliotheek is gewoon m²; anders valt de rij terug op alleen een aantal.
     const eenh = normaliseerEenheid(eenheid)
     setGekozenEenheid(eenh)
-    // Pre-fill als er al een waarde is, gevolgd door een lege rij
-    setRijen(hoeveelheid > 0 ? [prefillRij(hoeveelheid, eenh), legeRij()] : [legeRij()])
+    // De bewaarde meting, of anders de bestaande hoeveelheid als eerste rij.
+    const start = startToestand(bewaard, hoeveelheid, eenh)
+    setRijen(start.rijen)
+    setAfwijking(start.afwijking)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -287,6 +247,7 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
   const handleEenheidWijzig = (e: string) => {
     setGekozenEenheid(e)
     setRijen([legeRij()])
+    setAfwijking(null)
   }
 
   const totalen = rijen.map(r => bereken(r, gekozenEenheid))
@@ -301,7 +262,7 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
   const handleBevestig = () => {
     if (eindtotaal <= 0) return
     const eenheidGewijzigd = gekozenEenheid !== eenheid
-    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined)
+    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined, maakMeting(rijen, gekozenEenheid))
   }
 
   const headers = kolomHeaders(gekozenEenheid)
@@ -366,6 +327,13 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, onBevestig, 
         {/* Meetrijen tabel */}
         {gekozenEenheid && (
           <>
+            {afwijking && (
+              <p className="mx-4 mt-3 rounded-md border border-warning-300 bg-warning-50 px-3 py-2 text-xs text-warning-700">
+                In de calculatie staat {getal(afwijking.calculatie)} {gekozenEenheid}: die is met de hand
+                aangepast. Deze meting telt op tot {getal(afwijking.meting)}. Overnemen zet de meting terug
+                in de calculatie; Annuleren laat de calculatie zoals hij is.
+              </p>
+            )}
             <div className="flex-1 overflow-auto">
               <table className="w-full border-collapse">
                 <thead>
