@@ -2412,5 +2412,16 @@
         "attribution": "inputs-changed"
       }
     ]
-  }
+  },
+  "renders": {
+    "latest": {
+      "id": "ba86ac0c-7257-4549-a9a4-95a712724ca4",
+      "completedAt": 1792078005836,
+      "output": "/home/user/EVerst-Applicatie-EVA-/videos/eva-promo/renders/concept-zonder-stem.mp4",
+      "status": "completed",
+      "revision": null
+    },
+    "retainedRevisions": []
+  },
+  "pendingArtifactCleanup": []
 }
