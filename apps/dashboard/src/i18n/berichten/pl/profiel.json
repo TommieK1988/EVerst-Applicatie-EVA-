@@ -103,6 +103,9 @@
   },
   "navigatieApp": {
     "titel": "Aplikacja do nawigacji",
-    "uitleg": "Która aplikacja otwiera się, gdy klikniesz Nawiguj. Jeśli nie masz jej w telefonie, otworzy się strona internetowa."
+    "uitleg": "Która aplikacja otwiera się, gdy klikniesz Nawiguj. Jeśli nie masz jej w telefonie, otworzy się strona internetowa.",
+    "telefoon": "Niech telefon zapyta",
+    "telefoonUitleg": "Telefon pokaże wszystkie twoje aplikacje do nawigacji. Kliknij Zawsze, żeby zapamiętać wybór.",
+    "standaard": "domyślnie"
   }
 }

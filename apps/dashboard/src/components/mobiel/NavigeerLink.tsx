@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { leesNavigatieApp, navigatieLink, STANDAARD_NAVIGATIE_APP, type NavigatieApp } from '@/lib/mobiel/navigatie'
+import { leesNavigatieApp, navigatieLink, opentApp, STANDAARD_NAVIGATIE_APP, type NavigatieApp } from '@/lib/mobiel/navigatie'
 
 /**
  * Een `<a>` naar de route in de navigatie-app die op dit toestel gekozen is
@@ -16,8 +16,12 @@ export default function NavigeerLink({
   const [app, setApp] = useState<NavigatieApp>(STANDAARD_NAVIGATIE_APP)
   useEffect(() => { setApp(leesNavigatieApp()) }, [])
 
+  const href = navigatieLink(adres, app)
+  // Een geo:/intent-link opent een app; in een nieuw tabblad bleef dan een leeg venster achter.
+  const doel = opentApp(href) ? {} : { target: '_blank', rel: 'noopener noreferrer' }
+
   return (
-    <a href={navigatieLink(adres, app)} target="_blank" rel="noopener noreferrer" {...rest}>
+    <a href={href} {...doel} {...rest}>
       {children}
     </a>
   )

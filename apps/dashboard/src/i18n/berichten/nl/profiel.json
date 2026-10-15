@@ -103,6 +103,9 @@
   },
   "navigatieApp": {
     "titel": "Navigatie-app",
-    "uitleg": "Welke app opent als je op Navigeren tikt. Staat de app niet op je telefoon, dan opent de website."
+    "uitleg": "Welke app opent als je op Navigeren tikt. Staat de app niet op je telefoon, dan opent de website.",
+    "telefoon": "Telefoon laat kiezen",
+    "telefoonUitleg": "Je telefoon toont al je navigatie-apps. Tik op Altijd om je keuze te onthouden.",
+    "standaard": "standaard"
   }
 }
