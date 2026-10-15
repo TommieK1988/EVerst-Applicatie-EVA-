@@ -4164,7 +4164,10 @@ export async function getDossierUrenBewaking(dossierId: string): Promise<Dossier
     }
   }
 
-  const codeSet = new Set<string>([...bouwMap.keys(), ...(wbData?.keys() ?? [])])
+  // De regels komen uit Bouw7; de werkbegroting vult alleen het uurtarief in bij codes die daar
+  // al staan. Een code die alleen in de werkbegroting voorkomt zou hier (en in de urentabel op de
+  // Planning-tab) als lege regel verschijnen.
+  const codeSet = new Set<string>(bouwMap.keys())
   const heeftWerkbegroting = wbData != null && wbData.size > 0
 
   const regels: UrenBewakingRegel[] = [...codeSet].map((code) => {
