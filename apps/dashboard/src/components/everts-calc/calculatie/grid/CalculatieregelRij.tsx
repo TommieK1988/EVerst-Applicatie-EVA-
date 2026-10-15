@@ -181,8 +181,11 @@ export function CalculatieregelRij({
   }, [weergaveSignaal])
   // Dicht bij het openen; de stip in de omschrijving laat zien dát er een opmerking is.
   const [opmerkingOpen,          setOpmerkingOpen]          = useState(false)
-  // Dicht bij het openen: het label achter de omschrijving laat de behandeling zien.
-  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(false)
+  // Zoals vóór fase 4b: de behandeling hoort bij de normen en staat open zodra die
+  // openklappen als de regel er een heeft.
+  const heeftBehandeling = !!(regel.schilderbehandeling_id || regel.schilderbehandeling)
+  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(heeftBehandeling)
+  const behandelingZichtbaar = compsUitgeklapt && schilderbehandelingOpen
   const [biblOpen,        setBiblOpen]        = useState(false)
   // Lokale edit-state voor totaalbedragen en verkoopprijzen
   const [mtBedragEdit, setMtBedragEdit] = useState<string | null>(null)
@@ -301,8 +304,11 @@ export function CalculatieregelRij({
               )}
             </div>
             <BehandelingLabel
-              regel={regel} open={schilderbehandelingOpen} readOnly={readOnly}
-              onWissel={() => setSchilderbehandelingOpen(v => !v)}
+              regel={regel} open={behandelingZichtbaar} readOnly={readOnly}
+              onWissel={() => {
+                if (behandelingZichtbaar) { setCompsUitgeklapt(false); return }
+                setCompsUitgeklapt(true); setSchilderbehandelingOpen(true)
+              }}
             />
           </div>
         </td>
@@ -635,7 +641,7 @@ export function CalculatieregelRij({
               { label: 'Werkomschrijving & afbeeldingen', sneltoets: 'Ctrl ⇧ Enter', onSelect: () => { setWerkFocus(true); setWerkUitgeklapt(true) } },
               !readOnly && { label: 'Markering & interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
-              !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => setSchilderbehandelingOpen(true) },
+              !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
               !readOnly && { label: 'Uit bibliotheek toevoegen aan groep…', onSelect: () => setBiblOpen(true) },
               !readOnly && { soort: 'scheiding' },
@@ -716,12 +722,6 @@ export function CalculatieregelRij({
       {opmerkingOpen && (
         <OpmerkingRij regel={regel} colOrder={colOrder} onWijzig={onWijzig} onSluit={() => setOpmerkingOpen(false)} />
       )}
-      {schilderbehandelingOpen && (
-        <BehandelingRij
-          regel={regel} colOrder={colOrder} aantalNormen={regelComps.length} readOnly={readOnly}
-          onSluit={() => setSchilderbehandelingOpen(false)}
-        />
-      )}
       {werkUitgeklapt && (
         <WerkomschrijvingRij
           regel={regel} colOrder={colOrder} onWijzig={onWijzig}
@@ -734,6 +734,12 @@ export function CalculatieregelRij({
           uurtarieven={uurtarieven} eenheden={eenheden}
           onWijzigComponentExtra={onWijzigComponentExtra}
           onVerwijderComponent={onVerwijderComponent} onVoegComponentToe={onVoegComponentToe}
+        />
+      )}
+      {behandelingZichtbaar && (
+        <BehandelingRij
+          regel={regel} colOrder={colOrder} aantalNormen={regelComps.length} readOnly={readOnly}
+          onSluit={() => setSchilderbehandelingOpen(false)}
         />
       )}
       {receptModalOpen && (
