@@ -20,7 +20,7 @@ import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './Regel
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
-import { NormenKnop, OmschrijvingKnop, OpmerkingKnop, eersteRegel } from './RegelKnoppen'
+import { NormenKnop, OmschrijvingKnop, MarkeerKnop, eersteRegel } from './RegelKnoppen'
 import { naarBuurRegel } from './toetsen'
 import type { WeergaveSignaal } from './weergave'
 
@@ -338,11 +338,6 @@ export function CalculatieregelRij({
           />
         </td>
       )
-      case 'opm': return (
-        <td key={id} className="px-1 py-1 text-center">
-          <OpmerkingKnop gevuld={!!regel.opmerking} open={opmerkingOpen} tekst={regel.opmerking} onWissel={() => setOpmerkingOpen(v => !v)} />
-        </td>
-      )
       case 'aant': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
           {regel.meetstaat_aggregaat_id ? (
@@ -451,14 +446,19 @@ export function CalculatieregelRij({
       )
       case 'markeer': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
-          <button
-            onClick={() => onWijzig(regel.id, { gemarkeerd: !(regel.gemarkeerd ?? false) })}
-            className={`w-4 h-4 rounded-full border-2 transition-colors mx-auto block ${
-              regel.gemarkeerd
-                ? 'bg-orange-400 border-orange-500'
-                : 'border-slate-300 hover:border-orange-400 hover:bg-orange-50'
-            }`}
-            title="Markeer / Hef markering op"
+          <MarkeerKnop
+            gemarkeerd={!!regel.gemarkeerd}
+            opmerking={regel.opmerking}
+            open={opmerkingOpen}
+            onKlik={readOnly ? undefined : () => {
+              // Een lege regel markeren opent meteen het vak om te noteren wát er is.
+              if (!regel.gemarkeerd && !regel.opmerking) {
+                onWijzig(regel.id, { gemarkeerd: true })
+                setOpmerkingOpen(true)
+              } else {
+                setOpmerkingOpen(v => !v)
+              }
+            }}
           />
         </td>
       )
@@ -650,7 +650,7 @@ export function CalculatieregelRij({
               { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', sneltoets: 'Ctrl Enter', onSelect: () => setCompsUitgeklapt(v => !v),
                 extra: regelComps.length > 0 ? <span className="text-[10.5px] text-neutral-400">{regelComps.length}</span> : undefined },
               { label: 'Werkomschrijving & afbeeldingen', sneltoets: 'Ctrl ⇧ Enter', onSelect: () => { setWerkFocus(true); setWerkUitgeklapt(true) } },
-              !readOnly && { label: 'Interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
+              !readOnly && { label: 'Markering & interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
               !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },

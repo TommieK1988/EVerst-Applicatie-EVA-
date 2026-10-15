@@ -3,7 +3,7 @@ import type { KolomConfig } from '@everts/database/platform-types'
 // ─── Kolom definities ─────────────────────────────────────────────────────────
 
 export type ColId =
-  'kostengroep' | 'omschrijving' | 'normen' | 'omschr' | 'opm' | 'code' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
+  'kostengroep' | 'omschrijving' | 'normen' | 'omschr' | 'code' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
   'uur_eenh' | 'min_eenh' | 'tarief_ab' | 'bedrag_ab' |
   'prijs_mt' | 'bedrag_mt' | 'prijs_oa' | 'bedrag_oa' |
   'tot_uren' |
@@ -25,13 +25,12 @@ export const COL_DEFS: ColDef[] = [
   // Twee vaste knoppen naast de omschrijving: normen en werkomschrijving open/dicht.
   { id: 'normen',       label: 'Norm', title: 'Normen tonen of verbergen (Ctrl+Enter)', dw: 52, minW: 44, align: 'center' },
   { id: 'omschr',       label: '¶', title: 'Werkomschrijving tonen of verbergen (Ctrl+Shift+Enter)', dw: 40, minW: 36, align: 'center' },
-  { id: 'opm',          label: 'Opm.', title: 'Interne opmerking tonen of toevoegen (Ctrl+Alt+Enter)', dw: 44, minW: 40, align: 'center' },
   { id: 'code',         label: 'Code', title: 'Bestekscode uit de meetstaat', dw: 56, minW: 40, align: 'left' },
   { id: 'aant',         label: 'Aant.',        dw: 56,  minW: 40,  align: 'right' },
   { id: 'eenh',         label: 'Eenh.',        dw: 44,  minW: 36,  align: 'left' },
   { id: 'stelpost',     label: 'STP', title: 'Stelpost (provisorische som)', dw: 32, minW: 28, align: 'center' },
   { id: 'verrekenbaar', label: 'VRR', title: 'Verrekenbaar (wordt apart getoond in offerte)', dw: 32, minW: 28, align: 'center' },
-  { id: 'markeer',      label: '⚑', title: 'Markeer regel', dw: 32, minW: 28, align: 'center' },
+  { id: 'markeer',      label: '⚑', title: 'Markeren met interne opmerking (Ctrl+Alt+Enter)', dw: 32, minW: 28, align: 'center' },
   { id: 'uur_eenh',  label: 'Uur/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb' } },
   { id: 'min_eenh',  label: 'Min/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb' } },
   { id: 'tarief_ab', label: 'Tarief AB', dw: 64,  minW: 48, align: 'right', thStyle: { color: '#1f6feb' } },

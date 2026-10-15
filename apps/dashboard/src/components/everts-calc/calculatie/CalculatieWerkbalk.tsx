@@ -57,7 +57,7 @@ const SNELTOETSEN: [string, string][] = [
   ['Ctrl+Z',       'Ongedaan maken'],
   ['Ctrl+Enter',   'Normen van de regel open/dicht'],
   ['Ctrl+Shift+Enter', 'Werkomschrijving open/dicht'],
-  ['Ctrl+Alt+Enter', 'Interne opmerking open/dicht'],
+  ['Ctrl+Alt+Enter', 'Markering & interne opmerking open/dicht'],
   ['↑ / ↓',        'Vorige/volgende regel, zelfde kolom'],
   ['Esc',          'Selectie opheffen'],
 ]

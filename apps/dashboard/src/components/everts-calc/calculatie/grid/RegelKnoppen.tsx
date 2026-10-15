@@ -1,10 +1,9 @@
 'use client'
 
-import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/everts-calc/utils'
 
 /**
- * De twee vaste knoppen naast de omschrijving: normen en werkomschrijving. Ook
+ * De vaste knoppen van een regel: normen, werkomschrijving en markering. Ook
  * zichtbaar als ze nog leeg zijn (gestippeld), zodat je ziet dát het kan.
  */
 export function NormenKnop({ aantal, open, onWissel }: {
@@ -69,32 +68,39 @@ export function OmschrijvingKnop({ gevuld, open, onWissel }: {
   )
 }
 
-/** Interne opmerking: oranje als er een is, "+" als je er een kunt toevoegen. */
-export function OpmerkingKnop({ gevuld, open, tekst, onWissel }: {
-  gevuld: boolean
+/**
+ * Het markeerbolletje (⚑). Markeren en de interne opmerking horen bij elkaar: je
+ * markeert iets óm er iets van te zeggen. Vol oranje = gemarkeerd, oranje ring met
+ * stip = alleen een opmerking, grijze ring = niets.
+ */
+export function MarkeerKnop({ gemarkeerd, opmerking, open, onKlik }: {
+  gemarkeerd: boolean
+  opmerking?: string
   open: boolean
-  tekst?: string
-  onWissel: () => void
+  onKlik?: () => void
 }) {
+  const titel = opmerking
+    ? `Opmerking: ${opmerking}`
+    : gemarkeerd ? 'Gemarkeerd — klik voor de interne opmerking' : 'Markeren en interne opmerking toevoegen'
   return (
     <button
       type="button"
-      onClick={e => { e.stopPropagation(); onWissel() }}
-      title={`${gevuld ? `Opmerking: ${tekst}` : 'Interne opmerking toevoegen'} (Ctrl+Alt+Enter)`}
+      disabled={!onKlik}
+      onClick={e => { e.stopPropagation(); onKlik?.() }}
+      title={`${titel} (Ctrl+Alt+Enter)`}
+      aria-label={gemarkeerd ? 'Gemarkeerd, interne opmerking' : 'Markeren'}
       aria-expanded={open}
-      aria-label={gevuld ? 'Interne opmerking' : 'Interne opmerking toevoegen'}
       className={cn(
-        'inline-flex h-5 min-w-[26px] items-center justify-center rounded-md px-1 transition-colors',
-        open
-          ? 'border border-warning-500 bg-warning-500 text-white'
-          : gevuld
-            ? 'border border-warning-300 bg-warning-100 text-warning-700 hover:border-warning-500'
-            : 'border border-dashed border-neutral-300 text-neutral-400 hover:border-warning-500 hover:text-warning-700',
+        'mx-auto flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors',
+        gemarkeerd
+          ? 'border-orange-500 bg-orange-400'
+          : opmerking
+            ? 'border-orange-400 bg-white'
+            : 'border-slate-300 hover:border-orange-400 hover:bg-orange-50',
+        open && 'ring-2 ring-orange-200',
       )}
     >
-      {gevuld || open
-        ? <MessageSquare className="h-3 w-3" />
-        : <span className="text-[11px] font-semibold">+</span>}
+      {opmerking && <span className={cn('h-1.5 w-1.5 rounded-full', gemarkeerd ? 'bg-white' : 'bg-orange-400')} />}
     </button>
   )
 }

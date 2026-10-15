@@ -115,7 +115,7 @@ export function WerkomschrijvingRij({ regel, colOrder, onWijzig, focus = false, 
 
 /**
  * Interne opmerking: een eigen rij direct onder de regel, uitgelijnd op de omschrijving.
- * Hoort bij de regel zelf, niet bij de normen, dus hij opent ook zonder de normen.
+ * Hoort bij de markering (⚑): je markeert een regel en schrijft hier wát er is.
  */
 export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
   regel: Calculatieregel
@@ -141,6 +141,16 @@ export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
             onChange={e => onWijzig(regel.id, { opmerking: e.target.value || undefined })}
             onKeyDown={e => { if (e.key === 'Escape') onSluit() }}
           />
+          <button
+            onClick={() => {
+              onWijzig(regel.id, { gemarkeerd: !regel.gemarkeerd })
+              if (regel.gemarkeerd && !regel.opmerking) onSluit()
+            }}
+            className="mt-0.5 whitespace-nowrap rounded border border-warning-300/60 bg-white px-2 py-1 text-[11px] text-warning-700 hover:border-warning-500"
+            title={regel.gemarkeerd ? 'Markering weghalen; de opmerking blijft staan' : 'Regel markeren'}
+          >
+            {regel.gemarkeerd ? 'Markering opheffen' : 'Markeren'}
+          </button>
           <button onClick={onSluit} className="p-1 text-neutral-400 hover:text-neutral-700 rounded mt-0.5" title="Inklappen (Esc)">
             <X className="w-3 h-3" />
           </button>
