@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/everts-calc/supabase/server'
 import { createAdminClient } from '@everts/database/server'
+import { spiegelMeetstaten } from '@/lib/meetstaat/spiegel-schrijven'
 import type {
   Scenario, Groep, Calculatieregel, Componentregel,
   Meetstaat, Meetregel, MeetregelAggregaat, MeetstaatElement,
@@ -244,6 +245,9 @@ export async function bewaarCalculatieSnapshot(
       { onConflict: 'project_id' }
     )
   if (error) return { gelukt: false, fout: error.message }
+
+  // Fase 1a: meetstaat ook naar de eigen tabellen. Faalt nooit de opslag zelf.
+  await spiegelMeetstaten(db, projectId, teSchrijven)
   return { gelukt: true }
 }
 
