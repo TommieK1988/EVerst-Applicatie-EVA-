@@ -3,13 +3,14 @@
 import type { ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
-  GitBranch, Undo2, Check, CloudUpload, TriangleAlert, ChevronDown, ChevronsUp, ChevronsDown,
+  GitBranch, Undo2, Check, CloudUpload, TriangleAlert, ChevronDown, ChevronsUpDown,
   Library, BookOpen, Paintbrush, Package, Keyboard, MoreHorizontal, Copy, FileUp, FileDown, Table2,
   FileText, ClipboardList, Receipt, ListChecks,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader } from '@/components/ui/popover'
 import type { QuoteType } from '@/lib/everts-calc/types-quotes'
+import { type Weergave, WEERGAVE_LABEL } from './grid/weergave'
 
 export type BibliotheekSoort = 'recepten' | 'schilderwerk' | 'materialen'
 export type SyncStatus = 'idle' | 'bezig' | 'gelukt' | 'fout'
@@ -27,8 +28,8 @@ interface Props {
   onBibliotheek: (soort: BibliotheekSoort) => void
   /** Meetstaat- en behandeling-per-code-knop; die dragen hun eigen dialogen. */
   toevoegen: ReactNode
-  allesIngeklapt: boolean
-  onToggleInklap: () => void
+  weergave: Weergave
+  onWeergave: (w: Weergave) => void
   kanKopieren: boolean
   onKopieer: () => void
   kanReviseren: boolean
@@ -54,6 +55,9 @@ const SNELTOETSEN: [string, string][] = [
   ['Ctrl+M',       'Verplaatsen naar groep'],
   ['Ctrl+Shift+R', 'Verwijderen'],
   ['Ctrl+Z',       'Ongedaan maken'],
+  ['Ctrl+Enter',   'Normen van de regel open/dicht'],
+  ['Ctrl+Shift+Enter', 'Werkomschrijving open/dicht'],
+  ['↑ / ↓',        'Vorige/volgende regel, zelfde kolom'],
   ['Esc',          'Selectie opheffen'],
 ]
 
@@ -125,12 +129,26 @@ export default function CalculatieWerkbalk(p: Props) {
       {p.toevoegen}
 
       <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="outline" size="icon-sm" onClick={p.onToggleInklap}
-          title={p.allesIngeklapt ? 'Alles uitklappen — alle regels zichtbaar' : 'Inklappen — alleen de groepen zichtbaar'}
-        >
-          {p.allesIngeklapt ? <ChevronsDown className="w-3.5 h-3.5" /> : <ChevronsUp className="w-3.5 h-3.5" />}
-        </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <Button variant="outline" size="sm" title="Wat het rekenblad toont, voor de hele calculatie">
+              <ChevronsUpDown className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Tonen</span>
+              <ChevronDown className="w-3 h-3 text-neutral-400" />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className={ddContent} align="end" sideOffset={4}>
+              <div className={ddKop}>Tonen</div>
+              {(Object.keys(WEERGAVE_LABEL) as Weergave[]).map(w => (
+                <DropdownMenu.Item key={w} className={ddItem} onSelect={() => p.onWeergave(w)}>
+                  <span className="w-3.5">{p.weergave === w && <Check className="w-3.5 h-3.5 text-brand-700" />}</span>
+                  <span className={p.weergave === w ? 'font-semibold text-brand-700' : ''}>{WEERGAVE_LABEL[w]}</span>
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         {/* Kolom-layouts en kolommen: het rekenblad zet zijn knoppen hier via een portal. */}
         <div id="calc-grid-toolbar-slot" className="flex items-center gap-1" />
         <Sneltoetsen />

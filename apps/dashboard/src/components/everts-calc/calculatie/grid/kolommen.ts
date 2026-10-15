@@ -3,7 +3,7 @@ import type { KolomConfig } from '@everts/database/platform-types'
 // ─── Kolom definities ─────────────────────────────────────────────────────────
 
 export type ColId =
-  'kostengroep' | 'omschrijving' | 'code' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
+  'kostengroep' | 'omschrijving' | 'normen' | 'omschr' | 'code' | 'aant' | 'eenh' | 'stelpost' | 'verrekenbaar' | 'markeer' |
   'uur_eenh' | 'min_eenh' | 'tarief_ab' | 'bedrag_ab' |
   'prijs_mt' | 'bedrag_mt' | 'prijs_oa' | 'bedrag_oa' |
   'tot_uren' |
@@ -22,6 +22,9 @@ export interface ColDef {
 export const COL_DEFS: ColDef[] = [
   { id: 'kostengroep',  label: 'Kostengroep',  dw: 100, minW: 60,  align: 'left' },
   { id: 'omschrijving', label: 'Omschrijving', dw: 320, minW: 100, align: 'left' },
+  // Twee vaste knoppen naast de omschrijving: normen en werkomschrijving open/dicht.
+  { id: 'normen',       label: 'Normen', title: 'Normen tonen of verbergen (Ctrl+Enter)', dw: 72, minW: 52, align: 'center' },
+  { id: 'omschr',       label: 'Omschr.', title: 'Werkomschrijving tonen of verbergen (Ctrl+Shift+Enter)', dw: 72, minW: 44, align: 'center' },
   { id: 'code',         label: 'Code', title: 'Bestekscode uit de meetstaat', dw: 56, minW: 40, align: 'left' },
   { id: 'aant',         label: 'Aant.',        dw: 56,  minW: 40,  align: 'right' },
   { id: 'eenh',         label: 'Eenh.',        dw: 44,  minW: 36,  align: 'left' },

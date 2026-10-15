@@ -1,13 +1,14 @@
 'use client'
 
 import type { Dispatch, SetStateAction } from 'react'
-import { Plus, Trash2, MessageSquare, X, PaintBucket, ImagePlus } from 'lucide-react'
+import { Trash2, MessageSquare, X, PaintBucket, ImagePlus } from 'lucide-react'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import type { Calculatieregel, Componentregel, EenheidConfig } from '@/lib/everts-calc/types'
 import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
 import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { ColId } from './kolommen'
 import { ComponentRegelRij } from './ComponentRegelRij'
+import { NieuweNormInvoer } from './NieuweNormInvoer'
 
 /**
  * Het uitklapdeel onder een calculatieregel: de werkomschrijving met afbeeldingen, en
@@ -15,29 +16,40 @@ import { ComponentRegelRij } from './ComponentRegelRij'
  * regel zelf, zodat die rij leesbaar blijft.
  */
 
-export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig }: {
+export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig, focus = false, onSluit }: {
   regel: Calculatieregel
   colOrder: ColId[]
   indent: number
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
+  /** Alleen bij zelf openen: met Tonen › alles zou elke regel om de focus vechten. */
+  focus?: boolean
+  onSluit?: () => void
 }) {
   return (
       <tr className={`border-b border-slate-100 ${regel.gemarkeerd ? 'bg-orange-50/60' : 'bg-slate-50/30'}`}>
-        <td colSpan={colOrder.length} className="pb-2 pt-1 space-y-2" style={{ paddingLeft: `${indent + 8}px`, paddingRight: '12px' }}>
-          <BulletTextarea
-            autoFocus
-            value={regel.werkomschrijving ?? ''}
-            onChange={tekst => onWijzig(regel.id, { werkomschrijving: tekst })}
-            placeholder="Uitgebreide werkomschrijving..."
-            minRows={3}
-            maxRows={30}
-            toolbarClassName="-mt-0.5"
-            className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded bg-white
-              focus:outline-none focus:border-everts/40 focus:ring-1 focus:ring-everts/20
-              text-slate-600 placeholder-slate-300 leading-relaxed"
-          />
-          {/* Afbeeldingen */}
-          <div className="flex flex-wrap items-center gap-2">
+        <td colSpan={colOrder.length} className="pb-2 pt-1.5" style={{ paddingLeft: `${indent + 8}px`, paddingRight: '12px' }}>
+         <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0 max-w-4xl rounded-[10px] border border-neutral-200 bg-white px-2 pb-1.5 pt-1">
+            <BulletTextarea
+              autoFocus={focus}
+              onKeyDown={e => {
+                if (e.key === 'Escape' || (e.key === 'Enter' && e.shiftKey && (e.ctrlKey || e.metaKey))) {
+                  e.preventDefault(); onSluit?.()
+                }
+              }}
+              value={regel.werkomschrijving ?? ''}
+              onChange={tekst => onWijzig(regel.id, { werkomschrijving: tekst })}
+              placeholder="Uitgebreide werkomschrijving voor de offerte… (Esc of Ctrl+Shift+Enter om te sluiten)"
+              label={<span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Werkomschrijving</span>}
+              streepjeWordtBullet
+              minRows={2}
+              maxRows={30}
+              toolbarClassName="-mt-0.5"
+              className="text-xs px-1 py-1 border-0 rounded bg-white focus:outline-none text-neutral-700 placeholder-neutral-300 leading-relaxed"
+            />
+          </div>
+          {/* Afbeeldingen, rechts naast de tekst */}
+          <div className="flex flex-wrap items-start gap-2 pt-1 max-w-[260px]">
             {(regel.werkomschrijving_afbeeldingen ?? []).map((src, idx) => (
               <div key={idx} className="relative group/img flex-shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -87,6 +99,7 @@ export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig }: {
               />
             </label>
           </div>
+         </div>
         </td>
       </tr>
   )
@@ -159,7 +172,7 @@ export function RegelComponentenBlok({
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
   onVerwijderComponent: (compId: string) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type']) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
 }) {
   return (
       <>
@@ -179,25 +192,8 @@ export function RegelComponentenBlok({
         ))}
         <tr className="border-b border-slate-100 bg-slate-50/30">
           <td colSpan={colOrder.length} className="py-1" style={{ paddingLeft: `${indent + 20}px` }}>
-            <div className="flex gap-2">
-              <button
-                onClick={() => onVoegComponentToe(regel.id, 'arbeid')}
-                className="text-[11px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors"
-              >
-                <Plus className="w-3 h-3" /> Arbeid
-              </button>
-              <button
-                onClick={() => onVoegComponentToe(regel.id, 'materieel')}
-                className="text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors"
-              >
-                <Plus className="w-3 h-3" /> Materiaal
-              </button>
-              <button
-                onClick={() => onVoegComponentToe(regel.id, 'onderaanneming')}
-                className="text-[11px] text-purple-600 hover:text-purple-700 hover:bg-purple-50 px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors"
-              >
-                <Plus className="w-3 h-3" /> OA
-              </button>
+            <div className="flex items-center gap-2 pr-3">
+              <NieuweNormInvoer onVoeg={(type, oms) => onVoegComponentToe(regel.id, type, oms || undefined)} />
               <span className="text-slate-200 mx-1">|</span>
               <button
                 onClick={() => setOpmerkingOpen(v => !v)}
