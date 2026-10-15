@@ -1,0 +1,96 @@
+<style>
+#ID .window { left: 96px; top: 230px; width: 1728px; height: 830px; }
+#ID .pt { position: absolute; left: 0; right: 0; top: 40px; bottom: 0; background: #f8fafa; }
+#ID .pt .hd { height: 88px; background: linear-gradient(rgba(1,58,32,.45), rgba(1,58,32,.45)), #054f2e url(assets/img/polygon-bg.png) center / cover; display: flex; align-items: center; gap: 20px; padding: 0 36px; color: #fff; }
+#ID .pt .hd img { height: 46px; border-radius: 4px; } #ID .pt .hd b { font-size: 26px; font-weight: 800; } #ID .pt .hd small { font-size: 18px; color: #fff; margin-left: auto; font-weight: 600; }
+#ID .pt .nav { display: flex; gap: 8px; padding: 16px 36px; border-bottom: 1px solid #e3e8ea; background: #fff; }
+#ID .pt .nav span { font-size: 19px; font-weight: 700; padding: 10px 18px; border-radius: 999px; color: #5b656c; }
+#ID .pt .nav span.on { background: #ecfaf0; color: #0a5e28; }
+#ID .cols { display: grid; grid-template-columns: 560px 560px 1fr; gap: 24px; padding: 24px 36px; }
+#ID .c { background: #fff; border: 1px solid #e3e8ea; border-radius: 10px; padding: 22px; }
+#ID .c + .c { margin-top: 20px; }
+#ID h4 { font-size: 21px; font-weight: 800; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+#ID h4 small { font-size: 15px; font-weight: 700; color: #5b656c; }
+#ID .ph { display: flex; align-items: center; gap: 14px; margin-top: 11px; font-size: 17px; font-weight: 600; }
+#ID .ph span:first-child { width: 170px; } #ID .ph .tr { flex: 1; height: 22px; background: #f1f4f5; border-radius: 6px; position: relative; }
+#ID .ph .tr b { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: #009439; } #ID .ph.sub span:first-child { padding-left: 18px; color: #5b656c; font-weight: 500; }
+#ID .ph.sub .tr b { background: #6dd190; }
+#ID .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; } #ID .grid div { height: 78px; border-radius: 8px; }
+#ID .doc { display: flex; justify-content: space-between; font-size: 17px; font-weight: 600; padding: 10px 0; border-bottom: 1px solid #f1f4f5; } #ID .doc span:last-child { color: #007530; }
+#ID .mw .t { font-size: 19px; font-weight: 700; } #ID .mw p { font-size: 16px; color: #5b656c; font-weight: 500; margin-top: 4px; }
+#ID .mw .bed { font-size: 26px; margin-top: 10px; color: #161b20; }
+#ID .mw .btns { display: flex; gap: 10px; margin-top: 16px; position: relative; height: 52px; }
+#ID .mw .btns span { flex: 1; text-align: center; padding: 14px; border-radius: 10px; font-size: 18px; font-weight: 800; }
+#ID .mw .ok { background: #007530; color: #fff; } #ID .mw .no { background: #fff; border: 1px solid #e3e8ea; color: #364048; }
+#ID .mw .confirm { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 6px 0 16px; border-radius: 10px; background: #ecfaf0; border: 1px solid #a5e4ba; font-size: 17px; font-weight: 700; color: #0a5e28; }
+#ID .mw .confirm span { flex: none !important; padding: 10px 16px !important; }
+#ID .mw .done { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 10px; background: #007530; color: #fff; font-size: 19px; font-weight: 800; }
+#ID .team { display: flex; align-items: center; gap: 14px; } #ID .av { width: 52px; height: 52px; border-radius: 50%; background: #0f9b8e; color: #fff; font-weight: 800; font-size: 19px; display: flex; align-items: center; justify-content: center; flex: none; }
+#ID .team b { font-size: 18px; display: block; } #ID .team small { font-size: 15px; color: #5b656c; font-weight: 500; }
+#ID .chat { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+#ID .msg { max-width: 82%; padding: 12px 14px; border-radius: 14px; font-size: 16px; font-weight: 500; line-height: 1.4; }
+#ID .msg.k { align-self: flex-end; background: #007530; color: #fff; border-bottom-right-radius: 4px; }
+#ID .msg.e { align-self: flex-start; background: #f1f4f5; color: #161b20; border-bottom-left-radius: 4px; }
+#ID .msg small { display: block; font-size: 13px; opacity: .8; margin-top: 4px; }
+#ID .input { margin-top: 14px; padding: 12px 14px; border: 1px solid #e3e8ea; border-radius: 10px; font-size: 16px; color: #5b656c; }
+#ID .cur { position: absolute; left: 0; top: 0; width: 44px; height: 44px; z-index: 20; opacity: 0; }
+</style>
+<div class="bg-light"></div>
+<div class="copy"><div class="eyebrow">Klantportaal</div><div class="head">De opdrachtgever kijkt mee</div></div>
+<div class="window"><div class="bar"><i></i><i></i><i></i><span>portaal.everts.nl · VvE Laan van Meervoort 412–480</span></div>
+<div class="pt">
+  <div class="hd"><img src="assets/img/eve-beeldmerk.png" alt="" /><b>Schilderwerk en gevelonderhoud</b><small>Uitvoering · week 42</small></div>
+  <div class="nav"><span class="on">Overzicht</span><span>Documenten</span><span>Foto's</span><span>Controles</span><span>Facturen</span></div>
+  <div class="cols">
+    <div>
+      <div class="c"><h4>Planning <small>fases en activiteiten</small></h4>
+        <div class="ph"><span>Steigerwerk</span><div class="tr"><b style="left:0;width:22%"></b></div></div>
+        <div class="ph"><span>Voorgevel</span><div class="tr"><b style="left:18%;width:40%"></b></div></div>
+        <div class="ph sub"><span>Houtrotherstel</span><div class="tr"><b style="left:18%;width:18%"></b></div></div>
+        <div class="ph sub"><span>Schilderwerk</span><div class="tr"><b style="left:34%;width:24%"></b></div></div>
+        <div class="ph"><span>Achtergevel</span><div class="tr"><b style="left:55%;width:35%"></b></div></div>
+        <div class="ph"><span>Oplevering</span><div class="tr"><b style="left:90%;width:10%"></b></div></div>
+      </div>
+      <div class="c"><h4>Documenten &amp; facturen</h4><div class="doc"><span>Opleverrapport voorgevel</span><span>PDF</span></div><div class="doc"><span>Factuur 2026-0587</span><span>PDF</span></div></div>
+    </div>
+    <div>
+      <div class="c mw"><h4>Meerwerk <small>wacht op uw akkoord</small></h4>
+        <div class="t">MW03 · Extra houtrot onderdorpels nr. 420–426</div><p>Aangetroffen bij het openmaken van de kozijnen.</p>
+        <div class="bed mono">€ 1.240,00 <small style="font-size:15px;color:#5b656c;font-family:Montserrat">incl. btw</small></div>
+        <div class="btns" data-layout-allow-overlap><span class="ok">Akkoord</span><span class="no">Afwijzen</span>
+          <div class="confirm">Akkoord op € 1.240,00? <span class="ok">Bevestigen</span></div>
+          <div class="done">✓ Akkoord gegeven · gaat mee in het project</div></div>
+      </div>
+      <div class="c"><h4>Laatste foto's</h4><div class="grid">
+        <div style="background:linear-gradient(135deg,#b5623f,#7a3d24)"></div><div style="background:linear-gradient(135deg,#f4f1ea,#cfc8bb)"></div><div style="background:linear-gradient(135deg,#cfe3ef,#8fb3c9)"></div><div style="background:linear-gradient(135deg,#0a5e28,#28a44a)"></div>
+        <div style="background:linear-gradient(135deg,#d9cdbb,#a99a83)"></div><div style="background:linear-gradient(135deg,#b5623f,#e8d2c4)"></div><div style="background:linear-gradient(135deg,#8fb3c9,#cfe3ef)"></div><div style="background:linear-gradient(135deg,#7a3d24,#b5623f)"></div></div></div>
+    </div>
+    <div class="c"><h4>Projectteam</h4>
+      <div class="team"><div class="av">JV</div><div><b>Jan de Vries</b><small>Projectleider Everts</small></div></div>
+      <div class="chat">
+        <div class="msg k">Wanneer staat de steiger aan de achterkant?<small>Bestuur VvE · 09:12</small></div>
+        <div class="msg e">Maandag 20 oktober, de bewoners krijgen vrijdag een brief.<small>Jan · 09:40</small></div>
+        <div class="msg k">Top, dank je!<small>Bestuur VvE · 09:41</small></div>
+      </div>
+      <div class="input">Stel een vraag aan het projectteam…</div>
+    </div>
+  </div>
+</div></div>
+<svg class="cur" viewBox="0 0 24 24"><path d="M4 2l16 9-7 2-3 7z" fill="#161b20" stroke="#fff" stroke-width="1.5"/></svg>
+<script>
+A('.window', 0.3, { y: 80, d: 1 });
+tl.fromTo(q('.ph .tr b'), { scaleX: 0, transformOrigin: 'left center' }, { scaleX: 1, duration: 0.6, ease: 'power2.out', stagger: 0.12 }, 1.0);
+A('.grid div', 1.8, { s: 0.85, y: 0, st: 0.06, d: 0.4 });
+A('.doc', 2.2, { y: 10, st: 0.2, d: 0.4 });
+tl.to(q('.nav span'), { backgroundColor: '#ecfaf0', color: '#0a5e28', duration: 0.25, stagger: 0.35, yoyo: true, repeat: 1, repeatDelay: 0.1 }, 1.4);
+tl.set(q('.mw .confirm'), { opacity: 0 }, 0); tl.set(q('.mw .done'), { opacity: 0 }, 0);
+tl.fromTo(q('.cur'), { opacity: 0, x: 1300, y: 1000 }, { opacity: 1, x: 845, y: 640, duration: 1.0, ease: 'power2.out' }, 3.6);
+tl.to(q('.mw .ok'), { scale: 0.94, duration: 0.1, yoyo: true, repeat: 1 }, 4.6);
+tl.to(q('.mw .confirm'), { opacity: 1, duration: 0.3 }, 4.8);
+tl.to(q('.cur'), { x: 1165, y: 640, duration: 0.6, ease: 'power2.inOut' }, 5.2);
+tl.to(q('.mw .confirm'), { opacity: 0, duration: 0.2 }, 6.0);
+tl.to(q('.mw .done'), { opacity: 1, duration: 0.3 }, 6.0);
+tl.to(q('.cur'), { opacity: 0, duration: 0.3 }, 6.6);
+A('.msg', 7.0, { y: 20, st: 0.7, d: 0.5 });
+A('.input', 9.0, { y: 10, d: 0.4 });
+</script>

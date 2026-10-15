@@ -104,98 +104,110 @@ music: calm warm corporate underscore, soft piano and pads, light pulse, unobtru
 - act: Op de bouwplaats
 - asset_candidates: assets/img/phone-nl.png; assets/img/phone-pl.png; assets/img/phone-ta.png — startscherm in drie talen
 
-## Frame 9 — Houtrotregistratie
+## Frame 9 — Projectbezoek
+
+- scene: Telefoon: disciplines kiezen, punten met foto (ook als aandachtspunt), voortgang per vak; daarnaast het bezoekrapport
+- voiceover: "Op projectbezoek kies je de disciplines, leg je punten vast met een foto, en geef je per vak aan hoe ver het werk is. EVA maakt er meteen een bezoekrapport van."
+- duration: 11s
+- transition_in: crossfade
+- status: built
+- src: compositions/frames/09-projectbezoek.html
+- type: feature_showcase
+- act: Op de bouwplaats
+- asset_candidates: 
+
+## Frame 10 — Houtrotregistratie
 
 - scene: Telefoon: locatie, werkzaamheden, voor/na-foto; kantoor: reparatietotaal
 - voiceover: "Houtrot? Kies de locatie, voeg de werkzaamheden toe, en maak een voor- en na-foto. Kantoor ziet meteen het reparatietotaal."
 - duration: 9s
 - transition_in: crossfade
 - status: built
-- src: compositions/frames/09-houtrot.html
+- src: compositions/frames/10-houtrot.html
 - type: feature_showcase
 - act: Op de bouwplaats
 - asset_candidates: 
 
-## Frame 10 — Veiligheid en kwaliteit
+## Frame 11 — Veiligheid en kwaliteit
 
 - scene: Toolbox aftekenen; kaarten VCA, kwaliteitsinspectie, opleverrapport
 - voiceover: "Toolboxmeetings, kwaliteitsinspecties en het opleverrapport: ter plekke ingevuld, met foto's, en meteen vastgelegd."
 - duration: 8s
 - transition_in: crossfade
 - status: built
-- src: compositions/frames/10-kwaliteit.html
+- src: compositions/frames/11-kwaliteit.html
 - type: benefit_highlight
 - act: Op de bouwplaats
 - asset_candidates: 
 
-## Frame 11 — Bewonersenquête
+## Frame 12 — Bewonersenquête
 
 - scene: Telefoon met enquête (sterren, aandachtspunt met foto); kantoor: gemiddelden en nieuwe melding
 - voiceover: "Na de oplevering vullen bewoners een korte enquête in. EVA vat de cijfers samen, en aandachtspunten komen met foto bij de projectleider."
 - duration: 9s
 - transition_in: crossfade
 - status: built
-- src: compositions/frames/11-enquete.html
+- src: compositions/frames/12-enquete.html
 - type: benefit_highlight
 - act: Bewoner en opdrachtgever
 - asset_candidates: assets/img/everts-logo-1078.png — logo in de enquête
 
-## Frame 12 — Klantportaal
+## Frame 13 — Klantportaal
 
-- scene: Klantportaal: planning met fases en activiteiten, foto's, documenten
-- voiceover: "De opdrachtgever kijkt mee in het klantportaal: planning, foto's, documenten en facturen."
-- duration: 7s
+- scene: Klantportaal: planning, foto's, documenten en facturen; opdrachtgever geeft akkoord op meerwerk en chat met het projectteam
+- voiceover: "De opdrachtgever kijkt mee in het klantportaal: planning, foto's, documenten en facturen. Meerwerk keurt hij daar zelf goed, en vragen stelt hij direct aan het projectteam."
+- duration: 11s
 - transition_in: push-slide LEFT
 - status: built
-- src: compositions/frames/12-portaal.html
+- src: compositions/frames/13-portaal.html
 - type: benefit_highlight
 - act: Bewoner en opdrachtgever
 - asset_candidates: assets/img/eve-beeldmerk.png — beeldmerk
 
-## Frame 13 — Financieel
+## Frame 14 — Financieel
 
 - scene: Echt financieel overzicht; totalen tellen op; inkoopfactuur goedgekeurd
 - voiceover: "Daarna sluit de cirkel. Termijnen, meerwerk en facturen. Inkoopfacturen goedkeuren. En stuurcijfers voor het management."
 - duration: 9s
 - transition_in: zoom-through
 - status: built
-- src: compositions/frames/13-financieel.html
+- src: compositions/frames/14-financieel.html
 - type: feature_showcase
 - act: De cirkel rond
 - asset_candidates: assets/img/verkoop-crop.png — financieel
 
-## Frame 14 — Servicedesk
+## Frame 15 — Servicedesk
 
 - scene: Servicedeskbord: Nieuw, Offerte uitgebracht, Loopt, Gereed; badge verzamelfactuur
 - voiceover: "Kleine klussen en mutaties lopen via de servicedesk: alle bonnen op één bord, van nieuw tot gereed — en samen op één verzamelfactuur."
 - duration: 9s
 - transition_in: push-slide LEFT
 - status: built
-- src: compositions/frames/14-servicedesk.html
+- src: compositions/frames/15-servicedesk.html
 - type: feature_showcase
 - act: De cirkel rond
 - asset_candidates: 
 
-## Frame 15 — En nog veel meer
+## Frame 16 — En nog veel meer
 
 - scene: Tegels: wagenpark, materieel, KAM/VGM, bedrijfsagenda, mijn acties, Vraag EVA
 - voiceover: "En ook het wagenpark, het materieel, je acties en de bedrijfsagenda. Heb je een vraag? Vraag het EVA."
 - duration: 8s
 - transition_in: crossfade
 - status: built
-- src: compositions/frames/15-meer.html
+- src: compositions/frames/16-meer.html
 - type: benefit_highlight
 - act: De cirkel rond
 - asset_candidates: 
 
-## Frame 16 — EVA
+## Frame 17 — EVA
 
 - scene: Groene merkachtergrond, beeldmerk, EVA, belofte
 - voiceover: "EVA. Eén systeem — van eerste mail tot laatste factuur."
 - duration: 6s
 - transition_in: blur-crossfade
 - status: built
-- src: compositions/frames/16-outro.html
+- src: compositions/frames/17-outro.html
 - type: branding
 - act: De cirkel rond
 - asset_candidates: assets/img/eve-beeldmerk.png — beeldmerk

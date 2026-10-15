@@ -54,50 +54,56 @@
 
     De vakman ziet het meteen op zijn telefoon. Inklokken, uren schrijven, foto's maken en navigeren naar het werk. In het Nederlands, Pools of Tamil.
 
-## Line 9 — Houtrotregistratie (Frame 9)
+## Line 9 — Projectbezoek (Frame 9)
 
-**Time:** 63.0 – 72.0s
+**Time:** 63.0 – 74.0s
+
+    Op projectbezoek kies je de disciplines, leg je punten vast met een foto, en geef je per vak aan hoe ver het werk is. EVA maakt er meteen een bezoekrapport van.
+
+## Line 10 — Houtrotregistratie (Frame 10)
+
+**Time:** 74.0 – 83.0s
 
     Houtrot? Kies de locatie, voeg de werkzaamheden toe, en maak een voor- en na-foto. Kantoor ziet meteen het reparatietotaal.
 
-## Line 10 — Veiligheid en kwaliteit (Frame 10)
+## Line 11 — Veiligheid en kwaliteit (Frame 11)
 
-**Time:** 72.0 – 80.0s
+**Time:** 83.0 – 91.0s
 
     Toolboxmeetings, kwaliteitsinspecties en het opleverrapport: ter plekke ingevuld, met foto's, en meteen vastgelegd.
 
-## Line 11 — Bewonersenquête (Frame 11)
+## Line 12 — Bewonersenquête (Frame 12)
 
-**Time:** 80.0 – 89.0s
+**Time:** 91.0 – 100.0s
 
     Na de oplevering vullen bewoners een korte enquête in. EVA vat de cijfers samen, en aandachtspunten komen met foto bij de projectleider.
 
-## Line 12 — Klantportaal (Frame 12)
+## Line 13 — Klantportaal (Frame 13)
 
-**Time:** 89.0 – 96.0s
+**Time:** 100.0 – 111.0s
 
-    De opdrachtgever kijkt mee in het klantportaal: planning, foto's, documenten en facturen.
+    De opdrachtgever kijkt mee in het klantportaal: planning, foto's, documenten en facturen. Meerwerk keurt hij daar zelf goed, en vragen stelt hij direct aan het projectteam.
 
-## Line 13 — Financieel (Frame 13)
+## Line 14 — Financieel (Frame 14)
 
-**Time:** 96.0 – 105.0s
+**Time:** 111.0 – 120.0s
 
     Daarna sluit de cirkel. Termijnen, meerwerk en facturen. Inkoopfacturen goedkeuren. En stuurcijfers voor het management.
 
-## Line 14 — Servicedesk (Frame 14)
+## Line 15 — Servicedesk (Frame 15)
 
-**Time:** 105.0 – 114.0s
+**Time:** 120.0 – 129.0s
 
     Kleine klussen en mutaties lopen via de servicedesk: alle bonnen op één bord, van nieuw tot gereed — en samen op één verzamelfactuur.
 
-## Line 15 — En nog veel meer (Frame 15)
+## Line 16 — En nog veel meer (Frame 16)
 
-**Time:** 114.0 – 122.0s
+**Time:** 129.0 – 137.0s
 
     En ook het wagenpark, het materieel, je acties en de bedrijfsagenda. Heb je een vraag? Vraag het EVA.
 
-## Line 16 — EVA (Frame 16)
+## Line 17 — EVA (Frame 17)
 
-**Time:** 122.0 – 128.0s
+**Time:** 137.0 – 143.0s
 
     EVA. Eén systeem — van eerste mail tot laatste factuur.
