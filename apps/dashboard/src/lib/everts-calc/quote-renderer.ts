@@ -27,6 +27,7 @@
 import type { Quote, QuoteSection, QuoteLine } from './types-quotes'
 import { STANDAARD_BTW_HOOG_PCT } from '@/lib/stamdata/constants'
 import { nominaalPercentage } from '@/lib/stamdata/btw'
+import { metOpsommingstekens } from './opsomming'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1061,10 +1062,11 @@ export function buildRenderContext(
     return {
       id: line.id,
       is_tekstregel: isTekst,
-      omschrijving: line.omschrijving,
+      // Tekstregels mogen een opsomming bevatten ("- muren"); die wordt hier "• muren".
+      omschrijving: isTekst ? metOpsommingstekens(line.omschrijving) : line.omschrijving,
       omschrijving_volledig: line.opmerking
         ? `${line.omschrijving}\n${line.opmerking}`
-        : line.omschrijving,
+        : isTekst ? metOpsommingstekens(line.omschrijving) : line.omschrijving,
       hoeveelheid: isTekst ? '' : numNL(line.hoeveelheid),
       eenheid: isTekst ? '' : line.eenheid,
       eenheidsprijs: isTekst ? '' : euro(line.eenheidsprijs),

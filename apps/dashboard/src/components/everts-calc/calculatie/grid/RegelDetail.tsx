@@ -92,6 +92,52 @@ export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig }: {
   )
 }
 
+/**
+ * Interne opmerking: een eigen rij direct onder de regel, uitgelijnd op de omschrijving.
+ * Hoort bij de regel zelf, niet bij de normen, dus hij opent ook zonder de normen.
+ */
+export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
+  regel: Calculatieregel
+  colOrder: ColId[]
+  onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
+  onSluit: () => void
+}) {
+  const voor = Math.max(0, colOrder.indexOf('omschrijving'))
+  return (
+    <tr className="border-b border-warning-100 bg-warning-50/60">
+      {voor > 0 && <td colSpan={voor} />}
+      <td colSpan={colOrder.length - voor} className="py-1.5 pr-3">
+        <div className="flex items-start gap-2 border-l-2 border-warning-300 pl-2">
+          <MessageSquare className="w-3.5 h-3.5 text-warning-500 mt-1.5 flex-shrink-0" />
+          <textarea
+            autoFocus={!regel.opmerking}
+            value={regel.opmerking ?? ''}
+            placeholder="Interne opmerking (niet zichtbaar voor de opdrachtgever)…"
+            rows={2}
+            className="flex-1 max-w-3xl text-xs px-2 py-1.5 border border-warning-300/60 rounded bg-white
+              focus:outline-none focus:border-warning-500 focus:ring-1 focus:ring-warning-100
+              resize-y text-neutral-700 placeholder-neutral-400"
+            onChange={e => onWijzig(regel.id, { opmerking: e.target.value || undefined })}
+            onKeyDown={e => { if (e.key === 'Escape') onSluit() }}
+          />
+          <button onClick={onSluit} className="p-1 text-neutral-400 hover:text-neutral-700 rounded mt-0.5" title="Inklappen (Esc)">
+            <X className="w-3 h-3" />
+          </button>
+          {regel.opmerking && (
+            <button
+              onClick={() => { onWijzig(regel.id, { opmerking: undefined }); onSluit() }}
+              className="p-1 text-neutral-300 hover:text-red-500 rounded transition-colors mt-0.5"
+              title="Opmerking verwijderen"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export function RegelComponentenBlok({
   regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden, behandelingen, heeftBehandeling,
   opmerkingOpen, setOpmerkingOpen, schilderbehandelingOpen, setSchilderbehandelingOpen,
@@ -178,33 +224,6 @@ export function RegelComponentenBlok({
             </div>
           </td>
         </tr>
-        {opmerkingOpen && (
-          <tr className="border-b border-amber-100 bg-amber-50/30">
-            <td colSpan={colOrder.length} className="px-3 py-2" style={{ paddingLeft: `${indent + 20}px` }}>
-              <div className="flex items-start gap-2">
-                <MessageSquare className="w-3.5 h-3.5 text-amber-500 mt-1.5 flex-shrink-0" />
-                <textarea
-                  value={regel.opmerking ?? ''}
-                  placeholder="Interne opmerking (niet zichtbaar voor opdrachtgever)..."
-                  rows={2}
-                  className="flex-1 text-xs px-2 py-1.5 border border-amber-200 rounded bg-white
-                    focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100
-                    resize-none text-slate-700 placeholder-slate-300"
-                  onChange={e => onWijzig(regel.id, { opmerking: e.target.value || undefined })}
-                />
-                {regel.opmerking && (
-                  <button
-                    onClick={() => { onWijzig(regel.id, { opmerking: undefined }); setOpmerkingOpen(false) }}
-                    className="p-1 text-slate-300 hover:text-red-500 rounded transition-colors mt-0.5"
-                    title="Opmerking verwijderen"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </td>
-          </tr>
-        )}
         {schilderbehandelingOpen && (
           <tr className="border-b border-blue-100 bg-blue-50/30">
             <td colSpan={colOrder.length} className="px-3 py-2" style={{ paddingLeft: `${indent + 20}px` }}>

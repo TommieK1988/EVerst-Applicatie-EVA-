@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/everts-calc/utils'
 import type { Calculatieregel } from '@/lib/everts-calc/types'
 import { type ColId } from './kolommen'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
+import { BulletTextarea } from '@/components/ui/bullet-textarea'
 
 /**
  * Rij voor een tekstregel: één tekstvlak over de volle breedte van het rekenblad,
@@ -36,20 +37,10 @@ export function TekstregelRij({
   onDragEnd?: () => void
   readOnly?: boolean
 }) {
-  const veld = useRef<HTMLTextAreaElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   // De vinkjeskolom staat vooraan zodra het grid hem tekent (niet in een bevroren calculatie).
   const metVinkje = colOrder[0] === 'selectie'
 
-  // Hoogte volgt de inhoud, zodat een lange toelichting niet in een scrollbalkje verdwijnt.
-  const pasHoogteAan = useCallback(() => {
-    const el = veld.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [])
-
-  useEffect(() => { pasHoogteAan() }, [pasHoogteAan, regel.omschrijving])
 
   return (
     <tr
@@ -97,18 +88,23 @@ export function TekstregelRij({
           >
             Tekstregel:
           </span>
-          <textarea
-            ref={veld}
-            value={regel.omschrijving ?? ''}
-            onChange={e => { onWijzig(regel.id, { omschrijving: e.target.value }); pasHoogteAan() }}
-            placeholder="Tekstregel voor in de offerte…"
-            rows={1}
-            disabled={readOnly}
-            className="flex-1 min-w-0 text-xs italic px-1 py-1 border border-transparent rounded bg-transparent
-              hover:border-slate-200 focus:bg-white focus:outline-none focus:border-everts/40
-              focus:ring-1 focus:ring-everts/20 resize-none overflow-hidden
-              text-slate-700 placeholder-slate-400 disabled:cursor-default"
-          />
+          <div className="flex-1 min-w-0">
+            <BulletTextarea
+              value={regel.omschrijving ?? ''}
+              onChange={tekst => onWijzig(regel.id, { omschrijving: tekst })}
+              streepjeWordtBullet
+              toonKnop={false}
+              minRows={1}
+              maxRows={30}
+              placeholder="Tekst voor in de offerte… Begin een regel met - voor een opsomming"
+              title="Begin een regel met - voor een opsomming; Enter gaat door met het volgende punt (Ctrl+Shift+8 zet het aan of uit)"
+              disabled={readOnly}
+              className="text-xs px-1 py-1 border border-transparent rounded bg-transparent
+                hover:border-slate-200 focus:bg-white focus:outline-none focus:border-everts/40
+                focus:ring-1 focus:ring-everts/20
+                text-slate-700 placeholder-slate-400 disabled:cursor-default"
+            />
+          </div>
           {!readOnly && (
             <ActieMenu
               open={menuOpen} onOpenChange={setMenuOpen}

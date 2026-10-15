@@ -13,8 +13,10 @@ import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, NIVEAU_INSPRING, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { TekstregelRij } from './TekstregelRij'
 import { CalculatieregelRij } from './CalculatieregelRij'
-import { ActieMenu, type RegelActie } from './ActieMenu'
+import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
+import { subtreeIds } from '@/lib/everts-calc/groep-boom'
 import { InvoegRij } from './InvoegRij'
+import { NieuweGroepRij, type NieuweGroepInvoer } from './NieuweGroepRij'
 
 // ─── GroepSectie (recursief) ──────────────────────────────────────────────────
 
@@ -68,6 +70,10 @@ export interface GroepSectieProps {
   onRegelActie?: (regelId: string, actie: RegelActie) => void
   collapseSignal?: number
   readOnly?: boolean
+  /** Lopende invoer van een nieuwe subgroep; het veld staat onder de ouder waar hij komt. */
+  nieuweGroep?: NieuweGroepInvoer | null
+  /** Kopvinkje: alle regels van deze groep (incl. subgroepen) aan- of uitvinken. */
+  onSelecteerGroep?: (regelIds: string[], aan: boolean) => void
 }
 
 export function GroepSectie({
@@ -80,7 +86,7 @@ export function GroepSectie({
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel, onRegelActie,
-  collapseSignal, readOnly = false,
+  collapseSignal, readOnly = false, nieuweGroep, onSelecteerGroep,
 }: GroepSectieProps) {
   const ingeklapt = groep.ingeklapt ?? false
   const [confirmVerwijder, setConfirmVerwijder] = useState(false)
@@ -151,6 +157,15 @@ export function GroepSectie({
   const totaalRijStijl: React.CSSProperties = { backgroundColor: diepte === 0 ? 'rgba(5,79,46,0.07)' : 'rgba(241,245,249,0.9)' }
   const totaalTekst    = diepte === 0 ? 'text-everts-dark' : 'text-slate-600'
 
+  // Kopvinkje: alle regels in deze groep en zijn subgroepen.
+  const metVinkje = colOrder[0] === 'selectie'
+  const takRegelIds = metVinkje && onSelecteerGroep
+    ? (() => { const tak = subtreeIds(alleGroepen, groep.id); return alleRegels.filter(r => tak.has(r.groep_id)).map(r => r.id) })()
+    : []
+  const aantalAan = takRegelIds.filter(id => geselecteerdeRegels?.has(id)).length
+  const groepStand: boolean | 'deels' =
+    takRegelIds.length > 0 && aantalAan === takRegelIds.length ? true : aantalAan > 0 ? 'deels' : false
+
   return (
     <>
       <tr
@@ -162,7 +177,20 @@ export function GroepSectie({
         onDrop={e => onDrop(e, groep)}
         onDragEnd={onDragEnd}
       >
-        <td colSpan={colCount} className={kopPadding} style={{ paddingLeft: `${indent}px` }}>
+        {metVinkje && (
+          <td className={`${kopPadding} px-1`} onClick={e => e.stopPropagation()}>
+            {onSelecteerGroep && takRegelIds.length > 0 && (
+              <span className="flex justify-center">
+                <SelectieVinkje
+                  aan={groepStand}
+                  onWissel={() => onSelecteerGroep(takRegelIds, groepStand !== true)}
+                  label={groepStand === true ? `Selectie in ${groep.naam} opheffen` : `Alle regels in ${groep.naam} selecteren`}
+                />
+              </span>
+            )}
+          </td>
+        )}
+        <td colSpan={colCount - (metVinkje ? 1 : 0)} className={kopPadding} style={{ paddingLeft: `${indent}px` }}>
           <div className="flex items-center gap-2">
             <span
               role="button"
@@ -193,14 +221,14 @@ export function GroepSectie({
               />
             ) : (
               <span
-                className={`${kopTekst} ${groep.optioneel ? 'italic opacity-60' : ''} cursor-text`}
+                className={`${kopTekst} ${groep.optioneel ? 'italic' : ''} cursor-text`}
                 onDoubleClick={e => { e.stopPropagation(); setEditingNaam(true) }}
               >
                 {groep.naam}
               </span>
             )}
             {groep.optioneel && (
-              <span className={`text-[10.5px] px-1.5 py-0.5 rounded font-medium ${diepte <= 1 ? 'bg-white/15 text-white' : 'bg-neutral-100 text-neutral-600 border border-neutral-200'}`}>
+              <span className={`text-[10.5px] px-1.5 py-0.5 rounded font-medium ${diepte <= 1 ? 'bg-warning-100 text-warning-900' : 'bg-warning-100 text-warning-700 border border-warning-300'}`}>
                 OPTIONEEL · telt niet mee
               </span>
             )}
@@ -327,9 +355,16 @@ export function GroepSectie({
               onRegelActie={onRegelActie}
               collapseSignal={collapseSignal}
               readOnly={readOnly}
+              nieuweGroep={nieuweGroep}
+              onSelecteerGroep={onSelecteerGroep}
             />
           ))}
-
+          {nieuweGroep?.parentId === groep.id && (
+            <NieuweGroepRij
+              invoer={nieuweGroep} colCount={colCount} indent={indent + NIVEAU_INSPRING}
+              label={`Subgroep in ${groep.naam}:`}
+            />
+          )}
         </>
       )}
 

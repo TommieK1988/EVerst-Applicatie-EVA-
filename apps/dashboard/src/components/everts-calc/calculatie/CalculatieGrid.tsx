@@ -25,6 +25,7 @@ import { kiesBtwTarief } from './grid/btw-keuze'
 import { GroepSectie } from './grid/GroepSectie'
 import type { RegelActie } from './grid/ActieMenu'
 import { SelectieBalk } from './grid/SelectieBalk'
+import { NieuweGroepRij } from './grid/NieuweGroepRij'
 
 interface Props {
   scenarioId: string
@@ -489,6 +490,15 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         // Enkel
         next.clear(); next.add(regelId)
       }
+      return next
+    })
+  }, [])
+
+  /** Kopvinkje van een groep: al zijn regels erbij, of (als ze er allemaal al in zitten) eruit. */
+  const handleSelecteerGroep = useCallback((ids: string[], aan: boolean) => {
+    setGeselecteerdeRegels(prev => {
+      const next = new Set(prev)
+      for (const id of ids) { if (aan) next.add(id); else next.delete(id) }
       return next
     })
   }, [])
@@ -966,8 +976,15 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   }, [duwSnapshot, regels, onWijziging])
 
   const handleVoegSubgroepToe = useCallback((parent: Groep) => {
+    // Het invulveld staat onderaan de ouder; die moet dus open staan.
+    if (parent.ingeklapt) handleToggleInklap(parent.id)
+    setNieuwRootGroepOpen(false)
     setNieuwGroepParent(parent); setNieuwGroepNaam('')
-  }, [])
+  }, [handleToggleInklap])
+
+  /** Na het toevoegen naar de nieuwe groep, zodat je ziet waar hij staat. */
+  const toonNieuweGroep = (id: string) =>
+    setTimeout(() => document.getElementById(`groepkop-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80)
 
   const bevestigSubgroep = () => {
     if (!nieuwGroepParent || !nieuwGroepNaam.trim()) return
@@ -980,9 +997,11 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     }
     slaGroepOp(nieuw); laadAlles(); onWijziging()
     setNieuwGroepParent(null); setNieuwGroepNaam('')
+    toonNieuweGroep(nieuw.id)
   }
 
   const voegRootGroepToe = () => {
+    setNieuwGroepParent(null)
     setNieuwRootGroepNaam(''); setNieuwRootGroepOpen(true)
   }
 
@@ -995,6 +1014,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     }
     slaGroepOp(nieuw); laadAlles(); onWijziging()
     setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('')
+    toonNieuweGroep(nieuw.id)
   }
 
   // Optionele groepen niet meerekenen in eindtotaal
@@ -1038,53 +1058,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
           onVerwijderen={handleVerwijderGeselecteerd}
           onOpheffen={() => setGeselecteerdeRegels(new Set())}
         />
-      )}
-
-      {/* Root-groep inline dialog */}
-      {nieuwRootGroepOpen && (
-        <div className="px-4 py-2.5 bg-everts-dark border-b border-everts/30 flex items-center gap-3 flex-shrink-0">
-          <span className="text-xs font-medium text-white/80 whitespace-nowrap">Nieuwe hoofdgroep:</span>
-          <input
-            autoFocus
-            value={nieuwRootGroepNaam}
-            onChange={e => setNieuwRootGroepNaam(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') bevestigRootGroep(); if (e.key === 'Escape') { setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('') } }}
-            placeholder="Naam van de groep..."
-            className="flex-1 text-xs px-3 py-1.5 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/40 bg-paper/10 text-white placeholder-white/40"
-          />
-          <button
-            onClick={bevestigRootGroep}
-            disabled={!nieuwRootGroepNaam.trim()}
-            className="text-xs bg-white text-everts-dark font-semibold px-3 py-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Toevoegen
-          </button>
-          <button
-            onClick={() => { setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('') }}
-            className="text-xs text-white/50 hover:text-white/80 px-1 transition-colors"
-          >
-            Annuleer
-          </button>
-        </div>
-      )}
-
-      {/* Subgroep inline form */}
-      {nieuwGroepParent && (
-        <div className="px-4 py-2 bg-everts-50 border-b border-everts/20 flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs text-slate-600">
-            Subgroep onder <strong>{nieuwGroepParent.naam}</strong>:
-          </span>
-          <input
-            autoFocus
-            value={nieuwGroepNaam}
-            onChange={e => setNieuwGroepNaam(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') bevestigSubgroep(); if (e.key === 'Escape') setNieuwGroepParent(null) }}
-            placeholder="Naam subgroep..."
-            className="flex-1 text-xs px-2 py-1 border border-everts/40 rounded focus:outline-none focus:ring-1 focus:ring-everts bg-white"
-          />
-          <button onClick={bevestigSubgroep} className="text-xs bg-everts text-white px-2 py-1 rounded hover:bg-everts-dark">✓</button>
-          <button onClick={() => setNieuwGroepParent(null)} className="text-xs text-slate-400 px-1 hover:text-slate-600">✕</button>
-        </div>
       )}
 
       {/* Datalist voor kostengroep autocomplete */}
@@ -1316,10 +1289,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   geselecteerdeRegels={geselecteerdeRegels}
                   onSelecteerRegel={handleSelecteerRegel}
                   onRegelActie={handleRegelActie}
+                  nieuweGroep={nieuwGroepParent ? {
+                    parentId: nieuwGroepParent.id, naam: nieuwGroepNaam, onNaam: setNieuwGroepNaam,
+                    onBevestig: bevestigSubgroep, onAnnuleer: () => setNieuwGroepParent(null),
+                  } : null}
+                  onSelecteerGroep={handleSelecteerGroep}
                   collapseSignal={collapseSignal}
                   readOnly={readOnly}
                 />
               ))}
+              {nieuwRootGroepOpen && (
+                <NieuweGroepRij
+                  colCount={tekenKolommen.length} indent={4} label="Nieuwe hoofdgroep:"
+                  invoer={{
+                    parentId: null, naam: nieuwRootGroepNaam, onNaam: setNieuwRootGroepNaam,
+                    onBevestig: bevestigRootGroep, onAnnuleer: () => { setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('') },
+                  }}
+                />
+              )}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50">
@@ -1362,12 +1349,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             <div className="text-5xl mb-4">📋</div>
             <p className="text-slate-500 font-semibold mb-1">Nog geen groepen aangemaakt</p>
             <p className="text-slate-400 text-sm mb-5">Maak een groep aan om te beginnen.</p>
-            <button
-              onClick={voegRootGroepToe}
-              className="inline-flex items-center gap-2 bg-everts hover:bg-everts-dark text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Eerste groep aanmaken
-            </button>
+            {nieuwRootGroepOpen ? (
+              <table className="text-left"><tbody>
+                <NieuweGroepRij
+                  colCount={1} indent={12} label="Eerste groep:"
+                  invoer={{
+                    parentId: null, naam: nieuwRootGroepNaam, onNaam: setNieuwRootGroepNaam,
+                    onBevestig: bevestigRootGroep, onAnnuleer: () => { setNieuwRootGroepOpen(false); setNieuwRootGroepNaam('') },
+                  }}
+                />
+              </tbody></table>
+            ) : (
+              <button
+                onClick={voegRootGroepToe}
+                className="inline-flex items-center gap-2 bg-everts hover:bg-everts-dark text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Eerste groep aanmaken
+              </button>
+            )}
           </div>
         )}
       </fieldset>

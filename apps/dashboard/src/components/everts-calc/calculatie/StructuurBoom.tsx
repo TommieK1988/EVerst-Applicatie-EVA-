@@ -8,7 +8,7 @@ import { cn, nieuweId } from '@/lib/everts-calc/utils'
 import { getGroepen, slaGroepOp, verwijderGroep, getScenario, getCalculatieregelsVoorScenario, getComponentregelsVoorScenario } from '@/lib/everts-calc/local-store'
 import { berekeningNummers, berekenGroepVP, scenarioDefaultOpslag, formatGetal } from '@/lib/everts-calc/calculations'
 import {
-  platteGroepen, verplaatsGroep, magVerplaatsenNaar, positieVoor, positieIn, subtreeIds,
+  platteGroepen, verplaatsGroep, magVerplaatsenNaar, positieVoor, positieIn, positieNa, subtreeIds,
   type Doelpositie,
 } from '@/lib/everts-calc/groep-boom'
 import type { Groep } from '@/lib/everts-calc/types'
@@ -66,12 +66,18 @@ interface Doel {
   geldig: boolean
   /** Regel voor de statusstrook, bijv. `vóór "Afplakken" · niveau 2`. */
   omschrijving: string
+  /** Waar de invoeglijn komt: vóór zichtbare rij `index`, ingesprongen op `diepte`. */
+  lijn?: { index: number; diepte: number }
 }
 
 function InlineForm({ placeholder, onOpslaan, onAnnuleer }: InlineFormProps) {
   const [waarde, setWaarde] = useState('')
+  const ref = useRef<HTMLFormElement>(null)
+  // Het veld staat waar de groep komt; dat kan onderaan buiten beeld zijn.
+  useEffect(() => { ref.current?.scrollIntoView({ block: 'nearest' }) }, [])
   return (
     <form
+      ref={ref}
       onSubmit={e => { e.preventDefault(); if (waarde.trim()) onOpslaan(waarde.trim()) }}
       className="flex items-center gap-1 px-2 py-1"
     >
@@ -122,6 +128,12 @@ export default function StructuurBoom({
   }, [scenarioId, refreshTrigger])
 
   useEffect(() => { laad() }, [laad])
+
+  /** Subgroep toevoegen: de ouder openklappen, anders staat het veld tussen verborgen rijen. */
+  const startSubgroep = (parentId: string) => {
+    setIngeklapt(prev => { const next = new Set(prev); next.delete(parentId); return next })
+    setToevoegen({ parentId })
+  }
 
   const toggle = (id: string) =>
     setIngeklapt(prev => {
@@ -237,9 +249,10 @@ export default function StructuurBoom({
     // Invoegpunt i = vóór zichtbare rij i; i === zichtbaar.length = onderaan.
     const strook = (i: number): Doel | null => {
       const onder = zichtbaar[i]
-      return onder
+      const d = onder
         ? maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieVoor(groepen, onder.groep.id), `vóór "${onder.groep.naam}"`)
         : maakDoel(sleepIdArg, 'strook', `strook-${i}`, positieIn(groepen, null), 'onderaan als hoofdgroep')
+      return d && { ...d, lijn: { index: i, diepte: onder?.diepte ?? 0 } }
     }
 
     const raak = document.elementFromPoint(x, y)
@@ -268,10 +281,14 @@ export default function StructuurBoom({
     const eigen = subtreeIds(groepen, sleepIdArg)
     if (fractie < RAND) return eigen.has(groep.id) ? null : strook(i)
     if (fractie > 1 - RAND) {
-      // Erna: vóór de volgende zichtbare rij die niet tot de gesleepte tak hoort.
+      // Erna, op hetzelfde niveau als deze groep: onder de laatste subgroep kom je zo
+      // als volgende subgroep, niet als hoofdgroep vóór de groep daarna.
+      if (eigen.has(groep.id)) return null
+      const rijDiepte = zichtbaar[i].diepte
       let j = i + 1
-      while (j < zichtbaar.length && eigen.has(zichtbaar[j].groep.id)) j++
-      return eigen.has(groep.id) && j === i + 1 ? null : strook(j)
+      while (j < zichtbaar.length && zichtbaar[j].diepte > rijDiepte) j++
+      const d = maakDoel(sleepIdArg, 'strook', `na-${groep.id}`, positieNa(groepen, groep.id, sleepIdArg), `na "${groep.naam}"`)
+      return d && { ...d, lijn: { index: j, diepte: rijDiepte } }
     }
     if (eigen.has(groep.id)) return null
     return maakDoel(sleepIdArg, 'rij', spec, positieIn(groepen, groep.id), `in "${groep.naam}", als laatste`)
@@ -347,9 +364,8 @@ export default function StructuurBoom({
 
   /** Invoeglijn tussen twee rijen. Neemt geen ruimte in, zodat de lijst stil blijft staan. */
   const renderStrook = (index: number) => {
-    if (!sleepId || doel?.sleutel !== `strook-${index}`) return null
-    const onder  = zichtbaar[index]
-    const inspring = 8 + (onder ? onder.diepte : 0) * INSPRING
+    if (!sleepId || !doel?.lijn || doel.lijn.index !== index) return null
+    const inspring = 8 + doel.lijn.diepte * INSPRING
     return (
       <div className="relative h-0" aria-hidden>
         <div
@@ -437,7 +453,7 @@ export default function StructuurBoom({
           <span className="text-slate-400 text-[10px] flex-shrink-0">{nummer}</span>
           <span className={cn('truncate', groep.optioneel && 'italic text-neutral-500')}>{groep.naam}</span>
           {groep.optioneel && (
-            <span className="flex-shrink-0 rounded bg-neutral-100 px-1 text-[9.5px] font-medium tracking-wide text-neutral-500" title="Telt niet mee in het totaal">
+            <span className="flex-shrink-0 rounded bg-warning-100 px-1 text-[9.5px] font-semibold tracking-wide text-warning-700" title="Telt niet mee in het totaal">
               OPTIONEEL
             </span>
           )}
@@ -455,7 +471,7 @@ export default function StructuurBoom({
             <ActieMenu
               label={`Acties voor ${groep.naam}`}
               items={[
-                groep.niveau < 3 && { label: 'Subgroep toevoegen', onSelect: () => setToevoegen({ parentId: groep.id }) },
+                groep.niveau < 3 && { label: 'Subgroep toevoegen', onSelect: () => startSubgroep(groep.id) },
                 heeftKinderen && { label: isOpen ? 'Inklappen' : 'Uitklappen', onSelect: () => toggle(groep.id) },
                 { soort: 'scheiding' },
                 { label: 'Groep verwijderen…', gevaarlijk: true, onSelect: () => setConfirmId(groep.id) },
@@ -466,6 +482,13 @@ export default function StructuurBoom({
       </div>
     )
   }
+
+  // Plek van het invulveld voor een nieuwe subgroep: na de laatste zichtbare rij van
+  // de tak van de ouder.
+  const ouderIndex = toevoegen?.parentId ? zichtbaar.findIndex(r => r.groep.id === toevoegen.parentId) : -1
+  const formDiepte = ouderIndex >= 0 ? zichtbaar[ouderIndex].diepte : 0
+  let formNaIndex = ouderIndex
+  while (ouderIndex >= 0 && formNaIndex + 1 < zichtbaar.length && zichtbaar[formNaIndex + 1].diepte > formDiepte) formNaIndex++
 
   return (
     <div className="flex flex-col h-full relative">
@@ -487,7 +510,23 @@ export default function StructuurBoom({
 
       {/* Boom */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-1">
-        {/* Inline form voor root groep */}
+        {zichtbaar.map((rij, i) => (
+          <Fragment key={rij.groep.id}>
+            {renderStrook(i)}
+            {renderRij(rij)}
+            {/* Nieuwe subgroep: het veld staat onder de laatste bestaande subgroep, waar hij komt. */}
+            {toevoegen?.parentId && i === formNaIndex && (
+              <div style={{ paddingLeft: `${(formDiepte + 1) * INSPRING + 4}px` }}>
+                <InlineForm
+                  placeholder="Naam subgroep..."
+                  onOpslaan={naam => voegGroepToe(toevoegen.parentId, naam)}
+                  onAnnuleer={() => setToevoegen(null)}
+                />
+              </div>
+            )}
+          </Fragment>
+        ))}
+        {/* Nieuwe hoofdgroep: onderaan, waar hij komt. */}
         {toevoegen?.parentId === null && (
           <div className="px-2">
             <InlineForm
@@ -497,22 +536,6 @@ export default function StructuurBoom({
             />
           </div>
         )}
-
-        {zichtbaar.map((rij, i) => (
-          <Fragment key={rij.groep.id}>
-            {renderStrook(i)}
-            {renderRij(rij)}
-            {toevoegen?.parentId === rij.groep.id && (
-              <div style={{ paddingLeft: `${(rij.diepte + 1) * INSPRING + 4}px` }}>
-                <InlineForm
-                  placeholder="Naam subgroep..."
-                  onOpslaan={naam => voegGroepToe(rij.groep.id, naam)}
-                  onAnnuleer={() => setToevoegen(null)}
-                />
-              </div>
-            )}
-          </Fragment>
-        ))}
         {renderStrook(zichtbaar.length)}
 
         {roots.length === 0 && !toevoegen && (

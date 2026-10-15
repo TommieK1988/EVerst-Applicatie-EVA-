@@ -16,7 +16,7 @@ import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { GetalInput } from './GetalInput'
 import { OmschrijvingVeld } from './OmschrijvingVeld'
-import { WerkomschrijvingRij, RegelComponentenBlok } from './RegelDetail'
+import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './RegelDetail'
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
@@ -170,7 +170,8 @@ export function CalculatieregelRij({
   const [werkUitgeklapt,         setWerkUitgeklapt]         = useState(false)
   const [compsUitgeklapt,        setCompsUitgeklapt]        = useState(false)
   useEffect(() => { if (collapseSignal) setCompsUitgeklapt(false) }, [collapseSignal])
-  const [opmerkingOpen,          setOpmerkingOpen]          = useState(!!(regel.opmerking))
+  // Dicht bij het openen; de stip in de omschrijving laat zien dát er een opmerking is.
+  const [opmerkingOpen,          setOpmerkingOpen]          = useState(false)
   const heeftBehandeling = !!(regel.schilderbehandeling_id || regel.schilderbehandeling)
   const behandelingNaam = regel.schilderbehandeling_id
     ? behandelingen.find(b => b.id === regel.schilderbehandeling_id)?.naam ?? ''
@@ -328,7 +329,7 @@ export function CalculatieregelRij({
             {regel.opmerking && (
               <button
                 type="button"
-                onClick={e => { e.stopPropagation(); setCompsUitgeklapt(true); setOpmerkingOpen(true) }}
+                onClick={e => { e.stopPropagation(); setOpmerkingOpen(v => !v) }}
                 className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded hover:bg-amber-50"
                 title={`Opmerking: ${regel.opmerking}`}
                 aria-label="Opmerking tonen"
@@ -649,7 +650,7 @@ export function CalculatieregelRij({
               { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', onSelect: () => setCompsUitgeklapt(v => !v),
                 extra: regelComps.length > 0 ? <span className="text-[10.5px] text-neutral-400">{regelComps.length}</span> : undefined },
               { label: 'Werkomschrijving & afbeeldingen', onSelect: () => setWerkUitgeklapt(true) },
-              !readOnly && { label: 'Interne opmerking', onSelect: () => { setCompsUitgeklapt(true); setOpmerkingOpen(true) },
+              !readOnly && { label: 'Interne opmerking', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
               !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
@@ -715,6 +716,9 @@ export function CalculatieregelRij({
           })
         })}
       </tr>
+      {opmerkingOpen && (
+        <OpmerkingRij regel={regel} colOrder={colOrder} onWijzig={onWijzig} onSluit={() => setOpmerkingOpen(false)} />
+      )}
       {werkUitgeklapt && (
         <WerkomschrijvingRij regel={regel} colOrder={colOrder} indent={indent} onWijzig={onWijzig} />
       )}

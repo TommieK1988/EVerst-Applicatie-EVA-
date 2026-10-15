@@ -1,6 +1,7 @@
 import type { Quote, QuoteSection, QuoteLine } from '@/lib/everts-calc/types-quotes'
 import { groepeerBtwPerTarief, LEEG_BEDRIJF } from '@/lib/everts-calc/quote-renderer'
 import { schoonOfferteHtml } from '@/lib/everts-calc/html-naar-ooxml'
+import { metOpsommingstekens } from '@/lib/everts-calc/opsomming'
 
 export interface BedrijfsInstellingen {
   naam: string
@@ -123,7 +124,7 @@ function SectionRows({ section, isIntern }: { section: QuoteSection; isIntern: b
                         colSpan={colSpanTotal}
                         style={{ padding: '2mm 3mm', color: '#334155', whiteSpace: 'pre-line', lineHeight: 1.5 }}
                       >
-                        {line.omschrijving}
+                        {metOpsommingstekens(line.omschrijving)}
                       </td>
                     </tr>
                   )
