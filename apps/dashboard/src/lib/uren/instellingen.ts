@@ -72,7 +72,7 @@ const STANDAARD: UrenInstellingen = {
   indien_deadline_dag: 5,
   indien_deadline_tijd: '17:00:00',
   goedkeur_deadline_dag: 1,
-  goedkeur_deadline_tijd: '12:00:00',
+  goedkeur_deadline_tijd: '15:00:00',
   goedkeuring_modus: 'bouw7',
   verlof_routes: {},
   km_vergoeding_auto: 0.3,
@@ -169,7 +169,7 @@ export function indienDeadline(weekStart: string, inst: UrenInstellingen): Date 
 }
 
 /**
- * Het moment waarop de goedkeuring rond moet zijn. De standaard is maandag 12:00 — dat is de
+ * Het moment waarop de goedkeuring rond moet zijn. De standaard is maandag 15:00 — dat is de
  * maandag ná de week, niet de maandag waarop de week begon; vandaar `volgendeWeek`.
  */
 export function goedkeurDeadline(weekStart: string, inst: UrenInstellingen): Date {

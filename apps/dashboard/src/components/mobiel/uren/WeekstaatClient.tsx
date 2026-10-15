@@ -136,7 +136,7 @@ export default function WeekstaatClient({
           {t(`weekstaat.status.${statusSleutel}`)}
         </div>
 
-        {/* Ingediend maar nog niets goedgekeurd: aanpassen mag nog, tot de goedkeurdeadline. */}
+        {/* Ingediend: aanpassen mag nog tot de goedkeurdeadline, behalve wat al goedgekeurd is. */}
         {staat.wijzigenTot && (
           <p style={{ fontSize: 13, color: '#0b4f96', margin: '10px 0 0', lineHeight: 1.45 }}>
             {t('weekstaat.wijzigenTot', {
@@ -174,6 +174,9 @@ export default function WeekstaatClient({
           const regels = staat.regels.filter(r => r.datum === datum)
           const dagKosten = staat.onkosten.filter(k => k.datum === datum)
           const dagTotaal = regels.reduce((s, r) => s + r.uren, 0)
+          // Kosten hebben geen eigen goedkeuring: zijn er uren van deze dag goedgekeurd, dan
+          // heeft de goedkeurder de dag bekeken en liggen de kosten ook vast.
+          const kostenWijzigbaar = staat.wijzigbaar && !regels.some(r => r.goedgekeurd)
           const isVandaag = datum === vandaag
 
           // Lege weekenddagen tonen we niet: die vullen het scherm zonder iets te zeggen.
@@ -226,6 +229,11 @@ export default function WeekstaatClient({
                     ) : r.opmerking && (
                       <div style={{ fontSize: 12, color: '#8a949a', marginTop: 2 }}>{r.opmerking}</div>
                     )}
+                    {r.goedgekeurd && (
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#009439', marginTop: 3 }}>
+                        {t('weekstaat.regelGoedgekeurd')}
+                      </div>
+                    )}
                     {r.gewijzigd_door_goedkeurder && (
                       <div style={{ fontSize: 11, color: '#a15c00', marginTop: 3 }}>
                         {t('weekstaat.aangepastDoorGoedkeurder')}
@@ -237,7 +245,7 @@ export default function WeekstaatClient({
                     {uur(r.uren)}
                   </span>
 
-                  {staat.wijzigbaar && !auto && (
+                  {staat.wijzigbaar && !auto && !r.goedgekeurd && (
                     <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                       <button type="button" onClick={() => setSheet({ datum, regel: r })}
                         // eslint-disable-next-line i18next/no-literal-string -- potlood-pictogram, geen tekst
@@ -273,7 +281,7 @@ export default function WeekstaatClient({
                   <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {euro(k.bedrag)}
                   </span>
-                  {staat.wijzigbaar && (
+                  {kostenWijzigbaar && (
                     <button type="button" onClick={() => verwijderKosten(k.id)}
                       aria-label={t('weekstaat.kostenVerwijderen')} style={{ ...rijKnop, color: '#c0392b' }}>×</button>
                   )}
@@ -290,14 +298,14 @@ export default function WeekstaatClient({
                     }}>
                     {t('weekstaat.urenToevoegen')}
                   </button>
-                  <button type="button" onClick={() => setKostenSheet(datum)}
+                  {kostenWijzigbaar && <button type="button" onClick={() => setKostenSheet(datum)}
                     style={{
                       padding: '11px 14px', border: 'none', background: 'transparent',
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c',
                       cursor: 'pointer',
                     }}>
                     {t('weekstaat.kostenToevoegen')}
-                  </button>
+                  </button>}
                 </div>
               )}
             </div>

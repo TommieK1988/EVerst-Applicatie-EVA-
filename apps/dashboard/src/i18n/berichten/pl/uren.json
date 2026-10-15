@@ -50,7 +50,8 @@
     "overurenTitel": "W tym tygodniu przepracowałeś {uren} godz. więcej",
     "overurenUitleg": "Te godziny trafiają na Twoje saldo nadgodzin (czas za czas). Dlatego jest tu wiersz −{uren} godz. „czas za czas”. Dzięki temu Twój tydzień zgadza się dokładnie z umową. Nie musisz nic robić.",
     "overurenRegel": "Nadgodziny na Twoje saldo",
-    "wijzigenTot": "Możesz jeszcze zmienić swój tydzień do {moment}, dopóki osoba zatwierdzająca niczego nie zatwierdziła."
+    "wijzigenTot": "Możesz jeszcze zmienić swój tydzień do {moment}. Godzin już zatwierdzonych przez osobę zatwierdzającą nie można zmienić.",
+    "regelGoedgekeurd": "Zatwierdzone"
   },
   "regel": {
     "titelNieuw": "Dodaj godziny",
@@ -133,8 +134,7 @@
   },
   "fout": {
     "weekAlIngediend": "Ten tydzień został już wysłany.",
-    "alGoedgekeurd": "Osoba zatwierdzająca zatwierdziła już godziny z tego tygodnia. Nie możesz ich już zmienić; zapytaj osobę zatwierdzającą.",
-    "wijzigTermijnVerstreken": "Tego tygodnia nie możesz już zmienić: było to możliwe do poniedziałku 12:00. Zapytaj osobę zatwierdzającą.",
+    "wijzigTermijnVerstreken": "Tego tygodnia nie możesz już zmienić: termin minął. Zapytaj osobę zatwierdzającą.",
     "goedkeuringNietTeControleren": "Nie możemy teraz sprawdzić, czy Twoje godziny zostały już zatwierdzone. Spróbuj ponownie za chwilę.",
     "bouw7VerwijderenMislukt": "Usuwanie nie powiodło się. Spróbuj ponownie za chwilę.",
     "toevoegenMislukt": "Nie udało się dodać.",
@@ -162,7 +162,10 @@
     "geenWerkmaatschappij": "W Twoim profilu nie ma jeszcze firmy, więc EVA nie wie, do którego projektu należą te godziny. Poproś biuro o uzupełnienie.",
     "externAlleenGewerkt": "Jako pracownik zewnętrzny wpisujesz tylko przepracowane godziny.",
     "automatischeRegel": "Ten wiersz EVA dodaje sama dla Twoich nadgodzin. Zmień przepracowane godziny, a on dopasuje się automatycznie.",
-    "tvtSaldoTeLaag": "Masz za mało salda nadgodzin: chcesz wykorzystać {uren} godz., a masz dostępne {beschikbaar} godz."
+    "tvtSaldoTeLaag": "Masz za mało salda nadgodzin: chcesz wykorzystać {uren} godz., a masz dostępne {beschikbaar} godz.",
+    "regelAlGoedgekeurd": "Ta pozycja jest już zatwierdzona. Nie możesz jej już zmienić; zapytaj osobę zatwierdzającą.",
+    "overurenAlGoedgekeurd": "Ta zmiana zmienia Twoje nadgodziny, a one są już zatwierdzone. Zapytaj osobę zatwierdzającą.",
+    "dagAlGoedgekeurd": "Godziny z tego dnia są już zatwierdzone. Nie możesz już zmienić kosztów; zapytaj osobę zatwierdzającą."
   },
   "keuren": {
     "titel": "Zatwierdzanie",
