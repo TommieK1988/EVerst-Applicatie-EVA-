@@ -7,6 +7,8 @@ type Props = {
   templateId: string
   url: string | null
   onChange: (url: string | null) => void
+  /** Uitlegregel boven de knop; standaard de tekst voor formulier-PDF's. */
+  uitleg?: React.ReactNode
 }
 
 /**
@@ -15,7 +17,7 @@ type Props = {
  * `templateId` dient alleen als mapnaam. De URL wordt in `schema.instellingen.pdf.briefpapierUrl`
  * bewaard; pas na Opslaan is hij actief.
  */
-export default function BriefpapierUpload({ templateId, url, onChange }: Props) {
+export default function BriefpapierUpload({ templateId, url, onChange, uitleg }: Props) {
   const [bezig, setBezig] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -54,7 +56,7 @@ export default function BriefpapierUpload({ templateId, url, onChange }: Props) 
   return (
     <div>
       <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.4 }}>
-        PDF-achtergrond onder elke pagina. Bevat het briefpapier een eigen logo? Zet dan &quot;Logo tonen&quot; op Verbergen.
+        {uitleg ?? <>PDF-achtergrond onder elke pagina. Bevat het briefpapier een eigen logo? Zet dan &quot;Logo tonen&quot; op Verbergen.</>}
       </p>
       {url ? (
         <div style={{ display: 'flex', gap: 6 }}>

@@ -3,7 +3,8 @@ import { createAdminClient } from '@everts/database/server'
 import { meerwerkStatusLabels, type MeerwerkStatus } from '@everts/database'
 import { getDossierMeerwerk, type MeerwerkRegelView } from './meerwerk'
 import { veilig, wikkel, type PdfFont } from '@/lib/pdf/tekst'
-import { fetchBriefpapier, mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import { mergeBriefpapierBackground } from '@/lib/everts-calc/briefpapier'
+import { haalKlantBriefpapier } from '@/lib/pdf/klant-briefpapier'
 
 /**
  * Meerwerkoverzicht als PDF voor de opdrachtgever: alle meerwerkregels van een dossier,
@@ -93,28 +94,8 @@ export type MeerwerkOverzichtDossier = {
   nummer: string | null
   klant: string | null
   werkadres: string | null
-}
-
-/**
- * Het briefpapier van de offerte-layout, als bytes. Bewust dezelfde bron als de offerte: dat is het
- * briefpapier dat de klant van ons kent, en het wordt op één plek beheerd (Instellingen > Offertes).
- * De standaard-layout gaat voor; is daar niets ingesteld, dan de laatst bijgewerkte layout die wél
- * briefpapier heeft. Best-effort: zonder briefpapier komt het overzicht er kaal uit, niet fout.
- */
-async function haalBriefpapier(): Promise<Buffer | null> {
-  const supabase = createAdminClient() as any
-  const { data } = await supabase
-    .from('quote_layouts')
-    .select('briefpapier_pdf_url, is_standaard, updated_at')
-    // Alleen offerte-lay-outs: het meerwerkoverzicht gaat naar de klant, dus het
-    // briefpapier van een interne-begrotingslay-out hoort er niet onder.
-    .eq('soort', 'offerte')
-    .not('briefpapier_pdf_url', 'is', null)
-    .order('is_standaard', { ascending: false })
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return fetchBriefpapier(data?.briefpapier_pdf_url ?? null)
+  /** Bepaalt welk briefpapier eronder komt. */
+  werkmaatschappijId: string | null
 }
 
 /** Kopgegevens van het dossier voor op het overzicht (titel, nummer, opdrachtgever, werkadres). */
@@ -122,7 +103,7 @@ export async function getMeerwerkOverzichtDossier(dossierId: string): Promise<Me
   const supabase = createAdminClient() as any
   const { data: dossier } = await supabase
     .from('dossiers')
-    .select('titel, dossiernummer, klant_id, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad')
+    .select('titel, dossiernummer, klant_id, werkadres_straat, werkadres_huisnummer, werkadres_postcode, werkadres_stad, werkmaatschappij_id')
     .eq('id', dossierId)
     .maybeSingle()
   if (!dossier) return null
@@ -137,7 +118,10 @@ export async function getMeerwerkOverzichtDossier(dossierId: string): Promise<Me
     [dossier.werkadres_postcode, dossier.werkadres_stad].filter(Boolean).join('  '),
   ].filter(Boolean).join(', ') || null
 
-  return { titel: dossier.titel ?? null, nummer: dossier.dossiernummer ?? null, klant, werkadres }
+  return {
+    titel: dossier.titel ?? null, nummer: dossier.dossiernummer ?? null, klant, werkadres,
+    werkmaatschappijId: dossier.werkmaatschappij_id ?? null,
+  }
 }
 
 /**
@@ -155,7 +139,7 @@ export async function genereerMeerwerkOverzichtPdf(
   if (!dossier) return null
   const [{ regels }, briefpapier] = await Promise.all([
     getDossierMeerwerk(dossierId),
-    haalBriefpapier(),
+    haalKlantBriefpapier(dossier.werkmaatschappijId),
   ])
   // Pas de smallere bladspiegel gebruiken als het briefpapier er ook écht is: anders staat de
   // inhoud ingesprongen op een leeg vel.

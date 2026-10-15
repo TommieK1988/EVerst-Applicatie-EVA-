@@ -400,6 +400,7 @@ export type Database = {
           font_secundair: string | null
           geocode_op: string | null
           geocode_status: string | null
+          briefpapier_pdf_url: string | null
           huisstijl_notities: string | null
           iban: string | null
           id: string
@@ -441,6 +442,7 @@ export type Database = {
           font_secundair?: string | null
           geocode_op?: string | null
           geocode_status?: string | null
+          briefpapier_pdf_url?: string | null
           huisstijl_notities?: string | null
           iban?: string | null
           id?: string
@@ -482,6 +484,7 @@ export type Database = {
           font_secundair?: string | null
           geocode_op?: string | null
           geocode_status?: string | null
+          briefpapier_pdf_url?: string | null
           huisstijl_notities?: string | null
           iban?: string | null
           id?: string

@@ -59,6 +59,7 @@ export async function saveHuisstijl(formData: FormData): Promise<SaveResult> {
     font_primair:        emptyNull(formData.get('font_primair')) ?? 'Montserrat',
     font_secundair:      emptyNull(formData.get('font_secundair')),
     huisstijl_notities:  emptyNull(formData.get('huisstijl_notities')),
+    briefpapier_pdf_url: emptyNull(formData.get('briefpapier_pdf_url')),
   }
 
   const supabase = await createClient()

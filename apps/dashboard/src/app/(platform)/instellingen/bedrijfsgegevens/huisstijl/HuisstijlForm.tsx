@@ -5,6 +5,7 @@ import { saveHuisstijl } from './actions'
 import type { Bedrijfsgegevens } from '@everts/database'
 import { logoSlotLabels } from '@everts/database'
 import { LogoUpload } from '@/components/LogoUpload'
+import BriefpapierUpload from '@/components/formulieren/builder/BriefpapierUpload'
 import { Card, CardBody, Input, Textarea, Button, Spinner } from '@/components/ui'
 
 type Status = { kind: 'idle' } | { kind: 'saving' } | { kind: 'success' } | { kind: 'error'; message: string }
@@ -33,6 +34,8 @@ export function HuisstijlForm({ data }: { data: Bedrijfsgegevens }) {
     logo_monochroom_url: data.logo_monochroom_url ?? '',
   })
 
+  const [briefpapier, setBriefpapier] = useState<string | null>(data.briefpapier_pdf_url ?? null)
+
   const setLogoUrl = useCallback((key: string, url: string | null) => {
     setLogos((prev) => ({ ...prev, [key]: url ?? '' }))
   }, [])
@@ -58,6 +61,7 @@ export function HuisstijlForm({ data }: { data: Bedrijfsgegevens }) {
       {Object.entries(logos).map(([key, val]) => (
         <input key={key} type="hidden" name={key} value={val} />
       ))}
+      <input type="hidden" name="briefpapier_pdf_url" value={briefpapier ?? ''} />
 
       {/* ── Logo's ── */}
       <section>
@@ -81,6 +85,25 @@ export function HuisstijlForm({ data }: { data: Bedrijfsgegevens }) {
             )
           })}
         </div>
+      </section>
+
+      {/* ── Briefpapier ── */}
+      <section>
+        <p className="eva-section-label">Briefpapier voor rapporten</p>
+        <Card>
+          <CardBody>
+            <div style={{ maxWidth: 420 }}>
+              <BriefpapierUpload
+                templateId={data.id}
+                url={briefpapier}
+                onChange={setBriefpapier}
+                uitleg={data.type === 'werkmaatschappij'
+                  ? <>PDF die onder het opleverrapport en het meerwerkoverzicht komt. Leeg laten = het briefpapier van de organisatie.</>
+                  : <>PDF die onder het opleverrapport en het meerwerkoverzicht komt. Werkmaatschappijen zonder eigen briefpapier gebruiken dit.</>}
+              />
+            </div>
+          </CardBody>
+        </Card>
       </section>
 
       {/* ── Kleurenpalet ── */}

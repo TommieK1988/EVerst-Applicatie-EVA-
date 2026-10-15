@@ -34,42 +34,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
     : new Date(moment.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })
 
   /**
-   * Eén punt in drie kolommen: foto vooraf | foto na herstel | omschrijving. Overige foto's als
-   * duimnagels eronder. Een ontbrekende na-foto blijft zichtbaar als gestippeld vlak — dat moet
-   * opvallen. Een goed uitgevoerd punt kent geen voor/na: één foto beslaat dan twee kolommen.
+   * Eén punt als kaart met vaste hoogte: foto vooraf | foto na herstel | omschrijving. Elk fotovak
+   * even groot (4:3); de foto past er in zijn geheel in, niet bijgesneden. Tekst die niet past wordt
+   * afgekapt. Een ontbrekende na-foto blijft
+   * zichtbaar als gestippeld vlak. Een goed uitgevoerd punt toont zijn eerste twee foto's.
    */
   const puntHtml = (p: OpleverPuntView, nummer: string, status: { label: string; kleur: string }) => {
     const { voor, na } = splitsFotos(p.fotos)
     const mist = bewijsOntbreekt(p.status, p.fotos, p.is_goed)
-    const img = (url: string) => `<img class="hoofd" src="${esc(url)}" alt="foto" />`
-    const leeg = (t: string) => `<div class="leeg">${t}</div>`
-    let kolommen: string[] = []
-    let gebruikt: string[] = []
-    if (p.is_goed) {
-      gebruikt = voor.slice(0, 2).map(f => f.url)
-      kolommen = gebruikt.length === 1 ? [`<div class="span2">${img(gebruikt[0])}</div>`] : gebruikt.map(u => `<div>${img(u)}</div>`)
-    } else if (voor[0] || na[0] || mist) {
-      gebruikt = [voor[0]?.url, na[0]?.url].filter((u): u is string => Boolean(u))
-      kolommen = [
-        `<div><div class="kol-kop">Voor</div>${voor[0] ? img(voor[0].url) : leeg('geen foto')}</div>`,
-        `<div><div class="kol-kop">Na herstel</div>${na[0] ? img(na[0].url) : leeg(mist ? 'geen foto na herstel' : 'nog geen foto')}</div>`,
-      ]
+    const urls = p.is_goed ? [voor[0]?.url, voor[1]?.url] : [voor[0]?.url, na[0]?.url]
+    const vak = (url: string | undefined, i: number) => {
+      if (url) {
+        const lbl = p.is_goed ? '' : `<span class="lbl">${i === 0 ? 'Voor' : 'Na herstel'}</span>`
+        return `<div class="vak">${lbl}<img src="${esc(url)}" alt="foto" /></div>`
+      }
+      if (p.is_goed && i === 1) return '<div class="vak"></div>'
+      const t = i === 0 ? 'geen foto' : mist ? 'geen foto na herstel' : 'nog geen foto na herstel'
+      return `<div class="vak leeg${i === 1 && mist ? ' mist' : ''}">${t}</div>`
     }
-    const overig = p.fotos.filter(f => !gebruikt.includes(f.url))
-    const tekst = `
-        <div class="omschr">${esc(p.omschrijving)}</div>
-        <div class="meta">
-          ${p.deadline ? `<span>deadline ${esc(p.deadline)}</span>` : ''}
-          ${p.is_extra_werk ? `<span class="ew">Extra werk</span>` : ''}
-          ${mist ? `<span class="ew">Geen foto na herstel</span>` : ''}
-        </div>
-        ${p.geweigerd_reden ? `<div class="afw">Afgewezen: ${esc(p.geweigerd_reden)}</div>` : ''}
-        ${p.reacties.length ? `<div class="reacties">${p.reacties.map(r => `
-          <div class="reactie">
-            <strong>${esc(r.auteur_naam ?? (r.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Projectteam'))}</strong>
-            ${r.opmerking ? `<span>${esc(r.opmerking)}</span>` : ''}
-            ${r.foto_urls.length ? `<div class="fotos">${r.foto_urls.map(u => `<img src="${esc(u)}" alt="foto" />`).join('')}</div>` : ''}
-          </div>`).join('')}</div>` : ''}`
+    const nietGetoond = p.fotos.length - urls.filter(Boolean).length
+    const laatste = p.reacties[p.reacties.length - 1]
+    const meta = [
+      p.deadline ? `deadline ${esc(p.deadline)}` : '',
+      p.is_extra_werk ? 'Extra werk' : '',
+      nietGetoond > 0 ? `+${nietGetoond} foto${nietGetoond > 1 ? "'s" : ''} in EVA` : '',
+    ].filter(Boolean).join(' · ')
     return `
     <div class="punt">
       <div class="punt-kop">
@@ -77,8 +66,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
         <span class="ruimte">${esc(p.ruimte ?? '')}</span>
         <span class="status" style="color:${status.kleur}">${esc(status.label)}</span>
       </div>
-      ${kolommen.length ? `<div class="blok">${kolommen.join('')}${kolommen.length === 1 && !p.is_goed ? '<div></div>' : ''}<div style="grid-column:3">${tekst}</div></div>` : tekst}
-      ${overig.length ? `<div class="fotos overig">${overig.map(f => `<img src="${esc(f.url)}" alt="foto" />`).join('')}</div>` : ''}
+      <div class="blok">
+        ${urls.map(vak).join('')}
+        <div class="details">
+          ${meta ? `<div class="meta">${meta}</div>` : ''}
+          ${p.geweigerd_reden ? `<div class="afw">Afgewezen: ${esc(p.geweigerd_reden)}</div>` : ''}
+          ${laatste ? `<div class="meta">${esc(laatste.auteur_naam ?? (laatste.auteur_type === 'onderaannemer' ? 'Onderaannemer' : 'Projectteam'))}: ${esc(laatste.opmerking ?? '')}</div>` : ''}
+        </div>
+      </div>
+      <div class="omschr">${esc(p.omschrijving)}</div>
     </div>`
   }
   const opStatus = (p: OpleverPuntView) => ({ label: opleverPuntStatusLabels[p.status], kleur: STATUS_KLEUR[p.status] })
@@ -87,18 +83,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
   const puntenHtml = punten.map(p => puntHtml(p, nr('OP', p.volgnummer), opStatus(p))).join('')
 
   const goedHtml = goed.length ? `
-    <h2>Goed uitgevoerd (${goed.length})</h2>
+    <h2 class="nieuw">Goed uitgevoerd (${goed.length})</h2>
     <p class="uitleg">Werkzaamheden die bij de oplevering akkoord zijn bevonden.</p>
     ${goed.map((p, i) => puntHtml(p, nr('G', i + 1), { label: 'Goed uitgevoerd', kleur: '#1c7a3f' })).join('')}` : ''
 
   const tekstenHtml = ([['Algemene opmerkingen', moment.opmerking], ['Afspraken', moment.afspraken]] as const)
     .filter(([, t]) => t?.trim())
-    .map(([kop, t]) => `<h2>${kop}</h2><div class="vrij">${esc(t)}</div>`).join('')
+    .map(([kop, t], i) => `<h2${i === 0 ? ' class="nieuw"' : ''}>${kop}</h2><div class="vrij">${esc(t)}</div>`).join('')
 
   // Aandachtspunten horen bij het dossier, niet bij dit ene moment — vandaar een eigen hoofdstuk
   // met eigen nummerreeks (AP). Geen aandachtspunten = geen kopje.
   const aandachtspuntenHtml = aandachtspunten.length ? `
-    <h2>Aandachtspunten (${aandachtspunten.length})</h2>
+    <h2 class="nieuw">Aandachtspunten (${aandachtspunten.length})</h2>
     <p class="uitleg">Gemelde punten bij dit project die niet aan dit oplevermoment gekoppeld zijn.</p>
     ${aandachtspunten.map(p => puntHtml(p, nr('AP', p.volgnummer), opStatus(p))).join('')}` : ''
 
@@ -144,30 +140,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
   .info { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; font-size: 13px; margin-bottom: 22px; }
   .info .k { color: #8a938f; }
   h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #4a545b; border-bottom: 1px solid #e4e8e7; padding-bottom: 6px; margin: 24px 0 12px; }
-  .punt { border: 1px solid #e4e8e7; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; page-break-inside: avoid; }
-  .punt-kop { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
-  .op { font-size: 11px; font-weight: 700; color: #a4adb2; }
-  .ruimte { font-size: 13px; font-weight: 700; flex: 1; }
-  .omschr { font-size: 14px; font-weight: 600; white-space: pre-line; }
-  .blok { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: start; }
-  .blok .span2 { grid-column: 1 / span 2; }
-  .blok img.hoofd { width: 100%; max-height: 260px; object-fit: contain; object-position: left top; border-radius: 6px; }
-  .fotos.overig { margin-top: 8px; }
-  .fotos.overig img { width: 64px; height: 64px; }
-  .vrij { font-size: 13px; white-space: pre-line; line-height: 1.5; }
+  .punt { border: 1px solid #e4e8e7; border-radius: 6px; margin-bottom: 10px; page-break-inside: avoid; overflow: hidden; }
+  .punt-kop { display: flex; align-items: baseline; gap: 8px; background: #f4f6f6; padding: 5px 10px; }
+  .op { font-size: 11px; font-weight: 700; color: #8a938f; }
+  .ruimte { font-size: 13px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { font-size: 12px; font-weight: 700; }
-  .meta { font-size: 11.5px; color: #6b757c; margin-top: 3px; display: flex; gap: 10px; }
-  .meta .ew { color: #7a5a17; font-weight: 600; }
-  .afw { font-size: 12px; color: #a12020; margin-top: 4px; }
+  .blok { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 10px 10px 6px; }
+  .vak { position: relative; aspect-ratio: 4 / 3; background: #f4f6f6; border-radius: 3px; }
+  .vak:empty { background: none; }
+  .vak img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .vak .lbl { position: absolute; top: 0; left: 0; background: rgba(26,31,36,.65); color: #fff; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px 0 3px 0; }
+  .vak.leeg { border: 1px dashed #d5dbd9; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; color: #8a938f; }
+  .vak.leeg.mist { border-color: #a12020; color: #a12020; }
+  .details { display: flex; flex-direction: column; gap: 4px; }
+  .omschr { font-size: 13px; font-weight: 600; white-space: pre-line; padding: 0 10px 10px; height: 4.8em; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  @media print { h2.nieuw { break-before: page; } }
+  .meta { font-size: 11px; color: #6b757c; }
+  .afw { font-size: 11px; color: #a12020; }
   .fotos { display: flex; flex-wrap: wrap; gap: 6px; }
   .fotos img { width: 92px; height: 92px; object-fit: cover; border-radius: 6px; border: 1px solid #e4e8e7; }
   .kol-kop { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #8a938f; margin-bottom: 4px; }
-  .leeg { border: 1px dashed #d5dbd9; border-radius: 6px; height: 92px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; color: #a4adb2; }
+  .vrij { font-size: 13px; white-space: pre-line; line-height: 1.5; }
   .uitleg { font-size: 12px; color: #6b757c; margin: -4px 0 10px; }
-  .reacties { margin-top: 8px; border-top: 1px dashed #e4e8e7; padding-top: 8px; }
-  .reactie { font-size: 12.5px; margin-bottom: 6px; }
-  .reactie strong { margin-right: 6px; }
-  .reactie .fotos { margin-top: 4px; }
   .handtekeningen { display: flex; flex-wrap: wrap; gap: 24px; }
   .ht { border: 1px solid #e4e8e7; border-radius: 8px; padding: 10px 14px; min-width: 200px; }
   .ht img { height: 54px; max-width: 180px; object-fit: contain; }
@@ -202,7 +196,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ momentI
       <div><span class="k">Datum:</span> ${esc(datum)}</div>
     </div>
 
-    <h2>Opleverpunten (${punten.length}) · ${aantalGeaccepteerd} geaccepteerd</h2>
+    <h2 class="nieuw">Opleverpunten (${punten.length}) · ${aantalGeaccepteerd} geaccepteerd</h2>
     ${punten.length ? puntenHtml : `<p style="font-size:13px;color:#6b757c">${goed.length
       ? 'Geen opleverpunten: de werkzaamheden zijn akkoord bevonden.' : 'Geen opleverpunten geregistreerd.'}</p>`}
 

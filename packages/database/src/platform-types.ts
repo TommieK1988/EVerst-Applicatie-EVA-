@@ -43,6 +43,8 @@ export type Bedrijfsgegevens = {
   font_secundair: string | null
   // Huisstijl notities
   huisstijl_notities: string | null
+  /** Briefpapier-PDF onder rapporten naar de klant (opleverrapport, meerwerkoverzicht). */
+  briefpapier_pdf_url: string | null
   /** Bouw7 branch/vestiging-id van deze werkmaatschappij (GET /list/branches). Bepaalt de projectnummer-reeks bij aanmaken. */
   bouw7_branch_id: number | null
   created_at: string
