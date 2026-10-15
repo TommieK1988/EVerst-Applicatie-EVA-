@@ -14,7 +14,7 @@ music: calm warm corporate underscore, soft piano and pads, light pulse, unobtru
 - voiceover: "Elke klus begint met een mail."
 - duration: 4s
 - transition_in: cut
-- status: outline
+- status: built
 - src: compositions/frames/01-hook.html
 - type: hook
 - persuasion: Herkenning (pain validation light)
@@ -31,7 +31,7 @@ keyMessage: het begint klein.
 - voiceover: "Met EVA doe je de rest in één systeem — op kantoor, én op de bouwplaats."
 - duration: 6s
 - transition_in: zoom-through
-- status: outline
+- status: built
 - src: compositions/frames/02-intro.html
 - type: product_intro
 - persuasion: Value stacking (kantoor + buiten in één)
@@ -47,7 +47,7 @@ keyMessage: kantoor en bouwplaats in één systeem.
 - voiceover: "In het postvak leest EVA de aanvraag mee. Opdrachtgever, werkadres en contactpersoon staan al klaar. Eén klik — en het dossier staat."
 - duration: 9s
 - transition_in: crossfade
-- status: outline
+- status: built
 - src: compositions/frames/03-postvak.html
 - type: feature_showcase
 - persuasion: Friction reduction
@@ -63,7 +63,7 @@ keyMessage: van mail naar dossier in één klik.
 - voiceover: "Alles over de klus staat in één dossier: opname, calculatie en planning, werkplan, uren en inkoop."
 - duration: 7s
 - transition_in: push-slide LEFT
-- status: outline
+- status: built
 - src: compositions/frames/04-dossier.html
 - type: feature_showcase
 - persuasion: Rule of three (voorbereiding / uitvoering / financieel)
@@ -79,7 +79,7 @@ keyMessage: één plek per klus.
 - voiceover: "De opname wordt een meetstaat, de meetstaat een calculatie. En EVA controleert alles, vóórdat de offerte de deur uitgaat."
 - duration: 9s
 - transition_in: crossfade
-- status: outline
+- status: built
 - src: compositions/frames/05-calculatie.html
 - type: feature_showcase
 - persuasion: Show-don't-tell proof
@@ -95,7 +95,7 @@ keyMessage: geen fouten in de offerte.
 - voiceover: "Gegund? Sleep het werk op het planbord, en verdeel het over je mensen."
 - duration: 7s
 - transition_in: zoom-through
-- status: outline
+- status: built
 - src: compositions/frames/06-planning.html
 - type: feature_showcase
 - persuasion: Feature-to-benefit translation
@@ -111,7 +111,7 @@ keyMessage: plannen is slepen.
 - voiceover: "De vakman ziet het meteen op zijn telefoon. Inklokken, uren schrijven, foto's maken en navigeren naar het werk. In het Nederlands, Pools of Tamil."
 - duration: 11s
 - transition_in: push-slide UP
-- status: outline
+- status: built
 - src: compositions/frames/07-mobiel.html
 - type: feature_showcase
 - persuasion: Belonging (iedereen in zijn eigen taal)
@@ -127,7 +127,7 @@ keyMessage: iedereen werkt in dezelfde app, in zijn eigen taal.
 - voiceover: "Toolboxmeetings, kwaliteitsinspecties en het opleverrapport: ter plekke ingevuld, met foto's, en meteen vastgelegd."
 - duration: 8s
 - transition_in: crossfade
-- status: outline
+- status: built
 - src: compositions/frames/08-kwaliteit.html
 - type: benefit_highlight
 - persuasion: Risk reversal (aantoonbaar vastgelegd)
@@ -143,7 +143,7 @@ keyMessage: aantoonbaar veilig en goed.
 - voiceover: "Daarna sluit de cirkel. Termijnen, meerwerk en facturen. Inkoopfacturen goedkeuren. En stuurcijfers voor het management."
 - duration: 9s
 - transition_in: zoom-through
-- status: outline
+- status: built
 - src: compositions/frames/09-financieel.html
 - type: feature_showcase
 - persuasion: Value stacking
@@ -159,7 +159,7 @@ keyMessage: van mail tot factuur — rond.
 - voiceover: "En ook het wagenpark, het materieel, je acties en de bedrijfsagenda. Heb je een vraag? Vraag het EVA."
 - duration: 8s
 - transition_in: crossfade
-- status: outline
+- status: built
 - src: compositions/frames/10-meer.html
 - type: benefit_highlight
 - persuasion: Value stacking (breedte)
@@ -175,7 +175,7 @@ keyMessage: alles zit erin.
 - voiceover: "EVA. Eén systeem — van eerste mail tot laatste factuur."
 - duration: 6s
 - transition_in: blur-crossfade
-- status: outline
+- status: built
 - src: compositions/frames/11-outro.html
 - type: branding
 - persuasion: Future pacing

@@ -1,0 +1,21 @@
+<style>
+#ID .side { position: absolute; left: 96px; top: 250px; width: 300px; height: 740px; border-radius: 14px; overflow: hidden; border: 1px solid #e3e8ea; background: #fff;
+  box-shadow: 0 30px 60px -24px rgba(16,40,28,.25); }
+#ID .side img { width: 100%; display: block; }
+#ID .groups { position: absolute; left: 460px; top: 250px; display: flex; gap: 32px; }
+#ID .grp { width: 430px; padding: 32px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.25); }
+#ID .grp h3 { font-size: 30px; font-weight: 800; margin-bottom: 8px; }
+#ID .grp .n { font-size: 20px; font-weight: 700; color: #6b757c; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 24px; }
+#ID .grp ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+#ID .grp li { font-size: 26px; font-weight: 600; padding: 16px 20px; border-radius: 10px; background: #f8fafa; border: 1px solid #e3e8ea; display: flex; align-items: center; gap: 16px; }
+#ID .grp li::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: #009439; }
+#ID .grp.g2 li::before { background: #61ac2b; } #ID .grp.g3 li::before { background: #2e90fa; }
+</style>
+<div class="bg-light"></div>
+<div class="copy"><div class="eyebrow">Dossier</div><div class="head">Alles over de klus op één plek</div></div>
+<div class="side"><img src="assets/img/sidebar.png" alt="" /></div>
+<div class="groups">
+  <div class="grp g1"><div class="n">01</div><h3>Voorbereiding</h3><ul><li>Opname</li><li>Calculatie</li><li>Werkbegroting</li><li>Planning</li></ul></div>
+  <div class="grp g2"><div class="n">02</div><h3>Uitvoering</h3><ul><li>Werkplan</li><li>Acties</li><li>Uren</li><li>KAM/VGM</li></ul></div>
+  <div class="grp g3"><div class="n">03</div><h3>Financieel</h3><ul><li>Inkoop</li><li>Verkoop</li><li>Meerwerk</li><li>Financieel</li></ul></div>
+</div>
