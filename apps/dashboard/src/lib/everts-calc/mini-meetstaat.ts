@@ -32,8 +32,34 @@ export function berekenRij(rij: MiniMaatrij, eenh: string): number {
   })
 }
 
-export function totaalMeting(rijen: MiniMaatrij[], eenh: string): number {
-  return +(rijen.reduce((s, r) => s + berekenRij(r, eenh), 0)).toFixed(4)
+export type Gebruik = 'bruto' | 'netto'
+
+export interface BrutoNetto {
+  bruto: number
+  aftrek: number
+  netto: number
+  /** Er staat minstens één aftrekregel met een maat in; alleen dan is er iets te kiezen. */
+  heeftAftrek: boolean
+}
+
+const rond = (n: number) => +n.toFixed(4)
+
+/** Bruto = alle gewone regels; netto = bruto min de aftrekregels (ramen uit een gevelvlak). */
+export function brutoNetto(rijen: MiniMaatrij[], eenh: string): BrutoNetto {
+  let bruto = 0
+  let aftrek = 0
+  for (const r of rijen) {
+    const t = berekenRij(r, eenh)
+    if (r.aftrek) aftrek += t
+    else bruto += t
+  }
+  return { bruto: rond(bruto), aftrek: rond(aftrek), netto: rond(bruto - aftrek), heeftAftrek: aftrek > 0 }
+}
+
+/** Het totaal dat de calculatieregel krijgt. Zonder aftrekregels zijn bruto en netto gelijk. */
+export function totaalMeting(rijen: MiniMaatrij[], eenh: string, gebruik: Gebruik = 'netto'): number {
+  const t = brutoNetto(rijen, eenh)
+  return gebruik === 'bruto' ? t.bruto : t.netto
 }
 
 export function rijHeeftData(r: MiniMaatrij): boolean {
@@ -61,6 +87,7 @@ const MARGE = 0.005
 
 export interface StartToestand {
   rijen: MiniMaatrij[]
+  gebruik: Gebruik
   /** De bewaarde meting telt op tot iets anders dan de hoeveelheid in de calculatie. */
   afwijking: { meting: number; calculatie: number } | null
 }
@@ -79,18 +106,22 @@ export function startToestand(
   const rijen = bewaard && normaliseerEenheid(bewaard.eenheid) === eenh
     ? bewaard.rijen.filter(rijHeeftData)
     : []
+  const gebruik: Gebruik = bewaard?.gebruik ?? 'netto'
   if (rijen.length > 0) {
-    const meting = totaalMeting(rijen, eenh)
+    const meting = totaalMeting(rijen, eenh, gebruik)
     const afwijking = Math.abs(meting - hoeveelheid) >= MARGE ? { meting, calculatie: hoeveelheid } : null
-    return { rijen: [...rijen, legeRij()], afwijking }
+    return { rijen: [...rijen, legeRij()], gebruik, afwijking }
   }
   return {
     rijen: hoeveelheid > 0 ? [prefillRij(hoeveelheid, eenh), legeRij()] : [legeRij()],
+    gebruik,
     afwijking: null,
   }
 }
 
 /** Wat de regel bewaart: alleen rijen met inhoud. */
-export function maakMeting(rijen: MiniMaatrij[], eenheid: string, nu = new Date().toISOString()): MiniMeting {
-  return { eenheid, rijen: rijen.filter(rijHeeftData), gemeten_op: nu }
+export function maakMeting(
+  rijen: MiniMaatrij[], eenheid: string, gebruik: Gebruik = 'netto', nu = new Date().toISOString(),
+): MiniMeting {
+  return { eenheid, rijen: rijen.filter(rijHeeftData), gemeten_op: nu, gebruik }
 }

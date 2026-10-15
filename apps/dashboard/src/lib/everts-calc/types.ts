@@ -311,6 +311,8 @@ export interface MiniMaatrij {
   dim2: number
   dim3: number
   factor: number
+  /** Aftrekregel: telt negatief mee in het netto totaal (bv. ramen uit een gevelvlak). */
+  aftrek?: boolean
 }
 
 export interface MiniMeting {
@@ -318,6 +320,9 @@ export interface MiniMeting {
   eenheid: string
   rijen: MiniMaatrij[]
   gemeten_op: string
+  /** Welk totaal deze regel gebruikt als er aftrekregels zijn. Steiger: bruto; reinigen,
+   *  voegen: netto. Zonder aftrekregels zijn ze gelijk. Leeg = netto. */
+  gebruik?: 'bruto' | 'netto'
 }
 
 // ─── Instellingen ─────────────────────────────────────────────────────────────
