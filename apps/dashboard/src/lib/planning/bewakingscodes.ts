@@ -3,6 +3,7 @@ import type { AthenaControlPayload } from '@/lib/bouw7/snapshot-bronnen'
 import type { Bouw7CostTypeId } from '@/lib/bouw7/client'
 import { leesEigenBewakingscodes } from '@/lib/dossiers/eigen-bewakingscodes'
 import { isCorrectieCode } from '@/components/dossiers/types'
+import { splitsKostengroep } from '@/lib/dossiers/uren-bewaking-wb-bereken'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { createAdminClient } from '@everts/database/server'
 
@@ -77,21 +78,6 @@ const HOOFDSTUK_EVA: Record<'werkbegroting' | 'stelpost' | 'meerwerk' | 'regie',
  *  zijn in Bouw7 verschillende codes en blijven hier dus apart staan. */
 function identiteit(code: string, naam: string | null): string {
   return `${code.toLowerCase()}|${(naam ?? '').trim().toLowerCase()}`
-}
-
-/**
- * De werkbegroting bewaart code én omschrijving in één kostengroep-veld: `"01.A — Peuterhof"`.
- *
- * Splitsen op het eerste scheidingsteken, en de rest **letterlijk** laten staan. Wie op álle
- * scheidingstekens splitst en weer aaneenrijgt, herschrijft een streepje in de omschrijving zelf:
- * `"01.A — Peuterhof - Dobbelaan 9"` werd dan `"Peuterhof — Dobbelaan 9"`, en die code viel niet
- * meer samen met dezelfde code uit Bouw7 — de kiezer toonde hem twee keer.
- */
-function splitsKostengroep(kostengroep: string): { code: string; naam: string | null } {
-  const heel = kostengroep.trim()
-  const m = /^(.*?)\s[—-]\s(.*)$/.exec(heel)
-  if (!m) return { code: heel, naam: null }
-  return { code: m[1].trim(), naam: m[2].trim() || null }
 }
 
 /** Getal uit een Bouw7-veld dat zowel string als number kan zijn; onleesbaar telt als 0. */
