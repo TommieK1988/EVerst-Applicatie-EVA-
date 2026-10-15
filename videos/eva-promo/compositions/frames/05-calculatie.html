@@ -40,16 +40,31 @@
 #f05-calculatie .mono { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
 
 
-#f05-calculatie .window { left: 96px; top: 250px; width: 1728px; height: 870px; }
-#f05-calculatie .shot img { width: 1728px; }
-#f05-calculatie .badge { left: 1290px; top: 150px; }
+#f05-calculatie .window { left: 96px; top: 250px; width: 1240px; height: 870px; }
+#f05-calculatie .shot img { width: 1728px !important; }
+#f05-calculatie .pb { position: absolute; left: 1384px; top: 250px; width: 440px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 30px 60px -28px rgba(16,40,28,.3); overflow: hidden; }
+#f05-calculatie .pb .h { padding: 24px 24px 12px; } #f05-calculatie .pb h4 { font-size: 28px; font-weight: 800; }
+#f05-calculatie .pb .tabs { display: flex; gap: 8px; padding: 0 24px 16px; border-bottom: 1px solid #e3e8ea; }
+#f05-calculatie .pb .tabs span { font-size: 17px; font-weight: 700; padding: 8px 14px; border-radius: 999px; color: #6b757c; background: #f1f4f5; }
+#f05-calculatie .pb .tabs span.on { background: #009439; color: #fff; }
+#f05-calculatie .pb .r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid #f1f4f5; font-size: 19px; font-weight: 600; }
+#f05-calculatie .pb .r small { display: block; font-size: 15px; color: #6b757c; font-weight: 500; margin-top: 2px; }
+#f05-calculatie .pb .r .mono { font-size: 19px; color: #0a5e28; white-space: nowrap; }
 
       </style>
       <div id="f05-calculatie" data-composition-id="f05-calculatie" data-width="1920" data-height="1080">
 <div class="bg-light"></div>
 <div class="copy"><div class="eyebrow">Meetstaat &amp; calculatie</div><div class="head">Van meetstaat naar offerte</div></div>
-<div class="badge"><span class="dot">✓</span>Controle vóór de offerte</div>
+
 <div class="window"><div class="bar"><i></i><i></i><i></i><span>Calculatie · Meetstaat opname gevels</span></div><div class="shot"><img src="assets/img/pv-meetstaat.png" alt="" /></div></div>
+<div class="pb"><div class="h"><div class="eyebrow" style="font-size:15px">Prijzenboek</div><h4>Normen &amp; prijzen</h4></div>
+<div class="tabs"><span>Recepten</span><span class="on">Schilderwerk</span><span>Materialen</span></div>
+<div class="r"><div>Kozijn buiten, 3-laags<small>norm 0,42 u/m¹</small></div><span class="mono">€ 18,40 /m¹</span></div>
+<div class="r"><div>Boeiboord bijwerken<small>norm 0,30 u/m¹</small></div><span class="mono">€ 12,95 /m¹</span></div>
+<div class="r"><div>Voordeur lakken<small>norm 2,10 u/st</small></div><span class="mono">€ 96,50 /st</span></div>
+<div class="r"><div>Gevelbetimmering<small>norm 0,25 u/m²</small></div><span class="mono">€ 14,20 /m²</span></div>
+<div class="r"><div>Houtrot, kleine reparatie<small>recept HR-02</small></div><span class="mono">€ 64,00 /st</span></div>
+</div>
       </div>
       <script>
         (function () {

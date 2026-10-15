@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+@font-face { font-family: Montserrat; font-weight: 500; src: url(assets/fonts/montserrat-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: Montserrat; font-weight: 600; src: url(assets/fonts/montserrat-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: Montserrat; font-weight: 700; src: url(assets/fonts/montserrat-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: Montserrat; font-weight: 800; src: url(assets/fonts/montserrat-latin-800-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url(assets/fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2"); }
+#f06-offerte { position: absolute; inset: 0; overflow: hidden; font-family: Montserrat, sans-serif; color: #161b20; }
+#f06-offerte .bg-light { position: absolute; inset: 0; background: radial-gradient(1200px 700px at 80% 20%, #ecfaf0 0%, #f8fafa 60%, #f1f4f5 100%); }
+#f06-offerte .bg-brand { position: absolute; inset: 0; background: #054f2e url(assets/img/polygon-bg.png) center / cover no-repeat; }
+#f06-offerte .bg-brand::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(1,58,32,.78) 0%, rgba(1,58,32,.35) 55%, rgba(1,58,32,.1) 100%); }
+#f06-offerte .eyebrow { font-size: 22px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #0a5e28; }
+#f06-offerte .on-brand .eyebrow { color: #a5e4ba; }
+#f06-offerte .head { font-size: 64px; font-weight: 800; letter-spacing: -0.022em; line-height: 1.08; color: #161b20; }
+#f06-offerte .on-brand .head { color: #fff; }
+#f06-offerte .sub { font-size: 28px; font-weight: 500; line-height: 1.4; color: #364048; }
+#f06-offerte .on-brand .sub { color: #d2f2dd; }
+#f06-offerte .copy { position: absolute; left: 96px; top: 88px; width: 1100px; display: flex; flex-direction: column; gap: 16px; }
+#f06-offerte .window { position: absolute; background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid #e3e8ea;
+  box-shadow: 0 40px 80px -24px rgba(16,40,28,.28), 0 12px 24px -12px rgba(16,40,28,.18); }
+#f06-offerte .window .bar { height: 40px; background: #f1f4f5; border-bottom: 1px solid #e3e8ea; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+#f06-offerte .window .bar i { width: 12px; height: 12px; border-radius: 50%; background: #d0d6d9; display: block; }
+#f06-offerte .window .bar span { margin-left: 16px; font-size: 15px; font-weight: 600; color: #6b757c; }
+#f06-offerte .window .shot { position: absolute; left: 0; top: 40px; right: 0; bottom: 0; overflow: hidden; }
+#f06-offerte .window .shot img { position: absolute; left: 0; top: 0; width: 100%; display: block; }
+#f06-offerte .phone { position: absolute; width: 400px; height: 840px; border-radius: 56px; background: #11181c; padding: 14px;
+  box-shadow: 0 50px 90px -30px rgba(0,0,0,.45), 0 0 0 2px #2a3338 inset; }
+#f06-offerte .phone .screen { width: 100%; height: 100%; border-radius: 44px; overflow: hidden; position: relative; background: #fff; }
+#f06-offerte .phone .screen img { width: 100%; display: block; }
+#f06-offerte .phone .notch { position: absolute; top: 26px; left: 50%; margin-left: -60px; width: 120px; height: 30px; border-radius: 16px; background: #11181c; z-index: 2; }
+#f06-offerte .badge { position: absolute; display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-radius: 999px; background: #fff;
+  border: 1px solid #d2f2dd; box-shadow: 0 16px 40px -16px rgba(0,80,40,.35); font-size: 24px; font-weight: 700; color: #0a5e28; }
+#f06-offerte .badge .dot { width: 32px; height: 32px; border-radius: 50%; background: #009439; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+#f06-offerte .chip { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 999px; background: #ecfaf0; color: #0a5e28; font-size: 22px; font-weight: 700; }
+#f06-offerte .card { background: #fff; border: 1px solid #e3e8ea; border-radius: 10px; }
+#f06-offerte .mono { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+
+
+#f06-offerte .doc { position: absolute; left: 96px; top: 250px; width: 1080px; height: 860px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; box-shadow: 0 40px 80px -24px rgba(16,40,28,.28); padding: 56px 72px; }
+#f06-offerte .doc .hd { display: flex; justify-content: space-between; align-items: flex-start; }
+#f06-offerte .doc .hd img { width: 260px; border-radius: 6px; }
+#f06-offerte .doc .hd .r { text-align: right; font-size: 18px; color: #6b757c; font-weight: 500; line-height: 1.6; }
+#f06-offerte .doc h2 { font-size: 40px; font-weight: 800; margin-top: 40px; } #f06-offerte .doc .to { font-size: 20px; color: #364048; margin-top: 8px; font-weight: 500; }
+#f06-offerte .doc table { width: 100%; border-collapse: collapse; margin-top: 32px; font-size: 20px; }
+#f06-offerte .doc th { text-align: left; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #6b757c; padding: 10px 0; border-bottom: 2px solid #e3e8ea; }
+#f06-offerte .doc td { padding: 16px 0; border-bottom: 1px solid #f1f4f5; font-weight: 600; } #f06-offerte .doc td.n { text-align: right; }
+#f06-offerte .doc tr.tot td { border-bottom: none; font-size: 26px; font-weight: 800; color: #0a5e28; padding-top: 24px; }
+#f06-offerte .side { position: absolute; left: 1240px; top: 250px; width: 584px; display: flex; flex-direction: column; gap: 20px; }
+#f06-offerte .step { display: flex; align-items: center; gap: 20px; padding: 24px 28px; border-radius: 14px; background: #fff; border: 1px solid #e3e8ea; font-size: 26px; font-weight: 700; }
+#f06-offerte .step .d { width: 44px; height: 44px; border-radius: 50%; background: #009439; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; flex: none; }
+#f06-offerte .step small { display: block; font-size: 18px; font-weight: 500; color: #6b757c; margin-top: 2px; }
+#f06-offerte .send { margin-top: 12px; padding: 28px; border-radius: 14px; background: #009439; color: #fff; text-align: center; font-size: 30px; font-weight: 800; box-shadow: 0 20px 40px -16px rgba(0,148,57,.6); }
+#f06-offerte .badge { left: 1180px; top: 150px; }
+
+      </style>
+      <div id="f06-offerte" data-composition-id="f06-offerte" data-width="1920" data-height="1080">
+<div class="bg-light"></div>
+<div class="copy"><div class="eyebrow">Offerte</div><div class="head">Gecontroleerd de deur uit</div></div>
+<div class="badge"><span class="dot">✓</span>Controle vóór de offerte</div>
+<div class="doc">
+  <div class="hd"><img src="assets/img/everts-logo-1078.png" alt="" /><div class="r">Offerte 2026-0412<br />15 oktober 2026<br />Geldig tot 15 november 2026</div></div>
+  <h2>Schilderwerk en gevelonderhoud</h2><div class="to">VvE Laan van Meervoort 412–480, Den Haag</div>
+  <table><tr><th>Omschrijving</th><th class="n" style="text-align:right">Bedrag</th></tr>
+  <tr><td>Kozijnen buiten schilderen, 3-laags systeem</td><td class="n mono">€ 48.250,40</td></tr>
+  <tr><td>Houtrotherstel volgens opname</td><td class="n mono">€ 21.640,00</td></tr>
+  <tr><td>Gevelbetimmering en boeiboorden</td><td class="n mono">€ 32.985,20</td></tr>
+  <tr><td>Steigerwerk en bouwplaatsvoorzieningen</td><td class="n mono">€ 17.750,00</td></tr>
+  <tr class="tot"><td>Totaal excl. btw</td><td class="n mono">€ 120.625,60</td></tr></table>
+</div>
+<div class="side">
+  <div class="step"><span class="d">✓</span><div>Calculatie gecontroleerd<small>Geen open punten</small></div></div>
+  <div class="step"><span class="d">✓</span><div>Goedgekeurd<small>door de projectleider</small></div></div>
+  <div class="step"><span class="d" style="background:#2e90fa">→</span><div>Verzonden<small>dossier schuift door naar Offertes</small></div></div>
+  <div class="send">Offerte verzenden</div>
+</div>
+      </div>
+      <script>
+        (function () {
+          const R = '#f06-offerte';
+          const q = (s) => R + ' ' + s;
+          const tl = gsap.timeline({ paused: true });
+
+          window.__timelines["f06-offerte"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

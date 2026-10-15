@@ -1,6 +1,6 @@
 // Schrijft index.html: monteert elke frame-compositie op zijn startmoment (schetsfase).
 import { writeFileSync } from 'node:fs';
-const frames = [['01-hook',4],['02-intro',6],['03-postvak',9],['04-dossier',7],['05-calculatie',9],['06-planning',7],['07-mobiel',11],['08-kwaliteit',8],['09-financieel',9],['10-meer',8],['11-outro',6]];
+const frames = [['01-hook',4],['02-intro',6],['03-postvak',9],['04-dossier',8],['05-calculatie',9],['06-offerte',9],['07-planning',7],['08-mobiel',11],['09-houtrot',9],['10-kwaliteit',8],['11-enquete',9],['12-portaal',7],['13-financieel',9],['14-servicedesk',9],['15-meer',8],['16-outro',6]];
 let t = 0; const hosts = [];
 for (const [f, d] of frames) {
   hosts.push(`      <div id="f${f}" data-composition-id="f${f}" data-composition-src="compositions/frames/${f}.html" data-start="${t}" data-duration="${d}" data-track-index="1" data-width="1920" data-height="1080"></div>`);

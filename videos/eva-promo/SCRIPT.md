@@ -1,84 +1,103 @@
 # SCRIPT — eva-promo
 
-**Voice:** nog te bepalen — Google Cloud TTS nl-NL (Chirp 3 HD) of eigen opname via Descript
-**Voice settings:** spreektempo normaal (1.0), Nederlands (nl-NL)
+**Voice:** Google Cloud TTS nl-NL (Chirp 3 HD) — stem nog te kiezen
+**Voice settings:** spreektempo 1.0
 **Voice direction:** Rustig, helder en warm. Collega tegen collega, geen reclamestem.
 
 ---
 
-## Line 1 — Hook (Frame 1)
+## Line 1 — Elke klus begint met een mail (Frame 1)
 
 **Time:** 0.0 – 4.0s
-**Delivery:** Rustig, laat een korte pauze na "mail".
 
     Elke klus begint met een mail.
 
 ## Line 2 — Eén systeem (Frame 2)
 
 **Time:** 4.0 – 10.0s
-**Delivery:** Kleine nadruk op "één systeem" en "én".
 
     Met EVA doe je de rest in één systeem — op kantoor, én op de bouwplaats.
 
 ## Line 3 — Postvak (Frame 3)
 
 **Time:** 10.0 – 19.0s
-**Delivery:** Opsommend, "Eén klik" met een korte pauze erna.
 
     In het postvak leest EVA de aanvraag mee. Opdrachtgever, werkadres en contactpersoon staan al klaar. Eén klik — en het dossier staat.
 
-## Line 4 — Dossier (Frame 4)
+## Line 4 — Dossier en object (Frame 4)
 
-**Time:** 19.0 – 26.0s
-**Delivery:** Vlot opsommend.
+**Time:** 19.0 – 27.0s
 
-    Alles over de klus staat in één dossier: opname, calculatie en planning, werkplan, uren en inkoop.
+    Elke klus krijgt een dossier, gekoppeld aan het object: de VvE, het complex of het pand.
 
-## Line 5 — Calculatie (Frame 5)
+## Line 5 — Meetstaat en prijzenboek (Frame 5)
 
-**Time:** 26.0 – 35.0s
-**Delivery:** Nadruk op "vóórdat".
+**Time:** 27.0 – 36.0s
 
-    De opname wordt een meetstaat, de meetstaat een calculatie. En EVA controleert alles, vóórdat de offerte de deur uitgaat.
+    De opname wordt een meetstaat, de meetstaat een calculatie. Met het prijzenboek: vaste recepten, schilderbehandelingen en materiaalprijzen.
 
-## Line 6 — Planning (Frame 6)
+## Line 6 — Offerte (Frame 6)
 
-**Time:** 35.0 – 42.0s
-**Delivery:** "Gegund?" als vraag, dan luchtig.
+**Time:** 36.0 – 45.0s
+
+    EVA controleert de calculatie. Daarna laat je de offerte goedkeuren en verstuur je hem — en het dossier schuift vanzelf door.
+
+## Line 7 — Planning (Frame 7)
+
+**Time:** 45.0 – 52.0s
 
     Gegund? Sleep het werk op het planbord, en verdeel het over je mensen.
 
-## Line 7 — Mobiel (Frame 7)
+## Line 8 — EVA Mobiel (Frame 8)
 
-**Time:** 42.0 – 53.0s
-**Delivery:** Warm; de drie talen helder uitspreken.
+**Time:** 52.0 – 63.0s
 
     De vakman ziet het meteen op zijn telefoon. Inklokken, uren schrijven, foto's maken en navigeren naar het werk. In het Nederlands, Pools of Tamil.
 
-## Line 8 — Kwaliteit (Frame 8)
+## Line 9 — Houtrotregistratie (Frame 9)
 
-**Time:** 53.0 – 61.0s
-**Delivery:** Zeker, geruststellend.
+**Time:** 63.0 – 72.0s
+
+    Houtrot? Kies de locatie, voeg de werkzaamheden toe, en maak een voor- en na-foto. Kantoor ziet meteen het reparatietotaal.
+
+## Line 10 — Veiligheid en kwaliteit (Frame 10)
+
+**Time:** 72.0 – 80.0s
 
     Toolboxmeetings, kwaliteitsinspecties en het opleverrapport: ter plekke ingevuld, met foto's, en meteen vastgelegd.
 
-## Line 9 — Financieel (Frame 9)
+## Line 11 — Bewonersenquête (Frame 11)
 
-**Time:** 61.0 – 70.0s
-**Delivery:** "Daarna sluit de cirkel" als scharnier; daarna opsommend.
+**Time:** 80.0 – 89.0s
+
+    Na de oplevering vullen bewoners een korte enquête in. EVA vat de cijfers samen, en aandachtspunten komen met foto bij de projectleider.
+
+## Line 12 — Klantportaal (Frame 12)
+
+**Time:** 89.0 – 96.0s
+
+    De opdrachtgever kijkt mee in het klantportaal: planning, foto's, documenten en facturen.
+
+## Line 13 — Financieel (Frame 13)
+
+**Time:** 96.0 – 105.0s
 
     Daarna sluit de cirkel. Termijnen, meerwerk en facturen. Inkoopfacturen goedkeuren. En stuurcijfers voor het management.
 
-## Line 10 — Meer (Frame 10)
+## Line 14 — Servicedesk (Frame 14)
 
-**Time:** 70.0 – 78.0s
-**Delivery:** Vlotter tempo; "Vraag het EVA" met een glimlach.
+**Time:** 105.0 – 114.0s
+
+    Kleine klussen en mutaties lopen via de servicedesk: alle bonnen op één bord, van nieuw tot gereed — en samen op één verzamelfactuur.
+
+## Line 15 — En nog veel meer (Frame 15)
+
+**Time:** 114.0 – 122.0s
 
     En ook het wagenpark, het materieel, je acties en de bedrijfsagenda. Heb je een vraag? Vraag het EVA.
 
-## Line 11 — Outro (Frame 11)
+## Line 16 — EVA (Frame 16)
 
-**Time:** 78.0 – 84.0s
-**Delivery:** Langzaam, afsluitend.
+**Time:** 122.0 – 128.0s
 
     EVA. Eén systeem — van eerste mail tot laatste factuur.
