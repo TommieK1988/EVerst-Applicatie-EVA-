@@ -23,6 +23,7 @@ export type ControleSoort =
   | 'stelpost'
   | 'meetstaat_zonder_behandeling'
   | 'regel_zonder_prijs'
+  | 'gemarkeerd'
 
 export interface ControlePunt {
   /** Uniek per punt; ook de sleutel waaronder "Klopt" wordt bewaard. */
@@ -48,6 +49,7 @@ export const SOORT_LABEL: Record<ControleSoort, string> = {
   stelpost:                     'Stelposten',
   meetstaat_zonder_behandeling: 'Schilderwerk zonder behandeling',
   regel_zonder_prijs:           'Regels zonder prijs',
+  gemarkeerd:                   'Gemarkeerde regels',
 }
 
 export interface ControleInvoer {
@@ -75,12 +77,13 @@ export function controleerCalculatie(invoer: ControleInvoer): ControlePunt[] {
   }
 
   const punten: ControlePunt[] = []
-  const nakijken = (soort: ControleSoort, regel: Calculatieregel, bevestigbaar = true) => {
+  const nakijken = (soort: ControleSoort, regel: Calculatieregel, bevestigbaar = true, toelichting?: string) => {
     const sleutel = `${soort}:${regel.id}`
+    const groep = groepNaam.get(regel.groep_id)
     punten.push({
       sleutel, soort, niveau: 'nakijken', bevestigbaar,
       titel: regel.omschrijving || '(zonder omschrijving)',
-      detail: groepNaam.get(regel.groep_id),
+      detail: toelichting ? [groep, toelichting].filter(Boolean).join(' · ') : groep,
       regelId: regel.id,
       bevestigd: bevestigbaar && bevestigd.has(sleutel),
     })
@@ -104,6 +107,10 @@ export function controleerCalculatie(invoer: ControleInvoer): ControlePunt[] {
     }
 
     if (regel.is_stelpost) nakijken('stelpost', regel)
+
+    // Een markering (⚑) betekent "hier moet nog iemand naar kijken". Niet weg te klikken
+    // met Klopt: de oplossing is de markering opheffen, anders blijft de regel oranje.
+    if (regel.gemarkeerd) nakijken('gemarkeerd', regel, false, regel.opmerking?.split('\n')[0].trim() || undefined)
 
     const uitMeetstaat = !!regel.meetstaat_aggregaat_id || !!regel.bestekcode
     if (uitMeetstaat && !regel.schilderbehandeling_id && !regel.schilderbehandeling) {
