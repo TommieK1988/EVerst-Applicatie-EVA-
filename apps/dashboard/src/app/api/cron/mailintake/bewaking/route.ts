@@ -87,14 +87,19 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     rapport.nabehandelingOpgegeven = (opgegeven ?? []).length
 
     if ((opgegeven ?? []).length) {
-      const perPostbus = new Set((opgegeven ?? []).map((o: any) => o.postbus_id))
-      for (const pid of perPostbus) {
+      // Per postbus de eerste foutmelding meegeven: "map weg", "geen machtiging"
+      // en "Graph onbereikbaar" vragen elk iets anders van de beheerder.
+      const perPostbus = new Map<string, string | null>()
+      for (const o of opgegeven ?? []) {
+        if (!perPostbus.has(o.postbus_id)) perPostbus.set(o.postbus_id, o.outlook_fout)
+      }
+      for (const [pid, fout] of perPostbus) {
         for (const user of await ontvangersVoor(pid as string)) {
           await maakNotificatie({
             user_id: user,
             type: 'mailintake_mislukt',
             titel: 'Mailintake: berichten konden niet worden verplaatst',
-            body: 'Controleer of de map "Verwerkt door EVA" nog bestaat en of de machtiging nog geldt.',
+            body: fout ? `Melding van Outlook: ${fout.slice(0, 200)}` : 'Bekijk de achterstand bij de instellingen.',
             url: '/instellingen/mailintake',
           })
         }

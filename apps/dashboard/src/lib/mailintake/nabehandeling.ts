@@ -22,6 +22,8 @@
 import 'server-only'
 import { createAdminClient } from '@everts/database/server'
 
+import { GraphError } from '@/lib/o365/graph'
+
 import {
   markeerBericht, verplaatsBericht, zorgVoorVerwerktMap, zorgVoorCategorieen,
   zoekBerichtOpInternetId,
@@ -86,6 +88,17 @@ export function bepaalNabehandeling(
 export function isMenselijkBesluit(besluit: BerichtBesluit | null): boolean {
   return besluit != null && besluit !== 'geen_aanvraag'
 }
+
+/**
+ * Het bericht staat niet meer in de postbus: ook op `internetMessageId` niet te
+ * vinden. Een collega heeft hem definitief verwijderd of naar een andere postbus
+ * of het archief gesleept. Dan valt er niets meer te categoriseren of te
+ * verplaatsen, en is opnieuw proberen zinloos.
+ */
+export const VERDWENEN_MELDING =
+  'Staat niet meer in de postbus (verwijderd of elders heen verplaatst); er valt niets meer te doen.'
+
+class BerichtVerdwenen extends Error {}
 
 export interface NabehandelResultaat {
   gedaan: boolean
@@ -158,12 +171,7 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
       return { gedaan: false, overgeslagen: false, fout: 'Geen Graph-id bekend.', nieuwGraphId: null }
     }
     graphId = await zoekBerichtOpInternetId(postbus.adres, bericht.internet_message_id)
-    if (!graphId) {
-      await supabase.from('mailintake_berichten')
-        .update({ outlook_nabehandeling: 'mislukt', outlook_fout: 'Het bericht is niet meer in de postbus te vinden.' })
-        .eq('id', berichtId)
-      return { gedaan: false, overgeslagen: false, fout: 'Bericht niet meer gevonden in de postbus.', nieuwGraphId: null }
-    }
+    if (!graphId) return markeerVerdwenen(berichtId)
   }
 
   const pogingen = (bericht.outlook_pogingen ?? 0) + 1
@@ -176,6 +184,8 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
     } catch (e) {
       if (!bericht.internet_message_id) throw e
       const vers = await zoekBerichtOpInternetId(postbus.adres, bericht.internet_message_id)
+      // 404 én nergens meer te vinden: weg, niet kapot. Zie `VERDWENEN_MELDING`.
+      if (!vers && e instanceof GraphError && e.status === 404) throw new BerichtVerdwenen()
       if (!vers || vers === graphId) throw e
       await markeerBericht(postbus.adres, vers, plan.categorieen, plan.gelezen)
       return vers
@@ -216,6 +226,7 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
 
     return { gedaan: true, overgeslagen: false, fout: null, nieuwGraphId: nieuwId }
   } catch (e) {
+    if (e instanceof BerichtVerdwenen) return markeerVerdwenen(berichtId)
     const melding = e instanceof Error ? e.message : String(e)
     await supabase.from('mailintake_berichten').update({
       outlook_nabehandeling: 'mislukt',
@@ -224,6 +235,20 @@ export async function voerNabehandelingUit(berichtId: string): Promise<Nabehande
     }).eq('id', berichtId)
     return { gedaan: false, overgeslagen: false, fout: melding, nieuwGraphId: null }
   }
+}
+
+/**
+ * Een verdwenen bericht krijgt 'nvt', niet 'mislukt'. Met 'mislukt' bleef hij
+ * eeuwig in de achterstand staan en kreeg de beheerder elke dag de melding dat de
+ * map "Verwerkt door EVA" misschien ontbrak -- terwijl de map gewoon werkte en er
+ * alleen een mail ontbrak.
+ */
+async function markeerVerdwenen(berichtId: string): Promise<NabehandelResultaat> {
+  const supabase = createAdminClient()
+  await supabase.from('mailintake_berichten')
+    .update({ outlook_nabehandeling: 'nvt', outlook_fout: VERDWENEN_MELDING })
+    .eq('id', berichtId)
+  return { gedaan: false, overgeslagen: true, fout: null, nieuwGraphId: null }
 }
 
 /**
