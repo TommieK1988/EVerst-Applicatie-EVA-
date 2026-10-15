@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "preferences": {
+    "destination": {
+      "value": "presentation",
+      "confirmed_in": [
+        "eva-promo"
+      ],
+      "updated_at": "2026-10-15T14:16:10.104Z"
+    },
+    "aspect": {
+      "value": "1920x1080",
+      "confirmed_in": [
+        "eva-promo"
+      ],
+      "updated_at": "2026-10-15T14:16:10.171Z"
+    },
+    "language": {
+      "value": "nl",
+      "confirmed_in": [
+        "eva-promo"
+      ],
+      "updated_at": "2026-10-15T14:16:10.223Z"
+    },
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "eva-promo"
+      ],
+      "updated_at": "2026-10-15T14:16:10.276Z"
+    },
+    "storyboard": {
+      "value": "yes",
+      "confirmed_in": [
+        "eva-promo"
+      ],
+      "updated_at": "2026-10-15T14:16:10.334Z"
+    }
+  },
+  "sightings": {}
+}

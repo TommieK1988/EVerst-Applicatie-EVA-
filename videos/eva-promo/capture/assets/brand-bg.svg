@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="base" cx="532" cy="270" r="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7ad038"/>
+      <stop offset="18%"  stop-color="#54c028"/>
+      <stop offset="38%"  stop-color="#30a020"/>
+      <stop offset="58%"  stop-color="#187030"/>
+      <stop offset="78%"  stop-color="#0d5525"/>
+      <stop offset="100%" stop-color="#083818"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Base radial gradient -->
+  <rect width="1400" height="800" fill="url(#base)"/>
+
+  <!-- Polygon facets — opaque fill gives the low-poly look -->
+  <!-- Top strip -->
+  <polygon points="0,0 230,0 140,170 0,185"        fill="#156030"/>
+  <polygon points="230,0 520,0 400,155 140,170"     fill="#2a9028"/>
+  <polygon points="520,0 790,0 660,160 400,155"     fill="#52be28"/>
+  <polygon points="790,0 1080,0 920,175 660,160"    fill="#309025"/>
+  <polygon points="1080,0 1400,0 1400,185 1200,165" fill="#0e5020"/>
+  <polygon points="1080,0 1200,165 920,175"         fill="#1a7028"/>
+
+  <!-- Row 1 → Row 2 -->
+  <polygon points="0,185 140,170 270,355 0,370"     fill="#1e7830"/>
+  <polygon points="140,170 400,155 270,355"         fill="#3aa028"/>
+  <polygon points="400,155 660,160 550,375 270,355" fill="#62c828"/>
+  <polygon points="660,160 920,175 820,360 550,375" fill="#48b020"/>
+  <polygon points="920,175 1200,165 1100,370 820,360" fill="#228030"/>
+  <polygon points="1200,165 1400,185 1400,375 1100,370" fill="#0d5020"/>
+
+  <!-- Row 2 → Row 3 -->
+  <polygon points="0,370 270,355 240,570 0,565"     fill="#1c7530"/>
+  <polygon points="270,355 550,375 510,580 240,570" fill="#3ca028"/>
+  <polygon points="550,375 820,360 770,565 510,580" fill="#46aa20"/>
+  <polygon points="820,360 1100,370 1050,575 770,565" fill="#2e9030"/>
+  <polygon points="1100,370 1400,375 1400,570 1050,575" fill="#0e5020"/>
+
+  <!-- Row 3 → Row 4 (bottom) -->
+  <polygon points="0,565 240,570 320,800 0,800"     fill="#126028"/>
+  <polygon points="240,570 510,580 640,800 320,800" fill="#1e7828"/>
+  <polygon points="510,580 770,565 950,800 640,800" fill="#2a8828"/>
+  <polygon points="770,565 1050,575 1250,800 950,800" fill="#1a6828"/>
+  <polygon points="1050,575 1400,570 1400,800 1250,800" fill="#0a3e18"/>
+
+  <!-- Extra dark corner overlays to deepen corners -->
+  <polygon points="0,0 140,0 0,180"   fill="#083c18" opacity="0.35"/>
+  <polygon points="1260,0 1400,0 1400,175" fill="#062e14" opacity="0.4"/>
+  <polygon points="0,650 0,800 200,800"  fill="#062e14" opacity="0.35"/>
+  <polygon points="1250,720 1400,640 1400,800" fill="#051e0e" opacity="0.4"/>
+
+  <!-- Extra bright highlight on the center-left peak -->
+  <polygon points="380,120 620,100 530,310 300,285" fill="#88d840" opacity="0.18"/>
+
+  <!-- Gold / yellow-beige stroke lines between facets -->
+  <g stroke="#c8a020" stroke-width="1.4" fill="none" opacity="0.32">
+    <!-- Horizontal ridge lines -->
+    <polyline points="0,185 140,170 400,155 660,160 920,175 1200,165 1400,185"/>
+    <polyline points="0,370 270,355 550,375 820,360 1100,370 1400,375"/>
+    <polyline points="0,565 240,570 510,580 770,565 1050,575 1400,570"/>
+    <!-- Vertical / diagonal ridge lines -->
+    <line x1="140"  y1="170"  x2="270"  y2="355"/>
+    <line x1="400"  y1="155"  x2="270"  y2="355"/>
+    <line x1="400"  y1="155"  x2="550"  y2="375"/>
+    <line x1="660"  y1="160"  x2="550"  y2="375"/>
+    <line x1="660"  y1="160"  x2="820"  y2="360"/>
+    <line x1="920"  y1="175"  x2="820"  y2="360"/>
+    <line x1="920"  y1="175"  x2="1100" y2="370"/>
+    <line x1="1200" y1="165"  x2="1100" y2="370"/>
+    <line x1="270"  y1="355"  x2="240"  y2="570"/>
+    <line x1="550"  y1="375"  x2="510"  y2="580"/>
+    <line x1="820"  y1="360"  x2="770"  y2="565"/>
+    <line x1="1100" y1="370"  x2="1050" y2="575"/>
+    <line x1="240"  y1="570"  x2="320"  y2="800"/>
+    <line x1="510"  y1="580"  x2="640"  y2="800"/>
+    <line x1="770"  y1="565"  x2="950"  y2="800"/>
+    <line x1="1050" y1="575"  x2="1250" y2="800"/>
+    <!-- Extra inner diagonals for more facets -->
+    <line x1="0"    y1="370"  x2="140"  y2="170"/>
+    <line x1="1400" y1="375"  x2="1200" y2="165"/>
+    <line x1="0"    y1="565"  x2="0"    y2="370"/>
+    <line x1="1400" y1="570"  x2="1400" y2="375"/>
+    <line x1="320"  y1="800"  x2="640"  y2="800"/>
+    <line x1="640"  y1="800"  x2="950"  y2="800"/>
+    <line x1="950"  y1="800"  x2="1250" y2="800"/>
+    <!-- Additional inner lines -->
+    <line x1="400"  y1="155"  x2="140"  y2="170"/>
+    <line x1="660"  y1="160"  x2="400"  y2="155"/>
+    <line x1="920"  y1="175"  x2="660"  y2="160"/>
+    <line x1="270"  y1="355"  x2="550"  y2="375"/>
+    <line x1="550"  y1="375"  x2="820"  y2="360"/>
+    <line x1="820"  y1="360"  x2="1100" y2="370"/>
+    <line x1="240"  y1="570"  x2="510"  y2="580"/>
+    <line x1="510"  y1="580"  x2="770"  y2="565"/>
+    <line x1="770"  y1="565"  x2="1050" y2="575"/>
+  </g>
+</svg>
