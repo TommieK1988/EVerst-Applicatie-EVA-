@@ -654,6 +654,18 @@ dezelfde conversatie. Dat kan niet: een antwoord in de keten hangen kan alleen a
 oorspronkelijke bericht in jóuw mailbox staat, en het staat in de gedeelde postbus. Het wordt
 dus een nieuw bericht met "RE:" in het onderwerp.
 
+## 8c. Koppelen aan een bestaand dossier
+
+Koppel je een bericht aan een dossier dat al bestaat — gewoon, als meerwerk of bij het
+winnen van een offerte — dan krijgt de **projectleider van dat dossier een melding**: van wie
+de mail komt, het onderwerp, en een link naar het dossier. Zonder die melding verdween de
+mail stil uit het Postvak, en merkte wie het dossier draait er pas iets van als hij toevallig
+in de dossiermap keek.
+
+De link gaat naar het dossier, niet naar het bericht in de Mailintake: niet elke
+projectleider heeft rechten op die module. Wie zelf koppelt krijgt geen melding, en heeft het
+dossier nog geen projectleider, dan gaat er niets uit.
+
 ---
 
 ## 9. Wat er in Outlook gebeurt

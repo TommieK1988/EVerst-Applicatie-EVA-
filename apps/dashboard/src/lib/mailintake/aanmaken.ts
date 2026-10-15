@@ -586,6 +586,11 @@ export async function koppelAanDossier(
   // alleen in de mailbox. Dat is juist bij deze route de reden dat iemand koppelt.
   await zetBijlagenInSharePoint(berichtId, dossierId).catch(() => {})
 
+  // Anders verdwijnt de mail stil uit het Postvak zonder dat wie het dossier draait
+  // het merkt.
+  const { meldKoppelingAanProjectleider } = await import('./melden-koppeling')
+  await meldKoppelingAanProjectleider(berichtId, dossierId, medewerkerId)
+
   await planNabehandeling(berichtId)
   await voerNabehandelingUit(berichtId).catch(() => {})
 }
