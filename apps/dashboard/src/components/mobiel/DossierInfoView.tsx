@@ -1,5 +1,6 @@
 import React from 'react'
 import StatusBadge from './StatusBadge'
+import NavigeerLink from './NavigeerLink'
 import { getAppVertaler } from '@/i18n/server'
 
 /**
@@ -45,8 +46,6 @@ export type ExtraWerkadresInfo = {
   contact_naam: string | null
   contact_telefoon: string | null
 }
-
-const navigeerLink = (adres: string) => `https://maps.google.com/?q=${encodeURIComponent(adres)}`
 
 /** Groot, goed leesbaar feit. */
 function Feit({ label, waarde }: { label: string; waarde: React.ReactNode }) {
@@ -115,21 +114,21 @@ export default async function DossierInfoView({
         >
           {t('info.bellen')}
         </a>
-        <a
-          href={info.werkadres ? navigeerLink(info.werkadres) : undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-disabled={!info.werkadres}
-          style={{
-            ...knop,
-            background: info.werkadres ? '#fff' : '#f4f6f7',
-            color: info.werkadres ? '#009439' : '#9aa4ab',
-            border: `1px solid ${info.werkadres ? '#009439' : '#e3e8ea'}`,
-            pointerEvents: info.werkadres ? 'auto' : 'none',
-          }}
-        >
-          {t('info.navigeren')}
-        </a>
+        {info.werkadres ? (
+          <NavigeerLink
+            adres={info.werkadres}
+            style={{ ...knop, background: '#fff', color: '#009439', border: '1px solid #009439' }}
+          >
+            {t('info.navigeren')}
+          </NavigeerLink>
+        ) : (
+          <a
+            aria-disabled
+            style={{ ...knop, background: '#f4f6f7', color: '#9aa4ab', border: '1px solid #e3e8ea', pointerEvents: 'none' }}
+          >
+            {t('info.navigeren')}
+          </a>
+        )}
       </div>
 
       <div style={kaart}>
@@ -159,14 +158,12 @@ export default async function DossierInfoView({
               />
             )}
             {w.adres && (
-              <a
-                href={navigeerLink(w.adres)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <NavigeerLink
+                adres={w.adres}
                 style={{ ...knop, minHeight: 48, background: '#fff', color: '#009439', border: '1px solid #009439' }}
               >
                 {t('info.navigeren')}
-              </a>
+              </NavigeerLink>
             )}
           </div>
         )

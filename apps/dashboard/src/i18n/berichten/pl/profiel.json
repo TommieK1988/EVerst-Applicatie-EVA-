@@ -3,7 +3,7 @@
   "geenKoppeling": "To konto nie jest powiązane z żadnym pracownikiem.",
   "onbekend": "Nieznany",
   "instellingen": "Ustawienia",
-  "instellingenSub": "Uprawnienia, powiadomienia i lokalizacja",
+  "instellingenSub": "Uprawnienia, powiadomienia, lokalizacja i nawigacja",
   "handleiding": "Instrukcja",
   "handleidingSub": "Jak działa EVA na twoim telefonie",
   "uitloggen": "Wyloguj się",
@@ -100,5 +100,9 @@
   "locatieAuto": {
     "titel": "Otwieraj projekt na miejscu",
     "uitleg": "Po uruchomieniu aplikacji automatycznie otwiera projekt przypisany do twojej lokalizacji."
+  },
+  "navigatieApp": {
+    "titel": "Aplikacja do nawigacji",
+    "uitleg": "Która aplikacja otwiera się, gdy klikniesz Nawiguj. Jeśli nie masz jej w telefonie, otworzy się strona internetowa."
   }
 }

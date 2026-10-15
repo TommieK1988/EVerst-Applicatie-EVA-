@@ -7,14 +7,14 @@
  * zonder gegeven wordt uitgegrijsd in plaats van weggelaten: een rij die van plek verspringt
  * afhankelijk van wat er ingevuld is, tik je op de tast mis.
  *
- * `tel:` en `mailto:` laat het toestel zelf afhandelen. Voor de route gebruiken we een
- * gewone maps-URL met het adres als zoekterm; dat opent op iOS en Android de kaart-app en
- * werkt ook in een browser.
+ * `tel:` en `mailto:` laat het toestel zelf afhandelen. De route opent in de navigatie-app
+ * die op dit toestel gekozen is (Profiel → Instellingen, standaard Google Maps).
  */
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Mail, MapPin, Phone } from 'lucide-react'
 import { GRIJS, OPPERVLAK, RAND, TEKST } from './stijl'
+import { leesNavigatieApp, navigatieLink, STANDAARD_NAVIGATIE_APP, type NavigatieApp } from '@/lib/mobiel/navigatie'
 
 function Knop({
   href, label, Icon,
@@ -50,13 +50,16 @@ export default function ContactKnoppen({
 }) {
   // Spaties en streepjes in een telefoonnummer breken sommige toestellen; tel: wil ze niet.
   const telHref = telefoon ? `tel:${telefoon.replace(/[^\d+]/g, '')}` : null
+  // Keuze staat in localStorage; tot die gelezen is Google Maps, zodat server en client gelijk renderen.
+  const [navigatieApp, setNavigatieApp] = useState<NavigatieApp>(STANDAARD_NAVIGATIE_APP)
+  useEffect(() => { setNavigatieApp(leesNavigatieApp()) }, [])
 
   return (
     <div style={{ display: 'flex', gap: 8, padding: '14px 16px 0' }}>
       <Knop href={telHref} label="Bellen" Icon={Phone} />
       <Knop href={email ? `mailto:${email}` : null} label="Mailen" Icon={Mail} />
       <Knop
-        href={adres ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adres)}` : null}
+        href={adres ? navigatieLink(adres, navigatieApp) : null}
         label="Route"
         Icon={MapPin}
       />

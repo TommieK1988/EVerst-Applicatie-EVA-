@@ -3,7 +3,7 @@
   "geenKoppeling": "Geen medewerker-koppeling gevonden voor dit account.",
   "onbekend": "Onbekend",
   "instellingen": "Instellingen",
-  "instellingenSub": "Toestemmingen, meldingen en locatie",
+  "instellingenSub": "Toestemmingen, meldingen, locatie en navigatie",
   "handleiding": "Handleiding",
   "handleidingSub": "Hoe EVA op je telefoon werkt",
   "uitloggen": "Uitloggen",
@@ -100,5 +100,9 @@
   "locatieAuto": {
     "titel": "Dossier openen op locatie",
     "uitleg": "Opent bij het starten van de app automatisch het dossier dat bij jouw locatie hoort."
+  },
+  "navigatieApp": {
+    "titel": "Navigatie-app",
+    "uitleg": "Welke app opent als je op Navigeren tikt. Staat de app niet op je telefoon, dan opent de website."
   }
 }

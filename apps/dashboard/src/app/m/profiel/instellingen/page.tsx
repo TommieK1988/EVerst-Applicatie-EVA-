@@ -4,6 +4,7 @@ import LocatieAutoToggle from '@/components/mobiel/LocatieAutoToggle'
 import ToestemmingenBlok from '@/components/mobiel/ToestemmingenBlok'
 import PushMeldingen from '@/components/eva/PushMeldingen'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
+import NavigatieAppKeuze from '@/components/mobiel/NavigatieAppKeuze'
 import { getAppVertaler } from '@/i18n/server'
 
 export const metadata = { title: 'Instellingen · EVA Mobiel' }
@@ -30,6 +31,7 @@ export default async function MobielInstellingenPage() {
         <ToestemmingenBlok />
         <PushMeldingen weergave="mobiel" />
         <LocatieAutoToggle />
+        <NavigatieAppKeuze />
         {!medewerker && (
           <div style={{ fontSize: 13, color: '#6b757c', lineHeight: 1.5 }}>
             {t('instellingenGeenKoppeling')}
