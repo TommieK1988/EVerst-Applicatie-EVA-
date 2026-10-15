@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, cloneElement } from 'react'
 import type { ReactElement } from 'react'
-import { ChevronDown, ChevronRight, AlignLeft, TriangleAlert } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { standaardUurtarief } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, formatEuro, formatGetal, parseGetal } from '@/lib/everts-calc/calculations'
 import { cn } from '@/lib/everts-calc/utils'
@@ -20,6 +20,9 @@ import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './Regel
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
+import { NormenKnop, OmschrijvingKnop, MarkeerKnop, eersteRegel } from './RegelKnoppen'
+import { naarBuurRegel } from './toetsen'
+import type { WeergaveSignaal } from './weergave'
 
 export interface RegelRijProps {
   regel: Calculatieregel
@@ -37,7 +40,7 @@ export interface RegelRijProps {
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponent: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type']) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
   onVerwijderComponent: (compId: string) => void
   onVerwijder: () => void
   onHerlaad: () => void
@@ -54,7 +57,7 @@ export interface RegelRijProps {
   onDragOver?: (e: React.DragEvent) => void
   onDrop?: (e: React.DragEvent) => void
   onDragEnd?: () => void
-  collapseSignal?: number
+  weergaveSignaal?: WeergaveSignaal
   readOnly?: boolean
 }
 
@@ -64,7 +67,7 @@ export function CalculatieregelRij({
   bibliotheekItems, behandelingen = [],
   isGeselecteerd, onSelecteer, onActie,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
-  collapseSignal, readOnly = false,
+  weergaveSignaal, readOnly = false,
 }: RegelRijProps) {
   const regelComps = componenten.filter(c => c.calculatieregel_id === regel.id)
   const ab = regelComps.find(c => c.type === 'arbeid')
@@ -168,8 +171,17 @@ export function CalculatieregelRij({
   }
 
   const [werkUitgeklapt,         setWerkUitgeklapt]         = useState(false)
+  // Zelf geopend (knop, sneltoets) → cursor erin; via Tonen niet.
+  const [werkFocus,              setWerkFocus]              = useState(false)
+  const wisselWerk = () => { setWerkFocus(true); setWerkUitgeklapt(v => !v) }
   const [compsUitgeklapt,        setCompsUitgeklapt]        = useState(false)
-  useEffect(() => { if (collapseSignal) setCompsUitgeklapt(false) }, [collapseSignal])
+  // Menu Tonen: alle regels tegelijk open of dicht.
+  useEffect(() => {
+    if (!weergaveSignaal) return
+    setCompsUitgeklapt(weergaveSignaal.normen)
+    setWerkFocus(false)
+    setWerkUitgeklapt(weergaveSignaal.werk)
+  }, [weergaveSignaal])
   // Dicht bij het openen; de stip in de omschrijving laat zien dát er een opmerking is.
   const [opmerkingOpen,          setOpmerkingOpen]          = useState(false)
   const heeftBehandeling = !!(regel.schilderbehandeling_id || regel.schilderbehandeling)
@@ -278,11 +290,23 @@ export function CalculatieregelRij({
                 <TriangleAlert className="w-3 h-3" />
               </span>
             )}
-            <OmschrijvingVeld
-              waarde={regel.omschrijving}
-              italic={regel.gemarkeerd}
-              onWijzig={v => onWijzig(regel.id, { omschrijving: v })}
-            />
+            <div className="flex-1 min-w-0">
+              <OmschrijvingVeld
+                waarde={regel.omschrijving}
+                italic={regel.gemarkeerd}
+                onWijzig={v => onWijzig(regel.id, { omschrijving: v })}
+              />
+              {/* Eerste regel van de werkomschrijving, ook als die dicht is. */}
+              {!werkUitgeklapt && eersteRegel(regel.werkomschrijving) && (
+                <div
+                  className="truncate px-1 -mt-0.5 text-[11px] leading-tight text-neutral-500 not-italic cursor-pointer"
+                  title={regel.werkomschrijving}
+                  onClick={() => { setWerkFocus(true); setWerkUitgeklapt(true) }}
+                >
+                  {eersteRegel(regel.werkomschrijving)}
+                </div>
+              )}
+            </div>
             {/* Naam van de gekoppelde behandeling, afgeleid uit de bibliotheek — hij
                 staat bewust náást het invoerveld, niet erin, zodat `omschrijving` de
                 eigen tekst blijft. Belandt zo ook in de offerteregel. */}
@@ -294,53 +318,24 @@ export function CalculatieregelRij({
                 {behandelingSuffix}
               </span>
             )}
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={() => setWerkUitgeklapt(v => !v)}
-              className={`flex-shrink-0 p-0.5 rounded transition-colors cursor-pointer ${
-                // Ook groen als er alléén een foto onder hangt: anders lijkt de regel leeg
-                // terwijl er wel degelijk iets in staat dat op de offerte komt.
-                werkUitgeklapt || regel.werkomschrijving || regel.werkomschrijving_afbeeldingen?.length
-                  ? 'text-everts bg-everts-50'
-                  : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
-              }`}
-              title="Uitgebreide werkomschrijving"
-            >
-              <AlignLeft className="w-3 h-3" />
-            </span>
-            {/* Expand componentregels: rechts */}
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={e => { e.stopPropagation(); setCompsUitgeklapt(v => !v) }}
-              className={`flex-shrink-0 p-0.5 rounded transition-colors cursor-pointer ${
-                compsUitgeklapt
-                  ? 'text-everts bg-everts-50'
-                  : regelComps.length > 0
-                    ? 'text-slate-400 hover:text-everts hover:bg-everts-50'
-                    : 'text-slate-200 hover:text-slate-400'
-              }`}
-              title={`${compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}${regelComps.length ? ` (${regelComps.length})` : ''}`}
-              aria-label={compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen'}
-            >
-              {compsUitgeklapt ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            </span>
-            {regel.opmerking && (
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); setOpmerkingOpen(v => !v) }}
-                className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded hover:bg-amber-50"
-                title={`Opmerking: ${regel.opmerking}`}
-                aria-label="Opmerking tonen"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              </button>
-            )}
             {heeftBehandeling && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Heeft schilderbehandeling" />
             )}
           </div>
+        </td>
+      )
+      case 'normen': return (
+        <td key={id} className="px-1 py-1 text-center">
+          <NormenKnop aantal={regelComps.length} open={compsUitgeklapt} onWissel={() => setCompsUitgeklapt(v => !v)} />
+        </td>
+      )
+      case 'omschr': return (
+        <td key={id} className="px-1 py-1 text-center">
+          <OmschrijvingKnop
+            gevuld={!!(regel.werkomschrijving || regel.werkomschrijving_afbeeldingen?.length)}
+            open={werkUitgeklapt}
+            onWissel={wisselWerk}
+          />
         </td>
       )
       case 'aant': return (
@@ -451,14 +446,19 @@ export function CalculatieregelRij({
       )
       case 'markeer': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
-          <button
-            onClick={() => onWijzig(regel.id, { gemarkeerd: !(regel.gemarkeerd ?? false) })}
-            className={`w-4 h-4 rounded-full border-2 transition-colors mx-auto block ${
-              regel.gemarkeerd
-                ? 'bg-orange-400 border-orange-500'
-                : 'border-slate-300 hover:border-orange-400 hover:bg-orange-50'
-            }`}
-            title="Markeer / Hef markering op"
+          <MarkeerKnop
+            gemarkeerd={!!regel.gemarkeerd}
+            opmerking={regel.opmerking}
+            open={opmerkingOpen}
+            onKlik={readOnly ? undefined : () => {
+              // Een lege regel markeren opent meteen het vak om te noteren wát er is.
+              if (!regel.gemarkeerd && !regel.opmerking) {
+                onWijzig(regel.id, { gemarkeerd: true })
+                setOpmerkingOpen(true)
+              } else {
+                setOpmerkingOpen(v => !v)
+              }
+            }}
           />
         </td>
       )
@@ -647,10 +647,10 @@ export function CalculatieregelRij({
             label={`Acties voor ${regel.omschrijving || 'regel'}`}
             items={[
               { soort: 'kop', label: 'Deze regel' },
-              { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', onSelect: () => setCompsUitgeklapt(v => !v),
+              { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', sneltoets: 'Ctrl Enter', onSelect: () => setCompsUitgeklapt(v => !v),
                 extra: regelComps.length > 0 ? <span className="text-[10.5px] text-neutral-400">{regelComps.length}</span> : undefined },
-              { label: 'Werkomschrijving & afbeeldingen', onSelect: () => setWerkUitgeklapt(true) },
-              !readOnly && { label: 'Interne opmerking', onSelect: () => setOpmerkingOpen(true),
+              { label: 'Werkomschrijving & afbeeldingen', sneltoets: 'Ctrl ⇧ Enter', onSelect: () => { setWerkFocus(true); setWerkUitgeklapt(true) } },
+              !readOnly && { label: 'Markering & interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
               !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
@@ -698,6 +698,20 @@ export function CalculatieregelRij({
           if ((e.target as HTMLElement).closest('input,select,textarea,button,a,[role="button"]')) return
           onSelecteer?.(e.ctrlKey || e.metaKey, e.shiftKey)
         }}
+        onKeyDown={e => {
+          // Ctrl+Enter: normen, Ctrl+Shift+Enter: werkomschrijving; werkt vanuit elk veld.
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault(); e.stopPropagation()
+            if (e.altKey) setOpmerkingOpen(v => !v)
+            else if (e.shiftKey) wisselWerk()
+            else setCompsUitgeklapt(v => !v)
+            return
+          }
+          // ↑/↓: zelfde kolom in de vorige/volgende regel; open normen blijven open.
+          if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+            if (naarBuurRegel(e.target as HTMLElement, e.key === 'ArrowUp' ? -1 : 1)) e.preventDefault()
+          }
+        }}
         // Rechtsklik: hetzelfde ⋯-menu, behalve in een invoerveld (daar wil je plakken).
         onContextMenu={e => {
           if ((e.target as HTMLElement).closest('input,textarea,select')) return
@@ -720,13 +734,15 @@ export function CalculatieregelRij({
         <OpmerkingRij regel={regel} colOrder={colOrder} onWijzig={onWijzig} onSluit={() => setOpmerkingOpen(false)} />
       )}
       {werkUitgeklapt && (
-        <WerkomschrijvingRij regel={regel} colOrder={colOrder} indent={indent} onWijzig={onWijzig} />
+        <WerkomschrijvingRij
+          regel={regel} colOrder={colOrder} onWijzig={onWijzig}
+          focus={werkFocus} onSluit={() => setWerkUitgeklapt(false)}
+        />
       )}
       {compsUitgeklapt && (
         <RegelComponentenBlok
           regel={regel} regelComps={regelComps} colOrder={colOrder} indent={indent} opslag={opslag}
-          uurtarieven={uurtarieven} eenheden={eenheden} behandelingen={behandelingen} heeftBehandeling={heeftBehandeling}
-          opmerkingOpen={opmerkingOpen} setOpmerkingOpen={setOpmerkingOpen}
+          uurtarieven={uurtarieven} eenheden={eenheden} behandelingen={behandelingen}
           schilderbehandelingOpen={schilderbehandelingOpen} setSchilderbehandelingOpen={setSchilderbehandelingOpen}
           onWijzig={onWijzig} onWijzigComponentExtra={onWijzigComponentExtra}
           onVerwijderComponent={onVerwijderComponent} onVoegComponentToe={onVoegComponentToe}

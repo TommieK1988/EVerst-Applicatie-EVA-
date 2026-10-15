@@ -25,6 +25,7 @@ import { kiesBtwTarief } from './grid/btw-keuze'
 import { GroepSectie } from './grid/GroepSectie'
 import type { RegelActie } from './grid/ActieMenu'
 import { SelectieBalk } from './grid/SelectieBalk'
+import type { Weergave, WeergaveSignaal } from './grid/weergave'
 import { NieuweGroepRij } from './grid/NieuweGroepRij'
 
 interface Props {
@@ -54,6 +55,8 @@ export interface CalculatieGridHandle {
   /** true = de diepste groepen inklappen (elke groepskop blijft zichtbaar, regels verdwijnen);
    *  false = alles uitklappen. */
   zetInklap: (ingeklapt: boolean) => void
+  /** Menu Tonen: groepen, regels, normen en omschrijvingen voor de hele calculatie. */
+  zetWeergave: (w: Weergave) => void
   /** Zet een herstelpunt vóór een wijziging van buitenaf (structuurboom), zodat Ctrl+Z die terugdraait. */
   duwSnapshot: () => void
   /**
@@ -98,7 +101,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [nieuwRootGroepNaam,  setNieuwRootGroepNaam]  = useState('')
 
   // Collapse-signaal voor componentregels
-  const [collapseSignal, setCollapseSignal] = useState(0)
+  const [weergaveSignaal, setWeergaveSignaal] = useState<WeergaveSignaal | undefined>(undefined)
 
   // Selectie
   const [geselecteerdeRegels, setGeselecteerdeRegels] = useState<Set<string>>(new Set())
@@ -395,8 +398,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     const bijgewerkt = groepen.map(g => ({ ...g, ingeklapt: ingeklapt && !groepenMetSubgroepen.has(g.id) }))
     bijgewerkt.forEach((g, i) => { if ((groepen[i].ingeklapt ?? false) !== g.ingeklapt) slaGroepOp(g) })
     setGroepen(bijgewerkt)
-    if (ingeklapt) setCollapseSignal(s => s + 1)
+    if (ingeklapt) setWeergaveSignaal(s => ({ n: (s?.n ?? 0) + 1, normen: false, werk: false }))
   }, [groepen, groepenMetSubgroepen])
+
+  const zetWeergave = useCallback((w: Weergave) => {
+    zetInklap(w === 'groepen')
+    setWeergaveSignaal(s => ({ n: (s?.n ?? 0) + 1, normen: w === 'normen' || w === 'alles', werk: w === 'alles' }))
+  }, [zetInklap])
 
   const handleToggleInklap = useCallback((id: string) => {
     const groep = groepen.find(g => g.id === id)
@@ -458,8 +466,8 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     }, 50)
   }, [regels, groepen])
 
-  useImperativeHandle(ref, () => ({ undo, zetInklap, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel }),
-    [undo, zetInklap, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel])
+  useImperativeHandle(ref, () => ({ undo, zetInklap, zetWeergave, duwSnapshot, herlaad: laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel }),
+    [undo, zetInklap, zetWeergave, duwSnapshot, laadAlles, wisRegelOpslagen, zetArbeidTarieven, toonRegel])
 
   // ─── Selectie ──────────────────────────────────────────────────────────────
   // Anker voor Shift-klik: de laatst los aangeklikte regel.
@@ -929,12 +937,17 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     setComponenten(prev => prev.map(c => c.id === compId ? bijgewerkt : c))
   }, [componenten])
 
-  const handleVoegComponentToe = useCallback((regelId: string, type: Componentregel['type']) => {
+  const handleVoegComponentToe = useCallback((regelId: string, type: Componentregel['type'], omschrijving?: string) => {
     // Het standaard uurtarief van de calculatie (of anders dat uit de
     // bedrijfsinstellingen) wordt in de store zelf op het component gezet.
-    const nieuw = voegComponentregelToe(regelId, type)
+    let nieuw = voegComponentregelToe(regelId, type)
+    if (omschrijving) nieuw = slaComponentregelOp({ ...nieuw, omschrijving })
     setComponenten(prev => [...prev, nieuw])
     onWijziging()
+    // Door naar de hoeveelheid van de nieuwe norm, zodat je meteen kunt doortypen.
+    setTimeout(() => {
+      document.querySelector<HTMLInputElement>(`tr[data-comp-id="${nieuw.id}"] input[inputmode="decimal"]`)?.focus()
+    }, 50)
   }, [onWijziging])
 
   const handleVerwijderComponent = useCallback((compId: string) => {
@@ -1294,7 +1307,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                     onBevestig: bevestigSubgroep, onAnnuleer: () => setNieuwGroepParent(null),
                   } : null}
                   onSelecteerGroep={handleSelecteerGroep}
-                  collapseSignal={collapseSignal}
+                  weergaveSignaal={weergaveSignaal}
                   readOnly={readOnly}
                 />
               ))}

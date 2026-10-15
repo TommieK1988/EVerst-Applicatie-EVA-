@@ -330,7 +330,7 @@ export function ComponentRegelRij({
   }
 
   return (
-    <tr className="group border-b border-slate-100 bg-slate-50/50">
+    <tr data-comp-id={comp.id} className="group border-b border-slate-100 bg-slate-50/50">
       {colOrder.map(id => renderCompCell(id))}
     </tr>
   )

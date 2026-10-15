@@ -16,6 +16,7 @@ import { CalculatieregelRij } from './CalculatieregelRij'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
 import { subtreeIds } from '@/lib/everts-calc/groep-boom'
 import { InvoegRij } from './InvoegRij'
+import type { WeergaveSignaal } from './weergave'
 import { NieuweGroepRij, type NieuweGroepInvoer } from './NieuweGroepRij'
 
 // ─── GroepSectie (recursief) ──────────────────────────────────────────────────
@@ -40,7 +41,7 @@ export interface GroepSectieProps {
   onRegelWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onRegelComponentWijzig: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type']) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
   onVerwijderComponent: (compId: string) => void
   onVerwijderRegel: (id: string) => void
   onVerwijderGroep: (id: string) => void
@@ -68,7 +69,7 @@ export interface GroepSectieProps {
   onSelecteerRegel?: (regelId: string, ctrlKey: boolean, shiftKey: boolean) => void
   /** Acties uit het ⋯-menu van een regel (dupliceren, kopiëren, verplaatsen, verwijderen). */
   onRegelActie?: (regelId: string, actie: RegelActie) => void
-  collapseSignal?: number
+  weergaveSignaal?: WeergaveSignaal
   readOnly?: boolean
   /** Lopende invoer van een nieuwe subgroep; het veld staat onder de ouder waar hij komt. */
   nieuweGroep?: NieuweGroepInvoer | null
@@ -86,7 +87,7 @@ export function GroepSectie({
   onRegelDragStartNaarGroep, onRegelDragEnd, onRegelVerplaatsNaarPositie,
   bibliotheekItems, behandelingen = [],
   geselecteerdeRegels, onSelecteerRegel, onRegelActie,
-  collapseSignal, readOnly = false, nieuweGroep, onSelecteerGroep,
+  weergaveSignaal, readOnly = false, nieuweGroep, onSelecteerGroep,
 }: GroepSectieProps) {
   const ingeklapt = groep.ingeklapt ?? false
   const [confirmVerwijder, setConfirmVerwijder] = useState(false)
@@ -317,7 +318,7 @@ export function GroepSectie({
               onDragOver={e => handleRegelDragOver(e, r.id)}
               onDrop={() => handleRegelDrop(r.id)}
               onDragEnd={handleRegelDragEnd}
-              collapseSignal={collapseSignal}
+              weergaveSignaal={weergaveSignaal}
               readOnly={readOnly}
             />
           ))}
@@ -353,7 +354,7 @@ export function GroepSectie({
               geselecteerdeRegels={geselecteerdeRegels}
               onSelecteerRegel={onSelecteerRegel}
               onRegelActie={onRegelActie}
-              collapseSignal={collapseSignal}
+              weergaveSignaal={weergaveSignaal}
               readOnly={readOnly}
               nieuweGroep={nieuweGroep}
               onSelecteerGroep={onSelecteerGroep}

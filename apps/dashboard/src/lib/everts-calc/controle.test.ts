@@ -61,6 +61,18 @@ describe('controleerCalculatie', () => {
     expect(punten.map(p => p.soort)).toEqual(['regel_zonder_prijs'])
   })
 
+  it('gemarkeerde regel als nakijkpunt met de opmerking erbij, niet weg te klikken', () => {
+    const punten = controleerCalculatie({
+      ...basis,
+      regels: [regel('a', { gemarkeerd: true, opmerking: 'Maat nog checken\nbij de VvE' }), regel('b', { opmerking: 'alleen notitie' })],
+      componenten: [comp('a', {}), comp('b', {})],
+    })
+    expect(punten.map(p => p.sleutel)).toEqual(['gemarkeerd:a'])
+    expect(punten[0].detail).toBe('Gevel achter · Maat nog checken')
+    expect(punten[0].bevestigbaar).toBe(false)
+    expect(telControle(punten)).toEqual({ rood: 0, oranje: 1 })
+  })
+
   it('slaat tekstregels over', () => {
     const punten = controleerCalculatie({ ...basis, regels: [regel('t', { soort: 'tekst', is_stelpost: true })], componenten: [] })
     expect(punten).toEqual([])

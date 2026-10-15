@@ -10,6 +10,7 @@ import StructuurBoom from './StructuurBoom'
 import CalculatieGrid, { type CalculatieGridHandle } from './CalculatieGrid'
 import TotalsBar from './TotalsBar'
 import CalculatieWerkbalk, { type SyncStatus } from './CalculatieWerkbalk'
+import type { Weergave } from './grid/weergave'
 import BibliotheekDrawer from './BibliotheekDrawer'
 import CufImportModal from './CufImportModal'
 import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
@@ -105,7 +106,8 @@ export default function CalculatieHoofdscherm({
   const [opgeslagenOp, setOpgeslagenOp]               = useState<Date | null>(null)
   const [undoCount, setUndoCount]                     = useState(0)
   /** Zijn de diepste groepen allemaal ingeklapt? Bepaalt of de knop in- of uitklapt. */
-  const [allesIngeklapt, setAllesIngeklapt]           = useState(false)
+  /** Menu Tonen: wat het rekenblad laat zien, voor de hele calculatie. */
+  const [weergave, setWeergave]                       = useState<Weergave>('regels')
   const [receptenOpen, setReceptenOpen]               = useState(false)
   const [schilderwerkOpen, setSchilderwerkOpen]       = useState(false)
   const [materialenOpen, setMaterialenOpen]           = useState(false)
@@ -129,7 +131,11 @@ export default function CalculatieHoofdscherm({
     })
   }, [])
 
-  const handleToggleInklap = useCallback(() => gridRef.current?.zetInklap(!allesIngeklapt), [allesIngeklapt])
+  const handleWeergave = useCallback((w: Weergave) => { setWeergave(w); gridRef.current?.zetWeergave(w) }, [])
+  // Klapt iemand losse groepen in of uit, dan klopt "Alleen groepen" niet meer (of juist wel).
+  const handleInklapStatus = useCallback((allesDicht: boolean) => {
+    setWeergave(w => (allesDicht ? 'groepen' : w === 'groepen' ? 'regels' : w))
+  }, [])
   const handleUndo         = useCallback(() => gridRef.current?.undo(), [])
 
   /* ── Scenario laden ──────────────────────────────────────────────── */
@@ -450,8 +456,8 @@ export default function CalculatieHoofdscherm({
           <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
             onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
         </>}
-        allesIngeklapt={allesIngeklapt}
-        onToggleInklap={handleToggleInklap}
+        weergave={weergave}
+        onWeergave={handleWeergave}
         // Meerwerk niet kopiëren: een tweede scenario bij dezelfde meerwerkregel zou de
         // actuele meerwerk-calculatie stil vervangen (hoogste versie wint).
         kanKopieren={!readOnly && magReviseren === 'alles' && !scenario.meerwerk_regel_id}
@@ -499,7 +505,7 @@ export default function CalculatieHoofdscherm({
             onWijziging={handleWijziging}
             onTekstWijziging={planAutoSave}
             onUndoCountChange={setUndoCount}
-            onInklapStatusChange={setAllesIngeklapt}
+            onInklapStatusChange={handleInklapStatus}
             bibliotheekItems={bibliotheekItems}
             readOnly={readOnly}
           />
