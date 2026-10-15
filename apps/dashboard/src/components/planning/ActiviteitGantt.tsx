@@ -1653,7 +1653,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
   const rowsRef    = useRef<HTMLDivElement>(null)
 
   const {
-    view, peildatum, layout, wrapRef, scrollRef,
+    view, peildatum, layout, wrapRef, scrollRef, scrubVs,
     handlePeildatum, handleView, handleVandaag, handleScrub,
     // weekendFactor 1 = uniforme dagbreedte; de detailplanning houdt (voorlopig) volle
     // weekenddagen i.v.m. de drag-/afhankelijkheidsgeometrie die nog niet is omgezet.
@@ -2281,7 +2281,7 @@ export default function ActiviteitGantt({ dossier_id, activiteiten: initA, items
         }
       />
 
-      <PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />
+      <PeriodeScrubber view={view} peildatum={peildatum} vs={scrubVs} onChange={handleScrub} />
 
       <DubbelOverzicht dubbel={dubbel} onToon={toonDubbel} />
 

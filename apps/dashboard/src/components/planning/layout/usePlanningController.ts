@@ -39,6 +39,35 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
 
   const layout = usePlanningLayout({ peildatum, view, availableW, weekendFactor })
 
+  // De dag die nu op het anker (1/6) van het bord staat — daar hoort de scrubberbalk.
+  // Volgt het bord per dag: bij scrubben, bij ‹ › / Vandaag én bij met de hand scrollen.
+  // Niet layout.periodeVs: die springt naar het begin van de week/maand.
+  const [scrubVs, setScrubVs] = useState<Date>(() => peildatum)
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
+  const availableWRef = useRef(availableW)
+  availableWRef.current = availableW
+
+  const meetScrubVs = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const dag = layoutRef.current.dagVoorX(el.scrollLeft + availableWRef.current * VANDAAG_ANCHOR)
+    setScrubVs(prev => prev.getTime() === dag.getTime() ? prev : dag)
+  }, [])
+
+  // Het scroll-element kan later mounten (laadstatus), dus elke render nagaan of de
+  // listener nog aan het juiste element hangt.
+  const gekoppeldRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el === gekoppeldRef.current) return
+    gekoppeldRef.current?.removeEventListener('scroll', meetScrubVs)
+    el?.addEventListener('scroll', meetScrubVs, { passive: true })
+    gekoppeldRef.current = el
+    meetScrubVs()
+  })
+  useEffect(() => () => gekoppeldRef.current?.removeEventListener('scroll', meetScrubVs), [meetScrubVs])
+
   // Scroll zo dat het anker (Vandaag of periodegrens) op VANDAAG_ANCHOR landt.
   useLayoutEffect(() => {
     const el = scrollRef.current
@@ -51,7 +80,8 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
         ? today
         : startOfDay(layout.periodeVs)
     el.scrollLeft  = Math.max(0, layout.xVoor(target.toISOString()) - availableW * VANDAAG_ANCHOR)
-  }, [layout.vs, layout.periodeVs, layout.ppd, availableW, view, peildatum])
+    meetScrubVs()
+  }, [meetScrubVs, layout.vs, layout.periodeVs, layout.ppd, availableW, view, peildatum])
 
   // ‹ › — naar vorige/volgende periode; toon de nieuwe periodegrens op 1/6.
   const handlePeildatum = useCallback((d: Date) => {
@@ -85,10 +115,13 @@ export function usePlanningController(opts?: { defaultView?: View; labelW?: numb
     anchorRef.current = 'scrub'
     anchorDateRef.current = startOfDay(newVs)
     setPeildatum(startOfDay(newVs))
+    setScrubVs(startOfDay(newVs))
   }, [])
 
   return {
     view, peildatum, availableW, layout: layout as PlanningLayout,
+    /** Dag op het anker van het bord — geef door als `vs` aan PeriodeScrubber. */
+    scrubVs,
     wrapRef, scrollRef,
     handlePeildatum, handleView, handleVandaag, handleScrub, handleWeekKlik,
   }

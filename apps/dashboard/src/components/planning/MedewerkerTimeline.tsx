@@ -1274,7 +1274,7 @@ function MedewerkerTimelineInhoud({
   const [, startTransition] = useTransition()
 
   const {
-    view, peildatum, layout, wrapRef, scrollRef,
+    view, peildatum, layout, wrapRef, scrollRef, scrubVs,
     handlePeildatum, handleView, handleVandaag, handleScrub, handleWeekKlik,
   } = usePlanningController({ defaultView: 'maand' })
   const { vs, ve, ppd } = layout
@@ -1890,7 +1890,7 @@ function MedewerkerTimelineInhoud({
               }
             />
           }
-          scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={layout.periodeVs} onChange={handleScrub} />}
+          scrubber={<PeriodeScrubber view={view} peildatum={peildatum} vs={scrubVs} onChange={handleScrub} />}
           preHeaderStrip={legeStaat}
           labelHeader="Medewerker"
           onWeekKlik={handleWeekKlik}
