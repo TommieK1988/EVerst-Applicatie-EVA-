@@ -2,11 +2,14 @@
 
 import { useState, useTransition, useEffect } from 'react'
 import { Plus, X, ChevronDown } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { createClient } from '@everts/database/client'
 import { maakTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
+import { hangtNergensAan } from '@/lib/taken/toewijzing'
 import type { TaskPrioriteit, DbTaskList } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
@@ -87,13 +90,25 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
   const [medewerkers, setMedewerkers]       = useState<MedewerkerKeuze[]>([])
   const [formulierTemplateId, setFormulierTemplateId] = useState('')
   const [formulieren, setFormulieren]       = useState<{ id: string; naam: string; categorie: string | null }[]>([])
+  const [mijnUserId, setMijnUserId]         = useState<string | null>(null)
+
+  // Vanuit "Mijn acties" of het bord hangt een nieuwe actie nergens aan vast; daar staat de
+  // maker standaard aangevinkt, anders verdwijnt de actie uit beeld. Wijzigbaar, net als mobiel.
+  const losseActie = !isTemplate && !defaultDossier && !defaultLijstId && !defaultMedewerker
 
   useEffect(() => {
     if (open) {
       getMedewerkersVoorToewijzing().then(setMedewerkers)
       getGepubliceerdeFormulieren().then(setFormulieren)
+      createClient().auth.getUser().then(({ data }) => setMijnUserId(data.user?.id ?? null))
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || !losseActie || !mijnUserId) return
+    if (!medewerkers.some(m => m.auth_user_id === mijnUserId)) return
+    setGeselecteerdeAssignees(prev => prev.length ? prev : [{ user_id: mijnUserId, rol: 'verantwoordelijke' }])
+  }, [open, losseActie, mijnUserId, medewerkers])
 
   function toggleAssignee(userId: string) {
     setGeselecteerdeAssignees(prev => {
@@ -156,30 +171,37 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
     if (!titel.trim()) return
 
     startTransition(async () => {
-      await maakTaak({
-        titel:      titel.trim(),
-        prioriteit,
-        lijst_id:   lijstId || undefined,
-        // Bij een gekozen actielijst is de lijst leidend voor de dossier-koppeling
-        dossier_id: !isTemplate && !lijstId && dossierId ? dossierId : undefined,
-        medewerker_id: !isTemplate && !lijstId && defaultMedewerker ? defaultMedewerker.id : undefined,
-        // Deadline afhankelijk van mode: een echte taak krijgt een datum,
-        // een sjabloontaak een anker waaruit de datum later volgt.
-        deadline: (!isTemplate && deadline) ? deadline : undefined,
-        deadline_basis: isTemplate ? effectieveBasis : undefined,
-        deadline_dagen: isTemplate ? effectieveDagen : undefined,
-        // Herhaling hangt aan de detailplanning van een dossier; niet in medewerker-context.
-        herhaling_interval: isTemplate && !isMedewerkerContext ? herhalingInterval : undefined,
-        // Toewijzing
-        assignee_type: isTemplate ? assigneeType : 'direct',
-        dossier_rollen: isTemplate && assigneeType === 'dossier_rol' ? dossierRollen : undefined,
-        assignees:
-          (!isTemplate || assigneeType === 'direct') && geselecteerdeAssignees.length > 0
-            ? geselecteerdeAssignees
-            : undefined,
-        // Formulier
-        formulier_template_id: formulierTemplateId || undefined,
-      })
+      try {
+        await maakTaak({
+          titel:      titel.trim(),
+          prioriteit,
+          lijst_id:   lijstId || undefined,
+          // Bij een gekozen actielijst is de lijst leidend voor de dossier-koppeling
+          dossier_id: !isTemplate && !lijstId && dossierId ? dossierId : undefined,
+          medewerker_id: !isTemplate && !lijstId && defaultMedewerker ? defaultMedewerker.id : undefined,
+          // Deadline afhankelijk van mode: een echte taak krijgt een datum,
+          // een sjabloontaak een anker waaruit de datum later volgt.
+          deadline: (!isTemplate && deadline) ? deadline : undefined,
+          deadline_basis: isTemplate ? effectieveBasis : undefined,
+          deadline_dagen: isTemplate ? effectieveDagen : undefined,
+          // Herhaling hangt aan de detailplanning van een dossier; niet in medewerker-context.
+          herhaling_interval: isTemplate && !isMedewerkerContext ? herhalingInterval : undefined,
+          // Toewijzing
+          assignee_type: isTemplate ? assigneeType : 'direct',
+          dossier_rollen: isTemplate && assigneeType === 'dossier_rol' ? dossierRollen : undefined,
+          assignees:
+            (!isTemplate || assigneeType === 'direct') && geselecteerdeAssignees.length > 0
+              ? geselecteerdeAssignees
+              : undefined,
+          // Formulier
+          formulier_template_id: formulierTemplateId || undefined,
+        })
+      } catch {
+        // Zonder vangnet bleef de dialoog stil open staan; de fouttekst van een server
+        // action komt in productie toch niet mee, dus een vaste melding.
+        toast.error('Actie aanmaken lukte niet. Probeer het opnieuw.')
+        return
+      }
 
       reset()
       setOpen(false)
@@ -340,7 +362,9 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                               onChange={() => toggleAssignee(m.auth_user_id!)}
                               className="accent-everts flex-shrink-0"
                             />
-                            <span className="text-sm text-slate-700 truncate">{m.naam}</span>
+                            <span className="text-sm text-slate-700 truncate">
+                              {m.naam}{m.auth_user_id === mijnUserId ? ' (jij)' : ''}
+                            </span>
                           </label>
                           {geselecteerd && (
                             <select
@@ -357,6 +381,15 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                       )
                     })}
                   </div>
+                )}
+
+                {/* Zelfde regel als maakTaak: een losse actie zonder toewijzing komt bij de maker. */}
+                {!isTemplate && geselecteerdeAssignees.length === 0 && (
+                  <p className="text-xs text-slate-500 leading-snug">
+                    {hangtNergensAan({ lijst_id: lijstId, dossier_id: dossierId, medewerker_id: defaultMedewerker?.id })
+                      ? 'Niemand gekozen: de actie komt dan bij jou onder Mijn acties.'
+                      : 'Niemand gekozen: de actie staat dan bij niemand onder Mijn acties.'}
+                  </p>
                 )}
 
                 {isTemplate && assigneeType === 'medewerker_zelf' && (
