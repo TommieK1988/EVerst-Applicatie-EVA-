@@ -1,7 +1,7 @@
 'use client'
 
 import type { Dispatch, SetStateAction } from 'react'
-import { Trash2, MessageSquare, X, PaintBucket, ImagePlus } from 'lucide-react'
+import { Trash2, MessageSquare, X, ImagePlus } from 'lucide-react'
 import { BulletTextarea } from '@/components/ui/bullet-textarea'
 import type { Calculatieregel, Componentregel, EenheidConfig } from '@/lib/everts-calc/types'
 import SchilderbehandelingZoekveld from '@/components/everts-calc/calculatie/SchilderbehandelingZoekveld'
@@ -16,10 +16,17 @@ import { NieuweNormInvoer } from './NieuweNormInvoer'
  * regel zelf, zodat die rij leesbaar blijft.
  */
 
-export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig, focus = false, onSluit }: {
+/**
+ * Aantal kolommen vóór de omschrijving. De uitklaprijen (werkomschrijving, opmerking,
+ * nieuwe norm, behandeling) beginnen daar, zodat hun tekst onder de regelnaam staat.
+ */
+function voorOmschrijving(colOrder: ColId[]): number {
+  return Math.max(0, colOrder.indexOf('omschrijving'))
+}
+
+export function WerkomschrijvingRij({ regel, colOrder, onWijzig, focus = false, onSluit }: {
   regel: Calculatieregel
   colOrder: ColId[]
-  indent: number
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   /** Alleen bij zelf openen: met Tonen › alles zou elke regel om de focus vechten. */
   focus?: boolean
@@ -27,7 +34,8 @@ export function WerkomschrijvingRij({ regel, colOrder, indent, onWijzig, focus =
 }) {
   return (
       <tr className={`border-b border-slate-100 ${regel.gemarkeerd ? 'bg-orange-50/60' : 'bg-slate-50/30'}`}>
-        <td colSpan={colOrder.length} className="pb-2 pt-1.5" style={{ paddingLeft: `${indent + 8}px`, paddingRight: '12px' }}>
+        {voorOmschrijving(colOrder) > 0 && <td colSpan={voorOmschrijving(colOrder)} />}
+        <td colSpan={colOrder.length - voorOmschrijving(colOrder)} className="pb-2 pt-1.5 pr-3">
          <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0 max-w-4xl rounded-[10px] border border-neutral-200 bg-white px-2 pb-1.5 pt-1">
             <BulletTextarea
@@ -115,7 +123,7 @@ export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onSluit: () => void
 }) {
-  const voor = Math.max(0, colOrder.indexOf('omschrijving'))
+  const voor = voorOmschrijving(colOrder)
   return (
     <tr className="border-b border-warning-100 bg-warning-50/60">
       {voor > 0 && <td colSpan={voor} />}
@@ -152,8 +160,8 @@ export function OpmerkingRij({ regel, colOrder, onWijzig, onSluit }: {
 }
 
 export function RegelComponentenBlok({
-  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden, behandelingen, heeftBehandeling,
-  opmerkingOpen, setOpmerkingOpen, schilderbehandelingOpen, setSchilderbehandelingOpen,
+  regel, regelComps, colOrder, indent, opslag, uurtarieven, eenheden, behandelingen,
+  schilderbehandelingOpen, setSchilderbehandelingOpen,
   onWijzig, onWijzigComponentExtra, onVerwijderComponent, onVoegComponentToe,
 }: {
   regel: Calculatieregel
@@ -164,9 +172,6 @@ export function RegelComponentenBlok({
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
   behandelingen: SchilderBehandeling[]
-  heeftBehandeling: boolean
-  opmerkingOpen: boolean
-  setOpmerkingOpen: Dispatch<SetStateAction<boolean>>
   schilderbehandelingOpen: boolean
   setSchilderbehandelingOpen: Dispatch<SetStateAction<boolean>>
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
@@ -191,38 +196,15 @@ export function RegelComponentenBlok({
           />
         ))}
         <tr className="border-b border-slate-100 bg-slate-50/30">
-          <td colSpan={colOrder.length} className="py-1" style={{ paddingLeft: `${indent + 20}px` }}>
-            <div className="flex items-center gap-2 pr-3">
-              <NieuweNormInvoer onVoeg={(type, oms) => onVoegComponentToe(regel.id, type, oms || undefined)} />
-              <span className="text-slate-200 mx-1">|</span>
-              <button
-                onClick={() => setOpmerkingOpen(v => !v)}
-                className={`text-[11px] px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors ${
-                  opmerkingOpen || regel.opmerking
-                    ? 'text-amber-600 bg-amber-50 hover:bg-amber-100'
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Interne opmerking"
-              >
-                <MessageSquare className="w-3 h-3" /> Opmerking
-              </button>
-              <button
-                onClick={() => setSchilderbehandelingOpen(v => !v)}
-                className={`text-[11px] px-2 py-0.5 rounded flex items-center gap-0.5 transition-colors ${
-                  schilderbehandelingOpen || heeftBehandeling
-                    ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Schilderbehandeling (zichtbaar op behandelingsblad)"
-              >
-                <PaintBucket className="w-3 h-3" /> Behandeling
-              </button>
-            </div>
+          {voorOmschrijving(colOrder) > 0 && <td colSpan={voorOmschrijving(colOrder)} />}
+          <td colSpan={colOrder.length - voorOmschrijving(colOrder)} className="py-1 pr-3" style={{ paddingLeft: '16px' }}>
+            <NieuweNormInvoer onVoeg={(type, oms) => onVoegComponentToe(regel.id, type, oms || undefined)} />
           </td>
         </tr>
         {schilderbehandelingOpen && (
           <tr className="border-b border-blue-100 bg-blue-50/30">
-            <td colSpan={colOrder.length} className="px-3 py-2" style={{ paddingLeft: `${indent + 20}px` }}>
+            {voorOmschrijving(colOrder) > 0 && <td colSpan={voorOmschrijving(colOrder)} />}
+            <td colSpan={colOrder.length - voorOmschrijving(colOrder)} className="pr-3 py-2">
               <SchilderbehandelingZoekveld
                 behandelingId={regel.schilderbehandeling_id}
                 behandelingTekst={regel.schilderbehandeling}

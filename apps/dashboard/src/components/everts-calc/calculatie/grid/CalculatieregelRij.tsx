@@ -20,7 +20,7 @@ import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './Regel
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
-import { NormenKnop, OmschrijvingKnop, eersteRegel } from './RegelKnoppen'
+import { NormenKnop, OmschrijvingKnop, OpmerkingKnop, eersteRegel } from './RegelKnoppen'
 import { naarBuurRegel } from './toetsen'
 import type { WeergaveSignaal } from './weergave'
 
@@ -318,17 +318,6 @@ export function CalculatieregelRij({
                 {behandelingSuffix}
               </span>
             )}
-            {regel.opmerking && (
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); setOpmerkingOpen(v => !v) }}
-                className="flex-shrink-0 flex h-4 w-4 items-center justify-center rounded hover:bg-amber-50"
-                title={`Opmerking: ${regel.opmerking}`}
-                aria-label="Opmerking tonen"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              </button>
-            )}
             {heeftBehandeling && !compsUitgeklapt && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Heeft schilderbehandeling" />
             )}
@@ -347,6 +336,11 @@ export function CalculatieregelRij({
             open={werkUitgeklapt}
             onWissel={wisselWerk}
           />
+        </td>
+      )
+      case 'opm': return (
+        <td key={id} className="px-1 py-1 text-center">
+          <OpmerkingKnop gevuld={!!regel.opmerking} open={opmerkingOpen} tekst={regel.opmerking} onWissel={() => setOpmerkingOpen(v => !v)} />
         </td>
       )
       case 'aant': return (
@@ -656,7 +650,7 @@ export function CalculatieregelRij({
               { label: compsUitgeklapt ? 'Normen verbergen' : 'Normen tonen', sneltoets: 'Ctrl Enter', onSelect: () => setCompsUitgeklapt(v => !v),
                 extra: regelComps.length > 0 ? <span className="text-[10.5px] text-neutral-400">{regelComps.length}</span> : undefined },
               { label: 'Werkomschrijving & afbeeldingen', sneltoets: 'Ctrl ⇧ Enter', onSelect: () => { setWerkFocus(true); setWerkUitgeklapt(true) } },
-              !readOnly && { label: 'Interne opmerking', onSelect: () => setOpmerkingOpen(true),
+              !readOnly && { label: 'Interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
               !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
@@ -708,7 +702,8 @@ export function CalculatieregelRij({
           // Ctrl+Enter: normen, Ctrl+Shift+Enter: werkomschrijving; werkt vanuit elk veld.
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault(); e.stopPropagation()
-            if (e.shiftKey) wisselWerk()
+            if (e.altKey) setOpmerkingOpen(v => !v)
+            else if (e.shiftKey) wisselWerk()
             else setCompsUitgeklapt(v => !v)
             return
           }
@@ -740,15 +735,14 @@ export function CalculatieregelRij({
       )}
       {werkUitgeklapt && (
         <WerkomschrijvingRij
-          regel={regel} colOrder={colOrder} indent={indent} onWijzig={onWijzig}
+          regel={regel} colOrder={colOrder} onWijzig={onWijzig}
           focus={werkFocus} onSluit={() => setWerkUitgeklapt(false)}
         />
       )}
       {compsUitgeklapt && (
         <RegelComponentenBlok
           regel={regel} regelComps={regelComps} colOrder={colOrder} indent={indent} opslag={opslag}
-          uurtarieven={uurtarieven} eenheden={eenheden} behandelingen={behandelingen} heeftBehandeling={heeftBehandeling}
-          opmerkingOpen={opmerkingOpen} setOpmerkingOpen={setOpmerkingOpen}
+          uurtarieven={uurtarieven} eenheden={eenheden} behandelingen={behandelingen}
           schilderbehandelingOpen={schilderbehandelingOpen} setSchilderbehandelingOpen={setSchilderbehandelingOpen}
           onWijzig={onWijzig} onWijzigComponentExtra={onWijzigComponentExtra}
           onVerwijderComponent={onVerwijderComponent} onVoegComponentToe={onVoegComponentToe}
