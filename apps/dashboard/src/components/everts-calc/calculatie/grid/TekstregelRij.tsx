@@ -56,15 +56,7 @@ export function TekstregelRij({
       onDragOver={onDragOver}
       onDrop={e => { e.preventDefault(); onDrop?.(e) }}
       onDragEnd={onDragEnd}
-      onMouseDown={e => {
-        if (e.shiftKey && !(e.target as HTMLElement).closest('input,select,textarea,button,a,[role="button"]')) {
-          e.preventDefault()
-        }
-      }}
-      onClick={e => {
-        if ((e.target as HTMLElement).closest('input,select,textarea,button,a,[role="button"]')) return
-        onSelecteer?.(e.ctrlKey || e.metaKey, e.shiftKey)
-      }}
+      // Selecteren gaat alleen via het vinkje: een klik op de regel zelf selecteert niets.
       onContextMenu={e => {
         if (readOnly || (e.target as HTMLElement).closest('input,textarea,select')) return
         e.preventDefault(); setMenuOpen(true)
