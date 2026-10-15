@@ -1970,6 +1970,12 @@ export type PortaalOnderdeel =
 export type PortaalDossierInstellingen = {
   dossier_id: string
   actief: boolean
+  /**
+   * Iemand heeft `actief` zelf gezet op de Portaal-tab. Zolang dit false is, zet
+   * een DB-trigger het dossier vanzelf open zodra het binnen het bereik valt van
+   * een contactpersoon met portaaltoegang.
+   */
+  actief_handmatig: boolean
   toon_bestanden: boolean
   toon_fotos: boolean
   toon_facturen: boolean

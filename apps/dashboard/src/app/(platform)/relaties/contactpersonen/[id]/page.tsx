@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getContactpersoonById } from '@/lib/relaties/contactpersonen-actions'
 import { getContactpersoonDossiers } from '@/lib/relaties/dossiers'
+import { getPortaalVoorContactpersoon } from '@/lib/portaal/contactpersoon'
 import ContactpersoonDetailView from './ContactpersoonDetailView'
 
 export async function generateMetadata(props: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -13,11 +14,12 @@ export async function generateMetadata(props: { params: Promise<{ id: string }> 
 
 export default async function ContactpersoonDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params
-  const [contactpersoon, dossiers] = await Promise.all([
+  const [contactpersoon, dossiers, portaal] = await Promise.all([
     getContactpersoonById(params.id),
     getContactpersoonDossiers(params.id),
+    getPortaalVoorContactpersoon(params.id),
   ])
   if (!contactpersoon) notFound()
 
-  return <ContactpersoonDetailView contactpersoon={contactpersoon} dossiers={dossiers} />
+  return <ContactpersoonDetailView contactpersoon={contactpersoon} dossiers={dossiers} portaal={portaal} />
 }
