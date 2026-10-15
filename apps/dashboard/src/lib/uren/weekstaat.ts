@@ -23,12 +23,13 @@ import { bepaalModus, bepaalTeamleider } from './goedkeuring'
 import { eigenWeek, bewerkbaar, type WeekStatus } from './week-guard'
 import {
   wijzigVenster, vereisWijzigbaar, tekortNaWijziging, verwijderUitBouw7, stuurWijzigingNaarBouw7, WEEK_JOIN,
+  goedgekeurdeRegelIds,
 } from './wijzigen-na-indienen'
 import type { OnkostenSoort, Vervoermiddel } from './onkosten'
 import { signBonnen } from './bonnen'
 import { BOEKBAAR_FILTER } from './boekbaar'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
-import { zetOverurenRegels } from './overuren'
+import { zetOverurenRegels, overurenDieVervallen } from './overuren'
 import { berekenTvtSaldo } from './tvt-saldo'
 import type { KantoorOptie } from './kantoor-opties'
 
@@ -59,6 +60,8 @@ export type WeekRegel = {
   bouw7_status: string
   /** Staat op een indirecte-urenproject (overhead). Kantoor ziet zo of een regel op een echt project staat. */
   indirect: boolean
+  /** Ingediend en al goedgekeurd: deze regel ligt vast, de rest van de week niet per se. */
+  goedgekeurd: boolean
 }
 
 export type WeekOnkosten = {
@@ -91,7 +94,7 @@ export type Weekstaat = {
   blokkade: string | null
   /** In te dienen: concept of afgekeurd. */
   bewerkbaar: boolean
-  /** Regels en kosten aan te passen; ook na indienen, tot er iets is goedgekeurd. */
+  /** Regels en kosten aan te passen; ook na indienen tot de deadline, behalve wat al goedgekeurd is. */
   wijzigbaar: boolean
   /** Ingediend en nog aan te passen: tot wanneer (ISO). */
   wijzigenTot: string | null
@@ -200,7 +203,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
   // vóór deze regel moet bij het openen meteen goed staan.
   await zetOverurenRegels(weekId)
 
-  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers, bestemming] = await Promise.all([
+  const [{ data: week }, { data: regels }, { data: onkosten }, { data: saldoRij }, inst, indirecteDossiers, bestemming, akkoord] = await Promise.all([
     supabase.from('uren_weken').select('*').eq('id', weekId).single(),
     supabase
       .from('uren_regels')
@@ -212,6 +215,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     getUrenInstellingen(),
     getIndirecteDossierIds(),
     getUrenBestemming(medewerker.id),
+    goedgekeurdeRegelIds(weekId),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -233,6 +237,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     gewijzigd_door_goedkeurder: !!r.gewijzigd_door_goedkeurder_id,
     bouw7_status: r.bouw7_status,
     indirect: !!r.dossier_id && indirecteDossiers.has(r.dossier_id),
+    goedgekeurd: !bewerkbaar(week.status) && akkoord.has(r.id),
   }))
 
   const contracturen = Number(week.contracturen ?? 0)
@@ -589,7 +594,8 @@ export async function voegRegelToe(
   const t = await getAppVertaler('uren')
   try {
     const { medewerker, week, supabase } = await eigenWeek(weekId)
-    const geweigerd = await vereisWijzigbaar(week)
+    const overurenIds = await overurenDieVervallen(weekId, { nieuw: invoer })
+    const geweigerd = await vereisWijzigbaar(week, { overurenIds })
     if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
     const rij = await bouwRegel(medewerker.id, invoer)
@@ -620,7 +626,8 @@ export async function wijzigRegel(
     if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
     if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
     if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
-    const geweigerd = await vereisWijzigbaar(bestaand.uren_weken)
+    const overurenIds = await overurenDieVervallen(bestaand.week_id, { regelId, nieuw: invoer })
+    const geweigerd = await vereisWijzigbaar(bestaand.uren_weken, { regelId, overurenIds })
     if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
     const tekort = await tekortNaWijziging(bestaand.uren_weken, regelId, invoer.uren)
     if (tekort) return { ok: false, error: tekort }
@@ -657,7 +664,8 @@ export async function verwijderRegel(
   if (!bestaand) return { ok: false, error: t('fout.regelNietGevonden') }
   if (bestaand.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
   if (bestaand.bron === OVERUREN_BRON) return { ok: false, error: t('fout.automatischeRegel') }
-  const geweigerd = await vereisWijzigbaar(bestaand.uren_weken)
+  const overurenIds = await overurenDieVervallen(bestaand.week_id, { regelId })
+  const geweigerd = await vereisWijzigbaar(bestaand.uren_weken, { regelId, overurenIds })
   if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
   const tekort = await tekortNaWijziging(bestaand.uren_weken, regelId, 0)
   if (tekort) return { ok: false, error: tekort }

@@ -100,7 +100,7 @@ export default function UrenInstellingenBeheer({
     indien_deadline_dag: instellingen?.indien_deadline_dag ?? 5,
     indien_deadline_tijd: (instellingen?.indien_deadline_tijd ?? '17:00').slice(0, 5),
     goedkeur_deadline_dag: instellingen?.goedkeur_deadline_dag ?? 1,
-    goedkeur_deadline_tijd: (instellingen?.goedkeur_deadline_tijd ?? '12:00').slice(0, 5),
+    goedkeur_deadline_tijd: (instellingen?.goedkeur_deadline_tijd ?? '15:00').slice(0, 5),
     goedkeuring_modus: instellingen?.goedkeuring_modus ?? 'bouw7',
     km_vergoeding_auto: Number(instellingen?.km_vergoeding_auto ?? 0.3),
     km_vergoeding_bromfiets: Number(instellingen?.km_vergoeding_bromfiets ?? 0.11),

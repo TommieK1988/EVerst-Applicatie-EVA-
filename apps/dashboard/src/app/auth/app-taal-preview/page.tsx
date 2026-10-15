@@ -74,8 +74,12 @@ const VERLOF_SOORTEN: VerlofSoort[] = [
  * uitleg erbij in elke taal te zien zijn. 9 uur per dag op 37,5: -1,5 per dag naar het saldo.
  * `?uren=kantoor`: dezelfde week voor iemand op kantoor die voor twee bedrijven werkt, zodat de
  * keuze "Voor welk bedrijf" in het boekscherm te zien is (tik op + bij een dag).
+ * `?uren=ingediend`: dezelfde week ingediend, met maandag en dinsdag al goedgekeurd: die regels
+ * (en de kosten van maandag) liggen vast, de rest is nog aan te passen.
  */
-function voorbeeldWeek(kantoor = false): Weekstaat {
+function voorbeeldWeek(variant: 'gewoon' | 'kantoor' | 'ingediend' = 'gewoon'): Weekstaat {
+  const kantoor = variant === 'kantoor'
+  const ingediend = variant === 'ingediend'
   const maandag = new Date(vandaag.getTime() - ((vandaag.getUTCDay() + 6) % 7) * 86_400_000)
   const dagen = Array.from({ length: 7 }, (_, i) =>
     new Date(maandag.getTime() + i * 86_400_000).toISOString().slice(0, 10))
@@ -87,13 +91,19 @@ function voorbeeldWeek(kantoor = false): Weekstaat {
     bewakingscode: auto ? null : 'SC01', opmerking: auto ? 'Overuren naar tijd-voor-tijdsaldo' : null,
     bron: auto ? OVERUREN_BRON : 'eva', afgeweken_van_bron: false, pl_status: 'nvt',
     gewijzigd_door_goedkeurder: false, bouw7_status: 'niet_verzonden', indirect: auto,
+    goedgekeurd: ingediend && datum <= dagen[1],
+  })
+  const kosten = (id: string, datum: string): Weekstaat['onkosten'][number] => ({
+    id, datum, soort: 'parkeren', vervoermiddel: null, bedrag: 7.5, km: null, omschrijving: null, bon_url: null,
   })
   const regels = dagen.slice(0, 5).flatMap((d, i) => [regel(`w${i}`, d, 9, false), regel(`a${i}`, d, -1.5, true)])
   return {
-    weekId: 'w', weekStart: dagen[0], jaar: 2026, weekNr: 41, dagen, status: 'concept',
+    weekId: 'w', weekStart: dagen[0], jaar: 2026, weekNr: 41, dagen, status: ingediend ? 'ingediend' : 'concept',
     contracturen: 37.5, totaalUren: 37.5, tijdVoorTijdUren: -7.5, tekort: 0, saldoMutatie: 7.5,
-    saldoNu: 12, magIndienen: true, blokkade: null, bewerkbaar: true, wijzigbaar: true, wijzigenTot: null, afkeurReden: null,
-    regels, onkosten: [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor, extern: false,
+    saldoNu: 12, magIndienen: !ingediend, blokkade: null, bewerkbaar: !ingediend, wijzigbaar: true,
+    wijzigenTot: ingediend ? new Date(Date.parse(`${dagen[0]}T13:00:00Z`) + 7 * 86_400_000).toISOString() : null,
+    afkeurReden: null,
+    regels, onkosten: ingediend ? [kosten('k0', dagen[0]), kosten('k2', dagen[2])] : [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor, extern: false,
     kantoorOpties: kantoor
       ? [{ dossierId: 'k1', label: 'Bouwbedrijf Morgenstond B.V.' }, { dossierId: 'k2', label: 'Everts Onderhoudsschilders B.V.' }]
       : [],
@@ -166,8 +176,11 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         {params.uren === '1' && (
           <WeekstaatClient staat={voorbeeldWeek()} uursoorten={[]} vandaag={vandaag.toISOString().slice(0, 10)} />
         )}
+        {params.uren === 'ingediend' && (
+          <WeekstaatClient staat={voorbeeldWeek('ingediend')} uursoorten={[]} vandaag={vandaag.toISOString().slice(0, 10)} />
+        )}
         {params.uren === 'kantoor' && (
-          <WeekstaatClient staat={voorbeeldWeek(true)} uursoorten={[{ id: 'werk', naam: 'Kantoor', categorie: 'werk' }]} vandaag={vandaag.toISOString().slice(0, 10)} />
+          <WeekstaatClient staat={voorbeeldWeek('kantoor')} uursoorten={[{ id: 'werk', naam: 'Kantoor', categorie: 'werk' }]} vandaag={vandaag.toISOString().slice(0, 10)} />
         )}
         <VerlofClient aanvragen={VERLOF} ingepland={INGEPLAND} soorten={VERLOF_SOORTEN} saldo={86.5} tvtBeschikbaar={6} />
         <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>

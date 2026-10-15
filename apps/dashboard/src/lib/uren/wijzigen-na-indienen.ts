@@ -9,54 +9,92 @@ import { bewerkbaar } from './week-guard'
 
 // Wijzigen ná indienen.
 //
-// Een ingediende week blijft van de medewerker zolang de goedkeurder er nog niets van heeft
-// goedgekeurd, en uiterlijk tot de goedkeurdeadline (standaard maandag 12:00 ná de week). Daarna
-// ligt hij vast. Een vergissing die hij zelf ziet hoeft dan niet via de goedkeurder te lopen.
+// Een ingediende week blijft van de medewerker tot de goedkeurdeadline (standaard maandag 15:00
+// ná de week). Daarna ligt hij vast. Een vergissing die hij zelf ziet -- of een te vroege tik op
+// Indienen -- hoeft dan niet via de goedkeurder te lopen.
 //
-// "Iets goedgekeurd" betekent: één regel is genoeg. Een teamleider-akkoord telt ook, al is de
-// regel in Bouw7 nog niet geaccordeerd -- de teamleider heeft er dan naar gekeken, en wat hij
-// gezien heeft mag niet onder zijn handen veranderen.
+// HET SLOT ZIT OP DE REGEL, NIET OP DE WEEK. Goedkeuren gebeurt per uurregel (een Bouw7 hour-log
+// met zijn eigen teamleider- en projectleiderstempel), dus vergrendelen doen we ook per regel:
+// een goedgekeurde regel ligt vast, de rest van de week blijft aan te passen. Vroeger ging bij
+// het eerste akkoord de hele week op slot, en zat een extern die maandag nog een fout zag vast
+// aan regels waar nog niemand naar gekeken had.
+//
+// "Goedgekeurd" betekent: geaccordeerd in Bouw7 óf een teamleider- of projectleiderakkoord in
+// EVA. Een teamleider-akkoord telt ook, al is de regel in Bouw7 nog niet geaccordeerd -- de
+// teamleider heeft er dan naar gekeken, en wat hij gezien heeft mag niet onder zijn handen
+// veranderen.
+//
+// Twee dingen hebben geen eigen goedkeuring en lenen die daarom van iets anders:
+// - Kostenposten hangen aan een dag. Is er van die dag een uurregel goedgekeurd, dan heeft de
+//   goedkeurder die dag (met zijn kosten) bekeken en ligt de kostenpost ook vast.
+// - De automatische overurenregel verschuift mee met de andere regels. Zou een wijziging een al
+//   goedgekeurde overurenregel laten verdwijnen, dan weigeren we de wijziging (zie
+//   `overurenDieVervallen` in ./overuren).
 //
 // In de Bouw7-route staan de uren na indienen al in Bouw7 (approved = false). Elke wijziging gaat
-// er dus meteen achteraan (`stuurWijzigingNaarBouw7`), en een verwijderde regel wordt daar eerst
-// verwijderd. Vóór elke wijziging kijken we ook live in Bouw7: daar kan iemand rechtstreeks
-// geaccordeerd hebben, wat EVA pas bij de volgende sync zou zien -- en ons opnieuw versturen met
-// approved = false zou die goedkeuring stilletjes terugdraaien.
+// er dus meteen achteraan (`stuurWijzigingNaarBouw7`; die stuurt alleen regels die nog niet
+// verzonden zijn, een goedgekeurde regel blijft dus onaangeroerd), en een verwijderde regel wordt
+// daar eerst verwijderd. Vóór elke wijziging kijken we ook live in Bouw7: daar kan iemand
+// rechtstreeks geaccordeerd hebben, wat EVA pas bij de volgende sync zou zien -- en ons opnieuw
+// versturen met approved = false zou die goedkeuring stilletjes terugdraaien.
 
 const db = () => createAdminClient()
 
 type WeekRij = { id: string; week_start: string; status: string; medewerker_id: string }
 
 export type WijzigVenster = {
-  /** Mag de medewerker regels en kosten nog toevoegen, wijzigen en verwijderen? */
+  /** Mag de medewerker nog regels en kosten toevoegen? Per regel kan er nog een slot op zitten. */
   wijzigbaar: boolean
   /** Alleen bij een ingediende week die nog open staat: tot wanneer (ISO). */
   tot: string | null
-  /** Waarom niet, als het een ingediende week betreft. */
-  reden: 'goedgekeurd' | 'deadline' | null
 }
 
-/** Heeft de goedkeurder al iets van deze week goedgekeurd? Alleen wat EVA zelf weet. */
-async function heeftGoedkeuringInEva(weekId: string): Promise<{ akkoord: boolean; hourLogIds: number[] }> {
-  const supabase = db()
+/** Wat een wijziging raakt; bepaalt welke goedkeuringen ertoe doen. */
+export type WijzigDoel = {
+  /** De regel die gewijzigd of verwijderd wordt. */
+  regelId?: string
+  /** Automatische overurenregels die door de wijziging zouden verdwijnen. */
+  overurenIds?: string[]
+  /** De dag van een kostenpost die erbij komt of verdwijnt. */
+  datum?: string
+}
+
+export type Weigering =
+  | 'weekAlIngediend' | 'wijzigTermijnVerstreken' | 'regelAlGoedgekeurd' | 'overurenAlGoedgekeurd'
+  | 'dagAlGoedgekeurd' | 'goedkeuringNietTeControleren'
+
+type RegelRij = { id: string; datum: string; bouw7_hour_log_id: number | null; bouw7_goedgekeurd: boolean | null }
+
+async function regelsVanWeek(weekId: string): Promise<RegelRij[]> {
   // Eén week van één medewerker: een handvol regels.
-  const { data: regels } = await supabase
+  const { data } = await db()
     .from('uren_regels')
-    .select('bouw7_hour_log_id, bouw7_goedgekeurd')
+    .select('id, datum, bouw7_hour_log_id, bouw7_goedgekeurd')
     .eq('week_id', weekId)
-  const rij = (regels ?? []) as Array<{ bouw7_hour_log_id: number | null; bouw7_goedgekeurd: boolean | null }>
-  const hourLogIds = rij.map(r => r.bouw7_hour_log_id).filter((id): id is number => id != null)
-  if (rij.some(r => r.bouw7_goedgekeurd)) return { akkoord: true, hourLogIds }
-  if (!hourLogIds.length) return { akkoord: false, hourLogIds }
+  return (data ?? []) as RegelRij[]
+}
+
+/** Welke van deze regels zijn goedgekeurd, voor zover EVA dat weet. */
+async function goedgekeurdInEva(regels: RegelRij[]): Promise<Set<string>> {
+  const akkoord = new Set(regels.filter(r => r.bouw7_goedgekeurd).map(r => r.id))
+  const open = regels.filter(r => !r.bouw7_goedgekeurd && r.bouw7_hour_log_id != null)
+  if (!open.length) return akkoord
 
   // Bij intrekken worden beide stempels leeggemaakt; een gevulde stempel is dus een geldig akkoord.
-  const { data: beoordeeld } = await supabase
+  // Begrensd door de id-lijst: de regels van één week.
+  const { data: beoordeeld } = await db()
     .from('uren_bouw7_beoordeling')
     .select('bouw7_hour_log_id')
-    .in('bouw7_hour_log_id', hourLogIds)
+    .in('bouw7_hour_log_id', open.map(r => r.bouw7_hour_log_id as number))
     .or('tl_akkoord_op.not.is.null,pl_akkoord_op.not.is.null')
-    .limit(1)
-  return { akkoord: (beoordeeld ?? []).length > 0, hourLogIds }
+  const ids = new Set((beoordeeld ?? []).map(b => b.bouw7_hour_log_id))
+  for (const r of open) if (r.bouw7_hour_log_id != null && ids.has(r.bouw7_hour_log_id)) akkoord.add(r.id)
+  return akkoord
+}
+
+/** De goedgekeurde regels van een week, voor het scherm: daar komt een slotje in plaats van de knoppen. */
+export async function goedgekeurdeRegelIds(weekId: string): Promise<Set<string>> {
+  return goedgekeurdInEva(await regelsVanWeek(weekId))
 }
 
 /**
@@ -64,54 +102,75 @@ async function heeftGoedkeuringInEva(weekId: string): Promise<{ akkoord: boolean
  * tonen of verbergen. De echte controle bij een wijziging is `vereisWijzigbaar`.
  */
 export async function wijzigVenster(week: WeekRij, nu = new Date()): Promise<WijzigVenster> {
-  if (bewerkbaar(week.status)) return { wijzigbaar: true, tot: null, reden: null }
-  if (week.status !== 'ingediend') return { wijzigbaar: false, tot: null, reden: null }
+  if (bewerkbaar(week.status)) return { wijzigbaar: true, tot: null }
+  if (week.status !== 'ingediend') return { wijzigbaar: false, tot: null }
 
   const deadline = goedkeurDeadline(week.week_start, await getUrenInstellingen())
-  if (nu >= deadline) return { wijzigbaar: false, tot: null, reden: 'deadline' }
-  if ((await heeftGoedkeuringInEva(week.id)).akkoord) return { wijzigbaar: false, tot: null, reden: 'goedgekeurd' }
-  return { wijzigbaar: true, tot: deadline.toISOString(), reden: null }
+  if (nu >= deadline) return { wijzigbaar: false, tot: null }
+  return { wijzigbaar: true, tot: deadline.toISOString() }
 }
 
 /**
  * De poort voor elke wijziging aan regels of kosten. Levert `null` als het mag, anders de reden
  * als sleutel onder `uren.fout.*`.
  *
- * Bij een ingediende week in de Bouw7-route kijkt hij ook live in Bouw7. Is Bouw7 niet bereikbaar,
+ * Alleen de goedkeuring van wat `doel` raakt telt: de regel zelf, de overurenregels die zouden
+ * verdwijnen, en bij een kostenpost de uurregels van die dag. Een nieuwe uurregel zonder
+ * gevolgen voor de overuren raakt niets wat al goedgekeurd is en mag tot de deadline.
+ *
+ * Bij een ingediende week kijkt hij voor die regels ook live in Bouw7. Is Bouw7 niet bereikbaar,
  * dan weigert hij: liever even niet wijzigen dan een goedkeuring overschrijven die we niet zagen.
  */
 export async function vereisWijzigbaar(
   week: WeekRij & { goedkeuring_modus?: string | null },
-): Promise<null | 'weekAlIngediend' | 'wijzigTermijnVerstreken' | 'alGoedgekeurd' | 'goedkeuringNietTeControleren'> {
+  doel: WijzigDoel = {},
+): Promise<Weigering | null> {
   if (bewerkbaar(week.status)) return null
   if (week.status !== 'ingediend') return 'weekAlIngediend'
 
   const deadline = goedkeurDeadline(week.week_start, await getUrenInstellingen())
   if (new Date() >= deadline) return 'wijzigTermijnVerstreken'
 
-  const { akkoord, hourLogIds } = await heeftGoedkeuringInEva(week.id)
-  if (akkoord) return 'alGoedgekeurd'
-  if (!hourLogIds.length) return null
+  const regels = (await regelsVanWeek(week.id)).filter(r =>
+    r.id === doel.regelId || doel.overurenIds?.includes(r.id) || (doel.datum != null && r.datum === doel.datum))
+  if (!regels.length) return null
 
+  const reden = (akkoord: Set<string>): Weigering | null => {
+    if (doel.regelId && akkoord.has(doel.regelId)) return 'regelAlGoedgekeurd'
+    if (doel.overurenIds?.some(id => akkoord.has(id))) return 'overurenAlGoedgekeurd'
+    if (doel.datum != null && regels.some(r => r.datum === doel.datum && akkoord.has(r.id))) return 'dagAlGoedgekeurd'
+    return null
+  }
+
+  const akkoord = await goedgekeurdInEva(regels)
+  const volgensEva = reden(akkoord)
+  if (volgensEva) return volgensEva
+
+  const teControleren = regels.filter(r => !akkoord.has(r.id) && r.bouw7_hour_log_id != null)
+  if (!teControleren.length) return null
   try {
-    if (await heeftGoedkeuringInBouw7(week, hourLogIds)) return 'alGoedgekeurd'
+    const live = await goedgekeurdInBouw7(week, teControleren.map(r => r.bouw7_hour_log_id as number))
+    for (const r of teControleren) if (live.has(r.bouw7_hour_log_id as number)) akkoord.add(r.id)
   } catch (e) {
     console.error('[uren] goedkeuring in Bouw7 niet te controleren:', e)
     return 'goedkeuringNietTeControleren'
   }
-  return null
+  return reden(akkoord)
 }
 
-async function heeftGoedkeuringInBouw7(week: WeekRij, hourLogIds: number[]): Promise<boolean> {
+/** Welke van deze hour-logs zijn in Bouw7 geaccordeerd. */
+async function goedgekeurdInBouw7(week: WeekRij, hourLogIds: number[]): Promise<Set<number>> {
   const { data: mw } = await db().from('medewerkers').select('bouw7_id').eq('id', week.medewerker_id).maybeSingle()
-  if (!mw?.bouw7_id) return false
+  if (!mw?.bouw7_id) return new Set()
   const client = await getBouw7Client()
   // Eén medewerker vanaf de maandag van de week: een paar weken uren, ruim onder de limiet.
   const resp = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
     q: `employee.id = ${mw.bouw7_id} AND logDate >= "${week.week_start}" SORT(logDate, ASC) LIMIT 500`,
   })
   const ids = new Set(hourLogIds)
-  return (resp?.items ?? []).some(l => l.id != null && ids.has(l.id) && l.isApproved === true)
+  return new Set((resp?.items ?? [])
+    .filter(l => l.id != null && ids.has(l.id) && l.isApproved === true)
+    .map(l => l.id as number))
 }
 
 /** De weekvelden die `vereisWijzigbaar` en `tekortNaWijziging` nodig hebben, als join op een regel. */

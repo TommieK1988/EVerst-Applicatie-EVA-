@@ -40,10 +40,11 @@ export async function voegOnkostenToe(
   const { medewerker, week, supabase } = await eigenWeek(weekId)
   // Foutteksten in de taal van de app: deze actie draait alleen vanuit EVA Mobiel.
   const t = await getAppVertaler('uren')
-  const geweigerd = await vereisWijzigbaar(week)
+  const datum = String(formData.get('datum') ?? '')
+  // Een kostenpost heeft geen eigen goedkeuring: hij ligt vast als de uren van die dag dat zijn.
+  const geweigerd = await vereisWijzigbaar(week, { datum })
   if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
-  const datum = String(formData.get('datum') ?? '')
   const soortRuw = formData.get('soort')
   const vervoerRuw = formData.get('vervoermiddel')
   const omschrijving = String(formData.get('omschrijving') ?? '').trim()
@@ -126,7 +127,7 @@ export async function verwijderOnkosten(
   const supabase = createAdminClient()
   const { data: rij } = await supabase
     .from('uren_onkosten')
-    .select('id, medewerker_id, week_id, bon_pad')
+    .select('id, medewerker_id, week_id, datum, bon_pad')
     .eq('id', onkostenId)
     .maybeSingle()
   if (!rij) return { ok: false, error: t('fout.regelNietGevonden') }
@@ -137,7 +138,7 @@ export async function verwijderOnkosten(
   const { data: week } = await supabase
     .from('uren_weken').select('id, week_start, status, medewerker_id, goedkeuring_modus').eq('id', rij.week_id).maybeSingle()
   if (!week) return { ok: false, error: t('fout.weekAlIngediend') }
-  const geweigerd = await vereisWijzigbaar(week)
+  const geweigerd = await vereisWijzigbaar(week, { datum: rij.datum })
   if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
   const { error } = await supabase.from('uren_onkosten').delete().eq('id', onkostenId)

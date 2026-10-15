@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { berekenWeekTotalen, verdeelOveruren } from './rekenregel'
+import { berekenWeekTotalen, overurenVerschil, verdeelOveruren } from './rekenregel'
 
 // Week 41 van 2026: ma 5 t/m zo 11 oktober, rooster ma-vr 7,5 uur.
 const NORM: Record<string, number> = {
@@ -91,5 +91,35 @@ describe('verdeelOveruren', () => {
       dag('2026-10-07', -1.5), dag('2026-10-08', -1.5), dag('2026-10-09', -1.5), dag('2026-10-10', -6),
       dag('2026-10-06', -1.5),
     ].sort((a, b) => a.datum.localeCompare(b.datum)))
+  })
+})
+
+describe('overurenVerschil', () => {
+  const rij = (id: string, datum: string, uren: number) => ({ id, datum, uren })
+
+  it('laat een overurenregel die al goed staat staan, ook als een andere dag verschuift', () => {
+    const bestaand = [rij('a', '2026-10-08', -1.5), rij('b', '2026-10-09', -1.5)]
+    const { weg, erbij } = overurenVerschil(bestaand, [dag('2026-10-08', -1.5), dag('2026-10-09', -2)])
+    expect(weg.map(r => r.id)).toEqual(['b'])
+    expect(erbij).toEqual([dag('2026-10-09', -2)])
+  })
+
+  it('doet niets als alles al klopt', () => {
+    const bestaand = [rij('a', '2026-10-09', -3)]
+    expect(overurenVerschil(bestaand, [dag('2026-10-09', -3)])).toEqual({ weg: [], erbij: [] })
+  })
+
+  it('haalt alles weg als er geen overuren meer zijn', () => {
+    const bestaand = [rij('a', '2026-10-08', -1), rij('b', '2026-10-09', -1)]
+    const { weg, erbij } = overurenVerschil(bestaand, [])
+    expect(weg.map(r => r.id)).toEqual(['a', 'b'])
+    expect(erbij).toEqual([])
+  })
+
+  it('telt dubbele regels op dezelfde dag apart', () => {
+    const bestaand = [rij('a', '2026-10-09', -1), rij('b', '2026-10-09', -1)]
+    const { weg, erbij } = overurenVerschil(bestaand, [dag('2026-10-09', -1)])
+    expect(weg.map(r => r.id)).toEqual(['b'])
+    expect(erbij).toEqual([])
   })
 })

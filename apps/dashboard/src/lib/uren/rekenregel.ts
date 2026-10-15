@@ -100,6 +100,27 @@ export function verdeelOveruren(
 }
 
 /**
+ * Wat er aan de bestaande overurenregels moet veranderen om op `gewenst` uit te komen: welke weg
+ * moeten en welke erbij komen. Een regel die al precies goed staat (zelfde dag, zelfde uren)
+ * blijft staan -- dat is nodig omdat hij al goedgekeurd kan zijn, en dan mag hij niet verdwijnen
+ * en terugkomen als een nieuwe, ongekeurde regel.
+ */
+export function overurenVerschil<T extends OverurenRegel>(
+  bestaand: T[],
+  gewenst: OverurenRegel[],
+): { weg: T[]; erbij: OverurenRegel[] } {
+  const sleutel = (r: OverurenRegel) => `${r.datum}:${rondUren(r.uren)}`
+  const erbij = [...gewenst]
+  const weg = bestaand.filter(r => {
+    const i = erbij.findIndex(g => sleutel(g) === sleutel(r))
+    if (i < 0) return true
+    erbij.splice(i, 1)
+    return false
+  })
+  return { weg, erbij }
+}
+
+/**
  * Waarom een week (nog) niet ingediend kan worden, of `null` als het mag.
  * De tekst is voor de medewerker bedoeld en zegt wat hij moet doen.
  */
