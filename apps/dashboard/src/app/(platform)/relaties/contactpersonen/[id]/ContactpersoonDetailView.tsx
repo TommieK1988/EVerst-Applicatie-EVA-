@@ -21,6 +21,8 @@ import DossierLijstBlok from '@/components/relaties/DossierLijstBlok'
 import SamenvoegenModal from '@/components/relaties/SamenvoegenModal'
 import EmailadressenBlok from '@/components/relaties/EmailadressenBlok'
 import AdreskoppelingenBlok from '@/components/relaties/AdreskoppelingenBlok'
+import KlantportaalContactBlok from '@/components/relaties/KlantportaalContactBlok'
+import type { PortaalContactpersoonBeheer } from '@/lib/portaal/contactpersoon'
 import { adresRegel, bezorgadres, bezorgadresWaarschuwing } from '@/lib/relaties/kerstkaart'
 
 const baseInput: React.CSSProperties = {
@@ -168,9 +170,11 @@ type Props = {
   contactpersoon: ContactpersoonMetOrganisaties
   /** Dossiers waarop deze persoon de contactpersoon is. */
   dossiers: RelatieDossier[]
+  /** `null`: geen leesrecht op het klantportaal — dan geen blok. */
+  portaal: PortaalContactpersoonBeheer | null
 }
 
-export default function ContactpersoonDetailView({ contactpersoon: initial, dossiers }: Props) {
+export default function ContactpersoonDetailView({ contactpersoon: initial, dossiers, portaal }: Props) {
   const [cp, setCp] = useState(initial)
   const [bewerken, setBewerken] = useState(false)
   const [form, setForm] = useState({
@@ -594,6 +598,11 @@ export default function ContactpersoonDetailView({ contactpersoon: initial, doss
               </div>
             )}
           </Blok>
+
+          {/* Een samengevoegde rij krijgt geen portaaltoegang meer: die hoort bij de blijver. */}
+          {portaal && !cp.samengevoegd_naar && (
+            <KlantportaalContactBlok contactpersoonId={cp.id} naam={volledigeNaam} data={portaal} />
+          )}
 
           {/* Bouw7 kent geen gedeelde contactpersoon: bij twee werkgevers staan er twee rijen. */}
           {(cp.spiegels?.length ?? 0) > 1 && (

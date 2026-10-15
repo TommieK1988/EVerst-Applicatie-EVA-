@@ -13060,6 +13060,7 @@ export type Database = {
       portaal_dossier_instellingen: {
         Row: {
           actief: boolean
+          actief_handmatig: boolean
           dossier_id: string
           gewijzigd_door: string | null
           gewijzigd_op: string
@@ -13077,6 +13078,7 @@ export type Database = {
         }
         Insert: {
           actief?: boolean
+          actief_handmatig?: boolean
           dossier_id: string
           gewijzigd_door?: string | null
           gewijzigd_op?: string
@@ -13094,6 +13096,7 @@ export type Database = {
         }
         Update: {
           actief?: boolean
+          actief_handmatig?: boolean
           dossier_id?: string
           gewijzigd_door?: string | null
           gewijzigd_op?: string
@@ -13398,6 +13401,53 @@ export type Database = {
             columns: ["portaal_gebruiker_id"]
             isOneToOne: false
             referencedRelation: "portaal_gebruikers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portaal_standaard_onderdelen: {
+        Row: {
+          gewijzigd_door: string | null
+          gewijzigd_op: string
+          id: boolean
+          toon_aandachtspunten: boolean
+          toon_bestanden: boolean
+          toon_chat: boolean
+          toon_facturen: boolean
+          toon_formulieren: boolean
+          toon_fotos: boolean
+          toon_planning: boolean
+        }
+        Insert: {
+          gewijzigd_door?: string | null
+          gewijzigd_op?: string
+          id?: boolean
+          toon_aandachtspunten?: boolean
+          toon_bestanden?: boolean
+          toon_chat?: boolean
+          toon_facturen?: boolean
+          toon_formulieren?: boolean
+          toon_fotos?: boolean
+          toon_planning?: boolean
+        }
+        Update: {
+          gewijzigd_door?: string | null
+          gewijzigd_op?: string
+          id?: boolean
+          toon_aandachtspunten?: boolean
+          toon_bestanden?: boolean
+          toon_chat?: boolean
+          toon_facturen?: boolean
+          toon_formulieren?: boolean
+          toon_fotos?: boolean
+          toon_planning?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portaal_standaard_onderdelen_gewijzigd_door_fkey"
+            columns: ["gewijzigd_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
             referencedColumns: ["id"]
           },
         ]
@@ -19969,6 +20019,25 @@ export type Database = {
           planning_eind: string
           planning_start: string
         }[]
+      }
+      portaal_dossier_automatisch_openen: {
+        Args: { p_dossier_id: string }
+        Returns: boolean
+      }
+      portaal_gebruiker_dossiers_openen: {
+        Args: { p_gebruiker_id: string }
+        Returns: number
+      }
+      portaal_gebruiker_ziet_dossier: {
+        Args: {
+          p_contactpersoon_id: string
+          p_dossier_contactpersoon_id: string
+          p_dossier_klant_id: string
+          p_particulier_id: string
+          p_relatie_id: string
+          p_scope: string
+        }
+        Returns: boolean
       }
       relatie_samenvoegen: {
         Args: { p_blijver: string; p_door?: string; p_verliezer: string }

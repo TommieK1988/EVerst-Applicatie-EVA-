@@ -10,6 +10,7 @@ import type {
 import { PORTAAL_ONDERDEEL_KOLOM } from './onderdelen'
 import { appBaseUrl } from '@/lib/app-url'
 import { getPortaalDossierBeheer, type PortaalDossierBeheer } from './beheer'
+import { openPortaalDossiersVoor } from './contactpersoon'
 
 /**
  * beheer-actions.ts — de EVA-kant van het klantportaal.
@@ -28,7 +29,8 @@ import { getPortaalDossierBeheer, type PortaalDossierBeheer } from './beheer'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createAdminClient() as any
 
-export type BeheerResultaat = { ok: true } | { ok: false; error: string }
+/** `geopend`: hoeveel dossiers er door deze handeling voor het portaal zijn opengezet. */
+export type BeheerResultaat = { ok: true; geopend?: number } | { ok: false; error: string }
 
 function fout(e: unknown): BeheerResultaat {
   if (e instanceof GeenToegangError) return { ok: false, error: 'Je hebt hier geen rechten voor.' }
@@ -143,12 +145,19 @@ export async function getPortaalBeheerVoorBlok(dossierId: string): Promise<Porta
 
 /* ── Zichtbaarheid per dossier ─────────────────────────────────────────────── */
 
-/** Zet het hele portaal voor dit dossier aan of uit. */
+/**
+ * Zet het hele portaal voor dit dossier aan of uit. Dit is een menselijke keuze en wint
+ * daarom van de automatiek: een dossier dat hier dichtgaat, zet de databasetrigger niet
+ * meer vanzelf open (actief_handmatig).
+ */
 export async function setPortaalDossierActief(dossierId: string, actief: boolean): Promise<BeheerResultaat> {
   try {
     const { medewerker } = await vereisRecht('klantportaal', 'schrijven')
     await db().from('portaal_dossier_instellingen').upsert(
-      { dossier_id: dossierId, actief, gewijzigd_op: new Date().toISOString(), gewijzigd_door: medewerker.id },
+      {
+        dossier_id: dossierId, actief, actief_handmatig: true,
+        gewijzigd_op: new Date().toISOString(), gewijzigd_door: medewerker.id,
+      },
       { onConflict: 'dossier_id' },
     )
     revalidatePath('/portaal')
@@ -310,12 +319,29 @@ export async function nodigPortaalGebruikerUit(input: {
     if (!input.contactpersoonId && !input.particulierId) {
       return { ok: false, error: 'Koppel de toegang aan een contactpersoon of particulier.' }
     }
+    if (input.scope === 'organisatie' && !input.relatieId) {
+      return { ok: false, error: 'Kies van welke organisatie deze persoon alle dossiers ziet.' }
+    }
 
     // Altijd in kleine letters opslaan: de login zoekt op exact dit adres.
     const { data: bestaand } = await db()
-      .from('portaal_gebruikers').select('id').eq('email', email).maybeSingle()
+      .from('portaal_gebruikers').select('id, contactpersoon_id, particulier_id')
+      .eq('email', email).maybeSingle()
 
+    // Eén adres is één account. Hoort dat account bij iemand anders, dan zou een uitnodiging
+    // het stilletjes omhangen — en ziet de nieuwe persoon voortaan andermans dossiers.
     if (bestaand) {
+      const anderePersoon =
+        (bestaand.contactpersoon_id && bestaand.contactpersoon_id !== (input.contactpersoonId ?? null)) ||
+        (bestaand.particulier_id && bestaand.particulier_id !== (input.particulierId ?? null))
+      if (anderePersoon) {
+        return { ok: false, error: `${email} hoort al bij het portaalaccount van iemand anders.` }
+      }
+    }
+
+    let gebruikerId: string
+    if (bestaand) {
+      gebruikerId = bestaand.id
       await db().from('portaal_gebruikers').update({
         actief: true,
         contactpersoon_id: input.contactpersoonId ?? null,
@@ -327,7 +353,7 @@ export async function nodigPortaalGebruikerUit(input: {
         updated_at: new Date().toISOString(),
       }).eq('id', bestaand.id)
     } else {
-      await db().from('portaal_gebruikers').insert({
+      const { data: nieuw, error } = await db().from('portaal_gebruikers').insert({
         email,
         contactpersoon_id: input.contactpersoonId ?? null,
         particulier_id: input.particulierId ?? null,
@@ -336,8 +362,14 @@ export async function nodigPortaalGebruikerUit(input: {
         actief: true,
         uitgenodigd_op: new Date().toISOString(),
         uitgenodigd_door: medewerker.id,
-      })
+      }).select('id').single()
+      if (error || !nieuw) throw error ?? new Error('Portaalaccount aanmaken mislukt.')
+      gebruikerId = nieuw.id
     }
+
+    // Eerst de lopende dossiers openzetten, dan pas mailen: wie direct op de link klikt,
+    // moet zijn projecten meteen zien. Nieuwe dossiers komen er daarna vanzelf bij.
+    const geopend = await openPortaalDossiersVoor(gebruikerId)
 
     const voornaam = await haalVoornaam(input.contactpersoonId, input.particulierId)
     const afzender = [medewerker.voornaam, medewerker.tussenvoegsel, medewerker.achternaam]
@@ -349,16 +381,26 @@ export async function nodigPortaalGebruikerUit(input: {
     await db().from('portaal_gebruikers')
       .update({ laatste_link_op: new Date().toISOString() }).eq('email', email)
 
-    return { ok: true }
+    return { ok: true, geopend }
   } catch (e) { return fout(e) }
 }
 
 export async function setPortaalGebruikerScope(id: string, scope: PortaalScope): Promise<BeheerResultaat> {
   try {
     await vereisRecht('klantportaal', 'beheren')
+    if (!['eigen_dossiers', 'organisatie', 'alleen_gekoppeld'].includes(scope)) {
+      return { ok: false, error: 'Onbekend bereik.' }
+    }
+    const { data: gebruiker } = await db().from('portaal_gebruikers')
+      .select('relatie_id').eq('id', id).maybeSingle()
+    if (!gebruiker) return { ok: false, error: 'Portaalaccount niet gevonden.' }
+    // Zonder organisatie valt 'organisatie' stil terug op eigen dossiers; dan liever eerlijk weigeren.
+    if (scope === 'organisatie' && !gebruiker.relatie_id) {
+      return { ok: false, error: 'Dit account hangt aan geen organisatie. Kies die op de pagina van de contactpersoon.' }
+    }
     await db().from('portaal_gebruikers')
       .update({ scope, updated_at: new Date().toISOString() }).eq('id', id)
-    return { ok: true }
+    return { ok: true, geopend: await openPortaalDossiersVoor(id) }
   } catch (e) { return fout(e) }
 }
 
@@ -375,7 +417,8 @@ export async function setPortaalGebruikerActief(id: string, actief: boolean): Pr
     await vereisRecht('klantportaal', 'beheren')
     await db().from('portaal_gebruikers')
       .update({ actief, updated_at: new Date().toISOString() }).eq('id', id)
-    return { ok: true }
+    // Terug van weggeweest: wat er intussen aan nieuwe dossiers bij kwam, alsnog openzetten.
+    return { ok: true, geopend: actief ? await openPortaalDossiersVoor(id) : 0 }
   } catch (e) { return fout(e) }
 }
 
