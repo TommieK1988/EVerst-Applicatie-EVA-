@@ -96,7 +96,7 @@ const somBron = (regels: BewakingRegel[]): ComponentBron => ({
 
 export function BewakingTabelInhoud({ dossierId, data, bewerkbaar, stand }: {
   dossierId: string
-  /** De regel "Stand Bouw7: …"; staat links op dezelfde regel als de inklapknop. */
+  /** Meldingen over de Bouw7-stand (alleen bij een probleem); links op de regel van de inklapknop. */
   stand: React.ReactNode
   data: Pick<DossierBewakingData, 'bouw7Id' | 'hoofdstukken' | 'totalen'>
   bewerkbaar: boolean
@@ -131,7 +131,7 @@ export function BewakingTabelInhoud({ dossierId, data, bewerkbaar, stand }: {
         padding: '18px 18px 0',
       }}>
         {stand}
-        <Button size="sm" variant="ghost" aria-expanded={!ingeklapt} onClick={wissel} style={{ marginBottom: 8 }}>
+        <Button size="sm" variant="ghost" aria-expanded={!ingeklapt} onClick={wissel} style={{ marginLeft: 'auto', marginBottom: 8 }}>
           {ingeklapt ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
           {ingeklapt ? 'Alles uitklappen' : 'Alles inklappen'}
         </Button>

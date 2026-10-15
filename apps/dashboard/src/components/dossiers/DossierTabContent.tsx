@@ -44,6 +44,7 @@ import { DossierReadOnlyProvider } from './DossierReadOnlyContext'
 import { isDossierAfgesloten, opRegie } from './types'
 import { SECTIE_ROUTE } from './open-dossier'
 import type { DossierSectie, DossierRij } from './types'
+import { dossierLaatstBijgewerkt } from '@/lib/bouw7/snapshot'
 
 const TAB_LABELS: Record<string, string> = {
   bewaking:      'Bewaking',
@@ -224,7 +225,7 @@ async function renderEnkeleTab(
       title={dossier.titel}
       sync={{
         id: dossier.id,
-        laatsteSync: dossier.bouw7_laatst_sync ?? null,
+        laatsteSync: await dossierLaatstBijgewerkt(dossier.id, dossier.bouw7_laatst_sync ?? null),
         heeftBouw7: dossier.bouw7_id != null,
       }}
     />

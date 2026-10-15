@@ -10,8 +10,11 @@ export const dynamic = 'force-dynamic'
 /**
  * GET|POST /api/cron/bouw7-snapshots/alles | /dossiers | /overig
  *
- * Vult de Bouw7-snapshots waaruit EVA's schermen lezen. Draait kort ná de reguliere sync, zodat
- * de dossierlijst al bij is voordat we per dossier de details ophalen.
+ * Vult de Bouw7-snapshots waaruit EVA's schermen lezen. Draait vijf minuten ná de start van de
+ * reguliere sync (02:30 → 02:35, 12:30 → 12:35), zodat de dossierlijst al bij is voordat we per
+ * dossier de details ophalen. Vijf minuten is genoeg: de sync mag van Vercel nooit langer dan
+ * 300 s duren (`maxDuration`), dus om :35 is hij altijd klaar of afgebroken. Zo vormen sync en
+ * warmer samen één nachtronde, en toont het dossier één synctijd in plaats van twee.
  *
  * De modus zit in het PAD, niet in een query-string: Vercel Cron registreert paden met `?query=`
  * niet. 'alles' is de normale ronde; 'dossiers' en 'overig' bestaan om het werk te splitsen zodra
@@ -25,11 +28,11 @@ export const dynamic = 'force-dynamic'
  */
 
 /**
- * Beoogde lokale (Europe/Amsterdam) starttijden: 03:00 na de full sync, 13:30 na de incremental.
+ * Beoogde lokale (Europe/Amsterdam) starttijden: 02:35 na de full sync, 12:35 na de incremental.
  * De UTC-paren in vercel.json moeten per doeluur H gelijk zijn aan H-2 en H-1 — anders valt geen
  * enkele firing in dit venster en draait de warmer stilzwijgend nooit (zie run-cron-sync.ts).
  */
-const DOEL_LOKALE_UREN = [3, 13]
+const DOEL_LOKALE_UREN = [2, 12]
 
 function leesModus(mode: string): WarmModus {
   return mode === 'dossiers' || mode === 'overig' ? mode : 'alles'

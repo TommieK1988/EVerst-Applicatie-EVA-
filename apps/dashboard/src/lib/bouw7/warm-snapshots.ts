@@ -1,7 +1,7 @@
 /**
  * De snapshot-warmer: vult `bouw7_snapshots` zodat de schermen niets meer live hoeven op te halen.
  *
- * Draait vanuit /api/cron/bouw7-snapshots, kort ná de reguliere Bouw7-sync. Werkt met een
+ * Draait vanuit /api/cron/bouw7-snapshots, vijf minuten ná de start van de Bouw7-sync. Werkt met een
  * tijdsbudget in plaats van een vaste lijst: hij begint bij de oudste snapshots, werkt door tot
  * het budget op is, en pakt de volgende run vanzelf de rest — de sortering op `opgehaald_op` is
  * de wachtrij, dus een aparte cursor is niet nodig.

@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/bouw7-snapshots/alles",
-      "schedule": "0 1,2 * * *"
+      "schedule": "35 0,1 * * *"
     },
     {
       "path": "/api/cron/ulu-sync",
@@ -46,7 +46,7 @@
     },
     {
       "path": "/api/cron/bouw7-snapshots/alles",
-      "schedule": "30 11,12 * * *"
+      "schedule": "35 10,11 * * *"
     },
     {
       "path": "/api/cron/uren",

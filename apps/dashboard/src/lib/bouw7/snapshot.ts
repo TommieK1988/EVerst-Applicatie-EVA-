@@ -114,6 +114,29 @@ export const dossierBouw7Id = cache(async (dossierId: string): Promise<string | 
 })
 
 /**
+ * Het moment waarop een dossier voor het laatst uit Bouw7 is bijgewerkt: het laatste van de
+ * dossier-sync (`dossiers.bouw7_laatst_sync`) en de jongste snapshot. Sync en snapshots lopen
+ * achter elkaar in één ronde (nacht, middag of de knop Synchroniseer); dit is dus het einde van
+ * die ronde, en de enige synctijd die het dossier toont (in de topbalk).
+ */
+export const dossierLaatstBijgewerkt = cache(
+  async (dossierId: string, laatsteSync: string | null): Promise<string | null> => {
+    const { data } = await db()
+      .from('bouw7_snapshots')
+      .select('opgehaald_op')
+      .eq('dossier_id', dossierId)
+      .not('opgehaald_op', 'is', null)
+      .order('opgehaald_op', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const snapshot = (data as { opgehaald_op: string } | null)?.opgehaald_op ?? null
+    if (!snapshot) return laatsteSync
+    if (!laatsteSync) return snapshot
+    return Date.parse(snapshot) > Date.parse(laatsteSync) ? snapshot : laatsteSync
+  },
+)
+
+/**
  * De gezamenlijke stand van een aantal bronnen. Oudste tijdstip wint: een tab is zo vers als zijn
  * meest verouderde bron, en dat is wat de gebruiker moet zien.
  */
