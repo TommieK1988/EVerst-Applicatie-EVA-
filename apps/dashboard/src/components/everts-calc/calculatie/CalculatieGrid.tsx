@@ -10,10 +10,9 @@ import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { berekenGroepUren, berekenGroepMaterieel, berekenGroepOA, berekenScenarioKostprijs, berekenScenarioVP, berekeningNummers, formatEuro, formatGetal, parseGetal, scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
 import { nieuweId } from '@/lib/everts-calc/utils'
 import type { Groep, Calculatieregel, Componentregel, Scenario } from '@/lib/everts-calc/types'
-import { laadBehandelingen } from '@/app/(platform)/everts-calc/actions/schilderwerk'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import { tariefKort, vindTarief, type BtwTariefKeuze } from '@/lib/stamdata/btw'
-import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
+import { BehandelingProvider, useBehandelingBibliotheek } from './grid/BehandelingContext'
 import { haalHuidigeGebruikerId } from '@/app/(platform)/everts-calc/actions/layouts-calc'
 import { laadLayouts, slaLayoutOp, verwijderLayout, stelStandaardIn } from '@/app/actions/layouts'
 import { useBewaarLaatsteKolommen, LAATST_SCHERM } from './kolom-geheugen'
@@ -143,12 +142,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     laadBtwTarieven().then(setBtwTarieven).catch(() => setBtwTarieven([]))
   }, [])
 
-  // Schilderbehandelingen: één keer voor het hele grid, zodat elke regel de naam
-  // van zijn gekoppelde behandeling live kan tonen zonder eigen fetch per rij.
-  const [behandelingen, setBehandelingen] = useState<SchilderBehandeling[]>([])
-  useEffect(() => {
-    laadBehandelingen().then(setBehandelingen).catch(() => setBehandelingen([]))
-  }, [])
+
 
   // Kolom breedte + volgorde
   const [colWidths, setColWidths] = useState<Record<ColId, number>>(DEFAULT_WIDTHS)
@@ -370,6 +364,9 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     historyRef.current = [snap, ...historyRef.current].slice(0, 20)
     onUndoCountChange?.(historyRef.current.length)
   }, [groepen, regels, componenten, onUndoCountChange])
+
+  // Schilderwerkbibliotheek: één keer voor het hele grid (label, zoekveld, koppelen).
+  const behandelingKoppeling = useBehandelingBibliotheek({ regels, setRegels, setComponenten, duwSnapshot, onWijziging })
 
   const undo = useCallback(() => {
     const snap = historyRef.current.shift()
@@ -937,11 +934,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     setComponenten(prev => prev.map(c => c.id === compId ? bijgewerkt : c))
   }, [componenten])
 
-  const handleVoegComponentToe = useCallback((regelId: string, type: Componentregel['type'], omschrijving?: string) => {
+  const handleVoegComponentToe = useCallback((
+    regelId: string, type: Componentregel['type'], omschrijving?: string, extra?: Partial<Componentregel>,
+  ) => {
     // Het standaard uurtarief van de calculatie (of anders dat uit de
     // bedrijfsinstellingen) wordt in de store zelf op het component gezet.
     let nieuw = voegComponentregelToe(regelId, type)
-    if (omschrijving) nieuw = slaComponentregelOp({ ...nieuw, omschrijving })
+    // extra: een artikel uit de materialenbibliotheek (prijs, eenheid, leverancier).
+    if (omschrijving || extra) nieuw = slaComponentregelOp({ ...nieuw, ...extra, ...(omschrijving ? { omschrijving } : {}) })
     setComponenten(prev => [...prev, nieuw])
     onWijziging()
     // Door naar de hoeveelheid van de nieuwe norm, zodat je meteen kunt doortypen.
@@ -1273,6 +1273,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
               onColDrop={onColDrop} onColDragEnd={onColDragEnd}
             />
             <tbody>
+              <BehandelingProvider value={behandelingKoppeling}>
               {roots.map(g => (
                 <GroepSectie
                   key={g.id} groep={g} diepte={0}
@@ -1298,7 +1299,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   onRegelDragEnd={handleDragEnd}
                   onRegelVerplaatsNaarPositie={handleVerplaatsRegelsNaarPositie}
                   bibliotheekItems={bibliotheekItems}
-                  behandelingen={behandelingen}
                   geselecteerdeRegels={geselecteerdeRegels}
                   onSelecteerRegel={handleSelecteerRegel}
                   onRegelActie={handleRegelActie}
@@ -1311,6 +1311,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   readOnly={readOnly}
                 />
               ))}
+              </BehandelingProvider>
               {nieuwRootGroepOpen && (
                 <NieuweGroepRij
                   colCount={tekenKolommen.length} indent={4} label="Nieuwe hoofdgroep:"

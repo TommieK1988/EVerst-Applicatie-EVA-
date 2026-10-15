@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groepeerPerBestekcode, planKoppeling, benodigdeTypeIds, ZONDER_CODE } from './behandeling-koppelen'
+import { groepeerPerBestekcode, planKoppeling, benodigdeTypeIds, heeftBibliotheekNormen, isMeetstaatOmschrijving, ZONDER_CODE } from './behandeling-koppelen'
 import { aggregaatSleutel, calculatieregelOmschrijving, normaliseerBestekcode } from './meetstaat-utils'
 import { componentregelsUitCombinatie } from './normen-uit-combinatie'
 import { zonderCodeInOmschrijving } from './bestekcode'
@@ -148,17 +148,37 @@ describe('koppelen', () => {
     expect(stappen[0].nieuw.gemarkeerd).toBeFalsy()
   })
 
-  it('koppelt zonder combinatie toch de tekst, en markeert de regel', () => {
+  it('koppelt zonder combinatie toch de tekst, zonder de regel te markeren', () => {
     expect(stappen[1].combinatie).toBeNull()
     expect(stappen[1].nieuw.schilderbehandeling_id).toBe('b1')
-    expect(stappen[1].nieuw.gemarkeerd).toBe(true)
+    expect(stappen[1].nieuw.gemarkeerd).toBeFalsy()
     expect(stappen[1].label).toBe('Boeideel hout >20cm')
+  })
+
+  it('laat een eigen omschrijving staan, werkt een meetstaat-omschrijving bij', () => {
+    const [eigen, oud] = planKoppeling([
+      regel({ id: 'e', meetstaat_aggregaat_id: 'a1', omschrijving: 'Boeidelen en windveren' }),
+      regel({ id: 'o', meetstaat_aggregaat_id: 'a1', omschrijving: 'Kozijnen hout - 10-20cm [S-01] : OHD 53' }),
+    ], aggs, combinaties, { id: 'b1', naam: 'OHD 03' })
+    expect(eigen.nieuw.omschrijving).toBe('Boeidelen en windveren')
+    expect(oud.nieuw.omschrijving).toBe('Kozijnen hout - 10-20cm : OHD 03')
+    expect(isMeetstaatOmschrijving('Kozijnen hout - 10-20cm', 'Kozijnen hout', '10-20cm')).toBe(true)
+  })
+
+  it('weet of de bibliotheek normen heeft voor type en behandeling', () => {
+    const lijst = [{ type_id: 't-kozijn', behandeling_id: 'b1' }]
+    expect(heeftBibliotheekNormen('t-kozijn', 'b1', lijst)).toBe(true)
+    expect(heeftBibliotheekNormen('t-boeideel', 'b1', lijst)).toBe(false)
+    expect(heeftBibliotheekNormen(undefined, 'b1', lijst)).toBeNull()
+    expect(heeftBibliotheekNormen('t-kozijn', 'b1', null)).toBeNull()
   })
 
   it('bouwt normen uit de combinatie en laat normen zonder kosten weg', () => {
     const comps = componentregelsUitCombinatie('r1', combinatie('t-kozijn', 'b1'))
     expect(comps.map(c => c.type)).toEqual(['arbeid', 'materieel'])
     expect(comps[0].norm_hoeveelheid).toBe(0.5)
+    // Uurtarief komt van de calculatie (de store vult 0 aan), niet uit de bibliotheek.
+    expect(comps[0].tarief).toBe(0)
     expect(comps.every(c => c.calculatieregel_id === 'r1')).toBe(true)
   })
 })

@@ -10,8 +10,6 @@ import type { Calculatieregel, Componentregel, Eenheid, EenheidConfig } from '@/
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
 import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
 import { tariefKort, vindTarief, type BtwTariefKeuze } from '@/lib/stamdata/btw'
-import { behandelingSuffix as maakBehandelingSuffix } from '@/lib/everts-calc/behandeling-label'
-import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { GetalInput } from './GetalInput'
@@ -20,6 +18,7 @@ import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './Regel
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
+import { BehandelingLabel, BehandelingRij } from './Behandeling'
 import { NormenKnop, OmschrijvingKnop, MarkeerKnop, eersteRegel } from './RegelKnoppen'
 import { naarBuurRegel } from './toetsen'
 import type { WeergaveSignaal } from './weergave'
@@ -40,13 +39,11 @@ export interface RegelRijProps {
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponent: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
-  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string) => void
+  onVoegComponentToe: (regelId: string, type: Componentregel['type'], omschrijving?: string, extra?: Partial<Componentregel>) => void
   onVerwijderComponent: (compId: string) => void
   onVerwijder: () => void
   onHerlaad: () => void
   bibliotheekItems?: BibliotheekItemVereenvoudigd[]
-  /** Bibliotheek van schilderbehandelingen; één keer geladen door het grid. */
-  behandelingen?: SchilderBehandeling[]
   isGeselecteerd?: boolean
   onSelecteer?: (ctrlKey: boolean, shiftKey: boolean) => void
   /** Acties die het grid uitvoert: dupliceren, kopiëren, verplaatsen, verwijderen. */
@@ -64,7 +61,7 @@ export interface RegelRijProps {
 export function CalculatieregelRij({
   regel, componenten, diepte, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
   onWijzig, onWijzigComponent, onWijzigComponentExtra, onVoegComponentToe, onVerwijderComponent, onVerwijder, onHerlaad,
-  bibliotheekItems, behandelingen = [],
+  bibliotheekItems,
   isGeselecteerd, onSelecteer, onActie,
   isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd,
   weergaveSignaal, readOnly = false,
@@ -184,12 +181,8 @@ export function CalculatieregelRij({
   }, [weergaveSignaal])
   // Dicht bij het openen; de stip in de omschrijving laat zien dát er een opmerking is.
   const [opmerkingOpen,          setOpmerkingOpen]          = useState(false)
-  const heeftBehandeling = !!(regel.schilderbehandeling_id || regel.schilderbehandeling)
-  const behandelingNaam = regel.schilderbehandeling_id
-    ? behandelingen.find(b => b.id === regel.schilderbehandeling_id)?.naam ?? ''
-    : ''
-  const behandelingSuffix = maakBehandelingSuffix(regel.omschrijving, behandelingNaam)
-  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(heeftBehandeling)
+  // Dicht bij het openen: het label achter de omschrijving laat de behandeling zien.
+  const [schilderbehandelingOpen, setSchilderbehandelingOpen] = useState(false)
   const [biblOpen,        setBiblOpen]        = useState(false)
   // Lokale edit-state voor totaalbedragen en verkoopprijzen
   const [mtBedragEdit, setMtBedragEdit] = useState<string | null>(null)
@@ -307,20 +300,10 @@ export function CalculatieregelRij({
                 </div>
               )}
             </div>
-            {/* Naam van de gekoppelde behandeling, afgeleid uit de bibliotheek — hij
-                staat bewust náást het invoerveld, niet erin, zodat `omschrijving` de
-                eigen tekst blijft. Belandt zo ook in de offerteregel. */}
-            {behandelingSuffix && (
-              <span
-                className="flex-shrink min-w-0 truncate text-xs text-slate-500"
-                title={`Schilderbehandeling: ${behandelingNaam}`}
-              >
-                {behandelingSuffix}
-              </span>
-            )}
-            {heeftBehandeling && !compsUitgeklapt && (
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Heeft schilderbehandeling" />
-            )}
+            <BehandelingLabel
+              regel={regel} open={schilderbehandelingOpen} readOnly={readOnly}
+              onWissel={() => setSchilderbehandelingOpen(v => !v)}
+            />
           </div>
         </td>
       )
@@ -652,7 +635,7 @@ export function CalculatieregelRij({
               { label: 'Werkomschrijving & afbeeldingen', sneltoets: 'Ctrl ⇧ Enter', onSelect: () => { setWerkFocus(true); setWerkUitgeklapt(true) } },
               !readOnly && { label: 'Markering & interne opmerking', sneltoets: 'Ctrl Alt Enter', onSelect: () => setOpmerkingOpen(true),
                 extra: regel.opmerking ? <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> : undefined },
-              !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => { setCompsUitgeklapt(true); setSchilderbehandelingOpen(true) } },
+              !readOnly && { label: 'Schilderbehandeling kiezen', onSelect: () => setSchilderbehandelingOpen(true) },
               !readOnly && !regel.meetstaat_aggregaat_id && { label: 'Meten', onSelect: () => setMiniMeetstaat(true) },
               !readOnly && { label: 'Uit bibliotheek toevoegen aan groep…', onSelect: () => setBiblOpen(true) },
               !readOnly && { soort: 'scheiding' },
@@ -733,6 +716,12 @@ export function CalculatieregelRij({
       {opmerkingOpen && (
         <OpmerkingRij regel={regel} colOrder={colOrder} onWijzig={onWijzig} onSluit={() => setOpmerkingOpen(false)} />
       )}
+      {schilderbehandelingOpen && (
+        <BehandelingRij
+          regel={regel} colOrder={colOrder} aantalNormen={regelComps.length} readOnly={readOnly}
+          onSluit={() => setSchilderbehandelingOpen(false)}
+        />
+      )}
       {werkUitgeklapt && (
         <WerkomschrijvingRij
           regel={regel} colOrder={colOrder} onWijzig={onWijzig}
@@ -742,9 +731,8 @@ export function CalculatieregelRij({
       {compsUitgeklapt && (
         <RegelComponentenBlok
           regel={regel} regelComps={regelComps} colOrder={colOrder} indent={indent} opslag={opslag}
-          uurtarieven={uurtarieven} eenheden={eenheden} behandelingen={behandelingen}
-          schilderbehandelingOpen={schilderbehandelingOpen} setSchilderbehandelingOpen={setSchilderbehandelingOpen}
-          onWijzig={onWijzig} onWijzigComponentExtra={onWijzigComponentExtra}
+          uurtarieven={uurtarieven} eenheden={eenheden}
+          onWijzigComponentExtra={onWijzigComponentExtra}
           onVerwijderComponent={onVerwijderComponent} onVoegComponentToe={onVoegComponentToe}
         />
       )}

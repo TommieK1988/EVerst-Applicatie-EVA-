@@ -15,9 +15,14 @@ interface Props {
   bibliotheek?: SchilderBehandeling[]
   onSelecteer: (b: SchilderBehandeling) => void
   onWis: () => void
+  /** Per behandeling: heeft de bibliotheek normen voor dit onderdeel? `null` = onbekend. */
+  normenVoor?: (b: SchilderBehandeling) => boolean | null
+  /** Onderdeel uit de meetstaat, voor "normen voor boeidelen". */
+  onderdeel?: string | null
+  autoFocus?: boolean
 }
 
-export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, bibliotheek, onSelecteer, onWis }: Props) {
+export default function SchilderbehandelingZoekveld({ behandelingId, behandelingTekst, bibliotheek, onSelecteer, onWis, normenVoor, onderdeel, autoFocus }: Props) {
   const [zoekterm, setZoekterm]     = useState('')
   const [resultaten, setResultaten] = useState<SchilderBehandeling[]>([])
   const [open, setOpen]             = useState(false)
@@ -109,7 +114,7 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
       <ZwevendeLijst
         open={toonLijst}
         onSluit={() => setOpen(false)}
-        breedte={384}
+        breedte={normenVoor ? 560 : 384}
         className="py-1"
         anker={
           <div className="flex items-center gap-2">
@@ -118,6 +123,7 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-300 pointer-events-none" />
               <input
                 ref={inputRef}
+                autoFocus={autoFocus}
                 className="w-full text-xs pl-7 pr-2 py-1.5 rounded border border-blue-200 bg-white
                   focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100
                   text-slate-700 placeholder:text-slate-300"
@@ -138,10 +144,13 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
             title={b.uitgebreide_werkomschrijving ?? b.korte_omschrijving ?? undefined}
             onMouseDown={() => { onSelecteer(b); setZoekterm(''); setOpen(false) }}
           >
-            <p className="text-xs font-medium text-slate-700 truncate">
-              {b.code && <span className="text-[10px] font-semibold text-blue-600 mr-1">{b.code}</span>}
-              {b.naam}
-            </p>
+            <div className="flex items-baseline gap-2">
+              <p className="flex-1 min-w-0 text-xs font-medium text-slate-700 truncate">
+                {b.code && <span className="text-[10px] font-semibold text-blue-600 mr-1">{b.code}</span>}
+                {b.naam}
+              </p>
+              <NormenStatus status={normenVoor?.(b) ?? null} onderdeel={onderdeel} />
+            </div>
             {(b.korte_omschrijving || b.uitgebreide_werkomschrijving) && (
               <p className="text-[10px] text-slate-400 truncate">
                 {b.korte_omschrijving || b.uitgebreide_werkomschrijving}
@@ -157,4 +166,13 @@ export default function SchilderbehandelingZoekveld({ behandelingId, behandeling
       </ZwevendeLijst>
     </div>
   )
+}
+
+/** "✓ normen voor boeidelen" of "geen normen voor boeidelen"; niets als het onbekend is. */
+function NormenStatus({ status, onderdeel }: { status: boolean | null; onderdeel?: string | null }) {
+  if (status === null) return null
+  const voor = onderdeel ? ` voor ${onderdeel.toLowerCase()}` : ''
+  return status
+    ? <span className="flex-shrink-0 whitespace-nowrap text-[10.5px] font-semibold text-success-700">✓ normen{voor}</span>
+    : <span className="flex-shrink-0 whitespace-nowrap text-[10.5px] font-semibold text-warning-700">geen normen{voor}</span>
 }
