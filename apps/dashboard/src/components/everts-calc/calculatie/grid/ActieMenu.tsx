@@ -93,7 +93,8 @@ export function ActieMenu({ items, open, onOpenChange, label = 'Acties', licht =
 
 /** Vinkje vóór een regel: selecteren zonder Ctrl-klik. Shift-klik selecteert een reeks. */
 export function SelectieVinkje({ aan, onWissel, label }: {
-  aan: boolean
+  /** 'deels': kopvinkje bij een gedeeltelijke selectie (streepje). */
+  aan: boolean | 'deels'
   onWissel: (shift: boolean) => void
   label: string
 }) {
@@ -101,7 +102,7 @@ export function SelectieVinkje({ aan, onWissel, label }: {
     <button
       type="button"
       role="checkbox"
-      aria-checked={aan}
+      aria-checked={aan === 'deels' ? 'mixed' : aan}
       aria-label={label}
       title={aan ? 'Selectie opheffen' : 'Selecteren (Shift-klik: reeks)'}
       // Shift-klik zou anders ook de tekst tussen de twee regels selecteren.
@@ -112,7 +113,8 @@ export function SelectieVinkje({ aan, onWissel, label }: {
         aan ? 'border-brand-500 bg-brand-500 text-white' : 'border-neutral-300 bg-white hover:border-brand-500',
       )}
     >
-      {aan && (
+      {aan === 'deels' && <span className="h-0.5 w-2 rounded bg-white" />}
+      {aan === true && (
         <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" aria-hidden>
           <path d="M2.5 6.2 5 8.5 9.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

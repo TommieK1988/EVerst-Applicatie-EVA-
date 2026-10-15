@@ -10,7 +10,7 @@ import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/Activi
 import { type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
-import { type ColId, NIVEAU_INSPRING, COL_MAP } from './kolommen'
+import { type ColId, NIVEAU_INSPRING, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { TekstregelRij } from './TekstregelRij'
 import { CalculatieregelRij } from './CalculatieregelRij'
 import { ActieMenu, type RegelActie } from './ActieMenu'
@@ -95,6 +95,7 @@ export function GroepSectie({
   const nummer        = nummers.get(groep.id) ?? ''
   const isRegelDropTarget   = sleepRegelId !== null && dragOverGroepId === groep.id
   const colCount      = colOrder.length
+  const grenzen       = groepsGrenzen(colOrder)
 
   // Alle regels die met deze sleep meegaan — bij een multiselectie is dat de hele
   // selectie, anders alleen de opgepakte regel. Het grid bepaalt de set.
@@ -199,8 +200,8 @@ export function GroepSectie({
               </span>
             )}
             {groep.optioneel && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 border border-amber-300 font-medium">
-                optioneel · telt niet mee
+              <span className={`text-[10.5px] px-1.5 py-0.5 rounded font-medium ${diepte <= 1 ? 'bg-white/15 text-white' : 'bg-neutral-100 text-neutral-600 border border-neutral-200'}`}>
+                OPTIONEEL · telt niet mee
               </span>
             )}
             <span className={`text-[11px] opacity-50 ${diepte <= 1 ? 'text-white' : 'text-slate-500'}`}>
@@ -337,9 +338,10 @@ export function GroepSectie({
       {toonTotalen && (
         <tr className={totaalRijCls} style={totaalRijStijl}>
           {colOrder.map(id => {
+            const grens = grenzen.has(id) ? GRENS_STIJL : undefined
             const uitlijning = COL_MAP[id].align === 'right' ? 'text-right' : COL_MAP[id].align === 'center' ? 'text-center' : 'text-left'
             const cel = (inhoud: React.ReactNode, extra = '') => (
-              <td key={id} data-col={id} className={`px-2 py-1.5 ${uitlijning} ${extra}`}>{inhoud}</td>
+              <td key={id} data-col={id} className={`px-2 py-1.5 ${uitlijning} ${extra}`} style={grens}>{inhoud}</td>
             )
             switch (id) {
               case 'omschrijving': return (
@@ -352,7 +354,7 @@ export function GroepSectie({
               case 'bedrag_oa': return cel(groepOA  !== 0 ? <span className="text-xs font-semibold text-purple-700">{formatEuro(groepOA)}</span> : null)
               case 'tot_kp':    return cel(<span className="text-xs font-semibold text-everts-dark">{formatEuro(kostprijs)}</span>)
               case 'tot_vp':    return cel(<span className="text-xs font-bold text-everts">{formatEuro(groepVP)}</span>)
-              default:          return <td key={id} data-col={id} className="py-1.5" />
+              default:          return <td key={id} data-col={id} className="py-1.5" style={grens} />
             }
           })}
         </tr>

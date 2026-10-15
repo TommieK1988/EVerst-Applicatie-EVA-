@@ -13,7 +13,7 @@ import { tariefKort, vindTarief, type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import { behandelingSuffix as maakBehandelingSuffix } from '@/lib/everts-calc/behandeling-label'
 import type { SchilderBehandeling } from '@/lib/everts-calc/services/schilderwerk'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
-import { type ColId, COL_MAP } from './kolommen'
+import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { GetalInput } from './GetalInput'
 import { OmschrijvingVeld } from './OmschrijvingVeld'
 import { WerkomschrijvingRij, RegelComponentenBlok } from './RegelDetail'
@@ -236,16 +236,23 @@ export function CalculatieregelRij({
           />
         </td>
       )
-      case 'omschrijving': return (
-        <td key={id} className={`py-1 ${isSP || regel.gemarkeerd ? 'italic' : ''}`} style={{ paddingLeft: `${indent}px`, paddingRight: '4px' }}>
-          <div className="flex items-center gap-1">
+      // Vinkje en sleepgreep in een eigen smalle kolom vooraan, zodat de omschrijving
+      // er geen ruimte voor hoeft af te staan.
+      case 'selectie': return (
+        <td key={id} className="px-1 py-1">
+          <span className="flex items-center justify-center gap-0.5">
+            {onDragStart && !readOnly && (
+              <span className="opacity-30 hover:opacity-80 text-neutral-500 cursor-grab text-xs select-none" title="Versleep om te herordenen">⠿</span>
+            )}
             {onSelecteer && (
               <SelectieVinkje aan={!!isGeselecteerd} onWissel={shift => onSelecteer(!shift, shift)} label={`Selecteer ${regel.omschrijving || 'regel'}`} />
             )}
-            {/* Sleepgreep: altijd zichtbaar, niet pas bij hover */}
-            {onDragStart && (
-              <span className="flex-shrink-0 opacity-40 hover:opacity-80 text-neutral-500 cursor-grab text-sm select-none px-0.5" title="Versleep om te herordenen">⠿</span>
-            )}
+          </span>
+        </td>
+      )
+      case 'omschrijving': return (
+        <td key={id} className={`py-1 ${isSP || regel.gemarkeerd ? 'italic' : ''}`} style={{ paddingLeft: `${indent}px`, paddingRight: '4px' }}>
+          <div className="flex items-center gap-1">
             <ActiviteitToevoegenModal
               open={biblOpen}
               onClose={() => setBiblOpen(false)}
@@ -662,6 +669,8 @@ export function CalculatieregelRij({
     }
   }
 
+  const grenzen = groepsGrenzen(colOrder)
+
   return (
     <>
       <tr
@@ -697,8 +706,13 @@ export function CalculatieregelRij({
       >
         {colOrder.map(id => {
           const cell = renderCell(id)
+          if (!cell) return null
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return cell ? cloneElement(cell as ReactElement<any>, { 'data-col': id }) : null
+          const el = cell as ReactElement<any>
+          return cloneElement(el, {
+            'data-col': id,
+            ...(grenzen.has(id) ? { style: { ...el.props.style, ...GRENS_STIJL } } : null),
+          })
         })}
       </tr>
       {werkUitgeklapt && (

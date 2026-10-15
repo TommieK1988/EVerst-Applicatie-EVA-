@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { type ColId, COL_MAP } from './kolommen'
+import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
+import { SelectieVinkje } from './ActieMenu'
 
 // ─── TabelHeader ──────────────────────────────────────────────────────────────
 
@@ -17,12 +18,15 @@ export interface TabelHeaderProps {
   onColDragOver: (e: React.DragEvent, col: ColId) => void
   onColDrop: (col: ColId) => void
   onColDragEnd: () => void
+  /** Kopvinkje boven de vinkjeskolom: 'deels' zodra er iets geselecteerd is. */
+  selectie?: { stand: 'uit' | 'deels'; onWissel: () => void }
 }
 
 export function TabelHeader({
   colOrder, colWidths, kolomNamen, onHernoem, onStartResize, dragOverCol,
-  onColDragStart, onColDragOver, onColDrop, onColDragEnd,
+  onColDragStart, onColDragOver, onColDrop, onColDragEnd, selectie,
 }: TabelHeaderProps) {
+  const grenzen = groepsGrenzen(colOrder)
   // Dubbelklik op een kop = hernoemen. De <th> is draggable, dus tijdens het
   // bewerken zetten we dat uit — anders pakt de browser de drag i.p.v. de cursor.
   const [bewerkt,  setBewerkt]  = useState<ColId | null>(null)
@@ -38,6 +42,19 @@ export function TabelHeader({
     <thead className="sticky top-0 z-10">
       <tr className="bg-white border-b-2 border-slate-200 shadow-sm">
         {colOrder.map(id => {
+          if (id === 'selectie') return (
+            <th key={id} data-col={id} className="px-2 py-2 align-bottom" style={{ width: colWidths[id] ?? COL_MAP[id].dw }}>
+              {selectie && (
+                <span className="flex justify-center pb-0.5">
+                  <SelectieVinkje
+                    aan={selectie.stand === 'deels' ? 'deels' : false}
+                    onWissel={selectie.onWissel}
+                    label={selectie.stand === 'deels' ? 'Selectie opheffen' : 'Alle zichtbare regels selecteren'}
+                  />
+                </span>
+              )}
+            </th>
+          )
           const col = COL_MAP[id]
           const inBewerking = bewerkt === id
           return (
@@ -52,8 +69,11 @@ export function TabelHeader({
               onDragEnd={onColDragEnd}
               onDoubleClick={() => { if (id !== 'acties') start(id) }}
               className={[
-                'relative px-2 py-2 text-[11px] font-normal uppercase tracking-wide',
-                'whitespace-normal break-words leading-tight align-bottom',
+                // Smalle kolommen (Eenh., STP, VRR) krijgen minder zijruimte, anders past de kop niet.
+                'relative py-2 text-[11px] font-normal',
+                (colWidths[id] ?? col.dw) < 40 ? 'px-0' : (colWidths[id] ?? col.dw) < 60 ? 'px-1' : 'px-2',
+                // Afbreken op spaties, niet midden in een woord ("Kostengro-ep").
+                'whitespace-normal leading-tight align-bottom overflow-hidden text-ellipsis',
                 'select-none cursor-grab active:cursor-grabbing',
                 col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                 col.thCls ?? (!col.thStyle ? 'text-slate-500' : ''),
@@ -61,7 +81,7 @@ export function TabelHeader({
                 // ⋯-kolom blijft in beeld, ook als het rekenblad breder is dan het scherm.
                 id === 'acties' ? 'sticky right-0 z-[1] bg-white' : '',
               ].filter(Boolean).join(' ')}
-              style={{ width: colWidths[id], ...col.thStyle }}
+              style={{ width: colWidths[id], ...col.thStyle, ...(grenzen.has(id) ? GRENS_STIJL : null) }}
             >
               {inBewerking ? (
                 <input

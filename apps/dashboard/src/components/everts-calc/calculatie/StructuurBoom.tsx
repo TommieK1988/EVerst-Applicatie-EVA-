@@ -5,8 +5,8 @@ import { ChevronRight, ChevronDown, Plus, FolderOpen, Folder, GripVertical, X } 
 import { ActieMenu } from './grid/ActieMenu'
 import toast from 'react-hot-toast'
 import { cn, nieuweId } from '@/lib/everts-calc/utils'
-import { getGroepen, slaGroepOp, verwijderGroep } from '@/lib/everts-calc/local-store'
-import { berekeningNummers } from '@/lib/everts-calc/calculations'
+import { getGroepen, slaGroepOp, verwijderGroep, getScenario, getCalculatieregelsVoorScenario, getComponentregelsVoorScenario } from '@/lib/everts-calc/local-store'
+import { berekeningNummers, berekenGroepVP, scenarioDefaultOpslag, formatGetal } from '@/lib/everts-calc/calculations'
 import {
   platteGroepen, verplaatsGroep, magVerplaatsenNaar, positieVoor, positieIn, subtreeIds,
   type Doelpositie,
@@ -100,6 +100,8 @@ export default function StructuurBoom({
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set())
   const [toevoegen, setToevoegen] = useState<{ parentId: string | null } | null>(null)
   const [nummers,   setNummers]   = useState<Map<string, string>>(new Map())
+  /** Verkoopbedrag per groep (incl. subgroepen), zodat je in de boom ziet waar het geld zit. */
+  const [totalen,   setTotalen]   = useState<Map<string, number>>(new Map())
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [sleepId,   setSleepId]   = useState<string | null>(null)
   const [doel,      setDoel]      = useState<Doel | null>(null)
@@ -113,6 +115,10 @@ export default function StructuurBoom({
     const gs = getGroepen(scenarioId).sort((a, b) => a.volgorde - b.volgorde)
     setGroepen(gs)
     setNummers(berekeningNummers(gs))
+    const regels = getCalculatieregelsVoorScenario(scenarioId)
+    const comps  = getComponentregelsVoorScenario(scenarioId)
+    const opslag = scenarioDefaultOpslag(getScenario(scenarioId))
+    setTotalen(new Map(gs.map(g => [g.id, berekenGroepVP(g.id, gs, regels, comps, opslag)])))
   }, [scenarioId, refreshTrigger])
 
   useEffect(() => { laad() }, [laad])
@@ -429,8 +435,19 @@ export default function StructuurBoom({
           )}
         >
           <span className="text-slate-400 text-[10px] flex-shrink-0">{nummer}</span>
-          <span className="truncate">{groep.naam}</span>
+          <span className={cn('truncate', groep.optioneel && 'italic text-neutral-500')}>{groep.naam}</span>
+          {groep.optioneel && (
+            <span className="flex-shrink-0 rounded bg-neutral-100 px-1 text-[9.5px] font-medium tracking-wide text-neutral-500" title="Telt niet mee in het totaal">
+              OPTIONEEL
+            </span>
+          )}
         </button>
+        <span className={cn(
+          'flex-shrink-0 pl-2 text-[11px] tabular-nums',
+          isActief ? 'font-semibold text-everts-dark' : groep.optioneel ? 'italic text-neutral-400' : 'text-neutral-500',
+        )}>
+          {formatGetal(totalen.get(groep.id) ?? 0, 2)}
+        </span>
 
         {/* Acties: altijd zichtbaar, niet meer achter hover. */}
         {!readOnly && (

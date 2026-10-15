@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { formatEuro, formatGetal, parseGetal } from '@/lib/everts-calc/calculations'
 import type { Componentregel, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
-import { type ColId, COL_MAP } from './kolommen'
+import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { GetalInput } from './GetalInput'
 
 // ─── ComponentRegelRij ───────────────────────────────────────────────────────
@@ -68,10 +68,11 @@ export function ComponentRegelRij({
     />
   )
 
+  const grenzen = groepsGrenzen(colOrder)
   const renderCompCell = (id: ColId): React.ReactNode => {
     const col = COL_MAP[id]
     const tdBase = `px-1 py-0.5 ${col.tdCls ?? ''} ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`
-    const tdSt = col.tdStyle
+    const tdSt = grenzen.has(id) ? { ...col.tdStyle, ...GRENS_STIJL } : col.tdStyle
 
     switch (id) {
       case 'omschrijving': return (
@@ -324,7 +325,7 @@ export function ComponentRegelRij({
           </button>
         </td>
       )
-      default: return <td key={id} className={tdBase} />
+      default: return <td key={id} className={tdBase} style={tdSt} />
     }
   }
 

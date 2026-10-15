@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, forwardRef, useImperativeHandle } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, ChevronDown, Move, CopyPlus, X, Percent, Receipt } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
 import { getGroepen, getCalculatieregels, getComponentregels, slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel, verwijderGroep, verwijderCalculatieregel, verwijderComponentregel, voegComponentregelToe, getMeetregelAggregaten, slaMeetregelAggregaatOp, herstelSnapshot } from '@/lib/everts-calc/local-store'
@@ -24,6 +24,7 @@ import { TabelHeader, KolomNaamVeld } from './grid/TabelHeader'
 import { kiesBtwTarief } from './grid/btw-keuze'
 import { GroepSectie } from './grid/GroepSectie'
 import type { RegelActie } from './grid/ActieMenu'
+import { SelectieBalk } from './grid/SelectieBalk'
 
 interface Props {
   scenarioId: string
@@ -492,6 +493,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     })
   }, [])
 
+  /** Kopvinkje: met een selectie heft hij die op, anders selecteert hij alle zichtbare regels. */
+  const handleSelecteerAlles = useCallback(() => {
+    setGeselecteerdeRegels(prev => {
+      if (prev.size > 0) return new Set()
+      return new Set(Array.from(document.querySelectorAll<HTMLElement>('tr[data-regel-id]')).map(tr => tr.dataset.regelId!))
+    })
+  }, [])
+
   // ─── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -760,7 +769,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     if (dragCol && dragCol !== col) setDragOverCol(col)
   }
   const onColDrop = (col: ColId) => {
-    if (!dragCol || dragCol === col) { setDragCol(null); setDragOverCol(null); return }
+    if (!dragCol || dragCol === col || col === 'selectie') { setDragCol(null); setDragOverCol(null); return }
     setColOrder(prev => {
       const next = [...prev]
       const fi = next.indexOf(dragCol); const ti = next.indexOf(col)
@@ -1011,59 +1020,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     .reduce((s, g) => s + berekenGroepOA(g.id, groepenZonderOptioneel, regels, componenten), 0)
   const roots    = groepen.filter(g => g.parent_id === null).sort((a, b) => a.volgorde - b.volgorde)
   const visibleColOrder = colOrder.filter(id => !hiddenCols.has(id))
-  const totalW   = visibleColOrder.reduce((s, id) => s + colWidths[id], 0)
+  // Wat er getekend wordt: de vinkjeskolom altijd vooraan (niet in een bevroren calculatie).
+  const tekenKolommen: ColId[] = readOnly ? visibleColOrder : ['selectie', ...visibleColOrder]
+  const totalW   = tekenKolommen.reduce((s, id) => s + (colWidths[id] ?? COL_MAP[id].dw), 0)
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0">
 
-      {/* Sub-header: selectie-acties (alleen zichtbaar bij actieve selectie) */}
+      {/* Selectie: alle acties op een aangevinkte reeks regels */}
       {geselecteerdeRegels.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-1.5 border-b border-slate-200 bg-white flex-shrink-0 flex-wrap">
-          <span className="text-xs font-semibold text-everts">{geselecteerdeRegels.size} regel{geselecteerdeRegels.size !== 1 ? 's' : ''} geselecteerd</span>
-          <span className="text-slate-300 text-xs">·</span>
-          <button
-            onClick={() => handleKopieerRegels()}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-            title="Kopieer geselecteerde regels (Ctrl+D)"
-          >
-            <CopyPlus className="w-3 h-3" /> Kopiëren
-          </button>
-          <button
-            onClick={() => setVerplaatsModalOpen(true)}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-            title="Verplaats naar andere groep (Ctrl+M)"
-          >
-            <Move className="w-3 h-3" /> Verplaatsen
-          </button>
-          <button
-            onClick={opentOpslagModal}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-            title="Opslag% van de geselecteerde regels wijzigen"
-          >
-            <Percent className="w-3 h-3" /> Opslag%
-          </button>
-          <button
-            onClick={() => setBtwModalOpen(true)}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-            title="BTW-tarief van de geselecteerde regels wijzigen"
-          >
-            <Receipt className="w-3 h-3" /> BTW
-          </button>
-          <button
-            onClick={handleVerwijderGeselecteerd}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
-            title="Verwijder geselecteerde regels (Delete)"
-          >
-            <Trash2 className="w-3 h-3" /> Verwijderen
-          </button>
-          <button
-            onClick={() => setGeselecteerdeRegels(new Set())}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-200 text-slate-400 hover:text-slate-600"
-            title="Deselecteer (Escape)"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
+        <SelectieBalk
+          aantal={geselecteerdeRegels.size}
+          onKopieren={() => handleKopieerRegels()}
+          onVerplaatsen={() => setVerplaatsModalOpen(true)}
+          onOpslag={opentOpslagModal}
+          onBtw={() => setBtwModalOpen(true)}
+          onVerwijderen={handleVerwijderGeselecteerd}
+          onOpheffen={() => setGeselecteerdeRegels(new Set())}
+        />
       )}
 
       {/* Root-groep inline dialog */}
@@ -1299,10 +1273,14 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             onMouseLeave={() => { if (tabelRef.current) delete tabelRef.current.dataset.hcol }}
           >
             <colgroup>
-              {visibleColOrder.map(id => <col key={id} style={{ width: colWidths[id] }} />)}
+              {tekenKolommen.map(id => <col key={id} style={{ width: colWidths[id] ?? COL_MAP[id].dw }} />)}
             </colgroup>
             <TabelHeader
-              colOrder={visibleColOrder} colWidths={colWidths} kolomNamen={effectieveKolomNamen}
+              colOrder={tekenKolommen} colWidths={colWidths} kolomNamen={effectieveKolomNamen}
+              selectie={readOnly ? undefined : {
+                stand: geselecteerdeRegels.size === 0 ? 'uit' : 'deels',
+                onWissel: handleSelecteerAlles,
+              }}
               onHernoem={zetKolomNaam}
               onStartResize={startResize} dragOverCol={dragOverCol}
               onColDragStart={onColDragStart} onColDragOver={onColDragOver}
@@ -1314,7 +1292,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
                   key={g.id} groep={g} diepte={0}
                   alleGroepen={groepen} alleRegels={regels} alleComponenten={componenten}
                   nummers={nummers} isActief={actiefGroepId === g.id}
-                  defaultOpslag={defaultOpslag} standaardTarief={scenario.standaard_uurtarief} colOrder={visibleColOrder} btwTarieven={btwTarieven}
+                  defaultOpslag={defaultOpslag} standaardTarief={scenario.standaard_uurtarief} colOrder={tekenKolommen} btwTarieven={btwTarieven}
                   uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={laadAlles}
                   onKlik={onGroepActief}
                   onRegelWijzig={handleRegelWijzig}
@@ -1345,32 +1323,32 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50">
-                {visibleColOrder.map(id => {
+                {tekenKolommen.map(id => {
                   if (id === 'omschrijving') return (
                     <td key={id} className="px-3 py-3 text-sm font-bold text-slate-700">Totaal calculatie</td>
                   )
                   if (id === 'bedrag_mt') return (
-                    <td key={id} className="px-3 py-3 text-right bg-red-50/40">
+                    <td key={id} className="px-3 py-3 text-right">
                       {totaalMT !== 0 && <span className=" text-sm font-bold text-red-700">{formatEuro(totaalMT)}</span>}
                     </td>
                   )
                   if (id === 'bedrag_oa') return (
-                    <td key={id} className="px-3 py-3 text-right bg-purple-50/40">
+                    <td key={id} className="px-3 py-3 text-right">
                       {totaalOA !== 0 && <span className=" text-sm font-bold text-purple-700">{formatEuro(totaalOA)}</span>}
                     </td>
                   )
                   if (id === 'tot_uren') return (
-                    <td key={id} className="px-3 py-3 text-right bg-blue-50/40">
+                    <td key={id} className="px-3 py-3 text-right">
                       {totaalUren !== 0 && <span className=" text-sm font-bold text-blue-700">{formatGetal(totaalUren, 2)}</span>}
                     </td>
                   )
                   if (id === 'tot_kp') return (
-                    <td key={id} className="px-3 py-3 text-left bg-everts-50">
+                    <td key={id} className="px-3 py-3 text-left">
                       <span className=" text-base font-bold text-everts-dark">{formatEuro(totaalKP)}</span>
                     </td>
                   )
                   if (id === 'tot_vp') return (
-                    <td key={id} className="px-3 py-3 text-left bg-everts-50/80">
+                    <td key={id} className="px-3 py-3 text-left">
                       <span className=" text-base font-bold text-everts">{formatEuro(totaalVP)}</span>
                     </td>
                   )

@@ -38,6 +38,8 @@ export function TekstregelRij({
 }) {
   const veld = useRef<HTMLTextAreaElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  // De vinkjeskolom staat vooraan zodra het grid hem tekent (niet in een bevroren calculatie).
+  const metVinkje = colOrder[0] === 'selectie'
 
   // Hoogte volgt de inhoud, zodat een lange toelichting niet in een scrollbalkje verdwijnt.
   const pasHoogteAan = useCallback(() => {
@@ -53,7 +55,7 @@ export function TekstregelRij({
     <tr
       data-regel-id={regel.id}
       className={cn(
-        'group border-b border-slate-100 bg-sky-50/40 hover:bg-sky-100/50 transition-colors',
+        'group border-b border-slate-100 bg-white hover:bg-neutral-50 transition-colors',
         isGeselecteerd ? 'bg-everts/10 ring-1 ring-inset ring-everts/30' : '',
         isDragging ? 'opacity-40' : '',
         isDragOver ? 'border-t-2 border-t-everts' : ''
@@ -78,19 +80,22 @@ export function TekstregelRij({
       }}
       style={{ cursor: onDragStart ? 'grab' : undefined }}
     >
-      <td colSpan={colOrder.length} className="px-2 py-1" style={{ paddingLeft: '4px' }}>
-        <div className="flex items-start gap-2">
-          {onSelecteer && !readOnly && (
-            <span className="mt-1.5 flex-shrink-0">
+      {metVinkje && (
+        <td className="px-1 py-1 align-top">
+          <span className="mt-1 flex justify-center">
+            {onSelecteer && (
               <SelectieVinkje aan={!!isGeselecteerd} onWissel={shift => onSelecteer(!shift, shift)} label="Selecteer tekstregel" />
-            </span>
-          )}
+            )}
+          </span>
+        </td>
+      )}
+      <td colSpan={colOrder.length - (metVinkje ? 1 : 0)} className="px-2 py-1">
+        <div className="flex items-start gap-1">
           <span
-            className="mt-1 flex-shrink-0 text-[9px] font-medium tracking-wide px-1.5 py-0.5 rounded
-              bg-sky-100 text-sky-700 border border-sky-200"
-            title="Tekstregel — telt niet mee in de calculatie, komt wel in de offerte"
+            className="mt-1 flex-shrink-0 py-0.5 text-xs italic text-neutral-500"
+            title="Telt niet mee in de calculatie, komt wel in de offerte"
           >
-            TEKST
+            Tekstregel:
           </span>
           <textarea
             ref={veld}
@@ -99,7 +104,7 @@ export function TekstregelRij({
             placeholder="Tekstregel voor in de offerte…"
             rows={1}
             disabled={readOnly}
-            className="flex-1 min-w-0 text-xs px-2 py-1 border border-transparent rounded bg-transparent
+            className="flex-1 min-w-0 text-xs italic px-1 py-1 border border-transparent rounded bg-transparent
               hover:border-slate-200 focus:bg-white focus:outline-none focus:border-everts/40
               focus:ring-1 focus:ring-everts/20 resize-none overflow-hidden
               text-slate-700 placeholder-slate-400 disabled:cursor-default"

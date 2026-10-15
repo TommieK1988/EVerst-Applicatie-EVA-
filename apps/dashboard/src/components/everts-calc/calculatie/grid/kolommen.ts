@@ -8,7 +8,9 @@ export type ColId =
   'prijs_mt' | 'bedrag_mt' | 'prijs_oa' | 'bedrag_oa' |
   'tot_uren' |
   'kp_eenh' | 'tot_kp' | 'opslag_pct' | 'vp_eenh' | 'tot_vp' |
-  'btw_pct' | 'acties'
+  'btw_pct' | 'acties' |
+  /** Vinkjeskolom: altijd vooraan, hoort niet bij een kolomindeling (zie SELECTIE_COL). */
+  'selectie'
 
 export interface ColDef {
   id: ColId; label: string; title?: string
@@ -26,21 +28,21 @@ export const COL_DEFS: ColDef[] = [
   { id: 'stelpost',     label: 'STP', title: 'Stelpost (provisorische som)', dw: 32, minW: 28, align: 'center' },
   { id: 'verrekenbaar', label: 'VRR', title: 'Verrekenbaar (wordt apart getoond in offerte)', dw: 32, minW: 28, align: 'center' },
   { id: 'markeer',      label: '⚑', title: 'Markeer regel', dw: 32, minW: 28, align: 'center' },
-  { id: 'uur_eenh',  label: 'Uur/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb', backgroundColor: 'rgba(31,111,235,0.08)' }, tdStyle: { backgroundColor: 'rgba(31,111,235,0.04)' } },
-  { id: 'min_eenh',  label: 'Min/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb', backgroundColor: 'rgba(31,111,235,0.08)' }, tdStyle: { backgroundColor: 'rgba(31,111,235,0.04)' } },
-  { id: 'tarief_ab', label: 'Tarief AB', dw: 64,  minW: 48, align: 'right', thStyle: { color: '#1f6feb', backgroundColor: 'rgba(31,111,235,0.08)' }, tdStyle: { backgroundColor: 'rgba(31,111,235,0.04)' } },
-  { id: 'bedrag_ab', label: 'Bedrag AB', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#1f6feb', backgroundColor: 'rgba(31,111,235,0.08)' }, tdStyle: { backgroundColor: 'rgba(31,111,235,0.04)' } },
-  { id: 'prijs_mt',  label: 'Prijs MA',  dw: 68,  minW: 48, align: 'right', thStyle: { color: '#c2185b', backgroundColor: 'rgba(194,24,91,0.08)' },   tdStyle: { backgroundColor: 'rgba(194,24,91,0.04)' } },
-  { id: 'bedrag_mt', label: 'Bedrag MA', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#c2185b', backgroundColor: 'rgba(194,24,91,0.08)' },   tdStyle: { backgroundColor: 'rgba(194,24,91,0.04)' } },
-  { id: 'prijs_oa',  label: 'Prijs OA',  dw: 68,  minW: 48, align: 'right', thStyle: { color: '#7b1fa2', backgroundColor: 'rgba(123,31,162,0.08)' },  tdStyle: { backgroundColor: 'rgba(123,31,162,0.04)' } },
-  { id: 'bedrag_oa', label: 'Bedrag OA', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#7b1fa2', backgroundColor: 'rgba(123,31,162,0.08)' },  tdStyle: { backgroundColor: 'rgba(123,31,162,0.04)' } },
-  { id: 'tot_uren',  label: 'Tot. Uren', dw: 64,  minW: 48, align: 'right', thStyle: { color: '#1f6feb', backgroundColor: 'rgba(31,111,235,0.08)' },  tdStyle: { backgroundColor: 'rgba(31,111,235,0.04)' } },
-  { id: 'kp_eenh',   label: 'KP/e.',    dw: 68,  minW: 48, align: 'right', thStyle: { color: '#009439', backgroundColor: 'rgba(0,148,57,0.08)' },     tdStyle: { backgroundColor: 'rgba(0,148,57,0.04)' } },
-  { id: 'tot_kp',    label: 'Tot. KP',  dw: 80,  minW: 60, align: 'right', thStyle: { color: '#009439', backgroundColor: 'rgba(0,148,57,0.08)' },     tdStyle: { backgroundColor: 'rgba(0,148,57,0.04)' } },
-  { id: 'opslag_pct',label: 'Opsl.%',   dw: 52,  minW: 44, align: 'right', thStyle: { color: '#009439', backgroundColor: 'rgba(0,148,57,0.08)' },     tdStyle: { backgroundColor: 'rgba(0,148,57,0.04)' } },
-  { id: 'vp_eenh',   label: 'VP/e.',    dw: 68,  minW: 48, align: 'right', thStyle: { color: '#057a5c', backgroundColor: 'rgba(5,122,92,0.08)' },     tdStyle: { backgroundColor: 'rgba(5,122,92,0.04)' } },
-  { id: 'tot_vp',    label: 'Tot. VP',  dw: 80,  minW: 60, align: 'right', thStyle: { color: '#057a5c', backgroundColor: 'rgba(5,122,92,0.08)' },     tdStyle: { backgroundColor: 'rgba(5,122,92,0.04)' } },
-  { id: 'btw_pct',   label: 'BTW',     dw: 96,  minW: 64, align: 'right', thStyle: { color: '#b85a00', backgroundColor: 'rgba(184,90,0,0.08)' },     tdStyle: { backgroundColor: 'rgba(184,90,0,0.04)' } },
+  { id: 'uur_eenh',  label: 'Uur/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb' } },
+  { id: 'min_eenh',  label: 'Min/e.',    dw: 56,  minW: 40, align: 'right', thStyle: { color: '#1f6feb' } },
+  { id: 'tarief_ab', label: 'Tarief AB', dw: 64,  minW: 48, align: 'right', thStyle: { color: '#1f6feb' } },
+  { id: 'bedrag_ab', label: 'Bedrag AB', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#1f6feb' } },
+  { id: 'prijs_mt',  label: 'Prijs MA',  dw: 68,  minW: 48, align: 'right', thStyle: { color: '#c2185b' } },
+  { id: 'bedrag_mt', label: 'Bedrag MA', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#c2185b' } },
+  { id: 'prijs_oa',  label: 'Prijs OA',  dw: 68,  minW: 48, align: 'right', thStyle: { color: '#7b1fa2' } },
+  { id: 'bedrag_oa', label: 'Bedrag OA', dw: 76,  minW: 56, align: 'right', thStyle: { color: '#7b1fa2' } },
+  { id: 'tot_uren',  label: 'Tot. Uren', dw: 64,  minW: 48, align: 'right', thStyle: { color: '#1f6feb' } },
+  { id: 'kp_eenh',   label: 'KP/e.',    dw: 68,  minW: 48, align: 'right', thStyle: { color: '#009439' } },
+  { id: 'tot_kp',    label: 'Tot. KP',  dw: 80,  minW: 60, align: 'right', thStyle: { color: '#009439' } },
+  { id: 'opslag_pct',label: 'Opsl.%',   dw: 52,  minW: 44, align: 'right', thStyle: { color: '#009439' } },
+  { id: 'vp_eenh',   label: 'VP/e.',    dw: 68,  minW: 48, align: 'right', thStyle: { color: '#057a5c' } },
+  { id: 'tot_vp',    label: 'Tot. VP',  dw: 80,  minW: 60, align: 'right', thStyle: { color: '#057a5c' } },
+  { id: 'btw_pct',   label: 'BTW',     dw: 96,  minW: 64, align: 'right', thStyle: { color: '#b85a00' } },
   { id: 'acties',    label: '',         dw: 28,  minW: 28, align: 'center' },
 ]
 
@@ -53,9 +55,44 @@ export const NIVEAU_INSPRING = 24
 /** Regelvelden die alleen tekst zijn: wijzigen verandert geen bedrag. */
 export const TEKSTVELDEN = new Set(['omschrijving', 'werkomschrijving', 'werkomschrijving_afbeeldingen', 'opmerking'])
 
-export const COL_MAP     = Object.fromEntries(COL_DEFS.map(c => [c.id, c])) as Record<ColId, ColDef>
+/**
+ * De vinkjeskolom staat bewust niet in COL_DEFS: hij hoort niet in een opgeslagen
+ * kolomindeling, is niet te verbergen of te verslepen, en staat altijd vooraan.
+ * Het grid zet hem pas bij het tekenen voor de zichtbare kolommen.
+ */
+export const SELECTIE_COL: ColDef = { id: 'selectie', label: '', dw: 40, minW: 40, align: 'center' }
+
+export const COL_MAP     = Object.fromEntries([...COL_DEFS, SELECTIE_COL].map(c => [c.id, c])) as Record<ColId, ColDef>
 export const DEFAULT_ORDER  = COL_DEFS.map(c => c.id) as ColId[]
-export const DEFAULT_WIDTHS = Object.fromEntries(COL_DEFS.map(c => [c.id, c.dw])) as Record<ColId, number>
+export const DEFAULT_WIDTHS = Object.fromEntries([...COL_DEFS, SELECTIE_COL].map(c => [c.id, c.dw])) as Record<ColId, number>
+
+/** Kostensoort per kolom: tussen twee soorten staat een dunne scheidingslijn. */
+const KOLOM_SOORT: Partial<Record<ColId, string>> = {
+  uur_eenh: 'arbeid', min_eenh: 'arbeid', tarief_ab: 'arbeid', bedrag_ab: 'arbeid',
+  prijs_mt: 'materiaal', bedrag_mt: 'materiaal',
+  prijs_oa: 'oa', bedrag_oa: 'oa',
+  tot_uren: 'uren',
+  kp_eenh: 'kostprijs', tot_kp: 'kostprijs', opslag_pct: 'kostprijs',
+  vp_eenh: 'verkoop', tot_vp: 'verkoop',
+  btw_pct: 'btw',
+}
+
+/**
+ * Kolommen waar links een scheidingslijn hoort: daar begint een andere kostensoort
+ * dan in de kolom ervoor. Volgt de werkelijke volgorde, dus ook na verslepen.
+ */
+export function groepsGrenzen(colOrder: ColId[]): Set<ColId> {
+  const uit = new Set<ColId>()
+  colOrder.forEach((id, i) => {
+    if (i === 0 || id === 'acties') return
+    const soort = KOLOM_SOORT[id], vorige = KOLOM_SOORT[colOrder[i - 1]]
+    if (soort !== vorige && (soort || vorige)) uit.add(id)
+  })
+  return uit
+}
+
+/** Scheidingslijn als inset-schaduw: verandert geen breedte en botst niet met randen. */
+export const GRENS_STIJL: React.CSSProperties = { boxShadow: 'inset 1px 0 0 #e2e8f0' }
 
 // ─── Kolom-layouts (per gebruiker, tabel gebruiker_layouts, scherm 'evc_calculatie') ──
 export const LAYOUT_SCHERM = 'evc_calculatie'
