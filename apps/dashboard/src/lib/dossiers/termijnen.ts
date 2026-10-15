@@ -27,6 +27,7 @@ import { assertDossierBewerkbaar } from './guards'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { maakConceptVerkoopfactuur } from '@/lib/bouw7/verkoopfactuur'
 import { schrijfBouw7Termijnstaat } from '@/lib/bouw7/termijnstaat'
+import { ververseDossierBronnen } from '@/lib/bouw7/snapshot'
 import { naarKeuze, sorteerTarieven, heffingsPercentage, type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import type { Bouw7ListResponse, Bouw7ProjectInvoiceTerm } from '@/lib/bouw7/client'
 
@@ -435,6 +436,9 @@ export async function maakTermijnschema(
     aanneemsom: grondslag,
     termijnen: teSchrijven,
   })
+  // Ook na een fout: een mislukte terugleescontrole betekent niet dat er niets is geschreven, en
+  // een verouderde snapshot laat het scherm "geen termijnen" tonen — wat uitnodigt tot nog een poging.
+  await ververseDossierBronnen(dossierId, ['termijnen']).catch(() => null)
   if (!res.ok) return res
 
   // Is er op het contracttotaal gerekend, dan zit het nu goedgekeurde meerwerk al in deze

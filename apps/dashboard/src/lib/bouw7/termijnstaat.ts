@@ -91,8 +91,9 @@ export async function leesBouw7Termijnstaat(projectId: number): Promise<{
 const bedrag = (n: number): string => (Math.round(n * 100) / 100).toFixed(2)
 
 /**
- * Schrijft het termijnschema naar Bouw7. Idempotent: een bestaande staat wordt hergebruikt en
- * termijnen worden bijgewerkt op hun `bouw7TermId` in plaats van gedupliceerd.
+ * Schrijft het termijnschema naar Bouw7. Een bestaande staat wordt hergebruikt en termijnen worden
+ * bijgewerkt op hun `bouw7TermId`. Een volledig schema (geen `deelschrijving`) wordt geweigerd
+ * zodra er termijnen staan die niet in de invoer zitten — anders komt het er dubbel naast.
  */
 export async function schrijfBouw7Termijnstaat(
   invoer: TermijnstaatInvoer,
@@ -135,6 +136,19 @@ export async function schrijfBouw7Termijnstaat(
   const onbekendInEva = bestaand.termijnen
     .filter(t => !evaIds.has(t.id))
     .map(t => t.description ?? String(t.id))
+
+  // Een volledig schema naast termijnen die EVA niet kent is een tweede schema, geen aanvulling.
+  // Hier wordt live gelezen; de controle bij de aanroeper leunt soms op een snapshot die nog niet
+  // weet wat er net is geschreven. Zo kwamen er op 28-09 drie keer 100% bij een staat die al een
+  // termijn had: de terugleescontrole meldde een fout, het venster bleef open en er werd opnieuw
+  // geklikt — terwijl elke poging wél was weggeschreven.
+  if (!opts?.deelschrijving && onbekendInEva.length > 0) {
+    return {
+      ok: false,
+      error: `Dit project heeft in Bouw7 al ${bestaand.termijnen.length} termijn(en). `
+        + 'Pas die daar aan; EVA zet er geen tweede schema naast.',
+    }
+  }
 
   // De termijnen gaan INLINE mee in de statement-POST. Bouw7 weigert een statement zonder
   // termijnen ("This collection should contain 1 element or more", geverifieerd sep 2026), en het
