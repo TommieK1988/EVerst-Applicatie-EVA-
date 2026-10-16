@@ -133,3 +133,106 @@ export async function getLaatsteContacten(dossierIds: string[]): Promise<Laatste
     kop: g.uitkomst && g.uitkomst in UITKOMST_LABELS ? UITKOMST_LABELS[g.uitkomst as UitkomstSleutel] : 'Contact',
   }))
 }
+
+// ── Overige open offertes bij dezelfde partij ────────────────────────────────
+
+/**
+ * Welke andere open offertes horen bij wie je aan de lijn hebt?
+ *
+ * Bij VvE's bel je meestal de beheerder, soms rechtstreeks de voorzitter. Wie je spreekt is dus
+ * niet altijd de opdrachtgever van het dossier: bij een beheerder met dertig VvE's is de
+ * opdrachtgever per dossier een andere VvE. Daarom kijken we naar drie dingen tegelijk:
+ *
+ *  1. dezelfde opdrachtgever (`klant_id`);
+ *  2. dezelfde contactpersoon (`contactpersoon_id`): de voorzitter of de vaste beheerder;
+ *  3. de organisatie van die contactpersoon (`contactpersoon_organisaties`), meestal het
+ *     beheerkantoor, en alle objecten waar die organisatie bij staat (`vastgoed_object_relaties`).
+ *
+ * Geeft alleen ids terug: de werklijst heeft alle open offertes al geladen en toont ze met
+ * dezelfde stip, stap en bedrag als in de lijst.
+ */
+export type OverigeOffertes = { partij: string | null; dossierIds: string[] }
+
+/** Grens per zoekvraag: een partij met meer open offertes dan dit is geen telefoongesprek meer. */
+const MAX_OVERIG = 50
+
+export async function getOverigeOffertes(dossierId: string): Promise<OverigeOffertes> {
+  await vereisRecht('dossiers', 'lezen')
+  if (!UUID.test(dossierId)) return { partij: null, dossierIds: [] }
+  const supabase = createAdminClient()
+
+  const { data: d } = await supabase.from('dossiers')
+    .select('klant_id, contactpersoon_id, object_id, relaties!klant_id(naam)')
+    .eq('id', dossierId).maybeSingle()
+  if (!d) return { partij: null, dossierIds: [] }
+
+  // De organisaties achter de contactpersoon (het beheerkantoor), begrensd per contactpersoon.
+  const { data: orgs } = d.contactpersoon_id
+    ? await supabase.from('contactpersoon_organisaties')
+      .select('organisatie_id, relaties!organisatie_id(naam)')
+      .eq('contactpersoon_id', d.contactpersoon_id).limit(10)
+    : { data: [] as { organisatie_id: string; relaties: { naam: string | null } | null }[] }
+  const orgIds = (orgs ?? []).map(o => o.organisatie_id)
+  const partijIds = [...new Set([d.klant_id, ...orgIds].filter(Boolean))] as string[]
+
+  // Objecten waar deze partijen bij staan (beheerder, VvE, eigenaar).
+  const { data: objRel } = partijIds.length > 0
+    ? await supabase.from('vastgoed_object_relaties')
+      .select('object_id').in('relatie_id', partijIds).limit(500)
+    : { data: [] as { object_id: string }[] }
+  const objectIds = [...new Set([d.object_id, ...(objRel ?? []).map(o => o.object_id)].filter(Boolean))] as string[]
+
+  const filters = [
+    partijIds.length ? `klant_id.in.(${partijIds.join(',')})` : null,
+    d.contactpersoon_id ? `contactpersoon_id.eq.${d.contactpersoon_id}` : null,
+    objectIds.length ? `object_id.in.(${objectIds.slice(0, 300).join(',')})` : null,
+  ].filter(Boolean)
+  if (filters.length === 0) return { partij: null, dossierIds: [] }
+
+  const { data: rijen } = await supabase.from('dossiers')
+    .select('id')
+    .eq('hoofdstatus', 'offerte')
+    .not('offerte_substatus', 'in', '(verloren,vervallen)')
+    .neq('id', dossierId)
+    .or(filters.join(','))
+    .order('id')
+    .limit(MAX_OVERIG)
+
+  // De naam van wie je belt: het kantoor achter de contactpersoon, anders de opdrachtgever.
+  const orgNaam = (orgs ?? []).map(o => (o.relaties as { naam: string | null } | null)?.naam).find(Boolean) ?? null
+  const klantNaam = (d.relaties as { naam: string | null } | null)?.naam ?? null
+  return { partij: orgNaam ?? klantNaam, dossierIds: (rijen ?? []).map(r => r.id as string) }
+}
+
+/**
+ * "Meebesproken": de notitie van het gesprek ook op de andere offertes van dezelfde partij, zodat
+ * wie daar morgen belt ziet dat het al besproken is. Alleen een tijdlijnregel; de stap van die
+ * offertes verandert niet, want wat er daar is afgesproken kan anders zijn.
+ */
+export async function legMeebesprokenVast(
+  dossierIds: string[], tekst: string, bronNummer: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { medewerker } = await vereisRecht('dossiers', 'schrijven')
+  const ids = [...new Set(dossierIds.filter(id => UUID.test(id)))].slice(0, MAX_OVERIG)
+  if (ids.length === 0 || !tekst.trim()) return { ok: true }
+  const supabase = createAdminClient()
+
+  const { data: bestaand } = await supabase.from('commercie_bewaking')
+    .select('id, dossier_id').in('dossier_id', ids)
+  const kaartVan = new Map((bestaand ?? []).map(k => [k.dossier_id as string, k.id as string]))
+  const zonder = ids.filter(id => !kaartVan.has(id))
+  if (zonder.length > 0) {
+    const { data: nieuw } = await supabase.from('commercie_bewaking')
+      .insert(zonder.map(id => ({ dossier_id: id, soort: 'offerte' })))
+      .select('id, dossier_id')
+    for (const k of nieuw ?? []) kaartVan.set(k.dossier_id as string, k.id as string)
+  }
+
+  const kop = bronNummer ? `Meebesproken bij ${bronNummer}: ` : 'Meebesproken: '
+  const { error } = await supabase.from('commercie_gebeurtenissen').insert(
+    [...kaartVan.values()].map(bewaking_id => ({
+      bewaking_id, soort: 'notitie', tekst: `${kop}${tekst.trim()}`, door: medewerker.id,
+    })),
+  )
+  return error ? { ok: false, error: error.message } : { ok: true }
+}

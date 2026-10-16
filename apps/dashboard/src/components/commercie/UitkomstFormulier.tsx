@@ -32,6 +32,8 @@ type Props = {
   medewerkers: Medewerker[]
   /** Na een geslaagde vastlegging. */
   onVastgelegd: () => void
+  /** Vlak vóór onVastgelegd, met de notitie: bv. om hem ook op meebesproken offertes te zetten. */
+  naVastleggen?: (notitie: string) => Promise<void>
   /** Toont een Annuleren-knop; zonder deze prop staat er alleen Vastleggen. */
   onAnnuleer?: () => void
   /** 1 t/m 8 kiest een uitkomst, Ctrl/Cmd+Enter legt vast. */
@@ -96,6 +98,7 @@ export function UitkomstFormulier(props: Props) {
     })
     setBezig(false)
     if (!res.ok) { toast.error(res.error); return }
+    if (props.naVastleggen && tekst.trim()) await props.naVastleggen(tekst.trim()).catch(() => {})
     toast.success(`${gekozen.label} vastgelegd`)
     props.onVastgelegd()
   }, [gekozen, kanVastleggen, props, tekst, datum, actiehouder, reden, toelichting, kansOpen, kans])

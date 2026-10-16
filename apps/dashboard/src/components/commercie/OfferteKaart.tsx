@@ -18,10 +18,12 @@ import { cn } from '@everts/ui'
 import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import { dossierTabPad } from '@/components/dossiers/open-dossier'
 import type { DossierRij } from '@/components/dossiers/types'
-import { STATUS_PRESENTATIE, stapOmschrijving } from '@/lib/commercie/types'
+import { STATUS_PRESENTATIE } from '@/lib/commercie/types'
 import type { OffertePaneelData } from '@/lib/commercie/paneel'
 import { bellenBanner } from './bellen-banner'
-import { eur, kortDatum } from './te-doen'
+import { eur, eurKort, kortDatum, kortStap, type TeDoenRij } from './te-doen'
+import { legMeebesprokenVast } from '@/lib/commercie/paneel'
+import { bedragklasse } from '@/lib/commercie/bedragklassen'
 import { UitkomstFormulier } from './UitkomstFormulier'
 
 type Props = {
@@ -33,16 +35,29 @@ type Props = {
   onVastgelegd: () => void
   /** Kop met titel en sluitknop; weg te laten als de drawer zijn eigen kop heeft. */
   kop?: React.ReactNode
+  /** Andere open offertes bij wie je aan de lijn hebt (zie getOverigeOffertes). */
+  overige?: { partij: string | null; rijen: TeDoenRij[] }
+  /** Een andere offerte in het paneel openen. */
+  onOpen?: (id: string) => void
 }
 
 export function OfferteKaart({ dossier: d, data, ...props }: Props) {
   const kaart = data.bewaking.kaart
   const pres = STATUS_PRESENTATIE[data.bewaking.status]
-  const stap = kaart ? stapOmschrijving(kaart) : null
+  const stap = kaart ? kortStap(kaart, props.vandaag) : null
   const banner = bellenBanner({
     bewaking: data.bewaking, tijdlijn: data.tijdlijn, mijnId: props.mijnMedewerkerId, vandaag: props.vandaag,
   })
   const geldigVerlopen = data.geldigTot != null && data.geldigTot < props.vandaag
+  const overige = props.overige?.rijen ?? []
+  /** Offertes die in dit gesprek zijn meebesproken: hun tijdlijn krijgt dezelfde notitie. */
+  const [mee, setMee] = React.useState<Set<string>>(new Set())
+  React.useEffect(() => setMee(new Set()), [d.id])
+  const naVastleggen = React.useCallback(async (notitie: string) => {
+    if (mee.size === 0) return
+    const res = await legMeebesprokenVast([...mee], notitie, d.dossiernummer ?? null)
+    if (!res.ok) throw new Error(res.error)
+  }, [mee, d.dossiernummer])
 
   return (
     <div className="flex flex-col">
@@ -75,6 +90,55 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
         ) : (
           <span className="text-[13px] text-neutral-500">Geen contactpersoon op het dossier.</span>
         )}
+
+        {overige.length > 0 && (
+          <div className="mt-2 flex flex-col">
+            <Label>
+              Ook open bij {props.overige?.partij ?? 'deze klant'} · {overige.length} · {eurKort(overige.reduce((t, r) => t + (r._bedrag ?? 0), 0))}
+            </Label>
+            <p className="mt-1 text-xs text-neutral-500">
+              Vink aan wat je in dit gesprek meebespreekt; de notitie komt dan ook op die offertes.
+            </p>
+            <ul className="mt-1 flex flex-col">
+              {overige.map(o => (
+                <li key={o.id} className="grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-2 border-t border-neutral-100 py-2 first:border-t-0">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[var(--brand-500)]"
+                    checked={mee.has(o.id)}
+                    onChange={e => setMee(s => {
+                      const n = new Set(s)
+                      if (e.target.checked) n.add(o.id); else n.delete(o.id)
+                      return n
+                    })}
+                    aria-label={`${o.titel} meebespreken`}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-neutral-900">{o.titel}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-neutral-500">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: STATUS_PRESENTATIE[o._status].cssKleur }} aria-hidden />
+                      <span className="truncate">
+                        {o.klant_naam ? `${o.klant_naam} · ` : ''}{o._stap ?? 'Nog niets afgesproken'}{o.bewaking_actiehouder ? ` · ${o.bewaking_actiehouder}` : ''}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="text-right">
+                    <span className="block text-[13px] font-semibold tabular-nums text-neutral-900">{eur(o._bedrag)}</span>
+                    {props.onOpen && (
+                      <button
+                        type="button"
+                        onClick={() => props.onOpen?.(o.id)}
+                        className="text-xs font-semibold text-brand-700 underline underline-offset-2"
+                      >
+                        Openen
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Blok>
 
       {/* 3. Waar gaat het over? */}
@@ -99,6 +163,12 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             </div>
           </div>
         </div>
+        {bedragklasse(berekenKaartBedrag(d, 'offerte').totaalExclBtw) === 'mega' && (
+          <p className="mt-3 rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
+            <strong className="font-semibold">Mega-offerte.</strong> Eigenaar is een projectleider of de
+            directie, en wachten we op de klant, dan toch elke twee weken een hercontrole.
+          </p>
+        )}
         {geldigVerlopen && (
           <p className="mt-3 rounded-md bg-warning-50 px-3 py-2 text-xs text-warning-700">
             De geldigheid is verstreken. Dat is geen afwijzing: zegt de klant ja, indexeer de offerte
@@ -133,6 +203,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             medewerkers={props.medewerkers}
             compact
             sneltoetsen
+            naVastleggen={naVastleggen}
             onVastgelegd={props.onVastgelegd}
           />
         </Blok>

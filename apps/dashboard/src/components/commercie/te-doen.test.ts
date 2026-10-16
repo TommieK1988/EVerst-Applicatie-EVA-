@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bakVan, kortDatum, kortStap, sorteerTeDoen, type TeDoenRij } from './te-doen'
+import { bakVan, kortDatum, kortStap, pastBijZoekterm, sorteerTeDoen, type TeDoenRij } from './te-doen'
 
 describe('kortStap', () => {
   it('schrijft de stap kort op, met het jaartal alleen als het een ander jaar is', () => {
@@ -8,6 +8,17 @@ describe('kortStap', () => {
     expect(kortStap({ stap_soort: 'wachten', stap_tekst: 'Besluit ALV', stap_datum: '2027-03-18', wacht_op: 'klant' }, '2026-10-15'))
       .toBe('Wacht op klant tot 18 mrt 2027 · Besluit ALV')
     expect(kortDatum('2026-01-05T09:00:00Z', '2026-10-15')).toBe('5 jan')
+  })
+})
+
+describe('pastBijZoekterm', () => {
+  const r = { titel: 'Gevelonderhoud', klant_naam: 'VvE Laan van Meerdervoort 210', dossiernummer: 'D-26-0371', contactpersoon_naam: 'P. de Wit' } as TeDoenRij
+  it('zoekt op klant, nummer en contactpersoon, hoofdletterongevoelig', () => {
+    expect(pastBijZoekterm(r, 'meerdervoort')).toBe(true)
+    expect(pastBijZoekterm(r, '0371')).toBe(true)
+    expect(pastBijZoekterm(r, 'de wit')).toBe(true)
+    expect(pastBijZoekterm(r, 'staedion')).toBe(false)
+    expect(pastBijZoekterm(r, '  ')).toBe(true)
   })
 })
 

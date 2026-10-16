@@ -11,6 +11,7 @@ import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import type { DossierRij } from '@/components/dossiers/types'
 import { dagenTussenKalender } from '@/lib/dossiers/datum-regels'
 import { bewakingsStatus, type BewakingStatus, type BewakingKaart } from '@/lib/commercie/types'
+import { bedragklasse, type Bedragklasse } from '@/lib/commercie/bedragklassen'
 
 export type Bak = 'verlopen' | 'vandaag' | 'ongetrieerd' | 'week' | 'later'
 
@@ -42,6 +43,8 @@ export type TeDoenRij = DossierRij & {
   _aandacht: boolean
   /** Dagen sinds de offerte verzonden is. */
   _openDagen: number | null
+  /** Klein, middel, groot of mega; zie bedragklassen.ts. */
+  _klasse: Bedragklasse
 }
 
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
@@ -101,6 +104,7 @@ export function maakTeDoenRij(d: DossierRij, vandaag: string): TeDoenRij {
     _stap: kortStap(stap, vandaag),
     _aandacht: (bedrag ?? 0) >= AANDACHT_BEDRAG && (!d.bewaking_eigenaar_id || !d.bewaking_stap_soort),
     _openDagen: verzonden ? dagenTussenKalender(verzonden, vandaag) : null,
+    _klasse: bedragklasse(bedrag),
   }
 }
 
@@ -113,6 +117,20 @@ export function sorteerTeDoen(a: TeDoenRij, b: TeDoenRij): number {
   return (BAK_INDEX.get(a._bak) ?? 99) - (BAK_INDEX.get(b._bak) ?? 99)
     || (a._dagen ?? 9999) - (b._dagen ?? 9999)
     || (b._bedrag ?? 0) - (a._bedrag ?? 0)
+}
+
+/**
+ * Past een rij bij de zoekterm? Op alles waarmee je een offerte aan de telefoon herkent: titel,
+ * klant, dossiernummer, contactpersoon, werkadres en wie er aan zet is.
+ */
+export function pastBijZoekterm(r: TeDoenRij, term: string): boolean {
+  const q = term.trim().toLowerCase()
+  if (!q) return true
+  return [
+    r.titel, r.klant_naam, r.dossiernummer, r.contactpersoon_naam, r.werkadres_naam,
+    [r.werkadres_straat, r.werkadres_huisnummer, r.werkadres_postcode, r.werkadres_stad].filter(Boolean).join(' '),
+    r.bewaking_actiehouder, r.bewaking_stap_tekst,
+  ].some(v => v?.toLowerCase().includes(q))
 }
 
 export const eur = (n: number | null) =>

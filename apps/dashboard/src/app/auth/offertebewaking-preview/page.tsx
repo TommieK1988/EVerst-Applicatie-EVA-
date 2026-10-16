@@ -21,6 +21,8 @@ import type { BewakingKaart } from '@/lib/commercie/types'
 import { maakTeDoenRij, sorteerTeDoen, type Bak, type LaatsteContact } from '@/components/commercie/te-doen'
 import { TeDoenLijst, TeDoenTegels } from '@/components/commercie/TeDoenLijst'
 import { OfferteKaart } from '@/components/commercie/OfferteKaart'
+import { BedragFilter } from '@/components/commercie/BedragFilter'
+import { STANDAARD_KLASSEN } from '@/lib/commercie/bedragklassen'
 
 const VANDAAG = '2026-10-15'
 const BAS = 'mw-bas'
@@ -40,6 +42,7 @@ const VOORBEELDEN: Voorbeeld[] = [
   { id: 'd5', titel: 'Dakrenovatie plat dak', klant: 'VvE De Kroonvogel, Delft', nr: 'D-26-0333', bedrag: 138_500, verzonden: '2026-06-25', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Besluit voorjaars-ALV', datum: '2026-10-28', wachtOp: 'klant' },
   { id: 'd6', titel: 'Kunststof kozijnen achtergevel', klant: 'Fam. de Groot, Voorburg', nr: 'D-26-0449', bedrag: 8_900, verzonden: '2026-10-08', contact: ['E. de Groot', '06 55 10 72 64'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Offerte toelichten', datum: '2026-10-16' },
   { id: 'd7', titel: 'Groot onderhoud portiekflats', klant: 'Vidomes, Delft', nr: 'D-26-0389', bedrag: 27_400, verzonden: '2026-09-10', contact: ['D. Pranoto', '015 750 30 84'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Opdracht formeel rondmaken', datum: '2026-10-19' },
+  { id: 'd9', titel: 'Vervangen entreepartij', klant: 'VvE Buitenhof, Delft', nr: 'D-26-0437', bedrag: 14_200, verzonden: '2026-09-29', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: SANNE, houder: SANNE, houderNaam: 'Sanne', soort: 'actie', tekst: 'Navragen of het bestuur akkoord is', datum: '2026-10-22' },
   { id: 'd8', titel: 'Betonherstel galerijen', klant: 'VvE Waldeck', nr: 'D-26-0418', bedrag: 19_800, verzonden: '2026-09-18', contact: ['T. Vos (Ingenieursbureau Kruit)', '070 360 12 12'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Adviseur toetst aan bestek', datum: '2026-11-21', wachtOp: 'extern' },
 ]
 
@@ -95,9 +98,13 @@ function paneelData(v: Voorbeeld): OffertePaneelData {
 
 export default function OffertebewakingPreview() {
   const [tegel, setTegel] = React.useState<Bak | null>(null)
-  const [geopend, setGeopend] = React.useState<string | null>('d4')
-  const alle = React.useMemo(() => VOORBEELDEN.map(v => maakTeDoenRij(naarDossier(v), VANDAAG)), [])
+  const [klassen, setKlassen] = React.useState(STANDAARD_KLASSEN)
+  const [geopend, setGeopend] = React.useState<string | null>('d5')
+  const alleOngefilterd = React.useMemo(() => VOORBEELDEN.map(v => maakTeDoenRij(naarDossier(v), VANDAAG)), [])
+  const alle = alleOngefilterd.filter(r => klassen[r._klasse])
   const zichtbaar = alle.filter(r => (tegel ? r._bak === tegel : true)).sort(sorteerTeDoen)
+  const aantallen = { mega: 0, groot: 0, middel: 0, klein: 0 }
+  for (const r of alleOngefilterd) aantallen[r._klasse]++
   const contacten = React.useMemo(() => new Map(Object.entries(CONTACTEN)), [])
   const v = VOORBEELDEN.find(x => x.id === geopend) ?? null
 
@@ -108,6 +115,7 @@ export default function OffertebewakingPreview() {
           <p className="text-xs text-neutral-500">
             Voorbeeld met verzonnen gegevens · vandaag = 15 okt 2026 · ingelogd als Bas
           </p>
+          <BedragFilter klassen={klassen} onKlassen={setKlassen} aantallen={aantallen} min={null} max={null} onBereik={() => {}} />
           <TeDoenTegels alleRijen={alle} tegel={tegel} onTegel={setTegel} />
           <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
             <TeDoenLijst
@@ -130,6 +138,11 @@ export default function OffertebewakingPreview() {
                   medewerkers={[{ id: BAS, naam: 'Bas' }, { id: SANNE, naam: 'Sanne' }]}
                   vandaag={VANDAAG}
                   onVastgelegd={() => {}}
+                  onOpen={setGeopend}
+                  // Kroonvogel en Buitenhof hebben dezelfde beheerder: zo ziet het blok "Ook open bij" eruit.
+                  overige={v.id === 'd5' || v.id === 'd9'
+                    ? { partij: 'VvE Beheer Delfland', rijen: alleOngefilterd.filter(r => r.id === (v.id === 'd5' ? 'd9' : 'd5')) }
+                    : undefined}
                   kop={
                     <div className="border-b border-neutral-200 px-4 py-3">
                       <h2 className="text-[15px] font-bold leading-5 text-neutral-900">{v.titel}</h2>

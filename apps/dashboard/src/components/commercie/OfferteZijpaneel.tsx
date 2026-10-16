@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/drawer'
 import type { DossierRij } from '@/components/dossiers/types'
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery'
-import { getOffertePaneel, type OffertePaneelData } from '@/lib/commercie/paneel'
+import { getOffertePaneel, getOverigeOffertes, type OffertePaneelData, type OverigeOffertes } from '@/lib/commercie/paneel'
+import type { TeDoenRij } from './te-doen'
 import { OfferteKaart } from './OfferteKaart'
 
 /** Vanaf deze breedte staat het paneel naast de lijst. */
@@ -31,6 +32,10 @@ type Props = {
   onSluit: () => void
   /** Na een vastgelegde uitkomst: de lijst verversen en de volgende offerte kiezen. */
   onVastgelegd: () => void
+  /** Alle open offertes (ook die niet van mij zijn), om "ook open bij" mee te tonen. */
+  alleRijen: TeDoenRij[]
+  /** Een andere offerte in het paneel openen. */
+  onOpen: (id: string) => void
 }
 
 export function OfferteZijpaneel(props: Props) {
@@ -38,6 +43,7 @@ export function OfferteZijpaneel(props: Props) {
   const naast = useMediaQuery(NAAST_DE_LIJST)
   const [data, setData] = React.useState<OffertePaneelData | null>(null)
   const [fout, setFout] = React.useState<string | null>(null)
+  const [overigeIds, setOverigeIds] = React.useState<OverigeOffertes | null>(null)
 
   // Op het id, niet op het rij-object: na router.refresh() komt dezelfde offerte als nieuw object
   // terug, en opnieuw laden zou een half getypte notitie wissen.
@@ -45,12 +51,25 @@ export function OfferteZijpaneel(props: Props) {
   React.useEffect(() => {
     if (!dossierId) return
     let actief = true
-    setData(null); setFout(null)
+    setData(null); setFout(null); setOverigeIds(null)
     getOffertePaneel(dossierId)
       .then(r => { if (actief) setData(r) })
       .catch((e: unknown) => { if (actief) setFout(e instanceof Error ? e.message : 'Laden mislukt') })
+    // Los en stil: zonder dit blok werkt de kaart gewoon.
+    getOverigeOffertes(dossierId)
+      .then(r => { if (actief) setOverigeIds(r) })
+      .catch(() => {})
     return () => { actief = false }
   }, [dossierId])
+
+  const overige = React.useMemo(() => {
+    if (!overigeIds) return undefined
+    const perId = new Map(props.alleRijen.map(r => [r.id, r]))
+    return {
+      partij: overigeIds.partij,
+      rijen: overigeIds.dossierIds.map(id => perId.get(id)).filter((r): r is TeDoenRij => r != null),
+    }
+  }, [overigeIds, props.alleRijen])
 
   const inhoud = !d ? null
     : fout ? <p className="px-4 py-3 text-sm text-error-700">{fout}</p>
@@ -63,6 +82,8 @@ export function OfferteZijpaneel(props: Props) {
         medewerkers={props.medewerkers}
         vandaag={props.vandaag}
         onVastgelegd={props.onVastgelegd}
+        overige={overige}
+        onOpen={props.onOpen}
       />
     )
 
