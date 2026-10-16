@@ -18,6 +18,7 @@ import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
 import ControlePaneel from './ControlePaneel'
+import { volgendRechterPaneel, type RechterPaneel } from './rechter-paneel'
 import { useCalculatieControle } from './useCalculatieControle'
 import { useUitvraagInCalculatie } from './uitvraag/useUitvraagInCalculatie'
 import { UitvraagProvider } from './uitvraag/UitvraagContext'
@@ -122,7 +123,16 @@ export default function CalculatieHoofdscherm({
   const [offerteModalOpen, setOfferteModalOpen]       = useState(false)
   const [offerteModalType, setOfferteModalType]       = useState<QuoteType>('verkoopofferte')
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
-  const [controleOpen, setControleOpen]               = useState(false)
+  /** Rechts maximaal één paneel tegelijk (zie rechter-paneel.ts). */
+  const [rechterPaneel, setRechterPaneel]             = useState<RechterPaneel | null>(null)
+  const controleOpen = rechterPaneel === 'controle'
+  const setControleOpen = useCallback((open: boolean | ((o: boolean) => boolean)) => {
+    setRechterPaneel(huidig =>
+      volgendRechterPaneel(huidig, 'controle', typeof open === 'function' ? open(huidig === 'controle') : open))
+  }, [])
+  const zetUitvraagOpen = useCallback((open: boolean) => {
+    setRechterPaneel(huidig => volgendRechterPaneel(huidig, 'uitvraag', open))
+  }, [])
   /** Venster uit het menu Bewerken. */
   const [bewerkVenster, setBewerkVenster]             = useState<'behandeling' | 'uren' | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
@@ -199,7 +209,10 @@ export default function CalculatieHoofdscherm({
   const controle = useCalculatieControle({
     scenario, regels: regelsVoorBtw, componenten: componentenVoorBtw, kostprijs, verkoopprijs, versie: refreshTotalen,
   })
-  const uitvraag = useUitvraagInCalculatie({ dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly })
+  const uitvraag = useUitvraagInCalculatie({
+    dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly,
+    paneelOpen: rechterPaneel === 'uitvraag', zetPaneelOpen: zetUitvraagOpen,
+  })
   const uurtarieven = useInstellingen().uurtarieven ?? []
   const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
 

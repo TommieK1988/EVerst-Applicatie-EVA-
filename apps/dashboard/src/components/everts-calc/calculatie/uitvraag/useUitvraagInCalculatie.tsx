@@ -16,14 +16,16 @@ import { useUitvraagPakketten } from './useUitvraagPakketten'
  * dingen hoeft in te hangen: de knop in de werkbalk, de provider om het rekenblad (labels en
  * de knop in de selectiebalk) en het paneel met de vensters. Zonder dossier is alles leeg.
  */
-export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
+export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly, paneelOpen, zetPaneelOpen }: {
   dossierId: string | null | undefined
   scenarioId: string | null | undefined
   readOnly: boolean
+  /** Paneel open of dicht: het hoofdscherm beslist, want rechts staat maar één paneel tegelijk. */
+  paneelOpen: boolean
+  zetPaneelOpen: (open: boolean) => void
 }): { context: UitvraagInGrid; knop: ReactNode; paneel: ReactNode } {
   const actief = !!dossierId && !!scenarioId
   const { pakketten, laden, fout, herlaad } = useUitvraagPakketten(actief ? dossierId : null)
-  const [paneelOpen, setPaneelOpen] = useState(false)
   const [focusPakketId, setFocusPakketId] = useState<string | null>(null)
   /** Open venster: de regels die meegaan; een lege lijst is een losse uitvraag. */
   const [dialoogRegels, setDialoogRegels] = useState<string[] | null>(null)
@@ -31,7 +33,7 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
   const [mailRij, setMailRij] = useState<string[]>([])
 
   const statussen = useMemo(() => regelUitvraagStatussen(pakketten), [pakketten])
-  const openPaneel = useCallback((pakketId?: string) => { setFocusPakketId(pakketId ?? null); setPaneelOpen(true) }, [])
+  const openPaneel = useCallback((pakketId?: string) => { setFocusPakketId(pakketId ?? null); zetPaneelOpen(true) }, [zetPaneelOpen])
   const context = useMemo<UitvraagInGrid>(() => ({
     actief, kanUitvragen: actief && !readOnly, statussen,
     onUitvragen: ids => setDialoogRegels(ids), onOpenPaneel: openPaneel,
@@ -43,7 +45,7 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
   const knop = (
     <Button
       variant="outline" size="sm" aria-pressed={paneelOpen} aria-label="Uitvraag"
-      onClick={() => { setFocusPakketId(null); setPaneelOpen(o => !o) }}
+      onClick={() => { setFocusPakketId(null); zetPaneelOpen(!paneelOpen) }}
       className={paneelOpen ? 'border-calc-oa bg-calc-oa/5 text-calc-oa hover:bg-calc-oa/5' : undefined}
       title={teller > 0 ? `Uitvragen: ${teller} met een partij die nog open staat` : 'Uitvragen bij onderaannemers en leveranciers'}
     >
@@ -63,7 +65,7 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
       <UitvraagPaneelContainer
         open={paneelOpen} pakketten={pakketten} laden={laden} fout={fout} herlaad={herlaad}
         focusPakketId={focusPakketId}
-        onSluit={() => setPaneelOpen(false)}
+        onSluit={() => zetPaneelOpen(false)}
         onLosseUitvraag={() => setDialoogRegels([])}
         onMail={id => setMailRij([id])}
       />
@@ -73,7 +75,7 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
           onSluit={() => setDialoogRegels(null)}
           onAangemaakt={(ids, mailen) => {
             setDialoogRegels(null)
-            setPaneelOpen(true)
+            zetPaneelOpen(true)
             void herlaad()
             if (mailen) setMailRij(ids)
           }}
