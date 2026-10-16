@@ -13,10 +13,13 @@
  */
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import { StatCard } from '@/components/ui/stat-card'
 import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
-import { dossierTabPad } from '@/components/dossiers/open-dossier'
+import { offerteBordKolom, OFFERTE_BORD_KOLOMMEN } from '@/components/dossiers/offerte-bord'
+import { getMedewerkers } from '@/lib/dossiers/actions'
+import { OfferteZijpaneel } from './OfferteZijpaneel'
 import { formatDatumNL } from '@/lib/dossiers/datum-regels'
 import { vandaagNL } from '@/lib/wagenpark/periode'
 import {
@@ -92,10 +95,42 @@ type Props = {
   extraActies?: React.ReactNode
 }
 
+/** Per gebruiker onthouden: wie "alleen van mij" uitzet, wil dat de volgende keer ook. */
+const OPSLAG_MIJ = 'offerte-tedoen-alleen-van-mij'
+const OPSLAG_LATER = 'offerte-tedoen-ook-later'
+
+function leesVlag(sleutel: string, standaard: boolean): boolean {
+  try {
+    const v = localStorage.getItem(sleutel)
+    return v == null ? standaard : v === '1'
+  } catch { return standaard }
+}
+function schrijfVlag(sleutel: string, waarde: boolean) {
+  try { localStorage.setItem(sleutel, waarde ? '1' : '0') } catch { /* privémodus: niet onthouden */ }
+}
+
 export function BewakingWerklijst(props: Props) {
-  const [alleenVanMij, setAlleenVanMij] = React.useState(false)
-  const [toonLater, setToonLater] = React.useState(false)
+  const router = useRouter()
+  // Standaard alleen je eigen offertes: dit is een werklijst, geen pijplijnoverzicht.
+  const [alleenVanMij, setAlleenVanMijRuw] = React.useState(true)
+  const [toonLater, setToonLaterRuw] = React.useState(false)
+  React.useEffect(() => {
+    setAlleenVanMijRuw(leesVlag(OPSLAG_MIJ, true))
+    setToonLaterRuw(leesVlag(OPSLAG_LATER, false))
+  }, [])
+  const setAlleenVanMij = (f: (v: boolean) => boolean) =>
+    setAlleenVanMijRuw(v => { const n = f(v); schrijfVlag(OPSLAG_MIJ, n); return n })
+  const setToonLater = (f: (v: boolean) => boolean) =>
+    setToonLaterRuw(v => { const n = f(v); schrijfVlag(OPSLAG_LATER, n); return n })
   const vandaag = React.useMemo(() => vandaagNL(), [])
+
+  /** De offerte die in het zijpaneel openstaat. */
+  const [geopendId, setGeopendId] = React.useState<string | null>(null)
+  const [medewerkers, setMedewerkers] = React.useState<{ id: string; naam: string }[]>([])
+  React.useEffect(() => {
+    if (!geopendId || medewerkers.length > 0) return
+    getMedewerkers().then(setMedewerkers).catch(() => {})
+  }, [geopendId, medewerkers.length])
 
   const alle: Rij[] = React.useMemo(() => {
     return props.dossiers.map(d => {
@@ -144,6 +179,24 @@ export function BewakingWerklijst(props: Props) {
     () => toonLater ? vanMij : vanMij.filter(r => r._bak !== 'later'),
     [vanMij, toonLater],
   )
+
+  // Belronde: na een vastgelegde uitkomst opent de volgende offerte vanzelf. "Volgende" is de
+  // standaardvolgorde van de lijst (urgentie, dan datum), vastgelegd vóór de lijst ververst.
+  const volgorde = React.useMemo(
+    () => [...zichtbaar]
+      .sort((a, b) => (BAK_INDEX.get(a._bak) ?? 99) - (BAK_INDEX.get(b._bak) ?? 99) || (a._dagen ?? 0) - (b._dagen ?? 0))
+      .map(r => r.id),
+    [zichtbaar],
+  )
+  const geopend = React.useMemo(
+    () => props.dossiers.find(d => d.id === geopendId) ?? null,
+    [props.dossiers, geopendId],
+  )
+  const naVastleggen = React.useCallback(() => {
+    const i = geopendId ? volgorde.indexOf(geopendId) : -1
+    setGeopendId(i >= 0 && i + 1 < volgorde.length ? volgorde[i + 1] : null)
+    router.refresh()
+  }, [geopendId, volgorde, router])
 
   // De tegels rekenen over de hele (eventueel op "van mij" gefilterde) pijplijn, niet over de
   // zichtbare bakken: "€ 1,2 mln staat open" is een pijplijncijfer, geen werklijstcijfer.
@@ -240,7 +293,11 @@ export function BewakingWerklijst(props: Props) {
     },
     {
       key: 'fase', label: 'Fase', standaard_zichtbaar: false, breedte: 160,
-      render: r => r.offerte_substatus ?? '—',
+      // Het label van de bordkolom, niet de databasesleutel (`in_behandeling`).
+      render: r => {
+        const k = r.offerte_substatus ? offerteBordKolom(r.offerte_substatus) : null
+        return OFFERTE_BORD_KOLOMMEN.find(x => x.key === k)?.label ?? '—'
+      },
       sorteerWaarde: r => r.offerte_substatus ?? '',
     },
   ], [alle])
@@ -288,7 +345,7 @@ export function BewakingWerklijst(props: Props) {
         eenregelig
         selecteerbaar={false}
         beginSortering={[{ id: 'datum', desc: false }]}
-        onRijKlik={r => { window.location.href = dossierTabPad('offerte', r.id, 'bewaking') }}
+        onRijKlik={r => setGeopendId(r.id)}
         groepering={{
           sleutel: r => r._bak,
           standaardOpen: true,
@@ -306,6 +363,15 @@ export function BewakingWerklijst(props: Props) {
             )
           },
         }}
+      />
+
+      <OfferteZijpaneel
+        dossier={geopend}
+        mijnMedewerkerId={props.mijnMedewerkerId}
+        medewerkers={medewerkers}
+        vandaag={vandaag}
+        onSluit={() => setGeopendId(null)}
+        onVastgelegd={naVastleggen}
       />
     </div>
   )
