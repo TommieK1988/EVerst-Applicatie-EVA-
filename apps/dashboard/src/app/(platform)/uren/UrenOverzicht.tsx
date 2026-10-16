@@ -17,6 +17,7 @@ import {
 import { keurUrenGoed } from '@/lib/uren/bouw7-goedkeuring'
 import toast from 'react-hot-toast'
 import UurregelBewerken, { type TeBewerkenRegel } from '@/components/uren/UurregelBewerken'
+import { bewerkrecht, bewerkrechtUitleg } from '@/lib/uren/bewerkrecht'
 import { useDialogen } from '@/components/ui/dialogen'
 
 /* ─── Opmaak ────────────────────────────────────────────────────────────────── */
@@ -514,24 +515,23 @@ export default function UrenOverzicht({
           ))}
         </div>
 
-        {/* Te keuren door mij — de ingang tot het accorderen. Zonder financieel-recht krijg je
-            toch alleen je eigen werk te zien, dus is de knop dan niet uit te zetten. */}
-        {magAlles && (
-          <button
-            type="button"
-            onClick={() => setAlleenMijn(v => !v)}
-            disabled={teKeuren.length === 0 && !alleenMijn}
-            style={{
-              padding: '7px 13px', borderRadius: 8, cursor: teKeuren.length === 0 && !alleenMijn ? 'default' : 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
-              border: `1px solid ${alleenMijn ? '#009439' : 'var(--border)'}`,
-              background: alleenMijn ? 'rgba(0,148,57,0.10)' : 'var(--surface)',
-              color: alleenMijn ? '#009439' : (teKeuren.length === 0 ? 'var(--fg-muted)' : 'var(--fg)'),
-            }}
-          >
-            Te keuren door mij ({teKeuren.length})
-          </button>
-        )}
+        {/* Te keuren door mij — de ingang tot het accorderen. Uitgezet zie je ook wat al
+            goedgekeurd is: zonder financieel-recht alleen op je eigen dossiers, en daar moet je
+            bij kunnen om een goedkeuring in te trekken. */}
+        <button
+          type="button"
+          onClick={() => setAlleenMijn(v => !v)}
+          disabled={teKeuren.length === 0 && !alleenMijn}
+          style={{
+            padding: '7px 13px', borderRadius: 8, cursor: teKeuren.length === 0 && !alleenMijn ? 'default' : 'pointer',
+            fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
+            border: `1px solid ${alleenMijn ? '#009439' : 'var(--border)'}`,
+            background: alleenMijn ? 'rgba(0,148,57,0.10)' : 'var(--surface)',
+            color: alleenMijn ? '#009439' : (teKeuren.length === 0 ? 'var(--fg-muted)' : 'var(--fg)'),
+          }}
+        >
+          Te keuren door mij ({teKeuren.length})
+        </button>
 
         <Stat label={telling.gefilterd ? 'Regels (gefilterd)' : 'Regels'} value={String(telling.regels)} />
         <Stat label="Uren" value={uur(telling.uren)} />
@@ -567,8 +567,26 @@ export default function UrenOverzicht({
             groepering={groepering}
             onGefilterd={meldTotalen}
             onRijKlik={(r) => {
-              if (!magIkKeuren(r) || r.bouw7Id == null) return
+              if (r.bouw7Id == null) return
+              // Wat een klik doet bepaalt `bewerkrecht`, dezelfde toets die de server bij Opslaan
+              // doet. Mag het niet, dan zeggen we bij wie de regel wél ligt in plaats van niets
+              // te doen -- een regel die niet reageert leest als een kapot scherm.
+              const recht = bewerkrecht({
+                goedgekeurd: r.geaccordeerd || netGoedgekeurd.has(r.bouw7Id),
+                teamleiderId: r.teamleiderId,
+                projectleiderId: r.projectleiderId,
+                vasteGoedkeurderId: r.vasteGoedkeurderId,
+                // "Wacht op" gaat pas naar de projectleider als de teamleider akkoord is.
+                tlAkkoord: r.teamleiderId != null && r.wachtOp?.rol === 'projectleider',
+              }, medewerkerId)
+              if (recht.mag === null) {
+                toast(bewerkrechtUitleg(recht.reden, {
+                  wachtOp: r.wachtOp?.naam, projectleider: r.projectleider, viaGoedkeurder: r.vasteGoedkeurderId != null,
+                }))
+                return
+              }
               setBewerken({
+                goedgekeurd: recht.mag === 'intrekken',
                 hourLogId: r.bouw7Id,
                 medewerkerNaam: r.medewerker ?? '—',
                 datum: r.datum ?? '',
@@ -625,10 +643,11 @@ export default function UrenOverzicht({
             }
           />
           <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
-            Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : 'de uren die op jouw akkoord wachten'} van {datum(data.van)} t/m {datum(data.tot)}.
+            Live uit Bouw7 — {magAlles ? 'alle geboekte uren van interne en externe medewerkers' : alleenMijn ? 'de uren die op jouw akkoord wachten' : 'de uren op de dossiers waar jij teamleider of projectleider bent'} van {datum(data.van)} t/m {datum(data.tot)}.
             {alleenMijn
               ? ' Vink een regel af om hem goed te keuren, of selecteer er meerdere en keur ze samen goed. Gewerkte uren beoordeelt de teamleider en daarna de projectleider van het dossier; verlof, ziekte en alles op een indirecte-urenproject gaan naar de goedkeurder die op het medewerkerprofiel staat. De kolom Wacht op zegt per regel wie aan zet is.'
               : ' Accorderen kan in Bouw7, of hier met de knop Te keuren door mij.'}
+            {' Klik op een regel om hem aan te passen, te splitsen of er een regel bij te zetten. Is hij al goedgekeurd, dan kan de projectleider daar eerst de goedkeuring intrekken.'}
           </div>
         </div>
       )}
