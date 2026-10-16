@@ -9,11 +9,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { Card, CardHeader, CardBody, Button, Badge, useDialogen } from '@/components/ui'
 import {
-  uitvraagStatusLabels, uitvraagSoortLabels, UITVRAAG_TRANSITIES,
+  uitvraagStatusLabels, UITVRAAG_TRANSITIES,
   type UitvraagStatus, type UitvraagSoort,
 } from '@everts/database'
 import {
@@ -23,6 +22,7 @@ import {
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
 import PartijKiezer from '../PartijKiezer'
 import UitvraagMailVenster from './UitvraagMailVenster'
+import UitvraagPartijCel from './UitvraagPartijCel'
 
 type Props = { dossierId: string }
 
@@ -268,22 +268,7 @@ export default function UitvraagTab({ dossierId }: Props) {
                             </td>
 
                             <td className="py-2 pr-3 w-[20%]">
-                              <div className="flex flex-col gap-0.5">
-                                {rij.relatie_id ? (
-                                  <Link href={`/relaties/${rij.relatie_id}`} className="truncate text-neutral-800 hover:underline">
-                                    {rij.partij_naam}
-                                  </Link>
-                                ) : (
-                                  <span className="truncate text-neutral-800">{rij.partij_naam}</span>
-                                )}
-                                <span className="text-[11px] text-neutral-400">
-                                  {uitvraagSoortLabels[rij.soort]}
-                                  {rij.partij_inactief && <span className="text-warning-600"> · inactief</span>}
-                                  {!rij.partij_email && !rij.laatst_gemaild_naar?.length && (
-                                    <span className="text-warning-600"> · geen e-mailadres</span>
-                                  )}
-                                </span>
-                              </div>
+                              <UitvraagPartijCel rij={rij} />
                             </td>
 
                             <td className="py-2 pr-3 w-[13%]">

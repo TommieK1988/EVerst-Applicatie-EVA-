@@ -2,13 +2,16 @@
 
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/everts-calc/utils'
+import { UitvraagSelectieKnop } from '../uitvraag/UitvraagContext'
 
 /**
  * Balk boven het rekenblad zodra er regels zijn aangevinkt: alles wat je met een
  * selectie kunt, op één plek, met de sneltoets ernaast.
  */
-export function SelectieBalk({ aantal, onKopieren, onVerplaatsen, onOpslag, onBtw, onVerwijderen, onOpheffen }: {
+export function SelectieBalk({ aantal, regelIds = [], onKopieren, onVerplaatsen, onOpslag, onBtw, onVerwijderen, onOpheffen }: {
   aantal: number
+  /** De aangevinkte regels; voor "Uitvragen bij onderaannemer" (alleen binnen een dossier). */
+  regelIds?: Iterable<string>
   onKopieren: () => void
   onVerplaatsen: () => void
   onOpslag: () => void
@@ -21,6 +24,7 @@ export function SelectieBalk({ aantal, onKopieren, onVerplaatsen, onOpslag, onBt
       <span className="mr-1 text-xs font-semibold text-info-700">
         {aantal} regel{aantal !== 1 ? 's' : ''} geselecteerd
       </span>
+      <UitvraagSelectieKnop regelIds={regelIds} />
       <Knop onClick={onKopieren} sneltoets="Ctrl D" title="Kopie van de geselecteerde regels onder de laatste">Dupliceren</Knop>
       <Knop onClick={onVerplaatsen} sneltoets="Ctrl M" title="Naar een andere groep verplaatsen">Verplaatsen</Knop>
       <Knop onClick={onOpslag} title="Opslag% van de geselecteerde regels wijzigen">Opslag%</Knop>

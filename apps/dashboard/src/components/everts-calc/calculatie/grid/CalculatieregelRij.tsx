@@ -19,6 +19,7 @@ import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
 import { kiesBtwTarief } from './btw-keuze'
 import { ActieMenu, SelectieVinkje, type RegelActie } from './ActieMenu'
 import { BehandelingLabel, BehandelingRij } from './Behandeling'
+import { UitvraagLabel } from '../uitvraag/UitvraagContext'
 import { NormenKnop, OmschrijvingKnop, MarkeerKnop, eersteRegel } from './RegelKnoppen'
 import { naarBuurRegel } from './toetsen'
 import type { WeergaveSignaal } from './weergave'
@@ -314,6 +315,7 @@ export function CalculatieregelRij({
                 setCompsUitgeklapt(true); setSchilderbehandelingOpen(true)
               }}
             />
+            <UitvraagLabel regelId={regel.id} />
           </div>
         </td>
       )

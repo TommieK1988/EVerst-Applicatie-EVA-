@@ -41,6 +41,8 @@ interface Props {
   kanOfferte: boolean
   /** Knop Controle met tellers (rood = houdt de offerte tegen, oranje = nakijken). */
   controle: { rood: number; oranje: number; open: boolean; onToggle: () => void }
+  /** Knop Uitvraag (alleen binnen een dossier); draagt zelf zijn paneel. */
+  uitvraagKnop?: ReactNode
   onStartOfferte: (type: QuoteType) => void
   onInstellingen: () => void
 }
@@ -195,6 +197,7 @@ export default function CalculatieWerkbalk(p: Props) {
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
 
+        {p.uitvraagKnop}
         <Button
           variant="outline" size="sm" onClick={p.controle.onToggle} aria-pressed={p.controle.open}
           className={p.controle.open ? 'border-brand-500 bg-brand-50 text-brand-700 hover:bg-brand-50' : undefined}

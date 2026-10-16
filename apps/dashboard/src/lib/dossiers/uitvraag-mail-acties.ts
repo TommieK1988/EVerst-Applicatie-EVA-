@@ -19,6 +19,7 @@ import { assertDossierBewerkbaar } from './guards'
 import { vulMailTekst, netteRegel } from '@/lib/mail/sjabloontekst'
 import { getMailSjabloonTekst } from '@/lib/mail/sjabloon-bron'
 import { bouwUitvraagMailHtml, type UitvraagMailRegel } from '@/lib/mail/uitvraag-mail'
+import { bouwUitvraagPostenHtml, formatProjectbezoek } from '@/lib/mail/uitvraag-posten-mail'
 import { splitsAdressen, verstuurMetOmleiding as verstuur } from '@/lib/mail/verstuur'
 
 /** dd-mm-jjjj uit een ISO-datum. */
@@ -39,6 +40,38 @@ function werkadresVan(d: {
     [d.werkadres_straat, d.werkadres_huisnummer].filter(Boolean).join(' '),
     [d.werkadres_postcode, d.werkadres_stad].filter(Boolean).join(' '),
   ].filter(Boolean).join(', ') || null
+}
+
+/**
+ * Een uitvraag vanuit de calculatie hoort bij een pakket: dan gaan de posten (zonder prijzen), het
+ * projectbezoek en de reactiedatum mee in de mail. Zonder pakket: null, en de mail blijft zoals hij was.
+ * Posten begrensd door het ene pakket.
+ */
+async function pakketVoorMail(
+  pakketId: string | null | undefined,
+): Promise<{ html: string; projectbezoek: string } | null> {
+  if (!pakketId) return null
+  const db = createAdminClient()
+  const [{ data: pakket }, { data: posten }] = await Promise.all([
+    db.from('dossier_uitvraag_pakketten')
+      .select('projectbezoek_op, reactie_uiterlijk')
+      .eq('id', pakketId)
+      .maybeSingle(),
+    db.from('dossier_uitvraag_posten')
+      .select('omschrijving, hoeveelheid, eenheid')
+      .eq('pakket_id', pakketId)
+      .order('volgorde')
+      .limit(1000),
+  ])
+  if (!pakket) return null
+  return {
+    html: bouwUitvraagPostenHtml({
+      posten: posten ?? [],
+      projectbezoekOp: pakket.projectbezoek_op,
+      reactieUiterlijk: pakket.reactie_uiterlijk,
+    }),
+    projectbezoek: formatProjectbezoek(pakket.projectbezoek_op),
+  }
 }
 
 /* ─── concept voor één uitvraag ───────────────────────────────────── */
@@ -76,6 +109,7 @@ export async function getUitvraagMailConcept(uitvraagId: string): Promise<Uitvra
   // Al eerder gemaild → dit wordt een rappel, met de tekst en het adres van die vorige keer.
   const soort: 'uitvraag' | 'rappel' = uv.aangevraagd_op ? 'rappel' : 'uitvraag'
   const bron = await getMailSjabloonTekst(soort === 'rappel' ? 'uitvraag_rappel' : 'uitvraag')
+  const pakket = await pakketVoorMail(uv.pakket_id)
 
   const vars: Record<string, string> = {
     'partij.naam': uv.partij_naam ?? '',
@@ -86,6 +120,7 @@ export async function getUitvraagMailConcept(uitvraagId: string): Promise<Uitvra
     'dossier.werkadres': werkadresVan(dossier) ?? '',
     'dossier.plaats': dossier?.werkadres_stad ?? '',
     'reactie.uiterlijk': nlDatum(uv.reactie_uiterlijk),
+    'projectbezoek': pakket?.projectbezoek ?? '',
   }
 
   // Prefill: het adres van de vórige mail wint van het algemene adres. Grote leveranciers hebben per
@@ -120,7 +155,7 @@ export async function verstuurUitvraagMail(
   const db = createAdminClient() as any
   const { data: uv } = await db
     .from('dossier_uitvragen')
-    .select('id, dossier_id, discipline, status, aangevraagd_op, rappels, reactie_uiterlijk')
+    .select('id, dossier_id, discipline, status, aangevraagd_op, rappels, reactie_uiterlijk, pakket_id')
     .eq('id', uitvraagId)
     .maybeSingle()
   if (!uv) return { ok: false, error: 'Uitvraag niet gevonden.' }
@@ -137,6 +172,7 @@ export async function verstuurUitvraagMail(
     .maybeSingle()
 
   const isRappel = !!uv.aangevraagd_op
+  const pakket = await pakketVoorMail(uv.pakket_id)
   const regel: UitvraagMailRegel = {
     project: [dossier?.dossiernummer, dossier?.titel].filter(Boolean).join(' — '),
     discipline: uv.discipline,
@@ -154,6 +190,7 @@ export async function verstuurUitvraagMail(
         bericht: input.bericht,
         regels: [regel],
         werkadres: werkadresVan(dossier),
+        extraHtml: pakket?.html ?? null,
       }),
     })
   } catch (e) {
