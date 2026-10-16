@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, forwardRef, useImperativeHandle } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, ChevronDown, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDialogen } from '@/components/ui/dialogen'
 import { getGroepen, getCalculatieregels, getComponentregels, slaGroepOp, slaCalculatieregelOp, slaComponentregelOp, upsertComponentregel, verwijderGroep, verwijderCalculatieregel, verwijderComponentregel, voegComponentregelToe, getMeetregelAggregaten, slaMeetregelAggregaatOp, herstelSnapshot } from '@/lib/everts-calc/local-store'
@@ -19,7 +19,8 @@ import { useBewaarLaatsteKolommen, LAATST_SCHERM } from './kolom-geheugen'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import type { KolomConfig, GebruikerLayout } from '@everts/database/platform-types'
 import { type ColId, COL_DEFS, TEKSTVELDEN, COL_MAP, DEFAULT_ORDER, DEFAULT_WIDTHS, LAYOUT_SCHERM, NAMEN_SCHERM, stateNaarLayout, layoutNaarState } from './grid/kolommen'
-import { TabelHeader, KolomNaamVeld } from './grid/TabelHeader'
+import { TabelHeader } from './grid/TabelHeader'
+import { LayoutMenu, KolommenMenu } from './grid/KolomMenus'
 import { kiesBtwTarief } from './grid/btw-keuze'
 import { GroepSectie } from './grid/GroepSectie'
 import type { RegelActie } from './grid/ActieMenu'
@@ -152,7 +153,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [dragOverCol, setDragOverCol] = useState<ColId | null>(null)
   const resizeRef = useRef<{ col: ColId; startX: number; startW: number } | null>(null)
   const tabelRef  = useRef<HTMLTableElement>(null)
-  const NON_HIDEABLE: ColId[] = ['omschrijving', 'acties']
   // Verborgen kolommen horen bij de kolom-layout (per gebruiker in de database,
   // zie gebruiker_layouts hieronder) en niet apart op dit apparaat: anders zag je
   // op je tweede scherm een andere kolomindeling dan op je eerste.
@@ -164,11 +164,9 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       return next
     })
   }
-  const [colPickerOpen, setColPickerOpen] = useState(false)
-  const colPickerRef = useRef<HTMLDivElement>(null)
 
-  // Kolom-layouts + kolommen-picker worden via een portal in de actiebalk getoond
-  // (naast "Opties"); de slot leeft in CalculatieHoofdscherm.
+  // Kolom-layouts + kolommen-picker worden via een portal in de werkbalk getoond
+  // (naast Tonen); de slot leeft in CalculatieWerkbalk.
   const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null)
   useEffect(() => { setToolbarSlot(document.getElementById('calc-grid-toolbar-slot')) }, [])
 
@@ -176,8 +174,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
   const [userId, setUserId]               = useState<string | null>(null)
   const [layouts, setLayouts]             = useState<GebruikerLayout[]>([])
   const [actiefLayoutId, setActiefLayoutId] = useState<string | null>(null)
-  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false)
-  const layoutMenuRef = useRef<HTMLDivElement>(null)
   const { vraagTekst } = useDialogen()
 
   // Eigen kolomnamen van deze gebruiker (leeg = de naam uit de instellingen/standaard)
@@ -285,7 +281,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     setActiefLayoutId(res.id ?? null)
     await herlaadLayouts()
     toast.success(`Layout "${naam}" opgeslagen`)
-    setLayoutMenuOpen(false)
   }, [userId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts, vraagTekst])
 
   const layoutBijwerken = useCallback(async () => {
@@ -296,7 +291,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     if (!res.ok) { toast.error(res.error); return }
     await herlaadLayouts()
     toast.success(`Layout "${huidig.naam}" bijgewerkt`)
-    setLayoutMenuOpen(false)
   }, [userId, actiefLayoutId, layouts, colOrder, hiddenCols, colWidths, herlaadLayouts])
 
   const layoutVerwijderen = useCallback(async (id: string) => {
@@ -319,16 +313,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     toast.success('Standaard-layout ingesteld')
   }, [userId, herlaadLayouts])
 
-  // Layout-menu klik-buiten sluiten
-  useEffect(() => {
-    if (!layoutMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node))
-        setLayoutMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [layoutMenuOpen])
 
   const defaultOpslag = scenarioDefaultOpslag(scenario)
 
@@ -344,16 +328,6 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
 
   useEffect(() => { laadAlles() }, [laadAlles])
 
-  // ─── Kolom picker klik-buiten sluiten ─────────────────────────────────────
-  useEffect(() => {
-    if (!colPickerOpen) return
-    const handler = (e: MouseEvent) => {
-      if (colPickerRef.current && !colPickerRef.current.contains(e.target as Node))
-        setColPickerOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [colPickerOpen])
 
   // ─── Undo ──────────────────────────────────────────────────────────────────
   const duwSnapshot = useCallback(() => {
@@ -1089,149 +1063,24 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
         `#calc-tabel[data-hcol="${id}"] [data-col="${id}"] { background-color: rgba(219,234,254,0.35) !important; }`
       ).join(' ')}</style>
 
-      {/* Kolom-layouts + kolommen-picker: gerenderd in de werkbalk (naast inklappen)
-          via een portal in #calc-grid-toolbar-slot. */}
+      {/* Kolom-layouts + kolommen: gerenderd in de werkbalk via een portal in #calc-grid-toolbar-slot. */}
       {toolbarSlot && createPortal(
         <>
-        {userId && (
-          <div ref={layoutMenuRef} className="relative">
-            <button
-              onClick={() => setLayoutMenuOpen(v => !v)}
-              className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
-                actiefLayoutId
-                  ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                  : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
-              }`}
-              title="Kolom-layouts (per gebruiker)"
-            >
-              <ChevronDown className="w-3 h-3" />
-              {actiefLayoutId ? (layouts.find(l => l.id === actiefLayoutId)?.naam ?? 'Layout') : 'Layouts'}
-            </button>
-            {layoutMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-[150] min-w-[240px]">
-                <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
-                  Kolom-layouts
-                </div>
-                {/* Layout uitzetten zonder hem te verwijderen: terug naar de gewone kolommen. */}
-                <button
-                  onClick={() => { setActiefLayoutId(null); setColOrder(DEFAULT_ORDER); setColWidths(DEFAULT_WIDTHS); setHiddenCols(new Set()); setLayoutMenuOpen(false) }}
-                  className={`w-full text-left px-3 py-1 text-xs hover:bg-slate-50 ${actiefLayoutId ? 'text-slate-700' : 'text-everts font-medium bg-everts-50/60'}`}
-                  title="Geen layout — alle kolommen in de standaardvolgorde en -breedte"
-                >
-                  Standaardkolommen
-                </button>
-                {layouts.length === 0 && (
-                  <div className="px-3 py-1.5 text-xs text-slate-400">Nog geen opgeslagen layouts</div>
-                )}
-                {layouts.map(l => (
-                  <div
-                    key={l.id}
-                    className={`flex items-center gap-1 px-2 py-1 hover:bg-slate-50 ${actiefLayoutId === l.id ? 'bg-everts-50/60' : ''}`}
-                  >
-                    <button
-                      onClick={() => { pasLayoutToe(l.kolommen, l.id); setLayoutMenuOpen(false) }}
-                      className="flex-1 min-w-0 text-left text-xs text-slate-700 truncate px-1 py-0.5"
-                      title="Layout toepassen"
-                    >
-                      {l.is_standaard && <span className="text-amber-500 mr-1">★</span>}
-                      {l.naam}
-                    </button>
-                    {!l.is_standaard && (
-                      <button
-                        onClick={() => layoutStandaardZetten(l.id)}
-                        className="flex-shrink-0 p-1 text-slate-300 hover:text-amber-500 rounded"
-                        title="Als standaard instellen"
-                      >★</button>
-                    )}
-                    <button
-                      onClick={() => layoutVerwijderen(l.id)}
-                      className="flex-shrink-0 p-1 text-slate-300 hover:text-red-500 rounded"
-                      title="Layout verwijderen"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <div className="border-t border-slate-100 mt-1 pt-1">
-                  {actiefLayoutId && (
-                    <button
-                      onClick={layoutBijwerken}
-                      className="w-full text-left px-3 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-                    >
-                      Actieve layout bijwerken
-                    </button>
-                  )}
-                  <button
-                    onClick={layoutOpslaanAlsNieuw}
-                    className="w-full text-left px-3 py-1 text-xs text-everts hover:bg-everts-50 font-medium"
-                  >
-                    Huidige kolommen opslaan als nieuw…
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        <div ref={colPickerRef} className="relative">
-          <button
-            onClick={() => setColPickerOpen(v => !v)}
-            className={`inline-flex items-center gap-1 h-7 text-xs font-semibold px-2.5 rounded-md border transition-colors ${
-              hiddenCols.size > 0
-                ? 'border-everts/40 bg-everts-50 text-everts font-medium'
-                : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 hover:border-neutral-400'
-            }`}
-            title="Kolommen tonen/verbergen"
-          >
-            <ChevronDown className="w-3 h-3" />
-            Kolommen{hiddenCols.size > 0 ? ` (${hiddenCols.size} verborgen)` : ''}
-          </button>
-          {colPickerOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-[150] w-[300px] max-h-[70vh] overflow-auto">
-              <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 mb-1">
-                Kolommen tonen en hernoemen
-              </div>
-              {COL_DEFS.map(c => (
-                <div key={c.id} className="flex items-center gap-2 px-3 py-1 hover:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    checked={!hiddenCols.has(c.id)}
-                    disabled={NON_HIDEABLE.includes(c.id)}
-                    onChange={() => toggleHiddenCol(c.id)}
-                    className="w-3.5 h-3.5 rounded accent-everts flex-shrink-0 disabled:opacity-30"
-                    title={NON_HIDEABLE.includes(c.id) ? 'Deze kolom is altijd zichtbaar' : 'Kolom tonen/verbergen'}
-                  />
-                  <KolomNaamVeld
-                    waarde={colNamen[c.id] ?? ''}
-                    standaard={standaardKolomNaam(c.id)}
-                    onCommit={naam => zetKolomNaam(c.id, naam)}
-                  />
-                </div>
-              ))}
-              <div className="border-t border-slate-100 mt-1 pt-1">
-                <p className="px-3 py-1 text-[10px] text-slate-400 leading-snug">
-                  Eigen kolomnamen gelden alleen voor jou. Leeg laten = standaardnaam.
-                  Je kunt ook dubbelklikken op een kolomkop.
-                </p>
-                {hiddenCols.size > 0 && (
-                  <button
-                    onClick={() => setHiddenCols(new Set())}
-                    className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                  >
-                    Alle kolommen tonen
-                  </button>
-                )}
-                {Object.keys(colNamen).length > 0 && (
-                  <button
-                    onClick={() => { setColNamen({}); void bewaarKolomNamen({}) }}
-                    className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                  >
-                    Kolomnamen herstellen
-                  </button>
-                )}
-              </div>
-            </div>
+          {userId && (
+            <LayoutMenu
+              layouts={layouts} actiefLayoutId={actiefLayoutId}
+              onStandaard={() => { setActiefLayoutId(null); setColOrder(DEFAULT_ORDER); setColWidths(DEFAULT_WIDTHS); setHiddenCols(new Set()) }}
+              onKies={l => pasLayoutToe(l.kolommen, l.id)}
+              onMaakStandaard={layoutStandaardZetten} onVerwijder={layoutVerwijderen}
+              onBijwerken={layoutBijwerken} onOpslaanAlsNieuw={layoutOpslaanAlsNieuw}
+            />
           )}
-        </div>
+          <KolommenMenu
+            hiddenCols={hiddenCols} kolomNamen={colNamen} standaardNaam={standaardKolomNaam}
+            onWissel={toggleHiddenCol} onHernoem={zetKolomNaam}
+            onAllesTonen={() => setHiddenCols(new Set())}
+            onNamenHerstellen={() => { setColNamen({}); void bewaarKolomNamen({}) }}
+          />
         </>,
         toolbarSlot,
       )}
