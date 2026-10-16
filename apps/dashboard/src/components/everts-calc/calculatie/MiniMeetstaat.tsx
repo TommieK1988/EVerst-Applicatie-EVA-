@@ -210,6 +210,7 @@ export default function MiniMeetstaat({
   const [gebruik, setGebruik] = useState<Gebruik>('netto')
   const [koppelId, setKoppelId] = useState<string | undefined>()
   const [bronRegelId, setBronRegelId] = useState<string | undefined>()
+  const [naam, setNaam] = useState('')
 
   // Bij openen: de bewaarde meting, of anders de bestaande hoeveelheid als eerste rij.
   useEffect(() => {
@@ -221,8 +222,10 @@ export default function MiniMeetstaat({
     setRijen(start.rijen)
     setGebruik(start.gebruik)
     setAfwijking(start.afwijking)
-    // Een meting in een andere eenheid opent niet, en dus ook zijn koppeling niet.
-    setKoppelId(bewaard && normaliseerEenheid(bewaard.eenheid) === eenh ? bewaard.koppel_id : undefined)
+    // Een meting in een andere eenheid opent niet, en dus ook zijn koppeling en naam niet.
+    const zelfde = bewaard && normaliseerEenheid(bewaard.eenheid) === eenh
+    setKoppelId(zelfde ? bewaard.koppel_id : undefined)
+    setNaam(zelfde ? bewaard.naam ?? '' : '')
     setBronRegelId(undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -237,6 +240,7 @@ export default function MiniMeetstaat({
     setGekozenEenheid(e)
     setRijen([legeRij()])
     setAfwijking(null)
+    setNaam('')
     setKoppelId(undefined)
     setBronRegelId(undefined)
   }
@@ -251,16 +255,13 @@ export default function MiniMeetstaat({
   // Overnemen uit de lijst: de maten en de koppeling; bruto of netto blijft van deze regel.
   const kiesMeting = (k: MetingKeuze) => {
     setRijen([...k.meting.rijen, legeRij()])
+    setNaam(k.naam)
     setKoppelId(k.koppelId ?? nieuweId())
     setBronRegelId(k.koppelId ? undefined : k.bronRegelId)
     setAfwijking(null)
   }
 
-  const ontkoppel = () => {
-    setKoppelId(undefined)
-    setBronRegelId(undefined)
-    onOntkoppel?.()
-  }
+  const ontkoppel = () => { setKoppelId(undefined); setBronRegelId(undefined); onOntkoppel?.() }
 
   const totalen = rijen.map(r => berekenRij(r, gekozenEenheid))
   const bn = brutoNetto(rijen, gekozenEenheid)
@@ -276,7 +277,8 @@ export default function MiniMeetstaat({
     const eenheidGewijzigd = gekozenEenheid !== eenheid
     const meting: MiniMeting = {
       ...maakMeting(rijen, gekozenEenheid, gebruik),
-      naam: metingNaam(rijen.filter(rijHeeftData), titel ?? ''),
+      // Zelf ingevuld, anders de eerste maat (niet de regel: die past niet bij andere regels).
+      naam: naam.trim() || metingNaam(rijen.filter(rijHeeftData), ''),
       // Een koppeling zonder andere regels is geen koppeling.
       ...(koppelId && gedeeld.length > 0 ? { koppel_id: koppelId } : {}),
     }
@@ -301,7 +303,10 @@ export default function MiniMeetstaat({
 
         <DialogBody className="flex flex-col gap-4">
           {gekozenEenheid && (
-            <MetingKoppeling keuzes={keuzes} gedeeldMet={gedeeld} onKies={kiesMeting} onOntkoppel={ontkoppel} />
+            <MetingKoppeling
+              keuzes={keuzes} gedeeldMet={gedeeld} onKies={kiesMeting} onOntkoppel={ontkoppel}
+              naam={naam} naamVoorstel={metingNaam(rijen.filter(rijHeeftData), '')} onNaam={setNaam}
+            />
           )}
 
           {afwijking && (

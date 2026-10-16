@@ -78,7 +78,8 @@ export function metingKeuzes(
       sleutel,
       koppelId: m.koppel_id,
       bronRegelId: r.id,
-      naam: m.naam || metingNaam(rijen, r.omschrijving),
+      // Zonder eigen naam en zonder omschrijving bij de maten: zeg waar hij vandaan komt.
+      naam: m.naam || metingNaam(rijen, `Meting uit ${r.omschrijving.trim() || 'een andere regel'}`),
       meting: { ...m, rijen },
       bruto: bn.bruto,
       netto: bn.netto,

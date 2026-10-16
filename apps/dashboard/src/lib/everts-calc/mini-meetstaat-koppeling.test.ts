@@ -60,6 +60,11 @@ describe('metingKeuzes', () => {
     const k = metingKeuzes([regel('a', 'x', meting({ naam: 'Voorgevel' }))], 'z', 'm²')
     expect(k[0].naam).toBe('Voorgevel')
   })
+
+  it('zonder naam en zonder omschrijving bij de maten: zegt waar hij vandaan komt', () => {
+    const k = metingKeuzes([regel('a', 'Voegwerk vervangen', meting({ rijen: [rij({ dim1: 4, dim2: 2 })] }))], 'z', 'm²')
+    expect(k[0].naam).toBe('Meting uit Voegwerk vervangen')
+  })
 })
 
 describe('synchroniseerKoppeling', () => {
