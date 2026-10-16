@@ -18,6 +18,7 @@ import { DialoogProvider } from '@/components/ui/dialogen'
 import type { DossierRij } from '@/components/dossiers/types'
 import type { OffertePaneelData } from '@/lib/commercie/paneel'
 import type { BewakingKaart } from '@/lib/commercie/types'
+import { OfferteBordKaart } from '@/components/commercie/OfferteBordKaart'
 import { StilstandOverzicht } from '@/components/commercie/StilstandOverzicht'
 import type { StilReden } from '@/lib/commercie/opvolging'
 import { maakTeDoenRij, pastBijBedrag, sorteerTeDoen, type Bak, type LaatsteContact } from '@/components/commercie/te-doen'
@@ -67,7 +68,7 @@ function naarDossier(v: Voorbeeld): DossierRij {
     bewaking_actief: true, bewaking_stap_soort: v.soort, bewaking_stap_tekst: v.tekst,
     bewaking_stap_datum: v.datum, bewaking_wacht_op: v.wachtOp ?? null, bewaking_stap_bron: 'handmatig',
     bewaking_actiehouder: v.houderNaam, bewaking_actiehouder_id: v.houder,
-    bewaking_eigenaar_id: v.eigenaar || null, intern: false,
+    bewaking_eigenaar_id: v.eigenaar || null, bewaking_eigenaar: v.eigenaar === BAS ? 'Bas de Vries' : v.eigenaar === SANNE ? 'Sanne Jansen' : null, intern: false,
     bewaking_stil_reden: v.stil ?? null, bewaking_besluit_datum: v.besluit ?? null, bewaking_opvolging: v.opvolging ?? null,
   } as unknown as DossierRij
 }
@@ -140,6 +141,13 @@ export default function OffertebewakingPreview() {
           <p className="text-xs text-neutral-500">
             Voorbeeld met verzonnen gegevens · vandaag = 15 okt 2026 · ingelogd als Bas
           </p>
+          {/* Bordkaarten (Offertes → Bord), met dezelfde verzonnen gegevens. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Bordkaarten">
+            {['d3', 'd1', 'd5', 'd7'].map(id => {
+              const v = VOORBEELDEN.find(x => x.id === id)!
+              return <OfferteBordKaart key={id} dossier={naarDossier(v)} vandaag={VANDAAG} onOpen={setGeopend} />
+            })}
+          </div>
           <BedragFilter klassen={klassen} onKlassen={setKlassen} aantallen={aantallen} min={null} max={null} onBereik={() => {}} />
           <StilstandOverzicht rijen={alle} gekozen={stil} onKies={setStil} vandaag={VANDAAG} />
           <TeDoenTegels alleRijen={alle} tegel={tegel} onTegel={b => { setStil(null); setTegel(b) }} />

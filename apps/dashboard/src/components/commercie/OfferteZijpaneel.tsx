@@ -38,11 +38,13 @@ type Props = {
   /** Een andere offerte in het paneel openen. */
   onOpen: (id: string) => void
   grenzen?: Bedragklassegrenzen
+  /** Altijd als lade over de pagina, ook op een breed scherm (bord, lijst). */
+  altijdLade?: boolean
 }
 
 export function OfferteZijpaneel(props: Props) {
   const d = props.dossier
-  const naast = useMediaQuery(NAAST_DE_LIJST)
+  const naast = useMediaQuery(NAAST_DE_LIJST) && !props.altijdLade
   const [data, setData] = React.useState<OffertePaneelData | null>(null)
   const [fout, setFout] = React.useState<string | null>(null)
   const [overigeIds, setOverigeIds] = React.useState<OverigeOffertes | null>(null)
