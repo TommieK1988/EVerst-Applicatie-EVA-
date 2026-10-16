@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog'
@@ -20,21 +19,8 @@ interface Props {
   onNaWijziging: () => void
 }
 
-/** Knop "Uren" in de werkbalk, met het venster erachter. */
-export default function UrenPerGroepKnop(props: Props) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)} title="Uren per groep en tijdtoeslag">
-        <Clock className="w-3.5 h-3.5" />
-        <span className="hidden lg:inline">Uren</span>
-      </Button>
-      {open && <UrenDialog {...props} onSluit={() => setOpen(false)} />}
-    </>
-  )
-}
-
-function UrenDialog({ scenarioId, readOnly, onVoorWijziging, onNaWijziging, onSluit }: Props & { onSluit: () => void }) {
+/** Het venster; de werkbalk opent het via het menu Bewerken. */
+export default function UrenPerGroepDialoog({ scenarioId, readOnly, onVoorWijziging, onNaWijziging, onSluit }: Props & { onSluit: () => void }) {
   // Eenmalig inlezen bij openen: het venster is modaal, het grid verandert intussen niet.
   const [groepen] = useState(() => getGroepen(scenarioId))
   const rijen = useMemo(

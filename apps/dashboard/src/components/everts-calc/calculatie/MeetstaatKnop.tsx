@@ -19,6 +19,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Ruler, ChevronDown, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
+import { menuInhoud, menuItem } from './werkbalk-menu'
 import MeetstaaatHoofdscherm from '@/components/everts-calc/meetstaat/MeetstaaatHoofdscherm'
 import { hydrateCalculatie } from '@/lib/everts-calc/local-store'
 import { laadCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
@@ -108,19 +109,19 @@ export default function MeetstaatKnop({
           <DropdownMenu.Trigger asChild>
             <Button variant="outline" size="sm" title="Meer opties voor de meetstaat"
               className="rounded-l-none border-l-0 px-1">
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className="w-3 h-3 text-neutral-400" />
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content
-              className="bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[180px] z-[200]"
+              className={menuInhoud}
               align="start" sideOffset={4}
             >
               <DropdownMenu.Item
-                className="flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 cursor-pointer outline-none rounded-md"
+                className={menuItem}
                 onSelect={() => { void openVenster() }}
               >
-                <ExternalLink className="w-3.5 h-3.5 text-slate-400" /> In nieuw venster openen
+                <ExternalLink className="w-3.5 h-3.5 text-neutral-400" /> In nieuw venster openen
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

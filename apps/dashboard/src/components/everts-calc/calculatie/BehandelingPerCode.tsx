@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { ListChecks } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,24 +25,8 @@ interface Props {
   onNaWijziging: () => void
 }
 
-/** Knop in de werkbalk van de calculatie, met het venster erachter. */
-export default function BehandelingPerCodeKnop(props: Props) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <Button
-        variant="outline" size="sm" disabled={props.readOnly} onClick={() => setOpen(true)}
-        title="Per bestekscode in één keer een behandeling koppelen"
-      >
-        <ListChecks className="w-3.5 h-3.5" />
-        <span className="hidden lg:inline">Behandeling per code</span>
-      </Button>
-      {open && <BehandelingPerCodeDialog {...props} onSluit={() => setOpen(false)} />}
-    </>
-  )
-}
-
-function BehandelingPerCodeDialog({ scenarioId, onVoorWijziging, onNaWijziging, onSluit }: Props & { onSluit: () => void }) {
+/** Het venster; de werkbalk opent het via het menu Bewerken. */
+export default function BehandelingPerCodeDialoog({ scenarioId, onVoorWijziging, onNaWijziging, onSluit }: Props & { onSluit: () => void }) {
   // Eenmalig inlezen bij openen: het venster is modaal, het grid verandert intussen niet.
   const [regels] = useState(() => getCalculatieregelsVoorScenario(scenarioId))
   const [aggregaten] = useState(() => getMeetregelAggregaten())

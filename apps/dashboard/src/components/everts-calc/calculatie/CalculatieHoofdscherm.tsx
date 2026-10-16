@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
-import UrenPerGroepKnop from '@/components/everts-calc/calculatie/UrenPerGroep'
+import BehandelingPerCodeDialoog from '@/components/everts-calc/calculatie/BehandelingPerCode'
+import UrenPerGroepDialoog from '@/components/everts-calc/calculatie/UrenPerGroep'
 import MeetstaatKnop from './MeetstaatKnop'
 import { Alert } from '@/components/ui/alert'
 import toast from 'react-hot-toast'
@@ -18,6 +18,7 @@ import CalculatieInstellingenKaarten from './CalculatieInstellingenKaarten'
 import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmakenModal'
 import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
 import ControlePaneel from './ControlePaneel'
+import { volgendRechterPaneel, type RechterPaneel } from './rechter-paneel'
 import { useCalculatieControle } from './useCalculatieControle'
 import { useUitvraagInCalculatie } from './uitvraag/useUitvraagInCalculatie'
 import { UitvraagProvider } from './uitvraag/UitvraagContext'
@@ -71,12 +72,14 @@ interface Props {
    *    daar leidend), maar meerwerk mag nog wel een nieuwe versie krijgen;
    *  - `geen`     — reviseren volledig uit. */
   magReviseren?: 'alles' | 'meerwerk' | 'geen'
+  /** Terugknop vooraan in de werkbalk, naar het overzicht waar de calculatie uit geopend is. */
+  terug?: { label: string; onClick: () => void }
 }
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
   bibliotheekItems = [], readOnly: readOnlyProp = false, scenarioId, dossierContext,
-  onScenariosGewijzigd, magReviseren = 'alles',
+  onScenariosGewijzigd, magReviseren = 'alles', terug,
 }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -120,7 +123,18 @@ export default function CalculatieHoofdscherm({
   const [offerteModalOpen, setOfferteModalOpen]       = useState(false)
   const [offerteModalType, setOfferteModalType]       = useState<QuoteType>('verkoopofferte')
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
-  const [controleOpen, setControleOpen]               = useState(false)
+  /** Rechts maximaal één paneel tegelijk (zie rechter-paneel.ts). */
+  const [rechterPaneel, setRechterPaneel]             = useState<RechterPaneel | null>(null)
+  const controleOpen = rechterPaneel === 'controle'
+  const setControleOpen = useCallback((open: boolean | ((o: boolean) => boolean)) => {
+    setRechterPaneel(huidig =>
+      volgendRechterPaneel(huidig, 'controle', typeof open === 'function' ? open(huidig === 'controle') : open))
+  }, [])
+  const zetUitvraagOpen = useCallback((open: boolean) => {
+    setRechterPaneel(huidig => volgendRechterPaneel(huidig, 'uitvraag', open))
+  }, [])
+  /** Venster uit het menu Bewerken. */
+  const [bewerkVenster, setBewerkVenster]             = useState<'behandeling' | 'uren' | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
   const [schermRef, schermHoogte] = usePasInScrollvlak()
 
@@ -195,7 +209,10 @@ export default function CalculatieHoofdscherm({
   const controle = useCalculatieControle({
     scenario, regels: regelsVoorBtw, componenten: componentenVoorBtw, kostprijs, verkoopprijs, versie: refreshTotalen,
   })
-  const uitvraag = useUitvraagInCalculatie({ dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly })
+  const uitvraag = useUitvraagInCalculatie({
+    dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly,
+    paneelOpen: rechterPaneel === 'uitvraag', zetPaneelOpen: zetUitvraagOpen,
+  })
   const uurtarieven = useInstellingen().uurtarieven ?? []
   const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
 
@@ -459,6 +476,7 @@ export default function CalculatieHoofdscherm({
       {/* ─── Werkbalk ── */}
       <CalculatieWerkbalk
         readOnly={readOnly}
+        terug={terug}
         boomOpen={boomUitgeklapt}
         onToggleBoom={handleToggleBoom}
         undoCount={undoCount}
@@ -467,16 +485,14 @@ export default function CalculatieHoofdscherm({
         opgeslagenOp={opgeslagenOp}
         onOpslaan={() => slaCalculatieOp(false)}
         onBibliotheek={soort => (soort === 'recepten' ? setReceptenOpen : soort === 'schilderwerk' ? setSchilderwerkOpen : setMaterialenOpen)(true)}
-        toevoegen={<>
+        meetstaat={
           <MeetstaatKnop projectId={projectId} scenarioId={scenario.id} projectNaam={projectNaam} projectNummer={projectNummer}
             terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
             bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
             onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
-          <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
-            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
-          <UrenPerGroepKnop scenarioId={scenario.id} readOnly={readOnly}
-            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
-        </>}
+        }
+        onBehandelingPerCode={() => setBewerkVenster('behandeling')}
+        onUrenPerGroep={() => setBewerkVenster('uren')}
         weergave={weergave}
         onWeergave={handleWeergave}
         // Meerwerk niet kopiëren: een tweede scenario bij dezelfde meerwerkregel zou de
@@ -558,6 +574,15 @@ export default function CalculatieHoofdscherm({
         eigenOpslag={eigenOpslag}
         readOnly={readOnly}
       />
+
+      {bewerkVenster === 'behandeling' && (
+        <BehandelingPerCodeDialoog scenarioId={scenario.id} readOnly={readOnly} onSluit={() => setBewerkVenster(null)}
+          onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+      )}
+      {bewerkVenster === 'uren' && (
+        <UrenPerGroepDialoog scenarioId={scenario.id} readOnly={readOnly} onSluit={() => setBewerkVenster(null)}
+          onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+      )}
 
       {toonCufImport && (
         <CufImportModal
