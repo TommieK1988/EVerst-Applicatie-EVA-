@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useRef, cloneElement } from 'react'
 import type { ReactElement } from 'react'
-import { TriangleAlert, Ruler } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { standaardUurtarief } from '@/lib/everts-calc/local-store'
 import { berekenCalculatieregel, formatEuro, formatGetal, parseGetal } from '@/lib/everts-calc/calculations'
 import { cn } from '@/lib/everts-calc/utils'
 import type { Calculatieregel, Componentregel, Eenheid, EenheidConfig } from '@/lib/everts-calc/types'
 import ActiviteitToevoegenModal from '@/components/everts-calc/calculatie/ActiviteitToevoegenModal'
-import MiniMeetstaat from '@/components/everts-calc/calculatie/MiniMeetstaat'
 import { tariefKort, vindTarief, type BtwTariefKeuze } from '@/lib/stamdata/btw'
 import type { BibliotheekItemVereenvoudigd } from '@/lib/everts-calc/types'
 import { type ColId, COL_MAP, groepsGrenzen, GRENS_STIJL } from './kolommen'
 import { GetalInput } from './GetalInput'
+import { HoeveelheidCel } from './HoeveelheidCel'
 import { OmschrijvingVeld } from './OmschrijvingVeld'
 import { WerkomschrijvingRij, RegelComponentenBlok, OpmerkingRij } from './RegelDetail'
 import { OpslaanAlsReceptModal } from './OpslaanAlsReceptModal'
@@ -36,6 +36,8 @@ export interface RegelRijProps {
   uurtarieven: { label: string; tarief: number }[]
   eenheden: EenheidConfig[]
   scenarioId: string
+  /** Alle regels van dit scenario: een meting kan met andere regels gedeeld zijn. */
+  scenarioRegels?: Calculatieregel[]
   onWijzig: (id: string, veld: Partial<Calculatieregel>) => void
   onWijzigComponent: (id: string, type: Componentregel['type'], norm: number, tarief: number) => void
   onWijzigComponentExtra: (compId: string, patch: Partial<Componentregel>) => void
@@ -61,7 +63,7 @@ export interface RegelRijProps {
 }
 
 export function CalculatieregelRij({
-  regel, componenten, diepte, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId,
+  regel, componenten, diepte, defaultOpslag, standaardTarief, colOrder, btwTarieven, uurtarieven, eenheden, scenarioId, scenarioRegels = [],
   onWijzig, onWijzigComponent, onWijzigComponentExtra, onVoegComponentToe, onVerwijderComponent, onVerwijder, onHerlaad,
   bibliotheekItems,
   isGeselecteerd, onSelecteer, onActie,
@@ -331,46 +333,10 @@ export function CalculatieregelRij({
       )
       case 'aant': return (
         <td key={id} className={`px-1 py-1 ${base}`} style={tdSt}>
-          {regel.meetstaat_aggregaat_id ? (
-            <span
-              className="w-full text-xs text-right  font-semibold px-1 py-0.5 block text-teal-600"
-              title="Hoeveelheid vastgesteld door meetstaat — pas aan in de meetstaat"
-            >
-              {regel.hoeveelheid === 0 ? '—' : formatGetal(regel.hoeveelheid, 2)}
-            </span>
-          ) : (
-            <div className="relative">
-              {(regel.mini_meetstaat?.rijen.length ?? 0) > 0 && (
-                <Ruler
-                  aria-label="Gemeten"
-                  className="pointer-events-none absolute left-0.5 top-1/2 h-3 w-3 -translate-y-1/2 text-brand-500"
-                />
-              )}
-              <GetalInput
-                waarde={regel.hoeveelheid}
-                onChange={v => onWijzig(regel.id, { hoeveelheid: v })}
-                className="w-full text-xs text-right  font-semibold px-1 py-0.5 rounded border-0 bg-transparent
-                  hover:bg-slate-50 hover:border hover:border-slate-200
-                  focus:bg-white focus:border focus:border-everts/40 focus:outline-none text-slate-800"
-                onDoubleClick={e => { e.stopPropagation(); setMiniMeetstaat(true) }}
-                title={regel.mini_meetstaat?.rijen.length
-                  ? `Gemeten (${regel.mini_meetstaat.rijen.length} ${regel.mini_meetstaat.rijen.length === 1 ? 'regel' : 'regels'}): dubbelklik om de meting te zien`
-                  : 'Dubbelklik om te meten'}
-              />
-              <MiniMeetstaat
-                open={miniMeetstaat}
-                eenheid={regel.eenheid}
-                hoeveelheid={regel.hoeveelheid}
-                titel={regel.omschrijving}
-                bewaard={regel.mini_meetstaat}
-                onSluiten={() => setMiniMeetstaat(false)}
-                onBevestig={(hoeveelheid, eenheid, meting) => {
-                  onWijzig(regel.id, { hoeveelheid, mini_meetstaat: meting, ...(eenheid ? { eenheid } : {}) })
-                  setMiniMeetstaat(false)
-                }}
-              />
-            </div>
-          )}
+          <HoeveelheidCel
+            regel={regel} scenarioRegels={scenarioRegels} onWijzig={onWijzig}
+            open={miniMeetstaat} onOpen={() => setMiniMeetstaat(true)} onSluit={() => setMiniMeetstaat(false)}
+          />
         </td>
       )
       case 'code': return (
