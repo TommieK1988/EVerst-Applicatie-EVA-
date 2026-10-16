@@ -197,6 +197,16 @@ export default function CalculatieHoofdscherm({
   const uurtarieven = useInstellingen().uurtarieven ?? []
   const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
 
+  // Een calculatie begint altijd met het ★-tarief uit Stamgegevens. Calculaties die
+  // zonder tarief zijn begonnen (de instellingen waren toen nog niet geladen, of lazen
+  // een lege lijst) krijgen het bij openen alsnog. Alleen het veld: bestaande regels
+  // houden hun tarief. Niet bij een bevroren of alleen-lezen calculatie.
+  useEffect(() => {
+    if (!scenario || readOnly || scenario.standaard_uurtarief || globaalTarief <= 0) return
+    handleScenarioWijzig({ standaard_uurtarief: globaalTarief })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario?.id, globaalTarief, readOnly])
+
   /* ── Opslaan (automatisch + handmatig) ───────────────────────────── */
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dirtyRef     = useRef(false)
@@ -353,15 +363,16 @@ export default function CalculatieHoofdscherm({
     handleWijziging()
   }
 
-  /** Uurtariefveld in de totalenbalk: zet het tarief van de calculatie én van alle
-   *  arbeidsregels erin. Het veld is het tarief van deze calculatie, dus een wijziging
-   *  hoort overal door te werken en niet alleen op nieuwe regels. Ctrl+Z zet de regels
-   *  terug; de waarde in de balk blijft staan. */
+  /** Uurtariefveld in de totalenbalk: zet het tarief van de calculatie. De arbeidsregels
+   *  die het oude tarief volgden gaan mee; een eigen tarief per regel (bijv. een uitvoerder
+   *  met een ander uurloon) blijft staan, en Controle laat die regels nakijken. Ctrl+Z zet
+   *  de regels terug; de waarde in de balk blijft staan. */
   const handleUurtariefToepassen = (tarief: number) => {
     if (readOnly) return
+    const oud = scenario.standaard_uurtarief || globaalTarief
     gridRef.current?.duwSnapshot()
     handleScenarioWijzig({ standaard_uurtarief: tarief })
-    gridRef.current?.zetArbeidTarieven(tarief)
+    gridRef.current?.zetArbeidTarieven(tarief, oud)
     handleWijziging()
   }
 

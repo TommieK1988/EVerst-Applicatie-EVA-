@@ -27,6 +27,7 @@ import { SelectieBalk } from './grid/SelectieBalk'
 import type { Weergave, WeergaveSignaal } from './grid/weergave'
 import { NieuweGroepRij } from './grid/NieuweGroepRij'
 import { toeslagLabel } from '@/lib/everts-calc/tijdtoeslag'
+import { volgtCalculatietarief } from '@/lib/everts-calc/calculatietarief'
 
 interface Props {
   scenarioId: string
@@ -72,11 +73,10 @@ export interface CalculatieGridHandle {
    */
   wisRegelOpslagen: () => void
   /**
-   * Zet het uurtarief van álle arbeidsregels in deze calculatie. Gebruikt door het
-   * uurtariefveld in de totalenbalk: dat veld is het tarief van de calculatie, dus
-   * een wijziging hoort overal door te werken en niet alleen op nieuwe regels.
+   * Nieuw uurtarief van de calculatie (uurtariefveld in de totalenbalk): de arbeidsregels
+   * die het oude tarief volgden gaan mee, regels met een eigen tarief blijven staan.
    */
-  zetArbeidTarieven: (tarief: number) => void
+  zetArbeidTarieven: (tarief: number, oudTarief: number) => void
   /** Springt naar een regel: klapt de groepen erboven open, selecteert hem en scrolt
    *  hem in beeld. Gebruikt door de controle ("Naar regel"). */
   toonRegel: (regelId: string) => void
@@ -438,11 +438,13 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
     onWijziging()
   }, [readOnly, regels, componenten, onWijziging])
 
-  /** Alle arbeidscomponenten op één uurtarief zetten (uurtariefveld in de totalenbalk). */
-  const zetArbeidTarieven = useCallback((tarief: number) => {
+  /** Nieuw calculatietarief (uurtariefveld in de totalenbalk): alleen de arbeidsnormen die
+   *  het oude tarief volgden gaan mee; een eigen tarief per regel blijft staan. */
+  const zetArbeidTarieven = useCallback((tarief: number, oudTarief: number) => {
     if (readOnly) return
     const bijgewerkt = componenten.map(c =>
-      c.type === 'arbeid' && c.tarief !== tarief ? slaComponentregelOp({ ...c, tarief }) : c
+      c.type === 'arbeid' && c.tarief !== tarief && volgtCalculatietarief(c.tarief, oudTarief)
+        ? slaComponentregelOp({ ...c, tarief }) : c
     )
     setComponenten(bijgewerkt)
     onWijziging()

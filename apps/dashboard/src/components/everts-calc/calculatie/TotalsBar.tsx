@@ -8,6 +8,7 @@ import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-cal
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
 import type { BtwTariefKeuze } from '@/lib/stamdata/btw'
+import { volgtCalculatietarief } from '@/lib/everts-calc/calculatietarief'
 
 interface Props {
   scenario: Scenario
@@ -17,7 +18,7 @@ interface Props {
   componenten?: Componentregel[]
   /** Zet de standaard-opslag én wist het eigen opslag% van alle regels. */
   onOpslagToepassen: (pct: number) => void
-  /** Zet het uurtarief van de calculatie én van alle arbeidsregels erin. */
+  /** Zet het uurtarief van de calculatie en van de arbeidsregels die het oude tarief volgden. */
   onUurtariefToepassen: (tarief: number) => void
   /** Aantal regels dat nu een eigen opslag% heeft; die raken hun percentage kwijt. */
   aantalEigenOpslag?: number
@@ -107,9 +108,12 @@ export default function TotalsBar({
     setTariefTeBevestigen(v)
   }
 
-  const afwijkendTarief = tariefTeBevestigen === null
-    ? 0
-    : arbeidComps.filter(c => c.tarief !== tariefTeBevestigen).length
+  // Wie volgt het huidige calculatietarief (gaat mee) en wie heeft een eigen tarief (blijft)?
+  const huidigTarief = scenario.standaard_uurtarief || globaalTarief
+  const gaatMee = tariefTeBevestigen === null ? 0
+    : arbeidComps.filter(c => c.tarief !== tariefTeBevestigen && volgtCalculatietarief(c.tarief, huidigTarief)).length
+  const eigenTarief = tariefTeBevestigen === null ? 0
+    : arbeidComps.filter(c => !volgtCalculatietarief(c.tarief, huidigTarief)).length
 
   const [opslagEdit, setOpslagEdit] = useState(String(scenarioDefaultOpslag(scenario)))
   const [opslagFocus, setOpslagFocus] = useState(false)
@@ -172,8 +176,8 @@ export default function TotalsBar({
                 // bevestiging die het verlaten van het veld opent.
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
                 title={globaalTarief > 0
-                  ? `Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
-                  : 'Uurtarief van deze calculatie; wordt op alle arbeidsregels toegepast. Er is nog geen standaardtarief ingesteld bij Stamgegevens → Uursoorten & uurtarieven.'}
+                  ? `Uurtarief van deze calculatie; geldt voor alle arbeidsregels zonder eigen tarief. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
+                  : 'Uurtarief van deze calculatie; geldt voor alle arbeidsregels zonder eigen tarief. Er is nog geen tarief ingesteld bij Stamgegevens → Uren → Uurtarieven.'}
                 onChange={e => setTariefEdit(e.target.value)}
                 className="w-16 h-6 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1.5 text-[13px] text-right text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
               />
@@ -269,9 +273,10 @@ export default function TotalsBar({
         onOpenChange={open => { if (!open) setTariefTeBevestigen(null) }}
         title={`Uurtarief op € ${formatGetal(tariefTeBevestigen ?? 0, 2)} per uur zetten?`}
         description={
-          afwijkendTarief > 0
-            ? `${afwijkendTarief} arbeidsregel${afwijkendTarief === 1 ? '' : 's'} in deze calculatie ${afwijkendTarief === 1 ? 'staat' : 'staan'} nu op een ander tarief; ${afwijkendTarief === 1 ? 'dat wordt' : 'die worden'} overschreven. Nieuwe arbeidsregels krijgen dit tarief ook.`
-            : 'Alle arbeidsregels in deze calculatie krijgen dit tarief, en nieuwe regels ook.'
+          `${gaatMee} arbeidsregel${gaatMee === 1 ? '' : 's'} met het calculatietarief ${gaatMee === 1 ? 'gaat' : 'gaan'} mee, nieuwe regels krijgen dit tarief ook.`
+          + (eigenTarief > 0
+            ? ` ${eigenTarief} regel${eigenTarief === 1 ? '' : 's'} met een eigen tarief ${eigenTarief === 1 ? 'blijft' : 'blijven'} staan; Controle laat ze nakijken.`
+            : '')
         }
         confirmLabel="Toepassen"
         onConfirm={() => {
