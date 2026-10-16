@@ -1,10 +1,14 @@
 'use client'
 
 /**
- * Op de offertekaart: moet deze offerte nagebeld worden, en waarom staat hij stil?
+ * Op de offertekaart: hoort deze offerte in de belronde, en waarom staat hij stil?
  *
- * Nabellen volgt standaard de bedragklasse (onder € 3k niet, daarboven wel). Per offerte is
- * dat om te zetten: een kleine offerte bij een belangrijke klant wél, een grote die al is
+ * "In de belronde?" is een instelling, geen actie: hij bepaalt alleen of de offerte in Te doen
+ * verschijnt. Bewust niet "Nabellen" genoemd, want zo heet ook een fase (en in Bouw7 een
+ * substatus), en dan leest de knop als "zet op nabellen" of "nu bellen".
+ *
+ * Standaard volgt hij de bedragklasse (klein niet, de rest wel; de grens staat in de
+ * instellingen). Per offerte is dat om te zetten: een kleine offerte bij een belangrijke klant wél, een grote die al is
  * afgestemd níet. Wie dat bepaalt komt in de tijdlijn.
  *
  * Elke wijziging slaat meteen op; er is geen opslaan-knop om te vergeten.
@@ -16,7 +20,7 @@ import toast from 'react-hot-toast'
 import { cn } from '@everts/ui'
 import { DatePicker } from '@/components/ui/date-picker'
 import { datumNaarISO } from '@/lib/dossiers/datum-regels'
-import type { Bedragklasse } from '@/lib/commercie/bedragklassen'
+import { eurDrempel, STANDAARD_GRENZEN, type Bedragklasse } from '@/lib/commercie/bedragklassen'
 import { OPVOLGING_KEUZES, STIL_REDENEN, wordtNagebeld, type Opvolging } from '@/lib/commercie/opvolging'
 import { zetOpvolging, zetStilstand } from '@/lib/commercie/opvolging-actions'
 
@@ -26,6 +30,8 @@ type Props = {
   opvolging: Opvolging | null
   stilReden: string | null
   besluitDatum: string | null
+  /** Grens voor klein, voor de uitleg. */
+  kleinTot?: number
 }
 
 const naarDatum = (iso: string | null): Date | undefined => {
@@ -65,12 +71,13 @@ export function OpvolgingBlok(props: Props) {
     void bewaar(() => zetStilstand(props.dossierId, r || null, b ? datumNaarISO(b) : null))
   }
 
-  const automatisch = wordtNagebeld(props.klasse, null) ? 'nabellen' : 'niet nabellen'
+  const automatisch = wordtNagebeld(props.klasse, null) ? 'ja' : 'nee'
+  const grens = eurDrempel(props.kleinTot ?? STANDAARD_GRENZEN.kleinTot)
 
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Nabellen</div>
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">In de belronde?</div>
         <div className="mt-1 inline-flex flex-wrap rounded-lg border border-neutral-200 bg-neutral-50 p-0.5" role="group">
           {OPVOLGING_KEUZES.map(k => (
             <button
@@ -78,7 +85,7 @@ export function OpvolgingBlok(props: Props) {
               type="button"
               disabled={bezig}
               aria-pressed={opvolging === k.waarde}
-              title={k.uitleg}
+              title={k.waarde === null ? `Onder ${grens} niet, daarboven wel` : k.uitleg}
               onClick={() => kiesOpvolging(k.waarde)}
               className={cn(
                 'rounded-md px-3 py-1 text-xs transition-colors disabled:opacity-60',
@@ -87,10 +94,13 @@ export function OpvolgingBlok(props: Props) {
                   : 'font-medium text-neutral-500 hover:text-neutral-700',
               )}
             >
-              {k.waarde === null ? `Automatisch (${automatisch})` : k.waarde === 'altijd' ? 'Altijd' : 'Niet'}
+              {k.waarde === null ? `Op bedrag: ${automatisch}` : k.waarde === 'altijd' ? 'Altijd' : 'Nooit'}
             </button>
           ))}
         </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          Bepaalt alleen of deze offerte in Te doen verschijnt. Er wordt niets ingepland of verstuurd.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

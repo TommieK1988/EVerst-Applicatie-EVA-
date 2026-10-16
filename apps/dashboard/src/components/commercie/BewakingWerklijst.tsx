@@ -29,7 +29,8 @@ import { TeDoenLijst, TeDoenTegels } from './TeDoenLijst'
 import { StilstandOverzicht } from './StilstandOverzicht'
 import type { StilReden } from '@/lib/commercie/opvolging'
 import { BedragFilter } from './BedragFilter'
-import { STANDAARD_KLASSEN, type Bedragklasse } from '@/lib/commercie/bedragklassen'
+import { STANDAARD_GRENZEN, STANDAARD_KLASSEN, type Bedragklasse, type Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
+import { getBedragklassegrenzen } from '@/lib/commercie/bedragklassen-actions'
 import { OfferteZijpaneel } from './OfferteZijpaneel'
 
 type Props = {
@@ -94,12 +95,15 @@ export function BewakingWerklijst(props: Props) {
   const [stilOpen, setStilOpen] = React.useState(false)
   const [stilFilter, setStilFilter] = React.useState<StilReden | null>(null)
   const zoekt = zoek.trim().length > 0
+  // De grenzen staan in de instellingen; tot ze binnen zijn rekent de lijst met de standaard.
+  const [grenzen, setGrenzen] = React.useState<Bedragklassegrenzen>(STANDAARD_GRENZEN)
+  React.useEffect(() => { getBedragklassegrenzen().then(setGrenzen).catch(() => {}) }, [])
   const vandaag = React.useMemo(() => vandaagNL(), [])
 
   // Afgesloten offertes (de terugblik op gewonnen/verloren) horen niet in een werklijst.
   const alle = React.useMemo(
-    () => props.dossiers.map(d => maakTeDoenRij(d, vandaag)).filter(r => r._status !== 'afgerond'),
-    [props.dossiers, vandaag],
+    () => props.dossiers.map(d => maakTeDoenRij(d, vandaag, grenzen)).filter(r => r._status !== 'afgerond'),
+    [props.dossiers, vandaag, grenzen],
   )
   const vanMijAlleBedragen = React.useMemo(
     () => alleenVanMij && props.mijnMedewerkerId
@@ -244,9 +248,10 @@ export function BewakingWerklijst(props: Props) {
           min={bereik.min}
           max={bereik.max}
           onBereik={(min, max) => setBereik({ min, max })}
+          grenzen={grenzen}
           extra={aantalNiet > 0 ? (
             <button type="button" onClick={() => setMetNiet(!metNiet)} className="text-xs text-neutral-500 underline underline-offset-2">
-              {metNiet ? 'Verberg "niet nabellen"' : `+ ${aantalNiet} op "niet nabellen"`}
+              {metNiet ? 'Verberg wat buiten de belronde valt' : `+ ${aantalNiet} buiten de belronde`}
             </button>
           ) : null}
         />
@@ -285,6 +290,7 @@ export function BewakingWerklijst(props: Props) {
           onVastgelegd={naVastleggen}
           alleRijen={alle}
           onOpen={setGeopendId}
+          grenzen={grenzen}
         />
       </div>
     </div>

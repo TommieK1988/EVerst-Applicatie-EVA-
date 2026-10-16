@@ -9,7 +9,7 @@
 
 import * as React from 'react'
 import { cn } from '@everts/ui'
-import { BEDRAGKLASSEN, type Bedragklasse } from '@/lib/commercie/bedragklassen'
+import { bedragklasseLabels, type Bedragklasse, type Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
 
 type Props = {
   klassen: Record<Bedragklasse, boolean>
@@ -19,6 +19,8 @@ type Props = {
   min: number | null
   max: number | null
   onBereik: (min: number | null, max: number | null) => void
+  /** De ingestelde grenzen, voor de labels op de knoppen. */
+  grenzen?: Bedragklassegrenzen
   /** Rechts in de balk, bv. de knop voor offertes op "niet nabellen". */
   extra?: React.ReactNode
 }
@@ -33,7 +35,7 @@ export function BedragFilter(props: Props) {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-neutral-200 bg-white px-3 py-2">
       <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">Bedrag</span>
       <div className="flex flex-wrap gap-1" role="group" aria-label="Bedragklassen">
-        {BEDRAGKLASSEN.map(k => {
+        {bedragklasseLabels(props.grenzen).map(k => {
           const aan = props.klassen[k.klasse]
           return (
             <button

@@ -8,13 +8,14 @@
  *  - eerst wat telt: dezelfde VvE/opdrachtgever als deze offerte, dan wat het dringendst is,
  *    dan het hoogste bedrag;
  *  - ingeklapt de eerste vijf, met één samenvattingsregel over het geheel;
- *  - uitgeklapt een zoekveld, en kleine offertes (onder € 3k, die we niet nabellen) pas op verzoek.
+ *  - uitgeklapt een zoekveld, en kleine offertes (die we niet nabellen) pas op verzoek.
  *
  * Aanvinken = meebesproken in dit gesprek; de kaart zet de notitie dan ook op die offertes.
  */
 
 import * as React from 'react'
 import { STATUS_PRESENTATIE } from '@/lib/commercie/types'
+import { eurDrempel, STANDAARD_GRENZEN } from '@/lib/commercie/bedragklassen'
 import { eur, eurKort, pastBijZoekterm, sorteerOverige, type TeDoenRij } from './te-doen'
 
 const INGEKLAPT = 5
@@ -29,6 +30,8 @@ type Props = {
   mee: Set<string>
   onMee: (id: string, aan: boolean) => void
   onOpen?: (id: string) => void
+  /** Grens voor klein, voor de tekst op de knop. */
+  kleinTot?: number
 }
 
 export function OverigeOffertes(props: Props) {
@@ -120,7 +123,7 @@ export function OverigeOffertes(props: Props) {
         )}
         {klein > 0 && (
           <button type="button" onClick={() => setMetKlein(v => !v)} className="text-xs text-neutral-500 underline underline-offset-2">
-            {metKlein ? 'Kleine offertes verbergen' : `+ ${klein} kleine (onder € 3k)`}
+            {metKlein ? 'Kleine offertes verbergen' : `+ ${klein} kleine (onder ${eurDrempel(props.kleinTot ?? STANDAARD_GRENZEN.kleinTot)})`}
           </button>
         )}
       </div>

@@ -23,7 +23,7 @@ import type { OffertePaneelData } from '@/lib/commercie/paneel'
 import { bellenBanner } from './bellen-banner'
 import { eur, kortDatum, kortStap, type TeDoenRij } from './te-doen'
 import { legMeebesprokenVast } from '@/lib/commercie/paneel'
-import { bedragklasse } from '@/lib/commercie/bedragklassen'
+import { bedragklasse, type Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
 import { UitkomstFormulier } from './UitkomstFormulier'
 import { OverigeOffertes } from './OverigeOffertes'
 import { OpvolgingBlok } from './OpvolgingBlok'
@@ -41,6 +41,8 @@ type Props = {
   overige?: { partij: string | null; rijen: TeDoenRij[] }
   /** Een andere offerte in het paneel openen. */
   onOpen?: (id: string) => void
+  /** De ingestelde bedragklassegrenzen; zonder: de standaard. */
+  grenzen?: Bedragklassegrenzen
 }
 
 export function OfferteKaart({ dossier: d, data, ...props }: Props) {
@@ -51,7 +53,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
     bewaking: data.bewaking, tijdlijn: data.tijdlijn, mijnId: props.mijnMedewerkerId, vandaag: props.vandaag,
   })
   const geldigVerlopen = data.geldigTot != null && data.geldigTot < props.vandaag
-  const klasse = bedragklasse(berekenKaartBedrag(d, 'offerte').totaalExclBtw)
+  const klasse = bedragklasse(berekenKaartBedrag(d, 'offerte').totaalExclBtw, props.grenzen)
   const overige = props.overige?.rijen ?? []
   /** Offertes die in dit gesprek zijn meebesproken: hun tijdlijn krijgt dezelfde notitie. */
   const [mee, setMee] = React.useState<Set<string>>(new Set())
@@ -106,6 +108,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
               return n
             })}
             onOpen={props.onOpen}
+            kleinTot={props.grenzen?.kleinTot}
           />
         )}
       </Blok>
@@ -173,6 +176,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
           <OpvolgingBlok
             dossierId={d.id}
             klasse={klasse}
+            kleinTot={props.grenzen?.kleinTot}
             opvolging={d.bewaking_opvolging ?? null}
             stilReden={d.bewaking_stil_reden ?? null}
             besluitDatum={d.bewaking_besluit_datum ?? null}

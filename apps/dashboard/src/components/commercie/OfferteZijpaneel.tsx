@@ -17,6 +17,7 @@ import type { DossierRij } from '@/components/dossiers/types'
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery'
 import { getOffertePaneel, getOverigeOffertes, type OffertePaneelData, type OverigeOffertes } from '@/lib/commercie/paneel'
 import type { TeDoenRij } from './te-doen'
+import type { Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
 import { OfferteKaart } from './OfferteKaart'
 
 /** Vanaf deze breedte staat het paneel naast de lijst. */
@@ -36,6 +37,7 @@ type Props = {
   alleRijen: TeDoenRij[]
   /** Een andere offerte in het paneel openen. */
   onOpen: (id: string) => void
+  grenzen?: Bedragklassegrenzen
 }
 
 export function OfferteZijpaneel(props: Props) {
@@ -84,6 +86,7 @@ export function OfferteZijpaneel(props: Props) {
         onVastgelegd={props.onVastgelegd}
         overige={overige}
         onOpen={props.onOpen}
+        grenzen={props.grenzen}
       />
     )
 

@@ -7,6 +7,7 @@ import 'server-only'
  */
 
 import { bedragklasse } from './bedragklassen'
+import { leesBedragklassegrenzen } from './bedragklassen-server'
 import { offerteBedragen } from './dossier-bedragen'
 import { alsStilReden, begrensMegaHercontrole, standaardStilReden } from './opvolging'
 import type { StapSoort, UitkomstSleutel } from './types'
@@ -35,8 +36,8 @@ export async function stilstandVelden(
 
   // Mega: wachten op de klant duurt nooit langer dan twee weken zonder hercontrole.
   if (stapSoort === 'wachten' && stapDatum) {
-    const bedrag = (await offerteBedragen([dossierId])).get(dossierId) ?? null
-    if (bedragklasse(bedrag) === 'mega') {
+    const [bedragen, grenzen] = await Promise.all([offerteBedragen([dossierId]), leesBedragklassegrenzen()])
+    if (bedragklasse(bedragen.get(dossierId) ?? null, grenzen) === 'mega') {
       const begrensd = begrensMegaHercontrole(stapDatum, vandaagNL())
       uit.stap_datum = begrensd.stapDatum
       besluit = besluit ?? begrensd.besluitDatum

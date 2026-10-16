@@ -43,8 +43,8 @@ async function legVast(
 export async function zetOpvolging(dossierId: string, opvolging: string | null): Promise<ActieResultaat> {
   const { medewerker } = await vereisRecht('dossiers', 'schrijven')
   const waarde = alsOpvolging(opvolging)
-  const label = OPVOLGING_KEUZES.find(k => k.waarde === waarde)?.label ?? 'Automatisch'
-  return legVast(dossierId, { opvolging: waarde }, `Nabellen: ${label.toLowerCase()}`, medewerker.id)
+  const label = OPVOLGING_KEUZES.find(k => k.waarde === waarde)?.label ?? 'Op bedrag'
+  return legVast(dossierId, { opvolging: waarde }, `In de belronde: ${label.toLowerCase()}`, medewerker.id)
 }
 
 /** Waarom de offerte stilstaat en wanneer de klant beslist; beide mogen leeg. */

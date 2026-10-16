@@ -21,6 +21,7 @@ import { vandaagNL } from '@/lib/wagenpark/periode'
 import { dagenTussenKalender } from '@/lib/dossiers/datum-regels'
 import { updateDossierSubstatus } from '@/lib/dossiers/actions'
 import { bedragklasse } from './bedragklassen'
+import { leesBedragklassegrenzen } from './bedragklassen-server'
 import { offerteBedragen } from './dossier-bedragen'
 import { werkdagenVooruit } from './types'
 import {
@@ -119,13 +120,13 @@ export async function automatiseerOffertebewaking(): Promise<AutomatiseringResul
       .in('project_id', blok).eq('status', 'verzonden').is('meerwerk_regel_id', null).neq('type', 'interne_calculatie')
     zetGeldig(data ?? [])
   }
-  const bedragen = await offerteBedragen(ids)
+  const [bedragen, grenzen] = await Promise.all([offerteBedragen(ids), leesBedragklassegrenzen()])
 
   // ── Per offerte ─────────────────────────────────────────────────────────────
   for (const d of dossiers) {
     const kaart = kaarten.get(d.id)
     const opvolging = alsOpvolging(kaart?.opvolging)
-    const klasse = bedragklasse(bedragen.get(d.id) ?? null)
+    const klasse = bedragklasse(bedragen.get(d.id) ?? null, grenzen)
     const verzonden = d.verzonden_op?.slice(0, 10) ?? null
 
     // 2. Klein, niet opgevolgd, ruim over de geldigheid: vervallen.

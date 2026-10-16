@@ -4,7 +4,7 @@
  *
  *  - Nabellen of niet: per bedragklasse, per offerte te overrulen ("altijd" / "niet").
  *  - Stilstand: waarom een offerte stilligt, uit een vaste lijst, plus wanneer de klant beslist.
- *  - Mega (vanaf € 125k): eigenaar is een projectleider of de directie, en wachten we op de
+ *  - Mega (standaard vanaf € 125k, instelbaar): eigenaar is een projectleider of de directie, en wachten we op de
  *    klant, dan toch uiterlijk elke twee weken een hercontrole. Het besluitmoment blijft staan.
  *  - Ontvangstcontrole: drie werkdagen na verzenden belt de managementassistent of de offerte
  *    goed is aangekomen; bij een mega doet de eigenaar dat zelf, bij klein niemand.
@@ -20,9 +20,9 @@ import { werkdagenVooruit, type UitkomstSleutel } from './types'
 export type Opvolging = 'altijd' | 'niet'
 
 export const OPVOLGING_KEUZES: { waarde: Opvolging | null; label: string; uitleg: string }[] = [
-  { waarde: null,     label: 'Automatisch',     uitleg: 'Op bedrag: onder € 3k niet, daarboven wel' },
-  { waarde: 'altijd', label: 'Altijd nabellen', uitleg: 'Ook als hij klein is' },
-  { waarde: 'niet',   label: 'Niet nabellen',   uitleg: 'Afgestemd, of de klant meldt zich zelf' },
+  { waarde: null,     label: 'Op bedrag', uitleg: 'Klein niet, de rest wel (grens in de instellingen)' },
+  { waarde: 'altijd', label: 'Altijd',    uitleg: 'Ook als hij klein is' },
+  { waarde: 'niet',   label: 'Nooit',     uitleg: 'Afgestemd, of de klant meldt zich zelf' },
 ]
 
 export function alsOpvolging(v: unknown): Opvolging | null {

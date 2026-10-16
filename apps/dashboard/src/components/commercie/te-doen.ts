@@ -11,7 +11,7 @@ import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import type { DossierRij } from '@/components/dossiers/types'
 import { dagenTussenKalender } from '@/lib/dossiers/datum-regels'
 import { bewakingsStatus, type BewakingStatus, type BewakingKaart } from '@/lib/commercie/types'
-import { bedragklasse, type Bedragklasse } from '@/lib/commercie/bedragklassen'
+import { bedragklasse, STANDAARD_GRENZEN, type Bedragklasse, type Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
 import { alsStilReden, wordtNagebeld, STIL_REDEN_LABEL, type StilReden } from '@/lib/commercie/opvolging'
 
 export type Bak = 'verlopen' | 'vandaag' | 'ongetrieerd' | 'week' | 'later'
@@ -89,7 +89,11 @@ export function bakVan(status: BewakingStatus, dagen: number | null): Bak | null
   }
 }
 
-export function maakTeDoenRij(d: DossierRij, vandaag: string): TeDoenRij {
+export function maakTeDoenRij(
+  d: DossierRij,
+  vandaag: string,
+  grenzen: Bedragklassegrenzen = STANDAARD_GRENZEN,
+): TeDoenRij {
   const stap = {
     stap_soort: d.bewaking_stap_soort ?? null,
     stap_tekst: d.bewaking_stap_tekst ?? null,
@@ -109,8 +113,8 @@ export function maakTeDoenRij(d: DossierRij, vandaag: string): TeDoenRij {
     _stap: kortStap(stap, vandaag),
     _aandacht: (bedrag ?? 0) >= AANDACHT_BEDRAG && (!d.bewaking_eigenaar_id || !d.bewaking_stap_soort),
     _openDagen: verzonden ? dagenTussenKalender(verzonden, vandaag) : null,
-    _klasse: bedragklasse(bedrag),
-    _nabellen: wordtNagebeld(bedragklasse(bedrag), d.bewaking_opvolging ?? null),
+    _klasse: bedragklasse(bedrag, grenzen),
+    _nabellen: wordtNagebeld(bedragklasse(bedrag, grenzen), d.bewaking_opvolging ?? null),
     _stil: alsStilReden(d.bewaking_stil_reden),
   }
 }

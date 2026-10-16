@@ -27,7 +27,7 @@ export async function zetCommercieelEigenaar(
 
   if (kaart?.eigenaar_id === eigenaarId) return { ok: true }
 
-  // Mega-offerte (vanaf € 125k): eigenaar is een projectleider of de directie.
+  // Mega-offerte (grens instelbaar, standaard € 125k): eigenaar is een projectleider of de directie.
   if (eigenaarId) {
     const fout = await megaEigenaarFout(dossierId, eigenaarId)
     if (fout) return { ok: false, error: fout }

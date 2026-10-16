@@ -184,8 +184,8 @@ const Rij = React.memo(function Rij(props: {
                 {r.bewaking_besluit_datum ? ` · besluit ${kortDatum(r.bewaking_besluit_datum, props.vandaag)}` : ''}
               </Chip>
             )}
-            {r.bewaking_opvolging === 'altijd' && <Chip>altijd nabellen</Chip>}
-            {r.bewaking_opvolging === 'niet' && <Chip>niet nabellen</Chip>}
+            {r.bewaking_opvolging === 'altijd' && <Chip>altijd in belronde</Chip>}
+            {r.bewaking_opvolging === 'niet' && <Chip>buiten belronde</Chip>}
             {r.bewaking_stap_bron === 'actie' && <Chip>uit de actielijst</Chip>}
             {r._openDagen != null && <Chip>{r._openDagen} dagen open</Chip>}
           </span>
