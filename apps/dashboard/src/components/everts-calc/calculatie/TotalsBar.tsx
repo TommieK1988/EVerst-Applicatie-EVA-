@@ -5,6 +5,7 @@ import { berekenBtwBreakdown, formatEuro, formatGetal, formatPct, scenarioDefaul
 import { TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
 import { Alert } from '@/components/ui/alert'
+import type { EigenOpslag } from '@/lib/everts-calc/calculatie-opslag'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
@@ -17,12 +18,12 @@ interface Props {
   verkoopprijs_live: number
   regels?: Calculatieregel[]
   componenten?: Componentregel[]
-  /** Zet de standaard-opslag én wist het eigen opslag% van alle regels. */
-  onOpslagToepassen: (pct: number) => void
+  /** Zet de opslag van de calculatie; met `ookEigen` ook die van regels met een eigen opslag%. */
+  onOpslagToepassen: (pct: number, ookEigen: boolean) => void
   /** Zet het uurtarief van de calculatie en van de arbeidsregels die het oude tarief volgden. */
   onUurtariefToepassen: (tarief: number) => void
-  /** Aantal regels dat nu een eigen opslag% heeft; die raken hun percentage kwijt. */
-  aantalEigenOpslag?: number
+  /** Regels met een eigen opslag%; die blijven staan, tenzij je kiest voor alle regels. */
+  eigenOpslag?: EigenOpslag
   /** Bevroren of afgesloten calculatie: alles in deze balk alleen-lezen. */
   readOnly?: boolean
 }
@@ -37,7 +38,7 @@ function Teken({ children }: { children: string }) {
 
 export default function TotalsBar({
   scenario, kostprijs_live, verkoopprijs_live, regels, componenten,
-  onOpslagToepassen, onUurtariefToepassen, aantalEigenOpslag = 0, readOnly = false,
+  onOpslagToepassen, onUurtariefToepassen, eigenOpslag = { aantal: 0, percentages: [] }, readOnly = false,
 }: Props) {
   const defaultOpslag = scenarioDefaultOpslag(scenario)
 
@@ -138,9 +139,7 @@ export default function TotalsBar({
   const margeWidth = Math.min(100, Math.max(0, (marge_pct / 30) * 100))
   const margeKleur = marge_pct >= 20 ? '#61ac2b' : marge_pct >= 12 ? '#ffb866' : '#fda29b'
 
-  const eigenOpslagZin = aantalEigenOpslag > 0
-    ? ` ${aantalEigenOpslag} ${aantalEigenOpslag === 1 ? 'regel heeft' : 'regels hebben'} nu een eigen opslag%; dat percentage vervalt.`
-    : ''
+  const aantalEigenOpslag = eigenOpslag.aantal
 
   return (
     /* `sticky bottom-0`: vangnet naast de gemeten schermhoogte in CalculatieHoofdscherm.
@@ -178,9 +177,11 @@ export default function TotalsBar({
                 // preventDefault: anders klikt dezelfde Enter meteen "Annuleren" in de
                 // bevestiging die het verlaten van het veld opent.
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-                title={globaalTarief > 0
-                  ? `Uurtarief van deze calculatie; geldt voor alle arbeidsregels zonder eigen tarief. Leeg = het standaardtarief uit Stamgegevens → Uursoorten & uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
-                  : 'Uurtarief van deze calculatie; geldt voor alle arbeidsregels zonder eigen tarief. Er is nog geen tarief ingesteld bij Stamgegevens → Uren → Uurtarieven.'}
+                title={'Uurtarief van deze calculatie; geldt voor alle arbeidsregels zonder eigen tarief. '
+                  + 'Wijzig je het, dan gaan alleen die regels mee: regels met een eigen tarief blijven staan en Controle laat ze nakijken. '
+                  + (globaalTarief > 0
+                    ? `Een nieuwe calculatie begint met het ★-tarief uit Stamgegevens → Uren → Uurtarieven (€ ${formatGetal(globaalTarief, 2)}/u).`
+                    : 'Er is nog geen tarief ingesteld bij Stamgegevens → Uren → Uurtarieven.')}
                 onChange={e => setTariefEdit(e.target.value)}
                 className="w-16 h-6 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1.5 text-[13px] text-right text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
               />
@@ -207,7 +208,7 @@ export default function TotalsBar({
                     e.currentTarget.blur()
                   }
                 }}
-                title="Standaard-opslag van deze calculatie; wordt op alle regels toegepast"
+                title="Opslag van deze calculatie; geldt voor alle regels zonder eigen opslag%. Wijzig je hem, dan kies je of regels met een eigen opslag blijven staan of meegaan."
                 onChange={e => setOpslagEdit(e.target.value)}
                 className="w-16 h-6 bg-paper/10 hover:bg-paper/20 focus:bg-paper/30 rounded px-1.5 text-[13px] text-right text-white focus:outline-none focus:ring-1 focus:ring-white/40 border-0 placeholder-white/30 disabled:opacity-60"
               />
@@ -298,16 +299,39 @@ export default function TotalsBar({
         open={teBevestigen !== null}
         onOpenChange={open => { if (!open) setTeBevestigen(null) }}
         title={`Opslag op ${formatGetal(teBevestigen ?? 0, 2)}% zetten?`}
-        description={
-          `Dit past de verkoopprijs van alle regels in deze calculatie aan.${eigenOpslagZin}`
-          + ' Daarna kun je per regel nog een afwijkend percentage invullen.'
-        }
-        confirmLabel="Toepassen"
+        description={aantalEigenOpslag > 0
+          ? 'De regels die de opslag van de calculatie volgen gaan mee, nieuwe regels krijgen deze opslag ook.'
+          : 'Dit past de verkoopprijs van alle regels in deze calculatie aan. Daarna kun je per regel nog een afwijkend percentage invullen.'}
+        confirmLabel={aantalEigenOpslag > 0 ? 'Alleen basisregels' : 'Toepassen'}
         onConfirm={() => {
-          if (teBevestigen !== null) onOpslagToepassen(teBevestigen)
+          if (teBevestigen !== null) onOpslagToepassen(teBevestigen, false)
           setTeBevestigen(null)
         }}
-      />
+        extraActie={aantalEigenOpslag > 0 ? {
+          label: 'Alle regels',
+          onClick: () => {
+            if (teBevestigen !== null) onOpslagToepassen(teBevestigen, true)
+            setTeBevestigen(null)
+          },
+        } : undefined}
+      >
+        {aantalEigenOpslag > 0 && (
+          <Alert
+            tone="warning"
+            title={`${aantalEigenOpslag} regel${aantalEigenOpslag === 1 ? '' : 's'} met een eigen opslag`}
+          >
+            {percentagesTekst(eigenOpslag.percentages)}. Met <strong>Alleen basisregels</strong> {aantalEigenOpslag === 1 ? 'blijft deze' : 'blijven deze'} staan;
+            met <strong>Alle regels</strong> vervalt de eigen opslag en krijgt alles {formatGetal(teBevestigen ?? 0, 2)}%.
+          </Alert>
+        )}
+      </ConfirmDialog>
     </div>
   )
+}
+
+/** "25%, 30% en 4 andere": lang genoeg om te herkennen, kort genoeg voor een venster. */
+function percentagesTekst(pcts: number[]): string {
+  const fmt = (p: number) => `${formatGetal(p, Math.abs(p - Math.round(p)) < 0.005 ? 0 : 2)}%`
+  if (pcts.length <= 4) return pcts.map(fmt).join(', ')
+  return `${pcts.slice(0, 3).map(fmt).join(', ')} en ${pcts.length - 3} andere`
 }

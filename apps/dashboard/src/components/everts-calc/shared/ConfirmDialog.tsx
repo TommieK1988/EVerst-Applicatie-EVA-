@@ -21,11 +21,13 @@ interface ConfirmDialogProps {
   destructive?: boolean
   /** Extra inhoud onder de beschrijving, bijvoorbeeld een waarschuwing. */
   children?: ReactNode
+  /** Tweede keuze naast de hoofdknop, bijvoorbeeld "Alle regels". */
+  extraActie?: { label: string; onClick: () => void }
 }
 
 export default function ConfirmDialog({
   open, onOpenChange, title, description,
-  confirmLabel = 'Bevestigen', onConfirm, destructive = false, children,
+  confirmLabel = 'Bevestigen', onConfirm, destructive = false, children, extraActie,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -35,6 +37,11 @@ export default function ConfirmDialog({
         {children}
         <AlertDialogFooter>
           <AlertDialogCancel>Annuleren</AlertDialogCancel>
+          {extraActie && (
+            <AlertDialogAction variant="secondary" onClick={extraActie.onClick}>
+              {extraActie.label}
+            </AlertDialogAction>
+          )}
           <AlertDialogAction
             variant={destructive ? 'destructive' : 'primary'}
             onClick={onConfirm}

@@ -24,6 +24,7 @@ import { nieuweId } from './utils'
 import { zonderCodeInOmschrijving } from './bestekcode'
 import { kopieerMeetstaten } from './meetstaat-kopie'
 import { maakTijdfactor } from './tijdtoeslag'
+import { geldigeStandaardOpslag } from './calculatie-opslag'
 
 const KEYS = {
   werkbegrotingen: 'werkbegrotingen',
@@ -143,7 +144,8 @@ export function maakStandaardScenario(project_id: string): Scenario {
     project_id,
     naam: 'Basisvariant',
     is_standaard: true,
-    opslag_pct: 0,
+    // De standaardopslag uit de calculatie-instellingen (leeg = 25%).
+    opslag_pct: geldigeStandaardOpslag(getInstellingen().standaard_opslag_pct),
     btw_pct_default: 21,
     standaard_uurtarief: favorietTarief,
   }

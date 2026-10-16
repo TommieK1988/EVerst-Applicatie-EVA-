@@ -11,6 +11,7 @@ import { getInstellingen, slaInstellingenOp } from '@/lib/everts-calc/local-stor
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import type { EenheidConfig } from '@/lib/everts-calc/types'
 import DicoIntegratiesBeheer from './DicoIntegratiesBeheer'
+import StandaardOpslag from './StandaardOpslag'
 import ProductgroepKoppeling from '@/components/everts-calc/bibliotheek/ProductgroepKoppeling'
 import MateriaalgroepenBeheer from '@/components/everts-calc/bibliotheek/MateriaalgroepenBeheer'
 import { Card, CardHeader, CardBody, FormField, Input, Button } from '@/components/ui'
@@ -192,6 +193,8 @@ function CalculatieTab() {
           . Ze worden automatisch gesynchroniseerd met EvertsCalc.
         </p>
       </div>
+
+      <StandaardOpslag />
 
       {/* Eenheden */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
