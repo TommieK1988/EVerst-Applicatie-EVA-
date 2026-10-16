@@ -13,6 +13,7 @@ import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platf
 import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/actions'
 import TaakCompletionActies from './TaakCompletionActies'
 import { useDialogen } from '@/components/ui/dialogen'
+import { MedewerkerKiezer } from '@/components/ui/medewerker-kiezer'
 import type { TaakMetDetails, TaskStatus, TaskPrioriteit, TaskAssigneeRol } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
@@ -586,16 +587,10 @@ export default function TaakDetailPanel({ taak, onSluit, isTemplate, context = '
 
           {toonAssigneeToevoegen && (
             <div className="flex items-center gap-2">
-              <select
-                value={nieuweAssigneeId}
-                onChange={e => setNieuweAssigneeId(e.target.value)}
-                className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-everts/30"
-              >
-                <option value="">— Kies medewerker —</option>
-                {beschikbareAssignees.map(m => (
-                  <option key={m.auth_user_id!} value={m.auth_user_id!}>{m.naam}</option>
-                ))}
-              </select>
+              {/* Zoekbaar: de volledige medewerkerslijst was als <select> niet te overzien. */}
+              <div className="min-w-0 flex-1">
+                <MedewerkerKiezer medewerkers={beschikbareAssignees.map(m => ({ id: m.auth_user_id!, naam: m.naam }))} value={nieuweAssigneeId} onChange={setNieuweAssigneeId} className="h-8 text-xs" />
+              </div>
               <select
                 value={nieuweAssigneeRol}
                 onChange={e => setNieuweAssigneeRol(e.target.value as TaskAssigneeRol)}

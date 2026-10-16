@@ -8,6 +8,7 @@ import MobielTegel from '@/components/mobiel/MobielTegel'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import ProjectZoekerVoorbeeld from './ProjectZoekerVoorbeeld'
+import MedewerkerZoekerVoorbeeld from './MedewerkerZoekerVoorbeeld'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
 import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
 import MobielUpdates from '@/components/mobiel/MobielUpdates'
@@ -15,6 +16,8 @@ import type { MobielUpdate } from '@/lib/mobiel/updates'
 import { laadBerichten } from '@/i18n/berichten'
 import { naarTaal, TALEN, TAAL_NAAM, TIJDZONE } from '@/i18n/talen'
 import WeekstaatClient from '@/components/mobiel/uren/WeekstaatClient'
+import { KostenContext, KostenTeKeuren } from '@/components/mobiel/uren/KostenKeuren'
+import { VOORBEELD_KOSTEN } from '../kosten-preview/voorbeeld'
 import type { VerlofAanvraag, VerlofSoort } from '@/lib/uren/verlof'
 import type { Weekstaat, WeekRegel } from '@/lib/uren/weekstaat'
 import { OVERUREN_BRON } from '@/lib/uren/rekenregel'
@@ -75,7 +78,8 @@ const VERLOF_SOORTEN: VerlofSoort[] = [
  * `?uren=kantoor`: dezelfde week voor iemand op kantoor die voor twee bedrijven werkt, zodat de
  * keuze "Voor welk bedrijf" in het boekscherm te zien is (tik op + bij een dag).
  * `?uren=ingediend`: dezelfde week ingediend, met maandag en dinsdag al goedgekeurd: die regels
- * (en de kosten van maandag) liggen vast, de rest is nog aan te passen.
+ * liggen vast, de rest is nog aan te passen. De kosten tonen de drie standen van hun eigen
+ * goedkeuring: goedgekeurd (maandag), afgekeurd met reden (woensdag) en wachtend (donderdag).
  */
 function voorbeeldWeek(variant: 'gewoon' | 'kantoor' | 'ingediend' = 'gewoon'): Weekstaat {
   const kantoor = variant === 'kantoor'
@@ -93,8 +97,10 @@ function voorbeeldWeek(variant: 'gewoon' | 'kantoor' | 'ingediend' = 'gewoon'): 
     gewijzigd_door_goedkeurder: false, bouw7_status: 'niet_verzonden', indirect: auto,
     goedgekeurd: ingediend && datum <= dagen[1],
   })
-  const kosten = (id: string, datum: string): Weekstaat['onkosten'][number] => ({
+  type Kosten = Weekstaat['onkosten'][number]
+  const kosten = (id: string, datum: string, status: Kosten['goedkeuring_status'] = 'open', reden: string | null = null): Kosten => ({
     id, datum, soort: 'parkeren', vervoermiddel: null, bedrag: 7.5, km: null, omschrijving: null, bon_url: null,
+    project_label: '20261.00412 · Kerkstraat 12, Zwolle', goedkeuring_status: status, afkeur_reden: reden,
   })
   const regels = dagen.slice(0, 5).flatMap((d, i) => [regel(`w${i}`, d, 9, false), regel(`a${i}`, d, -1.5, true)])
   return {
@@ -103,7 +109,9 @@ function voorbeeldWeek(variant: 'gewoon' | 'kantoor' | 'ingediend' = 'gewoon'): 
     saldoNu: 12, magIndienen: !ingediend, blokkade: null, bewerkbaar: !ingediend, wijzigbaar: true,
     wijzigenTot: ingediend ? new Date(Date.parse(`${dagen[0]}T13:00:00Z`) + 7 * 86_400_000).toISOString() : null,
     afkeurReden: null,
-    regels, onkosten: ingediend ? [kosten('k0', dagen[0]), kosten('k2', dagen[2])] : [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor, extern: false,
+    regels, onkosten: ingediend
+      ? [kosten('k0', dagen[0], 'goedgekeurd'), kosten('k2', dagen[2], 'afgekeurd', 'Bonnetje is onleesbaar'), kosten('k3', dagen[3])]
+      : [], kmTarieven: { auto: 0.23, bromfiets: 0.1 }, kantoor, extern: false,
     kantoorOpties: kantoor
       ? [{ dossierId: 'k1', label: 'Bouwbedrijf Morgenstond B.V.' }, { dossierId: 'k2', label: 'Everts Onderhoudsschilders B.V.' }]
       : [],
@@ -129,6 +137,14 @@ const GEGEVENS: EigenGegevens = {
   vca: null,
 }
 
+/**
+ * `?kosten=1`: de kosten op het fiatteerscherm. Wat bij jou ligt (met goed- en afkeurknoppen),
+ * en daaronder de kosten die bij een ander liggen of al beoordeeld zijn.
+ */
+const KEUR_KOSTEN = VOORBEELD_KOSTEN
+  .filter(k => k.status !== 'open' || k.teBeoordelen)
+  .map(k => ({ ...k, magKeuren: k.teBeoordelen && k.goedkeurderId === 'ik' }))
+
 /** `?updates=1` toont het "Nieuw in EVA Mobiel"-paneel van het startscherm. */
 const UPDATES: MobielUpdate[] = [
   { id: 'c1', datum: '2026-10-05', categorie: 'opgelost', titel: 'Houtrotreparaties vastleggen werkt weer',
@@ -137,7 +153,7 @@ const UPDATES: MobielUpdate[] = [
     omschrijving: 'Bij het schrijven van uren zie je alleen je ingeplande projecten en kun je zoeken in plaats van scrollen.' },
 ]
 
-export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string; uren?: string }> }) {
+export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string; uren?: string; kosten?: string; zoeker?: string }> }) {
   const params = await searchParams
   const taal = naarTaal(params.taal)
   const berichten = await laadBerichten(taal)
@@ -156,7 +172,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
       >
         <div style={{ display: 'flex', gap: 8, padding: 8, background: '#111', flexWrap: 'wrap' }}>
           {TALEN.map((l) => (
-            <a key={l} href={`?taal=${l}${params.updates === '1' ? '&updates=1' : ''}`} style={{ color: l === taal ? '#7ee2a8' : '#fff', fontSize: 13, fontWeight: 700 }}>
+            <a key={l} href={`?taal=${l}${params.updates === '1' ? '&updates=1' : ''}${params.uren ? `&uren=${params.uren}` : ''}${params.kosten === '1' ? '&kosten=1' : ''}`} style={{ color: l === taal ? '#7ee2a8' : '#fff', fontSize: 13, fontWeight: 700 }}>
               {TAAL_NAAM[l]}
             </a>
           ))}
@@ -182,11 +198,18 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         {params.uren === 'kantoor' && (
           <WeekstaatClient staat={voorbeeldWeek('kantoor')} uursoorten={[{ id: 'werk', naam: 'Kantoor', categorie: 'werk' }]} vandaag={vandaag.toISOString().slice(0, 10)} />
         )}
+        {params.kosten === '1' && (
+          <div id="kosten" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <KostenTeKeuren onkosten={KEUR_KOSTEN} />
+            <KostenContext onkosten={KEUR_KOSTEN} />
+          </div>
+        )}
         <VerlofClient aanvragen={VERLOF} ingepland={INGEPLAND} soorten={VERLOF_SOORTEN} saldo={86.5} tvtBeschikbaar={6} />
         <div style={{ padding: 16 }}><ProjectZoekerVoorbeeld /></div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>
         {params.updates === '1' && <MobielUpdates items={UPDATES} />}
+        {params.zoeker === 'medewerker' && <MedewerkerZoekerVoorbeeld />}
       </div>
     </NextIntlClientProvider>
   )

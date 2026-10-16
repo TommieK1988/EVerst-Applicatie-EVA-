@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { GebruikerLayout } from '@everts/database'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
-import { ONKOSTEN_LABEL, VERVOERMIDDEL_LABEL } from '@/lib/uren/onkosten'
 import type { OnkostenOverzicht, OnkostenRegel } from '@/lib/uren/onkosten-overzicht'
+import { IngediendeKosten, KostenTeKeurenKaart } from './KostenOverzicht'
 import { LegeStaat } from '@/components/dossiers/tabs/tab-ui'
 import { NAAR_NIEUW_TABBLAD } from '@/components/dossiers/open-dossier'
 import type { UrenOverzichtData, UrenOverzichtRegel } from '@/lib/uren/actions'
@@ -323,7 +323,7 @@ function maakKolommen(
 /* ─── Scherm ────────────────────────────────────────────────────────────────── */
 
 export default function UrenOverzicht({
-  data, onkosten, periode, layouts, user_id, magAlles, medewerkerId, vergelijking,
+  data, onkosten, kostenTeKeuren, periode, layouts, user_id, magAlles, medewerkerId, vergelijking,
 }: {
   data: UrenOverzichtData
   /**
@@ -332,11 +332,12 @@ export default function UrenOverzicht({
    */
   vergelijking: Record<string, DagVergelijking>
   /**
-   * De ingediende parkeer- en reiskosten over dezelfde periode. Null zonder financieel-recht:
-   * uitbetalen is werk van de administratie. Een projectleider ziet de kosten van zijn mensen
-   * op zijn eigen keurscherm.
+   * De ingediende kosten over dezelfde periode, met hun goedkeuring. Null zonder financieel-recht:
+   * uitbetalen is werk van de administratie.
    */
   onkosten: OnkostenOverzicht | null
+  /** Kosten die bij deze gebruiker liggen om goed te keuren, los van de periode. */
+  kostenTeKeuren: OnkostenRegel[]
   periode: UrenPeriode
   layouts: GebruikerLayout[]
   user_id: string | null
@@ -543,6 +544,10 @@ export default function UrenOverzicht({
         />
       </div>
 
+      {/* Bovenaan en los van de periode: een kostenpost is één beslissing en hoort niet onder
+          honderden urenregels weg te vallen. */}
+      <KostenTeKeurenKaart regels={kostenTeKeuren} />
+
       {data.fout ? (
         <LegeStaat titel="Uren niet op te halen" tekst={`Bouw7 gaf geen antwoord: ${data.fout}`} />
       ) : data.regels.length === 0 ? (
@@ -633,33 +638,11 @@ export default function UrenOverzicht({
         </div>
       )}
 
-      {onkosten && onkosten.regels.length > 0 && (
-        <div style={{ marginTop: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--fg)', margin: 0 }}>
-              Ingediende kosten
-            </h2>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-muted)', fontVariantNumeric: 'tabular-nums' }}>
-              {euro(onkosten.totaal)}
-            </span>
-          </div>
-          <OverzichtTabel
-            scherm="uren-onkosten"
-            data={onkosten.regels}
-            kolommen={ONKOSTEN_KOLOMMEN}
-            layouts={layouts}
-            user_id={user_id}
-            beginSortering={[{ id: 'datum', desc: true }]}
-            toonRijActie={false}
-            dicht
-            eenregelig
-          />
-          <div style={{ padding: '10px 2px 0', fontSize: 11.5, color: 'var(--fg-muted)', lineHeight: 1.5 }}>
-            Parkeer- en reiskosten uit de mobiele weekstaat van {datum(data.van)} t/m {datum(data.tot)}.
-            Bij auto en bromfiets is het bedrag berekend uit de kilometers; bij de rest hoort een
-            foto van het bonnetje. Deze bedragen staan los van Bouw7.
-          </div>
-        </div>
+      {onkosten && (
+        <IngediendeKosten
+          onkosten={onkosten} layouts={layouts} user_id={user_id}
+          periodeTekst={`${datum(data.van)} t/m ${datum(data.tot)}`}
+        />
       )}
 
       {bewerken && (
@@ -672,63 +655,6 @@ export default function UrenOverzicht({
     </div>
   )
 }
-
-/**
- * De kolommen van de kostentabel. Een vaste lijst en geen functie: anders dan bij de uursoorten
- * hangt hier geen filteroptie van de data af.
- */
-const ONKOSTEN_KOLOMMEN: KolomDefinitie<OnkostenRegel>[] = [
-  {
-    key: 'medewerker', label: 'Medewerker', vast: true, breedte: 170, filterType: 'tekst',
-    sorteerWaarde: (r) => r.medewerker,
-    render: (r) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{r.medewerker}</span>,
-  },
-  {
-    key: 'datum', label: 'Datum', breedte: 125,
-    sorteerWaarde: (r) => r.datum,
-    render: (r) => <span style={{ fontSize: 12.5, color: 'var(--fg-soft)', fontVariantNumeric: 'tabular-nums' }}>{datumMetDag(r.datum)}</span>,
-  },
-  {
-    key: 'week', label: 'Week', breedte: 70, filterType: 'tekst',
-    sorteerWaarde: (r) => r.datum,
-    render: (r) => tekst(isoWeek(r.datum), true),
-  },
-  {
-    key: 'soort', label: 'Soort', breedte: 130, filterType: 'select',
-    filterOpties: Object.values(ONKOSTEN_LABEL),
-    sorteerWaarde: (r) => ONKOSTEN_LABEL[r.soort],
-    render: (r) => tekst(ONKOSTEN_LABEL[r.soort], true),
-  },
-  {
-    key: 'vervoermiddel', label: 'Vervoermiddel', breedte: 120, filterType: 'select',
-    filterOpties: Object.values(VERVOERMIDDEL_LABEL),
-    sorteerWaarde: (r) => (r.vervoermiddel ? VERVOERMIDDEL_LABEL[r.vervoermiddel] : ''),
-    filterWaarde: (r) => (r.vervoermiddel ? VERVOERMIDDEL_LABEL[r.vervoermiddel] : null),
-    render: (r) => tekst(r.vervoermiddel ? VERVOERMIDDEL_LABEL[r.vervoermiddel] : null, true),
-  },
-  {
-    key: 'km', label: 'Kilometers', breedte: 95,
-    sorteerWaarde: (r) => r.km ?? 0,
-    render: (r) => getal(r.km == null ? '—' : r.km.toLocaleString('nl-NL')),
-  },
-  {
-    key: 'bedrag', label: 'Bedrag', breedte: 100,
-    sorteerWaarde: (r) => r.bedrag,
-    render: (r) => getal(euro(r.bedrag)),
-  },
-  {
-    key: 'omschrijving', label: 'Omschrijving', breedte: 240, filterType: 'tekst',
-    sorteerWaarde: (r) => r.omschrijving ?? '',
-    render: (r) => tekst(r.omschrijving, true),
-  },
-  {
-    key: 'bon', label: 'Bon', breedte: 70,
-    sorteerWaarde: (r) => (r.bonUrl ? 1 : 0),
-    render: (r) => (r.bonUrl
-      ? <a href={r.bonUrl} {...NAAR_NIEUW_TABBLAD} style={{ fontSize: 12.5, color: 'var(--accent)', textDecoration: 'none' }}>Bekijk</a>
-      : tekst(null, true)),
-  },
-]
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (

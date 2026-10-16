@@ -2,7 +2,8 @@
 
 // Mini-meetstaat: dubbelklik op een hoeveelheid in de calculatie. Opmaak volgt scherm 4
 // uit het plan "Meetstaten per object" en het design system (docs/design-system).
-// Rekenen en bewaren: lib/everts-calc/mini-meetstaat.ts.
+// Rekenen en bewaren: lib/everts-calc/mini-meetstaat.ts. Eén meting in meerdere regels:
+// lib/everts-calc/mini-meetstaat-koppeling.ts en MiniMeetstaatKoppeling.tsx.
 
 import { useState, useEffect } from 'react'
 import { Trash2, ChevronDown, Minus } from 'lucide-react'
@@ -24,7 +25,12 @@ import {
   isAlleenAantal, berekenRij, rijHeeftData, legeRij, startToestand, maakMeting, brutoNetto,
   type Gebruik,
 } from '@/lib/everts-calc/mini-meetstaat'
+import {
+  metingKeuzes, gedeeldMet, metingNaam, type MetingKeuze, type RegelMetMeting,
+} from '@/lib/everts-calc/mini-meetstaat-koppeling'
+import { nieuweId } from '@/lib/everts-calc/utils'
 import GetalInvoer from '@/components/everts-calc/meetstaat/GetalInvoer'
+import { MetingKoppeling } from './MiniMeetstaatKoppeling'
 
 interface Props {
   open: boolean
@@ -34,7 +40,14 @@ interface Props {
   titel?: string
   /** Eerder bewaarde meting van deze regel; de dialog opent daarmee. */
   bewaard?: MiniMeting
-  onBevestig: (hoeveelheid: number, eenheid: Eenheid | undefined, meting: MiniMeting) => void
+  /** Deze regel en de regels van hetzelfde scenario: voor de keuzelijst en de koppeling. */
+  regelId?: string
+  scenarioRegels?: RegelMetMeting[]
+  /** `bronRegelId`: de regel waar een nog losse meting uit de keuzelijst vandaan kwam;
+   *  die krijgt dezelfde koppel_id. */
+  onBevestig: (hoeveelheid: number, eenheid: Eenheid | undefined, meting: MiniMeting, bronRegelId?: string) => void
+  /** Ontkoppelen: alleen deze regel laat de gedeelde meting los. */
+  onOntkoppel?: () => void
   onSluiten: () => void
 }
 
@@ -188,11 +201,16 @@ function EenheidKiezer({ huidig, onChange }: { huidig: string; onChange: (e: str
 
 // ─── Dialog ───────────────────────────────────────────────────────────────────
 
-export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaard, onBevestig, onSluiten }: Props) {
+export default function MiniMeetstaat({
+  open, eenheid, hoeveelheid, titel, bewaard, regelId = '', scenarioRegels = [], onBevestig, onOntkoppel, onSluiten,
+}: Props) {
   const [gekozenEenheid, setGekozenEenheid] = useState<string>(normaliseerEenheid(eenheid))
   const [rijen, setRijen] = useState<MiniMaatrij[]>([legeRij()])
   const [afwijking, setAfwijking] = useState<{ meting: number; calculatie: number } | null>(null)
   const [gebruik, setGebruik] = useState<Gebruik>('netto')
+  const [koppelId, setKoppelId] = useState<string | undefined>()
+  const [bronRegelId, setBronRegelId] = useState<string | undefined>()
+  const [naam, setNaam] = useState('')
 
   // Bij openen: de bewaarde meting, of anders de bestaande hoeveelheid als eerste rij.
   useEffect(() => {
@@ -204,6 +222,11 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaa
     setRijen(start.rijen)
     setGebruik(start.gebruik)
     setAfwijking(start.afwijking)
+    // Een meting in een andere eenheid opent niet, en dus ook zijn koppeling en naam niet.
+    const zelfde = bewaard && normaliseerEenheid(bewaard.eenheid) === eenh
+    setKoppelId(zelfde ? bewaard.koppel_id : undefined)
+    setNaam(zelfde ? bewaard.naam ?? '' : '')
+    setBronRegelId(undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -217,7 +240,28 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaa
     setGekozenEenheid(e)
     setRijen([legeRij()])
     setAfwijking(null)
+    setNaam('')
+    setKoppelId(undefined)
+    setBronRegelId(undefined)
   }
+
+  // Andere metingen in dit scenario, en de regels waarmee deze meting gedeeld is.
+  const keuzes = metingKeuzes(scenarioRegels, regelId, gekozenEenheid, koppelId)
+    .filter(k => k.bronRegelId !== bronRegelId)
+  const bron = scenarioRegels.find(r => r.id === bronRegelId)
+  const gedeeld = [...gedeeldMet(scenarioRegels, regelId, koppelId), ...(bron ? [bron] : [])]
+    .map(r => r.omschrijving.trim() || 'Regel zonder omschrijving')
+
+  // Overnemen uit de lijst: de maten en de koppeling; bruto of netto blijft van deze regel.
+  const kiesMeting = (k: MetingKeuze) => {
+    setRijen([...k.meting.rijen, legeRij()])
+    setNaam(k.naam)
+    setKoppelId(k.koppelId ?? nieuweId())
+    setBronRegelId(k.koppelId ? undefined : k.bronRegelId)
+    setAfwijking(null)
+  }
+
+  const ontkoppel = () => { setKoppelId(undefined); setBronRegelId(undefined); onOntkoppel?.() }
 
   const totalen = rijen.map(r => berekenRij(r, gekozenEenheid))
   const bn = brutoNetto(rijen, gekozenEenheid)
@@ -231,7 +275,14 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaa
   const overnemen = () => {
     if (eindtotaal <= 0) return
     const eenheidGewijzigd = gekozenEenheid !== eenheid
-    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined, maakMeting(rijen, gekozenEenheid, gebruik))
+    const meting: MiniMeting = {
+      ...maakMeting(rijen, gekozenEenheid, gebruik),
+      // Zelf ingevuld, anders de eerste maat (niet de regel: die past niet bij andere regels).
+      naam: naam.trim() || metingNaam(rijen.filter(rijHeeftData), ''),
+      // Een koppeling zonder andere regels is geen koppeling.
+      ...(koppelId && gedeeld.length > 0 ? { koppel_id: koppelId } : {}),
+    }
+    onBevestig(eindtotaal, eenheidGewijzigd ? gekozenEenheid as Eenheid : undefined, meting, bronRegelId)
   }
 
   const kolommen = maatKolommen(gekozenEenheid)
@@ -251,6 +302,13 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaa
         </DialogHeader>
 
         <DialogBody className="flex flex-col gap-4">
+          {gekozenEenheid && (
+            <MetingKoppeling
+              keuzes={keuzes} gedeeldMet={gedeeld} onKies={kiesMeting} onOntkoppel={ontkoppel}
+              naam={naam} naamVoorstel={metingNaam(rijen.filter(rijHeeftData), '')} onNaam={setNaam}
+            />
+          )}
+
           {afwijking && (
             <Alert tone="warning" title="De hoeveelheid is met de hand aangepast">
               In de calculatie staat {getal(afwijking.calculatie)} {gekozenEenheid}, deze meting telt op
@@ -327,7 +385,9 @@ export default function MiniMeetstaat({ open, eenheid, hoeveelheid, titel, bewaa
 
         <DialogFooter split className="flex-wrap border-t border-neutral-100 bg-neutral-50">
           <span className="text-xs text-neutral-500">
-            {bewaard?.rijen.length
+            {gedeeld.length > 0
+              ? `Gedeelde meting · Overnemen werkt ook ${gedeeld.length} andere ${gedeeld.length === 1 ? 'regel' : 'regels'} bij`
+              : bewaard?.rijen.length
               ? `Bewaard bij deze regel · gemeten ${datum(bewaard.gemeten_op)}`
               : 'De maten worden bij deze regel bewaard'}
           </span>

@@ -16,7 +16,7 @@
  * horen en niet als contractversie gaat meetellen.
  */
 
-import { getScenario, getScenarios, kopieerScenario, slaScenarioOp, getInstellingen } from '@/lib/everts-calc/local-store'
+import { getScenario, getScenarios, kopieerScenario, slaScenarioOp, globaalUurtarief } from '@/lib/everts-calc/local-store'
 import { verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import { bewaarCalculatieSnapshot } from '@/app/(platform)/everts-calc/actions/sync'
 import { nieuweId } from '@/lib/everts-calc/utils'
@@ -116,8 +116,7 @@ export async function maakMeerwerkScenario(
   const bestaand = vindMeerwerkScenario(projectId, meerwerkRegelId)
   if (bestaand) return bestaand
 
-  const inst = getInstellingen()
-  const favorietTarief = inst.uurtarieven?.find(t => t.is_favoriet)?.tarief
+  const favorietTarief = globaalUurtarief() || undefined
   // Meerwerk volgt de opslag van de hoofdcalculatie; anders zou meerwerk stilzwijgend
   // een ander percentage krijgen dan het werk waar het bij hoort.
   const scenarios = getScenarios(projectId)

@@ -4,9 +4,9 @@ import { createAdminClient } from '@everts/database/server'
 import { appGraphFetch } from '@/lib/o365/graph'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from './guards'
+import { lijstDossiermapInhoud, type SharePointSubmap } from '@/lib/o365/dossiermap-inhoud'
 import {
   matchDossierFolder,
-  listFolderChildren,
   resolveShareLink,
   resolveDriveContext,
   zoekContainerMappen,
@@ -28,6 +28,7 @@ import {
 } from '@/lib/o365/dossier-map'
 
 export type { SharePointBestand, SharePointMap } from '@/lib/o365/sharepoint'
+export type { SharePointSubmap } from '@/lib/o365/dossiermap-inhoud'
 export type { UploadResultaat } from '@/lib/o365/dossier-map'
 
 export type DossierSharePointData = {
@@ -35,7 +36,12 @@ export type DossierSharePointData = {
   geconfigureerd: boolean
   status: MatchStatus | null
   mapUrl: string | null
+  /** Alle bestanden, ook die in submappen (`map` gevuld). */
   bestanden: SharePointBestand[]
+  /** De submappen van de dossiermap, ook lege — de lijst toont de structuur. */
+  mappen?: SharePointSubmap[]
+  /** Niet alle submappen konden worden gelezen; de lijst is dan niet compleet. */
+  onvolledig?: boolean
   /** true = map handmatig gekozen; een automatische rematch laat hem met rust. */
   handmatig: boolean
   /** Voorstel voor een nieuwe map: `{dossiernummer} - {titel}`. */
@@ -130,7 +136,7 @@ async function wisKoppeling(dossierId: string): Promise<void> {
     .eq('id', dossierId)
 }
 
-/** Bouwt het antwoord voor een gekoppelde map: bestanden ophalen, fouten opvangen. */
+/** Bouwt het antwoord voor een gekoppelde map: bestanden en submappen ophalen, fouten opvangen. */
 async function metBestanden(
   dossierId: string,
   d: DossierRij,
@@ -151,8 +157,13 @@ async function metBestanden(
     fout: null,
   }
   try {
-    const bestanden = await listFolderChildren(driveId, itemId)
-    return { ...basis, bestanden: await zonderWordWerkbestanden(dossierId, bestanden) }
+    const inhoud = await lijstDossiermapInhoud(driveId, itemId)
+    return {
+      ...basis,
+      bestanden: await zonderWordWerkbestanden(dossierId, inhoud.bestanden),
+      mappen: inhoud.mappen,
+      onvolledig: inhoud.onvolledig,
+    }
   } catch (err) {
     return { ...basis, fout: netteFout(err) }
   }

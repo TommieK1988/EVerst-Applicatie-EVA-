@@ -95,7 +95,7 @@ export const MAIL_SOORT_INFO: Record<MailSoort, MailSoortInfo> = {
     soort: 'uitvraag',
     label: 'Uitvraag — prijsopgave vragen',
     groep: 'Offerte & inkoop',
-    wanneer: 'Naar een onderaannemer of leverancier, vanaf het Uitvraag-tab van een dossier. EVA zet de tabel met het werk zelf boven de afsluitende groet.',
+    wanneer: 'Naar een onderaannemer of leverancier, vanaf het Uitvraag-tab van een dossier. EVA zet de tabel met het werk zelf boven de afsluitende groet; bij een uitvraag vanuit de calculatie komen daar de posten (zonder prijzen), het projectbezoek en de reactiedatum bij.',
     variabelen: [
       { sleutel: 'partij.naam', uitleg: 'Naam van de uitgevraagde partij' },
       { sleutel: 'discipline', uitleg: 'Onderdeel waarvoor prijs wordt gevraagd' },
@@ -104,6 +104,7 @@ export const MAIL_SOORT_INFO: Record<MailSoort, MailSoortInfo> = {
       { sleutel: 'dossier.werkadres', uitleg: 'Werkadres' },
       { sleutel: 'reactie.uiterlijk', uitleg: 'Datum waarop de offerte binnen moet zijn' },
       { sleutel: 'dossier.plaats', uitleg: 'Plaats van het werkadres' },
+      { sleutel: 'projectbezoek', uitleg: 'Datum en tijd van het projectbezoek (alleen bij een uitvraag vanuit de calculatie; anders leeg)' },
     ],
     blokken: [],
     standaard: {
@@ -129,6 +130,7 @@ export const MAIL_SOORT_INFO: Record<MailSoort, MailSoortInfo> = {
       { sleutel: 'partij.naam', uitleg: 'Naam van de uitgevraagde partij' },
       { sleutel: 'dossier.nummer', uitleg: 'Dossiernummer (bij één openstaande regel)' },
       { sleutel: 'dossier.titel', uitleg: 'Titel van het dossier (bij één openstaande regel)' },
+      { sleutel: 'projectbezoek', uitleg: 'Datum en tijd van het projectbezoek (alleen bij één uitvraag vanuit de calculatie)' },
     ],
     blokken: [],
     standaard: {

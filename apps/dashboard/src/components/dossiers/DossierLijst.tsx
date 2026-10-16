@@ -154,6 +154,8 @@ type Props = {
   onDossierKlik?: (d: DossierRij) => void
   /** Override voor de layout-sleutel (OverzichtTabel `scherm`); standaard afgeleid uit `sectie`. */
   scherm?: string
+  /** Past de kolommen aan, bv. voor Offertes (zie commercie/offerte-lijst-kolommen). Stabiel houden. */
+  kolomAanpassing?: (k: KolomDefinitie<DossierRij>[]) => KolomDefinitie<DossierRij>[]
 }
 
 // ── Hoofd-component ───────────────────────────────────────────────────────────
@@ -171,6 +173,7 @@ export function DossierLijst({
   extraActies,
   onDossierKlik,
   scherm: schermProp,
+  kolomAanpassing,
 }: Props) {
   const [modalOpen, setModalOpen] = React.useState(false)
   const [data, setData] = React.useState<DossierRij[]>(dossiers)
@@ -179,10 +182,8 @@ export function DossierLijst({
   const scherm = schermProp ?? (sectie ? `dossiers-${sectie}` : 'dossiers')
 
   // ── Kolomdefinities ─────────────────────────────────────────────────────────
-  // Standaard zichtbaar: een compacte kern. Alle overige kolommen zijn via
-  // kolombeheer aan te zetten (standaard_zichtbaar: false) — liever te veel dan te weinig.
-  const kolommen: KolomDefinitie<DossierRij>[] = React.useMemo(() => [
-    // ── Kern (standaard zichtbaar) ──────────────────────────────────────────
+  // Standaard zichtbaar: een compacte kern; de rest via kolombeheer (standaard_zichtbaar: false).
+  const basisKolommen: KolomDefinitie<DossierRij>[] = React.useMemo(() => [
     {
       key: 'dossiernummer',
       label: 'Dossiernr.',
@@ -734,6 +735,8 @@ export function DossierLijst({
       ),
     },
   ], [statussen, sectie])
+  const kolommen = React.useMemo(
+    () => (kolomAanpassing ? kolomAanpassing(basisKolommen) : basisKolommen), [basisKolommen, kolomAanpassing])
 
   // ── Klik-handler ────────────────────────────────────────────────────────────
   function handleKlik(d: DossierRij) {
@@ -744,7 +747,6 @@ export function DossierLijst({
     }
   }
 
-  // ── Acties slot voor OverzichtTabel toolbar ──────────────────────────────────
   const acties = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {extraActies}

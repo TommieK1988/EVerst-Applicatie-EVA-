@@ -20,6 +20,7 @@ import toast from 'react-hot-toast'
 import { Download, ExternalLink, FileText, Maximize2, Pencil } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
 import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
+import { mapLabel } from '@/lib/dossiers/bestand-boom'
 import { getSharePointVoorvertoning, hernoemDossierBestand } from '@/lib/dossiers/bestand-meta'
 import { MailInhoud } from './MailVenster'
 import { MarkdownInhoud } from './MarkdownVenster'
@@ -120,7 +121,7 @@ function Kop({ dossierId, rij, readOnly, onHernoemd, onVergroot }: {
 
   const meta = [
     rij.soortNaam,
-    rij.bron,
+    rij.map ? `${rij.bron} › ${mapLabel(rij.map)}` : rij.bron,
     rij.datum,
     rij.grootte != null ? formatteerGrootte(rij.grootte) : null,
     rij.door,

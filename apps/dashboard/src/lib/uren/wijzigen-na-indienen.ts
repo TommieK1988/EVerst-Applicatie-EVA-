@@ -24,12 +24,13 @@ import { bewerkbaar } from './week-guard'
 // teamleider heeft er dan naar gekeken, en wat hij gezien heeft mag niet onder zijn handen
 // veranderen.
 //
-// Twee dingen hebben geen eigen goedkeuring en lenen die daarom van iets anders:
-// - Kostenposten hangen aan een dag. Is er van die dag een uurregel goedgekeurd, dan heeft de
-//   goedkeurder die dag (met zijn kosten) bekeken en ligt de kostenpost ook vast.
-// - De automatische overurenregel verschuift mee met de andere regels. Zou een wijziging een al
-//   goedgekeurde overurenregel laten verdwijnen, dan weigeren we de wijziging (zie
-//   `overurenDieVervallen` in ./overuren).
+// De automatische overurenregel heeft geen eigen goedkeuring en leent die daarom van de andere
+// regels: hij verschuift mee, en zou een wijziging een al goedgekeurde overurenregel laten
+// verdwijnen, dan weigeren we de wijziging (zie `overurenDieVervallen` in ./overuren).
+//
+// Kostenposten hebben sinds oktober 2026 wél hun eigen goedkeuring (de projectleider, zie
+// ./onkosten-goedkeuring-acties). Ze lenen dus niets meer van de uren van die dag: alleen het
+// venster van de week telt, en een beoordeelde kostenpost ligt vast.
 //
 // In de Bouw7-route staan de uren na indienen al in Bouw7 (approved = false). Elke wijziging gaat
 // er dus meteen achteraan (`stuurWijzigingNaarBouw7`; die stuurt alleen regels die nog niet
@@ -55,13 +56,11 @@ export type WijzigDoel = {
   regelId?: string
   /** Automatische overurenregels die door de wijziging zouden verdwijnen. */
   overurenIds?: string[]
-  /** De dag van een kostenpost die erbij komt of verdwijnt. */
-  datum?: string
 }
 
 export type Weigering =
   | 'weekAlIngediend' | 'wijzigTermijnVerstreken' | 'regelAlGoedgekeurd' | 'overurenAlGoedgekeurd'
-  | 'dagAlGoedgekeurd' | 'goedkeuringNietTeControleren'
+  | 'goedkeuringNietTeControleren'
 
 type RegelRij = { id: string; datum: string; bouw7_hour_log_id: number | null; bouw7_goedgekeurd: boolean | null }
 
@@ -114,9 +113,9 @@ export async function wijzigVenster(week: WeekRij, nu = new Date()): Promise<Wij
  * De poort voor elke wijziging aan regels of kosten. Levert `null` als het mag, anders de reden
  * als sleutel onder `uren.fout.*`.
  *
- * Alleen de goedkeuring van wat `doel` raakt telt: de regel zelf, de overurenregels die zouden
- * verdwijnen, en bij een kostenpost de uurregels van die dag. Een nieuwe uurregel zonder
- * gevolgen voor de overuren raakt niets wat al goedgekeurd is en mag tot de deadline.
+ * Alleen de goedkeuring van wat `doel` raakt telt: de regel zelf en de overurenregels die zouden
+ * verdwijnen. Een nieuwe uurregel zonder gevolgen voor de overuren, of een kostenpost (zonder
+ * `doel`), raakt niets wat al goedgekeurd is en mag tot de deadline.
  *
  * Bij een ingediende week kijkt hij voor die regels ook live in Bouw7. Is Bouw7 niet bereikbaar,
  * dan weigert hij: liever even niet wijzigen dan een goedkeuring overschrijven die we niet zagen.
@@ -132,13 +131,12 @@ export async function vereisWijzigbaar(
   if (new Date() >= deadline) return 'wijzigTermijnVerstreken'
 
   const regels = (await regelsVanWeek(week.id)).filter(r =>
-    r.id === doel.regelId || doel.overurenIds?.includes(r.id) || (doel.datum != null && r.datum === doel.datum))
+    r.id === doel.regelId || doel.overurenIds?.includes(r.id))
   if (!regels.length) return null
 
   const reden = (akkoord: Set<string>): Weigering | null => {
     if (doel.regelId && akkoord.has(doel.regelId)) return 'regelAlGoedgekeurd'
     if (doel.overurenIds?.some(id => akkoord.has(id))) return 'overurenAlGoedgekeurd'
-    if (doel.datum != null && regels.some(r => r.datum === doel.datum && akkoord.has(r.id))) return 'dagAlGoedgekeurd'
     return null
   }
 

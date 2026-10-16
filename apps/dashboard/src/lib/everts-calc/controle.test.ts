@@ -73,6 +73,24 @@ describe('controleerCalculatie', () => {
     expect(telControle(punten)).toEqual({ rood: 0, oranje: 1 })
   })
 
+  it('eigen uurtarief: nakijkpunt met het tarief erbij, weg te klikken met Klopt', () => {
+    const invoer = {
+      ...basis, calculatietarief: 58,
+      regels: [regel('a'), regel('b')],
+      componenten: [comp('a', { tarief: 52 }), comp('b', { tarief: 58 })],
+    }
+    const punten = controleerCalculatie(invoer)
+    expect(punten.map(p => p.sleutel)).toEqual(['eigen_uurtarief:a'])
+    expect(punten[0].detail).toContain('52,00')
+    expect(punten[0].bevestigbaar).toBe(true)
+    expect(telControle(controleerCalculatie({ ...invoer, bevestigd: ['eigen_uurtarief:a'] })).oranje).toBe(0)
+  })
+
+  it('zonder calculatietarief geen melding eigen tarief', () => {
+    const punten = controleerCalculatie({ ...basis, regels: [regel('a')], componenten: [comp('a', { tarief: 52 })] })
+    expect(punten).toEqual([])
+  })
+
   it('slaat tekstregels over', () => {
     const punten = controleerCalculatie({ ...basis, regels: [regel('t', { soort: 'tekst', is_stelpost: true })], componenten: [] })
     expect(punten).toEqual([])

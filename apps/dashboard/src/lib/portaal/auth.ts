@@ -96,6 +96,10 @@ export async function vereisPortaalPagina(): Promise<PortaalGebruiker> {
  *  4. losse toekenningen in portaal_gebruiker_dossiers
  * en dan doorsneden met de dossiers die überhaupt aan het portaal zijn gegeven.
  *
+ * LET OP: de regel uit punt 1-3 staat ook in SQL, als
+ * `portaal_gebruiker_ziet_dossier()` (migratie 20261015d). Daarmee zet de
+ * database nieuwe dossiers vanzelf open. Wijzig je de een, wijzig dan de ander.
+ *
  * Gepagineerd: een corporatie kan makkelijk meer dan 1000 dossiers hebben, en
  * PostgREST kapt dan stil af — precies de fout die de Medewerkerplanning velde.
  */
@@ -240,6 +244,7 @@ function legeInstellingen(dossierId: string): PortaalDossierInstellingen {
   return {
     dossier_id: dossierId,
     actief: false,
+    actief_handmatig: false,
     toon_bestanden: false, toon_fotos: false, toon_facturen: false, toon_meerwerk: false,
     toon_meerwerk_handmatig: false, toon_formulieren: false, toon_aandachtspunten: false,
     toon_planning: false, planning_detail: false, toon_chat: false, toon_afspraken: false,

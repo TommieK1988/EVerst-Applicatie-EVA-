@@ -3,6 +3,9 @@ import { vereisModuleToegang } from '@/lib/auth/rechten'
 import { PageHeader, Card, CardHeader, CardBody, Badge } from '@/components/ui'
 import { datumKort } from '@/lib/portaal/format'
 import TerugNaarInstellingen from '@/components/instellingen/TerugNaarInstellingen'
+import Link from 'next/link'
+import { getPortaalStandaardOnderdelen } from '@/lib/portaal/contactpersoon'
+import StandaardOnderdelen from './StandaardOnderdelen'
 
 export const metadata = { title: 'Klantportaal' }
 export const dynamic = 'force-dynamic'
@@ -28,6 +31,7 @@ export default async function KlantportaalInstellingen() {
     .limit(500)
 
   const rijen = (gebruikers ?? []) as Record<string, unknown>[]
+  const standaard = await getPortaalStandaardOnderdelen()
 
   const relatieIds = [...new Set(rijen.map(r => r.relatie_id).filter(Boolean))] as string[]
   const cpIds = [...new Set(rijen.map(r => r.contactpersoon_id).filter(Boolean))] as string[]
@@ -56,8 +60,8 @@ export default async function KlantportaalInstellingen() {
       <TerugNaarInstellingen />
       <PageHeader eyebrow="Instellingen" title="Klantportaal" />
       <p className="-mt-3 mb-5 text-[13px] text-neutral-500">
-        Alle opdrachtgevers met toegang tot hun eigen projectomgeving. Uitnodigen doe je per
-        dossier, op de tab Klantportaal.
+        Alle opdrachtgevers met toegang tot hun eigen projectomgeving. Toegang geven doe je op de
+        pagina van de contactpersoon, of vanuit een dossier op de tab Klantportaal.
       </p>
 
       {nooitIngelogd > 0 && (
@@ -67,6 +71,8 @@ export default async function KlantportaalInstellingen() {
         </div>
       )}
 
+      <StandaardOnderdelen waarden={standaard} />
+
       <Card>
         <CardHeader>
           <span>Portaalaccounts</span>
@@ -75,8 +81,8 @@ export default async function KlantportaalInstellingen() {
         <CardBody style={{ padding: 0 }}>
           {rijen.length === 0 ? (
             <p className="px-4 py-5 text-[13px] text-neutral-500">
-              Er zijn nog geen portaalaccounts. Je nodigt een contactpersoon uit vanaf de
-              tab Klantportaal in een dossier.
+              Er zijn nog geen portaalaccounts. Je geeft een contactpersoon toegang vanaf zijn
+              eigen pagina onder Relaties.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -95,7 +101,14 @@ export default async function KlantportaalInstellingen() {
                   {rijen.map(r => (
                     <tr key={String(r.id)} className="border-b border-neutral-100">
                       <td className="px-3 py-1.5">
-                        {r.contactpersoon_id ? cpNaam.get(String(r.contactpersoon_id)) ?? '—' : '—'}
+                        {r.contactpersoon_id ? (
+                          <Link
+                            href={`/relaties/contactpersonen/${String(r.contactpersoon_id)}`}
+                            className="hover:text-brand-700 hover:underline"
+                          >
+                            {cpNaam.get(String(r.contactpersoon_id)) ?? '—'}
+                          </Link>
+                        ) : '—'}
                         {!r.actief && <Badge className="ml-2" tone="neutral">ingetrokken</Badge>}
                       </td>
                       <td className="px-3 py-1.5 text-neutral-600">{String(r.email)}</td>
@@ -103,7 +116,9 @@ export default async function KlantportaalInstellingen() {
                         {r.relatie_id ? relatieNaam.get(String(r.relatie_id)) ?? '—' : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-neutral-600">
-                        {r.scope === 'organisatie' ? 'Alle projecten van de organisatie' : 'Alleen eigen projecten'}
+                        {r.scope === 'organisatie' ? 'Alle projecten van de organisatie'
+                          : r.scope === 'alleen_gekoppeld' ? 'Alleen gekoppelde projecten'
+                          : 'Alleen eigen projecten'}
                       </td>
                       <td className="px-3 py-1.5 tabular-nums text-neutral-500">
                         {datumKort(r.uitgenodigd_op as string | null)}

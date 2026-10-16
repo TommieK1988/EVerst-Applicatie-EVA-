@@ -51,7 +51,10 @@
     "overurenUitleg": "Te godziny trafiają na Twoje saldo nadgodzin (czas za czas). Dlatego jest tu wiersz −{uren} godz. „czas za czas”. Dzięki temu Twój tydzień zgadza się dokładnie z umową. Nie musisz nic robić.",
     "overurenRegel": "Nadgodziny na Twoje saldo",
     "wijzigenTot": "Możesz jeszcze zmienić swój tydzień do {moment}. Godzin już zatwierdzonych przez osobę zatwierdzającą nie można zmienić.",
-    "regelGoedgekeurd": "Zatwierdzone"
+    "regelGoedgekeurd": "Zatwierdzone",
+    "kostenWacht": "Czeka na zatwierdzenie",
+    "kostenGoedgekeurd": "Zatwierdzone",
+    "kostenAfgekeurd": "Odrzucone: {reden}"
   },
   "regel": {
     "titelNieuw": "Dodaj godziny",
@@ -129,8 +132,14 @@
       "vulKm": "Wpisz liczbę kilometrów.",
       "vulBedrag": "Wpisz kwotę.",
       "fotoKaartje": "Dodaj zdjęcie biletu lub paragonu.",
-      "fotoBon": "Dodaj zdjęcie paragonu."
-    }
+      "fotoBon": "Dodaj zdjęcie paragonu.",
+      "kiesProject": "Wybierz, dla którego projektu poniosłeś te wydatki, albo wybierz „Bez projektu”."
+    },
+    "project": "Projekt",
+    "geenProject": "Bez projektu",
+    "geenProjectKiezen": "Bez projektu (na przykład biuro)",
+    "geenProjectUitleg": "Te wydatki zatwierdza Twoja osoba zatwierdzająca.",
+    "projectUitleg": "Te wydatki zatwierdza kierownik tego projektu."
   },
   "fout": {
     "weekAlIngediend": "Ten tydzień został już wysłany.",
@@ -165,11 +174,12 @@
     "tvtSaldoTeLaag": "Masz za mało salda nadgodzin: chcesz wykorzystać {uren} godz., a masz dostępne {beschikbaar} godz.",
     "regelAlGoedgekeurd": "Ta pozycja jest już zatwierdzona. Nie możesz jej już zmienić; zapytaj osobę zatwierdzającą.",
     "overurenAlGoedgekeurd": "Ta zmiana zmienia Twoje nadgodziny, a one są już zatwierdzone. Zapytaj osobę zatwierdzającą.",
-    "dagAlGoedgekeurd": "Godziny z tego dnia są już zatwierdzone. Nie możesz już zmienić kosztów; zapytaj osobę zatwierdzającą."
+    "kostenAlBeoordeeld": "Te wydatki zostały już ocenione i nie można ich zmienić.",
+    "ongeldigKostenProject": "Nie możesz wybrać tego projektu dla tego dnia. Wybierz projekt z listy albo „Bez projektu”."
   },
   "keuren": {
     "titel": "Zatwierdzanie",
-    "sub": "Godziny do Twojego zatwierdzenia",
+    "sub": "Godziny i wydatki do Twojego zatwierdzenia",
     "rol": {
       "projectleider": "jako kierownik projektu",
       "teamleider": "jako lider zespołu",
@@ -242,5 +252,32 @@
     "geenCodes": "Dla tego projektu w EVA nie ma kodów budżetowych. Najpierw trzeba je ustawić w Bouw7; potem można je tu wybrać.",
     "zetOp": "{aantal, plural, one {Ustaw kod {code} dla wpisu} few {Ustaw kod {code} dla wszystkich # wpisów} many {Ustaw kod {code} dla wszystkich # wpisów} other {Ustaw kod {code} dla wszystkich # wpisu}}",
     "kiesAndere": "Wybierz inny kod"
+  },
+  "kostenKeuren": {
+    "titel": "Wydatki do zatwierdzenia",
+    "overige": "Inne zgłoszone wydatki",
+    "goedkeuren": "Zatwierdź",
+    "afkeuren": "Odrzuć",
+    "allesGoedkeuren": "Zatwierdź wszystkie ({aantal}) · {bedrag}",
+    "afkeurTitel": "Odrzuć wydatki",
+    "afkeurUitleg": "{naam} otrzyma powiadomienie z Twoim uzasadnieniem. Te wydatki nie zostaną zwrócone.",
+    "reden": "Powód",
+    "redenVoorbeeld": "Na przykład: paragon jest nieczytelny",
+    "goedgekeurdToast": "{aantal, plural, one {Wydatek zatwierdzony.} few {Zatwierdzono # wydatki.} many {Zatwierdzono # wydatków.} other {Zatwierdzono # wydatku.}}",
+    "afgekeurdToast": "Wydatki odrzucone.",
+    "goedgekeurdDoor": "zatwierdził(a): {naam}",
+    "goedgekeurd": "zatwierdzone",
+    "afgekeurdDoor": "odrzucił(a) {naam}: {reden}",
+    "mislukt": "Nie udało się. Spróbuj ponownie za chwilę.",
+    "rol": {
+      "projectleider": "jako kierownik projektu",
+      "goedkeurder": "jako osoba zatwierdzająca"
+    },
+    "fout": {
+      "geenSelectie": "Nie wybrano wydatków.",
+      "nietBijJou": "Te wydatki nie czekają (już) na Twoją ocenę.",
+      "geefReden": "Podaj, dlaczego odrzucasz te wydatki.",
+      "alBeoordeeld": "Współpracownik właśnie ocenił te wydatki."
+    }
   }
 }

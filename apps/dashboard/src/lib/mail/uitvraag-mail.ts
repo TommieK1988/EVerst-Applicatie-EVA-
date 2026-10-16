@@ -33,13 +33,19 @@ export type UitvraagMailData = {
   regels: UitvraagMailRegel[]
   /** Alleen bij een enkele uitvraag: het werkadres van het project. */
   werkadres?: string | null
+  /** Kant-en-klare HTML onder de werktabel, bv. de posten van een uitvraagpakket. */
+  extraHtml?: string | null
 }
 
-const GROEN = '#009439'
-const TEKST = '#1f2933'
-const GRIJS = '#5a6472'
-const LIJN  = '#e2e6ea'
-const VLAK  = '#f4f7f5'
+/** Huisstijl van de uitvraagmail; gedeeld met `uitvraag-posten-mail.ts`. */
+export const MAIL_KLEUR = {
+  GROEN: '#009439',
+  TEKST: '#1f2933',
+  GRIJS: '#5a6472',
+  LIJN:  '#e2e6ea',
+  VLAK:  '#f4f7f5',
+} as const
+const { GROEN, TEKST, GRIJS, LIJN, VLAK } = MAIL_KLEUR
 const FONT  = "'Segoe UI',Segoe,Arial,Helvetica,sans-serif"
 
 function esc(s: string): string {
@@ -118,7 +124,7 @@ function werkadresBlok(werkadres?: string | null): string {
  * naam en functie van de afzender voegt Outlook zelf toe via de handtekening.
  */
 export function bouwUitvraagMailHtml(data: UitvraagMailData): string {
-  const blok = tabel(data) + werkadresBlok(data.werkadres)
+  const blok = tabel(data) + (data.extraHtml ?? '') + werkadresBlok(data.werkadres)
 
   const stukken = alineas(data.bericht)
   const groet = stukken.findIndex(a => GROET.test(a))

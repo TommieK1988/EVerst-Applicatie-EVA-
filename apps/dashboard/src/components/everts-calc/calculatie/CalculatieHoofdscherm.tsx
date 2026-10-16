@@ -19,6 +19,8 @@ import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmake
 import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
 import ControlePaneel from './ControlePaneel'
 import { useCalculatieControle } from './useCalculatieControle'
+import { useUitvraagInCalculatie } from './uitvraag/useUitvraagInCalculatie'
+import { UitvraagProvider } from './uitvraag/UitvraagContext'
 import { wisselBevestiging, type ControleSoort } from '@/lib/everts-calc/controle'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { formatGetal } from '@/lib/everts-calc/calculations'
@@ -38,6 +40,7 @@ import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quo
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 import { metTijdtoeslag } from '@/lib/everts-calc/tijdtoeslag'
+import { eigenOpslagen, type EigenOpslag } from '@/lib/everts-calc/calculatie-opslag'
 
 /** Structuurpaneel open of dicht: per browser onthouden, puur een gemak. */
 const BOOM_OPEN_SLEUTEL = 'eva.calculatie.structuur-open'
@@ -98,7 +101,7 @@ export default function CalculatieHoofdscherm({
     (magReviseren === 'meerwerk' && !!scenario?.meerwerk_regel_id)
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
-  const [aantalEigenOpslag, setAantalEigenOpslag]     = useState(0)
+  const [eigenOpslag, setEigenOpslag]                 = useState<EigenOpslag>({ aantal: 0, percentages: [] })
   const [kostprijs, setKostprijs]                     = useState(0)
   const [verkoopprijs, setVerkoopprijs]               = useState(0)
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
@@ -185,17 +188,26 @@ export default function CalculatieHoofdscherm({
     // Met de tijdtoeslag in de arbeidsnormen: de btw-uitsplitsing in de totalenbalk
     // telt zo dezelfde verkoopprijs als hierboven.
     setComponentenVoorBtw(metTijdtoeslag(cs, rs, gs))
-    const metEigen = new Set(cs.filter(c => c.opslag_pct !== undefined).map(c => c.calculatieregel_id))
-    rs.forEach(r => { if (r.opslag_pct !== undefined) metEigen.add(r.id) })
-    setAantalEigenOpslag(metEigen.size)
+    setEigenOpslag(eigenOpslagen(rs, cs))
   }, [refreshTotalen, scenario])
 
   /* ── Controle vóór de offerte ────────────────────────────────────── */
   const controle = useCalculatieControle({
     scenario, regels: regelsVoorBtw, componenten: componentenVoorBtw, kostprijs, verkoopprijs, versie: refreshTotalen,
   })
+  const uitvraag = useUitvraagInCalculatie({ dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly })
   const uurtarieven = useInstellingen().uurtarieven ?? []
   const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
+
+  // Een calculatie begint altijd met het ★-tarief uit Stamgegevens. Calculaties die
+  // zonder tarief zijn begonnen (de instellingen waren toen nog niet geladen, of lazen
+  // een lege lijst) krijgen het bij openen alsnog. Alleen het veld: bestaande regels
+  // houden hun tarief. Niet bij een bevroren of alleen-lezen calculatie.
+  useEffect(() => {
+    if (!scenario || readOnly || scenario.standaard_uurtarief || globaalTarief <= 0) return
+    handleScenarioWijzig({ standaard_uurtarief: globaalTarief })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario?.id, globaalTarief, readOnly])
 
   /* ── Opslaan (automatisch + handmatig) ───────────────────────────── */
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -345,23 +357,26 @@ export default function CalculatieHoofdscherm({
    *  de eigen percentages van alle regels weg, zodat ze die standaard volgen. Daarna
    *  kan elke regel weer een afwijkend percentage krijgen. Ctrl+Z zet de regels terug;
    *  de waarde in de balk blijft staan en typ je desgewenst opnieuw. */
-  const handleOpslagToepassen = (pct: number) => {
+  /** Opslagveld in de totalenbalk: zet de opslag van de calculatie. Regels met een eigen
+   *  opslag% blijven staan, tenzij de calculator kiest voor "alle regels". */
+  const handleOpslagToepassen = (pct: number, ookEigen: boolean) => {
     if (readOnly) return
     gridRef.current?.duwSnapshot()
     handleScenarioWijzig({ opslag_pct: pct })
-    gridRef.current?.wisRegelOpslagen()
+    if (ookEigen) gridRef.current?.wisRegelOpslagen()
     handleWijziging()
   }
 
-  /** Uurtariefveld in de totalenbalk: zet het tarief van de calculatie én van alle
-   *  arbeidsregels erin. Het veld is het tarief van deze calculatie, dus een wijziging
-   *  hoort overal door te werken en niet alleen op nieuwe regels. Ctrl+Z zet de regels
-   *  terug; de waarde in de balk blijft staan. */
+  /** Uurtariefveld in de totalenbalk: zet het tarief van de calculatie. De arbeidsregels
+   *  die het oude tarief volgden gaan mee; een eigen tarief per regel (bijv. een uitvoerder
+   *  met een ander uurloon) blijft staan, en Controle laat die regels nakijken. Ctrl+Z zet
+   *  de regels terug; de waarde in de balk blijft staan. */
   const handleUurtariefToepassen = (tarief: number) => {
     if (readOnly) return
+    const oud = scenario.standaard_uurtarief || globaalTarief
     gridRef.current?.duwSnapshot()
     handleScenarioWijzig({ standaard_uurtarief: tarief })
-    gridRef.current?.zetArbeidTarieven(tarief)
+    gridRef.current?.zetArbeidTarieven(tarief, oud)
     handleWijziging()
   }
 
@@ -477,6 +492,7 @@ export default function CalculatieHoofdscherm({
         controle={{ ...controle.tellers, open: controleOpen, onToggle: () => setControleOpen(o => !o) }}
         onStartOfferte={startOfferte}
         onInstellingen={() => setInstellingenOpen(true)}
+        uitvraagKnop={uitvraag.knop}
       />
 
       {/* ─── Boom + Grid ── */}
@@ -502,7 +518,7 @@ export default function CalculatieHoofdscherm({
 
         {/* Grid */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-          <CalculatieGrid
+          <UitvraagProvider value={uitvraag.context}><CalculatieGrid
             ref={gridRef}
             scenarioId={scenario.id}
             scenario={scenario}
@@ -514,7 +530,7 @@ export default function CalculatieHoofdscherm({
             onInklapStatusChange={handleInklapStatus}
             bibliotheekItems={bibliotheekItems}
             readOnly={readOnly}
-          />
+          /></UitvraagProvider>
         </div>
 
         <ControlePaneel
@@ -522,6 +538,7 @@ export default function CalculatieHoofdscherm({
           punten={controle.punten} tellers={controle.tellers} readOnly={readOnly}
           onNaarRegel={handleNaarRegel} onKlopt={handleKlopt} acties={controleActies}
         />
+        {uitvraag.paneel}
 
         {/* Bibliotheek drawers */}
         <BibliotheekDrawer type="recepten"     open={receptenOpen}     onClose={() => setReceptenOpen(false)} />
@@ -538,7 +555,7 @@ export default function CalculatieHoofdscherm({
         componenten={componentenVoorBtw}
         onOpslagToepassen={handleOpslagToepassen}
         onUurtariefToepassen={handleUurtariefToepassen}
-        aantalEigenOpslag={aantalEigenOpslag}
+        eigenOpslag={eigenOpslag}
         readOnly={readOnly}
       />
 

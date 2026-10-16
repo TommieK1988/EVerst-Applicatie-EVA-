@@ -71,7 +71,7 @@ export default async function MobielHome({
       <AppBadge aantal={ongelezenMeldingen} />
 
       {signalen && (
-        <HomeSignalen uren={signalen.uren} magFiatteren={signalen.magFiatteren} />
+        <HomeSignalen uren={signalen.uren} magFiatteren={signalen.magFiatteren} kostenTeKeuren={signalen.kostenTeKeuren} />
       )}
 
       {vandaag && <VandaagWidget dag={vandaag.dag} items={vandaag.items} />}

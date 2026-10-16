@@ -27,7 +27,9 @@
     "weekAfgekeurdSub": "Pas je uren aan en dien de week opnieuw in",
     "weekNietIngediend": "Week {week} nog niet ingediend",
     "deadlineVerstreken": "{dagen, plural, one {De deadline was # dag geleden} other {De deadline was # dagen geleden}}",
-    "vulAan": "Vul je uren aan en dien de week in"
+    "vulAan": "Vul je uren aan en dien de week in",
+    "kostenTeKeuren": "{aantal, plural, one {# kostenpost goed te keuren} other {# kostenposten goed te keuren}}",
+    "kostenTeKeurenSub": "Parkeer- en reiskosten op jouw projecten"
   },
   "locatie": {
     "dossierBijLocatie": "Dossier bij jouw locatie · {afstand} m",

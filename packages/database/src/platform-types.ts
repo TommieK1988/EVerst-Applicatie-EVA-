@@ -713,6 +713,13 @@ export type DossierUitvraag = {
   /** Adressen van de laatste verzending; prefill voor een volgende rappel. */
   laatst_gemaild_naar: string[] | null
   opmerking: string | null
+  /** Uitvraagpakket vanuit de calculatie; leeg bij een losse uitvraag uit de tab Uitvraag. */
+  pakket_id: string | null
+  /** "Rekent met": met deze partij rekent de calculatie. Nog geen gunning; hooguit één per pakket. */
+  rekent_mee: boolean
+  /** De ontvangen offerte (pdf) in de dossiermap. */
+  offerte_bestand_naam: string | null
+  offerte_bestand_url: string | null
   created_at: string
   updated_at: string
   created_by: string | null
@@ -1970,6 +1977,12 @@ export type PortaalOnderdeel =
 export type PortaalDossierInstellingen = {
   dossier_id: string
   actief: boolean
+  /**
+   * Iemand heeft `actief` zelf gezet op de Portaal-tab. Zolang dit false is, zet
+   * een DB-trigger het dossier vanzelf open zodra het binnen het bereik valt van
+   * een contactpersoon met portaaltoegang.
+   */
+  actief_handmatig: boolean
   toon_bestanden: boolean
   toon_fotos: boolean
   toon_facturen: boolean

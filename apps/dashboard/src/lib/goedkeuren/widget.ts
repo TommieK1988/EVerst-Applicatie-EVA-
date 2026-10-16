@@ -25,6 +25,7 @@ import { getCurrentMedewerker, getEffectieveRechten, heeftModuleToegang } from '
 import { getLaatsteSyncTijd } from '@/lib/bouw7/sync-status'
 import { dossierSegment, offerteHref } from '@/lib/dossiers/href'
 import { periodeBereik } from '@/lib/uren/types'
+import { haalKostenTeKeuren } from '@/lib/uren/onkosten-goedkeuring'
 
 export type GoedkeurenSoort = 'inkoopfactuur' | 'offerte' | 'werkbegroting' | 'opdracht'
 
@@ -66,6 +67,12 @@ export type GoedkeurenData = {
   /** Offertes en werkbegrotingen, op deadline. Inkoop en uren staan apart: dat zijn tellers. */
   ligtBijJou: GoedkeurenItem[]
   inkoop: GoedkeurenInkoop
+  /**
+   * Ingediende kosten (parkeren, reiskosten, overig) die op jouw goedkeuring wachten: als
+   * projectleider van het project, of als goedkeurder bij kosten zonder project. Een stapel,
+   * net als de inkoopfacturen: je werkt ze af bovenaan het Uren-overzicht.
+   */
+  kosten: { aantal: number; bedrag: number }
   afgehandeld: GoedkeurenItem[]
   aantallen: { inkoopfactuur: number; offerte: number; werkbegroting: number; opdracht: number }
   /**
@@ -82,7 +89,7 @@ export type GoedkeurenData = {
 const GEEN_INKOOP: GoedkeurenInkoop = { aantal: 0, bedrag: 0, eersteVervaldatum: null }
 
 const LEEG: GoedkeurenData = {
-  ligtBijJou: [], inkoop: GEEN_INKOOP, afgehandeld: [],
+  ligtBijJou: [], inkoop: GEEN_INKOOP, kosten: { aantal: 0, bedrag: 0 }, afgehandeld: [],
   aantallen: { inkoopfactuur: 0, offerte: 0, werkbegroting: 0, opdracht: 0 },
   inkoopSyncOp: null,
 }
@@ -102,7 +109,7 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
 
   const sinds = new Date(Date.now() - AFGEHANDELD_DAGEN * 86_400_000).toISOString()
 
-  const [inkoopRes, openRes, afgehandeldRes, inkoopSyncOp] = await Promise.all([
+  const [inkoopRes, openRes, afgehandeldRes, inkoopSyncOp, kostenRijen] = await Promise.all([
     // Inkoopfacturen waar ik de huidige fiatteur ben. Gebonden aan het inkooprecht: zonder dat
     // recht hoort iemand deze regels niet te zien, ook niet als teller op zijn startpagina.
     // `count: 'exact'` naast de rijen: de teller moet kloppen ook als de stapel groter is dan wat
@@ -143,6 +150,9 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
       .limit(20),
 
     magInkoop ? getLaatsteSyncTijd('inkoopfacturen') : Promise.resolve(null),
+
+    // Uit de eigen database, dus geen reden om dit na te laden zoals de uren.
+    haalKostenTeKeuren(medewerker.id, { metBonnen: false }).catch(() => []),
   ])
 
   type DossierRef = {
@@ -271,6 +281,7 @@ export async function getGoedkeurenWidget(): Promise<GoedkeurenData> {
   return {
     ligtBijJou,
     inkoop,
+    kosten: { aantal: kostenRijen.length, bedrag: kostenRijen.reduce((s, k) => s + k.bedrag, 0) },
     afgehandeld,
     inkoopSyncOp,
     aantallen: {

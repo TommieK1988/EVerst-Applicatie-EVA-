@@ -112,6 +112,12 @@ export type DossierRij = Dossier & {
   bewaking_eigenaar?: string | null
   /** True zodra er een bewakingskaart bestaat; onderscheidt "niets afgesproken" van "geen kaart". */
   bewaking_actief?: boolean
+  /** Nabellen: null = op bedragklasse, 'altijd' of 'niet' (zie lib/commercie/opvolging). */
+  bewaking_opvolging?: 'altijd' | 'niet' | null
+  /** Waarom de offerte stilstaat (sleutel uit STIL_REDENEN). */
+  bewaking_stil_reden?: string | null
+  /** Wanneer de klant beslist (ALV, begroting); kan later liggen dan de hercontrole. */
+  bewaking_besluit_datum?: string | null
   /** "Intern"-toggle (sleutel 'intern') aan → dossier wordt verborgen op de borden/lijsten. */
   intern: boolean
 }

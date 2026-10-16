@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { useTranslations } from 'next-intl'
@@ -11,7 +11,7 @@ import { voegRegelToe, wijzigRegel, verwijderRegel, dienWeekIn } from '@/lib/ure
 import { verwijderOnkosten } from '@/lib/uren/onkosten-acties'
 import { OVERUREN_BRON } from '@/lib/uren/rekenregel'
 import RegelSheet from './RegelSheet'
-import OnkostenSheet from './OnkostenSheet'
+import OnkostenSheet, { type DagProject } from './OnkostenSheet'
 
 /**
  * De mobiele weekstaat: per dag een kaart met regels, een voortgangskop en één knop Indienen.
@@ -55,6 +55,17 @@ export default function WeekstaatClient({
   const [sheet, setSheet] = useState<{ datum: string; regel: WeekRegel | null } | null>(null)
   const [kostenSheet, setKostenSheet] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
+
+  // De echte projecten waarop die dag uren staan: daar zijn de kosten bijna altijd voor gemaakt.
+  const dagProjecten = useMemo<DagProject[]>(() => {
+    const uit = new Map<string, string>()
+    for (const r of staat.regels) {
+      if (r.datum === kostenSheet && r.categorie === 'werk' && r.dossier_id && !r.indirect) {
+        uit.set(r.dossier_id, r.dossier_label ?? '—')
+      }
+    }
+    return [...uit].map(([id, label]) => ({ id, label }))
+  }, [staat.regels, kostenSheet])
 
   const statusSleutel: StatusSleutel = staat.status in STATUS_KLEUR ? staat.status as StatusSleutel : 'concept'
   const status = STATUS_KLEUR[statusSleutel]
@@ -174,9 +185,6 @@ export default function WeekstaatClient({
           const regels = staat.regels.filter(r => r.datum === datum)
           const dagKosten = staat.onkosten.filter(k => k.datum === datum)
           const dagTotaal = regels.reduce((s, r) => s + r.uren, 0)
-          // Kosten hebben geen eigen goedkeuring: zijn er uren van deze dag goedgekeurd, dan
-          // heeft de goedkeurder de dag bekeken en liggen de kosten ook vast.
-          const kostenWijzigbaar = staat.wijzigbaar && !regels.some(r => r.goedgekeurd)
           const isVandaag = datum === vandaag
 
           // Lege weekenddagen tonen we niet: die vullen het scherm zonder iets te zeggen.
@@ -272,16 +280,23 @@ export default function WeekstaatClient({
                       }} />
                     </a>
                   )}
-                  <span style={{ fontSize: 13, color: 'var(--fg)', flex: 1, minWidth: 0 }}>
-                    {t(`onkosten.label.${k.soort}`)}
-                    {k.vervoermiddel ? ` · ${t(`onkosten.vervoer.${k.vervoermiddel}`)}` : ''}
-                    {k.km ? ` · ${t('weekstaat.km', { km: k.km.toLocaleString(locale) })}` : ''}
-                    {k.omschrijving ? ` · ${k.omschrijving}` : ''}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: 'var(--fg)' }}>
+                      {t(`onkosten.label.${k.soort}`)}
+                      {k.vervoermiddel ? ` · ${t(`onkosten.vervoer.${k.vervoermiddel}`)}` : ''}
+                      {k.km ? ` · ${t('weekstaat.km', { km: k.km.toLocaleString(locale) })}` : ''}
+                      {k.omschrijving ? ` · ${k.omschrijving}` : ''}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#8a949a', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {k.project_label ?? t('onkosten.geenProject')}
+                    </div>
+                    <KostenStatusRegel status={k.goedkeuring_status} reden={k.afkeur_reden} ingediend={!staat.bewerkbaar} />
+                  </div>
                   <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {euro(k.bedrag)}
                   </span>
-                  {kostenWijzigbaar && (
+                  {/* Een beoordeelde post ligt vast; de rest kan weg zolang de week open staat. */}
+                  {staat.wijzigbaar && k.goedkeuring_status === 'open' && (
                     <button type="button" onClick={() => verwijderKosten(k.id)}
                       aria-label={t('weekstaat.kostenVerwijderen')} style={{ ...rijKnop, color: '#c0392b' }}>×</button>
                   )}
@@ -298,14 +313,16 @@ export default function WeekstaatClient({
                     }}>
                     {t('weekstaat.urenToevoegen')}
                   </button>
-                  {kostenWijzigbaar && <button type="button" onClick={() => setKostenSheet(datum)}
+                  {/* Kosten hebben hun eigen goedkeuring: een goedgekeurde uurregel op deze dag
+                      houdt een nieuwe kostenpost dus niet tegen. */}
+                  <button type="button" onClick={() => setKostenSheet(datum)}
                     style={{
                       padding: '11px 14px', border: 'none', background: 'transparent',
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c',
                       cursor: 'pointer',
                     }}>
                     {t('weekstaat.kostenToevoegen')}
-                  </button>}
+                  </button>
                 </div>
               )}
             </div>
@@ -348,6 +365,8 @@ export default function WeekstaatClient({
           weekId={staat.weekId}
           datum={kostenSheet}
           kmTarieven={staat.kmTarieven}
+          dagProjecten={dagProjecten}
+          kantoor={staat.kantoor}
           onSluit={() => setKostenSheet(null)}
           onKlaar={ververs}
         />
@@ -375,4 +394,23 @@ export default function WeekstaatClient({
 const rijKnop: React.CSSProperties = {
   width: 30, height: 30, padding: 0, border: 'none', background: 'transparent',
   cursor: 'pointer', color: '#6b757c', fontSize: 16, lineHeight: 1, flexShrink: 0,
+}
+
+/**
+ * Hoe het met een kostenpost staat. Vóór het indienen niets: dan is het nog een concept en ligt
+ * hij bij niemand. Een afgekeurde post toont de reden -- die staat ook in de melding, maar hier
+ * vindt de medewerker hem terug.
+ */
+function KostenStatusRegel({ status, reden, ingediend }: {
+  status: Weekstaat['onkosten'][number]['goedkeuring_status']
+  reden: string | null
+  ingediend: boolean
+}) {
+  const t = useTranslations('uren')
+  if (status === 'open' && !ingediend) return null
+  const [tekst, kleur] =
+    status === 'goedgekeurd' ? [t('weekstaat.kostenGoedgekeurd'), '#009439']
+    : status === 'afgekeurd' ? [t('weekstaat.kostenAfgekeurd', { reden: reden ?? '' }), '#c0392b']
+    : [t('weekstaat.kostenWacht'), '#0b6bcb']
+  return <div style={{ fontSize: 11, fontWeight: 600, color: kleur, marginTop: 3 }}>{tekst}</div>
 }

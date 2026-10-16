@@ -323,6 +323,11 @@ export interface MiniMeting {
   /** Welk totaal deze regel gebruikt als er aftrekregels zijn. Steiger: bruto; reinigen,
    *  voegen: netto. Zonder aftrekregels zijn ze gelijk. Leeg = netto. */
   gebruik?: 'bruto' | 'netto'
+  /** Label in de keuzelijst "Gemeten in deze calculatie", bv. "Gevelvlak voorgevel". */
+  naam?: string
+  /** Gedeelde meting: regels in hetzelfde scenario met dezelfde koppel_id houden dezelfde
+   *  maten bij (ieder met een eigen kopie en een eigen keuze bruto/netto). Leeg = los. */
+  koppel_id?: string
 }
 
 // ─── Instellingen ─────────────────────────────────────────────────────────────
@@ -336,6 +341,8 @@ export interface Instellingen {
   categorieen?: string[]                         // bijv. ['Schilderwerk', 'Timmerwerk', ...]
   categorieCodes?: Record<string, string>        // bijv. { 'Schilderwerk': 'SC', ... }
   standaard_kostengroepen?: string[]             // bijv. ['Bouwplaats', 'Bereikbaarheid', 'Arbeid']
+  /** Opslag% waarmee een nieuwe calculatie begint. Leeg = 25%. */
+  standaard_opslag_pct?: number
 }
 
 export type ComponentType = 'arbeid' | 'materieel' | 'onderaanneming'

@@ -51,7 +51,10 @@
     "overurenUitleg": "Die uren gaan naar je tijd-voor-tijdsaldo. Daarom staat er een regel van −{uren} uur tijd voor tijd. Zo klopt je week precies met je contract. Je hoeft hier niets voor te doen.",
     "overurenRegel": "Overuren naar je saldo",
     "wijzigenTot": "Je kunt je week nog aanpassen tot {moment}. Uren die je goedkeurder al heeft goedgekeurd, liggen vast.",
-    "regelGoedgekeurd": "Goedgekeurd"
+    "regelGoedgekeurd": "Goedgekeurd",
+    "kostenWacht": "Wacht op goedkeuring",
+    "kostenGoedgekeurd": "Goedgekeurd",
+    "kostenAfgekeurd": "Afgekeurd: {reden}"
   },
   "regel": {
     "titelNieuw": "Uren toevoegen",
@@ -129,8 +132,14 @@
       "vulKm": "Vul het aantal kilometers in.",
       "vulBedrag": "Vul een bedrag in.",
       "fotoKaartje": "Voeg een foto van je kaartje of bonnetje toe.",
-      "fotoBon": "Voeg een foto van het bonnetje toe."
-    }
+      "fotoBon": "Voeg een foto van het bonnetje toe.",
+      "kiesProject": "Kies voor welk project je deze kosten maakte, of kies Geen project."
+    },
+    "project": "Project",
+    "geenProject": "Geen project",
+    "geenProjectKiezen": "Geen project (bijvoorbeeld kantoor)",
+    "geenProjectUitleg": "Je eigen goedkeurder keurt deze kosten goed.",
+    "projectUitleg": "De projectleider van dit project keurt deze kosten goed."
   },
   "fout": {
     "weekAlIngediend": "Deze week is al ingediend.",
@@ -165,11 +174,12 @@
     "tvtSaldoTeLaag": "Je hebt niet genoeg tijd-voor-tijdsaldo: je wilt {uren} uur opnemen en je hebt {beschikbaar} uur beschikbaar.",
     "regelAlGoedgekeurd": "Deze regel is al goedgekeurd. Aanpassen kan niet meer; vraag het je goedkeurder.",
     "overurenAlGoedgekeurd": "Deze wijziging verandert je overuren, en die zijn al goedgekeurd. Vraag het je goedkeurder.",
-    "dagAlGoedgekeurd": "De uren van deze dag zijn al goedgekeurd. Kosten aanpassen kan niet meer; vraag het je goedkeurder."
+    "kostenAlBeoordeeld": "Deze kosten zijn al beoordeeld en liggen vast.",
+    "ongeldigKostenProject": "Dit project kun je voor deze dag niet kiezen. Kies een project uit de lijst, of Geen project."
   },
   "keuren": {
     "titel": "Fiatteren",
-    "sub": "Uren op jouw akkoord",
+    "sub": "Uren en kosten op jouw akkoord",
     "rol": {
       "projectleider": "als projectleider",
       "teamleider": "als teamleider",
@@ -242,5 +252,32 @@
     "geenCodes": "Voor dit project staan geen bewakingscodes in EVA. Dat moet eerst in Bouw7 geregeld worden; daarna is het hier te kiezen.",
     "zetOp": "{aantal, plural, one {Zet de regel op {code}} other {Zet alle # regels op {code}}}",
     "kiesAndere": "Kies een andere code"
+  },
+  "kostenKeuren": {
+    "titel": "Kosten om goed te keuren",
+    "overige": "Andere ingediende kosten",
+    "goedkeuren": "Goedkeuren",
+    "afkeuren": "Afkeuren",
+    "allesGoedkeuren": "Alle {aantal} goedkeuren · {bedrag}",
+    "afkeurTitel": "Kosten afkeuren",
+    "afkeurUitleg": "{naam} krijgt een melding met je reden. Deze kosten worden niet vergoed.",
+    "reden": "Reden",
+    "redenVoorbeeld": "Bijvoorbeeld: bonnetje is onleesbaar",
+    "goedgekeurdToast": "{aantal, plural, one {Kostenpost goedgekeurd.} other {# kostenposten goedgekeurd.}}",
+    "afgekeurdToast": "Kosten afgekeurd.",
+    "goedgekeurdDoor": "goedgekeurd door {naam}",
+    "goedgekeurd": "goedgekeurd",
+    "afgekeurdDoor": "afgekeurd door {naam}: {reden}",
+    "mislukt": "Dat is niet gelukt. Probeer het zo nog eens.",
+    "rol": {
+      "projectleider": "als projectleider",
+      "goedkeurder": "als goedkeurder"
+    },
+    "fout": {
+      "geenSelectie": "Geen kosten gekozen.",
+      "nietBijJou": "Deze kosten liggen niet (meer) bij jou om te beoordelen.",
+      "geefReden": "Geef aan waarom je deze kosten afkeurt.",
+      "alBeoordeeld": "Een collega heeft deze kosten net beoordeeld."
+    }
   }
 }

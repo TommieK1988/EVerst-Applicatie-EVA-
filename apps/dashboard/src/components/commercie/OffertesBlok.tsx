@@ -1,75 +1,46 @@
 /**
- * De Bouw7-offertes onder dit project.
- *
- * Staat op de bewakingstab omdat de vraag "welke offerte bewaak ik eigenlijk?" pas ontstaat als
- * er meer dan één is. Bij precies één offerte voegt dit blok weinig toe, maar het weglaten zou
- * betekenen dat je nooit ziet dát er maar één is — en dan blijf je twijfelen.
+ * De Bouw7-offertes onder dit project. Leesbron is `bouw7_offertes` (gevuld door de sync):
+ * Bouw7-gegevens, geen EVA-administratie. Zonder offertes één zin, geen lege rij met € 0.
  */
 
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { formatDatumNL } from '@/lib/dossiers/datum-regels'
-import type { OfferteRegel } from '@/lib/commercie/actions'
+import type { OfferteRegel } from '@/lib/commercie/bouw7-offertes'
 
 const eur = (n: number | null) =>
   n == null ? '—' : new Intl.NumberFormat('nl-NL', {
     style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
   }).format(n)
 
+const LABEL = 'text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500'
+
 export function OffertesBlok({ offertes }: { offertes: OfferteRegel[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-sm font-semibold">
-          Offertes in Bouw7
-          <span className="ml-2 font-normal opacity-70">{offertes.length}</span>
-        </h2>
-      </CardHeader>
-      <CardBody className="overflow-x-auto p-0">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-500">
-              <th className="px-4 py-2 font-semibold">Nummer</th>
-              <th className="px-4 py-2 font-semibold">Onderwerp</th>
-              <th className="px-4 py-2 font-semibold">Datum</th>
-              <th className="px-4 py-2 font-semibold">Status</th>
-              <th className="px-4 py-2 text-right font-semibold">Bedrag excl. btw</th>
-              <th className="px-4 py-2 font-semibold">Calculator</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Nog geen offerte in Bouw7: de kolommen blijven staan met een nulregel. */}
-            {offertes.length === 0 && (
-              <tr className="border-b border-neutral-100 text-neutral-400 last:border-0">
-                <td className="whitespace-nowrap px-4 py-2">—</td>
-                <td className="px-4 py-2">—</td>
-                <td className="whitespace-nowrap px-4 py-2">—</td>
-                <td className="whitespace-nowrap px-4 py-2">—</td>
-                <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{eur(0)}</td>
-                <td className="whitespace-nowrap px-4 py-2">—</td>
-              </tr>
-            )}
-            {offertes.map(o => (
-              <tr key={o.id} className="border-b border-neutral-100 last:border-0">
-                <td className="whitespace-nowrap px-4 py-2 font-medium">{o.nummer ?? '—'}</td>
-                <td className="max-w-[320px] truncate px-4 py-2" title={o.onderwerp ?? ''}>
-                  {o.onderwerp ?? '—'}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2">
-                  {o.datum ? formatDatumNL(o.datum) : '—'}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2">{o.status ?? '—'}</td>
-                <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{eur(o.bedrag)}</td>
-                <td className="whitespace-nowrap px-4 py-2">{o.calculator ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {offertes.length === 0 && (
-          <p className="px-4 py-2.5 text-[11.5px] text-neutral-500">
-            Nog geen offerte onder dit project in Bouw7.
-          </p>
-        )}
-      </CardBody>
-    </Card>
+    <section className="rounded-[10px] border border-neutral-200 bg-white" aria-label="Offertes in Bouw7">
+      <div className="flex items-baseline gap-2 border-b border-neutral-200 px-4 py-3">
+        <span className={LABEL}>Offertes in Bouw7</span>
+        {offertes.length > 0 && <span className="text-xs tabular-nums text-neutral-500">{offertes.length}</span>}
+      </div>
+      {offertes.length === 0 ? (
+        <p className="px-4 py-3 text-[13px] text-neutral-500">
+          Geen offertes in Bouw7 onder dit project. Is de offerte in EVA gemaakt, dan staat hij op de kaart hiernaast.
+        </p>
+      ) : (
+        <ul className="flex flex-col">
+          {offertes.map(o => (
+            <li key={o.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-b border-neutral-100 px-4 py-2 last:border-b-0">
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-neutral-900" title={o.onderwerp ?? ''}>
+                  {o.nummer ?? '—'}{o.onderwerp ? ` · ${o.onderwerp}` : ''}
+                </span>
+                <span className="block truncate text-xs text-neutral-500">
+                  {[o.datum ? formatDatumNL(o.datum) : null, o.status, o.calculator].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <span className="text-right text-[13px] font-semibold tabular-nums text-neutral-900">{eur(o.bedrag)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

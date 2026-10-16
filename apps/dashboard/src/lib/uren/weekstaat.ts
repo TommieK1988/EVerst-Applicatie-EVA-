@@ -25,8 +25,7 @@ import {
   wijzigVenster, vereisWijzigbaar, tekortNaWijziging, verwijderUitBouw7, stuurWijzigingNaarBouw7, WEEK_JOIN,
   goedgekeurdeRegelIds,
 } from './wijzigen-na-indienen'
-import type { OnkostenSoort, Vervoermiddel } from './onkosten'
-import { signBonnen } from './bonnen'
+import { naarWeekOnkosten, WEEK_ONKOSTEN_SELECT, type WeekOnkosten } from './week-onkosten'
 import { BOEKBAAR_FILTER } from './boekbaar'
 import { getBewakingscodesVoorUurlog } from '@/lib/dossiers/actions'
 import { zetOverurenRegels, overurenDieVervallen } from './overuren'
@@ -64,18 +63,7 @@ export type WeekRegel = {
   goedgekeurd: boolean
 }
 
-export type WeekOnkosten = {
-  id: string
-  datum: string
-  soort: OnkostenSoort
-  /** Alleen bij reiskosten; auto en bromfiets rekenen per kilometer, OV vraagt een kaartje. */
-  vervoermiddel: Vervoermiddel | null
-  bedrag: number
-  km: number | null
-  omschrijving: string | null
-  /** Verse signed URL van het bonnetje; de bucket is prive, zie ./bonnen. */
-  bon_url: string | null
-}
+export type { WeekOnkosten }
 
 export type Weekstaat = {
   weekId: string
@@ -210,7 +198,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
       .select('*, planning_uursoorten(naam, uren_categorie), dossiers(dossiernummer, titel)')
       .eq('week_id', weekId)
       .order('datum'),
-    supabase.from('uren_onkosten').select('*').eq('week_id', weekId).order('datum'),
+    supabase.from('uren_onkosten').select(WEEK_ONKOSTEN_SELECT).eq('week_id', weekId).order('datum'),
     supabase.from('uren_saldo_per_medewerker').select('saldo_uren').eq('medewerker_id', medewerker.id).maybeSingle(),
     getUrenInstellingen(),
     getIndirecteDossierIds(),
@@ -252,11 +240,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     ? await blokkadeTekst(totalen, contracturen, ongecodeerd, bestemming.extern)
     : null
 
-  // Eén batch-call voor alle bonnen van de week; de bucket is privé, dus elke render een verse link.
-  const [bonLinks, venster] = await Promise.all([
-    signBonnen((onkosten ?? []).map((o: Record<string, unknown>) => o.bon_pad as string)),
-    wijzigVenster(week),
-  ])
+  const [kosten, venster] = await Promise.all([naarWeekOnkosten(onkosten ?? []), wijzigVenster(week)])
 
   return {
     weekId,
@@ -275,16 +259,7 @@ export async function getWeekstaat(datum?: string): Promise<Weekstaat> {
     wijzigenTot: venster.tot,
     afkeurReden: week.afkeur_reden,
     regels: nette,
-    onkosten: (onkosten ?? []).map((o: Record<string, unknown>) => ({
-      id: o.id as string,
-      datum: o.datum as string,
-      soort: o.soort as OnkostenSoort,
-      vervoermiddel: (o.vervoermiddel as Vervoermiddel) ?? null,
-      bedrag: Number(o.bedrag),
-      km: o.km == null ? null : Number(o.km),
-      omschrijving: (o.omschrijving as string) ?? null,
-      bon_url: bonLinks.get(o.bon_pad as string) ?? null,
-    })),
+    onkosten: kosten,
     kmTarieven: { auto: inst.km_vergoeding_auto, bromfiets: inst.km_vergoeding_bromfiets },
     kantoor: bestemming.kantoor,
     extern: bestemming.extern,

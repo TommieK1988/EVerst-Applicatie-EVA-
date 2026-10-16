@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { AlertTriangle, ChevronRight, Clock, Stamp } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Clock, Receipt, Stamp } from 'lucide-react'
 import { getUrenTeFiatterenAantal } from '@/lib/goedkeuren/widget'
 import type { UrenSignaal } from '@/lib/mobiel/home'
 
@@ -31,9 +31,11 @@ const ZACHT = '#9aa4ab'
  * dat is een platformscherm, en `MobileRedirect` stuurt een telefoon daarvandaan
  * meteen terug naar `/m`.
  */
-export default function HomeSignalen({ uren, magFiatteren }: {
+export default function HomeSignalen({ uren, magFiatteren, kostenTeKeuren }: {
   uren: UrenSignaal[]
   magFiatteren: boolean
+  /** Uit de eigen database; komt dus al met de eerste render mee. */
+  kostenTeKeuren: number
 }) {
   const t = useTranslations('home.signalen')
   const [fiatteren, setFiatteren] = React.useState<number | null>(null)
@@ -50,7 +52,7 @@ export default function HomeSignalen({ uren, magFiatteren }: {
   }, [magFiatteren])
 
   const teFiatteren = fiatteren ?? 0
-  if (uren.length === 0 && teFiatteren === 0) return null
+  if (uren.length === 0 && teFiatteren === 0 && kostenTeKeuren === 0) return null
 
   return (
     <section style={{ padding: '14px 16px 0' }}>
@@ -97,6 +99,23 @@ export default function HomeSignalen({ uren, magFiatteren }: {
             <Tekst
               titel={t('teFiatteren', { aantal: teFiatteren })}
               sub={t('teFiatterenSub')}
+            />
+            <ChevronRight size={16} strokeWidth={2.4} color={ZACHT} style={{ flexShrink: 0 }} />
+          </Link>
+        )}
+
+        {kostenTeKeuren > 0 && (
+          <Link
+            href="/m/uren/keuren"
+            style={{
+              ...regelStyle,
+              borderTop: uren.length === 0 && teFiatteren === 0 ? 'none' : '1px solid var(--border)',
+            }}
+          >
+            <Icoon kleur={ORANJE}><Receipt size={17} strokeWidth={2.1} /></Icoon>
+            <Tekst
+              titel={t('kostenTeKeuren', { aantal: kostenTeKeuren })}
+              sub={t('kostenTeKeurenSub')}
             />
             <ChevronRight size={16} strokeWidth={2.4} color={ZACHT} style={{ flexShrink: 0 }} />
           </Link>

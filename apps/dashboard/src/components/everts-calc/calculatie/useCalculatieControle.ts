@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { offerteKeuzesBestaan } from '@/lib/everts-calc/offerte-keuzes'
-import { getGroepen } from '@/lib/everts-calc/local-store'
+import { getGroepen, globaalUurtarief } from '@/lib/everts-calc/local-store'
+import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { controleerCalculatie, telControle } from '@/lib/everts-calc/controle'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 
@@ -37,10 +38,13 @@ export function useCalculatieControle({ scenario, regels, componenten, kostprijs
     [scenarioId, versie])
 
   const bevestigd = scenario?.controle_bevestigd
-  const invoer = { groepen, regels, componenten, kostprijs, verkoopprijs, voorwaardenGekozen, bevestigd }
+  // Opnieuw rekenen zodra de uurtarieven uit Stamgegevens binnen zijn.
+  const instellingen = useInstellingen()
+  const calculatietarief = scenario?.standaard_uurtarief || globaalUurtarief()
+  const invoer = { groepen, regels, componenten, kostprijs, verkoopprijs, voorwaardenGekozen, bevestigd, calculatietarief }
   const punten = useMemo(() => controleerCalculatie(invoer),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groepen, regels, componenten, kostprijs, verkoopprijs, voorwaardenGekozen, bevestigd])
+    [groepen, regels, componenten, kostprijs, verkoopprijs, voorwaardenGekozen, bevestigd, calculatietarief, instellingen])
   const puntenVoorOfferte = useMemo(() => punten.filter(p => p.soort !== 'geen_voorwaarden'), [punten])
 
   return { punten, puntenVoorOfferte, tellers: telControle(punten) }

@@ -309,6 +309,7 @@ export function GroepSectie({
               key={r.id} regel={r} componenten={alleComponenten}
               diepte={diepte + 1} defaultOpslag={defaultOpslag} standaardTarief={standaardTarief} colOrder={colOrder} btwTarieven={btwTarieven}
               uurtarieven={uurtarieven} eenheden={eenheden} scenarioId={scenarioId} onHerlaad={onHerlaad}
+              scenarioRegels={alleRegels}
               onWijzig={onRegelWijzig} onWijzigComponent={onRegelComponentWijzig}
               onWijzigComponentExtra={onWijzigComponentExtra}
               onVoegComponentToe={onVoegComponentToe}

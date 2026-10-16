@@ -1234,6 +1234,9 @@ export type Database = {
           afgerond_door: string | null
           afgerond_op: string | null
           afgerond_reden: string | null
+          besluit_datum: string | null
+          opvolging: string | null
+          stil_reden: string | null
           bron_dossier_id: string | null
           created_at: string
           dossier_id: string | null
@@ -1260,6 +1263,9 @@ export type Database = {
           afgerond_door?: string | null
           afgerond_op?: string | null
           afgerond_reden?: string | null
+          besluit_datum?: string | null
+          opvolging?: string | null
+          stil_reden?: string | null
           bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
@@ -1286,6 +1292,9 @@ export type Database = {
           afgerond_door?: string | null
           afgerond_op?: string | null
           afgerond_reden?: string | null
+          besluit_datum?: string | null
+          opvolging?: string | null
+          stil_reden?: string | null
           bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
@@ -3258,6 +3267,108 @@ export type Database = {
           },
         ]
       }
+      dossier_uitvraag_pakketten: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          dossier_id: string
+          id: string
+          inhoud: string
+          naam: string
+          projectbezoek_op: string | null
+          reactie_uiterlijk: string | null
+          scenario_id: string | null
+          soort: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          dossier_id: string
+          id?: string
+          inhoud?: string
+          naam: string
+          projectbezoek_op?: string | null
+          reactie_uiterlijk?: string | null
+          scenario_id?: string | null
+          soort?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          dossier_id?: string
+          id?: string
+          inhoud?: string
+          naam?: string
+          projectbezoek_op?: string | null
+          reactie_uiterlijk?: string | null
+          scenario_id?: string | null
+          soort?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dossier_uitvraag_posten: {
+        Row: {
+          calculatieregel_id: string
+          eenheid: string | null
+          hoeveelheid: number | null
+          id: string
+          omschrijving: string
+          pakket_id: string
+          volgorde: number
+        }
+        Insert: {
+          calculatieregel_id: string
+          eenheid?: string | null
+          hoeveelheid?: number | null
+          id?: string
+          omschrijving: string
+          pakket_id: string
+          volgorde?: number
+        }
+        Update: {
+          calculatieregel_id?: string
+          eenheid?: string | null
+          hoeveelheid?: number | null
+          id?: string
+          omschrijving?: string
+          pakket_id?: string
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_uitvraag_posten_pakket_id_fkey"
+            columns: ["pakket_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_uitvraag_pakketten"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossier_uitvragen: {
         Row: {
           aangevraagd_op: string | null
@@ -3268,11 +3379,15 @@ export type Database = {
           id: string
           laatst_gemaild_naar: string[] | null
           laatst_gerappelleerd_op: string | null
+          offerte_bestand_naam: string | null
+          offerte_bestand_url: string | null
           ontvangen_op: string | null
           opmerking: string | null
+          pakket_id: string | null
           partij_naam: string
           rappels: number
           reactie_uiterlijk: string | null
+          rekent_mee: boolean
           relatie_id: string | null
           soort: string
           status: string
@@ -3288,11 +3403,15 @@ export type Database = {
           id?: string
           laatst_gemaild_naar?: string[] | null
           laatst_gerappelleerd_op?: string | null
+          offerte_bestand_naam?: string | null
+          offerte_bestand_url?: string | null
           ontvangen_op?: string | null
           opmerking?: string | null
+          pakket_id?: string | null
           partij_naam: string
           rappels?: number
           reactie_uiterlijk?: string | null
+          rekent_mee?: boolean
           relatie_id?: string | null
           soort?: string
           status?: string
@@ -3308,11 +3427,15 @@ export type Database = {
           id?: string
           laatst_gemaild_naar?: string[] | null
           laatst_gerappelleerd_op?: string | null
+          offerte_bestand_naam?: string | null
+          offerte_bestand_url?: string | null
           ontvangen_op?: string | null
           opmerking?: string | null
+          pakket_id?: string | null
           partij_naam?: string
           rappels?: number
           reactie_uiterlijk?: string | null
+          rekent_mee?: boolean
           relatie_id?: string | null
           soort?: string
           status?: string
@@ -3339,6 +3462,13 @@ export type Database = {
             columns: ["dossier_id"]
             isOneToOne: false
             referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvragen_pakket_id_fkey"
+            columns: ["pakket_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_uitvraag_pakketten"
             referencedColumns: ["id"]
           },
           {
@@ -13063,6 +13193,7 @@ export type Database = {
       portaal_dossier_instellingen: {
         Row: {
           actief: boolean
+          actief_handmatig: boolean
           dossier_id: string
           gewijzigd_door: string | null
           gewijzigd_op: string
@@ -13080,6 +13211,7 @@ export type Database = {
         }
         Insert: {
           actief?: boolean
+          actief_handmatig?: boolean
           dossier_id: string
           gewijzigd_door?: string | null
           gewijzigd_op?: string
@@ -13097,6 +13229,7 @@ export type Database = {
         }
         Update: {
           actief?: boolean
+          actief_handmatig?: boolean
           dossier_id?: string
           gewijzigd_door?: string | null
           gewijzigd_op?: string
@@ -13401,6 +13534,53 @@ export type Database = {
             columns: ["portaal_gebruiker_id"]
             isOneToOne: false
             referencedRelation: "portaal_gebruikers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portaal_standaard_onderdelen: {
+        Row: {
+          gewijzigd_door: string | null
+          gewijzigd_op: string
+          id: boolean
+          toon_aandachtspunten: boolean
+          toon_bestanden: boolean
+          toon_chat: boolean
+          toon_facturen: boolean
+          toon_formulieren: boolean
+          toon_fotos: boolean
+          toon_planning: boolean
+        }
+        Insert: {
+          gewijzigd_door?: string | null
+          gewijzigd_op?: string
+          id?: boolean
+          toon_aandachtspunten?: boolean
+          toon_bestanden?: boolean
+          toon_chat?: boolean
+          toon_facturen?: boolean
+          toon_formulieren?: boolean
+          toon_fotos?: boolean
+          toon_planning?: boolean
+        }
+        Update: {
+          gewijzigd_door?: string | null
+          gewijzigd_op?: string
+          id?: boolean
+          toon_aandachtspunten?: boolean
+          toon_bestanden?: boolean
+          toon_chat?: boolean
+          toon_facturen?: boolean
+          toon_formulieren?: boolean
+          toon_fotos?: boolean
+          toon_planning?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portaal_standaard_onderdelen_gewijzigd_door_fkey"
+            columns: ["gewijzigd_door"]
+            isOneToOne: false
+            referencedRelation: "medewerkers"
             referencedColumns: ["id"]
           },
         ]
@@ -17466,11 +17646,15 @@ export type Database = {
       }
       uren_onkosten: {
         Row: {
+          afkeur_reden: string | null
           bedrag: number
+          beoordeeld_door: string | null
+          beoordeeld_op: string | null
           bon_pad: string | null
           created_at: string
           datum: string
           dossier_id: string | null
+          goedkeuring_status: string
           id: string
           km: number | null
           medewerker_id: string
@@ -17481,11 +17665,15 @@ export type Database = {
           week_id: string
         }
         Insert: {
+          afkeur_reden?: string | null
           bedrag: number
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
           bon_pad?: string | null
           created_at?: string
           datum: string
           dossier_id?: string | null
+          goedkeuring_status?: string
           id?: string
           km?: number | null
           medewerker_id: string
@@ -17496,11 +17684,15 @@ export type Database = {
           week_id: string
         }
         Update: {
+          afkeur_reden?: string | null
           bedrag?: number
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
           bon_pad?: string | null
           created_at?: string
           datum?: string
           dossier_id?: string | null
+          goedkeuring_status?: string
           id?: string
           km?: number | null
           medewerker_id?: string
@@ -19972,6 +20164,25 @@ export type Database = {
           planning_eind: string
           planning_start: string
         }[]
+      }
+      portaal_dossier_automatisch_openen: {
+        Args: { p_dossier_id: string }
+        Returns: boolean
+      }
+      portaal_gebruiker_dossiers_openen: {
+        Args: { p_gebruiker_id: string }
+        Returns: number
+      }
+      portaal_gebruiker_ziet_dossier: {
+        Args: {
+          p_contactpersoon_id: string
+          p_dossier_contactpersoon_id: string
+          p_dossier_klant_id: string
+          p_particulier_id: string
+          p_relatie_id: string
+          p_scope: string
+        }
+        Returns: boolean
       }
       relatie_samenvoegen: {
         Args: { p_blijver: string; p_door?: string; p_verliezer: string }

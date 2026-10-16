@@ -8,6 +8,10 @@
 //
 // Deze bedragen gaan bewust NIET naar Bouw7: de hour-log daar kent geen geldbedragen, en het
 // als projectkosten boeken zou de inkoopstroom raken.
+//
+// Elke kostenpost hoort bij een project (of bewust bij geen): de projectleider van dat dossier
+// keurt hem goed. Dat beoordelen staat in ./onkosten-goedkeuring-acties; een beoordeelde post
+// ligt vast en kan de medewerker niet meer weghalen.
 
 import { createAdminClient } from '@everts/database/server'
 import { revalidatePath } from 'next/cache'
@@ -15,7 +19,8 @@ import { vereisSessie } from '@/lib/auth/rechten'
 import { getAppVertaler } from '@/i18n/server'
 import { eigenWeek } from './week-guard'
 import { vereisWijzigbaar } from './wijzigen-na-indienen'
-import { getUrenInstellingen } from './instellingen'
+import { getUrenInstellingen, getIndirecteDossierIds } from './instellingen'
+import { getDossierOpties } from './weekstaat'
 import {
   berekenKmBedrag, bonVerplicht, onkostenBezwaar, isOnkostenSoort, isVervoermiddel,
   rekentPerKm, type Vervoermiddel,
@@ -41,13 +46,16 @@ export async function voegOnkostenToe(
   // Foutteksten in de taal van de app: deze actie draait alleen vanuit EVA Mobiel.
   const t = await getAppVertaler('uren')
   const datum = String(formData.get('datum') ?? '')
-  // Een kostenpost heeft geen eigen goedkeuring: hij ligt vast als de uren van die dag dat zijn.
-  const geweigerd = await vereisWijzigbaar(week, { datum })
+  // Alleen het venster van de week telt: een kostenpost heeft zijn eigen goedkeuring, dus een
+  // al goedgekeurde uurregel op dezelfde dag houdt een nieuwe kostenpost niet tegen.
+  const geweigerd = await vereisWijzigbaar(week)
   if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
   const soortRuw = formData.get('soort')
   const vervoerRuw = formData.get('vervoermiddel')
   const omschrijving = String(formData.get('omschrijving') ?? '').trim()
+  // 'geen' is een bewuste keuze voor geen project; leeg is nog niets gekozen.
+  const project = String(formData.get('project') ?? '').trim()
   const bon = formData.get('bon')
   const bestand = bon instanceof File && bon.size > 0 ? bon : null
 
@@ -63,9 +71,14 @@ export async function voegOnkostenToe(
   const ingevuldBedrag = getal(formData.get('bedrag'))
 
   const bezwaar = onkostenBezwaar({
-    soort, vervoermiddel, km, bedrag: ingevuldBedrag, heeftBon: Boolean(bestand),
+    projectGekozen: project !== '', soort, vervoermiddel, km, bedrag: ingevuldBedrag, heeftBon: Boolean(bestand),
   })
   if (bezwaar) return { ok: false, error: t(`onkosten.bezwaar.${bezwaar}`) }
+
+  const dossierId = project === 'geen' ? null : project
+  if (dossierId && !(await magKostenOpProject(weekId, datum, dossierId))) {
+    return { ok: false, error: t('fout.ongeldigKostenProject') }
+  }
 
   // Het bedrag komt bij auto en bromfiets uit de instellingen, nooit uit de invoer: anders zou
   // een aangepast scherm de afgesproken kilometervergoeding stilzwijgend kunnen omzeilen.
@@ -99,7 +112,7 @@ export async function voegOnkostenToe(
     km: rekentPerKm(vervoermiddel) ? km : null,
     omschrijving: omschrijving || null,
     bon_pad: bonPad,
-    dossier_id: null,
+    dossier_id: dossierId,
   })
   if (error) {
     // Rij mislukt maar foto al geüpload: opruimen, anders blijft er een wees in de bucket.
@@ -109,6 +122,25 @@ export async function voegOnkostenToe(
 
   revalidatePath('/m/uren')
   return { ok: true }
+}
+
+/**
+ * Mag deze kostenpost op dit project? Alleen op een project dat de sheet ook aanbood: waar de
+ * medewerker rond die dag staat ingepland (`getDossierOpties`), of waar hij die dag uren op
+ * schreef. Het project wijst de goedkeurder aan; een vrij in te vullen id zou de kosten bij een
+ * willekeurige projectleider kunnen leggen. Indirecte-urenprojecten zijn geen project -- daar
+ * hoort "geen project" bij.
+ */
+async function magKostenOpProject(weekId: string, datum: string, dossierId: string): Promise<boolean> {
+  const [opties, indirect, { data: regels }] = await Promise.all([
+    getDossierOpties(datum),
+    getIndirecteDossierIds(),
+    // Eén dag van één week: een handvol regels.
+    createAdminClient().from('uren_regels').select('dossier_id').eq('week_id', weekId).eq('datum', datum),
+  ])
+  if (indirect.has(dossierId)) return false
+  return opties.some(o => o.id === dossierId && !o.indirect)
+    || (regels ?? []).some(r => r.dossier_id === dossierId)
 }
 
 /** Komma of punt, leeg veld wordt null. Telefoontoetsenborden leveren beide. */
@@ -127,22 +159,27 @@ export async function verwijderOnkosten(
   const supabase = createAdminClient()
   const { data: rij } = await supabase
     .from('uren_onkosten')
-    .select('id, medewerker_id, week_id, datum, bon_pad')
+    .select('id, medewerker_id, week_id, datum, bon_pad, goedkeuring_status')
     .eq('id', onkostenId)
     .maybeSingle()
   if (!rij) return { ok: false, error: t('fout.regelNietGevonden') }
   if (rij.medewerker_id !== medewerker.id) return { ok: false, error: t('fout.nietJouwRegel') }
+  // Beoordeeld is vast, ook een afgekeurde post: anders verdwijnt met de bon ook de reden.
+  if (rij.goedkeuring_status !== 'open') return { ok: false, error: t('fout.kostenAlBeoordeeld') }
 
   // De weekstatus apart opvragen en niet als join: een join dwingt hier een any-cast af, en
   // een tweede eenvoudige query leest net zo goed.
   const { data: week } = await supabase
     .from('uren_weken').select('id, week_start, status, medewerker_id, goedkeuring_modus').eq('id', rij.week_id).maybeSingle()
   if (!week) return { ok: false, error: t('fout.weekAlIngediend') }
-  const geweigerd = await vereisWijzigbaar(week, { datum: rij.datum })
+  const geweigerd = await vereisWijzigbaar(week)
   if (geweigerd) return { ok: false, error: t(`fout.${geweigerd}`) }
 
-  const { error } = await supabase.from('uren_onkosten').delete().eq('id', onkostenId)
+  // Alleen zolang hij open is: tussen het ophalen en nu kan de projectleider hem beoordeeld hebben.
+  const { data: weg, error } = await supabase
+    .from('uren_onkosten').delete().eq('id', onkostenId).eq('goedkeuring_status', 'open').select('id')
   if (error) return { ok: false, error: error.message }
+  if (!weg?.length) return { ok: false, error: t('fout.kostenAlBeoordeeld') }
   // Pas ná de rij: blijft het bestand staan terwijl de rij weg is, dan is dat een wees die
   // niemand meer kan vinden. Andersom zou de kostenpost naar een verdwenen bon wijzen.
   if (rij.bon_pad) await supabase.storage.from(ONKOSTEN_BUCKET).remove([rij.bon_pad])

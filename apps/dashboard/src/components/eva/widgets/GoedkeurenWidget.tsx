@@ -15,8 +15,8 @@ import type { GoedkeurenData, GoedkeurenItem, GoedkeurenSoort } from '@/lib/goed
  * met jouw eigen aanvragen is gebeurd (seintje). Dat tweede blok bestaat omdat je anders niet
  * merkt dat de controller je werkbegroting heeft goedgekeurd — of juist heeft teruggestuurd.
  *
- * DE VOLGORDE IS HET ONTWERP. Bovenaan de twee stapels die je in hun eigen scherm in één keer
- * afwerkt — inkoopfacturen, dan uren — elk als één regel met een teller. Daaronder de
+ * DE VOLGORDE IS HET ONTWERP. Bovenaan de stapels die je in hun eigen scherm in één keer
+ * afwerkt — inkoopfacturen, dan uren en ingediende kosten — elk als één regel met een teller. Daaronder de
  * beslissingen per stuk: offertes en werkbegrotingen, op deadline, want daar zit iemand op te
  * wachten. Een stapel die leeg is verdwijnt: een regel "0 facturen" is geen informatie maar ruis.
  *
@@ -101,9 +101,9 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
     return () => { afgebroken = true }
   }, [])
 
-  const { ligtBijJou, inkoop, afgehandeld, aantallen } = data
+  const { ligtBijJou, inkoop, kosten, afgehandeld, aantallen } = data
   const urenAantal = uren?.aantal ?? 0
-  const totaal = ligtBijJou.length + inkoop.aantal + urenAantal
+  const totaal = ligtBijJou.length + inkoop.aantal + urenAantal + kosten.aantal
   const ga = React.useCallback((href: string) => router.push(href), [router])
 
   const delen = [
@@ -112,6 +112,7 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
     aantallen.werkbegroting ? `${aantallen.werkbegroting} begroting` : null,
     aantallen.opdracht ? `${aantallen.opdracht} opdracht` : null,
     uren === null ? 'uren…' : uren.fout ? null : (uren.aantal ? `${uren.aantal} uren` : null),
+    kosten.aantal ? `${kosten.aantal} kosten` : null,
   ].filter(Boolean)
 
   // Wat er bij je ligt, in de volgorde van het ontwerp: stapels eerst, dan de beslissingen.
@@ -131,6 +132,16 @@ export default function GoedkeurenWidget({ data }: { data: GoedkeurenData }) {
       stip: UREN_KLEUR,
       titel: `${urenAantal} urenregel${urenAantal === 1 ? '' : 's'} te fiatteren`,
       sub: 'Uren',
+      rechts: null,
+      rechtsKleur: undefined,
+      href: '/uren?periode=te_keuren',
+    }] : []),
+    // Bovenaan het Uren-overzicht staat de kaart "Kosten ter goedkeuring", los van de periode.
+    ...(kosten.aantal > 0 ? [{
+      sleutel: 'kosten',
+      stip: UREN_KLEUR,
+      titel: `${kosten.aantal} kostenpost${kosten.aantal === 1 ? '' : 'en'} goed te keuren`,
+      sub: `Kosten · ${euro(kosten.bedrag)}`,
       rechts: null,
       rechtsKleur: undefined,
       href: '/uren?periode=te_keuren',

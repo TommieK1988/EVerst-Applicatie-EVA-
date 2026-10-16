@@ -160,8 +160,8 @@ eigen `klein`/`kop`/`veldStijl`-constanten per bestand: dat is precies hoe scher
 gaan lopen. Twee dingen die vaak misgaan: veldlabels zijn **UPPERCASE 10,5px** (`FormField upper`)
 en niet 12px gewone tekst, en spacing ligt op het **4px-raster** — geen 7, 10 of 14.
 
-`/auth/ui-preview` toont alle componenten; `/auth/mailintake-preview`, `/auth/meetstaat-preview`
-en `/auth/mini-meetstaat-preview` tonen elk één compleet scherm met verzonnen gegevens. Ze zijn alle bereikbaar zonder in te loggen, dus je kunt opmaak nakijken
+`/auth/ui-preview` toont alle componenten; `/auth/mailintake-preview`, `/auth/meetstaat-preview`,
+`/auth/mini-meetstaat-preview`, `/auth/offertebewaking-preview` (Te doen + offertekaart) en `/auth/kosten-preview` (kostengoedkeuring op het Uren-overzicht; de mobiele variant op `/auth/app-taal-preview?kosten=1`) tonen elk één compleet scherm met verzonnen gegevens. Ze zijn alle bereikbaar zonder in te loggen, dus je kunt opmaak nakijken
 zonder een sessie — en dat hoort erbij, want geen enkele type-check of build vangt een afgekapt
 label of een kolom die buiten beeld valt.
 

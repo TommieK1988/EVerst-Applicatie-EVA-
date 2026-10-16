@@ -30,3 +30,22 @@ export function toewijzingenVoorNieuweActie(
   if (data.assignees?.length) return data.assignees
   return hangtNergensAan(data) ? [{ user_id: makerId, rol: 'verantwoordelijke' }] : []
 }
+
+/** Kleine letters, zonder accenten: "Jäger" vind je ook met "jager". */
+function normaliseer(tekst: string): string {
+  return tekst.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+/**
+ * De medewerkers die bij een zoekterm passen, in de volgorde van de lijst. Elk woord moet
+ * ergens in de naam staan, in willekeurige volgorde: "vries jan" vindt Jan de Vries. Een lege
+ * zoekterm geeft iedereen.
+ */
+export function zoekOpNaam<T extends { naam: string }>(lijst: T[], zoekterm: string): T[] {
+  const woorden = normaliseer(zoekterm).split(/\s+/).filter(Boolean)
+  if (!woorden.length) return lijst
+  return lijst.filter(m => {
+    const naam = normaliseer(m.naam)
+    return woorden.every(w => naam.includes(w))
+  })
+}
