@@ -10,6 +10,7 @@ import { getGepubliceerdeFormulieren } from '@/app/(platform)/formulieren/action
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { hangtNergensAan } from '@/lib/taken/toewijzing'
+import { ToewijzingZoeker, type AssigneeKeuze } from './ToewijzingZoeker'
 import type { TaskPrioriteit, DbTaskList } from '@/lib/taken/supabase/database.types'
 import {
   DEADLINE_BASIS_LABELS,
@@ -58,14 +59,6 @@ const DOSSIER_ROLLEN = [
   { value: 'controller_id',       label: 'Controller' },
 ]
 
-const ASSIGNEE_ROLLEN = [
-  { value: 'verantwoordelijke', label: 'Verantwoordelijke' },
-  { value: 'mede-uitvoerder',   label: 'Mede-uitvoerder' },
-  { value: 'reviewer',          label: 'Reviewer' },
-]
-
-type AssigneeKeuze = { user_id: string; rol: 'verantwoordelijke' | 'mede-uitvoerder' | 'reviewer' }
-
 export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierPicker, defaultDossier, defaultMedewerker, isTemplate, context = 'dossier', onSuccess, trigger }: Props) {
   const isMedewerkerContext = context === 'medewerker'
   const [open, setOpen]                     = useState(false)
@@ -82,8 +75,6 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
   // Template-specifieke velden
   const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol' | 'medewerker_zelf'>('direct')
   const [geselecteerdeAssignees, setGeselecteerdeAssignees] = useState<AssigneeKeuze[]>([])
-  /** Zoekterm boven de lijst met medewerkers: die lijst was te lang om te overzien. */
-  const [zoekMedewerker, setZoekMedewerker] = useState('')
   const [dossierRollen, setDossierRollen]   = useState<string[]>(['project_manager_id'])
   const [deadlineBasis, setDeadlineBasis]       = useState<DeadlineBasis>('geen')
   const [deadlineDagen, setDeadlineDagen]       = useState('')
@@ -347,57 +338,15 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
                   </div>
                 )}
 
-                {/* Medewerker checkboxes: altijd (gewone taak) of bij 'direct' (sjabloon) */}
+                {/* Medewerkers zoeken en kiezen: altijd (gewone taak) of bij 'direct' (sjabloon) */}
                 {(!isTemplate || assigneeType === 'direct') && (
-                  <input
-                    type="search"
-                    value={zoekMedewerker}
-                    onChange={e => setZoekMedewerker(e.target.value)}
-                    placeholder="Zoek een collega…"
-                    aria-label="Zoek een collega"
-                    className="mb-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30"
+                  <ToewijzingZoeker
+                    medewerkers={medewerkers}
+                    gekozen={geselecteerdeAssignees}
+                    mijnUserId={mijnUserId}
+                    onToggle={toggleAssignee}
+                    onRol={setAssigneeRol}
                   />
-                )}
-                {(!isTemplate || assigneeType === 'direct') && (
-                  <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                    {medewerkers.filter(m => m.auth_user_id).length === 0 && (
-                      <p className="text-xs text-slate-400">Geen medewerkers beschikbaar</p>
-                    )}
-                    {/* Gekozen collega's blijven altijd staan, ook als ze niet bij de zoekterm passen. */}
-                    {medewerkers.filter(m => m.auth_user_id
-                      && (!zoekMedewerker.trim()
-                        || m.naam.toLowerCase().includes(zoekMedewerker.trim().toLowerCase())
-                        || geselecteerdeAssignees.some(a => a.user_id === m.auth_user_id)),
-                    ).map(m => {
-                      const geselecteerd = geselecteerdeAssignees.find(a => a.user_id === m.auth_user_id!)
-                      return (
-                        <div key={m.auth_user_id!} className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={!!geselecteerd}
-                              onChange={() => toggleAssignee(m.auth_user_id!)}
-                              className="accent-everts flex-shrink-0"
-                            />
-                            <span className="text-sm text-slate-700 truncate">
-                              {m.naam}{m.auth_user_id === mijnUserId ? ' (jij)' : ''}
-                            </span>
-                          </label>
-                          {geselecteerd && (
-                            <select
-                              value={geselecteerd.rol}
-                              onChange={e => setAssigneeRol(m.auth_user_id!, e.target.value as AssigneeKeuze['rol'])}
-                              className="text-xs border border-slate-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-everts/30"
-                            >
-                              {ASSIGNEE_ROLLEN.map(r => (
-                                <option key={r.value} value={r.value}>{r.label}</option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
                 )}
 
                 {/* Zelfde regel als maakTaak: een losse actie zonder toewijzing komt bij de maker. */}
