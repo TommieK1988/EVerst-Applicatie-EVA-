@@ -135,8 +135,8 @@ export function maakStandaardScenario(project_id: string): Scenario {
   const bestaand = getScenarios(project_id)
   if (bestaand.length > 0) return bestaand.find(s => s.is_standaard) || bestaand[0]
 
-  const inst = getInstellingen()
-  const favorietTarief = inst.uurtarieven?.find(t => t.is_favoriet)?.tarief
+  // Het ★-tarief uit Stamgegevens, of het eerste als er geen ★ staat.
+  const favorietTarief = globaalUurtarief() || undefined
 
   const nieuw: Scenario = {
     id: nieuweId(),

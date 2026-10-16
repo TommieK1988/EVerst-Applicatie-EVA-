@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -18,17 +19,20 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   onConfirm: () => void
   destructive?: boolean
+  /** Extra inhoud onder de beschrijving, bijvoorbeeld een waarschuwing. */
+  children?: ReactNode
 }
 
 export default function ConfirmDialog({
   open, onOpenChange, title, description,
-  confirmLabel = 'Bevestigen', onConfirm, destructive = false,
+  confirmLabel = 'Bevestigen', onConfirm, destructive = false, children,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>{description}</AlertDialogDescription>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel>Annuleren</AlertDialogCancel>
           <AlertDialogAction

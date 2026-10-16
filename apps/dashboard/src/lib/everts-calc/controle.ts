@@ -13,6 +13,8 @@
 
 import type { Calculatieregel, Componentregel, Groep } from './types'
 import { isTekstregel } from './types'
+import { heeftEigenTarief } from './calculatietarief'
+import { formatEuro } from './calculations'
 
 export type ControleNiveau = 'blokkeert' | 'nakijken'
 
@@ -24,6 +26,7 @@ export type ControleSoort =
   | 'meetstaat_zonder_behandeling'
   | 'regel_zonder_prijs'
   | 'gemarkeerd'
+  | 'eigen_uurtarief'
 
 export interface ControlePunt {
   /** Uniek per punt; ook de sleutel waaronder "Klopt" wordt bewaard. */
@@ -50,6 +53,7 @@ export const SOORT_LABEL: Record<ControleSoort, string> = {
   meetstaat_zonder_behandeling: 'Schilderwerk zonder behandeling',
   regel_zonder_prijs:           'Regels zonder prijs',
   gemarkeerd:                   'Gemarkeerde regels',
+  eigen_uurtarief:              'Eigen uurtarief',
 }
 
 export interface ControleInvoer {
@@ -63,6 +67,8 @@ export interface ControleInvoer {
   /** Interne begroting: gaat niet naar de klant, voorwaarden zijn dan niet nodig. */
   zonderVoorwaarden?: boolean
   bevestigd?: string[]
+  /** Uurtarief van de calculatie; arbeidsnormen met een ander tarief komen ter controle. */
+  calculatietarief?: number
 }
 
 export function controleerCalculatie(invoer: ControleInvoer): ControlePunt[] {
@@ -107,6 +113,15 @@ export function controleerCalculatie(invoer: ControleInvoer): ControlePunt[] {
     }
 
     if (regel.is_stelpost) nakijken('stelpost', regel)
+
+    // Een eigen tarief is vaak bewust (een uitvoerder met een ander uurloon), maar moet
+    // wél gezien worden: de calculator klikt het weg met Klopt.
+    const calcTarief = invoer.calculatietarief ?? 0
+    const eigen = comps.filter(c => heeftEigenTarief(c, calcTarief))
+    if (eigen.length > 0) {
+      const tarieven = [...new Set(eigen.map(c => formatEuro(c.tarief)))].join(', ')
+      nakijken('eigen_uurtarief', regel, true, `${tarieven}/u, calculatie ${formatEuro(calcTarief)}/u`)
+    }
 
     // Een markering (⚑) betekent "hier moet nog iemand naar kijken". Niet weg te klikken
     // met Klopt: de oplossing is de markering opheffen, anders blijft de regel oranje.
