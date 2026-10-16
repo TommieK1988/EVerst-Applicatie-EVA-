@@ -1,6 +1,6 @@
 {
   "budget": {
-    "as_any": 751,
+    "as_any": 747,
     "ongegate_service_role_actions": 511,
     "bestanden_boven_800_regels": 33
   },
@@ -180,7 +180,7 @@
       "apps/dashboard/src/lib/documenten/houtrot-rapport.ts": 2,
       "apps/dashboard/src/lib/documenten/kwaliteit-rapport.ts": 1,
       "apps/dashboard/src/lib/documenten/render-docx.ts": 2,
-      "apps/dashboard/src/lib/dossiers/actief.ts": 4,
+      "apps/dashboard/src/lib/dossiers/actief.ts": 3,
       "apps/dashboard/src/lib/dossiers/actions.ts": 47,
       "apps/dashboard/src/lib/dossiers/bestanden.ts": 2,
       "apps/dashboard/src/lib/dossiers/bouw7-retry.ts": 1,
@@ -277,7 +277,7 @@
       "apps/dashboard/src/lib/stamdata/btw-actions.ts": 1,
       "apps/dashboard/src/lib/stamdata/uurtarief.ts": 1,
       "apps/dashboard/src/lib/taken/meldingen.ts": 1,
-      "apps/dashboard/src/lib/taken/services/taken.ts": 26,
+      "apps/dashboard/src/lib/taken/services/taken.ts": 23,
       "apps/dashboard/src/lib/toolbox/klaarzetten.ts": 2,
       "apps/dashboard/src/lib/uren/actions.ts": 1,
       "apps/dashboard/src/lib/uren/bouw7-goedkeuring.ts": 1,
@@ -400,7 +400,7 @@
       "apps/dashboard/src/lib/everts-calc/quote-renderer.ts": 1411,
       "apps/dashboard/src/lib/kwaliteit/inspecties.ts": 847,
       "apps/dashboard/src/lib/page-help.ts": 1775,
-      "apps/dashboard/src/lib/taken/services/taken.ts": 1111,
+      "apps/dashboard/src/lib/taken/services/taken.ts": 1119,
       "packages/database/src/platform-types.ts": 2035,
       "packages/database/src/rechten-catalogus.ts": 824
     }

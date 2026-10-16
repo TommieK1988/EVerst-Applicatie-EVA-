@@ -11,7 +11,7 @@ import { createAdminClient } from '@everts/database/server'
 import {
   AANVRAAG_STATUSSEN, OFFERTE_STATUSSEN, OPDRACHT_STATUSSEN, SERVICEDESK_ALLE_STATUSSEN,
 } from '@/components/dossiers/types'
-import { haalAlleRijen } from '@/lib/supabase/paginate'
+import { haalAlleRijen, haalAlleRijenVoorIds } from '@/lib/supabase/paginate'
 
 /** Minimale dossier-vorm die nodig is om actief-zijn te bepalen. */
 export type DossierActiefVelden = {
@@ -188,14 +188,18 @@ export async function getDossierContextVoorIds(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
-  const { data, error } = await supabase
+  // In blokken: "Alle acties" raakt honderden dossiers, te veel id's voor één URL.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await haalAlleRijenVoorIds<any>(ids, (blok, van, tot) => supabase
     .from('dossiers')
     .select(DOSSIER_CONTEXT_SELECT)
-    .in('id', ids)
+    .in('id', blok)
+    .order('id')
+    .range(van, tot),
+  ).catch((e: unknown) => {
+    throw new Error(`Fout bij ophalen dossier-context: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
-  if (error) throw new Error(`Fout bij ophalen dossier-context: ${error.message}`)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (data ?? []) as any[]) context.set(row.id, toContext(row))
+  for (const row of data) context.set(row.id, toContext(row))
   return context
 }

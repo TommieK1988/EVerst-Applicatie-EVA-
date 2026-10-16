@@ -9,6 +9,7 @@ import { AlertTriangle, FolderTree, List } from 'lucide-react'
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import OverzichtTabel, { type KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
 import SlicerBalk, { type SlicerDef, type SlicerWaarde } from '@/components/overzicht/SlicerBalk'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import type { TaakRij } from '@/lib/taken/services/taken'
 import type { TaakMetDetails, TaskStatus } from '@/lib/taken/supabase/database.types'
 import { BEOORDEEL_TAAK_TITEL } from '@/lib/goedkeuring/types'
@@ -41,9 +42,15 @@ const DEADLINE_OPTIES = [
   { value: 'geen',         label: 'Geen deadline' },
 ]
 
-/** Scope-slicer waarden op "Mijn taken" (alleen relevant met alle_taken-recht). */
-const SCOPE_MIJN = 'mijn'
-const SCOPE_ALLE = 'alle'
+/**
+ * Scope-knoppen op "Mijn acties" (alleen met het recht om alle acties te zien). Het scherm
+ * opent altijd op de eigen acties; wie wil, schakelt door naar die van iedereen.
+ */
+type Scope = 'mijn' | 'alle'
+const SCOPE_OPTIES: { value: Scope; label: string }[] = [
+  { value: 'mijn', label: 'Mijn acties' },
+  { value: 'alle', label: 'Alle acties' },
+]
 
 function isVerlopen(deadline: string | null, status: string): boolean {
   if (!deadline) return false
@@ -114,6 +121,20 @@ export default function TakenActieveDossiers({
   const router = useRouter()
   const isMijnTaken = variant === 'mijn-taken'
   const [slicer, setSlicer] = useState<SlicerWaarde>({})
+  const toonScope = isMijnTaken && magAlleTaken
+  const [scope, setScope] = useState<Scope>('mijn')
+  const alleenEigen = toonScope && scope === 'mijn'
+
+  function wisselScope(nieuw: Scope) {
+    setScope(nieuw)
+    // "Toegewezen aan" staat alleen bij Alle acties; een keuze die daar bleef hangen zou
+    // de eigen lijst onzichtbaar blijven filteren.
+    if (nieuw === 'mijn') setSlicer(prev => {
+      const rest = { ...prev }
+      delete rest.toegewezen
+      return rest
+    })
+  }
 
   // Gebundeld per dossier, of alles plat onder elkaar. Standaard gebundeld; de
   // keuze wordt na de eerste render uit localStorage gehaald, want tijdens het
@@ -189,16 +210,9 @@ export default function TakenActieveDossiers({
 
     if (isMijnTaken) {
       return [
-        ...(magAlleTaken ? [{
-          key: 'scope', label: 'Acties van',
-          opties: [
-            { value: SCOPE_MIJN, label: 'Mijn acties' },
-            { value: SCOPE_ALLE, label: 'Alle acties' },
-          ],
-        }] : []),
-        // Met alle_zien-recht staan de acties van collega's in de dataset: dan wil je
-        // ook per persoon kunnen inzoomen.
-        ...(magAlleTaken ? [toegewezen] : []),
+        // Bij Alle acties staan die van collega's in beeld: dan wil je ook per persoon
+        // kunnen inzoomen.
+        ...(toonScope && scope === 'alle' ? [toegewezen] : []),
         deadline,
       ]
     }
@@ -211,16 +225,13 @@ export default function TakenActieveDossiers({
       toegewezen,
       deadline,
     ]
-  }, [data, isMijnTaken, magAlleTaken])
+  }, [data, isMijnTaken, toonScope, scope])
 
   // ── Filtering op slicer-waarden ──────────────────────────────────
   const gefilterd = useMemo(() => {
     return data.filter(rij => {
-      // Scope (alleen mijn-taken met alle_taken-recht): 'mijn' = eigen taken.
-      const sc = slicer.scope
-      if (sc?.length && sc.includes(SCOPE_MIJN) && !sc.includes(SCOPE_ALLE)) {
-        if (!user_id || !rij.toegewezen_ids.includes(user_id)) return false
-      }
+      // Met alle_zien-recht bevat de dataset alle open acties; bij "Mijn acties" alleen de eigen.
+      if (alleenEigen && (!user_id || !rij.toegewezen_ids.includes(user_id))) return false
       const s = slicer.status
       if (s?.length && !s.includes(rij.status)) return false
       const t = slicer.toegewezen
@@ -233,7 +244,7 @@ export default function TakenActieveDossiers({
       if (dl?.length && !dl.includes(deadlineBucket(rij.deadline, rij.status))) return false
       return true
     })
-  }, [data, slicer, user_id])
+  }, [data, slicer, user_id, alleenEigen])
 
   // ── "Ook toegewezen aan": namen behalve de ingelogde gebruiker ──
   const medeToegewezen = (r: TaakRij): string[] => {
@@ -395,18 +406,24 @@ export default function TakenActieveDossiers({
           {titel}
         </h1>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-          {subtitel} {groeperen ? 'Per dossier gebundeld.' : 'Alles onder elkaar.'}
+          {toonScope && scope === 'alle' ? 'Open acties van iedereen.' : subtitel}{' '}
+          {groeperen ? 'Per dossier gebundeld.' : 'Alles onder elkaar.'}
         </p>
       </div>
 
       {kopExtra}
 
-      <SlicerBalk
-        slicers={slicers}
-        waarde={slicer}
-        onChange={(key, values) => setSlicer(prev => ({ ...prev, [key]: values }))}
-        onReset={() => setSlicer({})}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {toonScope && (
+          <SegmentedControl label="Acties van" opties={SCOPE_OPTIES} waarde={scope} onChange={wisselScope} />
+        )}
+        <SlicerBalk
+          slicers={slicers}
+          waarde={slicer}
+          onChange={(key, values) => setSlicer(prev => ({ ...prev, [key]: values }))}
+          onReset={() => setSlicer({})}
+        />
+      </div>
 
       <OverzichtTabel
         scherm={scherm}

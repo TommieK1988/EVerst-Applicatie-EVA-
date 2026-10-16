@@ -2,7 +2,7 @@
 import React from 'react'
 import {
   Button, Input, Textarea, Badge, Avatar, AvatarGroup, Label, Separator, LabeledSeparator,
-  Checkbox, RadioGroup, RadioGroupItem, Switch,
+  Checkbox, RadioGroup, RadioGroupItem, Switch, SegmentedControl,
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, TooltipKbd,
   PageHeader, Alert, Spinner, Skeleton, SkeletonText, SkeletonTitle, EmptyState, Progress,
@@ -64,6 +64,7 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
 export default function UiPreview() {
   const [checked, setChecked] = React.useState(true)
   const [sw, setSw] = React.useState(true)
+  const [scope, setScope] = React.useState<'mijn' | 'alle'>('mijn')
   return (
     <TooltipProvider>
     <div className="eva" style={{ background: 'var(--bg)', minHeight: '100dvh', padding: '48px 56px', fontFamily: 'var(--font-ui)' }}>
@@ -144,6 +145,15 @@ export default function UiPreview() {
           <label className="flex items-center gap-2 text-[13px]"><RadioGroupItem value="2" /> Twee</label>
         </RadioGroup>
         <label className="flex items-center gap-2.5 text-[13px]"><Switch checked={sw} onCheckedChange={setSw} /> Actief</label>
+      </Row>
+
+      <Row title="SegmentedControl">
+        <SegmentedControl
+          label="Acties van"
+          opties={[{ value: 'mijn', label: 'Mijn acties' }, { value: 'alle', label: 'Alle acties' }]}
+          waarde={scope}
+          onChange={setScope}
+        />
       </Row>
 
       <Row title="Label + Separator">

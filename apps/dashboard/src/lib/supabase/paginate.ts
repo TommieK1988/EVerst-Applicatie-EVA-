@@ -54,3 +54,37 @@ export async function haalAlleRijen<T>(
 
   throw new Error(`Pagineren gestopt na ${MAX_PAGINAS} pagina's (${alles.length} rijen) — query te breed?`)
 }
+
+/**
+ * Zoveel id's gaan er in één `.in()`. Elke uuid kost ~37 tekens in de URL en rond de 19 kB
+ * weigert de proxy de aanvraag (zie `IDS_PER_QUERY` in lib/debiteuren/actions.ts); met 150
+ * blijft een aanvraag daar ruim onder, ook met de rest van de query erbij.
+ */
+export const IDS_PER_BLOK = 150
+
+/** Een id-lijst (ontdubbeld) in blokken van `IDS_PER_BLOK`. */
+export function inBlokken(ids: string[]): string[][] {
+  const uniek = [...new Set(ids)]
+  const blokken: string[][] = []
+  for (let i = 0; i < uniek.length; i += IDS_PER_BLOK) blokken.push(uniek.slice(i, i + IDS_PER_BLOK))
+  return blokken
+}
+
+/**
+ * `haalAlleRijen` voor een `.in()` met een lange id-lijst: de id's gaan in blokken (URL-limiet)
+ * en elk blok wordt gepagineerd, want één blok dossier-id's kan zelf meer dan 1000 rijen
+ * opleveren. Ook hier een stabiele `.order()` meegeven. De volgorde over de blokken heen is
+ * niet die van de `.order()`: sorteer achteraf als dat ertoe doet.
+ *
+ *   const taken = await haalAlleRijenVoorIds<Taak>(dossierIds, (blok, van, tot) =>
+ *     supabase.from('tasks').select('*').in('dossier_id', blok).order('id').range(van, tot))
+ */
+export async function haalAlleRijenVoorIds<T>(
+  ids: string[],
+  pagina: (blok: string[], van: number, tot: number) => PromiseLike<PaginaResultaat<T>>,
+): Promise<T[]> {
+  const perBlok = await Promise.all(
+    inBlokken(ids).map(blok => haalAlleRijen<T>((van, tot) => pagina(blok, van, tot))),
+  )
+  return perBlok.flat()
+}

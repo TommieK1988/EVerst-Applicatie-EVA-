@@ -12,6 +12,8 @@ import {
 } from '@/lib/dossiers/actief'
 import { omschrijvingNaarTekst } from '@/lib/taken/omschrijving'
 import { aanmakerLabel, type HerkomstBron } from '@/lib/taken/herkomst'
+import { haalAlleRijen, haalAlleRijenVoorIds, inBlokken } from '@/lib/supabase/paginate'
+import { deadlineAflopend, toegewezenTaakIds } from './ophalen'
 
 export type { UrgenteTaak }
 
@@ -204,26 +206,26 @@ export async function telMijnOpenTaken(userId: string): Promise<number> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { data: toewijzingen, error: tError } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  if (tError || !toewijzingen) return 0
-
-  const taskIds = (toewijzingen as { task_id: string }[]).map(t => t.task_id)
+  let taskIds: string[]
+  try {
+    taskIds = await toegewezenTaakIds(userId)
+  } catch {
+    return 0
+  }
   if (taskIds.length === 0) return 0
 
-  const { count, error } = await supabase
+  // Per blok tellen en optellen: alle id's in één `.in()` loopt tegen de URL-limiet.
+  const tellingen = await Promise.all(inBlokken(taskIds).map(blok => supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .in('id', taskIds)
+    .in('id', blok)
     .is('parent_task_id', null)
     .neq('status', 'gereed')
-    .neq('status', 'vervallen')
+    .neq('status', 'vervallen'),
+  )) as { count: number | null; error: unknown }[]
 
-  if (error) return 0
-  return count ?? 0
+  if (tellingen.some(t => t.error)) return 0
+  return tellingen.reduce((n, t) => n + (t.count ?? 0), 0)
 }
 
 export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
@@ -232,14 +234,7 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { data: toewijzingen, error: tError } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-
-  if (tError) throw new Error(`Fout bij ophalen toewijzingen: ${tError.message}`)
-
-  const taskIds = (toewijzingen as { task_id: string }[]).map(t => t.task_id)
+  const taskIds = await toegewezenTaakIds(userId)
   if (taskIds.length === 0) return []
 
   // Slanke query voor de "mijn taken"-lijst (mobiel + desktop-home-widgets):
@@ -247,24 +242,26 @@ export async function getMijnTaken(userId: string): Promise<TaakMetDetails[]> {
   // comments/attachments worden hier niet getoond, dus die joins laten we weg
   // (scheelt fors aan querytijd en payload). Velden hieronder op defaults gezet
   // zodat het TaakMetDetails-type intact blijft.
-  // as any: dossiers join staat niet in gegenereerde types
-  const { data, error } = await (supabase as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dossiers-join staat niet in de gegenereerde types
+  const data = await haalAlleRijenVoorIds<any>(taskIds, (blok, van, tot) => supabase
     .from('tasks')
     .select(`
       *,
       lijst:task_lists ( id, naam, dossier_id, dossiers ( id, titel, hoofdstatus ) ),
       dossier:dossiers ( id, titel, hoofdstatus )
     `)
-    .in('id', taskIds)
+    .in('id', blok)
     .is('parent_task_id', null)
     .neq('status', 'gereed')
     .neq('status', 'vervallen')
-    .order('deadline', { ascending: false, nullsFirst: false })
-
-  if (error) throw new Error(`Fout bij ophalen mijn taken: ${error.message}`)
+    .order('id')
+    .range(van, tot),
+  ).catch((e: unknown) => {
+    throw new Error(`Fout bij ophalen mijn taken: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
   // Dossier-context: directe koppeling (losse taak) gaat vóór de koppeling via de lijst.
-  return (data as any[]).map(taak => ({
+  return data.sort(deadlineAflopend).map(taak => ({
     ...taak,
     assignees:         [],
     subtaken:          [],
@@ -597,35 +594,40 @@ export async function getTakenVoorActieveDossiers(): Promise<TaakRij[]> {
   const { ids, context } = await getActieveDossierContext()
   if (ids.length === 0) return []
 
+  // Alles hieronder in blokken en gepagineerd: er zijn honderden actieve dossiers (alle id's
+  // in één `.in()` gaat over de URL-limiet) en de lijsttaken alleen al tellen boven de 1000,
+  // waar PostgREST stil afkapt. Zo vielen er acties weg uit dit overzicht.
   // Actielijst-instanties van actieve dossiers → map lijst_id → {dossier_id, naam}
-  const { data: lijsten } = await supabase
-    .from('task_lists')
-    .select('id, naam, dossier_id')
-    .in('dossier_id', ids)
+  const lijsten = await haalAlleRijenVoorIds<{ id: string; naam: string; dossier_id: string }>(
+    ids, (blok, van, tot) => supabase
+      .from('task_lists')
+      .select('id, naam, dossier_id')
+      .in('dossier_id', blok)
+      .order('id')
+      .range(van, tot),
+  )
   const lijstMap = new Map<string, { dossier_id: string; naam: string }>(
-    (lijsten ?? []).map((l: { id: string; naam: string; dossier_id: string }) =>
-      [l.id, { dossier_id: l.dossier_id, naam: l.naam }]),
+    lijsten.map(l => [l.id, { dossier_id: l.dossier_id, naam: l.naam }]),
   )
   const lijstIds = [...lijstMap.keys()]
 
   // Taken: direct aan dossier (losse taken) + taken binnen die actielijsten.
   const TAAK_SELECT = '*, task_assignees ( user_id )'
-  const queries: Promise<{ data: Record<string, unknown>[] | null }>[] = [
-    supabase.from('tasks').select(TAAK_SELECT)
-      .in('dossier_id', ids).is('parent_task_id', null),
-  ]
-  if (lijstIds.length > 0) {
-    queries.push(
-      supabase.from('tasks').select(TAAK_SELECT)
-        .in('lijst_id', lijstIds).is('parent_task_id', null),
-    )
-  }
-  const resultaten = await Promise.all(queries)
+  const resultaten = await Promise.all([
+    haalAlleRijenVoorIds<Record<string, unknown>>(ids, (blok, van, tot) => supabase
+      .from('tasks').select(TAAK_SELECT)
+      .in('dossier_id', blok).is('parent_task_id', null)
+      .order('id').range(van, tot)),
+    haalAlleRijenVoorIds<Record<string, unknown>>(lijstIds, (blok, van, tot) => supabase
+      .from('tasks').select(TAAK_SELECT)
+      .in('lijst_id', blok).is('parent_task_id', null)
+      .order('id').range(van, tot)),
+  ])
 
   // Dedupe op task-id (een taak kan in beide queries vallen mag niet, maar wees veilig).
   const taakMap = new Map<string, Record<string, unknown>>()
   for (const res of resultaten) {
-    for (const t of (res.data ?? [])) taakMap.set(t.id as string, t)
+    for (const t of res) taakMap.set(t.id as string, t)
   }
   const taken = [...taakMap.values()]
   if (taken.length === 0) return []
@@ -717,14 +719,16 @@ async function bouwTaakRijen(taken: Record<string, unknown>[]): Promise<TaakRij[
   // Effectief dossier: directe koppeling vóór de koppeling via de actielijst.
   const lijstIds = [...new Set(taken.map(t => t.lijst_id as string | null).filter(Boolean) as string[])]
   const lijstMap = new Map<string, { dossier_id: string | null; medewerker_id: string | null; naam: string }>()
-  if (lijstIds.length > 0) {
-    const { data: lijsten } = await supabase
+  const lijsten = await haalAlleRijenVoorIds<{ id: string; naam: string; dossier_id: string | null; medewerker_id: string | null }>(
+    lijstIds, (blok, van, tot) => supabase
       .from('task_lists')
       .select('id, naam, dossier_id, medewerker_id')
-      .in('id', lijstIds)
-    for (const l of (lijsten ?? []) as { id: string; naam: string; dossier_id: string | null; medewerker_id: string | null }[]) {
-      lijstMap.set(l.id, { dossier_id: l.dossier_id, medewerker_id: l.medewerker_id, naam: l.naam })
-    }
+      .in('id', blok)
+      .order('id')
+      .range(van, tot),
+  )
+  for (const l of lijsten) {
+    lijstMap.set(l.id, { dossier_id: l.dossier_id, medewerker_id: l.medewerker_id, naam: l.naam })
   }
 
   const effDossier = (t: Record<string, unknown>): string | null =>
@@ -833,48 +837,53 @@ export async function getMijnTakenRijen(userId: string): Promise<TaakRij[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { data: toewijzingen } = await supabase
-    .from('task_assignees')
-    .select('task_id')
-    .eq('user_id', userId)
-  const taskIds = [...new Set(((toewijzingen ?? []) as { task_id: string }[]).map(t => t.task_id))]
+  const taskIds = await toegewezenTaakIds(userId)
   if (taskIds.length === 0) return []
 
   // Zelfde status-filter als de werkende home-widget (getMijnTaken): twee neq's
   // i.p.v. een not-in, dat in PostgREST stil kon mislukken (lege lijst tot gevolg).
-  const { data: takenData, error: takenError } = await supabase
+  const taken = await haalAlleRijenVoorIds<Record<string, unknown>>(taskIds, (blok, van, tot) => supabase
     .from('tasks')
     .select('*, task_assignees ( user_id )')
-    .in('id', taskIds)
+    .in('id', blok)
     .is('parent_task_id', null)
     .neq('status', 'gereed')
     .neq('status', 'vervallen')
-    .order('deadline', { ascending: false, nullsFirst: false })
-  if (takenError) throw new Error(`Fout bij ophalen mijn taken: ${takenError.message}`)
+    .order('id')
+    .range(van, tot),
+  ).catch((e: unknown) => {
+    throw new Error(`Fout bij ophalen mijn taken: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
-  return bouwTaakRijen((takenData ?? []) as Record<string, unknown>[])
+  return bouwTaakRijen(taken.sort(deadlineAflopend))
 }
 
 /**
  * Alle open taken van alle medewerkers, zelfde vorm en dossier-scope als
  * `getMijnTakenRijen` — de superset daarvan. Voor gebruikers met het `alle_taken`-recht;
- * de scope-slicer op "Mijn taken" filtert er client-side de eigen taken uit.
+ * de knoppen Mijn acties / Alle acties filteren er client-side de eigen taken uit.
  * Alleen vanuit Server Components aanroepen (admin client, geen RLS).
  */
 export async function getAlleTakenRijen(): Promise<TaakRij[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createAdminClient() as any
 
-  const { data: takenData, error: takenError } = await supabase
+  // Gepagineerd: dit zijn alle open acties van iedereen, en zodra dat er meer dan 1000 zijn
+  // kapt PostgREST stil af. `id` als tweede sleutel houdt de volgorde per pagina stabiel.
+  const taken = await haalAlleRijen<Record<string, unknown>>((van, tot) => supabase
     .from('tasks')
     .select('*, task_assignees ( user_id )')
     .is('parent_task_id', null)
     .neq('status', 'gereed')
     .neq('status', 'vervallen')
     .order('deadline', { ascending: false, nullsFirst: false })
-  if (takenError) throw new Error(`Fout bij ophalen alle taken: ${takenError.message}`)
+    .order('id')
+    .range(van, tot),
+  ).catch((e: unknown) => {
+    throw new Error(`Fout bij ophalen alle taken: ${e instanceof Error ? e.message : String(e)}`)
+  })
 
-  return bouwTaakRijen((takenData ?? []) as Record<string, unknown>[])
+  return bouwTaakRijen(taken)
 }
 
 /** Sjablonen, optioneel beperkt tot één context ('dossier' of 'medewerker'). */

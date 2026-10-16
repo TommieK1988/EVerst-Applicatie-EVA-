@@ -23,7 +23,8 @@ export default async function MijnTakenPage() {
   }
 
   const medewerker = await getCurrentMedewerker()
-  // Scope-schakelaar: met deze functie toont het scherm ook de acties van collega's.
+  // Scope-knoppen: met deze functie kan het scherm ook de acties van collega's tonen. Het
+  // opent altijd op de eigen acties; "Alle acties" is een klik verder.
   // Was de verkapte module `alle_taken`; zie packages/database/src/rechten-catalogus.ts.
   const set = kiesKanaal(await getRechtenBundel(medewerker), 'verzoek')
   const magAlleTaken = heeftFunctie(set, 'mijn_taken.alle_zien')
@@ -41,7 +42,7 @@ export default async function MijnTakenPage() {
       layouts={layouts}
       user_id={user_id}
       titel="Mijn acties"
-      subtitel={magAlleTaken ? 'Open acties.' : 'Al jouw toegewezen open acties.'}
+      subtitel="Al jouw toegewezen open acties."
       scherm="mijn-taken"
       variant="mijn-taken"
       magAlleTaken={magAlleTaken}
