@@ -42,13 +42,14 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
   const teller = openPakketten(pakketten)
   const knop = (
     <Button
-      variant="outline" size="sm" aria-pressed={paneelOpen}
+      variant="outline" size="sm" aria-pressed={paneelOpen} aria-label="Uitvraag"
       onClick={() => { setFocusPakketId(null); setPaneelOpen(o => !o) }}
       className={paneelOpen ? 'border-calc-oa bg-calc-oa/5 text-calc-oa hover:bg-calc-oa/5' : undefined}
       title={teller > 0 ? `Uitvragen: ${teller} met een partij die nog open staat` : 'Uitvragen bij onderaannemers'}
     >
       <Send className="h-3.5 w-3.5" />
-      <span className="hidden xl:inline">Uitvraag</span>
+      {/* Tekst pas vanaf 2xl: anders loopt de werkbalk op een 1440-scherm over twee regels. */}
+      <span className="hidden 2xl:inline">Uitvraag</span>
       {teller > 0 && (
         <span className="h-[18px] min-w-[18px] rounded-full bg-calc-oa/10 px-1 text-center text-[10.5px] font-bold leading-[18px] text-calc-oa">
           {teller}

@@ -25,20 +25,22 @@ const Ctx = createContext<UitvraagInGrid>({
 export const UitvraagProvider = Ctx.Provider
 export const useUitvraagInGrid = () => useContext(Ctx)
 
-/** "Uitgevraagd · 2" of "Rekent met Voegbedrijf A" achter de omschrijving. Klik opent het paneel. */
+/** "Uitvraag · 2" of "✓ Voegbedrijf A" (rekent met) achter de omschrijving. Klik opent het paneel. */
 export function UitvraagLabel({ regelId }: { regelId: string }) {
   const { actief, statussen, onOpenPaneel } = useUitvraagInGrid()
   const status = actief ? statussen.get(regelId) : undefined
   if (!status) return null
   const rekent = !!status.rekentMet
-  const tekst = rekent ? `Rekent met ${status.rekentMet}` : `Uitgevraagd · ${status.uitgevraagd}`
+  // Kort in het grid, zodat de omschrijving leesbaar blijft; de volledige tekst staat in de tooltip.
+  const tekst = rekent ? `✓ ${status.rekentMet}` : `Uitvraag · ${status.uitgevraagd}`
+  const volledig = rekent ? `Rekent met ${status.rekentMet}` : `Uitgevraagd bij ${status.uitgevraagd} ${status.uitgevraagd === 1 ? 'partij' : 'partijen'}`
   return (
     <button
       type="button"
       onClick={e => { e.stopPropagation(); onOpenPaneel(status.pakketId) }}
-      title={`${tekst}. Klik om de uitvraag te openen.`}
+      title={`${volledig}. Klik om de uitvraag te openen.`}
       className={cn(
-        'inline-flex h-[18px] max-w-[160px] flex-shrink-0 items-center rounded-full border px-1.5 text-[10px] font-semibold not-italic transition-colors',
+        'inline-flex h-[18px] max-w-[110px] flex-shrink-0 items-center rounded-full border px-1.5 text-[10px] font-semibold not-italic transition-colors',
         rekent
           ? 'border-calc-oa bg-calc-oa text-white hover:opacity-90'
           : 'border-calc-oa/30 bg-calc-oa/5 text-calc-oa hover:border-calc-oa/60',
