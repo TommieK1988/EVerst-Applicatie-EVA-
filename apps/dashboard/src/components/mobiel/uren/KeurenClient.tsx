@@ -14,7 +14,8 @@ import KeurRegelSheet from './KeurRegelSheet'
 import BlokCodeSheet from './BlokCodeSheet'
 import type { KeurCodeBlok, KeurData, KeurRegel, KeurWeek } from '@/lib/mobiel/keuren'
 import { VERSCHIL_DREMPEL_UREN, type DagVergelijking } from '@/lib/uren/types'
-import { GRIJS, GROEN, KostenBlok, Melding, ORANJE, Vinkje, Waarschuwing, ZACHT } from './KeurenOnderdelen'
+import { GRIJS, GROEN, Melding, ORANJE, Vinkje, Waarschuwing, ZACHT } from './KeurenOnderdelen'
+import { KostenContext, KostenTeKeuren } from './KostenKeuren'
 
 const GEEL_VLAK = 'rgba(184,90,0,.08)'
 
@@ -173,20 +174,35 @@ export default function KeurenClient({ data }: { data: KeurData }) {
     )
   }, [bevestig, bezigWeek, router, selectieVan, t, locale])
 
+  // Kosten die bij mij liggen komen uit EVA, niet uit Bouw7: die staan er ook als Bouw7 hapert
+  // of als er geen uren op mijn akkoord wachten.
+  const heeftKosten = data.onkosten.some(k => k.magKeuren)
+  const kostenBovenaan = heeftKosten && (
+    <div style={{ padding: '12px 12px 0' }}><KostenTeKeuren onkosten={data.onkosten} /></div>
+  )
+
   if (data.fout) {
-    return <Melding titel={t('keuren.nietOpgehaald')} tekst={t('keuren.bouw7GeenAntwoord', { fout: data.fout })} />
+    return (
+      <>
+        {kostenBovenaan}
+        <Melding titel={t('keuren.nietOpgehaald')} tekst={t('keuren.bouw7GeenAntwoord', { fout: data.fout })} />
+      </>
+    )
   }
 
   if (weken.length === 0) {
     return (
       <>
-        <Melding
-          titel={t('keuren.nietsTeFiatteren')}
-          tekst={afgehandeld.size > 0
-            ? t('keuren.allesWeggewerkt')
-            : t('keuren.geenUrenOpAkkoord')}
-        />
-        <KostenBlok onkosten={data.onkosten} />
+        {kostenBovenaan}
+        {(!heeftKosten || afgehandeld.size > 0) && (
+          <Melding
+            titel={t('keuren.nietsTeFiatteren')}
+            tekst={afgehandeld.size > 0
+              ? t('keuren.allesWeggewerkt')
+              : t('keuren.geenUrenOpAkkoord')}
+          />
+        )}
+        <div style={{ padding: '12px 12px 16px' }}><KostenContext onkosten={data.onkosten} /></div>
       </>
     )
   }
@@ -215,6 +231,9 @@ export default function KeurenClient({ data }: { data: KeurData }) {
       </div>
 
       <div style={{ padding: '12px 12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Bovenaan: een kostenpost is één beslissing, en onderaan de weken zou hij wegvallen. */}
+        <KostenTeKeuren onkosten={data.onkosten} />
+
         {weken.map(week => (
           <Week
             key={week.sleutel}
@@ -229,7 +248,7 @@ export default function KeurenClient({ data }: { data: KeurData }) {
           />
         ))}
 
-        <KostenBlok onkosten={data.onkosten} />
+        <KostenContext onkosten={data.onkosten} />
       </div>
 
       {bewerken && (

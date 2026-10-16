@@ -85,9 +85,10 @@ export function berekenKmBedrag(
 
 /** Waarom een kostenpost nog niet opgeslagen mag worden — als code, zodat de app hem kan vertalen. */
 export type OnkostenBezwaar =
-  | 'kiesVervoer' | 'vervoerAlleenReis' | 'vulKm' | 'vulBedrag' | 'fotoKaartje' | 'fotoBon'
+  | 'kiesProject' | 'kiesVervoer' | 'vervoerAlleenReis' | 'vulKm' | 'vulBedrag' | 'fotoKaartje' | 'fotoBon'
 
 const BEZWAAR_TEKST: Record<OnkostenBezwaar, string> = {
+  kiesProject: 'Kies voor welk project je deze kosten maakte, of kies Geen project.',
   kiesVervoer: 'Kies waarmee je gereisd hebt.',
   vervoerAlleenReis: 'Een vervoermiddel hoort alleen bij reiskosten.',
   vulKm: 'Vul het aantal kilometers in.',
@@ -97,6 +98,12 @@ const BEZWAAR_TEKST: Record<OnkostenBezwaar, string> = {
 }
 
 type OnkostenInvoer = {
+  /**
+   * Een project gekozen, of bewust "geen project". Het project bepaalt welke projectleider de
+   * kosten goedkeurt (zie `./onkosten-route`); niets kiezen zou ze stil bij de eigen goedkeurder
+   * laten belanden in plaats van bij wie het budget bewaakt.
+   */
+  projectGekozen: boolean
   soort: OnkostenSoort
   vervoermiddel: Vervoermiddel | null
   km: number | null
@@ -113,8 +120,9 @@ type OnkostenInvoer = {
  * `controleerOnkosten`.
  */
 export function onkostenBezwaar(invoer: OnkostenInvoer): OnkostenBezwaar | null {
-  const { soort, vervoermiddel, km, bedrag, heeftBon } = invoer
+  const { projectGekozen, soort, vervoermiddel, km, bedrag, heeftBon } = invoer
 
+  if (!projectGekozen) return 'kiesProject'
   if (soort === 'reiskosten' && !vervoermiddel) return 'kiesVervoer'
   if (soort !== 'reiskosten' && vervoermiddel) return 'vervoerAlleenReis'
 

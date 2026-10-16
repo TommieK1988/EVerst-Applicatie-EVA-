@@ -27,7 +27,9 @@
     "weekAfgekeurdSub": "Popraw godziny i wyślij tydzień ponownie",
     "weekNietIngediend": "Tydzień {week} jeszcze nie wysłany",
     "deadlineVerstreken": "{dagen, plural, one {Termin minął # dzień temu} few {Termin minął # dni temu} many {Termin minął # dni temu} other {Termin minął # dnia temu}}",
-    "vulAan": "Uzupełnij godziny i wyślij tydzień"
+    "vulAan": "Uzupełnij godziny i wyślij tydzień",
+    "kostenTeKeuren": "{aantal, plural, one {# wydatek do zatwierdzenia} few {# wydatki do zatwierdzenia} many {# wydatków do zatwierdzenia} other {# wydatku do zatwierdzenia}}",
+    "kostenTeKeurenSub": "Parkowanie i dojazdy w Twoich projektach"
   },
   "locatie": {
     "dossierBijLocatie": "Projekt w twojej lokalizacji · {afstand} m",

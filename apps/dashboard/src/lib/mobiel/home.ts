@@ -6,6 +6,7 @@ import { sorteerDagItems, vandaagNl, type AgendaItem } from '@/lib/agenda/agenda
 import { getUrenInstellingen, indienDeadline } from '@/lib/uren/instellingen'
 import { weekStartVan } from '@/lib/uren/rooster'
 import { isFiatteerder } from './keuren'
+import { haalKostenTeKeuren } from '@/lib/uren/onkosten-goedkeuring'
 import { getAppVertaler } from '@/i18n/server'
 
 /**
@@ -68,6 +69,11 @@ export type HomeSignalen = {
   uren: UrenSignaal[]
   /** Of het zin heeft het aantal te fiatteren uurregels na te laden — zie `isFiatteerder`. */
   magFiatteren: boolean
+  /**
+   * Kostenposten die op jouw goedkeuring wachten. Die komen uit de eigen database, dus anders dan
+   * de uren gewoon bij de eerste render.
+   */
+  kostenTeKeuren: number
 }
 
 /** Hoeveel weken terug we kijken naar openstaande weekstaten. */
@@ -161,5 +167,9 @@ export async function haalHomeSignalen(medewerkerId: string): Promise<HomeSignal
     haalUrenSignalen(medewerkerId).catch(() => [] as UrenSignaal[]),
     isFiatteerder(medewerkerId).catch(() => false),
   ])
-  return { uren, magFiatteren: fiatteren }
+  // Alleen voor wie ergens beoordelaar is; voor een monteur is het antwoord altijd nul.
+  const kosten = fiatteren
+    ? await haalKostenTeKeuren(medewerkerId, { metBonnen: false }).catch(() => [])
+    : []
+  return { uren, magFiatteren: fiatteren, kostenTeKeuren: kosten.length }
 }

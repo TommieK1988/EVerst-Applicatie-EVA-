@@ -17646,11 +17646,15 @@ export type Database = {
       }
       uren_onkosten: {
         Row: {
+          afkeur_reden: string | null
           bedrag: number
+          beoordeeld_door: string | null
+          beoordeeld_op: string | null
           bon_pad: string | null
           created_at: string
           datum: string
           dossier_id: string | null
+          goedkeuring_status: string
           id: string
           km: number | null
           medewerker_id: string
@@ -17661,11 +17665,15 @@ export type Database = {
           week_id: string
         }
         Insert: {
+          afkeur_reden?: string | null
           bedrag: number
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
           bon_pad?: string | null
           created_at?: string
           datum: string
           dossier_id?: string | null
+          goedkeuring_status?: string
           id?: string
           km?: number | null
           medewerker_id: string
@@ -17676,11 +17684,15 @@ export type Database = {
           week_id: string
         }
         Update: {
+          afkeur_reden?: string | null
           bedrag?: number
+          beoordeeld_door?: string | null
+          beoordeeld_op?: string | null
           bon_pad?: string | null
           created_at?: string
           datum?: string
           dossier_id?: string | null
+          goedkeuring_status?: string
           id?: string
           km?: number | null
           medewerker_id?: string

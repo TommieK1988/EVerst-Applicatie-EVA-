@@ -4,8 +4,10 @@ import { haalOpenstaandeUren, verdeelNaarRol, type OpenUurRegel } from '@/lib/ur
 import { isoWeek, weekStartVan } from '@/lib/uren/rooster'
 import { dagVergelijkingSleutel, periodeBereik, type DagVergelijking } from '@/lib/uren/types'
 import { haalDagVergelijking, type LiveUurregel, type MedewerkerDag } from '@/lib/uren/aanwezigheid-bij-uren'
-import { signBonnen } from '@/lib/uren/bonnen'
-import type { OnkostenSoort, Vervoermiddel } from '@/lib/uren/onkosten'
+import { getUrenInstellingen } from '@/lib/uren/instellingen'
+import { haalKeurKosten, type KeurOnkosten } from './keuren-kosten'
+
+export type { KeurOnkosten }
 
 /**
  * Datalaag van het mobiele fiatteerscherm (`/m/uren/keuren`).
@@ -165,26 +167,6 @@ export type KeurWeek = {
 }
 
 
-/**
- * Een ingediende kostenpost van iemand wiens uren jij beoordeelt.
- *
- * Alleen-lezen: onkosten hangen aan een EVA-week en niet aan een Bouw7 hour-log, dus er is
- * geen goedkeurvlag om om te zetten. Ze staan hier omdat je bij het fiatteren wilt zien wat
- * je mensen die week aan kosten hebben gedeclareerd -- inclusief het bonnetje.
- */
-export type KeurOnkosten = {
-  id: string
-  datum: string
-  medewerkerNaam: string
-  soort: OnkostenSoort
-  vervoermiddel: Vervoermiddel | null
-  km: number | null
-  bedrag: number
-  omschrijving: string | null
-  /** Verse signed URL; de bonnen-bucket is prive. */
-  bonUrl: string | null
-}
-
 export type KeurData = {
   weken: KeurWeek[]
   totaalRegels: number
@@ -197,7 +179,10 @@ export type KeurData = {
   wachtOpTeamleider: number
   /** Gewerkte regels zonder bewakingscode, over alle weken heen. Stuurt de kop van het scherm. */
   ontbrekendeCodes: number
-  /** Parkeer- en reiskosten van dezelfde mensen over dezelfde periode. Alleen-lezen. */
+  /**
+   * Kosten die bij mij liggen om goed of af te keuren, plus -- alleen-lezen -- de overige kosten
+   * van de mensen wier uren ik beoordeel. Zie `./keuren-kosten`.
+   */
   onkosten: KeurOnkosten[]
   /** Bouw7 was niet bereikbaar; dan tonen we dat in plaats van "niets te doen". */
   fout: string | null
@@ -209,9 +194,10 @@ export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
   const { van, tot } = periodeBereik('te_keuren')
   const res = await haalOpenstaandeUren(van, tot)
   if (res.fout) {
+    // De kosten komen uit EVA: die horen er ook te staan als Bouw7 er even uit ligt.
     return {
       weken: [], totaalRegels: 0, totaalUren: 0, wachtOpTeamleider: 0,
-      ontbrekendeCodes: 0, onkosten: [], fout: res.fout,
+      ontbrekendeCodes: 0, onkosten: await haalKeurKosten(medewerkerId, [], van, tot), fout: res.fout,
     }
   }
 
@@ -314,8 +300,9 @@ export async function haalTeKeuren(medewerkerId: string): Promise<KeurData> {
     totaalUren: rondUren(alles.reduce((s, r) => s + r.uren, 0)),
     wachtOpTeamleider: alles.filter(r => r.wachtOpTeamleider).length,
     ontbrekendeCodes: alles.filter(r => r.codeOntbreekt).length,
-    onkosten: await haalOnkosten(
-      [...mijn.keys()].map(id => bron.get(id)).filter((r): r is OpenUurRegel => !!r),
+    onkosten: await haalKeurKosten(
+      medewerkerId,
+      [...new Set([...mijn.keys()].map(id => bron.get(id)?.medewerkerId).filter((id): id is string => !!id))],
       van, tot,
     ),
     fout: null,
@@ -378,63 +365,6 @@ function maakBlokken(regels: KeurRegel[]): KeurCodeBlok[] {
   // Wat een code mist bovenaan: dat is waar deze stap voor bestaat. Daarna op omvang.
   return [...blokken.values()].sort((a, b) =>
     a.ontbreekt !== b.ontbreekt ? (a.ontbreekt ? -1 : 1) : b.uren - a.uren)
-}
-
-/**
- * De onkosten van de mensen wier uren ik beoordeel, over dezelfde periode.
- *
- * De kring komt uit de Bouw7-regels die we toch al hadden: zie ik jouw uren, dan zie ik ook
- * wat je die periode aan kosten indiende. Er is geen aparte rol voor -- een kostenpost hangt
- * aan een week en niet aan een dossier, dus hem per project toewijzen kan niet.
- *
- * De query is begrensd door de medewerkerslijst en het datumbereik en blijft daarmee ruim
- * onder de PostgREST-grens van 1000 rijen.
- */
-/** De kolommen die `haalOnkosten` opvraagt; los benoemd zodat er geen any aan te pas komt. */
-type OnkostenRij = {
-  id: string
-  datum: string
-  medewerker_id: string
-  soort: string
-  vervoermiddel: string | null
-  km: number | string | null
-  bedrag: number | string
-  omschrijving: string | null
-  bon_pad: string | null
-}
-
-async function haalOnkosten(
-  regels: { medewerkerId: string | null; medewerkerNaam: string }[],
-  van: string,
-  tot: string,
-): Promise<KeurOnkosten[]> {
-  const namen = new Map<string, string>()
-  for (const r of regels) if (r.medewerkerId) namen.set(r.medewerkerId, r.medewerkerNaam)
-  if (namen.size === 0) return []
-
-  const { data, error } = await createAdminClient()
-    .from('uren_onkosten')
-    .select('id, datum, medewerker_id, soort, vervoermiddel, km, bedrag, omschrijving, bon_pad')
-    .in('medewerker_id', [...namen.keys()])
-    .gte('datum', van)
-    .lte('datum', tot)
-    .order('datum')
-  if (error || !data) return []
-
-  const rijen = data as OnkostenRij[]
-  const bonLinks = await signBonnen(rijen.map(r => r.bon_pad))
-
-  return rijen.map(r => ({
-    id: r.id,
-    datum: r.datum,
-    medewerkerNaam: namen.get(r.medewerker_id) ?? '-',
-    soort: r.soort as OnkostenSoort,
-    vervoermiddel: (r.vervoermiddel as Vervoermiddel) ?? null,
-    km: r.km == null ? null : Number(r.km),
-    bedrag: Number(r.bedrag),
-    omschrijving: r.omschrijving ?? null,
-    bonUrl: bonLinks.get(r.bon_pad ?? '') ?? null,
-  }))
 }
 
 type BronRegel = OpenUurRegel
@@ -543,5 +473,9 @@ export async function isFiatteerder(medewerkerId: string): Promise<boolean> {
     .from('medewerkers')
     .select('id', { count: 'exact', head: true })
     .eq('uren_goedkeurder_id', medewerkerId)
-  return !fout && (eigen ?? 0) > 0
+  if (!fout && (eigen ?? 0) > 0) return true
+
+  // De standaardgoedkeurder vangt alles op van wie geen eigen goedkeurder heeft -- verlof, maar
+  // ook kosten zonder project. Zonder deze vraag zag hij zijn eigen werkvoorraad nooit.
+  return (await getUrenInstellingen()).niet_gewerkt_goedkeurder_id === medewerkerId
 }

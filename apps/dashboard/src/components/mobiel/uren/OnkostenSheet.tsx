@@ -1,11 +1,13 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslations } from 'next-intl'
 import { useDatumLocale } from '@/i18n/client'
 import { voegOnkostenToe } from '@/lib/uren/onkosten-acties'
 import { verkleinFoto } from '@/lib/foto/verkleinFoto'
+import { getDossierOpties, type DossierOptie } from '@/lib/uren/weekstaat'
+import ProjectZoeker from './ProjectZoeker'
 import {
   ONKOSTEN_SOORTEN, VERVOERMIDDELEN, bedragZelfInvullen, berekenKmBedrag, bonVerplicht,
   onkostenBezwaar, rekentPerKm, type KmTarieven, type OnkostenSoort, type Vervoermiddel,
@@ -22,6 +24,11 @@ import {
  * Deze bedragen gaan bewust NIET naar Bouw7: de urenregistratie daar kent geen geldbedragen, en
  * het als projectkosten boeken zou de inkoopstroom raken. Ze worden hier vastgelegd en getoond;
  * hoe de administratie ze verder verwerkt is een aparte afspraak.
+ *
+ * HET PROJECT BEPAALT WIE GOEDKEURT. De projectleider van het gekozen project keurt de kosten
+ * goed; bij "Geen project" doet de eigen goedkeurder dat. Niets kiezen kan niet -- dan zouden ze
+ * stil bij de verkeerde belanden. Werkte je die dag op precies één project, dan staat dat al
+ * klaar; de lijst is dezelfde als bij de uren (waar je rond die dag staat ingepland).
  */
 
 const veld: React.CSSProperties = {
@@ -45,12 +52,19 @@ function keuzeKnop(actief: boolean): React.CSSProperties {
   }
 }
 
+/** Een project waarop de medewerker die dag uren schreef. */
+export type DagProject = { id: string; label: string }
+
 export default function OnkostenSheet({
-  weekId, datum, kmTarieven, onSluit, onKlaar,
+  weekId, datum, kmTarieven, dagProjecten, kantoor, onSluit, onKlaar,
 }: {
   weekId: string
   datum: string
   kmTarieven: KmTarieven
+  /** De echte projecten (geen overhead) uit de uren van deze dag; één ervan = voorgekozen. */
+  dagProjecten: DagProject[]
+  /** Kantoor werkt zelden op een project: zonder uren op een project staat "Geen project" klaar. */
+  kantoor: boolean
   onSluit: () => void
   onKlaar: () => void
 }) {
@@ -65,6 +79,31 @@ export default function OnkostenSheet({
   const [bon, setBon] = useState<{ bestand: File; voorbeeld: string } | null>(null)
   const [bezig, setBezig] = useState(false)
 
+  // '' = nog niets gekozen, 'geen' = bewust geen project, anders het dossier-id.
+  const [project, setProject] = useState(() =>
+    dagProjecten.length === 1 ? dagProjecten[0].id : (kantoor && dagProjecten.length === 0 ? 'geen' : ''))
+  const alsOptie = (p: DagProject): DossierOptie =>
+    ({ id: p.id, label: p.label, indirect: false, servicedesk: false, vandaag: true })
+  const [opties, setOpties] = useState<DossierOptie[]>(() => dagProjecten.map(alsOptie))
+  const [optiesLaden, setOptiesLaden] = useState(true)
+
+  // Bij het openen eenmalig; de sheet leeft maar zo lang als één invoer duurt.
+  useEffect(() => {
+    let levend = true
+    getDossierOpties(datum)
+      .then(d => {
+        if (!levend) return
+        // Overhead is geen project: daarvoor is "Geen project".
+        const echte = d.filter(o => !o.indirect)
+        const extra = dagProjecten.filter(p => !echte.some(o => o.id === p.id)).map(alsOptie)
+        setOpties([...extra, ...echte.map(o => dagProjecten.some(p => p.id === o.id) ? { ...o, vandaag: true } : o)])
+      })
+      .catch(() => { /* de projecten van die dag staan er al; meer is bijzaak */ })
+      .finally(() => { if (levend) setOptiesLaden(false) })
+    return () => { levend = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen bij het openen
+  }, [datum])
+
   // capture="environment" dwingt de achtercamera af; zónder de tweede input kun je dan geen
   // bestaande foto meer kiezen. Hetzelfde paar als in mobiel/kwaliteit/FotoStrook.tsx.
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -78,12 +117,13 @@ export default function OnkostenSheet({
   const bedragGetal = Number(bedrag.replace(',', '.'))
 
   const bezwaarCode = useMemo(() => onkostenBezwaar({
+    projectGekozen: project !== '',
     soort,
     vervoermiddel,
     km: km.trim() && Number.isFinite(kmGetal) ? kmGetal : null,
     bedrag: bedrag.trim() && Number.isFinite(bedragGetal) ? bedragGetal : null,
     heeftBon: Boolean(bon),
-  }), [soort, vervoermiddel, km, kmGetal, bedrag, bedragGetal, bon])
+  }), [project, soort, vervoermiddel, km, kmGetal, bedrag, bedragGetal, bon])
   const bezwaar = bezwaarCode ? t(`onkosten.bezwaar.${bezwaarCode}`) : null
 
   const kmBedrag = perKm && Number.isFinite(kmGetal) && kmGetal > 0
@@ -128,6 +168,7 @@ export default function OnkostenSheet({
 
     const fd = new FormData()
     fd.append('datum', datum)
+    fd.append('project', project)
     fd.append('soort', soort)
     if (vervoermiddel) fd.append('vervoermiddel', vervoermiddel)
     if (perKm) fd.append('km', km)
@@ -163,6 +204,39 @@ export default function OnkostenSheet({
         </div>
 
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <label style={labelStijl}>{t('onkosten.project')}</label>
+            {project === 'geen' ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px 10px 14px',
+                borderRadius: 10, border: '1.5px solid #009439', background: 'rgba(0,148,57,0.06)',
+              }}>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: 'var(--fg)' }}>
+                  {t('onkosten.geenProject')}
+                </div>
+                <button type="button" onClick={() => setProject('')} style={kleineKnop}>
+                  {t('regel.wijzigProject')}
+                </button>
+              </div>
+            ) : (
+              <>
+                <ProjectZoeker opties={opties} laden={optiesLaden && opties.length === 0}
+                  gekozenId={project} onKies={setProject} kantoor={kantoor} />
+                {!project && (
+                  <button type="button" onClick={() => setProject('geen')}
+                    style={{ ...kleineKnop, width: '100%', marginTop: 8, padding: '11px 12px', whiteSpace: 'normal' }}>
+                    {t('onkosten.geenProjectKiezen')}
+                  </button>
+                )}
+              </>
+            )}
+            {project && (
+              <p style={{ margin: '6px 0 0', fontSize: 12.5, color: '#6b757c' }}>
+                {project === 'geen' ? t('onkosten.geenProjectUitleg') : t('onkosten.projectUitleg')}
+              </p>
+            )}
+          </div>
+
           <div>
             <label style={labelStijl}>{t('onkosten.soort')}</label>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -292,6 +366,12 @@ export default function OnkostenSheet({
       </div>
     </div>
   )
+}
+
+const kleineKnop: React.CSSProperties = {
+  flexShrink: 0, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+  border: '1px solid var(--border)', background: 'var(--bg)',
+  fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: '#6b757c',
 }
 
 const actieKnop: React.CSSProperties = {
