@@ -96,6 +96,18 @@ export async function metBedragen(dossiers: RelatieDossier[]): Promise<DossierMe
 }
 
 /**
+ * Offertebedrag per dossier, met de regel van het offertebord. Voor de server-kant van de
+ * offertebewaking (bedragklasse: mega-regels, ontvangstcontrole, automatisch vervallen).
+ */
+export async function offerteBedragen(ids: string[]): Promise<Map<string, number | null>> {
+  const uit = new Map<string, number | null>()
+  if (ids.length === 0) return uit
+  const { ruw, kaartVelden } = await leesBedragRijen(ids)
+  for (const r of ruw) uit.set(r.id, berekenKaartBedrag(alsRij(r, kaartVelden.get(r.id)), 'offerte').totaalExclBtw)
+  return uit
+}
+
+/**
  * Contracttotaal van de lopende servicedeskbonnen onder `ids`. Andere dossiers worden
  * overgeslagen — de rij bepaalt zelf of het een lopende bon is, niet de aanroeper. Een bon
  * zonder contracttotaal valt terug op zijn offertebedrag (zelfde regel als het bord), en

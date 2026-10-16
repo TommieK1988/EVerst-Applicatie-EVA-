@@ -278,9 +278,8 @@ export type UitkomstDefinitie = {
   /** Vraagt de dialoog om een verliesreden? */
   vraagtReden?: boolean
   /**
-   * Dwingt de dialoog een verkoopkans af. Bij uitstel is dat geen extraatje: het werk komt
-   * terug, en zonder iemand met een datum erachter is "uitgesteld" een ander woord voor
-   * vergeten. De herbenaderdatum is meteen de deadline van die kans.
+   * Dwingt de dialoog een verkoopkans af. Wordt nu door geen uitkomst gebruikt: uitgesteld
+   * werk houdt de offerte open met een datum en een actiehouder, en dat is al de afspraak.
    */
   vraagtVerkoopkans?: boolean
   /** Biedt de dialoog een verkoopkans aan, zonder hem te verplichten. */
@@ -364,7 +363,9 @@ export const UITKOMSTEN: UitkomstDefinitie[] = [
     stapTekst: 'Werk uitgesteld — opnieuw benaderen',
     werkdagen: null,
     vraagtDatum: true,
-    vraagtVerkoopkans: true,
+    // Bewust geen verkoopkans erbij (afgesproken okt 2026): uitgesteld óf een verkoopkans,
+    // niet allebei. De offerte blijft open met een herbenaderdatum en een actiehouder; dat is
+    // de afspraak. Een verkoopkans is voor wat overblijft als de offerte zelf dicht gaat.
     kans: 10,
   },
   {
@@ -380,6 +381,15 @@ export const UITKOMSTEN: UitkomstDefinitie[] = [
     biedtVerkoopkans: true,
   },
 ]
+
+/**
+ * Moet er bij deze uitkomst iets opgeschreven worden? Altijd, behalve bij geen gehoor: die
+ * notitie is wat de volgende beller leest, en zonder notitie kan de kaart niet laten zien
+ * wat er afgesproken is. Eén plek, zodat dialoog en server dezelfde regel hanteren.
+ */
+export function notitieVerplicht(sleutel: UitkomstSleutel): boolean {
+  return sleutel !== 'geen_gehoor'
+}
 
 export const UITKOMST_LABELS: Record<UitkomstSleutel, string> = Object.fromEntries(
   UITKOMSTEN.map(u => [u.sleutel, u.label]),

@@ -23,6 +23,7 @@
  */
 
 import * as React from 'react'
+import { MedewerkerKiezer } from '@/components/ui/medewerker-kiezer'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
@@ -74,15 +75,13 @@ export function VerkoopkansVelden({
       </Veld>
 
       <Veld tekst="Wie gaat erachteraan?">
-        <select
-          className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px] disabled:bg-neutral-50"
+        <MedewerkerKiezer
+          medewerkers={medewerkers}
           value={waarde.actiehouderId}
           disabled={uitgeschakeld}
-          onChange={e => onChange({ ...waarde, actiehouderId: e.target.value })}
-        >
-          <option value="">Kies een collega…</option>
-          {medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-        </select>
+          onChange={id => onChange({ ...waarde, actiehouderId: id })}
+          className="h-8"
+        />
       </Veld>
 
       <Veld tekst="Wanneer pakken we het weer op?">

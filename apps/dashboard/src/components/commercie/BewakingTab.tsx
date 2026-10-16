@@ -6,7 +6,8 @@
  * en het Informatie-tab gebruiken — anders zou hier een ander getal staan dan op de kaart.
  */
 
-import { getBewaking, getTijdlijn, getOffertesVoorDossier } from '@/lib/commercie/actions'
+import { getBewaking, getTijdlijn } from '@/lib/commercie/actions'
+import { getOffertesVoorDossier } from '@/lib/commercie/bouw7-offertes'
 import { getMedewerkers } from '@/lib/dossiers/actions'
 import { berekenKaartBedrag } from '@/components/dossiers/kaart-bedrag'
 import type { DossierRij } from '@/components/dossiers/types'

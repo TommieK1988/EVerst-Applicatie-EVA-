@@ -10,6 +10,7 @@
  */
 
 import * as React from 'react'
+import { MedewerkerKiezer } from '@/components/ui/medewerker-kiezer'
 import toast from 'react-hot-toast'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,18 +19,15 @@ import { DatePicker } from '@/components/ui/date-picker'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
 } from '@/components/ui/dialog'
-import { useDialogen } from '@/components/ui/dialogen'
 import { cn } from '@everts/ui'
 import { formatDatumNL, datumNaarISO } from '@/lib/dossiers/datum-regels'
 import {
-  STATUS_PRESENTATIE, UITKOMSTEN, VERLIES_REDENEN, stapOmschrijving,
-  verkoopkansCompleet, LEGE_VERKOOPKANS,
-  type BewakingKaart, type BewakingStatus, type UitkomstDefinitie,
-  type VerkoopkansInvoer,
+  STATUS_PRESENTATIE, stapOmschrijving,
+  type BewakingKaart, type BewakingStatus,
 } from '@/lib/commercie/types'
-import { legUitkomstVast, slaStapOp } from '@/lib/commercie/actions'
+import { slaStapOp } from '@/lib/commercie/actions'
 import { zetCommercieelEigenaar } from '@/lib/commercie/eigenaar'
-import { VerkoopkansVelden } from './VerkoopkansVelden'
+import { UitkomstFormulier } from './UitkomstFormulier'
 
 type Medewerker = { id: string; naam: string }
 
@@ -177,106 +175,31 @@ function EigenaarVeld(props: { dossierId: string; eigenaarId: string | null; med
   }
 
   return (
-    <label className="block">
+    <div>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
         Commercieel eigenaar
       </span>
-      <select
-        className="mt-0.5 h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px] disabled:opacity-60"
+      <MedewerkerKiezer
+        medewerkers={props.medewerkers}
         value={waarde}
         disabled={bezig}
-        onChange={e => wijzig(e.target.value)}
-      >
-        <option value="">Nog niet bepaald</option>
-        {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-      </select>
-    </label>
+        onChange={wijzig}
+        leegLabel="Nog niet bepaald"
+        className="mt-0.5 h-8"
+      />
+    </div>
   )
 }
 
 // ── Uitkomst vastleggen ──────────────────────────────────────────────────────
 
+/** De dialoog om het gedeelde formulier heen; het zijpaneel in "Te doen" gebruikt hetzelfde. */
 function UitkomstDialoog(props: {
   open: boolean
   onOpenChange: (v: boolean) => void
   dossierId: string
   medewerkers: Medewerker[]
 }) {
-  const [gekozen, setGekozen] = React.useState<UitkomstDefinitie | null>(null)
-  const [tekst, setTekst] = React.useState('')
-  const [datum, setDatum] = React.useState<Date | undefined>()
-  const [actiehouder, setActiehouder] = React.useState('')
-  const [reden, setReden] = React.useState('')
-  const [toelichting, setToelichting] = React.useState('')
-  /**
-   * De kans die overblijft. Bij 'uitgesteld' verplicht — uitgesteld werk zonder houder en datum
-   * is een ander woord voor vergeten werk — en bij 'verloren' aangeboden achter een knop.
-   */
-  const [kansOpen, setKansOpen] = React.useState(false)
-  const [kans, setKans] = React.useState<VerkoopkansInvoer>(LEGE_VERKOOPKANS)
-  const [bezig, setBezig] = React.useState(false)
-  const { bevestig: bevestigDialoog } = useDialogen()
-
-  // Terug naar de keuzelijst zodra de dialoog sluit, zodat de volgende keer niet halverwege
-  // een vorige uitkomst wordt hervat.
-  React.useEffect(() => {
-    if (props.open) return
-    setGekozen(null); setTekst(''); setDatum(undefined)
-    setActiehouder(''); setReden(''); setToelichting('')
-    setKansOpen(false); setKans(LEGE_VERKOOPKANS)
-  }, [props.open])
-
-  // De herbenaderdatum is meteen de deadline van de kans: bij uitstel is dat per definitie
-  // hetzelfde moment, en twee keer dezelfde datum laten kiezen nodigt uit tot verschillen.
-  React.useEffect(() => {
-    if (!datum) return
-    setKans(k => (k.deadline ? k : { ...k, deadline: datumNaarISO(datum) }))
-  }, [datum])
-
-  // Bij een uitkomst die een kans afdwingt staat het blok meteen open; hem eerst moeten
-  // opzoeken achter een knop zou de verplichting onzichtbaar maken.
-  React.useEffect(() => {
-    setKansOpen(gekozen?.vraagtVerkoopkans === true)
-    setKans(LEGE_VERKOOPKANS)
-  }, [gekozen])
-
-  async function bevestig(forceerBouw7 = false) {
-    if (!gekozen) return
-    setBezig(true)
-    const res = await legUitkomstVast(props.dossierId, {
-      uitkomst: gekozen.sleutel,
-      tekst: tekst || null,
-      stapDatum: datum ? datumNaarISO(datum) : null,
-      actiehouderId: actiehouder || null,
-      reden: reden || null,
-      redenToelichting: toelichting || null,
-      verkoopkans: kansOpen && verkoopkansCompleet(kans) ? kans : null,
-      forceerBouw7,
-    })
-    setBezig(false)
-
-    if (res.ok) {
-      toast.success('Vastgelegd')
-      props.onOpenChange(false)
-      return
-    }
-    // Bouw7 en EVA zijn het oneens over de fase — iemand heeft hem daar inmiddels verzet.
-    // De gebruiker beslist wie wint; stil overschrijven zou het werk van een collega wissen.
-    if (res.conflict) {
-      const tochDoorvoeren = await bevestigDialoog({
-        titel: 'In Bouw7 staat iets anders',
-        omschrijving:
-          `Deze offerte staat in Bouw7 inmiddels op "${res.conflict.bouw7Label}". `
-          + 'Wil je jouw wijziging tóch doorvoeren en die van Bouw7 overschrijven?',
-        bevestigLabel: 'Tóch doorvoeren',
-        annuleerLabel: 'Bouw7 volgen',
-      })
-      if (tochDoorvoeren) await bevestig(true)
-      return
-    }
-    toast.error(res.error)
-  }
-
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent size="md">
@@ -290,144 +213,17 @@ function UitkomstDialoog(props: {
             </DialogDescription>
           </div>
         </DialogHeader>
-
-        <DialogBody className="space-y-3">
-          {!gekozen ? (
-            <div className="grid gap-2">
-              {UITKOMSTEN.map(u => (
-                <button
-                  key={u.sleutel}
-                  type="button"
-                  onClick={() => setGekozen(u)}
-                  className="rounded-lg border border-neutral-200 px-3 py-2 text-left hover:border-brand-500 hover:bg-neutral-50"
-                >
-                  <div className="text-sm font-medium text-neutral-900">{u.label}</div>
-                  <div className="text-xs text-neutral-500">{u.gevolg}</div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="rounded-lg bg-neutral-50 px-3 py-2">
-                <div className="text-sm font-medium text-neutral-900">{gekozen.label}</div>
-                <div className="text-xs text-neutral-500">{gekozen.gevolg}</div>
-                <button
-                  type="button"
-                  className="mt-1 text-xs text-brand-600 underline"
-                  onClick={() => setGekozen(null)}
-                >
-                  Andere uitkomst kiezen
-                </button>
-              </div>
-
-              <Label tekst="Wat is er gezegd of gebeurd? (optioneel)">
-                <Input
-                  value={tekst}
-                  onChange={e => setTekst(e.target.value)}
-                  placeholder="Kort en feitelijk, bv. 'Voorzitter gesproken, staat op agenda ALV'"
-                />
-              </Label>
-
-              {gekozen.vraagtDatum && (
-                <Label tekst={gekozen.sleutel === 'ligt_bij_alv'
-                  ? 'Wanneer controleren we het? (kies de dag ná de vergadering)'
-                  : 'Wanneer benaderen we de klant opnieuw?'}>
-                  <DatePicker value={datum} onChange={setDatum} />
-                </Label>
-              )}
-
-              {gekozen.vraagtActiehouder && (
-                <Label tekst="Wie pakt dit op?">
-                  <select
-                    className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-                    value={actiehouder}
-                    onChange={e => setActiehouder(e.target.value)}
-                  >
-                    <option value="">Kies een collega…</option>
-                    {props.medewerkers.map(m => (
-                      <option key={m.id} value={m.id}>{m.naam}</option>
-                    ))}
-                  </select>
-                </Label>
-              )}
-
-              {gekozen.vraagtReden && (
-                <>
-                  <Label tekst="Waarom is de offerte niet doorgegaan?">
-                    <select
-                      className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-                      value={reden}
-                      onChange={e => setReden(e.target.value)}
-                    >
-                      <option value="">Kies een reden…</option>
-                      {VERLIES_REDENEN.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </Label>
-                  {reden === 'Anders' && (
-                    <Label tekst="Licht kort toe">
-                      <Input value={toelichting} onChange={e => setToelichting(e.target.value)} />
-                    </Label>
-                  )}
-                  <p className="text-xs text-neutral-500">
-                    Komt het werk later terug? Kies dan <strong>Uitgesteld</strong> in plaats van
-                    Verloren — dan blijft de offerte zelf in bewaking. Gaat het werk wél van tafel
-                    maar komt de klant later terug, leg dan hieronder een verkoopkans vast.
-                  </p>
-                </>
-              )}
-
-              {/* De kans die overblijft. Verplicht bij uitstel, aangeboden bij verlies. */}
-              {(gekozen.vraagtVerkoopkans || gekozen.biedtVerkoopkans) && (
-                kansOpen ? (
-                  <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[13px] font-medium text-neutral-900">Verkoopkans</span>
-                      {!gekozen.vraagtVerkoopkans && (
-                        <button
-                          type="button"
-                          className="text-xs text-neutral-500 underline"
-                          onClick={() => { setKansOpen(false); setKans(LEGE_VERKOOPKANS) }}
-                        >
-                          Toch niet
-                        </button>
-                      )}
-                    </div>
-                    <VerkoopkansVelden
-                      waarde={kans}
-                      onChange={setKans}
-                      medewerkers={props.medewerkers}
-                    />
-                    <p className="mt-2 text-xs text-neutral-500">
-                      De kans blijft aan dit dossier gekoppeld en staat op het Aanvragen-tab onder
-                      &ldquo;Verkoopkansen&rdquo;. Laat je de klant leeg, dan nemen we de
-                      opdrachtgever van dit dossier over.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-2.5">
-                    <p className="text-xs text-neutral-600">
-                      Komt dit werk later terug? Leg het nu vast, anders verdwijnt het met dit
-                      dossier.
-                    </p>
-                    <Button size="sm" variant="outline" className="mt-2" onClick={() => setKansOpen(true)}>
-                      Verkoopkans aanmaken
-                    </Button>
-                  </div>
-                )
-              )}
-            </div>
+        <DialogBody>
+          {/* Alleen gemonteerd zolang de dialoog open is: zo begint elke opening schoon. */}
+          {props.open && (
+            <UitkomstFormulier
+              dossierId={props.dossierId}
+              medewerkers={props.medewerkers}
+              onVastgelegd={() => props.onOpenChange(false)}
+              onAnnuleer={() => props.onOpenChange(false)}
+            />
           )}
         </DialogBody>
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => props.onOpenChange(false)}>Annuleren</Button>
-          <Button
-            disabled={!gekozen || bezig || (kansOpen && !verkoopkansCompleet(kans))}
-            onClick={() => bevestig()}
-          >
-            {bezig ? 'Bezig…' : 'Vastleggen'}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -503,13 +299,7 @@ function AanpassenDialoog(props: {
 
         <DialogBody className="space-y-3">
           <Label tekst="Commercieel eigenaar">
-            <select
-              className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-              value={eigenaar} onChange={e => setEigenaar(e.target.value)}
-            >
-              <option value="">Nog niet bepaald</option>
-              {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
+            <MedewerkerKiezer medewerkers={props.medewerkers} value={eigenaar} onChange={setEigenaar} leegLabel="Nog niet bepaald" className="h-8" />
           </Label>
 
           <Label tekst="Wat is de volgende stap?">
@@ -559,13 +349,7 @@ function AanpassenDialoog(props: {
           </Label>
 
           <Label tekst={stapSoort === 'wachten' ? 'Wie controleert het?' : 'Wie pakt dit op?'}>
-            <select
-              className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-              value={actiehouder} onChange={e => setActiehouder(e.target.value)}
-            >
-              <option value="">Kies een collega…</option>
-              {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
+            <MedewerkerKiezer medewerkers={props.medewerkers} value={actiehouder} onChange={setActiehouder} className="h-8" />
           </Label>
 
           {/* Een percentage, geen los getal: het voedt de kans-gewogen pijplijn onder

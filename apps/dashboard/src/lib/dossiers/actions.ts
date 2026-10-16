@@ -250,6 +250,9 @@ type BewakingVerrijking = {
   bewaking_eigenaar_id: string | null
   bewaking_eigenaar: string | null
   bewaking_actief: boolean
+  bewaking_opvolging: 'altijd' | 'niet' | null
+  bewaking_stil_reden: string | null
+  bewaking_besluit_datum: string | null
 }
 
 async function getBewakingVerrijking(ids: string[]): Promise<Map<string, BewakingVerrijking>> {
@@ -263,7 +266,7 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
   const resultaten = await Promise.all(
     blokken.map(blok => supabase
       .from('commercie_bewaking')
-      .select('dossier_id,stap_soort,stap_tekst,stap_datum,wacht_op,stap_bron,actiehouder_id,eigenaar_id')
+      .select('dossier_id,stap_soort,stap_tekst,stap_datum,wacht_op,stap_bron,actiehouder_id,eigenaar_id,opvolging,stil_reden,besluit_datum')
       .in('dossier_id', blok)),
   )
 
@@ -293,6 +296,9 @@ async function getBewakingVerrijking(ids: string[]): Promise<Map<string, Bewakin
       bewaking_eigenaar_id: r.eigenaar_id ?? null,
       bewaking_eigenaar:    r.eigenaar_id ? namen.get(r.eigenaar_id) ?? null : null,
       bewaking_actief:      true,
+      bewaking_opvolging:   r.opvolging === 'altijd' || r.opvolging === 'niet' ? r.opvolging : null,
+      bewaking_stil_reden:  r.stil_reden ?? null,
+      bewaking_besluit_datum: r.besluit_datum ?? null,
     })
   }
 

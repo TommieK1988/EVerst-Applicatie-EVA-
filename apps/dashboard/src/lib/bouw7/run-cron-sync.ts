@@ -91,6 +91,11 @@ export async function runCronSync(
     offertebewaking = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  // De automatische regels uit lib/commercie/automatisering.ts (ontvangstcontrole na verzenden,
+  // kleine offertes laten vervallen) staan bewust op pauze (okt 2026): eerst de rest van de
+  // offertebewaking in gebruik nemen. Weer aanzetten = automatiseerOffertebewaking() hier
+  // aanroepen en `offerte_automatisering_vanaf` in bedrijfsinstellingen op de startdatum zetten.
+
   // Bordindeling nalopen: LB met een verkeerde categorie → melding aan de projectleider, en
   // dossiers waarvan de EVA-status niet bij hun bord past → foutenlog. Ná de sync, want die zet
   // de Bouw7-status en categorie waar `bord` uit volgt. Gooit niet.

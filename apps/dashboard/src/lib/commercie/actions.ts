@@ -29,13 +29,16 @@ import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { vandaagNL } from '@/lib/wagenpark/periode'
 import {
   bewakingsStatus, stapOmschrijving, werkdagenVooruit, verkoopkansCompleet,
-  naamVan, vertaalDbFout, UITKOMSTEN, UITKOMST_LABELS,
+  naamVan, vertaalDbFout, notitieVerplicht, UITKOMSTEN, UITKOMST_LABELS,
   type ActieResultaat, type BewakingKaart, type BewakingStatus, type MedewerkerNaam,
   type UitkomstSleutel, type StapSoort, type WachtOp, type VerkoopkansInvoer,
 } from './types'
 // De verkoopkans woont in een eigen module: hij is een andere entiteit dan de offertekaart,
 // en `actions.ts` was zonder die scheiding voorbij de 800 regels gegroeid.
 import { maakVerkoopkans } from './verkoopkansen'
+import { faseNaStap } from './fase-volgt-stap'
+import { stilstandVelden } from './stilstand'
+import { megaEigenaarFout } from './mega-eigenaar'
 
 /** De service-role-client; los getypeerd zodat de helpers hieronder hem kunnen aannemen. */
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -98,6 +101,8 @@ type KaartUpdate = {
   getrieerd_door?: string | null
   stap_bron?: 'handmatig' | 'actie'
   taak_id?: string | null
+  stil_reden?: string | null
+  besluit_datum?: string | null
 }
 
 /** Fases waarin commerciële opvolging niet meer nodig is. */
@@ -369,6 +374,10 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
 
   const vorigeActiehouder = kaart.actiehouder_id
   const update: KaartUpdate = {}
+  if (invoer.eigenaarId) {
+    const fout = await megaEigenaarFout(dossierId, invoer.eigenaarId)
+    if (fout) return { ok: false, error: fout }
+  }
   if (invoer.eigenaarId !== undefined) update.eigenaar_id = invoer.eigenaarId
   if (invoer.actiehouderId !== undefined) update.actiehouder_id = invoer.actiehouderId
   if (invoer.stapSoort !== undefined) update.stap_soort = invoer.stapSoort
@@ -396,6 +405,19 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
 
   const { error } = await supabase.from('commercie_bewaking').update(update).eq('id', kaart.id)
   if (error) return { ok: false, error: vertaalDbFout(error.message) }
+
+  // De fase volgt de stap, ook als die met de hand wordt gezet (zie fase-volgt-stap.ts).
+  if (invoer.stapSoort !== undefined) {
+    const { data: d } = await supabase.from('dossiers').select('offerte_substatus').eq('id', dossierId).maybeSingle()
+    const fase = faseNaStap(d?.offerte_substatus ?? null, null, invoer.stapSoort)
+    // Best effort: de stap is al opgeslagen; een alleen-lezen dossier of Bouw7-fout mag dat niet
+    // laten lijken op een mislukte opslag.
+    if (fase) {
+      const res = await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+        .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
+      if (!res.ok) console.error('[slaStapOp] fase niet meegezet:', res.error)
+    }
+  }
 
   const nieuweActiehouder = (update.actiehouder_id ?? kaart.actiehouder_id) as string | null
   const gewisseld = nieuweActiehouder != null && nieuweActiehouder !== vorigeActiehouder
@@ -435,10 +457,14 @@ export type UitkomstInvoer = {
   reden?: string | null
   redenToelichting?: string | null
   /**
-   * De kans die overblijft. Verplicht bij 'uitgesteld' (uitgesteld werk zonder houder en datum
-   * is vergeten werk), optioneel bij 'verloren'.
+   * De kans die overblijft, optioneel bij 'verloren'. Niet bij 'uitgesteld': daar blijft de
+   * offerte zelf open met een herbenaderdatum.
    */
   verkoopkans?: VerkoopkansInvoer | null
+  /** Waarom de offerte stilstaat; zonder opgave volgt hij uit de uitkomst (zie opvolging.ts). */
+  stilReden?: string | null
+  /** Wanneer de klant beslist (ALV, begroting). */
+  besluitDatum?: string | null
   /** Tweede poging na een Bouw7-conflict: tóch overschrijven. */
   forceerBouw7?: boolean
 }
@@ -462,6 +488,10 @@ export async function legUitkomstVast(
   if (def.vraagtReden && !invoer.reden) {
     return { ok: false, error: 'Kies een reden. Die komt terug in de verkooprapportage.' }
   }
+  // Wat er besproken is, is wat de volgende beller leest. Alleen "geen gehoor" heeft niets te melden.
+  if (notitieVerplicht(def.sleutel) && !invoer.tekst?.trim()) {
+    return { ok: false, error: 'Schrijf kort op wat er besproken is. Dat leest de volgende die belt.' }
+  }
   if (def.vraagtActiehouder && !invoer.actiehouderId) {
     return { ok: false, error: 'Kies wie deze stap oppakt.' }
   }
@@ -476,17 +506,17 @@ export async function legUitkomstVast(
   const kaart = await kaartVoorDossier(supabase, dossierId)
   if (!kaart) return { ok: false, error: 'Kon de bewakingskaart niet aanmaken.' }
 
-  // 1. Fase. Via updateDossierSubstatus, zodat Bouw7 meebeweegt en een conflict met de
-  //    tweede Bouw7-app de wijziging netjes afbreekt in plaats van stil te overschrijven.
-  if (def.fase) {
-    const res = await updateDossierSubstatus(dossierId, def.fase as never, {
-      schrijfBouw7: true,
-      forceerBouw7: invoer.forceerBouw7 === true,
-    })
-    if (!res.ok) return { ok: false, error: res.error, conflict: res.conflict }
+  // 1. Fase. Die volgt de stap (zie fase-volgt-stap.ts), tenzij de uitkomst zelf een eindfase of
+  //    mondeling akkoord kiest. Via updateDossierSubstatus, zodat de Bouw7-spiegel meebeweegt.
+  const { data: dossier } = await supabase.from('dossiers')
+    .select('offerte_substatus').eq('id', dossierId).maybeSingle()
+  const fase = faseNaStap(dossier?.offerte_substatus ?? null, def.fase, def.stapSoort)
+  if (fase) {
+    const res = await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+    if (!res.ok) return { ok: false, error: res.error }
 
     if (def.vraagtReden && invoer.reden) {
-      await legAfsluitRedenVast(supabase, dossierId, def.fase, invoer.reden, invoer.redenToelichting)
+      await legAfsluitRedenVast(supabase, dossierId, fase, invoer.reden, invoer.redenToelichting)
     }
   }
 
@@ -504,12 +534,15 @@ export async function legUitkomstVast(
     stap_datum: stapDatum,
     wacht_op: def.wachtOp,
     actiehouder_id: def.stapSoort ? actiehouder : kaart.actiehouder_id,
-    // Wie nog geen eigenaar had krijgt hem nu: wie een uitkomst vastlegt, is er duidelijk mee bezig.
-    eigenaar_id: kaart.eigenaar_id ?? medewerker.id,
+    // Wie nog geen eigenaar had krijgt hem nu: wie een uitkomst vastlegt, is er duidelijk mee
+    // bezig. Behalve bij een mega waar diegene geen projectleider of directie is.
+    eigenaar_id: kaart.eigenaar_id ?? ((await megaEigenaarFout(dossierId, medewerker.id)) ? null : medewerker.id),
     // Vanaf hier is dit een commerciële beslissing, geen afgeleide uit de actielijst.
     stap_bron: 'handmatig',
   }
   if (def.kans != null) update.kans_pct = def.kans
+  // Stilstandreden, besluitdatum en de mega-hercontrole (die kan de stapdatum vervroegen).
+  Object.assign(update, await stilstandVelden(dossierId, def.sleutel, def.stapSoort, stapDatum, invoer))
   if (!kaart.getrieerd_op) {
     update.getrieerd_op = new Date().toISOString()
     update.getrieerd_door = medewerker.id
@@ -546,7 +579,7 @@ export async function legUitkomstVast(
     await meldActiehouder(supabase, {
       dossierId, actiehouderId: actiehouder, door: medewerker,
       stapTekst: (update.stap_tekst as string | null) ?? null,
-      stapDatum,
+      stapDatum: update.stap_datum ?? null,
     })
   }
 
@@ -729,45 +762,4 @@ export async function getMijnBewaking(limiet = 5): Promise<BewakingWidgetData> {
   })
 
   return { regels: uit.slice(0, limiet), verlopen, vandaag, wachtend, totaal: uit.length }
-}
-
-// ── Verstuurde offertes bij een dossier ──────────────────────────────────────
-
-export type OfferteRegel = {
-  id: string
-  nummer: string | null
-  onderwerp: string | null
-  datum: string | null
-  status: string | null
-  bedrag: number | null
-  calculator: string | null
-}
-
-/**
- * De Bouw7-offertes onder dit project, nieuwste eerst.
- *
- * Onder één project kunnen er meerdere hangen; zonder deze lijst zie je op de kaart alleen een
- * totaalbedrag en niet wélke offerte openstaat. Leesbron is `bouw7_offertes`, gevuld door
- * `syncBouw7Offertes` — dit zijn dus Bouw7-gegevens, geen EVA-administratie.
- */
-export async function getOffertesVoorDossier(dossierId: string): Promise<OfferteRegel[]> {
-  await vereisRecht('dossiers', 'lezen')
-  const supabase = createAdminClient()
-
-  // Begrensd op één dossier; blijft ruim onder de PostgREST-grens.
-  const { data } = await supabase
-    .from('bouw7_offertes')
-    .select('id,nummer,onderwerp,datum,status,subtotaal_excl_btw,calculator_naam')
-    .eq('dossier_id', dossierId)
-    .order('datum', { ascending: false, nullsFirst: false })
-
-  return (data ?? []).map(r => ({
-    id: r.id,
-    nummer: r.nummer,
-    onderwerp: r.onderwerp,
-    datum: r.datum,
-    status: r.status,
-    bedrag: r.subtotaal_excl_btw,
-    calculator: r.calculator_naam,
-  }))
 }

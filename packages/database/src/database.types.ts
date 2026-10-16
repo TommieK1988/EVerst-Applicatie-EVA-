@@ -1234,6 +1234,9 @@ export type Database = {
           afgerond_door: string | null
           afgerond_op: string | null
           afgerond_reden: string | null
+          besluit_datum: string | null
+          opvolging: string | null
+          stil_reden: string | null
           bron_dossier_id: string | null
           created_at: string
           dossier_id: string | null
@@ -1260,6 +1263,9 @@ export type Database = {
           afgerond_door?: string | null
           afgerond_op?: string | null
           afgerond_reden?: string | null
+          besluit_datum?: string | null
+          opvolging?: string | null
+          stil_reden?: string | null
           bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
@@ -1286,6 +1292,9 @@ export type Database = {
           afgerond_door?: string | null
           afgerond_op?: string | null
           afgerond_reden?: string | null
+          besluit_datum?: string | null
+          opvolging?: string | null
+          stil_reden?: string | null
           bron_dossier_id?: string | null
           created_at?: string
           dossier_id?: string | null
