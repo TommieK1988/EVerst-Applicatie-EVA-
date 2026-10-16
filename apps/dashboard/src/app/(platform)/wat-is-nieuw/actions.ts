@@ -1,6 +1,8 @@
 'use server'
 
 import { createClient, createAdminClient } from '@everts/database/server'
+import { leesBedragklassegrenzen } from '@/lib/commercie/bedragklassen-server'
+import { heeftPlekhouder, vulPlekhouders } from '@/lib/changelog/plekhouders'
 
 export type ChangelogCategorie = 'nieuw' | 'verbeterd' | 'opgelost'
 
@@ -20,6 +22,13 @@ export type ChangelogItem = {
  */
 const KANTOOR = ['kantoor', 'beide']
 
+/** Instelbare waarden in de tekst invullen (zie lib/changelog/plekhouders.ts). */
+async function metWaarden(items: ChangelogItem[]): Promise<ChangelogItem[]> {
+  if (!items.some(i => heeftPlekhouder(i.titel) || heeftPlekhouder(i.omschrijving))) return items
+  const w = { grenzen: await leesBedragklassegrenzen() }
+  return items.map(i => ({ ...i, titel: vulPlekhouders(i.titel, w), omschrijving: vulPlekhouders(i.omschrijving, w) }))
+}
+
 /** Alle gepubliceerde changelog-items, nieuwste eerst. */
 export async function getChangelog(): Promise<ChangelogItem[]> {
   try {
@@ -31,7 +40,7 @@ export async function getChangelog(): Promise<ChangelogItem[]> {
       .in('doelgroep', KANTOOR)
       .order('datum', { ascending: false })
       .order('aangemaakt_op', { ascending: false })
-    return (data ?? []) as ChangelogItem[]
+    return metWaarden((data ?? []) as ChangelogItem[])
   } catch {
     return []
   }
@@ -86,7 +95,7 @@ export async function getOngelezenUpdates(limit = 5): Promise<ChangelogItem[]> {
       .gt('aangemaakt_op', drempel)
       .order('aangemaakt_op', { ascending: false })
       .limit(limit)
-    return (data ?? []) as ChangelogItem[]
+    return metWaarden((data ?? []) as ChangelogItem[])
   } catch {
     return []
   }

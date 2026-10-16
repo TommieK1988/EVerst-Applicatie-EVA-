@@ -16,6 +16,7 @@
  */
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cn } from '@everts/ui'
 import type { DossierRij } from '@/components/dossiers/types'
@@ -236,6 +237,12 @@ export function BewakingWerklijst(props: Props) {
           >
             Waarom staat het stil
           </button>
+          <Link
+            href="/offertes/opschonen"
+            className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            Opschonen
+          </Link>
         </div>
         <div className="flex items-center gap-2">{props.extraActies}{props.viewToggle}</div>
       </div>
