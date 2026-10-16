@@ -8,6 +8,7 @@ import MobielTegel from '@/components/mobiel/MobielTegel'
 import MobielTakenLijst, { type MobielTaak } from '@/components/mobiel/MobielTakenLijst'
 import VerlofClient from '@/components/mobiel/uren/VerlofClient'
 import ProjectZoekerVoorbeeld from './ProjectZoekerVoorbeeld'
+import MedewerkerZoekerVoorbeeld from './MedewerkerZoekerVoorbeeld'
 import TaalKeuze from '@/components/mobiel/TaalKeuze'
 import MedewerkerGegevensBlok from '@/components/mobiel/MedewerkerGegevensBlok'
 import MobielUpdates from '@/components/mobiel/MobielUpdates'
@@ -152,7 +153,7 @@ const UPDATES: MobielUpdate[] = [
     omschrijving: 'Bij het schrijven van uren zie je alleen je ingeplande projecten en kun je zoeken in plaats van scrollen.' },
 ]
 
-export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string; uren?: string; kosten?: string }> }) {
+export default async function AppTaalPreview({ searchParams }: { searchParams: Promise<{ taal?: string; updates?: string; uren?: string; kosten?: string; zoeker?: string }> }) {
   const params = await searchParams
   const taal = naarTaal(params.taal)
   const berichten = await laadBerichten(taal)
@@ -208,6 +209,7 @@ export default async function AppTaalPreview({ searchParams }: { searchParams: P
         <div style={{ padding: 16, display: 'grid', gap: 12 }}><MedewerkerGegevensBlok gegevens={GEGEVENS} /></div>
         <div style={{ padding: 16 }}><TaalKeuze /></div>
         {params.updates === '1' && <MobielUpdates items={UPDATES} />}
+        {params.zoeker === 'medewerker' && <MedewerkerZoekerVoorbeeld />}
       </div>
     </NextIntlClientProvider>
   )

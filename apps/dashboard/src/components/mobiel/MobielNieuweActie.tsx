@@ -7,6 +7,7 @@ import { maakTaak } from '@/app/(platform)/taken/actions/taken'
 import { getMedewerkersVoorToewijzing, type MedewerkerKeuze } from '@/app/(platform)/taken/actions/sjablonen'
 import { zoekDossiers } from '@/lib/dossiers/actions'
 import type { TaskPrioriteit } from '@/lib/taken/supabase/database.types'
+import MobielMedewerkerZoeker, { type ToewijsOptie } from './MobielMedewerkerZoeker'
 
 /**
  * "Nieuwe actie" voor de mobiele Acties-lijst (`/m/taken`).
@@ -14,7 +15,8 @@ import type { TaskPrioriteit } from '@/lib/taken/supabase/database.types'
  * Bewust een eigen, compacte flow i.p.v. de desktop-`NieuweTaakDialog`: styling
  * volgt de `/m`-taal (inline + CSS-vars, bottom-sheet), niet de Tailwind-modal
  * van de desktop. Velden: titel, dossier (optioneel), toegewezen medewerker,
- * prioriteit, deadline (optioneel).
+ * prioriteit, deadline (optioneel). De medewerker kies je in een eigen zoekscherm
+ * (`MobielMedewerkerZoeker`); een keuzelijst met alle collega's was op de telefoon niet te doen.
  *
  * BELANGRIJK: `getMijnTaken` vult de lijst puur uit `task_assignees`. Standaard
  * wijzen we de actie aan de aanmaker zelf toe (anders "verdwijnt" hij meteen),
@@ -67,6 +69,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
   // Toewijzing — standaard de aanmaker zelf, maar wijzigbaar.
   const [medewerkers, setMedewerkers] = useState<MedewerkerKeuze[]>([])
   const [assigneeId, setAssigneeId]   = useState(userId)
+  const [zoekerOpen, setZoekerOpen]   = useState(false)
 
   // Dossier-koppeling (optioneel) — vrij zoekveld met inline resultaten.
   const [dossier, setDossier]           = useState<{ id: string; titel: string } | null>(null)
@@ -80,13 +83,16 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
 
   // De aanmaker staat altijd bovenaan als "(jij)"; ontbreekt die in de
   // medewerkerslijst (geen gekoppeld account), dan tóch een eigen optie tonen.
-  const heeftZelf = medewerkers.some(m => m.auth_user_id === userId)
-  const toewijsOpties: { value: string; label: string }[] = [
-    ...(heeftZelf ? [] : [{ value: userId, label: t('nieuw.jezelf') }]),
+  const zelf = medewerkers.find(m => m.auth_user_id === userId)
+  const toewijsOpties: ToewijsOptie[] = [
+    zelf
+      ? { value: userId, naam: zelf.naam, label: t('nieuw.naamJij', { naam: zelf.naam }) }
+      : { value: userId, naam: t('nieuw.jezelf'), label: t('nieuw.jezelf') },
     ...medewerkers
-      .filter(m => m.auth_user_id)
-      .map(m => ({ value: m.auth_user_id!, label: m.auth_user_id === userId ? t('nieuw.naamJij', { naam: m.naam }) : m.naam })),
+      .filter(m => m.auth_user_id && m.auth_user_id !== userId)
+      .map(m => ({ value: m.auth_user_id!, naam: m.naam, label: m.naam })),
   ]
+  const gekozenLabel = toewijsOpties.find(o => o.value === assigneeId)?.label ?? t('nieuw.jezelf')
 
   // Buiten de JSX opgebouwd: de lintregel herkent `t.rich` niet als vertaalfunctie.
   const labelDossier = t.rich('nieuw.veldDossier', { zacht })
@@ -111,6 +117,7 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
     setPrio('normaal')
     setDeadline('')
     setAssigneeId(userId)
+    setZoekerOpen(false)
     setDossier(null)
     setDossierQuery('')
     setResultaten([])
@@ -280,26 +287,31 @@ export default function MobielNieuweActie({ userId }: { userId: string }) {
                 )}
               </div>
 
-              {/* Toegewezen aan */}
+              {/* Toegewezen aan — tik opent het zoekscherm */}
               <div>
-                <label style={labelStijl}>{t('nieuw.veldToegewezen')}</label>
-                <div style={{ position: 'relative' }}>
-                  <select
-                    value={assigneeId}
-                    onChange={e => setAssigneeId(e.target.value)}
-                    style={{ ...veld, appearance: 'none', WebkitAppearance: 'none', paddingRight: 40 }}
-                  >
-                    {toewijsOpties.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  <svg
-                    width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#9aa4ab" strokeWidth={2}
-                    style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  >
-                    <path d="m6 9 6 6 6-6" />
+                <label htmlFor="nieuwe-actie-toegewezen" style={labelStijl}>{t('nieuw.veldToegewezen')}</label>
+                <button
+                  id="nieuwe-actie-toegewezen"
+                  type="button"
+                  onClick={() => setZoekerOpen(true)}
+                  style={{ ...veld, display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {gekozenLabel}
+                  </span>
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#9aa4ab" strokeWidth={2} strokeLinecap="round" style={{ flexShrink: 0 }}>
+                    <circle cx={11} cy={11} r={7} /><path d="m20 20-3.5-3.5" />
                   </svg>
-                </div>
+                </button>
+                {zoekerOpen && (
+                  <MobielMedewerkerZoeker
+                    opties={toewijsOpties}
+                    zonderAccount={medewerkers.filter(m => !m.auth_user_id)}
+                    gekozen={assigneeId}
+                    onKies={id => { setAssigneeId(id); setZoekerOpen(false) }}
+                    onSluit={() => setZoekerOpen(false)}
+                  />
+                )}
               </div>
 
               {/* Prioriteit */}
