@@ -87,7 +87,7 @@ export function OpvolgingBlok(props: Props) {
                   : 'font-medium text-neutral-500 hover:text-neutral-700',
               )}
             >
-              {k.waarde === null ? `Automatisch (${automatisch})` : k.label}
+              {k.waarde === null ? `Automatisch (${automatisch})` : k.waarde === 'altijd' ? 'Altijd' : 'Niet'}
             </button>
           ))}
         </div>

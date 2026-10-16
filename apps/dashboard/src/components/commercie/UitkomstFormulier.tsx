@@ -191,7 +191,7 @@ export function UitkomstFormulier(props: Props) {
                 </select>
               </Label>
               {gekozen.sleutel !== 'ligt_bij_alv' && (
-                <Label tekst="Besluit klant verwacht (optioneel)">
+                <Label tekst="Besluit verwacht">
                   <DatePicker value={besluit} onChange={setBesluit} />
                 </Label>
               )}
