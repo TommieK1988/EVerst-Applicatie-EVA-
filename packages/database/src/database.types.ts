@@ -3273,6 +3273,7 @@ export type Database = {
           created_by: string | null
           dossier_id: string
           id: string
+          inhoud: string
           naam: string
           projectbezoek_op: string | null
           reactie_uiterlijk: string | null
@@ -3285,6 +3286,7 @@ export type Database = {
           created_by?: string | null
           dossier_id: string
           id?: string
+          inhoud?: string
           naam: string
           projectbezoek_op?: string | null
           reactie_uiterlijk?: string | null
@@ -3297,6 +3299,7 @@ export type Database = {
           created_by?: string | null
           dossier_id?: string
           id?: string
+          inhoud?: string
           naam?: string
           projectbezoek_op?: string | null
           reactie_uiterlijk?: string | null

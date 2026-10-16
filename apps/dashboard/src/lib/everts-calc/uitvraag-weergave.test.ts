@@ -53,6 +53,7 @@ describe('weergave', () => {
       ({ posten: Array.from({ length: aantalPosten }), projectbezoek_op: null, partijen: [{ status }] }) as unknown as UitvraagPakket
     expect(pakketOmschrijving(p('open', 0))).toBe('los')
     expect(pakketOmschrijving(p('open', 1))).toBe('1 post')
+    expect(pakketOmschrijving({ ...p('open', 3), soort: 'leverancier', inhoud: 'materialen' })).toBe('leverancier · 3 materialen')
     expect(openPakketten([p('open', 1), p('ontvangen', 2)])).toBe(1)
   })
 })

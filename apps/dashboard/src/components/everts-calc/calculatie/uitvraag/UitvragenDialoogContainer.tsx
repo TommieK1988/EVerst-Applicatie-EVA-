@@ -4,11 +4,10 @@ import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { zoekRelaties } from '@/app/(platform)/everts-calc/actions/werkbegroting'
 import { maakUitvraagPakket } from '@/lib/dossiers/uitvraag-pakketten'
-import { getCalculatieregels, getGroepen } from '@/lib/everts-calc/local-store'
-import { postenUitSelectie } from '@/lib/everts-calc/uitvraag-weergave'
+import { getCalculatieregels, getComponentregels, getGroepen } from '@/lib/everts-calc/local-store'
+import { materialenUitSelectie, postenUitSelectie } from '@/lib/everts-calc/uitvraag-weergave'
 import { UitvragenDialoog, type UitvraagInvoer } from './UitvragenDialoog'
 
-const zoekOnderaannemers = (term: string) => zoekRelaties(term, 'onderaannemer')
 
 /**
  * Dunne schil om het venster: zoekt de aangevinkte regels op in het werkgeheugen van de
@@ -24,22 +23,30 @@ export function UitvragenDialoogContainer({ dossierId, scenarioId, regelIds, onA
 }) {
   const [bezig, setBezig] = useState(false)
   // Eén keer bij openen: het venster werkt met de selectie zoals hij toen was.
-  const { posten, naamVoorstel } = useMemo(
-    () => postenUitSelectie(regelIds, getCalculatieregels(), getGroepen(scenarioId)),
+  const { posten, naamVoorstel, materialen } = useMemo(
+    () => {
+      const regels = getCalculatieregels()
+      return {
+        ...postenUitSelectie(regelIds, regels, getGroepen(scenarioId)),
+        materialen: materialenUitSelectie(regelIds, regels, getComponentregels()),
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
   async function bevestig(invoer: UitvraagInvoer, mailen: boolean) {
-    const metPosten = invoer.modus === 'posten' && posten.length > 0
+    const metRegels = invoer.modus !== 'los'
+    const regels = metRegels ? invoer.regels.filter(r => r.omschrijving.trim()) : []
     setBezig(true)
     try {
       const r = await maakUitvraagPakket({
         dossierId,
         naam: invoer.naam.trim(),
-        soort: 'onderaannemer',
-        scenarioId: metPosten ? scenarioId : null,
-        posten: metPosten ? posten : [],
+        soort: invoer.soort,
+        inhoud: invoer.modus === 'materialen' ? 'materialen' : 'posten',
+        scenarioId: metRegels ? scenarioId : null,
+        posten: regels,
         partijen: invoer.partijen,
         reactieUiterlijk: invoer.reactieUiterlijk,
         projectbezoekOp: invoer.bezoekDatum
@@ -59,9 +66,10 @@ export function UitvragenDialoogContainer({ dossierId, scenarioId, regelIds, onA
   return (
     <UitvragenDialoog
       posten={posten}
+      materialen={materialen}
       naamVoorstel={regelIds.length > 0 ? naamVoorstel : ''}
       beginModus={regelIds.length > 0 ? 'posten' : 'los'}
-      zoekPartijen={zoekOnderaannemers}
+      zoekPartijen={zoekRelaties}
       bezig={bezig}
       onBevestig={bevestig}
       onSluit={onSluit}

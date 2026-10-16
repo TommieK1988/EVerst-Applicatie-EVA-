@@ -7,13 +7,18 @@ import {
 import { cn } from '@/lib/everts-calc/utils'
 import type { RelatieRef } from '@/lib/everts-calc/types'
 import type { UitvraagPartijKeuze, UitvraagPost } from '@/lib/dossiers/uitvraag-pakket-types'
-import { hoeveelheidTekst, isoDatum, standaardReactieUiterlijk } from '@/lib/everts-calc/uitvraag-weergave'
+import type { UitvraagSoort } from '@everts/database'
+import { isoDatum, standaardReactieUiterlijk } from '@/lib/everts-calc/uitvraag-weergave'
 import { PartijChips } from './PartijChips'
+import { UitvraagRegels } from './UitvraagRegels'
 
-export type UitvraagModus = 'posten' | 'los'
+export type UitvraagModus = 'posten' | 'materialen' | 'los'
 
 export interface UitvraagInvoer {
+  soort: UitvraagSoort
   modus: UitvraagModus
+  /** De regels zoals ze meegaan (bij posten of materialen), na eventuele aanpassingen. */
+  regels: UitvraagPost[]
   naam: string
   partijen: UitvraagPartijKeuze[]
   /** yyyy-mm-dd */
@@ -24,21 +29,26 @@ export interface UitvraagInvoer {
 }
 
 /**
- * Venster "Uitvragen bij onderaannemer". Alleen weergave en invoer: wat er met de invoer
+ * Venster "Uitvragen bij onderaannemer" / "Aanvragen bij leverancier". Bij een leverancier
+ * (groothandel) gaat meestal de materiaallijst uit de normen mee in plaats van de posten. Alleen weergave en invoer: wat er met de invoer
  * gebeurt (opslaan, mailen) beslist de container via `onBevestig`. Monteer hem per keer
  * opnieuw (de container doet dat), dan begint het formulier altijd bij de voorstellen.
  */
-export function UitvragenDialoog({ posten, naamVoorstel, beginModus, zoekPartijen, bezig, onBevestig, onSluit }: {
+export function UitvragenDialoog({ posten, materialen, naamVoorstel, beginModus, zoekPartijen, bezig, onBevestig, onSluit }: {
   posten: UitvraagPost[]
+  /** De materialen uit de normen van dezelfde posten, al samengevoegd. */
+  materialen: UitvraagPost[]
   naamVoorstel: string
   beginModus: UitvraagModus
-  zoekPartijen: (term: string) => Promise<RelatieRef[]>
+  zoekPartijen: (term: string, soort: UitvraagSoort) => Promise<RelatieRef[]>
   bezig?: boolean
   onBevestig: (invoer: UitvraagInvoer, mailen: boolean) => void
   onSluit: () => void
 }) {
   const [invoer, setInvoer] = useState<UitvraagInvoer>({
+    soort: 'onderaannemer',
     modus: posten.length === 0 ? 'los' : beginModus,
+    regels: posten,
     naam: naamVoorstel,
     partijen: [],
     reactieUiterlijk: standaardReactieUiterlijk(),
@@ -46,38 +56,66 @@ export function UitvragenDialoog({ posten, naamVoorstel, beginModus, zoekPartije
     bezoekTijd: '09:00',
   })
   const zet = (patch: Partial<UitvraagInvoer>) => setInvoer(i => ({ ...i, ...patch }))
+  const kies = (modus: UitvraagModus) =>
+    zet({ modus, regels: modus === 'materialen' ? materialen : modus === 'posten' ? posten : [] })
+  // Andere soort: andere partijen, en bij een leverancier standaard de materiaallijst.
+  const kiesSoort = (soort: UitvraagSoort) => {
+    if (soort === invoer.soort) return
+    const modus: UitvraagModus = soort === 'leverancier'
+      ? (materialen.length > 0 ? 'materialen' : invoer.modus)
+      : (invoer.modus === 'materialen' ? (posten.length > 0 ? 'posten' : 'los') : invoer.modus)
+    setInvoer(i => ({ ...i, soort, partijen: [], modus, regels: modus === 'materialen' ? materialen : modus === 'posten' ? posten : [] }))
+  }
+  const zoek = (term: string) => zoekPartijen(term, invoer.soort)
   const n = invoer.partijen.length
+  const metRegels = invoer.modus !== 'los'
   const kanOpslaan = !bezig && invoer.naam.trim().length > 0 && n > 0
+    && (!metRegels || invoer.regels.some(r => r.omschrijving.trim()))
+  const leverancier = invoer.soort === 'leverancier'
 
   return (
     <Dialog open onOpenChange={o => { if (!o && !bezig) onSluit() }}>
       <DialogContent size="lg">
         <DialogHeader className="border-b border-neutral-200 pb-4">
-          <DialogTitle>Uitvragen bij onderaannemer</DialogTitle>
+          <DialogTitle>{leverancier ? 'Aanvragen bij leverancier' : 'Uitvragen bij onderaannemer'}</DialogTitle>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-5">
+          <FormField upper label="Bij wie vraag je het">
+            <div className="inline-flex w-fit rounded-md bg-neutral-100 p-0.5">
+              <ModusKnop actief={!leverancier} onClick={() => kiesSoort('onderaannemer')}>Onderaannemer</ModusKnop>
+              <ModusKnop actief={leverancier} onClick={() => kiesSoort('leverancier')}>Leverancier of groothandel</ModusKnop>
+            </div>
+          </FormField>
+
           <div>
-            <FormField upper label="Wat vraag je uit">
-              <div className="inline-flex w-fit rounded-md bg-neutral-100 p-0.5">
-                <ModusKnop actief={invoer.modus === 'posten'} disabled={posten.length === 0} onClick={() => zet({ modus: 'posten' })}>
+            <FormField upper label="Wat vraag je">
+              <div className="inline-flex w-fit flex-wrap rounded-md bg-neutral-100 p-0.5">
+                {leverancier && (
+                  <ModusKnop actief={invoer.modus === 'materialen'} disabled={materialen.length === 0} onClick={() => kies('materialen')}>
+                    {materialen.length} materia{materialen.length === 1 ? 'al' : 'len'} uit de normen
+                  </ModusKnop>
+                )}
+                <ModusKnop actief={invoer.modus === 'posten'} disabled={posten.length === 0} onClick={() => kies('posten')}>
                   {posten.length} geselecteerde post{posten.length === 1 ? '' : 'en'}
                 </ModusKnop>
-                <ModusKnop actief={invoer.modus === 'los'} onClick={() => zet({ modus: 'los' })}>
+                <ModusKnop actief={invoer.modus === 'los'} onClick={() => kies('los')}>
                   Los, zonder posten
                 </ModusKnop>
               </div>
             </FormField>
-            {invoer.modus === 'posten' ? (
+            {metRegels ? (
               <>
-                <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-neutral-200">
-                  {posten.map(p => (
-                    <li key={p.calculatieregel_id} className="flex items-center gap-4 border-b border-neutral-100 px-3 py-1.5 text-[13px] last:border-b-0">
-                      <span className="min-w-0 flex-1 truncate text-neutral-800" title={p.omschrijving}>{p.omschrijving}</span>
-                      <span className="flex-shrink-0 tabular-nums text-neutral-700">{hoeveelheidTekst(p)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-xs text-neutral-500">Omschrijving en hoeveelheden gaan mee in de mail, prijzen niet.</p>
+                <div className="mt-2">
+                  <UitvraagRegels
+                    regels={invoer.regels} onWijzig={regels => zet({ regels })}
+                    kanToevoegen={invoer.modus === 'materialen'} disabled={bezig}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-neutral-500">
+                  {invoer.modus === 'materialen'
+                    ? 'Uit de materiaalnormen van de posten: norm × hoeveelheid, gelijke materialen opgeteld. Kijk omschrijving en eenheid na; die staan niet bij elke norm. Prijzen gaan niet mee.'
+                    : 'Omschrijving en hoeveelheden gaan mee in de mail, prijzen niet. Je kunt ze hier nog aanpassen.'}
+                </p>
               </>
             ) : (
               <p className="mt-2 text-xs text-neutral-500">
@@ -94,7 +132,10 @@ export function UitvragenDialoog({ posten, naamVoorstel, beginModus, zoekPartije
           </FormField>
 
           <FormField upper label="Bij wie">
-            <PartijChips partijen={invoer.partijen} onWijzig={partijen => zet({ partijen })} zoek={zoekPartijen} disabled={bezig} />
+            <PartijChips
+              key={invoer.soort} partijen={invoer.partijen} onWijzig={partijen => zet({ partijen })} zoek={zoek} disabled={bezig}
+              placeholder={leverancier ? '+ Leverancier zoeken…' : undefined}
+            />
           </FormField>
 
           <div className="grid grid-cols-2 gap-4">
@@ -122,6 +163,9 @@ export function UitvragenDialoog({ posten, naamVoorstel, beginModus, zoekPartije
           </div>
         </DialogBody>
         <DialogFooter className="border-t border-neutral-200">
+          <p className="mr-auto self-center text-xs text-neutral-500">
+            Je ziet per partij eerst de mail; die verstuur je zelf.
+          </p>
           <Button variant="outline" disabled={!kanOpslaan} onClick={() => onBevestig(invoer, false)}>
             Opslaan, nog niet mailen
           </Button>
@@ -129,7 +173,7 @@ export function UitvragenDialoog({ posten, naamVoorstel, beginModus, zoekPartije
             disabled={!kanOpslaan} loading={bezig} onClick={() => onBevestig(invoer, true)}
             className="border-calc-oa bg-calc-oa hover:border-calc-oa hover:bg-calc-oa/90 active:bg-calc-oa disabled:border-calc-oa/40 disabled:bg-calc-oa/40"
           >
-            {n === 0 ? 'Mailen…' : `Mail naar ${n} ${n === 1 ? 'partij' : 'partijen'}…`}
+            {n === 0 ? 'Mail opstellen…' : `Mail opstellen (${n} ${n === 1 ? 'partij' : 'partijen'})…`}
           </Button>
         </DialogFooter>
       </DialogContent>

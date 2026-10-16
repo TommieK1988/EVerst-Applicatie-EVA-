@@ -42,16 +42,20 @@ export function uniekePartijen(partijen: UitvraagPartijKeuze[]): UitvraagPartijK
   return uit
 }
 
-/** Eén post per calculatieregel; de eerste wint. */
+/**
+ * Eén post per calculatieregel; de eerste wint. Regels zonder calculatieregel (een materiaallijst
+ * of een handmatig toegevoegde regel) blijven allemaal staan, behalve als ze geen omschrijving hebben.
+ */
 export function uniekePosten(posten: UitvraagPost[]): UitvraagPost[] {
   const gezien = new Set<string>()
   const uit: UitvraagPost[] = []
   for (const p of posten) {
-    if (!p.calculatieregel_id || gezien.has(p.calculatieregel_id)) continue
-    gezien.add(p.calculatieregel_id)
+    const id = p.calculatieregel_id ?? ''
+    if (id ? gezien.has(id) : !(p.omschrijving ?? '').trim()) continue
+    if (id) gezien.add(id)
     const h = p.hoeveelheid
     uit.push({
-      calculatieregel_id: p.calculatieregel_id,
+      calculatieregel_id: id,
       omschrijving: (p.omschrijving ?? '').trim() || '(zonder omschrijving)',
       hoeveelheid: typeof h === 'number' && Number.isFinite(h) ? h : null,
       eenheid: p.eenheid?.trim() || null,

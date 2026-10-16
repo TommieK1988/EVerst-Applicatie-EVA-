@@ -59,10 +59,10 @@ export function UitvraagSelectieKnop({ regelIds }: { regelIds: Iterable<string> 
     <button
       type="button"
       onClick={() => onUitvragen(Array.from(regelIds))}
-      title="Omschrijving en hoeveelheden van de geselecteerde posten uitvragen bij een of meer onderaannemers"
+      title="De geselecteerde posten uitvragen bij onderaannemers, of de materialen ervan aanvragen bij een leverancier of groothandel"
       className="inline-flex h-7 items-center rounded-md border border-calc-oa bg-calc-oa px-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
     >
-      Uitvragen bij onderaannemer
+      Uitvragen
     </button>
   )
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  controleerOffertePdf, controleerPakket, offerteBestandsnaam, MAX_OFFERTE_BYTES,
+  uniekePosten, controleerOffertePdf, controleerPakket, offerteBestandsnaam, MAX_OFFERTE_BYTES,
 } from './uitvraag-pakket-invoer'
 import type { NieuwUitvraagPakket } from './uitvraag-pakket-types'
 
@@ -8,6 +8,7 @@ const basis: NieuwUitvraagPakket = {
   dossierId: 'd1',
   naam: '  Voegwerk gevel achter ',
   soort: 'onderaannemer',
+  inhoud: 'posten',
   scenarioId: 's1',
   posten: [],
   partijen: [{ relatie_id: 'r1', naam: 'Voegbedrijf A' }],
@@ -70,5 +71,14 @@ describe('offerteBestandsnaam', () => {
   it('maakt een veilige naam met datum', () => {
     expect(offerteBestandsnaam('Bouw/Voeg: "A"', 'Gevel #2', '2026-10-16'))
       .toBe('Offerte BouwVoeg A - Gevel 2 2026-10-16.pdf')
+  })
+
+  it('materiaallijst: regels zonder calculatieregel blijven, lege omschrijvingen vallen weg', () => {
+    const r = uniekePosten([
+      { calculatieregel_id: '', omschrijving: 'Dekkende lak', hoeveelheid: 2, eenheid: 'ltr' },
+      { calculatieregel_id: '', omschrijving: 'Kit', hoeveelheid: 4, eenheid: 'st' },
+      { calculatieregel_id: '', omschrijving: '  ', hoeveelheid: 1, eenheid: null },
+    ])
+    expect(r.map(p => p.omschrijving)).toEqual(['Dekkende lak', 'Kit'])
   })
 })

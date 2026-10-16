@@ -45,7 +45,7 @@ export function useUitvraagInCalculatie({ dossierId, scenarioId, readOnly }: {
       variant="outline" size="sm" aria-pressed={paneelOpen} aria-label="Uitvraag"
       onClick={() => { setFocusPakketId(null); setPaneelOpen(o => !o) }}
       className={paneelOpen ? 'border-calc-oa bg-calc-oa/5 text-calc-oa hover:bg-calc-oa/5' : undefined}
-      title={teller > 0 ? `Uitvragen: ${teller} met een partij die nog open staat` : 'Uitvragen bij onderaannemers'}
+      title={teller > 0 ? `Uitvragen: ${teller} met een partij die nog open staat` : 'Uitvragen bij onderaannemers en leveranciers'}
     >
       <Send className="h-3.5 w-3.5" />
       {/* Tekst pas vanaf 2xl: anders loopt de werkbalk op een 1440-scherm over twee regels. */}

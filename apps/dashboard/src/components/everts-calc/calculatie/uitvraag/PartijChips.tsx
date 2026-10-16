@@ -12,11 +12,12 @@ import type { UitvraagPartijKeuze } from '@/lib/dossiers/uitvraag-pakket-types'
  * als PartijKiezer (300 ms debounce, zoeken vanaf twee tekens), maar houdt een lijst bij in
  * plaats van één keuze. Het zoeken komt via een prop, zodat de preview zonder server kan.
  */
-export function PartijChips({ partijen, onWijzig, zoek, disabled }: {
+export function PartijChips({ partijen, onWijzig, zoek, disabled, placeholder = '+ Onderaannemer zoeken…' }: {
   partijen: UitvraagPartijKeuze[]
   onWijzig: (partijen: UitvraagPartijKeuze[]) => void
   zoek: (term: string) => Promise<RelatieRef[]>
   disabled?: boolean
+  placeholder?: string
 }) {
   const [term, setTerm] = useState('')
   const [resultaten, setResultaten] = useState<RelatieRef[]>([])
@@ -70,7 +71,7 @@ export function PartijChips({ partijen, onWijzig, zoek, disabled }: {
               className="min-w-0 flex-1 bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400"
               value={term}
               disabled={disabled}
-              placeholder="+ Onderaannemer zoeken…"
+              placeholder={placeholder}
               onChange={e => {
                 const v = e.target.value
                 setTerm(v); setOpen(true)

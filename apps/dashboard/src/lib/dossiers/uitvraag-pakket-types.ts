@@ -13,7 +13,10 @@
 
 import type { DossierUitvraag, UitvraagSoort } from '@everts/database'
 
-/** Een calculatieregel zoals hij is uitgevraagd: een kopie, want de regel zelf kan later wijzigen. */
+/**
+ * Een calculatieregel zoals hij is uitgevraagd: een kopie, want de regel zelf kan later wijzigen.
+ * Bij een materiaallijst is `calculatieregel_id` leeg: één regel kan uit meerdere posten komen.
+ */
 export interface UitvraagPost {
   calculatieregel_id: string
   omschrijving: string
@@ -27,10 +30,17 @@ export interface UitvraagPartijKeuze {
   naam: string
 }
 
+/**
+ * Wat er in de uitvraag staat: de posten zoals ze in de calculatie staan (onderaannemer), of
+ * een materiaallijst uit de normen van die posten (leverancier, groothandel).
+ */
+export type UitvraagInhoud = 'posten' | 'materialen'
+
 export interface NieuwUitvraagPakket {
   dossierId: string
   naam: string
   soort: UitvraagSoort
+  inhoud: UitvraagInhoud
   /** Calculatieversie waar de posten uit komen; leeg bij een losse uitvraag. */
   scenarioId: string | null
   posten: UitvraagPost[]
@@ -58,6 +68,7 @@ export interface UitvraagPakket {
   dossier_id: string
   naam: string
   soort: UitvraagSoort
+  inhoud: UitvraagInhoud
   scenario_id: string | null
   reactie_uiterlijk: string | null
   projectbezoek_op: string | null

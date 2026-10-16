@@ -22,6 +22,8 @@ export function regelUitvraagStatussen(pakketten: UitvraagPakket[]): Map<string,
       pakketId: p.id,
     }
     for (const post of p.posten) {
+      // Een materiaallijst hangt niet aan één regel (calculatieregel_id leeg): geen label.
+      if (!post.calculatieregel_id) continue
       const bestaand = uit.get(post.calculatieregel_id)
       if (!bestaand || (!bestaand.rekentMet && status.rekentMet)) uit.set(post.calculatieregel_id, status)
     }

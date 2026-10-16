@@ -55,7 +55,7 @@ export function UitvraagPaneel(p: UitvraagPaneelProps) {
         )}
         {!p.laden && !p.fout && p.pakketten.length === 0 && (
           <p className="text-xs leading-relaxed text-neutral-500">
-            Nog geen uitvragen. Vink posten aan en kies &ldquo;Uitvragen bij onderaannemer&rdquo;, of start een losse uitvraag.
+            Nog geen uitvragen. Vink posten aan en kies &ldquo;Uitvragen&rdquo; (bij een onderaannemer, of de materialen bij een leverancier), of start een losse uitvraag.
           </p>
         )}
         {p.pakketten.map(pakket => {
@@ -83,7 +83,7 @@ export function UitvraagPaneel(p: UitvraagPaneelProps) {
               ))}
               {rekent && (
                 <p className="border-t border-neutral-100 bg-neutral-50 px-3 py-2 text-[11.5px] text-neutral-600">
-                  Je rekent met {rekent.partij_naam}. Vul het bedrag uit hun offerte in bij de post.
+                  Je rekent met {rekent.partij_naam}. {pakket.inhoud === 'materialen' ? 'Vul hun prijzen in bij de materiaalnormen van de posten.' : 'Vul het bedrag uit hun offerte in bij de post.'}
                 </p>
               )}
             </div>

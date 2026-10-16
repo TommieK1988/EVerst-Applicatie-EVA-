@@ -5,7 +5,7 @@
  */
 
 import type { UitvraagPakket, UitvraagPakketPartij, UitvraagPost } from '@/lib/dossiers/uitvraag-pakket-types'
-import { isTekstregel, type Calculatieregel, type Groep } from './types'
+import { isTekstregel, type Calculatieregel, type Componentregel, type Groep } from './types'
 
 /**
  * De aangevinkte regels als posten, in de volgorde van het rekenblad. Tekstregels gaan er
@@ -33,6 +33,32 @@ export function postenUitSelectie(
   const enigeGroep = groepIds.size === 1 ? groepen.find(g => g.id === [...groepIds][0]) : undefined
   const naamVoorstel = enigeGroep?.naam?.trim() || posten[0]?.omschrijving || ''
   return { posten, naamVoorstel }
+}
+
+/**
+ * De materialen uit de normen van de aangevinkte posten, als één lijst voor een leverancier of
+ * groothandel: norm × hoeveelheid van de post, gelijke materialen (zelfde omschrijving en
+ * eenheid) opgeteld. Een norm zonder omschrijving krijgt die van de post erbij, zodat de
+ * calculator ziet waar hij vandaan komt; nakijken en aanpassen gebeurt in het venster.
+ */
+export function materialenUitSelectie(
+  ids: Iterable<string>, regels: Calculatieregel[], componenten: Componentregel[],
+): UitvraagPost[] {
+  const gekozen = new Set(ids)
+  const perRegel = new Map(regels.filter(r => gekozen.has(r.id) && !isTekstregel(r)).map(r => [r.id, r]))
+  const uit = new Map<string, UitvraagPost>()
+  for (const c of componenten) {
+    const regel = perRegel.get(c.calculatieregel_id)
+    if (!regel || c.type !== 'materieel' || !(c.norm_hoeveelheid > 0)) continue
+    const omschrijving = c.omschrijving?.trim() || `Materiaal voor: ${regel.omschrijving?.trim() || 'post zonder omschrijving'}`
+    const eenheid = (typeof c.eenheid === 'string' ? c.eenheid : '').trim() || null
+    const hoeveelheid = c.norm_hoeveelheid * (Number.isFinite(regel.hoeveelheid) ? regel.hoeveelheid : 0)
+    const sleutel = `${omschrijving.toLowerCase()}|${eenheid ?? ''}`
+    const bestaand = uit.get(sleutel)
+    if (bestaand) bestaand.hoeveelheid = (bestaand.hoeveelheid ?? 0) + hoeveelheid
+    else uit.set(sleutel, { calculatieregel_id: '', omschrijving, hoeveelheid, eenheid })
+  }
+  return [...uit.values()].map(p => ({ ...p, hoeveelheid: Math.round((p.hoeveelheid ?? 0) * 100) / 100 }))
 }
 
 /** Groepen diepte-eerst, zoals ze in het rekenblad staan. */
@@ -74,8 +100,13 @@ export function korteDag(iso: string): string {
 }
 
 /** Kaartkop rechts: "4 posten · bezoek wo 15 okt", "1 post" of "los". */
-export function pakketOmschrijving(p: Pick<UitvraagPakket, 'posten' | 'projectbezoek_op'>): string {
-  const delen = [p.posten.length === 0 ? 'los' : `${p.posten.length} post${p.posten.length === 1 ? '' : 'en'}`]
+export function pakketOmschrijving(p: Pick<UitvraagPakket, 'posten' | 'projectbezoek_op'> & Partial<Pick<UitvraagPakket, 'soort' | 'inhoud'>>): string {
+  const n = p.posten.length
+  const delen: string[] = []
+  if (p.soort === 'leverancier') delen.push('leverancier')
+  delen.push(n === 0 ? 'los'
+    : p.inhoud === 'materialen' ? `${n} materia${n === 1 ? 'al' : 'len'}`
+    : `${n} post${n === 1 ? '' : 'en'}`)
   if (p.projectbezoek_op) delen.push(`bezoek ${korteDag(p.projectbezoek_op)}`)
   return delen.join(' · ')
 }
