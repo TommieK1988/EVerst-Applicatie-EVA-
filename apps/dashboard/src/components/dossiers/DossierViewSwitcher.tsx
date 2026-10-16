@@ -330,50 +330,19 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
     <InternDossiersKnop dossiers={interneDossiers} sectie={sectie} />
     <div style={{ display: 'flex', gap: 2, background: 'var(--neutral-100)', borderRadius: 6, padding: 2 }}>
-      <button
-        onClick={() => switchView('kanban')}
-        title="Kanban-weergave"
-        style={{
-          width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 4,
-          border: 'none', cursor: 'pointer',
-          background: view === 'kanban' ? 'white' : 'transparent',
-          color: view === 'kanban' ? 'var(--brand-600)' : 'var(--neutral-500)',
-          boxShadow: view === 'kanban' ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
-          transition: 'all 120ms',
-        }}
-      >
-        <IconGrid size={14} />
-      </button>
-      <button
-        onClick={() => switchView('lijst')}
-        title="Lijstweergave"
-        style={{
-          width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 4,
-          border: 'none', cursor: 'pointer',
-          background: view === 'lijst' ? 'white' : 'transparent',
-          color: view === 'lijst' ? 'var(--brand-600)' : 'var(--neutral-500)',
-          boxShadow: view === 'lijst' ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
-          transition: 'all 120ms',
-        }}
-      >
-        <IconList size={14} />
-      </button>
+      {/* Op Offertes met tekst en Te doen vooraan: drie losse icoontjes bleken niet te vinden,
+          wie per ongeluk naar het bord sprong, kwam niet meer terug in Te doen. */}
       {toonBewaking && (
-        <button
-          onClick={() => switchView('bewaking')}
-          title="Te doen — werklijst op urgentie"
-          style={{
-            width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 4,
-            border: 'none', cursor: 'pointer',
-            background: view === 'bewaking' ? 'white' : 'transparent',
-            color: view === 'bewaking' ? 'var(--brand-600)' : 'var(--neutral-500)',
-            boxShadow: view === 'bewaking' ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
-            transition: 'all 120ms',
-          }}
-        >
+        <WeergaveKnop actief={view === 'bewaking'} onClick={() => switchView('bewaking')} title="Te doen: werklijst op urgentie" label="Te doen">
           <IconBewaking size={14} />
-        </button>
+        </WeergaveKnop>
       )}
+      <WeergaveKnop actief={view === 'kanban'} onClick={() => switchView('kanban')} title="Kanban-weergave" label={toonBewaking ? 'Bord' : undefined}>
+        <IconGrid size={14} />
+      </WeergaveKnop>
+      <WeergaveKnop actief={view === 'lijst'} onClick={() => switchView('lijst')} title="Lijstweergave" label={toonBewaking ? 'Lijst' : undefined}>
+        <IconList size={14} />
+      </WeergaveKnop>
     </div>
     </div>
   )
@@ -690,5 +659,35 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         viewToggle={toggle}
       />
     </>
+  )
+}
+
+/** Eén knop in de weergavekiezer; met `label` krijgt hij tekst naast het icoon. */
+function WeergaveKnop({ actief, onClick, title, label, children }: {
+  actief: boolean
+  onClick: () => void
+  title: string
+  label?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={actief}
+      style={{
+        height: 28, minWidth: 28, padding: label ? '0 10px' : 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 4,
+        border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: actief ? 600 : 500,
+        background: actief ? 'white' : 'transparent',
+        color: actief ? 'var(--brand-600)' : 'var(--neutral-500)',
+        boxShadow: actief ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+        transition: 'all 120ms',
+      }}
+    >
+      {children}
+      {label}
+    </button>
   )
 }
