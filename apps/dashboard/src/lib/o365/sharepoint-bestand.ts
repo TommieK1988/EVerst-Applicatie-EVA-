@@ -7,6 +7,7 @@
  */
 
 import { appGraphFetch } from './graph'
+import { MAX_MAPDIEPTE } from './dossiermap-inhoud'
 
 type BestandItem = {
   id: string
@@ -16,23 +17,35 @@ type BestandItem = {
   parentReference?: { driveId?: string; id?: string }
 }
 
+async function haalItem(driveId: string, itemId: string): Promise<BestandItem | null> {
+  const res = await appGraphFetch(
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,file,parentReference`,
+  )
+  return res.ok ? ((await res.json()) as BestandItem) : null
+}
+
 /**
- * Staat dit item als bestand direct in de opgegeven map? De drive- en item-id komen
- * van de client; zonder deze controle kan een geknutseld verzoek elk bestand in de
- * hele container hernoemen. De bestandenlijst toont alleen directe kinderen van de
- * dossiermap, dus meer hoeft hier ook niet te mogen.
+ * Staat dit item als bestand in de opgegeven map, direct of in een submap daarvan?
+ * De drive- en item-id komen van de client; zonder deze controle kan een geknutseld
+ * verzoek elk bestand in de hele container hernoemen.
+ *
+ * We lopen de ouders af tot we de map tegenkomen. Niet dieper dan de bestandenlijst
+ * zelf kijkt (`MAX_MAPDIEPTE`): wat daar niet in staat, hoeft hier ook niet te mogen.
  */
 export async function bestandStaatInMap(
   driveId: string,
   itemId: string,
   mapItemId: string,
 ): Promise<boolean> {
-  const res = await appGraphFetch(
-    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,file,parentReference`,
-  )
-  if (!res.ok) return false
-  const item = (await res.json()) as BestandItem
-  return !!item.file && item.parentReference?.id === mapItemId
+  const item = await haalItem(driveId, itemId)
+  if (!item?.file) return false
+
+  let ouder = item.parentReference?.id
+  for (let stap = 0; ouder && stap < MAX_MAPDIEPTE; stap++) {
+    if (ouder === mapItemId) return true
+    ouder = (await haalItem(driveId, ouder))?.parentReference?.id
+  }
+  return false
 }
 
 /**

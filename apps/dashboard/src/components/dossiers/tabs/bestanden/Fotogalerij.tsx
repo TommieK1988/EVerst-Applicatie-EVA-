@@ -18,6 +18,8 @@ import { createPortal } from 'react-dom'
 import { Card, CardHeader, CardBody } from '@/components/ui'
 import { ChevronLeft, ChevronRight, X, Download, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { bestandUrl, formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
+import { mapLabel } from '@/lib/dossiers/bestand-boom'
+import FotoNavigatie from './FotoNavigatie'
 
 /** De preview vult ruim de helft van de breedte; op een scherm met hoge resolutie is 1200 scherp genoeg. */
 const PREVIEW_BREEDTE = 1200
@@ -124,6 +126,7 @@ function Preview({ foto, index, totaal, onVorige, onVolgende, onVergroot }: {
         <p className="truncate text-[12px] font-medium text-white">{foto.naam}</p>
         <p className="text-[10.5px] text-white/70">
           {index + 1} van {totaal} · {foto.bron}
+          {foto.map ? ` · ${mapLabel(foto.map)}` : ''}
           {foto.datum ? ` · ${foto.datum}` : ''}
         </p>
       </div>
@@ -190,6 +193,7 @@ function Lightbox({ fotos, index, onIndex, onClose }: {
           <p className="truncate text-[13px] font-medium">{foto.naam}</p>
           <p className="text-[11px] text-white/55">
             {index + 1} van {fotos.length} · {foto.bron}
+            {foto.map ? ` · ${mapLabel(foto.map)}` : ''}
             {foto.datum ? ` · ${foto.datum}` : ''}
             {foto.grootte ? ` · ${formatteerGrootte(foto.grootte)}` : ''}
           </p>
@@ -249,9 +253,16 @@ function Lightbox({ fotos, index, onIndex, onClose }: {
 /* ─── Galerij ─────────────────────────────────────────────────────────────── */
 
 export default function Fotogalerij({
-  fotos, inApp, onToggleApp, inPortaal, onTogglePortaal,
+  fotos, inApp, onToggleApp, inPortaal, onTogglePortaal, springNaar,
 }: {
+  /** Op volgorde van `sorteerFotos`: per map, nieuwste eerst. */
   fotos: BestandRij[]
+  /**
+   * "Bekijken" bij een map in de bestandenlijst: de galerij springt naar de eerste
+   * foto van die map en schuift in beeld. `keer` maakt een tweede klik op dezelfde
+   * map ook een sprong.
+   */
+  springNaar?: { pad: string; keer: number } | null
   /** Sleutels van foto's die in de mobiele app staan (opt-in), zelfde vinkje als in de bestandenlijst. */
   inApp?: Set<string>
   onToggleApp?: (rij: BestandRij, zichtbaar: boolean) => void
@@ -265,14 +276,22 @@ export default function Fotogalerij({
 }) {
   const [huidige, setHuidige] = useState(0)
   const [vergroot, setVergroot] = useState(false)
+  const kaart = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!springNaar) return
+    const i = fotos.findIndex(f => (f.map ?? '') === springNaar.pad)
+    if (i < 0) return
+    setHuidige(i)
+    kaart.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // Alleen op een nieuwe sprong reageren, niet als de fotolijst ververst.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [springNaar])
 
   // Verandert de fotolijst (upload, andere map gekoppeld), dan kan de index
   // buiten bereik vallen.
   const index = Math.min(huidige, Math.max(0, fotos.length - 1))
   const foto = fotos[index]
-
-  const toonApp = !!inApp && !!onToggleApp
-  const toonPortaal = !!inPortaal && !!onTogglePortaal
 
   const vorige = () => setHuidige((index - 1 + fotos.length) % fotos.length)
   const volgende = () => setHuidige((index + 1) % fotos.length)
@@ -311,7 +330,7 @@ export default function Fotogalerij({
   }
 
   return (
-    <Card>
+    <Card ref={kaart} className="scroll-mt-4">
       <CardHeader>
         <div className="flex w-full items-center justify-between">
           <span>Foto&apos;s</span>
@@ -333,69 +352,16 @@ export default function Fotogalerij({
           onVergroot={() => setVergroot(true)}
         />
 
-        {/* Bestandsnamen als navigatie: klikken zet de preview op die foto. */}
-        <div className="border-t border-neutral-100 pt-2 lg:border-t-0 lg:pt-0">
-          {/* Twee vinkjes naast elkaar zijn zonder kop niet uit elkaar te houden. */}
-          {(toonApp || toonPortaal) && (
-            <div className="flex items-center gap-2 px-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.03em] text-neutral-400">
-              <span className="flex-1" />
-              {toonApp && <span className="w-12 text-center" title="Zichtbaar in de mobiele app voor de buitendienst">In app</span>}
-              {toonPortaal && <span className="w-12 text-center" title="Zichtbaar voor de opdrachtgever in het klantportaal">Portaal</span>}
-            </div>
-          )}
-          <div className="max-h-[196px] overflow-y-auto lg:max-h-[60vh]">
-            {fotos.map((f, i) => (
-              <div
-                key={f.sleutel}
-                className={`flex w-full items-center gap-2 rounded px-1.5 py-[3px] text-[11.5px] ${
-                  i === index ? 'bg-brand-50 font-medium text-brand-700' : 'text-neutral-700 hover:bg-neutral-50'
-                }`}
-              >
-                <button
-                  onClick={() => setHuidige(i)}
-                  onDoubleClick={() => { setHuidige(i); setVergroot(true) }}
-                  title={f.naam}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  {/* Vet = staat in het klantportaal, net als in de bestandenlijst. */}
-                  <span
-                    className={`min-w-0 flex-1 truncate ${inPortaal?.has(f.sleutel) ? 'font-semibold' : ''}`}
-                    title={inPortaal?.has(f.sleutel) ? 'Staat in het klantportaal' : undefined}
-                  >
-                    {f.naam}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-neutral-400">{f.bron}</span>
-                  <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{f.datum ?? ''}</span>
-                  <span className="shrink-0 tabular-nums text-[10px] text-neutral-400">{formatteerGrootte(f.grootte)}</span>
-                </button>
-                {toonApp && (
-                  <span className="flex w-12 shrink-0 justify-center">
-                    <input
-                      type="checkbox"
-                      checked={inApp!.has(f.sleutel)}
-                      onChange={e => onToggleApp!(f, e.target.checked)}
-                      title="Zichtbaar in de mobiele app voor de buitendienst"
-                      aria-label={`${f.naam} zichtbaar in de app`}
-                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
-                    />
-                  </span>
-                )}
-                {toonPortaal && (
-                  <span className="flex w-12 shrink-0 justify-center">
-                    <input
-                      type="checkbox"
-                      checked={inPortaal!.has(f.sleutel)}
-                      onChange={e => onTogglePortaal!(f, e.target.checked)}
-                      title="Zichtbaar voor de opdrachtgever in het klantportaal"
-                      aria-label={`${f.naam} zichtbaar in het klantportaal`}
-                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
-                    />
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <FotoNavigatie
+          fotos={fotos}
+          index={index}
+          onKies={setHuidige}
+          onVergroot={i => { setHuidige(i); setVergroot(true) }}
+          inApp={inApp}
+          onToggleApp={onToggleApp}
+          inPortaal={inPortaal}
+          onTogglePortaal={onTogglePortaal}
+        />
         </div>
       </CardBody>
 

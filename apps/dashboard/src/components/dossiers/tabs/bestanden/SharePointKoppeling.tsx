@@ -63,6 +63,11 @@ export default function SharePointKoppeling({
         <span className="text-[11px] text-neutral-500">
           Live uit {bouw7Beschikbaar === false ? '' : 'Bouw7 en '}SharePoint
           ({data.handmatig ? 'handmatig' : 'automatisch'} gekoppelde dossiermap).
+          {data.onvolledig && (
+            <span className="block text-warning-700">
+              Niet alle submappen konden worden geladen — open de map in SharePoint voor de rest.
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-3">
           {!readOnly && <MapActies onKies={onKies} onOntkoppel={onOntkoppel} bezig={bezig} />}

@@ -5,6 +5,11 @@
  * kolom die vertelt waar het bestand staat. Eerder waren dit twee losse tabellen,
  * waardoor je twee keer moest zoeken naar iets waarvan je de bewaarplek niet weet.
  *
+ * De submappen van de SharePoint-dossiermap staan erin als uitklapbare regels, met de
+ * bestanden eronder — dezelfde indeling als in SharePoint zelf. Bij zoeken staat de
+ * lijst plat: dan wil je de treffers zien, niet eerst mappen openklikken; elke treffer
+ * zegt dan zelf in welke map hij staat.
+ *
  * Afbeeldingen zitten hier niet in — die staan in de fotogalerij.
  *
  * Een klik op een regel toont het bestand in het voorvertoningspaneel ernaast;
@@ -12,10 +17,14 @@
  */
 
 import React, { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, FileText, Mail, Search } from 'lucide-react'
-import { formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen'
-import { bepaalAutoSoort, type BestandSoortDef } from '@/lib/dossiers/bestand-soort'
-import SoortCel from './SoortCel'
+import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Search } from 'lucide-react'
+import { Button } from '@/components/ui'
+import type { BestandRij } from '@/lib/dossiers/bestand-rijen'
+import type { BestandSoortDef } from '@/lib/dossiers/bestand-soort'
+import { allePaden, bouwBoom, vlakAf, type BoomRegel } from '@/lib/dossiers/bestand-boom'
+import BestandRegel from './BestandRegel'
+import { MapHintRegel, MapRegel } from './MapRegel'
+import { BREED, CEL, KOP } from './lijst-cellen'
 
 type SorteerVeld = 'naam' | 'soort' | 'extensie' | 'bron' | 'grootte' | 'datum'
 type Richting = 'op' | 'af'
@@ -44,15 +53,6 @@ const KOLOMMEN: Kolom[] = [
   { veld: 'datum', label: 'Datum' },
 ]
 
-// Compacte cel- en kopklassen — de kolommen staan bewust dicht op elkaar.
-// De naamcel krijgt CEL_BASIS zonder `whitespace-nowrap`: een `whitespace-normal` erachter
-// plakken werkt níét — in de gegenereerde CSS staat nowrap later en wint. Daardoor
-// braken lange bestandsnamen nooit af en liep de tabel buiten de kaart.
-const CEL_BASIS = 'px-1.5 py-[3px] align-middle'
-const CEL = `${CEL_BASIS} whitespace-nowrap`
-const BREED = 'hidden 2xl:table-cell'
-const KOP = 'px-1.5 py-1 text-[10px] font-bold uppercase tracking-[0.03em] text-neutral-400 whitespace-nowrap'
-
 function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
   switch (veld) {
     case 'grootte': return rij.grootte ?? -1
@@ -64,16 +64,17 @@ function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
   }
 }
 
-const BRON_STIJL: Record<BestandRij['bron'], string> = {
-  Bouw7: 'bg-brand-50 text-brand-700',
-  SharePoint: 'bg-neutral-100 text-neutral-600',
-}
-
 export default function BestandenLijst({
   rijen, inApp, onToggleApp, geselecteerd, onSelecteer, voettekst, legeTekst,
-  inPortaal, onTogglePortaal, soorten, onZetSoort,
+  inPortaal, onTogglePortaal, soorten, onZetSoort, mappen, fotos, onToonFotos,
 }: {
   rijen: BestandRij[]
+  /** Submappen van de SharePoint-dossiermap, ook lege. */
+  mappen?: { pad: string; webUrl: string | null }[]
+  /** Alleen om per map te tellen: de foto's zelf staan in de galerij. */
+  fotos?: BestandRij[]
+  /** Springt in de fotogalerij naar de foto's van deze map. */
+  onToonFotos?: (pad: string) => void
   /**
    * Sleutels van bestanden die de buitendienst in de mobiele app ziet (opt-in).
    * Net als de portaalkolom op de bronoverstijgende sleutel, dus ook voor
@@ -105,6 +106,10 @@ export default function BestandenLijst({
   const [bronFilter, setBronFilter] = useState<'alle' | BestandRij['bron']>('alle')
   const [veld, setVeld] = useState<SorteerVeld>('datum')
   const [richting, setRichting] = useState<Richting>('af')
+  // Dichtgeklapt beginnen, zoals in SharePoint: de mapregel zegt al hoeveel erin zit.
+  const [open, setOpen] = useState<Set<string>>(new Set())
+
+  const zoekt = zoek.trim() !== ''
 
   const bronnen = useMemo(() => {
     const set = new Set(rijen.map(r => r.bron))
@@ -121,7 +126,8 @@ export default function BestandenLijst({
         (r.omschrijving ?? '').toLowerCase().includes(term) ||
         (r.categorie ?? '').toLowerCase().includes(term) ||
         (r.soortNaam ?? '').toLowerCase().includes(term) ||
-        (r.door ?? '').toLowerCase().includes(term)
+        (r.door ?? '').toLowerCase().includes(term) ||
+        (r.map ?? '').toLowerCase().includes(term)
       )
     })
 
@@ -136,6 +142,31 @@ export default function BestandenLijst({
       return verschil * factor
     })
   }, [rijen, zoek, bronFilter, veld, richting])
+
+  // Bouw7 kent geen mappen: met dat filter aan blijft de lijst plat.
+  const boom = useMemo(() => {
+    if (zoekt) return null
+    return bouwBoom(
+      zichtbaar,
+      (fotos ?? []).filter(f => bronFilter === 'alle' || f.bron === bronFilter),
+      bronFilter === 'Bouw7' ? [] : mappen ?? [],
+    )
+  }, [zoekt, zichtbaar, fotos, mappen, bronFilter])
+
+  const paden = useMemo(() => (boom ? allePaden(boom) : []), [boom])
+  const inBoom = paden.length > 0
+  const regels: BoomRegel[] = boom
+    ? vlakAf(boom, open)
+    : zichtbaar.map(rij => ({ soort: 'bestand', rij, diepte: 0 }))
+  const allesOpen = inBoom && paden.every(p => open.has(p))
+
+  function wissel(pad: string) {
+    setOpen(vorig => {
+      const nieuw = new Set(vorig)
+      if (nieuw.has(pad)) nieuw.delete(pad); else nieuw.add(pad)
+      return nieuw
+    })
+  }
 
   function sorteerOp(nieuw: SorteerVeld) {
     if (nieuw === veld) setRichting(r => (r === 'op' ? 'af' : 'op'))
@@ -180,10 +211,18 @@ export default function BestandenLijst({
           </div>
         )}
 
+        {inBoom && (
+          <Button variant="ghost" size="sm" onClick={() => setOpen(allesOpen ? new Set() : new Set(paden))}>
+            {allesOpen ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
+            {allesOpen ? 'Mappen inklappen' : 'Mappen uitklappen'}
+          </Button>
+        )}
+
         <span className="ml-auto text-[11px] text-neutral-400">
           {zichtbaar.length === rijen.length
             ? `${rijen.length} bestand${rijen.length === 1 ? '' : 'en'}`
             : `${zichtbaar.length} van ${rijen.length}`}
+          {inBoom && ` · ${paden.length} map${paden.length === 1 ? '' : 'pen'}`}
         </span>
       </div>
 
@@ -224,85 +263,57 @@ export default function BestandenLijst({
             </tr>
           </thead>
           <tbody>
-            {zichtbaar.map(r => (
-              <tr
-                key={r.sleutel}
-                onClick={() => onSelecteer(r)}
-                aria-selected={geselecteerd === r.sleutel}
-                className={`cursor-pointer border-b border-neutral-100 [&>td:first-child]:pl-3 ${
-                  geselecteerd === r.sleutel ? 'bg-brand-50' : 'hover:bg-neutral-50/70'
-                }`}
-              >
-                {toonAppKolom && (
-                  <td className={`${CEL} text-center`} onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={inApp!.has(r.sleutel)}
-                      onChange={e => onToggleApp!(r, e.target.checked)}
-                      aria-label={`${r.naam} zichtbaar in de app`}
-                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+            {regels.map(regel => {
+              switch (regel.soort) {
+                case 'map':
+                  return (
+                    <MapRegel
+                      key={`map:${regel.map.pad}`}
+                      map={regel.map}
+                      diepte={regel.diepte}
+                      open={regel.open}
+                      onWissel={wissel}
+                      toonApp={toonAppKolom}
+                      toonPortaal={toonPortaalKolom}
                     />
-                  </td>
-                )}
-                {toonPortaalKolom && (
-                  <td className={`${CEL} text-center`} onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={inPortaal!.has(r.sleutel)}
-                      onChange={e => onTogglePortaal!(r, e.target.checked)}
-                      aria-label={`${r.naam} zichtbaar in het klantportaal`}
-                      className="h-3.5 w-3.5 cursor-pointer accent-brand-600"
+                  )
+                case 'fotos':
+                case 'leeg':
+                  return (
+                    <MapHintRegel
+                      key={`${regel.soort}:${regel.map.pad}`}
+                      soort={regel.soort}
+                      map={regel.map}
+                      diepte={regel.diepte}
+                      onToonFotos={onToonFotos}
+                      toonApp={toonAppKolom}
+                      toonPortaal={toonPortaalKolom}
                     />
-                  </td>
-                )}
-                <td className={`${CEL_BASIS} break-words`}>
-                  {/* Vet = staat in het klantportaal. Zo zie je bij het scrollen
-                      meteen wat er buiten de deur ligt, zonder de vinkkolom af
-                      te speuren. */}
-                  <span
-                    className={`flex items-center gap-1.5 ${inPortaal?.has(r.sleutel) ? 'font-semibold' : ''}`}
-                    title={inPortaal?.has(r.sleutel) ? 'Staat in het klantportaal' : undefined}
-                  >
-                    {r.soort === 'mail' && <Mail className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
-                    {r.soort === 'markdown' && <FileText className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}
-                    <span className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); onSelecteer(r) }}
-                        title={r.oorspronkelijkeNaam ? `In Bouw7: ${r.oorspronkelijkeNaam}` : r.naam}
-                        className={`block text-left hover:underline ${geselecteerd === r.sleutel ? 'text-brand-700' : 'text-neutral-800 hover:text-brand-700'}`}
-                      >
-                        {r.naam}
-                      </button>
-                      {r.omschrijving && (
-                        <span className="block text-[10px] text-neutral-400">{r.omschrijving}</span>
-                      )}
-                    </span>
-                  </span>
-                </td>
-                <td className={CEL} onClick={e => onZetSoort && e.stopPropagation()}>
-                  <SoortCel
-                    rij={r}
-                    soorten={soorten}
-                    autoNaam={r.soortHandmatig ? bepaalAutoSoort(r, soorten)?.naam ?? null : r.soortNaam ?? null}
-                    bewerkbaar={!!onZetSoort}
-                    onKies={(rij, id) => onZetSoort?.(rij, id)}
-                  />
-                </td>
-                <td className={`${CEL} uppercase text-neutral-500`}>{r.extensie ?? '—'}</td>
-                <td className={CEL}>
-                  <span className={`rounded px-1.5 py-[1px] text-[10.5px] font-medium ${BRON_STIJL[r.bron]}`}>
-                    {r.bron}
-                  </span>
-                </td>
-                <td className={`${CEL} ${BREED} text-right tabular-nums text-neutral-500`}>{formatteerGrootte(r.grootte)}</td>
-                <td className={`${CEL} tabular-nums text-neutral-500`}>{r.datum ?? '—'}</td>
-              </tr>
-            ))}
+                  )
+                case 'bestand':
+                  return (
+                    <BestandRegel
+                      key={regel.rij.sleutel}
+                      rij={regel.rij}
+                      diepte={regel.diepte}
+                      inBoom={inBoom}
+                      toonMap={zoekt}
+                      geselecteerd={geselecteerd === regel.rij.sleutel}
+                      onSelecteer={onSelecteer}
+                      inApp={inApp}
+                      onToggleApp={onToggleApp}
+                      inPortaal={inPortaal}
+                      onTogglePortaal={onTogglePortaal}
+                      soorten={soorten}
+                      onZetSoort={onZetSoort}
+                    />
+                  )
+              }
+            })}
             {/* Nog geen bestanden: de kolommen blijven staan met een nulregel, zodat de lijst
                 dezelfde vorm houdt. Levert het zoekfilter niets op, dan is een melding over de
                 volle breedte juist duidelijker — dat is geen lege lijst maar een lege selectie. */}
-            {zichtbaar.length === 0 && (rijen.length === 0 ? (
+            {regels.length === 0 && (rijen.length === 0 ? (
               <tr className="border-b border-neutral-100 text-neutral-400 [&>td:first-child]:pl-3">
                 {toonAppKolom && <td className={`${CEL} text-center`}>—</td>}
                 {toonPortaalKolom && <td className={`${CEL} text-center`}>—</td>}

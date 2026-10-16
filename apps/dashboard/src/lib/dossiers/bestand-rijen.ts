@@ -43,6 +43,11 @@ export type BestandRij = {
    * 6 MB is dat het verschil tussen wachten en meteen beeld. Bouw7 heeft dit niet.
    */
   previewUrl: string | null
+  /**
+   * Submap in de SharePoint-dossiermap (`Tekeningen/Revisie 2`); null of afwezig =
+   * bovenaan. Bouw7 kent geen mappen.
+   */
+  map?: string | null
   /** Naam in Bouw7 als EVA er een eigen weergavenaam overheen legt (zie bestand-soort.ts). */
   oorspronkelijkeNaam?: string
   /** Soort uit Instellingen → Bestandssoorten; handmatig gekozen of automatisch herkend. */
@@ -151,6 +156,7 @@ export function sharePointRij(b: SharePointBestand): BestandRij {
       : b.webUrl ?? (b.driveId ? `/api/dossier-bestand?${query.toString()}` : null),
     thumbUrl: b.thumbUrl,
     previewUrl: b.previewUrl,
+    map: b.map || null,
   }
 }
 
