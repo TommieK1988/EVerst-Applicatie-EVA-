@@ -19,6 +19,8 @@ import OfferteAanmakenModal from '@/components/everts-calc/quotes/OfferteAanmake
 import { usePasInScrollvlak } from '@/lib/hooks/usePasInScrollvlak'
 import ControlePaneel from './ControlePaneel'
 import { useCalculatieControle } from './useCalculatieControle'
+import { useUitvraagInCalculatie } from './uitvraag/useUitvraagInCalculatie'
+import { UitvraagProvider } from './uitvraag/UitvraagContext'
 import { wisselBevestiging, type ControleSoort } from '@/lib/everts-calc/controle'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { formatGetal } from '@/lib/everts-calc/calculations'
@@ -193,6 +195,7 @@ export default function CalculatieHoofdscherm({
   const controle = useCalculatieControle({
     scenario, regels: regelsVoorBtw, componenten: componentenVoorBtw, kostprijs, verkoopprijs, versie: refreshTotalen,
   })
+  const uitvraag = useUitvraagInCalculatie({ dossierId: dossierContext?.dossierId, scenarioId: scenario?.id, readOnly })
   const uurtarieven = useInstellingen().uurtarieven ?? []
   const globaalTarief = (uurtarieven.find(t => t.is_favoriet) ?? uurtarieven[0])?.tarief ?? 0
 
@@ -489,6 +492,7 @@ export default function CalculatieHoofdscherm({
         controle={{ ...controle.tellers, open: controleOpen, onToggle: () => setControleOpen(o => !o) }}
         onStartOfferte={startOfferte}
         onInstellingen={() => setInstellingenOpen(true)}
+        uitvraagKnop={uitvraag.knop}
       />
 
       {/* ─── Boom + Grid ── */}
@@ -514,7 +518,7 @@ export default function CalculatieHoofdscherm({
 
         {/* Grid */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-          <CalculatieGrid
+          <UitvraagProvider value={uitvraag.context}><CalculatieGrid
             ref={gridRef}
             scenarioId={scenario.id}
             scenario={scenario}
@@ -526,7 +530,7 @@ export default function CalculatieHoofdscherm({
             onInklapStatusChange={handleInklapStatus}
             bibliotheekItems={bibliotheekItems}
             readOnly={readOnly}
-          />
+          /></UitvraagProvider>
         </div>
 
         <ControlePaneel
@@ -534,6 +538,7 @@ export default function CalculatieHoofdscherm({
           punten={controle.punten} tellers={controle.tellers} readOnly={readOnly}
           onNaarRegel={handleNaarRegel} onKlopt={handleKlopt} acties={controleActies}
         />
+        {uitvraag.paneel}
 
         {/* Bibliotheek drawers */}
         <BibliotheekDrawer type="recepten"     open={receptenOpen}     onClose={() => setReceptenOpen(false)} />

@@ -3267,6 +3267,105 @@ export type Database = {
           },
         ]
       }
+      dossier_uitvraag_pakketten: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          dossier_id: string
+          id: string
+          naam: string
+          projectbezoek_op: string | null
+          reactie_uiterlijk: string | null
+          scenario_id: string | null
+          soort: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          dossier_id: string
+          id?: string
+          naam: string
+          projectbezoek_op?: string | null
+          reactie_uiterlijk?: string | null
+          scenario_id?: string | null
+          soort?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          dossier_id?: string
+          id?: string
+          naam?: string
+          projectbezoek_op?: string | null
+          reactie_uiterlijk?: string | null
+          scenario_id?: string | null
+          soort?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_lijst_verrijking"
+            referencedColumns: ["dossier_id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvraag_pakketten_dossier_id_fkey"
+            columns: ["dossier_id"]
+            isOneToOne: false
+            referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dossier_uitvraag_posten: {
+        Row: {
+          calculatieregel_id: string
+          eenheid: string | null
+          hoeveelheid: number | null
+          id: string
+          omschrijving: string
+          pakket_id: string
+          volgorde: number
+        }
+        Insert: {
+          calculatieregel_id: string
+          eenheid?: string | null
+          hoeveelheid?: number | null
+          id?: string
+          omschrijving: string
+          pakket_id: string
+          volgorde?: number
+        }
+        Update: {
+          calculatieregel_id?: string
+          eenheid?: string | null
+          hoeveelheid?: number | null
+          id?: string
+          omschrijving?: string
+          pakket_id?: string
+          volgorde?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dossier_uitvraag_posten_pakket_id_fkey"
+            columns: ["pakket_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_uitvraag_pakketten"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dossier_uitvragen: {
         Row: {
           aangevraagd_op: string | null
@@ -3277,11 +3376,15 @@ export type Database = {
           id: string
           laatst_gemaild_naar: string[] | null
           laatst_gerappelleerd_op: string | null
+          offerte_bestand_naam: string | null
+          offerte_bestand_url: string | null
           ontvangen_op: string | null
           opmerking: string | null
+          pakket_id: string | null
           partij_naam: string
           rappels: number
           reactie_uiterlijk: string | null
+          rekent_mee: boolean
           relatie_id: string | null
           soort: string
           status: string
@@ -3297,11 +3400,15 @@ export type Database = {
           id?: string
           laatst_gemaild_naar?: string[] | null
           laatst_gerappelleerd_op?: string | null
+          offerte_bestand_naam?: string | null
+          offerte_bestand_url?: string | null
           ontvangen_op?: string | null
           opmerking?: string | null
+          pakket_id?: string | null
           partij_naam: string
           rappels?: number
           reactie_uiterlijk?: string | null
+          rekent_mee?: boolean
           relatie_id?: string | null
           soort?: string
           status?: string
@@ -3317,11 +3424,15 @@ export type Database = {
           id?: string
           laatst_gemaild_naar?: string[] | null
           laatst_gerappelleerd_op?: string | null
+          offerte_bestand_naam?: string | null
+          offerte_bestand_url?: string | null
           ontvangen_op?: string | null
           opmerking?: string | null
+          pakket_id?: string | null
           partij_naam?: string
           rappels?: number
           reactie_uiterlijk?: string | null
+          rekent_mee?: boolean
           relatie_id?: string | null
           soort?: string
           status?: string
@@ -3348,6 +3459,13 @@ export type Database = {
             columns: ["dossier_id"]
             isOneToOne: false
             referencedRelation: "v_dossier_actief"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dossier_uitvragen_pakket_id_fkey"
+            columns: ["pakket_id"]
+            isOneToOne: false
+            referencedRelation: "dossier_uitvraag_pakketten"
             referencedColumns: ["id"]
           },
           {

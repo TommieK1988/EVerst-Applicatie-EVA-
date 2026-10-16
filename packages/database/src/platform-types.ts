@@ -713,6 +713,13 @@ export type DossierUitvraag = {
   /** Adressen van de laatste verzending; prefill voor een volgende rappel. */
   laatst_gemaild_naar: string[] | null
   opmerking: string | null
+  /** Uitvraagpakket vanuit de calculatie; leeg bij een losse uitvraag uit de tab Uitvraag. */
+  pakket_id: string | null
+  /** "Rekent met": met deze partij rekent de calculatie. Nog geen gunning; hooguit één per pakket. */
+  rekent_mee: boolean
+  /** De ontvangen offerte (pdf) in de dossiermap. */
+  offerte_bestand_naam: string | null
+  offerte_bestand_url: string | null
   created_at: string
   updated_at: string
   created_by: string | null

@@ -1070,6 +1070,7 @@ const CalculatieGrid = forwardRef<CalculatieGridHandle, Props>(function Calculat
       {geselecteerdeRegels.size > 0 && (
         <SelectieBalk
           aantal={geselecteerdeRegels.size}
+          regelIds={geselecteerdeRegels}
           onKopieren={() => handleKopieerRegels()}
           onVerplaatsen={() => setVerplaatsModalOpen(true)}
           onOpslag={opentOpslagModal}
