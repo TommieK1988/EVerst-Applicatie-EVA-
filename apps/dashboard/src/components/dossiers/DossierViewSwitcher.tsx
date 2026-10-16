@@ -118,14 +118,16 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
   const storageKey = `dossier-view-${sectie}`
 
   const [view, setView] = React.useState<ViewMode>(() => {
+    // Offertes opent altijd bij "Te doen", ook als je de vorige keer op het bord zat: dat is de
+    // lijst die zegt wat er vandaag moet gebeuren. Het bord is het overzicht, niet het werkscherm.
+    // Staat ook vóór de window-check, zodat server en browser hetzelfde renderen.
+    if (toonBewaking) return 'bewaking'
     if (typeof window === 'undefined') return 'kanban'
     const bewaard = localStorage.getItem(storageKey) as ViewMode | null
     // Een eerder gekozen 'bewaking' mag niet blijven hangen op een sectie die hem niet heeft;
     // je zou dan naar een lege pagina kijken zonder te zien waarom.
-    if (bewaard === 'bewaking' && !toonBewaking) return 'kanban'
-    // Wie nog niets gekozen heeft, begint op Offertes bij "Te doen": dat is de lijst die zegt wat
-    // er vandaag moet gebeuren. Het bord is het overzicht, niet het werkscherm.
-    return bewaard ?? (toonBewaking ? 'bewaking' : 'kanban')
+    if (bewaard === 'bewaking') return 'kanban'
+    return bewaard ?? 'kanban'
   })
 
   const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>(
