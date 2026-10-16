@@ -12,6 +12,9 @@
  * Indeling: de lijst met rechts een voorvertoningspaneel voor wat je aanklikt, en de
  * fotogalerij daaronder over de volle breedte. Eerder stonden lijst en galerij elk op
  * een halve breedte en waren lange bestandsnamen nauwelijks te lezen.
+ *
+ * Submappen van de SharePoint-dossiermap komen mee, in lijst én galerij, in dezelfde
+ * indeling als in SharePoint.
  */
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
@@ -33,6 +36,7 @@ import {
 } from '@/lib/dossiers/sharepoint-bestanden'
 import { bouw7Rij, sharePointRij, type BestandRij } from '@/lib/dossiers/bestand-rijen'
 import { pasMetaToe } from '@/lib/dossiers/bestand-soort'
+import { sorteerFotos } from '@/lib/dossiers/bestand-boom'
 import { getBestandMeta, zetBestandSoort, type BestandMetaData } from '@/lib/dossiers/bestand-meta'
 import BestandVoorvertoning, { type Hernoemd } from './bestanden/BestandVoorvertoning'
 import { useDossierReadOnly } from '../DossierReadOnlyContext'
@@ -100,6 +104,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
   // Groot leesvenster voor mail/markdown, vanuit het voorvertoningspaneel.
   const [venster, setVenster] = useState<BestandRij | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // "Bekijken" bij de foto's van een map in de lijst: de galerij springt erheen.
+  const [fotoSprong, setFotoSprong] = useState<{ pad: string; keer: number } | null>(null)
   const [bezig, start] = useTransition()
 
   useEffect(() => {
@@ -201,10 +207,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
     ], meta.meta, meta.soorten)
     return {
       documenten: alle.filter(r => r.soort !== 'afbeelding'),
-      // Nieuwste foto's bovenaan: bij een lopend project is de laatste opname het interessantst.
-      fotos: alle
-        .filter(r => r.soort === 'afbeelding')
-        .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? '') || a.naam.localeCompare(b.naam)),
+      // Per map, en daarbinnen de nieuwste bovenaan.
+      fotos: sorteerFotos(alle.filter(r => r.soort === 'afbeelding')),
     }
   }, [bouw7, sharepoint, meta])
 
@@ -462,6 +466,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                  dezelfde plek staan als bij een gevuld dossier. */
               <BestandenLijst
                 rijen={documenten}
+                mappen={sharepoint?.status === 'gematcht' ? sharepoint.mappen : undefined}
+                fotos={fotos}
+                onToonFotos={pad => setFotoSprong(v => ({ pad, keer: (v?.keer ?? 0) + 1 }))}
                 inApp={inApp}
                 onToggleApp={toggleApp}
                 inPortaal={inPortaal ?? undefined}
@@ -505,6 +512,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
         <Fotogalerij
           fotos={fotos}
+          springNaar={fotoSprong}
           inApp={inApp}
           onToggleApp={toggleApp}
           inPortaal={inPortaal ?? undefined}

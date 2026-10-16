@@ -33,6 +33,11 @@ export interface SharePointBestand {
    * Kortlevende URL, net als thumbUrl.
    */
   previewUrl: string | null
+  /**
+   * Submap binnen de dossiermap waar het bestand in staat, met `/` gescheiden
+   * (`Tekeningen/Revisie 2`). Leeg of afwezig = direct in de dossiermap.
+   */
+  map?: string
 }
 
 /** Een map in de container, zoals de picker hem toont. */
@@ -44,7 +49,7 @@ export interface SharePointMap {
   gewijzigd: string | null
 }
 
-interface DriveItem {
+export interface DriveItem {
   id: string
   name?: string
   webUrl?: string
@@ -359,35 +364,44 @@ export async function matchDossierFolder(dossier: DossierMatchInput, ctx: DriveC
 /* ─── Bestanden ───────────────────────────────────────────────────────────── */
 
 /**
- * Lijst de bestanden (geen submappen) in een dossiermap.
+ * Querystring voor het opvragen van de inhoud van een map.
  *
  * `$expand=thumbnails` levert de voorbeeldplaatjes in dezelfde call, zodat de
  * fotogalerij geen aparte call per afbeelding hoeft te doen. Graph geeft die
  * alleen voor bestandstypen die het kan renderen; voor de rest blijft hij leeg.
  */
+export const KINDEREN_QUERY =
+  `$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,createdBy,parentReference` +
+  `&$expand=thumbnails($select=medium,large)&$top=200`
+
+/** Eén driveItem met een `file`-facet als bestand voor de lijst. */
+export function alsBestand(f: DriveItem, driveId: string, map?: string): SharePointBestand {
+  const punt = f.name?.lastIndexOf('.') ?? -1
+  return {
+    id: f.id,
+    naam: f.name ?? 'Bestand',
+    extensie: punt > 0 ? (f.name ?? '').slice(punt + 1) : null,
+    grootte: f.size ?? null,
+    webUrl: f.webUrl ?? null,
+    datum: f.lastModifiedDateTime ? f.lastModifiedDateTime.slice(0, 10) : null,
+    door: f.createdBy?.user?.displayName ?? null,
+    driveId: f.parentReference?.driveId ?? driveId,
+    thumbUrl: f.thumbnails?.[0]?.medium?.url ?? null,
+    previewUrl: f.thumbnails?.[0]?.large?.url ?? null,
+    ...(map ? { map } : {}),
+  }
+}
+
+/**
+ * Lijst de bestanden (geen submappen) direct in een dossiermap. De bestandenlijst
+ * van het dossier gebruikt `lijstDossiermapInhoud` (mét submappen); dit is voor wie
+ * bewust alleen het bovenste niveau wil.
+ */
 export async function listFolderChildren(driveId: string, itemId: string): Promise<SharePointBestand[]> {
   const res = await appGraphGet<{ value?: DriveItem[] }>(
-    `/drives/${driveId}/items/${itemId}/children` +
-      `?$select=id,name,size,webUrl,file,folder,lastModifiedDateTime,createdBy,parentReference` +
-      `&$expand=thumbnails($select=medium,large)&$top=200`,
+    `/drives/${driveId}/items/${itemId}/children?${KINDEREN_QUERY}`,
   )
-  return (res.value ?? [])
-    .filter((it) => it.file)
-    .map((f) => {
-      const punt = f.name?.lastIndexOf('.') ?? -1
-      return {
-        id: f.id,
-        naam: f.name ?? 'Bestand',
-        extensie: punt > 0 ? (f.name ?? '').slice(punt + 1) : null,
-        grootte: f.size ?? null,
-        webUrl: f.webUrl ?? null,
-        datum: f.lastModifiedDateTime ? f.lastModifiedDateTime.slice(0, 10) : null,
-        door: f.createdBy?.user?.displayName ?? null,
-        driveId: f.parentReference?.driveId ?? driveId,
-        thumbUrl: f.thumbnails?.[0]?.medium?.url ?? null,
-        previewUrl: f.thumbnails?.[0]?.large?.url ?? null,
-      }
-    })
+  return (res.value ?? []).filter((it) => it.file).map((f) => alsBestand(f, driveId))
 }
 
 /* ─── Koppelen & aanmaken ─────────────────────────────────────────────────── */
