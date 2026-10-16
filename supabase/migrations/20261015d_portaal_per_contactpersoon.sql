@@ -1,4 +1,6 @@
 -- Klantportaal per contactpersoon: nieuwe dossiers gaan vanzelf open.
+-- Toegepast op 2026-10-16. Niet via apply_migration (dat kwam vanuit de sessie niet door), maar
+-- stapsgewijs via execute_sql; daarna handmatig geregistreerd in supabase_migrations.
 --
 -- Tot nu toe was toegang al per persoon (portaal_gebruikers + scope), maar een dossier bestond
 -- pas voor het portaal als iemand het op de Portaal-tab openzette. In de praktijk werd dat
@@ -81,6 +83,7 @@ create or replace function public.portaal_gebruiker_ziet_dossier(
 ) returns boolean
 language sql
 immutable
+set search_path = public
 as $$
   select case
     when p_scope = 'alleen_gekoppeld' then false
@@ -225,7 +228,11 @@ create index if not exists portaal_gebruikers_contactpersoon_idx
   on public.portaal_gebruikers (contactpersoon_id) where actief;
 
 -- De openzet-functies draaien als security definer; alleen de server (service role) roept ze aan.
+-- De triggerfunctie hoeft door niemand rechtstreeks aangeroepen te worden (Postgres controleert
+-- dat recht alleen bij het aanmaken van de trigger, niet bij het afgaan).
 revoke all on function public.portaal_dossier_automatisch_openen(uuid) from public, anon, authenticated;
 revoke all on function public.portaal_gebruiker_dossiers_openen(uuid) from public, anon, authenticated;
+revoke all on function public.tg_portaal_dossier_automatisch() from public, anon, authenticated;
+revoke execute on function public.portaal_gebruiker_ziet_dossier(text, uuid, uuid, uuid, uuid, uuid) from anon;
 grant execute on function public.portaal_dossier_automatisch_openen(uuid) to service_role;
 grant execute on function public.portaal_gebruiker_dossiers_openen(uuid) to service_role;
