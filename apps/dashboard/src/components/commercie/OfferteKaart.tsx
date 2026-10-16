@@ -43,6 +43,14 @@ type Props = {
   onOpen?: (id: string) => void
   /** De ingestelde bedragklassegrenzen; zonder: de standaard. */
   grenzen?: Bedragklassegrenzen
+  /** Op het tabblad Bewaking van het dossier zelf: geen link naar "Volledig dossier". */
+  inDossier?: boolean
+  /** Vervangt het veld Eigenaar, bv. door een kiezer om hem te wijzigen. */
+  eigenaarVeld?: React.ReactNode
+  /** Onder de afgesproken stap: kans, verwachte opdracht en "Stap aanpassen". */
+  beheer?: React.ReactNode
+  /** De hele tijdlijn tonen in plaats van de laatste acht regels. */
+  tijdlijnAlles?: boolean
 }
 
 export function OfferteKaart({ dossier: d, data, ...props }: Props) {
@@ -122,8 +130,8 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             waarde={`${d.verzonden_op ? kortDatum(d.verzonden_op, props.vandaag) : '—'} · ${data.geldigTot ? kortDatum(data.geldigTot, props.vandaag) : '—'}`}
             waarschuwing={geldigVerlopen}
           />
-          <Veld label="Eigenaar" waarde={data.bewaking.eigenaarNaam ?? 'Nog niet bepaald'} />
-          <Veld label="Nu aan zet" waarde={data.bewaking.actiehouderNaam ?? '—'} />
+          {props.eigenaarVeld ?? <Veld label="Eigenaar" waarde={data.bewaking.eigenaarNaam ?? 'Nog niet bepaald'} />}
+          <Veld label="Aan zet" waarde={data.bewaking.actiehouderNaam ?? '—'} />
           <div className="col-span-2">
             <Label>Afgesproken</Label>
             <div className="mt-0.5 flex items-start gap-2 text-[13px] text-neutral-900">
@@ -135,12 +143,15 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             </div>
           </div>
         </div>
+        {props.beheer}
         {klasse === 'mega' && (
           <p className={cn('mt-3 rounded-md px-3 py-2 text-xs',
             data.eigenaarMagMega === false ? 'bg-warning-50 text-warning-700' : 'bg-neutral-50 text-neutral-700')}>
             <strong className="font-semibold">Mega-offerte.</strong> Eigenaar is een projectleider of de
             directie, en wachten we op de klant, dan toch elke twee weken een hercontrole.
-            {data.eigenaarMagMega === false && ' De huidige eigenaar is dat niet: wijs een projectleider aan via Volledig dossier.'}
+            {data.eigenaarMagMega === false && (props.inDossier
+              ? ' De huidige eigenaar is dat niet: kies hierboven een projectleider.'
+              : ' De huidige eigenaar is dat niet: wijs een projectleider aan via Volledig dossier.')}
             {data.eigenaarMagMega === null && ' Er is nog geen eigenaar.'}
           </p>
         )}
@@ -161,12 +172,14 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
               Offerte openen{data.versie ? ` (versie ${data.versie})` : ''}
             </a>
           )}
-          <Link
-            href={dossierTabPad('offerte', d.id, 'bewaking')}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50"
-          >
-            Volledig dossier
-          </Link>
+          {!props.inDossier && (
+            <Link
+              href={dossierTabPad('offerte', d.id, 'bewaking')}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-50"
+            >
+              Volledig dossier
+            </Link>
+          )}
         </div>
       </Blok>
 
@@ -205,7 +218,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
           <span className="text-[13px] text-neutral-500">Nog niets vastgelegd.</span>
         ) : (
           <ol className="flex flex-col gap-3">
-            {data.tijdlijn.slice(0, 8).map(r => (
+            {(props.tijdlijnAlles ? data.tijdlijn : data.tijdlijn.slice(0, 8)).map(r => (
               <li key={r.id} className="grid grid-cols-[8px_minmax(0,1fr)] gap-2">
                 <span className={cn('mt-1.5 h-2 w-2 rounded-full', r.soort === 'contact' ? 'bg-brand-500' : 'bg-neutral-300')} aria-hidden />
                 <span className="min-w-0">

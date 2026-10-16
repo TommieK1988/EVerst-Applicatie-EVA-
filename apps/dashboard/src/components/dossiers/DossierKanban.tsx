@@ -4,6 +4,10 @@ import { useRouter } from 'next/navigation'
 import { IconPlus, IconSearch, IconDomeinOnderhoud } from '../eva/Icons'
 import { Button, Input, EmptyState } from '@/components/ui'
 import { DossierKaart } from './DossierKaart'
+import { OfferteBordKaart } from '@/components/commercie/OfferteBordKaart'
+import { useOfferteLade } from '@/components/commercie/OfferteLade'
+import { berekenKaartBedrag } from './kaart-bedrag'
+import type { Bedragklassegrenzen } from '@/lib/commercie/bedragklassen'
 import { NieuweAanvraagModal, type AanvraagCategorie, type AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import toast from 'react-hot-toast'
 import { wijzigSubstatusMetConflict } from './substatus-wijzigen'
@@ -68,11 +72,13 @@ type Props<K extends string> = {
    * slepen naar Afgesloten vraagt eerst hoe de offerte is afgelopen.
    */
   offerteBord?: boolean
+  /** Offertebord: wie er ingelogd is, voor "jij bent aan zet" in de offertekaart. */
+  mijnMedewerkerId?: string | null
 }
 
 export function DossierKanban<K extends string>({
   sectie, statussen, dossiers: initieel, kanNieuwAanmaken = false, categorieen, werkmaatschappijen, viewToggle, extraActies,
-  kolomKeyModus = 'auto', onStatusChange, offerteBord = false,
+  kolomKeyModus = 'auto', onStatusChange, offerteBord = false, mijnMedewerkerId = null,
 }: Props<K>) {
   const router    = useRouter()
   const { bevestig } = useDialogen()
@@ -135,10 +141,14 @@ export function DossierKanban<K extends string>({
   const draggingRef = React.useRef<string | null>(null)
   React.useEffect(() => { draggingRef.current = draggingId }, [draggingId])
 
+  // Offertebord: een klik opent de offertekaart van Te doen als lade, niet het dossier.
+  const offerteLade = useOfferteLade(dossiers, mijnMedewerkerId, offerteBord)
+  const openLade = offerteLade.open
   const openKaart = React.useCallback((dossierId: string) => {
     if (draggingRef.current) return
+    if (offerteBord) { openLade(dossierId); return }
     openDossierInNieuwTabblad(dossierOpenPad(sectie, dossierId))
-  }, [sectie])
+  }, [sectie, offerteBord, openLade])
 
   const startSlepen = React.useCallback((dossierId: string) => setDraggingId(dossierId), [])
   const stopSlepen  = React.useCallback(() => { setDraggingId(null); setDragOverCol(null) }, [])
@@ -353,7 +363,11 @@ export function DossierKanban<K extends string>({
             const kolom = gefilterd.filter(d => resolveKey(d) === s.key)
             const isDragOver = dragOverCol === s.key
 
-            const kolomKleur = STATUS_COLORS[idx % STATUS_COLORS.length]
+            // Offertebord: neutrale kolommen, kleur zit alleen in het statuslabel op de kaart.
+            const kolomKleur = offerteBord ? 'var(--neutral-300)' : STATUS_COLORS[idx % STATUS_COLORS.length]
+            const kolomSom = offerteBord
+              ? kolom.reduce((t, d) => t + (berekenKaartBedrag(d, 'offerte').totaalExclBtw ?? 0), 0)
+              : null
 
             return (
               <div
@@ -381,12 +395,19 @@ export function DossierKanban<K extends string>({
                   borderBottom: `2px solid ${isDragOver ? 'var(--brand-500)' : kolomKleur}`,
                   flexShrink: 0, transition: 'border-color 0.15s',
                 }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: kolomKleur, flexShrink: 0,
-                  }} />
+                  {!offerteBord && (
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: kolomKleur, flexShrink: 0,
+                    }} />
+                  )}
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--neutral-800)', flex: 1 }}>
                     {s.label}
+                    {kolomSom != null && kolomSom > 0 && (
+                      <span style={{ marginLeft: 8, fontWeight: 500, color: 'var(--neutral-500)', fontVariantNumeric: 'tabular-nums' }}>
+                        € {Math.round(kolomSom / 1000).toLocaleString('nl-NL')}k
+                      </span>
+                    )}
                   </span>
                   <span style={{
                     minWidth: 20, height: 20, borderRadius: 999, padding: '0 6px',
@@ -406,12 +427,16 @@ export function DossierKanban<K extends string>({
                   onDragStart={startSlepen}
                   onDragEnd={stopSlepen}
                   onOpen={openKaart}
+                  offerteBord={offerteBord}
+                  grenzen={offerteLade.grenzen}
+                  vandaag={offerteLade.vandaag}
                 />
               </div>
             )
           })}
         </div>
       </div>
+      {offerteLade.lade}
     </>
   )
 }
@@ -435,8 +460,11 @@ const KAARTEN_PER_STAP = 20
  * niet de kaart.
  */
 function KaartenKolom({
-  dossiers, sectie, draggingId, onDragStart, onDragEnd, onOpen,
+  dossiers, sectie, draggingId, onDragStart, onDragEnd, onOpen, offerteBord, grenzen, vandaag,
 }: {
+  offerteBord?: boolean
+  grenzen?: Bedragklassegrenzen
+  vandaag: string
   dossiers: DossierRij[]
   sectie?: DossierSectie
   draggingId: string | null
@@ -494,12 +522,16 @@ function KaartenKolom({
             transition: 'opacity 0.15s', userSelect: 'none',
           }}
         >
-          <DossierKaart
-            dossier={d}
-            sectie={sectie}
-            draggingActief={draggingId != null}
-            onOpen={onOpen}
-          />
+          {offerteBord ? (
+            <OfferteBordKaart dossier={d} vandaag={vandaag} grenzen={grenzen} onOpen={onOpen} />
+          ) : (
+            <DossierKaart
+              dossier={d}
+              sectie={sectie}
+              draggingActief={draggingId != null}
+              onOpen={onOpen}
+            />
+          )}
         </div>
       ))}
 

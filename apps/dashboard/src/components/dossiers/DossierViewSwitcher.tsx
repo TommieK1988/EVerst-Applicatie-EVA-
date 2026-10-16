@@ -3,6 +3,9 @@ import React from 'react'
 import { DossierKanban } from './DossierKanban'
 import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
+import type { KolomDefinitie } from '@/components/overzicht/OverzichtTabel'
+import { useOfferteLade } from '@/components/commercie/OfferteLade'
+import { offerteLijstKolommen } from '@/components/commercie/offerte-lijst-kolommen'
 import { OFFERTE_BORD_KOLOMMEN } from './offerte-bord'
 import { BewakingWerklijst } from '@/components/commercie/BewakingWerklijst'
 import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
@@ -127,6 +130,15 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     // er vandaag moet gebeuren. Het bord is het overzicht, niet het werkscherm.
     return bewaard ?? (toonBewaking ? 'bewaking' : 'kanban')
   })
+
+  // Offertes → Lijst: kolommen van de offertebewaking en een klik opent de offertekaart als lade.
+  const lijstLade = useOfferteLade(dossiers, mijnMedewerkerId ?? null, !!toonBewaking && view === 'lijst')
+  const { vandaag: ladeVandaag, grenzen: ladeGrenzen, open: openLijstLade } = lijstLade
+  const offerteKolommen = React.useCallback(
+    (k: KolomDefinitie<DossierRij>[]) => offerteLijstKolommen(k, { vandaag: ladeVandaag, grenzen: ladeGrenzen }),
+    [ladeVandaag, ladeGrenzen],
+  )
+  const offerteLijstKlik = React.useCallback((d: DossierRij) => openLijstLade(d.id), [openLijstLade])
 
   const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>(
     mijnNaam ? [mijnNaam] : [],
@@ -636,7 +648,10 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
           werkmaatschappijen={werkmaatschappijen}
           extraActies={extraActies}
           viewToggle={toggle}
+          kolomAanpassing={toonBewaking ? offerteKolommen : undefined}
+          onDossierKlik={toonBewaking ? offerteLijstKlik : undefined}
         />
+        {lijstLade.lade}
       </>
     )
   }
@@ -649,6 +664,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
         // Offertebord: vier kolommen in plaats van één per substatus (zie offerte-bord.ts).
         statussen={toonBewaking ? OFFERTE_BORD_KOLOMMEN : statussen}
         offerteBord={toonBewaking}
+        mijnMedewerkerId={mijnMedewerkerId ?? null}
         dossiers={zichtbareDossiers}
         kanNieuwAanmaken={kanNieuwAanmaken}
         categorieen={categorieen}
