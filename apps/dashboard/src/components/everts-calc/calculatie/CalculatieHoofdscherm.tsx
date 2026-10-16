@@ -38,6 +38,7 @@ import { reserveerOfferteNummer } from '@/app/(platform)/everts-calc/actions/quo
 import { verzamelSyncData, verzamelCalculatieSnapshot } from '@/lib/everts-calc/sync-utils'
 import type { Scenario, BibliotheekItemVereenvoudigd, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 import { metTijdtoeslag } from '@/lib/everts-calc/tijdtoeslag'
+import { eigenOpslagen, type EigenOpslag } from '@/lib/everts-calc/calculatie-opslag'
 
 /** Structuurpaneel open of dicht: per browser onthouden, puur een gemak. */
 const BOOM_OPEN_SLEUTEL = 'eva.calculatie.structuur-open'
@@ -98,7 +99,7 @@ export default function CalculatieHoofdscherm({
     (magReviseren === 'meerwerk' && !!scenario?.meerwerk_regel_id)
   const [actiefGroepId, setActiefGroepId]             = useState<string | null>(null)
   const [refreshTotalen, setRefreshTotalen]           = useState(0)
-  const [aantalEigenOpslag, setAantalEigenOpslag]     = useState(0)
+  const [eigenOpslag, setEigenOpslag]                 = useState<EigenOpslag>({ aantal: 0, percentages: [] })
   const [kostprijs, setKostprijs]                     = useState(0)
   const [verkoopprijs, setVerkoopprijs]               = useState(0)
   const [regelsVoorBtw, setRegelsVoorBtw]             = useState<Calculatieregel[]>([])
@@ -185,9 +186,7 @@ export default function CalculatieHoofdscherm({
     // Met de tijdtoeslag in de arbeidsnormen: de btw-uitsplitsing in de totalenbalk
     // telt zo dezelfde verkoopprijs als hierboven.
     setComponentenVoorBtw(metTijdtoeslag(cs, rs, gs))
-    const metEigen = new Set(cs.filter(c => c.opslag_pct !== undefined).map(c => c.calculatieregel_id))
-    rs.forEach(r => { if (r.opslag_pct !== undefined) metEigen.add(r.id) })
-    setAantalEigenOpslag(metEigen.size)
+    setEigenOpslag(eigenOpslagen(rs, cs))
   }, [refreshTotalen, scenario])
 
   /* ── Controle vóór de offerte ────────────────────────────────────── */
@@ -355,11 +354,13 @@ export default function CalculatieHoofdscherm({
    *  de eigen percentages van alle regels weg, zodat ze die standaard volgen. Daarna
    *  kan elke regel weer een afwijkend percentage krijgen. Ctrl+Z zet de regels terug;
    *  de waarde in de balk blijft staan en typ je desgewenst opnieuw. */
-  const handleOpslagToepassen = (pct: number) => {
+  /** Opslagveld in de totalenbalk: zet de opslag van de calculatie. Regels met een eigen
+   *  opslag% blijven staan, tenzij de calculator kiest voor "alle regels". */
+  const handleOpslagToepassen = (pct: number, ookEigen: boolean) => {
     if (readOnly) return
     gridRef.current?.duwSnapshot()
     handleScenarioWijzig({ opslag_pct: pct })
-    gridRef.current?.wisRegelOpslagen()
+    if (ookEigen) gridRef.current?.wisRegelOpslagen()
     handleWijziging()
   }
 
@@ -549,7 +550,7 @@ export default function CalculatieHoofdscherm({
         componenten={componentenVoorBtw}
         onOpslagToepassen={handleOpslagToepassen}
         onUurtariefToepassen={handleUurtariefToepassen}
-        aantalEigenOpslag={aantalEigenOpslag}
+        eigenOpslag={eigenOpslag}
         readOnly={readOnly}
       />
 

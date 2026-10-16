@@ -336,6 +336,8 @@ export interface Instellingen {
   categorieen?: string[]                         // bijv. ['Schilderwerk', 'Timmerwerk', ...]
   categorieCodes?: Record<string, string>        // bijv. { 'Schilderwerk': 'SC', ... }
   standaard_kostengroepen?: string[]             // bijv. ['Bouwplaats', 'Bereikbaarheid', 'Arbeid']
+  /** Opslag% waarmee een nieuwe calculatie begint. Leeg = 25%. */
+  standaard_opslag_pct?: number
 }
 
 export type ComponentType = 'arbeid' | 'materieel' | 'onderaanneming'

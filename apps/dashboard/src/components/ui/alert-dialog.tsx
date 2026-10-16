@@ -76,7 +76,7 @@ function AlertDialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDiv
 
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & { variant?: 'primary' | 'destructive' }
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & { variant?: 'primary' | 'destructive' | 'secondary' }
 >(({ className, variant = 'destructive', ...props }, ref) => (
   <AlertDialogPrimitive.Action ref={ref} className={cn(buttonVariants({ variant, size: 'md' }), className)} {...props} />
 ))
