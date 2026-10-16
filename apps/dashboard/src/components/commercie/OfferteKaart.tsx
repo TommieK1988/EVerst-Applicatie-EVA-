@@ -26,6 +26,7 @@ import { legMeebesprokenVast } from '@/lib/commercie/paneel'
 import { bedragklasse } from '@/lib/commercie/bedragklassen'
 import { UitkomstFormulier } from './UitkomstFormulier'
 import { OverigeOffertes } from './OverigeOffertes'
+import { OpvolgingBlok } from './OpvolgingBlok'
 
 type Props = {
   dossier: DossierRij
@@ -50,6 +51,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
     bewaking: data.bewaking, tijdlijn: data.tijdlijn, mijnId: props.mijnMedewerkerId, vandaag: props.vandaag,
   })
   const geldigVerlopen = data.geldigTot != null && data.geldigTot < props.vandaag
+  const klasse = bedragklasse(berekenKaartBedrag(d, 'offerte').totaalExclBtw)
   const overige = props.overige?.rijen ?? []
   /** Offertes die in dit gesprek zijn meebesproken: hun tijdlijn krijgt dezelfde notitie. */
   const [mee, setMee] = React.useState<Set<string>>(new Set())
@@ -130,10 +132,13 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             </div>
           </div>
         </div>
-        {bedragklasse(berekenKaartBedrag(d, 'offerte').totaalExclBtw) === 'mega' && (
-          <p className="mt-3 rounded-md bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
+        {klasse === 'mega' && (
+          <p className={cn('mt-3 rounded-md px-3 py-2 text-xs',
+            data.eigenaarMagMega === false ? 'bg-warning-50 text-warning-700' : 'bg-neutral-50 text-neutral-700')}>
             <strong className="font-semibold">Mega-offerte.</strong> Eigenaar is een projectleider of de
             directie, en wachten we op de klant, dan toch elke twee weken een hercontrole.
+            {data.eigenaarMagMega === false && ' De huidige eigenaar is dat niet: wijs een projectleider aan via Volledig dossier.'}
+            {data.eigenaarMagMega === null && ' Er is nog geen eigenaar.'}
           </p>
         )}
         {geldigVerlopen && (
@@ -162,6 +167,19 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
         </div>
       </Blok>
 
+      {/* Nabellen en stilstand: geen gesprek nodig om dat bij te stellen. */}
+      {!data.bewaking.afgerond && (
+        <Blok>
+          <OpvolgingBlok
+            dossierId={d.id}
+            klasse={klasse}
+            opvolging={d.bewaking_opvolging ?? null}
+            stilReden={d.bewaking_stil_reden ?? null}
+            besluitDatum={d.bewaking_besluit_datum ?? null}
+          />
+        </Blok>
+      )}
+
       {/* 4. Wat is er gebeurd? */}
       {!data.bewaking.afgerond && (
         <Blok titel="Contact gehad? Wat is de uitkomst">
@@ -170,6 +188,7 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
             medewerkers={props.medewerkers}
             compact
             sneltoetsen
+            mega={klasse === 'mega'}
             naVastleggen={naVastleggen}
             onVastgelegd={props.onVastgelegd}
           />

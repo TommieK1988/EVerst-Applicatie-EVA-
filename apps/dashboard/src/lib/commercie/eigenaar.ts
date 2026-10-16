@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@everts/database/server'
 import { vereisRecht } from '@/lib/auth/rechten'
 import { vertaalDbFout, type ActieResultaat } from './types'
+import { megaEigenaarFout } from './mega-eigenaar'
 
 export async function zetCommercieelEigenaar(
   dossierId: string,
@@ -25,6 +26,12 @@ export async function zetCommercieelEigenaar(
     .select('id,eigenaar_id,stap_soort,getrieerd_op').eq('dossier_id', dossierId).maybeSingle()
 
   if (kaart?.eigenaar_id === eigenaarId) return { ok: true }
+
+  // Mega-offerte (vanaf € 125k): eigenaar is een projectleider of de directie.
+  if (eigenaarId) {
+    const fout = await megaEigenaarFout(dossierId, eigenaarId)
+    if (fout) return { ok: false, error: fout }
+  }
 
   let bewakingId: string
   if (kaart) {

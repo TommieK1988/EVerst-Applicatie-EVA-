@@ -91,6 +91,17 @@ export async function runCronSync(
     offertebewaking = { error: e instanceof Error ? e.message : String(e) }
   }
 
+  // Daarna de automatische regels: ontvangstcontrole inplannen na verzenden, kleine offertes
+  // die niemand nabelt laten vervallen (zie lib/commercie/automatisering.ts). Ook best-effort.
+  let offerteautomatisering: unknown
+  log.stap('offerteautomatisering')
+  try {
+    const { automatiseerOffertebewaking } = await import('@/lib/commercie/automatisering')
+    offerteautomatisering = await automatiseerOffertebewaking()
+  } catch (e) {
+    offerteautomatisering = { error: e instanceof Error ? e.message : String(e) }
+  }
+
   // Bordindeling nalopen: LB met een verkeerde categorie → melding aan de projectleider, en
   // dossiers waarvan de EVA-status niet bij hun bord past → foutenlog. Ná de sync, want die zet
   // de Bouw7-status en categorie waar `bord` uit volgt. Gooit niet.
@@ -157,6 +168,7 @@ export async function runCronSync(
       planning: full.planning,
       management,
       offertebewaking,
+      offerteautomatisering,
       bordcontrole,
       verzamelfacturen,
       geocode,

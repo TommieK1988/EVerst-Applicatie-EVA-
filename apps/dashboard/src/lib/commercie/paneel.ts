@@ -14,6 +14,7 @@ import { kiesOfferteBronnen } from '@/lib/dossiers/offerte-bron'
 import { ID_BLOK } from '@/lib/dossiers/kaart-bedragen'
 import { haalAlleRijen } from '@/lib/supabase/paginate'
 import { getBewaking, getTijdlijn, type BewakingWeergave, type TijdlijnRegel } from './actions'
+import { magMegaEigenaarZijn } from './opvolging'
 import { UITKOMST_LABELS, naamVan, type MedewerkerNaam, type UitkomstSleutel } from './types'
 
 export type OffertePaneelData = {
@@ -24,6 +25,8 @@ export type OffertePaneelData = {
   versie: number | null
   /** Is er een offerte-PDF te openen via /api/dossiers/[id]/offerte/pdf? */
   heeftPdf: boolean
+  /** Mag de eigenaar een mega-offerte houden (projectleider/directie)? null = geen eigenaar. */
+  eigenaarMagMega: boolean | null
 }
 
 export async function getOffertePaneel(dossierId: string): Promise<OffertePaneelData> {
@@ -58,7 +61,14 @@ export async function getOffertePaneel(dossierId: string): Promise<OffertePaneel
   ])
 
   const quote = quotes?.[0] ?? null
+  let eigenaarMagMega: boolean | null = null
+  if (bewaking.kaart?.eigenaar_id) {
+    const { data: eigenaar } = await supabase.from('medewerkers')
+      .select('functie').eq('id', bewaking.kaart.eigenaar_id).maybeSingle()
+    eigenaarMagMega = magMegaEigenaarZijn(eigenaar?.functie)
+  }
   return {
+    eigenaarMagMega,
     bewaking,
     tijdlijn,
     geldigTot: quote?.geldig_tot ?? null,

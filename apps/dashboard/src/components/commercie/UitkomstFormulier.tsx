@@ -24,6 +24,7 @@ import {
   type UitkomstDefinitie, type VerkoopkansInvoer,
 } from '@/lib/commercie/types'
 import { legUitkomstVast } from '@/lib/commercie/actions'
+import { STIL_REDENEN, standaardStilReden } from '@/lib/commercie/opvolging'
 import { VerkoopkansVelden } from './VerkoopkansVelden'
 
 type Medewerker = { id: string; naam: string }
@@ -41,6 +42,8 @@ type Props = {
   sneltoetsen?: boolean
   /** Uitkomstknoppen in twee kolommen zonder uitleg: voor het smalle zijpaneel. */
   compact?: boolean
+  /** Mega-offerte: wachten op de klant wordt uiterlijk over twee weken een hercontrole. */
+  mega?: boolean
 }
 
 export function UitkomstFormulier(props: Props) {
@@ -50,6 +53,9 @@ export function UitkomstFormulier(props: Props) {
   const [actiehouder, setActiehouder] = React.useState('')
   const [reden, setReden] = React.useState('')
   const [toelichting, setToelichting] = React.useState('')
+  /** Waarom het stilstaat en wanneer de klant beslist; alleen bij wachten op iemand. */
+  const [stilReden, setStilReden] = React.useState('')
+  const [besluit, setBesluit] = React.useState<Date | undefined>()
   /**
    * De kans die overblijft. Bij 'uitgesteld' verplicht — uitgesteld werk zonder houder en datum
    * is een ander woord voor vergeten werk — en bij 'verloren' aangeboden achter een knop.
@@ -64,6 +70,7 @@ export function UitkomstFormulier(props: Props) {
     setGekozen(null); setTekst(''); setDatum(undefined)
     setActiehouder(''); setReden(''); setToelichting('')
     setKansOpen(false); setKans(LEGE_VERKOOPKANS)
+    setStilReden(''); setBesluit(undefined)
   }, [props.dossierId])
 
   // De herbenaderdatum is meteen de deadline van de kans: bij uitstel is dat per definitie
@@ -78,6 +85,8 @@ export function UitkomstFormulier(props: Props) {
   React.useEffect(() => {
     setKansOpen(gekozen?.vraagtVerkoopkans === true)
     setKans(LEGE_VERKOOPKANS)
+    setStilReden(gekozen ? standaardStilReden(gekozen.sleutel) ?? '' : '')
+    setBesluit(undefined)
     if (gekozen) setTimeout(() => notitieRef.current?.focus(), 0)
   }, [gekozen])
 
@@ -96,13 +105,17 @@ export function UitkomstFormulier(props: Props) {
       reden: reden || null,
       redenToelichting: toelichting || null,
       verkoopkans: kansOpen && verkoopkansCompleet(kans) ? kans : null,
+      // Alleen meesturen bij wachten; anders bepaalt de server het uit de uitkomst.
+      ...(gekozen.stapSoort === 'wachten'
+        ? { stilReden: stilReden || null, besluitDatum: besluit ? datumNaarISO(besluit) : null }
+        : {}),
     })
     setBezig(false)
     if (!res.ok) { toast.error(res.error); return }
     if (props.naVastleggen && tekst.trim()) await props.naVastleggen(tekst.trim()).catch(() => {})
     toast.success(`${gekozen.label} vastgelegd`)
     props.onVastgelegd()
-  }, [gekozen, kanVastleggen, props, tekst, datum, actiehouder, reden, toelichting, kansOpen, kans])
+  }, [gekozen, kanVastleggen, props, tekst, datum, actiehouder, reden, toelichting, kansOpen, kans, stilReden, besluit])
 
   React.useEffect(() => {
     if (!props.sneltoetsen) return
@@ -163,6 +176,33 @@ export function UitkomstFormulier(props: Props) {
               : 'Wanneer benaderen we de klant opnieuw?'}>
               <DatePicker value={datum} onChange={setDatum} />
             </Label>
+          )}
+
+          {gekozen.stapSoort === 'wachten' && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Label tekst="Waarom staat het stil?">
+                <select
+                  className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
+                  value={stilReden}
+                  onChange={e => setStilReden(e.target.value)}
+                >
+                  <option value="">Geen reden</option>
+                  {STIL_REDENEN.map(r => <option key={r.sleutel} value={r.sleutel}>{r.label}</option>)}
+                </select>
+              </Label>
+              {gekozen.sleutel !== 'ligt_bij_alv' && (
+                <Label tekst="Besluit klant verwacht (optioneel)">
+                  <DatePicker value={besluit} onChange={setBesluit} />
+                </Label>
+              )}
+            </div>
+          )}
+
+          {props.mega && gekozen.stapSoort === 'wachten' && (
+            <p className="text-xs text-neutral-600">
+              Mega-offerte: ligt de datum verder dan twee weken weg, dan zet EVA er een hercontrole
+              over twee weken van. De datum die je kiest blijft bewaard als besluitdatum.
+            </p>
           )}
 
           {gekozen.vraagtActiehouder && (

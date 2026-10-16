@@ -12,6 +12,7 @@ import type { DossierRij } from '@/components/dossiers/types'
 import { dagenTussenKalender } from '@/lib/dossiers/datum-regels'
 import { bewakingsStatus, type BewakingStatus, type BewakingKaart } from '@/lib/commercie/types'
 import { bedragklasse, type Bedragklasse } from '@/lib/commercie/bedragklassen'
+import { alsStilReden, wordtNagebeld, STIL_REDEN_LABEL, type StilReden } from '@/lib/commercie/opvolging'
 
 export type Bak = 'verlopen' | 'vandaag' | 'ongetrieerd' | 'week' | 'later'
 
@@ -45,6 +46,10 @@ export type TeDoenRij = DossierRij & {
   _openDagen: number | null
   /** Klein, middel, groot of mega; zie bedragklassen.ts. */
   _klasse: Bedragklasse
+  /** Hoort in de nabellijst: bedragklasse, tenzij de offerte zelf "altijd" of "niet" zegt. */
+  _nabellen: boolean
+  /** Waarom de offerte stilstaat, als dat is vastgelegd. */
+  _stil: StilReden | null
 }
 
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
@@ -105,6 +110,8 @@ export function maakTeDoenRij(d: DossierRij, vandaag: string): TeDoenRij {
     _aandacht: (bedrag ?? 0) >= AANDACHT_BEDRAG && (!d.bewaking_eigenaar_id || !d.bewaking_stap_soort),
     _openDagen: verzonden ? dagenTussenKalender(verzonden, vandaag) : null,
     _klasse: bedragklasse(bedrag),
+    _nabellen: wordtNagebeld(bedragklasse(bedrag), d.bewaking_opvolging ?? null),
+    _stil: alsStilReden(d.bewaking_stil_reden),
   }
 }
 
@@ -131,6 +138,41 @@ export function pastBijZoekterm(r: TeDoenRij, term: string): boolean {
     [r.werkadres_straat, r.werkadres_huisnummer, r.werkadres_postcode, r.werkadres_stad].filter(Boolean).join(' '),
     r.bewaking_actiehouder, r.bewaking_stap_tekst,
   ].some(v => v?.toLowerCase().includes(q))
+}
+
+/**
+ * Past een rij bij het bedragfilter? De keuze op de offerte zelf gaat voor: "altijd nabellen"
+ * staat erin ongeacht de klasse, "niet nabellen" nooit. Het van–tot-bereik geldt altijd.
+ */
+export function pastBijBedrag(
+  r: Pick<TeDoenRij, '_klasse' | '_bedrag' | 'bewaking_opvolging'>,
+  klassen: Record<Bedragklasse, boolean>,
+  bereik: { min: number | null; max: number | null },
+): boolean {
+  const b = r._bedrag ?? 0
+  if ((bereik.min != null && b < bereik.min) || (bereik.max != null && b > bereik.max)) return false
+  if (r.bewaking_opvolging === 'altijd') return true
+  if (r.bewaking_opvolging === 'niet') return false
+  return klassen[r._klasse]
+}
+
+/** Stilstand per reden, voor het overzicht "Waarom staat het stil": aantal, bedrag, eerste besluit. */
+export function stilstandPerReden(rijen: TeDoenRij[]): {
+  reden: StilReden; label: string; aantal: number; bedrag: number; eersteBesluit: string | null
+}[] {
+  const per = new Map<StilReden, { aantal: number; bedrag: number; eersteBesluit: string | null }>()
+  for (const r of rijen) {
+    if (!r._stil) continue
+    const g = per.get(r._stil) ?? { aantal: 0, bedrag: 0, eersteBesluit: null }
+    g.aantal++
+    g.bedrag += r._bedrag ?? 0
+    const besluit = r.bewaking_besluit_datum ?? null
+    if (besluit && (!g.eersteBesluit || besluit < g.eersteBesluit)) g.eersteBesluit = besluit
+    per.set(r._stil, g)
+  }
+  return [...per.entries()]
+    .map(([reden, g]) => ({ reden, label: STIL_REDEN_LABEL[reden], ...g }))
+    .sort((a, b) => b.bedrag - a.bedrag)
 }
 
 /** "Ook open bij": zelfde klant (VvE) eerst, dan urgentie, dan het hoogste bedrag. */

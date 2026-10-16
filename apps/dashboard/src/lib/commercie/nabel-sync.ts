@@ -170,7 +170,8 @@ export async function synchroniseerBewakingUitActies(
 
     // Een menselijke beslissing wint altijd. Wie een uitkomst heeft vastgelegd, wil niet dat
     // een openstaande taak die stap de volgende ochtend weer overschrijft.
-    if (kaart?.stap_soort && kaart.stap_bron !== 'actie') {
+    // Een automatisch ingeplande ontvangstcontrole ('automatisch') mag wél wijken voor een actie.
+    if (kaart?.stap_soort && kaart.stap_bron === 'handmatig') {
       res.overgeslagenHandmatig++
       continue
     }

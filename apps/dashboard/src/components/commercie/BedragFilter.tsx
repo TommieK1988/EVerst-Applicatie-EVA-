@@ -19,6 +19,8 @@ type Props = {
   min: number | null
   max: number | null
   onBereik: (min: number | null, max: number | null) => void
+  /** Rechts in de balk, bv. de knop voor offertes op "niet nabellen". */
+  extra?: React.ReactNode
 }
 
 const leesBedrag = (v: string): number | null => {
@@ -79,6 +81,7 @@ export function BedragFilter(props: Props) {
           </button>
         )}
       </div>
+      {props.extra && <div className="ml-auto">{props.extra}</div>}
     </div>
   )
 }

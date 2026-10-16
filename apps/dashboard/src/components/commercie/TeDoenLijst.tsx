@@ -15,6 +15,7 @@
 import * as React from 'react'
 import { cn } from '@everts/ui'
 import { STATUS_PRESENTATIE } from '@/lib/commercie/types'
+import { STIL_REDEN_LABEL } from '@/lib/commercie/opvolging'
 import {
   BAKKEN, AANDACHT_BEDRAG, eur, eurKort, kortDatum,
   type Bak, type LaatsteContact, type TeDoenRij,
@@ -172,11 +173,19 @@ const Rij = React.memo(function Rij(props: {
           </span>
         </span>
         {/* Wie er wacht staat al in de staptekst; de chips zeggen wat de tekst niet zegt. */}
-        {(r.bewaking_stap_bron === 'actie' || r._openDagen != null || r._klasse === 'mega') && (
+        {(r.bewaking_stap_bron === 'actie' || r._openDagen != null || r._klasse === 'mega' || r._stil || r.bewaking_opvolging) && (
           <span className="flex flex-wrap gap-1">
             {r._klasse === 'mega' && (
               <span className="inline-flex items-center rounded-full bg-warning-50 px-2 py-px text-[11px] font-semibold text-warning-700">Mega</span>
             )}
+            {r._stil && (
+              <Chip>
+                {STIL_REDEN_LABEL[r._stil]}
+                {r.bewaking_besluit_datum ? ` · besluit ${kortDatum(r.bewaking_besluit_datum, props.vandaag)}` : ''}
+              </Chip>
+            )}
+            {r.bewaking_opvolging === 'altijd' && <Chip>altijd nabellen</Chip>}
+            {r.bewaking_opvolging === 'niet' && <Chip>niet nabellen</Chip>}
             {r.bewaking_stap_bron === 'actie' && <Chip>uit de actielijst</Chip>}
             {r._openDagen != null && <Chip>{r._openDagen} dagen open</Chip>}
           </span>

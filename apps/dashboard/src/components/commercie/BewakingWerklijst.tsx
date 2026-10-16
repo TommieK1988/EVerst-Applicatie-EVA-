@@ -24,8 +24,10 @@ import { vandaagNL } from '@/lib/wagenpark/periode'
 import { getMedewerkers } from '@/lib/dossiers/actions'
 import { getLaatsteContacten } from '@/lib/commercie/paneel'
 import { Search, X } from 'lucide-react'
-import { maakTeDoenRij, pastBijZoekterm, sorteerTeDoen, type Bak, type LaatsteContact } from './te-doen'
+import { maakTeDoenRij, pastBijBedrag, pastBijZoekterm, sorteerTeDoen, type Bak, type LaatsteContact } from './te-doen'
 import { TeDoenLijst, TeDoenTegels } from './TeDoenLijst'
+import { StilstandOverzicht } from './StilstandOverzicht'
+import type { StilReden } from '@/lib/commercie/opvolging'
 import { BedragFilter } from './BedragFilter'
 import { STANDAARD_KLASSEN, type Bedragklasse } from '@/lib/commercie/bedragklassen'
 import { OfferteZijpaneel } from './OfferteZijpaneel'
@@ -86,6 +88,11 @@ export function BewakingWerklijst(props: Props) {
     try { localStorage.setItem(OPSLAG_KLASSEN, JSON.stringify(k)) } catch { /* niet onthouden */ }
   }
   const [bereik, setBereik] = React.useState<{ min: number | null; max: number | null }>({ min: null, max: null })
+  /** Offertes op "niet nabellen" staan standaard niet in de lijst; op verzoek wel. */
+  const [metNiet, setMetNiet] = React.useState(false)
+  /** Het stilstandoverzicht, en de reden waarop de lijst dan gefilterd is. */
+  const [stilOpen, setStilOpen] = React.useState(false)
+  const [stilFilter, setStilFilter] = React.useState<StilReden | null>(null)
   const zoekt = zoek.trim().length > 0
   const vandaag = React.useMemo(() => vandaagNL(), [])
 
@@ -111,19 +118,25 @@ export function BewakingWerklijst(props: Props) {
   // Het bedragfilter werkt vóór de tegels: die tellen dus mee met wat je wilt zien.
   const vanMij = React.useMemo(
     () => vanMijAlleBedragen.filter(r =>
-      klassen[r._klasse]
-      && (bereik.min == null || (r._bedrag ?? 0) >= bereik.min)
-      && (bereik.max == null || (r._bedrag ?? 0) <= bereik.max)),
-    [vanMijAlleBedragen, klassen, bereik],
+      pastBijBedrag(r, klassen, bereik)
+      || (metNiet && r.bewaking_opvolging === 'niet' && pastBijBedrag({ ...r, bewaking_opvolging: null }, klassen, bereik))),
+    [vanMijAlleBedragen, klassen, bereik, metNiet],
+  )
+  const aantalNiet = React.useMemo(
+    () => vanMijAlleBedragen.filter(r => r.bewaking_opvolging === 'niet').length,
+    [vanMijAlleBedragen],
   )
   // Zoeken kijkt in álle open offertes: wie een naam intypt wil hem vinden, ook als hij van een
   // collega is of pas later speelt. Tegels en "van mij" gelden dan niet.
   const zichtbaar = React.useMemo(
     () => (zoekt
       ? alle.filter(r => pastBijZoekterm(r, zoek))
-      : vanMij.filter(r => (tegel ? r._bak === tegel : toonLater || r._bak !== 'later'))
+      // Op een stilstandreden: alles met die reden, ook wat later speelt; daar gaat het juist om.
+      : stilFilter
+        ? vanMij.filter(r => r._stil === stilFilter)
+        : vanMij.filter(r => (tegel ? r._bak === tegel : toonLater || r._bak !== 'later'))
     ).sort(sorteerTeDoen),
-    [alle, vanMij, toonLater, tegel, zoek, zoekt],
+    [alle, vanMij, toonLater, tegel, zoek, zoekt, stilFilter],
   )
 
   // Laatste contact per offerte: zit niet in de dossierlijst, dus los en achteraf geladen.
@@ -206,6 +219,19 @@ export function BewakingWerklijst(props: Props) {
           >
             Ook wat later speelt
           </button>
+          <button
+            type="button"
+            aria-pressed={stilOpen}
+            onClick={() => { setStilOpen(!stilOpen); if (stilOpen) setStilFilter(null) }}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              stilOpen
+                ? 'border-brand-500 bg-brand-50 text-brand-700'
+                : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50',
+            )}
+          >
+            Waarom staat het stil
+          </button>
         </div>
         <div className="flex items-center gap-2">{props.extraActies}{props.viewToggle}</div>
       </div>
@@ -218,7 +244,16 @@ export function BewakingWerklijst(props: Props) {
           min={bereik.min}
           max={bereik.max}
           onBereik={(min, max) => setBereik({ min, max })}
+          extra={aantalNiet > 0 ? (
+            <button type="button" onClick={() => setMetNiet(!metNiet)} className="text-xs text-neutral-500 underline underline-offset-2">
+              {metNiet ? 'Verberg "niet nabellen"' : `+ ${aantalNiet} op "niet nabellen"`}
+            </button>
+          ) : null}
         />
+      )}
+
+      {!zoekt && stilOpen && (
+        <StilstandOverzicht rijen={vanMij} gekozen={stilFilter} onKies={setStilFilter} vandaag={vandaag} />
       )}
 
       {zoekt ? (
@@ -226,7 +261,7 @@ export function BewakingWerklijst(props: Props) {
           {zichtbaar.length} open {zichtbaar.length === 1 ? 'offerte' : 'offertes'} gevonden voor &ldquo;{zoek.trim()}&rdquo;, van iedereen en ook wat later speelt.
         </p>
       ) : (
-        <TeDoenTegels alleRijen={vanMij} tegel={tegel} onTegel={kiesTegel} />
+        <TeDoenTegels alleRijen={vanMij} tegel={tegel} onTegel={b => { setStilFilter(null); kiesTegel(b) }} />
       )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">

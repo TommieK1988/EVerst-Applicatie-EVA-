@@ -8,7 +8,7 @@
 
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { formatDatumNL } from '@/lib/dossiers/datum-regels'
-import type { OfferteRegel } from '@/lib/commercie/actions'
+import type { OfferteRegel } from '@/lib/commercie/bouw7-offertes'
 
 const eur = (n: number | null) =>
   n == null ? '—' : new Intl.NumberFormat('nl-NL', {

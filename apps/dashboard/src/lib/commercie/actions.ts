@@ -37,6 +37,8 @@ import {
 // en `actions.ts` was zonder die scheiding voorbij de 800 regels gegroeid.
 import { maakVerkoopkans } from './verkoopkansen'
 import { faseNaStap } from './fase-volgt-stap'
+import { stilstandVelden } from './stilstand'
+import { megaEigenaarFout } from './mega-eigenaar'
 
 /** De service-role-client; los getypeerd zodat de helpers hieronder hem kunnen aannemen. */
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -99,6 +101,8 @@ type KaartUpdate = {
   getrieerd_door?: string | null
   stap_bron?: 'handmatig' | 'actie'
   taak_id?: string | null
+  stil_reden?: string | null
+  besluit_datum?: string | null
 }
 
 /** Fases waarin commerciële opvolging niet meer nodig is. */
@@ -370,6 +374,10 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
 
   const vorigeActiehouder = kaart.actiehouder_id
   const update: KaartUpdate = {}
+  if (invoer.eigenaarId) {
+    const fout = await megaEigenaarFout(dossierId, invoer.eigenaarId)
+    if (fout) return { ok: false, error: fout }
+  }
   if (invoer.eigenaarId !== undefined) update.eigenaar_id = invoer.eigenaarId
   if (invoer.actiehouderId !== undefined) update.actiehouder_id = invoer.actiehouderId
   if (invoer.stapSoort !== undefined) update.stap_soort = invoer.stapSoort
@@ -449,10 +457,14 @@ export type UitkomstInvoer = {
   reden?: string | null
   redenToelichting?: string | null
   /**
-   * De kans die overblijft. Verplicht bij 'uitgesteld' (uitgesteld werk zonder houder en datum
-   * is vergeten werk), optioneel bij 'verloren'.
+   * De kans die overblijft, optioneel bij 'verloren'. Niet bij 'uitgesteld': daar blijft de
+   * offerte zelf open met een herbenaderdatum.
    */
   verkoopkans?: VerkoopkansInvoer | null
+  /** Waarom de offerte stilstaat; zonder opgave volgt hij uit de uitkomst (zie opvolging.ts). */
+  stilReden?: string | null
+  /** Wanneer de klant beslist (ALV, begroting). */
+  besluitDatum?: string | null
   /** Tweede poging na een Bouw7-conflict: tóch overschrijven. */
   forceerBouw7?: boolean
 }
@@ -522,12 +534,15 @@ export async function legUitkomstVast(
     stap_datum: stapDatum,
     wacht_op: def.wachtOp,
     actiehouder_id: def.stapSoort ? actiehouder : kaart.actiehouder_id,
-    // Wie nog geen eigenaar had krijgt hem nu: wie een uitkomst vastlegt, is er duidelijk mee bezig.
-    eigenaar_id: kaart.eigenaar_id ?? medewerker.id,
+    // Wie nog geen eigenaar had krijgt hem nu: wie een uitkomst vastlegt, is er duidelijk mee
+    // bezig. Behalve bij een mega waar diegene geen projectleider of directie is.
+    eigenaar_id: kaart.eigenaar_id ?? ((await megaEigenaarFout(dossierId, medewerker.id)) ? null : medewerker.id),
     // Vanaf hier is dit een commerciële beslissing, geen afgeleide uit de actielijst.
     stap_bron: 'handmatig',
   }
   if (def.kans != null) update.kans_pct = def.kans
+  // Stilstandreden, besluitdatum en de mega-hercontrole (die kan de stapdatum vervroegen).
+  Object.assign(update, await stilstandVelden(dossierId, def.sleutel, def.stapSoort, stapDatum, invoer))
   if (!kaart.getrieerd_op) {
     update.getrieerd_op = new Date().toISOString()
     update.getrieerd_door = medewerker.id
@@ -564,7 +579,7 @@ export async function legUitkomstVast(
     await meldActiehouder(supabase, {
       dossierId, actiehouderId: actiehouder, door: medewerker,
       stapTekst: (update.stap_tekst as string | null) ?? null,
-      stapDatum,
+      stapDatum: update.stap_datum ?? null,
     })
   }
 
@@ -747,45 +762,4 @@ export async function getMijnBewaking(limiet = 5): Promise<BewakingWidgetData> {
   })
 
   return { regels: uit.slice(0, limiet), verlopen, vandaag, wachtend, totaal: uit.length }
-}
-
-// ── Verstuurde offertes bij een dossier ──────────────────────────────────────
-
-export type OfferteRegel = {
-  id: string
-  nummer: string | null
-  onderwerp: string | null
-  datum: string | null
-  status: string | null
-  bedrag: number | null
-  calculator: string | null
-}
-
-/**
- * De Bouw7-offertes onder dit project, nieuwste eerst.
- *
- * Onder één project kunnen er meerdere hangen; zonder deze lijst zie je op de kaart alleen een
- * totaalbedrag en niet wélke offerte openstaat. Leesbron is `bouw7_offertes`, gevuld door
- * `syncBouw7Offertes` — dit zijn dus Bouw7-gegevens, geen EVA-administratie.
- */
-export async function getOffertesVoorDossier(dossierId: string): Promise<OfferteRegel[]> {
-  await vereisRecht('dossiers', 'lezen')
-  const supabase = createAdminClient()
-
-  // Begrensd op één dossier; blijft ruim onder de PostgREST-grens.
-  const { data } = await supabase
-    .from('bouw7_offertes')
-    .select('id,nummer,onderwerp,datum,status,subtotaal_excl_btw,calculator_naam')
-    .eq('dossier_id', dossierId)
-    .order('datum', { ascending: false, nullsFirst: false })
-
-  return (data ?? []).map(r => ({
-    id: r.id,
-    nummer: r.nummer,
-    onderwerp: r.onderwerp,
-    datum: r.datum,
-    status: r.status,
-    bedrag: r.subtotaal_excl_btw,
-    calculator: r.calculator_naam,
-  }))
 }

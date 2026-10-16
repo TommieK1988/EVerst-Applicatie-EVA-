@@ -18,7 +18,9 @@ import { DialoogProvider } from '@/components/ui/dialogen'
 import type { DossierRij } from '@/components/dossiers/types'
 import type { OffertePaneelData } from '@/lib/commercie/paneel'
 import type { BewakingKaart } from '@/lib/commercie/types'
-import { maakTeDoenRij, sorteerTeDoen, type Bak, type LaatsteContact } from '@/components/commercie/te-doen'
+import { StilstandOverzicht } from '@/components/commercie/StilstandOverzicht'
+import type { StilReden } from '@/lib/commercie/opvolging'
+import { maakTeDoenRij, pastBijBedrag, sorteerTeDoen, type Bak, type LaatsteContact } from '@/components/commercie/te-doen'
 import { TeDoenLijst, TeDoenTegels } from '@/components/commercie/TeDoenLijst'
 import { OfferteKaart } from '@/components/commercie/OfferteKaart'
 import { BedragFilter } from '@/components/commercie/BedragFilter'
@@ -32,18 +34,19 @@ type Voorbeeld = {
   id: string; titel: string; klant: string; nr: string; bedrag: number; verzonden: string
   contact: [string, string]; eigenaar: string; houder: string | null; houderNaam: string | null
   soort: 'actie' | 'wachten' | null; tekst: string | null; datum: string | null; wachtOp?: 'klant' | 'intern' | 'extern'
+  stil?: string; besluit?: string; opvolging?: 'altijd' | 'niet'
 }
 
 const VOORBEELDEN: Voorbeeld[] = [
   { id: 'd1', titel: 'Schilderwerk buitenzijde 2027', klant: 'VvE Parkzicht, Rijswijk', nr: 'D-26-0412', bedrag: 48_200, verzonden: '2026-09-04', contact: ['M. Verbeek', '06 41 22 87 90'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Nabellen na uitslag ALV', datum: '2026-10-13' },
   { id: 'd2', titel: 'Houtrotherstel kozijnen complex 412', klant: 'Haag Wonen', nr: 'D-26-0398', bedrag: 21_750, verzonden: '2026-09-22', contact: ['R. Ouali', '070 312 44 10'], eigenaar: BAS, houder: SANNE, houderNaam: 'Sanne', soort: 'actie', tekst: 'Navragen of versie 2 is doorgezet', datum: '2026-10-15' },
   { id: 'd3', titel: 'Brandwerende deuren vervangen', klant: 'Zorgcentrum Duinrust', nr: 'D-26-0455', bedrag: 67_900, verzonden: '2026-10-12', contact: ['J. Smits', '070 205 66 31'], eigenaar: '', houder: null, houderNaam: null, soort: null, tekst: null, datum: null },
-  { id: 'd4', titel: 'Gevelonderhoud en voegwerk', klant: 'VvE Laan van Meerdervoort 210', nr: 'D-26-0371', bedrag: 12_400, verzonden: '2026-09-01', contact: ['P. de Wit', '06 28 45 19 03'], eigenaar: BAS, houder: SANNE, houderNaam: 'Sanne', soort: 'wachten', tekst: 'Penningmeester stuurt akkoord', datum: '2026-10-20', wachtOp: 'klant' },
-  { id: 'd5', titel: 'Dakrenovatie plat dak', klant: 'VvE De Kroonvogel, Delft', nr: 'D-26-0333', bedrag: 138_500, verzonden: '2026-06-25', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Besluit voorjaars-ALV', datum: '2026-10-28', wachtOp: 'klant' },
-  { id: 'd6', titel: 'Kunststof kozijnen achtergevel', klant: 'Fam. de Groot, Voorburg', nr: 'D-26-0449', bedrag: 8_900, verzonden: '2026-10-08', contact: ['E. de Groot', '06 55 10 72 64'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Offerte toelichten', datum: '2026-10-16' },
+  { id: 'd4', titel: 'Gevelonderhoud en voegwerk', klant: 'VvE Laan van Meerdervoort 210', nr: 'D-26-0371', bedrag: 12_400, verzonden: '2026-09-01', contact: ['P. de Wit', '06 28 45 19 03'], eigenaar: BAS, houder: SANNE, houderNaam: 'Sanne', soort: 'wachten', tekst: 'Penningmeester stuurt akkoord', datum: '2026-10-20', wachtOp: 'klant', stil: 'klant_beoordeelt' },
+  { id: 'd5', titel: 'Dakrenovatie plat dak', klant: 'VvE De Kroonvogel, Delft', nr: 'D-26-0333', bedrag: 138_500, verzonden: '2026-06-25', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Besluit voorjaars-ALV', datum: '2026-10-28', wachtOp: 'klant', stil: 'besluit_alv', besluit: '2027-03-18' },
+  { id: 'd6', titel: 'Kunststof kozijnen achtergevel', klant: 'Fam. de Groot, Voorburg', nr: 'D-26-0449', bedrag: 8_900, verzonden: '2026-10-08', contact: ['E. de Groot', '06 55 10 72 64'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Offerte toelichten', datum: '2026-10-16', opvolging: 'altijd' },
   { id: 'd7', titel: 'Groot onderhoud portiekflats', klant: 'Vidomes, Delft', nr: 'D-26-0389', bedrag: 27_400, verzonden: '2026-09-10', contact: ['D. Pranoto', '015 750 30 84'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'actie', tekst: 'Opdracht formeel rondmaken', datum: '2026-10-19' },
   { id: 'd9', titel: 'Vervangen entreepartij', klant: 'VvE Buitenhof, Delft', nr: 'D-26-0437', bedrag: 14_200, verzonden: '2026-09-29', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: SANNE, houder: SANNE, houderNaam: 'Sanne', soort: 'actie', tekst: 'Navragen of het bestuur akkoord is', datum: '2026-10-22' },
-  { id: 'd8', titel: 'Betonherstel galerijen', klant: 'VvE Waldeck', nr: 'D-26-0418', bedrag: 19_800, verzonden: '2026-09-18', contact: ['T. Vos (Ingenieursbureau Kruit)', '070 360 12 12'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Adviseur toetst aan bestek', datum: '2026-11-21', wachtOp: 'extern' },
+  { id: 'd8', titel: 'Betonherstel galerijen', klant: 'VvE Waldeck', nr: 'D-26-0418', bedrag: 19_800, verzonden: '2026-09-18', contact: ['T. Vos (Ingenieursbureau Kruit)', '070 360 12 12'], eigenaar: BAS, houder: BAS, houderNaam: 'Bas', soort: 'wachten', tekst: 'Adviseur toetst aan bestek', datum: '2026-11-21', wachtOp: 'extern', stil: 'wacht_op_adviseur' },
 ]
 
 const CONTACTEN: Record<string, LaatsteContact> = {
@@ -65,6 +68,7 @@ function naarDossier(v: Voorbeeld): DossierRij {
     bewaking_stap_datum: v.datum, bewaking_wacht_op: v.wachtOp ?? null, bewaking_stap_bron: 'handmatig',
     bewaking_actiehouder: v.houderNaam, bewaking_actiehouder_id: v.houder,
     bewaking_eigenaar_id: v.eigenaar || null, intern: false,
+    bewaking_stil_reden: v.stil ?? null, bewaking_besluit_datum: v.besluit ?? null, bewaking_opvolging: v.opvolging ?? null,
   } as unknown as DossierRij
 }
 
@@ -93,6 +97,7 @@ function paneelData(v: Voorbeeld): OffertePaneelData {
     geldigTot: v.id === 'd5' ? '2026-09-25' : '2026-12-15',
     versie: 1,
     heeftPdf: true,
+    eigenaarMagMega: v.eigenaar ? true : null,
   }
 }
 
@@ -120,8 +125,9 @@ export default function OffertebewakingPreview() {
   const [klassen, setKlassen] = React.useState(STANDAARD_KLASSEN)
   const [geopend, setGeopend] = React.useState<string | null>('d5')
   const alleOngefilterd = React.useMemo(() => VOORBEELDEN.map(v => maakTeDoenRij(naarDossier(v), VANDAAG)), [])
-  const alle = alleOngefilterd.filter(r => klassen[r._klasse])
-  const zichtbaar = alle.filter(r => (tegel ? r._bak === tegel : true)).sort(sorteerTeDoen)
+  const [stil, setStil] = React.useState<StilReden | null>(null)
+  const alle = alleOngefilterd.filter(r => pastBijBedrag(r, klassen, { min: null, max: null }))
+  const zichtbaar = alle.filter(r => (stil ? r._stil === stil : tegel ? r._bak === tegel : true)).sort(sorteerTeDoen)
   const aantallen = { mega: 0, groot: 0, middel: 0, klein: 0 }
   for (const r of alleOngefilterd) aantallen[r._klasse]++
   const contacten = React.useMemo(() => new Map(Object.entries(CONTACTEN)), [])
@@ -135,7 +141,8 @@ export default function OffertebewakingPreview() {
             Voorbeeld met verzonnen gegevens · vandaag = 15 okt 2026 · ingelogd als Bas
           </p>
           <BedragFilter klassen={klassen} onKlassen={setKlassen} aantallen={aantallen} min={null} max={null} onBereik={() => {}} />
-          <TeDoenTegels alleRijen={alle} tegel={tegel} onTegel={setTegel} />
+          <StilstandOverzicht rijen={alle} gekozen={stil} onKies={setStil} vandaag={VANDAAG} />
+          <TeDoenTegels alleRijen={alle} tegel={tegel} onTegel={b => { setStil(null); setTegel(b) }} />
           <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
             <TeDoenLijst
               rijen={zichtbaar}
