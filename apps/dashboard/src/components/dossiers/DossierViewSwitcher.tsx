@@ -3,6 +3,7 @@ import React from 'react'
 import { DossierKanban } from './DossierKanban'
 import type { KolomKeyModus } from './DossierKanban'
 import { DossierLijst } from './DossierLijst'
+import { OFFERTE_BORD_KOLOMMEN } from './offerte-bord'
 import { BewakingWerklijst } from '@/components/commercie/BewakingWerklijst'
 import type { AanvraagCategorie, AanvraagWerkmaatschappij } from './NieuweAanvraagModal'
 import { InternDossiersKnop } from './InternDossiersKnop'
@@ -122,7 +123,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
     // Een eerder gekozen 'bewaking' mag niet blijven hangen op een sectie die hem niet heeft;
     // je zou dan naar een lege pagina kijken zonder te zien waarom.
     if (bewaard === 'bewaking' && !toonBewaking) return 'kanban'
-    return bewaard ?? 'kanban'
+    // Wie nog niets gekozen heeft, begint op Offertes bij "Te doen": dat is de lijst die zegt wat
+    // er vandaag moet gebeuren. Het bord is het overzicht, niet het werkscherm.
+    return bewaard ?? (toonBewaking ? 'bewaking' : 'kanban')
   })
 
   const [geselecteerdeLeiders, setGeselecteerdeLeiders] = React.useState<string[]>(
@@ -358,7 +361,7 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       {toonBewaking && (
         <button
           onClick={() => switchView('bewaking')}
-          title="Bewaking — werklijst op urgentie"
+          title="Te doen — werklijst op urgentie"
           style={{
             width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 4,
             border: 'none', cursor: 'pointer',
@@ -674,7 +677,9 @@ export function DossierViewSwitcher({ sectie, statussen, dossiers, layouts, user
       {slicerBalk}
       <DossierKanban
         sectie={sectie}
-        statussen={statussen}
+        // Offertebord: vier kolommen in plaats van één per substatus (zie offerte-bord.ts).
+        statussen={toonBewaking ? OFFERTE_BORD_KOLOMMEN : statussen}
+        offerteBord={toonBewaking}
         dossiers={zichtbareDossiers}
         kanNieuwAanmaken={kanNieuwAanmaken}
         categorieen={categorieen}

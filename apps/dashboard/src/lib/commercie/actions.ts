@@ -29,13 +29,14 @@ import { updateTaakStatus } from '@/app/(platform)/taken/actions/taken'
 import { vandaagNL } from '@/lib/wagenpark/periode'
 import {
   bewakingsStatus, stapOmschrijving, werkdagenVooruit, verkoopkansCompleet,
-  naamVan, vertaalDbFout, UITKOMSTEN, UITKOMST_LABELS,
+  naamVan, vertaalDbFout, notitieVerplicht, UITKOMSTEN, UITKOMST_LABELS,
   type ActieResultaat, type BewakingKaart, type BewakingStatus, type MedewerkerNaam,
   type UitkomstSleutel, type StapSoort, type WachtOp, type VerkoopkansInvoer,
 } from './types'
 // De verkoopkans woont in een eigen module: hij is een andere entiteit dan de offertekaart,
 // en `actions.ts` was zonder die scheiding voorbij de 800 regels gegroeid.
 import { maakVerkoopkans } from './verkoopkansen'
+import { faseNaStap } from './fase-volgt-stap'
 
 /** De service-role-client; los getypeerd zodat de helpers hieronder hem kunnen aannemen. */
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -397,6 +398,13 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
   const { error } = await supabase.from('commercie_bewaking').update(update).eq('id', kaart.id)
   if (error) return { ok: false, error: vertaalDbFout(error.message) }
 
+  // De fase volgt de stap, ook als die met de hand wordt gezet (zie fase-volgt-stap.ts).
+  if (invoer.stapSoort !== undefined) {
+    const { data: d } = await supabase.from('dossiers').select('offerte_substatus').eq('id', dossierId).maybeSingle()
+    const fase = faseNaStap(d?.offerte_substatus ?? null, null, invoer.stapSoort)
+    if (fase) await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+  }
+
   const nieuweActiehouder = (update.actiehouder_id ?? kaart.actiehouder_id) as string | null
   const gewisseld = nieuweActiehouder != null && nieuweActiehouder !== vorigeActiehouder
 
@@ -462,6 +470,10 @@ export async function legUitkomstVast(
   if (def.vraagtReden && !invoer.reden) {
     return { ok: false, error: 'Kies een reden. Die komt terug in de verkooprapportage.' }
   }
+  // Wat er besproken is, is wat de volgende beller leest. Alleen "geen gehoor" heeft niets te melden.
+  if (notitieVerplicht(def.sleutel) && !invoer.tekst?.trim()) {
+    return { ok: false, error: 'Schrijf kort op wat er besproken is. Dat leest de volgende die belt.' }
+  }
   if (def.vraagtActiehouder && !invoer.actiehouderId) {
     return { ok: false, error: 'Kies wie deze stap oppakt.' }
   }
@@ -476,17 +488,17 @@ export async function legUitkomstVast(
   const kaart = await kaartVoorDossier(supabase, dossierId)
   if (!kaart) return { ok: false, error: 'Kon de bewakingskaart niet aanmaken.' }
 
-  // 1. Fase. Via updateDossierSubstatus, zodat Bouw7 meebeweegt en een conflict met de
-  //    tweede Bouw7-app de wijziging netjes afbreekt in plaats van stil te overschrijven.
-  if (def.fase) {
-    const res = await updateDossierSubstatus(dossierId, def.fase as never, {
-      schrijfBouw7: true,
-      forceerBouw7: invoer.forceerBouw7 === true,
-    })
-    if (!res.ok) return { ok: false, error: res.error, conflict: res.conflict }
+  // 1. Fase. Die volgt de stap (zie fase-volgt-stap.ts), tenzij de uitkomst zelf een eindfase of
+  //    mondeling akkoord kiest. Via updateDossierSubstatus, zodat de Bouw7-spiegel meebeweegt.
+  const { data: dossier } = await supabase.from('dossiers')
+    .select('offerte_substatus').eq('id', dossierId).maybeSingle()
+  const fase = faseNaStap(dossier?.offerte_substatus ?? null, def.fase, def.stapSoort)
+  if (fase) {
+    const res = await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+    if (!res.ok) return { ok: false, error: res.error }
 
     if (def.vraagtReden && invoer.reden) {
-      await legAfsluitRedenVast(supabase, dossierId, def.fase, invoer.reden, invoer.redenToelichting)
+      await legAfsluitRedenVast(supabase, dossierId, fase, invoer.reden, invoer.redenToelichting)
     }
   }
 

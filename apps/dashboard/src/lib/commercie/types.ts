@@ -381,6 +381,15 @@ export const UITKOMSTEN: UitkomstDefinitie[] = [
   },
 ]
 
+/**
+ * Moet er bij deze uitkomst iets opgeschreven worden? Altijd, behalve bij geen gehoor: die
+ * notitie is wat de volgende beller leest, en zonder notitie kan de kaart niet laten zien
+ * wat er afgesproken is. Eén plek, zodat dialoog en server dezelfde regel hanteren.
+ */
+export function notitieVerplicht(sleutel: UitkomstSleutel): boolean {
+  return sleutel !== 'geen_gehoor'
+}
+
 export const UITKOMST_LABELS: Record<UitkomstSleutel, string> = Object.fromEntries(
   UITKOMSTEN.map(u => [u.sleutel, u.label]),
 ) as Record<UitkomstSleutel, string>

@@ -11,6 +11,8 @@ import { useDialogen } from '@/components/ui/dialogen'
 import { getDossierSubstatus, isAfsluitendeSubstatus } from './types'
 import { dossierOpenPad, openDossierInNieuwTabblad } from './open-dossier'
 import { AfsluitenDialoog } from '@/components/commercie/AfsluitenDialoog'
+import { AfsluitKeuzeDialoog } from './AfsluitKeuzeDialoog'
+import { offerteBordKolom, offerteBordDoel, AFSLUIT_KEUZES } from './offerte-bord'
 import type { DossierSectie, DossierSubstatus, DossierRij, StatusDef } from './types'
 
 // Volgorde-gebaseerde statuskleur (eerste = brand, rest cyclisch)
@@ -61,11 +63,16 @@ type Props<K extends string> = {
    * van moet weten -- bijvoorbeeld dat Bouw7 achterbleef bij een eindstatus.
    */
   onStatusChange?: (id: string, status: string) => Promise<{ ok: boolean; error?: string; waarschuwing?: string }>
+  /**
+   * Offertebord met vier kolommen (zie offerte-bord.ts): de substatussen worden gebundeld en
+   * slepen naar Afgesloten vraagt eerst hoe de offerte is afgelopen.
+   */
+  offerteBord?: boolean
 }
 
 export function DossierKanban<K extends string>({
   sectie, statussen, dossiers: initieel, kanNieuwAanmaken = false, categorieen, werkmaatschappijen, viewToggle, extraActies,
-  kolomKeyModus = 'auto', onStatusChange,
+  kolomKeyModus = 'auto', onStatusChange, offerteBord = false,
 }: Props<K>) {
   const router    = useRouter()
   const { bevestig } = useDialogen()
@@ -97,8 +104,9 @@ export function DossierKanban<K extends string>({
     const basis = resolveKolomKeyFn(kolomKeyModus)
     const geldig = new Set<string>(statussen.map(s => s.key))
     const eerste = statussen[0]?.key ?? ''
-    const ruw = (d: DossierRij): string =>
-      isGewonnenTerugblik(sectie, d) && geldig.has('gewonnen') ? 'gewonnen' : basis(d)
+    const zonderBundel = (d: DossierRij): string =>
+      isGewonnenTerugblik(sectie, d) && (geldig.has('gewonnen') || offerteBord) ? 'gewonnen' : basis(d)
+    const ruw = offerteBord ? (d: DossierRij) => offerteBordKolom(zonderBundel(d)) : zonderBundel
     return {
       resolveKey: (d: DossierRij) => {
         const k = ruw(d)
@@ -107,7 +115,7 @@ export function DossierKanban<K extends string>({
       isAfwijkend: (d: DossierRij) =>
         kolomKeyModus !== 'servicedesk_substatus' && !geldig.has(ruw(d)),
     }
-  }, [kolomKeyModus, statussen, sectie])
+  }, [kolomKeyModus, statussen, sectie, offerteBord])
 
   /** De kaarten met hun waarschuwingsvlag; alleen een nieuw object als er echt iets afwijkt (memo). */
   const metAfwijking = React.useMemo(
@@ -140,6 +148,8 @@ export function DossierKanban<K extends string>({
   /** Gezet zodra er naar een afsluitende kolom is gesleept; de dialoog bevestigt of annuleert. */
   const [afsluitBevestiging, setAfsluitBevestiging] =
     React.useState<{ dossierId: string; status: K } | null>(null)
+  /** Offertebord: gezet na slepen naar Afgesloten, tot de gebruiker kiest hoe hij afloopt. */
+  const [afsluitKeuze, setAfsluitKeuze] = React.useState<string | null>(null)
 
   const zoekQ = zoek.trim().toLowerCase()
   const gefilterd = zoekQ
@@ -184,14 +194,16 @@ export function DossierKanban<K extends string>({
     router.refresh()
   }
 
-  async function handleDrop(targetStatus: K) {
+  async function handleDrop(kolom: K) {
+    // Op het offertebord is de kolom een bundel; hieronder wordt hij vertaald naar een substatus.
+    let targetStatus = kolom
     if (!draggingId) return
     // Een gewonnen offerte in de terugblik is al een opdracht: verslepen hoort op het opdrachtbord.
     const gesleept = dossiers.find(d => d.id === draggingId)
     if (gesleept && isGewonnenTerugblik(sectie, gesleept)) {
       setDraggingId(null)
       setDragOverCol(null)
-      if (targetStatus !== 'gewonnen') toast('Deze offerte is gewonnen en al een opdracht. Wijzig de status op het opdrachtbord.')
+      if (targetStatus !== 'gewonnen' && targetStatus !== 'afgesloten') toast('Deze offerte is gewonnen en al een opdracht. Wijzig de status op het opdrachtbord.')
       return
     }
 
@@ -231,6 +243,15 @@ export function DossierKanban<K extends string>({
     setDraggingId(null)
     setDragOverCol(null)
 
+    // Offertebord: de kolom is een bundel van substatussen. Binnen dezelfde kolom slepen doet
+    // niets; Afgesloten vraagt eerst gewonnen, verloren of vervallen.
+    if (offerteBord) {
+      if (gesleept && resolveKey(gesleept) === targetStatus) return
+      const doel = offerteBordDoel(targetStatus)
+      if (doel == null) { setAfsluitKeuze(id); return }
+      targetStatus = doel as K
+    }
+
     // Afsluitende status (Afgewezen/Vervallen/Verloren): het dossier wordt daarna alleen-lezen en
     // in Bouw7 kan het project op "08. Afgewezen" komen. Eerst bevestigen — een misslag met de muis
     // is niet meer terug te draaien.
@@ -246,8 +267,11 @@ export function DossierKanban<K extends string>({
     ? dossiers.find(d => d.id === afsluitBevestiging.dossierId)
     : null
   const afsluitLabel = afsluitBevestiging
-    ? (statussen.find(s => s.key === afsluitBevestiging.status)?.label ?? afsluitBevestiging.status)
+    ? (statussen.find(s => s.key === afsluitBevestiging.status)?.label
+      ?? AFSLUIT_KEUZES.find(k => k.key === afsluitBevestiging.status)?.label
+      ?? afsluitBevestiging.status)
     : ''
+  const keuzeDossier = afsluitKeuze ? dossiers.find(d => d.id === afsluitKeuze) : null
 
   return (
     <>
@@ -277,6 +301,20 @@ export function DossierKanban<K extends string>({
           onBevestigd={() => voerStatuswijzigingUit(
             afsluitBevestiging.dossierId, afsluitBevestiging.status,
           )}
+        />
+      )}
+
+      {afsluitKeuze && (
+        <AfsluitKeuzeDialoog
+          open
+          onOpenChange={open => { if (!open) setAfsluitKeuze(null) }}
+          dossierOmschrijving={[keuzeDossier?.dossiernummer, keuzeDossier?.titel].filter(Boolean).join(' — ') || null}
+          onKies={keuze => {
+            const id = afsluitKeuze
+            setAfsluitKeuze(null)
+            if (keuze === 'gewonnen') void voerStatuswijzigingUit(id, keuze as K)
+            else setAfsluitBevestiging({ dossierId: id, status: keuze as K })
+          }}
         />
       )}
 

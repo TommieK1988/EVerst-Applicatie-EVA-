@@ -25,6 +25,8 @@ import {
   type Bouw7CustomAttrValue,
 } from '@/lib/bouw7/custom-attributes'
 import type { Bouw7Projectstatus } from '@/lib/bouw7/status-map'
+import { sluitOffertesAfInBouw7 } from '@/lib/bouw7/offerte-afgesloten'
+import { logFout } from '@/lib/fouten/log'
 import {
   bouw7SubstatusNaarEva,
   evaSubstatusNaarBouw7,
@@ -171,18 +173,25 @@ export async function schrijfBouw7Substatus(
       ?? (await resolveCustomAttributeId(client, isSubstatusAttr))
     if (attrId == null) return { ok: false, error: 'Maatwerkveld "Offerte Sub-status" niet gevonden in Bouw7.' }
 
-    const huidigLabel = (bestaand.find((v) => v.customAttribute?.id === attrId)?.value ?? '').trim()
-    if (!opts?.forceer && huidigLabel && huidigLabel !== nieuwLabel && bouw7SubstatusNaarEva(huidigLabel)) {
-      // Wat verwachtte EVA daar te vinden? Alleen als Bouw7 daarvan afwijkt is er een echte botsing.
-      // Bij een leeg/onbekend Bouw7-label is er niets om te overschrijven → gewoon schrijven.
-      const verwachtLabel =
-        vorige?.substatus != null ? evaSubstatusNaarBouw7(vorige.sectie, vorige.substatus) : null
-      if (verwachtLabel != null && huidigLabel !== verwachtLabel) {
-        return {
-          ok: false,
-          error: `In Bouw7 staat inmiddels "${huidigLabel}" — daar is de substatus zojuist gewijzigd.`,
-          conflict: { bouw7Label: huidigLabel },
-        }
+    // Geen conflictcontrole meer (okt 2026). Die was er voor een tweede app die hetzelfde veld
+    // schreef; die bestaat niet meer en in Bouw7 wordt niet meer aan offertes gewerkt. EVA is
+    // leidend en schrijft het veld altijd. `vorige` en `opts.forceer` blijven in de signatuur
+    // zodat de aanroepers niet hoeven te veranderen.
+    void vorige
+    void opts
+
+    // Verloren of vervallen: eerst de offertes zelf in Bouw7 afsluiten. Pas dan ziet
+    // `projectstatusPrefixVoor` dat er niets meer leeft en gaat het project naar 08. Afgewezen.
+    if (sectie === 'offerte' && (nieuweSubstatus === 'verloren' || nieuweSubstatus === 'vervallen')) {
+      const afgesloten = await sluitOffertesAfInBouw7(client, bouw7Id, nieuweSubstatus)
+      if (!afgesloten.ok) {
+        await logFout({
+          omgeving: 'server',
+          bron: 'bouw7/substatus-attr',
+          soort: 'bouw7_offerte_afgesloten',
+          melding: `Offertes niet op ${nieuweSubstatus} gezet (Bouw7-project ${bouw7Id}): ${afgesloten.error}`,
+          extra: { bouw7ProjectId: String(bouw7Id) },
+        })
       }
     }
 
