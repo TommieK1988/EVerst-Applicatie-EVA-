@@ -8,3 +8,12 @@ export const menuKop = 'px-3 pt-2 pb-1 text-[10.5px] font-semibold uppercase tra
 export const menuScheiding = 'h-px bg-neutral-100 my-1'
 /** Tweede regel onder een menu-item: wat het doet, in een paar woorden. */
 export const menuUitleg = 'block text-[11px] text-neutral-400'
+
+/**
+ * Wanneer een knop zijn naam toont. De balk moet op één regel passen, ook met de zijbalk open
+ * (224px): op 1280 blijft ±1050px over, op 1536 ±1310px, op 1800 ±1575px. Met alle namen is hij
+ * ±1700px breed, dus krijgen eerst de werkknoppen hun naam (2xl) en pas daarna de weergave-
+ * knoppen (ruim). Terug, Kolommen en Meer blijven icoon; hun naam staat in de tooltip.
+ */
+export const LABEL_2XL = 'hidden 2xl:inline'
+export const LABEL_RUIM = 'hidden min-[1800px]:inline'

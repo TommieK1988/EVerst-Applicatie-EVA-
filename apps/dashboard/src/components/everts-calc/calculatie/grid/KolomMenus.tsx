@@ -7,14 +7,14 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import type { GebruikerLayout } from '@everts/database/platform-types'
 import { type ColId, COL_DEFS, NON_HIDEABLE_COLS } from './kolommen'
 import { KolomNaamVeld } from './TabelHeader'
-import { menuKop, menuScheiding } from '../werkbalk-menu'
+import { menuKop, menuScheiding, LABEL_RUIM } from '../werkbalk-menu'
 
 const regelKnop = 'w-full text-left px-3 py-1.5 text-xs text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 rounded-md'
 
 /**
- * Kolom-layouts van de gebruiker. Staat in de werkbalk (portal vanuit het rekenblad). De
- * knop toont de naam van de actieve layout; zonder layout alleen het pictogram, want
- * "standaardkolommen" is de rusttoestand en hoeft geen ruimte te kosten.
+ * Kolom-layouts van de gebruiker. Staat in de werkbalk (portal vanuit het rekenblad). Op een
+ * ruim scherm toont de knop de naam van de actieve layout; anders, en zonder layout, alleen
+ * het pictogram ("standaardkolommen" is de rusttoestand en hoeft geen ruimte te kosten).
  */
 export function LayoutMenu({
   layouts, actiefLayoutId, onStandaard, onKies, onMaakStandaard, onVerwijder, onBijwerken, onOpslaanAlsNieuw,
@@ -36,9 +36,7 @@ export function LayoutMenu({
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" title={actief ? `Kolom-layout: ${actief.naam}` : 'Kolom-layouts'}>
           <LayoutTemplate className="w-3.5 h-3.5" />
-          {actief
-            ? <span className="hidden xl:inline max-w-[8rem] truncate">{actief.naam}</span>
-            : <span className="hidden 2xl:inline">Layout</span>}
+          {actief && <span className={`${LABEL_RUIM} max-w-[8rem] truncate`}>{actief.naam}</span>}
           <ChevronDown className="w-3 h-3 text-neutral-400" />
         </Button>
       </PopoverTrigger>
@@ -113,7 +111,6 @@ export function KolommenMenu({
           title={verborgen > 0 ? `Kolommen tonen/verbergen — ${verborgen} verborgen` : 'Kolommen tonen/verbergen'}
         >
           <Columns3 className="w-3.5 h-3.5" />
-          <span className="hidden 2xl:inline">Kolommen</span>
           {verborgen > 0 && (
             <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-neutral-100 text-[10.5px] font-semibold leading-[18px] text-center text-neutral-600">
               {verborgen}

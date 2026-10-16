@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import BehandelingPerCodeKnop from '@/components/everts-calc/calculatie/BehandelingPerCode'
-import UrenPerGroepKnop from '@/components/everts-calc/calculatie/UrenPerGroep'
+import BehandelingPerCodeDialoog from '@/components/everts-calc/calculatie/BehandelingPerCode'
+import UrenPerGroepDialoog from '@/components/everts-calc/calculatie/UrenPerGroep'
 import MeetstaatKnop from './MeetstaatKnop'
 import { Alert } from '@/components/ui/alert'
 import toast from 'react-hot-toast'
@@ -71,12 +71,14 @@ interface Props {
    *    daar leidend), maar meerwerk mag nog wel een nieuwe versie krijgen;
    *  - `geen`     — reviseren volledig uit. */
   magReviseren?: 'alles' | 'meerwerk' | 'geen'
+  /** Terugknop vooraan in de werkbalk, naar het overzicht waar de calculatie uit geopend is. */
+  terug?: { label: string; onClick: () => void }
 }
 
 export default function CalculatieHoofdscherm({
   projectId, projectNaam, projectNummer,
   bibliotheekItems = [], readOnly: readOnlyProp = false, scenarioId, dossierContext,
-  onScenariosGewijzigd, magReviseren = 'alles',
+  onScenariosGewijzigd, magReviseren = 'alles', terug,
 }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -121,6 +123,8 @@ export default function CalculatieHoofdscherm({
   const [offerteModalType, setOfferteModalType]       = useState<QuoteType>('verkoopofferte')
   const [instellingenOpen, setInstellingenOpen]       = useState(false)
   const [controleOpen, setControleOpen]               = useState(false)
+  /** Venster uit het menu Bewerken. */
+  const [bewerkVenster, setBewerkVenster]             = useState<'behandeling' | 'uren' | null>(null)
   const gridRef       = useRef<CalculatieGridHandle>(null)
   const [schermRef, schermHoogte] = usePasInScrollvlak()
 
@@ -459,6 +463,7 @@ export default function CalculatieHoofdscherm({
       {/* ─── Werkbalk ── */}
       <CalculatieWerkbalk
         readOnly={readOnly}
+        terug={terug}
         boomOpen={boomUitgeklapt}
         onToggleBoom={handleToggleBoom}
         undoCount={undoCount}
@@ -467,16 +472,14 @@ export default function CalculatieHoofdscherm({
         opgeslagenOp={opgeslagenOp}
         onOpslaan={() => slaCalculatieOp(false)}
         onBibliotheek={soort => (soort === 'recepten' ? setReceptenOpen : soort === 'schilderwerk' ? setSchilderwerkOpen : setMaterialenOpen)(true)}
-        toevoegen={<>
+        meetstaat={
           <MeetstaatKnop projectId={projectId} scenarioId={scenario.id} projectNaam={projectNaam} projectNummer={projectNummer}
             terugUrl={terugNaarUrl} isVuil={() => dirtyRef.current}
             bewaarEerst={async () => { if (dirtyRef.current) await saveRef.current(true) }}
             onNaMeetstaat={() => { setScenario(s => (s && getScenario(s.id)) ?? s); handleBoomWijziging() }} />
-          <BehandelingPerCodeKnop scenarioId={scenario.id} readOnly={readOnly}
-            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
-          <UrenPerGroepKnop scenarioId={scenario.id} readOnly={readOnly}
-            onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
-        </>}
+        }
+        onBehandelingPerCode={() => setBewerkVenster('behandeling')}
+        onUrenPerGroep={() => setBewerkVenster('uren')}
         weergave={weergave}
         onWeergave={handleWeergave}
         // Meerwerk niet kopiëren: een tweede scenario bij dezelfde meerwerkregel zou de
@@ -558,6 +561,15 @@ export default function CalculatieHoofdscherm({
         eigenOpslag={eigenOpslag}
         readOnly={readOnly}
       />
+
+      {bewerkVenster === 'behandeling' && (
+        <BehandelingPerCodeDialoog scenarioId={scenario.id} readOnly={readOnly} onSluit={() => setBewerkVenster(null)}
+          onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+      )}
+      {bewerkVenster === 'uren' && (
+        <UrenPerGroepDialoog scenarioId={scenario.id} readOnly={readOnly} onSluit={() => setBewerkVenster(null)}
+          onVoorWijziging={() => gridRef.current?.duwSnapshot()} onNaWijziging={handleBoomWijziging} />
+      )}
 
       {toonCufImport && (
         <CufImportModal

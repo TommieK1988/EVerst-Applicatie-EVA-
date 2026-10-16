@@ -132,8 +132,8 @@ export default function MeerwerkCalculatie({
 
   return (
     <div>
-      {terugKnop}
       <CalculatieHoofdscherm
+        terug={{ label: 'Meerwerk', onClick: onTerug }}
         projectId={projectId}
         projectNaam={naam}
         projectNummer={nummer}

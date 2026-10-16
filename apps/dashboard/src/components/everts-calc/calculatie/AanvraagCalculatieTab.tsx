@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { ArrowLeft } from 'lucide-react'
 import CalculatieHoofdscherm from './CalculatieHoofdscherm'
 import CalculatiesTabel from './CalculatiesTabel'
 import OfferteDetail from './OfferteDetail'
@@ -14,7 +13,7 @@ import { getScenarios, hydrateCalculatie, verwijderScenario } from '@/lib/everts
 import { verwijderConceptVersie } from '@/app/(platform)/everts-calc/actions/versie-verwijderen'
 import { reviseerCalculatie } from '@/lib/everts-calc/versie'
 import { useDossierReadOnly } from '@/components/dossiers/DossierReadOnlyContext'
-import { Button, useDialogen } from '@/components/ui'
+import { useDialogen } from '@/components/ui'
 import type { Scenario } from '@/lib/everts-calc/types'
 import type { DossierQuoteRij } from '@/lib/everts-calc/services/quotes'
 
@@ -238,13 +237,8 @@ export function AanvraagCalculatieTab({ aanvraagId, naam, nummer, clientNaam, in
   // Een gekozen (of nieuwe) calculatie → de calculatie-omgeving.
   return (
     <div>
-      <div className="px-8 pt-4">
-        <Button variant="ghost" onClick={() => { setToonCalculatie(false); setSelectedScenarioId(null) }}>
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Terug naar versies
-        </Button>
-      </div>
       <CalculatieHoofdscherm
+        terug={{ label: 'Versies', onClick: () => { setToonCalculatie(false); setSelectedScenarioId(null) } }}
         projectId={projectId}
         projectNaam={naam}
         projectNummer={nummer}

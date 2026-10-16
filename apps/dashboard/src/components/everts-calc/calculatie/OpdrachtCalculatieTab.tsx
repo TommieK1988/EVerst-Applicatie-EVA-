@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import OfferteDetail from './OfferteDetail'
 import toast from 'react-hot-toast'
-import { Calculator, ArrowLeft } from 'lucide-react'
+import { Calculator } from 'lucide-react'
 import { Card, CardHeader, CardBody, Button, useDialogen } from '@/components/ui'
 import { koppelCalculatieProject } from '@/lib/dossiers/actions'
 import { verwijderConceptVersie } from '@/app/(platform)/everts-calc/actions/versie-verwijderen'
@@ -139,13 +139,8 @@ export function OpdrachtCalculatieTab({ dossierId, naam, nummer, clientNaam, pro
   if (toonCalculatie && projectId) {
     return (
       <div>
-        <div className="px-8 pt-4">
-          <Button variant="ghost" onClick={() => { setToonCalculatie(false); setSelectedScenarioId(null) }}>
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Terug naar overzicht
-          </Button>
-        </div>
         <CalculatieHoofdscherm
+          terug={{ label: 'Overzicht', onClick: () => { setToonCalculatie(false); setSelectedScenarioId(null) } }}
           projectId={projectId}
           projectNaam={naam}
           projectNummer={nummer}
