@@ -9,7 +9,7 @@
  * Pure functie, zodat de tekst per situatie te testen is.
  */
 
-import { formatDatumNL } from '@/lib/dossiers/datum-regels'
+import { kortDatum } from './te-doen'
 import type { BewakingWeergave, TijdlijnRegel } from '@/lib/commercie/actions'
 
 export type BellenBanner = {
@@ -26,18 +26,18 @@ type Invoer = {
 }
 
 /** Het laatste klantcontact, als "5 okt · Sanne: penningmeester stuurt akkoord". */
-function laatsteContact(tijdlijn: Invoer['tijdlijn']): string | null {
+function laatsteContact(tijdlijn: Invoer['tijdlijn'], vandaag: string): string | null {
   const r = tijdlijn.find(t => t.soort === 'contact')
   if (!r) return null
   const wie = r.door ? ` · ${r.door}` : ''
-  return `Laatste contact ${formatDatumNL(r.op.slice(0, 10))}${wie}: ${r.tekst ? `"${r.tekst}"` : r.kop}`
+  return `Laatste contact ${kortDatum(r.op, vandaag)}${wie}: ${r.tekst ? `"${r.tekst}"` : r.kop}`
 }
 
-export function bellenBanner({ bewaking, tijdlijn, mijnId }: Invoer): BellenBanner | null {
+export function bellenBanner({ bewaking, tijdlijn, mijnId, vandaag }: Invoer): BellenBanner | null {
   const { kaart, status, actiehouderNaam } = bewaking
   if (bewaking.afgerond || status === 'afgerond') return null
 
-  const contact = laatsteContact(tijdlijn)
+  const contact = laatsteContact(tijdlijn, vandaag)
   const metContact = (regels: string[]) => (contact ? [contact, ...regels] : regels)
 
   if (!kaart || status === 'ongetrieerd' || !kaart.stap_datum) {
@@ -48,7 +48,7 @@ export function bellenBanner({ bewaking, tijdlijn, mijnId }: Invoer): BellenBann
     }
   }
 
-  const datum = formatDatumNL(kaart.stap_datum)
+  const datum = kortDatum(kaart.stap_datum, vandaag)
   const wachten = kaart.stap_soort === 'wachten'
   const ikBenAanZet = mijnId != null && kaart.actiehouder_id === mijnId
   const naam = actiehouderNaam ?? 'een collega'
