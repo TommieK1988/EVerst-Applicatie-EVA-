@@ -184,6 +184,7 @@ export async function schrijfBouw7Substatus(
     // `projectstatusPrefixVoor` dat er niets meer leeft en gaat het project naar 08. Afgewezen.
     if (sectie === 'offerte' && (nieuweSubstatus === 'verloren' || nieuweSubstatus === 'vervallen')) {
       const afgesloten = await sluitOffertesAfInBouw7(client, bouw7Id, nieuweSubstatus)
+        .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
       if (!afgesloten.ok) {
         await logFout({
           omgeving: 'server',

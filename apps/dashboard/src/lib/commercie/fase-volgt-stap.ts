@@ -29,12 +29,16 @@ export function faseNaStap(
   // Een uitkomst die een eindfase of mondeling akkoord kiest, wint altijd.
   if (gevraagd && VAST.has(gevraagd)) return gevraagd === huidig ? null : gevraagd
 
+  // Geen offertesubstatus = het dossier staat niet in de offertefase (een aanvraag die via
+  // Bouw7 op het offertebord staat, of een opdracht). Een stap mag dat niet promoveren.
+  if (huidig === null) return null
+
   // Mondeling akkoord zakt niet terug naar "in gesprek" omdat er een vervolgstap komt: het
   // rondmaken van de opdracht ís die vervolgstap.
   if (huidig && VAST.has(huidig)) return null
 
   // Alleen de lopende ladder volgt de stap. Concept en dergelijke laten we met rust.
-  if (huidig !== null && huidig !== 'verzonden' && huidig !== 'nabellen' && huidig !== 'in_behandeling') {
+  if (huidig !== 'verzonden' && huidig !== 'nabellen' && huidig !== 'in_behandeling') {
     return null
   }
   if (!stapSoort) return null

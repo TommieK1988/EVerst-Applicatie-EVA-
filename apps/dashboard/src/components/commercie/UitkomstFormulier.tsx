@@ -106,13 +106,14 @@ export function UitkomstFormulier(props: Props) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void vastleggen(); return }
       const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase()
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      // Binnen de datumkiezer zijn cijfers geen uitkomstkeuze.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-radix-popper-content-wrapper]')) return
       const n = Number(e.key)
       if (Number.isInteger(n) && n >= 1 && n <= UITKOMSTEN.length) setGekozen(UITKOMSTEN[n - 1])
-      if (e.key === 'Escape' && gekozen) setGekozen(null)
     }
     window.addEventListener('keydown', opToets)
     return () => window.removeEventListener('keydown', opToets)
-  }, [props.sneltoetsen, vastleggen, gekozen])
+  }, [props.sneltoetsen, vastleggen])
 
   return (
     <div className="space-y-3">

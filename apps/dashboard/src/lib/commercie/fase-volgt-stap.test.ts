@@ -32,6 +32,12 @@ describe('faseNaStap', () => {
     expect(faseNaStap('mondelinge_toezegging', 'in_behandeling', 'wachten')).toBeNull()
   })
 
+  it('een dossier buiten de offertefase wordt door een stap niet gepromoveerd', () => {
+    expect(faseNaStap(null, null, 'actie')).toBeNull()
+    expect(faseNaStap(null, 'in_behandeling', 'wachten')).toBeNull()
+    expect(faseNaStap(null, 'verloren', null)).toBe('verloren')
+  })
+
   it('zonder stap blijft de fase staan', () => {
     expect(faseNaStap('nabellen', null, null)).toBeNull()
   })

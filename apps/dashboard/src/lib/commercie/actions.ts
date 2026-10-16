@@ -402,7 +402,13 @@ export async function slaStapOp(dossierId: string, invoer: StapInvoer): Promise<
   if (invoer.stapSoort !== undefined) {
     const { data: d } = await supabase.from('dossiers').select('offerte_substatus').eq('id', dossierId).maybeSingle()
     const fase = faseNaStap(d?.offerte_substatus ?? null, null, invoer.stapSoort)
-    if (fase) await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+    // Best effort: de stap is al opgeslagen; een alleen-lezen dossier of Bouw7-fout mag dat niet
+    // laten lijken op een mislukte opslag.
+    if (fase) {
+      const res = await updateDossierSubstatus(dossierId, fase as never, { schrijfBouw7: true })
+        .catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
+      if (!res.ok) console.error('[slaStapOp] fase niet meegezet:', res.error)
+    }
   }
 
   const nieuweActiehouder = (update.actiehouder_id ?? kaart.actiehouder_id) as string | null

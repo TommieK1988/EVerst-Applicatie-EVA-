@@ -51,15 +51,18 @@ export function OfferteZijpaneel(props: Props) {
   const [fout, setFout] = React.useState<string | null>(null)
   const [versie, setVersie] = React.useState(0)
 
+  // Op het id, niet op het rij-object: na router.refresh() komt dezelfde offerte als nieuw object
+  // terug, en opnieuw laden zou een half getypte notitie wissen.
+  const dossierId = d?.id ?? null
   React.useEffect(() => {
-    if (!d) return
+    if (!dossierId) return
     let actief = true
     setData(null); setFout(null)
-    getOffertePaneel(d.id)
+    getOffertePaneel(dossierId)
       .then(r => { if (actief) setData(r) })
       .catch((e: unknown) => { if (actief) setFout(e instanceof Error ? e.message : 'Laden mislukt') })
     return () => { actief = false }
-  }, [d, versie])
+  }, [dossierId, versie])
 
   const kaart = data?.bewaking.kaart ?? null
   const status = data?.bewaking.status ?? null

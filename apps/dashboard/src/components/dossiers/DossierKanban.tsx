@@ -182,9 +182,8 @@ export function DossierKanban<K extends string>({
       })
     )
     // Two-way: schrijf de statuswijziging direct terug naar Bouw7 — opdracht naar de projectstatus,
-    // aanvraag/offerte naar het gedeelde maatwerkveld "Offerte Sub-status". Bij een botsing met de
-    // tweede Bouw7-app legt de gedeelde helper de keuze voor (Bouw7 volgen of tóch overschrijven);
-    // hoe dat afloopt, de kaart moet daarna hoe dan ook de echte stand tonen.
+    // aanvraag/offerte naar het maatwerkveld "Offerte Sub-status". De conflictcontrole op dat veld
+    // is in okt 2026 vervallen (er is geen tweede app meer); de kaart toont daarna de echte stand.
     await wijzigSubstatusMetConflict({
       dossierId,
       substatus: targetStatus as DossierSubstatus,

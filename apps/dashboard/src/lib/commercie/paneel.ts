@@ -25,6 +25,10 @@ export type OffertePaneelData = {
 
 export async function getOffertePaneel(dossierId: string): Promise<OffertePaneelData> {
   await vereisRecht('dossiers', 'lezen')
+  // Het id komt van de client en gaat in een `.or()`-filter: alleen een uuid laten passeren.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dossierId)) {
+    throw new Error('Ongeldig dossier.')
+  }
   const supabase = createAdminClient()
 
   const { data: dossier } = await supabase.from('dossiers')
