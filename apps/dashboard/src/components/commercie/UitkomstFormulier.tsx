@@ -12,6 +12,7 @@
  */
 
 import * as React from 'react'
+import { MedewerkerKiezer } from '@/components/ui/medewerker-kiezer'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -166,14 +167,7 @@ export function UitkomstFormulier(props: Props) {
 
           {gekozen.vraagtActiehouder && (
             <Label tekst="Wie pakt dit op?">
-              <select
-                className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-                value={actiehouder}
-                onChange={e => setActiehouder(e.target.value)}
-              >
-                <option value="">Kies een collega…</option>
-                {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-              </select>
+              <MedewerkerKiezer medewerkers={props.medewerkers} value={actiehouder} onChange={setActiehouder} className="h-8" />
             </Label>
           )}
 

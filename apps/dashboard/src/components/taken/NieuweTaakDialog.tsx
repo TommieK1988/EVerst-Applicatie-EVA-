@@ -82,6 +82,8 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
   // Template-specifieke velden
   const [assigneeType, setAssigneeType]     = useState<'direct' | 'dossier_rol' | 'medewerker_zelf'>('direct')
   const [geselecteerdeAssignees, setGeselecteerdeAssignees] = useState<AssigneeKeuze[]>([])
+  /** Zoekterm boven de lijst met medewerkers: die lijst was te lang om te overzien. */
+  const [zoekMedewerker, setZoekMedewerker] = useState('')
   const [dossierRollen, setDossierRollen]   = useState<string[]>(['project_manager_id'])
   const [deadlineBasis, setDeadlineBasis]       = useState<DeadlineBasis>('geen')
   const [deadlineDagen, setDeadlineDagen]       = useState('')
@@ -347,11 +349,26 @@ export default function NieuweTaakDialog({ lijsten, defaultLijstId, toonDossierP
 
                 {/* Medewerker checkboxes: altijd (gewone taak) of bij 'direct' (sjabloon) */}
                 {(!isTemplate || assigneeType === 'direct') && (
+                  <input
+                    type="search"
+                    value={zoekMedewerker}
+                    onChange={e => setZoekMedewerker(e.target.value)}
+                    placeholder="Zoek een collega…"
+                    aria-label="Zoek een collega"
+                    className="mb-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-everts/30"
+                  />
+                )}
+                {(!isTemplate || assigneeType === 'direct') && (
                   <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                     {medewerkers.filter(m => m.auth_user_id).length === 0 && (
                       <p className="text-xs text-slate-400">Geen medewerkers beschikbaar</p>
                     )}
-                    {medewerkers.filter(m => m.auth_user_id).map(m => {
+                    {/* Gekozen collega's blijven altijd staan, ook als ze niet bij de zoekterm passen. */}
+                    {medewerkers.filter(m => m.auth_user_id
+                      && (!zoekMedewerker.trim()
+                        || m.naam.toLowerCase().includes(zoekMedewerker.trim().toLowerCase())
+                        || geselecteerdeAssignees.some(a => a.user_id === m.auth_user_id)),
+                    ).map(m => {
                       const geselecteerd = geselecteerdeAssignees.find(a => a.user_id === m.auth_user_id!)
                       return (
                         <div key={m.auth_user_id!} className="flex items-center gap-2">

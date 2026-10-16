@@ -10,6 +10,7 @@
  */
 
 import * as React from 'react'
+import { MedewerkerKiezer } from '@/components/ui/medewerker-kiezer'
 import toast from 'react-hot-toast'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -174,20 +175,19 @@ function EigenaarVeld(props: { dossierId: string; eigenaarId: string | null; med
   }
 
   return (
-    <label className="block">
+    <div>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
         Commercieel eigenaar
       </span>
-      <select
-        className="mt-0.5 h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px] disabled:opacity-60"
+      <MedewerkerKiezer
+        medewerkers={props.medewerkers}
         value={waarde}
         disabled={bezig}
-        onChange={e => wijzig(e.target.value)}
-      >
-        <option value="">Nog niet bepaald</option>
-        {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-      </select>
-    </label>
+        onChange={wijzig}
+        leegLabel="Nog niet bepaald"
+        className="mt-0.5 h-8"
+      />
+    </div>
   )
 }
 
@@ -299,13 +299,7 @@ function AanpassenDialoog(props: {
 
         <DialogBody className="space-y-3">
           <Label tekst="Commercieel eigenaar">
-            <select
-              className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-              value={eigenaar} onChange={e => setEigenaar(e.target.value)}
-            >
-              <option value="">Nog niet bepaald</option>
-              {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
+            <MedewerkerKiezer medewerkers={props.medewerkers} value={eigenaar} onChange={setEigenaar} leegLabel="Nog niet bepaald" className="h-8" />
           </Label>
 
           <Label tekst="Wat is de volgende stap?">
@@ -355,13 +349,7 @@ function AanpassenDialoog(props: {
           </Label>
 
           <Label tekst={stapSoort === 'wachten' ? 'Wie controleert het?' : 'Wie pakt dit op?'}>
-            <select
-              className="h-8 w-full rounded-md border border-neutral-300 bg-white px-2 text-[13px]"
-              value={actiehouder} onChange={e => setActiehouder(e.target.value)}
-            >
-              <option value="">Kies een collega…</option>
-              {props.medewerkers.map(m => <option key={m.id} value={m.id}>{m.naam}</option>)}
-            </select>
+            <MedewerkerKiezer medewerkers={props.medewerkers} value={actiehouder} onChange={setActiehouder} className="h-8" />
           </Label>
 
           {/* Een percentage, geen los getal: het voedt de kans-gewogen pijplijn onder

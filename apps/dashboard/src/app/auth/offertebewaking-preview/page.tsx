@@ -96,6 +96,25 @@ function paneelData(v: Voorbeeld): OffertePaneelData {
   }
 }
 
+/** Een beheerkantoor met veel open offertes: zo ziet "Ook open bij" er ingeklapt uit. */
+const DELFLAND: Voorbeeld[] = [
+  ['VvE Buitenhof, Delft', 'Vervangen entreepartij', 14_200, '2026-10-22'],
+  ['VvE De Kroonvogel, Delft', 'Houtrot kozijnen 2e verdieping', 9_850, '2026-10-12'],
+  ['VvE Hof van Delfland', 'Herstel hemelwaterafvoer', 2_950, null],
+  ['VvE Westhoven', 'Schilderwerk trappenhuizen', 31_400, '2026-10-29'],
+  ['VvE Harnaschpolder blok C', 'Balkonrenovatie', 96_000, '2026-10-09'],
+  ['VvE Tanthof-Oost', 'Voegwerk achtergevel', 18_700, '2026-11-14'],
+  ['VvE Delftse Hout', 'Dakgoten vervangen', 6_300, '2026-10-20'],
+  ['VvE Wippolder', 'Kozijnen 1e verdieping', 44_100, '2026-11-02'],
+  ['VvE Vrijenban', 'Brandwerende deuren', 2_400, null],
+  ['VvE Schieweg', 'Galerijhekken', 22_900, '2026-10-17'],
+].map(([klant, titel, bedrag, datum], i) => ({
+  id: `del${i}`, titel: titel as string, klant: klant as string, nr: `D-26-05${10 + i}`, bedrag: bedrag as number,
+  verzonden: '2026-09-15', contact: ['A. Kok (VvE Beheer Delfland)', '015 214 70 02'], eigenaar: BAS,
+  houder: datum ? SANNE : null, houderNaam: datum ? 'Sanne' : null,
+  soort: datum ? 'actie' : null, tekst: datum ? 'Nabellen' : null, datum: datum as string | null,
+}))
+
 export default function OffertebewakingPreview() {
   const [tegel, setTegel] = React.useState<Bak | null>(null)
   const [klassen, setKlassen] = React.useState(STANDAARD_KLASSEN)
@@ -141,7 +160,10 @@ export default function OffertebewakingPreview() {
                   onOpen={setGeopend}
                   // Kroonvogel en Buitenhof hebben dezelfde beheerder: zo ziet het blok "Ook open bij" eruit.
                   overige={v.id === 'd5' || v.id === 'd9'
-                    ? { partij: 'VvE Beheer Delfland', rijen: alleOngefilterd.filter(r => r.id === (v.id === 'd5' ? 'd9' : 'd5')) }
+                    ? { partij: 'VvE Beheer Delfland', rijen: [
+                        ...alleOngefilterd.filter(r => r.id === (v.id === 'd5' ? 'd9' : 'd5')),
+                        ...DELFLAND.map(x => maakTeDoenRij(naarDossier(x), VANDAAG)),
+                      ] }
                     : undefined}
                   kop={
                     <div className="border-b border-neutral-200 px-4 py-3">

@@ -21,10 +21,11 @@ import type { DossierRij } from '@/components/dossiers/types'
 import { STATUS_PRESENTATIE } from '@/lib/commercie/types'
 import type { OffertePaneelData } from '@/lib/commercie/paneel'
 import { bellenBanner } from './bellen-banner'
-import { eur, eurKort, kortDatum, kortStap, type TeDoenRij } from './te-doen'
+import { eur, kortDatum, kortStap, type TeDoenRij } from './te-doen'
 import { legMeebesprokenVast } from '@/lib/commercie/paneel'
 import { bedragklasse } from '@/lib/commercie/bedragklassen'
 import { UitkomstFormulier } from './UitkomstFormulier'
+import { OverigeOffertes } from './OverigeOffertes'
 
 type Props = {
   dossier: DossierRij
@@ -92,52 +93,18 @@ export function OfferteKaart({ dossier: d, data, ...props }: Props) {
         )}
 
         {overige.length > 0 && (
-          <div className="mt-2 flex flex-col">
-            <Label>
-              Ook open bij {props.overige?.partij ?? 'deze klant'} · {overige.length} · {eurKort(overige.reduce((t, r) => t + (r._bedrag ?? 0), 0))}
-            </Label>
-            <p className="mt-1 text-xs text-neutral-500">
-              Vink aan wat je in dit gesprek meebespreekt; de notitie komt dan ook op die offertes.
-            </p>
-            <ul className="mt-1 flex flex-col">
-              {overige.map(o => (
-                <li key={o.id} className="grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-2 border-t border-neutral-100 py-2 first:border-t-0">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 accent-[var(--brand-500)]"
-                    checked={mee.has(o.id)}
-                    onChange={e => setMee(s => {
-                      const n = new Set(s)
-                      if (e.target.checked) n.add(o.id); else n.delete(o.id)
-                      return n
-                    })}
-                    aria-label={`${o.titel} meebespreken`}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-semibold text-neutral-900">{o.titel}</span>
-                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-neutral-500">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: STATUS_PRESENTATIE[o._status].cssKleur }} aria-hidden />
-                      <span className="truncate">
-                        {o.klant_naam ? `${o.klant_naam} · ` : ''}{o._stap ?? 'Nog niets afgesproken'}{o.bewaking_actiehouder ? ` · ${o.bewaking_actiehouder}` : ''}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="text-right">
-                    <span className="block text-[13px] font-semibold tabular-nums text-neutral-900">{eur(o._bedrag)}</span>
-                    {props.onOpen && (
-                      <button
-                        type="button"
-                        onClick={() => props.onOpen?.(o.id)}
-                        className="text-xs font-semibold text-brand-700 underline underline-offset-2"
-                      >
-                        Openen
-                      </button>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <OverigeOffertes
+            partij={props.overige?.partij ?? null}
+            rijen={overige}
+            eigenKlant={d.klant_naam ?? null}
+            mee={mee}
+            onMee={(id, aan) => setMee(s => {
+              const n = new Set(s)
+              if (aan) n.add(id); else n.delete(id)
+              return n
+            })}
+            onOpen={props.onOpen}
+          />
         )}
       </Blok>
 

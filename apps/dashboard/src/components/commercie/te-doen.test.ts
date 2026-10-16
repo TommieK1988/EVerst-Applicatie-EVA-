@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bakVan, kortDatum, kortStap, pastBijZoekterm, sorteerTeDoen, type TeDoenRij } from './te-doen'
+import { bakVan, kortDatum, kortStap, pastBijZoekterm, sorteerOverige, sorteerTeDoen, type TeDoenRij } from './te-doen'
 
 describe('kortStap', () => {
   it('schrijft de stap kort op, met het jaartal alleen als het een ander jaar is', () => {
@@ -48,5 +48,19 @@ describe('sorteerTeDoen', () => {
       rij('vandaag-groot', 'vandaag', 0, 60_000),
     ].sort(sorteerTeDoen).map(r => r.id)
     expect(uit).toEqual(['lang-verlopen', 'kort-verlopen', 'vandaag-groot', 'vandaag-klein', 'later'])
+  })
+})
+
+describe('sorteerOverige', () => {
+  it('zelfde VvE eerst, dan urgentie, dan bedrag', () => {
+    const r = (id: string, klant: string, bak: TeDoenRij['_bak'], bedrag: number) =>
+      ({ id, klant_naam: klant, _bak: bak, _bedrag: bedrag }) as TeDoenRij
+    const uit = sorteerOverige([
+      r('a', 'VvE Buitenhof', 'later', 90_000),
+      r('b', 'VvE Buitenhof', 'verlopen', 5_000),
+      r('c', 'VvE De Kroonvogel', 'later', 1_000),
+      r('d', 'VvE Hof van Delfland', 'verlopen', 20_000),
+    ], 'VvE De Kroonvogel').map(x => x.id)
+    expect(uit).toEqual(['c', 'd', 'b', 'a'])
   })
 })

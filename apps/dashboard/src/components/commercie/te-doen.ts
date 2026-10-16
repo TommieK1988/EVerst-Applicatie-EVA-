@@ -133,6 +133,14 @@ export function pastBijZoekterm(r: TeDoenRij, term: string): boolean {
   ].some(v => v?.toLowerCase().includes(q))
 }
 
+/** "Ook open bij": zelfde klant (VvE) eerst, dan urgentie, dan het hoogste bedrag. */
+export function sorteerOverige(rijen: TeDoenRij[], eigenKlant: string | null): TeDoenRij[] {
+  return [...rijen].sort((a, b) =>
+    Number(b.klant_naam === eigenKlant) - Number(a.klant_naam === eigenKlant)
+    || (BAK_INDEX.get(a._bak) ?? 99) - (BAK_INDEX.get(b._bak) ?? 99)
+    || (b._bedrag ?? 0) - (a._bedrag ?? 0))
+}
+
 export const eur = (n: number | null) =>
   n == null ? '—' : new Intl.NumberFormat('nl-NL', {
     style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
