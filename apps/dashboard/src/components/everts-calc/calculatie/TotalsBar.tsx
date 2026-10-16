@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { berekenBtwBreakdown, formatEuro, formatGetal, formatPct, scenarioDefaultOpslag } from '@/lib/everts-calc/calculations'
 import { TriangleAlert } from 'lucide-react'
 import ConfirmDialog from '@/components/everts-calc/shared/ConfirmDialog'
+import { Alert } from '@/components/ui/alert'
 import type { Scenario, Calculatieregel, Componentregel } from '@/lib/everts-calc/types'
 import { useInstellingen } from '@/lib/everts-calc/use-instellingen'
 import { laadBtwTarieven } from '@/lib/stamdata/btw-actions'
@@ -112,8 +113,10 @@ export default function TotalsBar({
   const huidigTarief = scenario.standaard_uurtarief || globaalTarief
   const gaatMee = tariefTeBevestigen === null ? 0
     : arbeidComps.filter(c => c.tarief !== tariefTeBevestigen && volgtCalculatietarief(c.tarief, huidigTarief)).length
-  const eigenTarief = tariefTeBevestigen === null ? 0
-    : arbeidComps.filter(c => !volgtCalculatietarief(c.tarief, huidigTarief)).length
+  const eigenComps = tariefTeBevestigen === null ? []
+    : arbeidComps.filter(c => !volgtCalculatietarief(c.tarief, huidigTarief))
+  const eigenTarief = eigenComps.length
+  const eigenTarieven = [...new Set(eigenComps.map(c => c.tarief))].sort((a, b) => a - b)
 
   const [opslagEdit, setOpslagEdit] = useState(String(scenarioDefaultOpslag(scenario)))
   const [opslagFocus, setOpslagFocus] = useState(false)
@@ -274,16 +277,22 @@ export default function TotalsBar({
         title={`Uurtarief op € ${formatGetal(tariefTeBevestigen ?? 0, 2)} per uur zetten?`}
         description={
           `${gaatMee} arbeidsregel${gaatMee === 1 ? '' : 's'} met het calculatietarief ${gaatMee === 1 ? 'gaat' : 'gaan'} mee, nieuwe regels krijgen dit tarief ook.`
-          + (eigenTarief > 0
-            ? ` ${eigenTarief} regel${eigenTarief === 1 ? '' : 's'} met een eigen tarief ${eigenTarief === 1 ? 'blijft' : 'blijven'} staan; Controle laat ze nakijken.`
-            : '')
         }
         confirmLabel="Toepassen"
         onConfirm={() => {
           if (tariefTeBevestigen !== null) onUurtariefToepassen(tariefTeBevestigen)
           setTariefTeBevestigen(null)
         }}
-      />
+      >
+        {eigenTarief > 0 && (
+          <Alert
+            tone="warning"
+            title={`${eigenTarief} regel${eigenTarief === 1 ? '' : 's'} met een eigen tarief ${eigenTarief === 1 ? 'blijft' : 'blijven'} staan`}
+          >
+            {eigenTarieven.map(t => `${formatEuro(t)}/u`).join(', ')}. Deze regels krijgen het nieuwe tarief niet; Controle laat ze nakijken.
+          </Alert>
+        )}
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={teBevestigen !== null}
