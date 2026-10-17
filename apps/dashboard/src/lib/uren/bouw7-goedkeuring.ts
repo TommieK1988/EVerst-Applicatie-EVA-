@@ -79,7 +79,8 @@ import { vereisSessie } from '@/lib/auth/rechten'
 import { maakNotificatie } from '@/lib/notificaties/maak'
 import { getBouw7Client } from '@/lib/bouw7/sync'
 import { haalOpenstaandeUren, verdeelNaarRol, type OpenUurRegel, type OpenUrenResultaat } from './openstaande-uren'
-import type { Bouw7Client, Bouw7EmployeeHourLog, Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
+import type { Bouw7EmployeeHourLogResponse } from '@/lib/bouw7/client'
+import { schrijfHourLog, bewaarBeoordeling, vindBewerkbareRegel, verversUrenVensterLater } from './hourlog-schrijven'
 
 // De leeslaag woont in `openstaande-uren.ts` en niet hier; zie de kop van dat
 // bestand voor waarom. De types gaan hier wél doorheen, zodat bestaande importen
@@ -163,97 +164,8 @@ export async function getMijnTeKeurenUren(van: string, tot: string, ids?: number
 
 /* ── Schrijven ────────────────────────────────────────────────────── */
 
-/**
- * Leest de uurregel opnieuw uit Bouw7 en stuurt hem compleet terug met de gevraagde wijzigingen.
- *
- * Read-modify-write met de volledige veldenset, omdat niet vaststaat of Bouw7 een upsert als
- * gedeeltelijke wijziging of als volledige vervanging behandelt. Zo maakt het niet uit.
- */
-async function schrijfHourLog(
-  client: Bouw7Client,
-  hourLogId: number,
-  wijziging: {
-    approved?: boolean
-    logHours?: string
-    hourTypeId?: number
-    /** Bouw7-project waar de regel naartoe moet. Weglaten = laten staan waar hij staat. */
-    projectId?: number
-    pslId?: number | null
-    comments?: string
-  },
-): Promise<{ ok: true; voor: Bouw7EmployeeHourLog } | { ok: false; error: string }> {
-  const res = await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
-    q: `id = ${hourLogId} LIMIT 1`,
-  })
-  const voor = (res?.items ?? [])[0]
-  if (!voor) return { ok: false, error: 'Deze uurregel bestaat niet meer in Bouw7.' }
-  if (voor.isMutable === false) return { ok: false, error: 'Deze uurregel is in Bouw7 vergrendeld.' }
-  if (!voor.project?.id || !voor.employee?.id || !voor.type?.id || !voor.logDate) {
-    return { ok: false, error: 'De uurregel in Bouw7 mist gegevens die nodig zijn om hem bij te werken.' }
-  }
-
-  const projectId = wijziging.projectId ?? voor.project.id
-  const hourTypeId = wijziging.hourTypeId ?? voor.type.id
-  const naarAnderProject = projectId !== voor.project.id
-  const andereUursoort = hourTypeId !== voor.type.id
-
-  // Een bewakingscode hoort bij één project. Verhuist de regel, dan mag de oude code niet mee:
-  // wie een code op het nieuwe dossier wil, stuurt die expliciet mee.
-  const pslId = wijziging.pslId !== undefined ? wijziging.pslId
-    : naarAnderProject ? null
-    : (voor.projectSecurityLink?.id ?? null)
-  const opmerking = wijziging.comments !== undefined ? wijziging.comments : (voor.comment ?? '')
-
-  await client.post('/project/hour-log', {
-    id: hourLogId,
-    project: { id: projectId },
-    employee: { id: voor.employee.id },
-    hourType: { id: hourTypeId },
-    logDate: voor.logDate.slice(0, 10),
-    logHours: wijziging.logHours ?? String(voor.hours ?? '0'),
-    ...(pslId ? { projectSecurityLink: { id: pslId } } : {}),
-    ...(opmerking ? { comments: opmerking } : {}),
-    // Het uurtarief hoort bij de combinatie project × uursoort. Verandert een van die twee, dan
-    // laten we Bouw7 het opnieuw bepalen in plaats van het oude bedrag mee te slepen -- dat is
-    // dezelfde route als de weekstaat, die nooit zelf een tarief meestuurt.
-    ...(voor.hourlyRate != null && !naarAnderProject && !andereUursoort
-      ? { hourlyRate: String(voor.hourlyRate) }
-      : {}),
-    approved: wijziging.approved ?? voor.isApproved === true,
-  })
-
-  // Verhuizen en van uursoort wisselen lezen we terug. Een upsert die zo'n veld stilzwijgend
-  // negeert zou anders als geslaagd gemeld worden terwijl de uren op het oude project blijven --
-  // en dan is er niets te zien behalve een tevreden melding.
-  if (naarAnderProject || andereUursoort) {
-    const na = (await client.get<Bouw7EmployeeHourLogResponse>('/list/hour-logs/employee', {
-      q: `id = ${hourLogId} LIMIT 1`,
-    }))?.items?.[0]
-    if (!na) return { ok: false, error: 'Bouw7 gaf de bijgewerkte uurregel niet terug.' }
-    if (naarAnderProject && na.project?.id !== projectId) {
-      return { ok: false, error: 'Bouw7 heeft de uren niet naar het andere dossier verplaatst.' }
-    }
-    if (andereUursoort && na.type?.id !== hourTypeId) {
-      return { ok: false, error: 'Bouw7 heeft de uursoort niet aangepast.' }
-    }
-  }
-  return { ok: true, voor }
-}
-
-/** Zorgt dat de tussenstand-rij bestaat en werkt hem bij. */
-async function bewaarBeoordeling(
-  hourLogId: number,
-  regel: Pick<OpenUurRegel, 'medewerkerId' | 'dossierId' | 'datum'>,
-  patch: Record<string, unknown>,
-) {
-  await db().from('uren_bouw7_beoordeling').upsert({
-    bouw7_hour_log_id: hourLogId,
-    medewerker_id: regel.medewerkerId,
-    dossier_id: regel.dossierId,
-    log_datum: regel.datum || null,
-    ...patch,
-  }, { onConflict: 'bouw7_hour_log_id' })
-}
+// Het schrijven naar Bouw7 (`schrijfHourLog`, `bewaarBeoordeling`) woont in `hourlog-schrijven.ts`:
+// dit is een 'use server'-module, en die functies eisen zelf geen sessie.
 
 export type KeurResultaat =
   | {
@@ -410,15 +322,7 @@ export async function keurUrenGoed(
   revalidatePath('/uren')
   // De goedkeurvlaggen zijn in Bouw7 gewijzigd; /uren leest die uit het bewaarde urenvenster.
   // Op de achtergrond, want de goedkeurder hoeft daar niet op te wachten.
-  if (naarBouw7 > 0) {
-    try {
-      const { after } = await import('next/server')
-      after(async () => {
-        const { ververseGlobaleBron } = await import('@/lib/bouw7/snapshot')
-        await ververseGlobaleBron('uren_venster').catch(() => {})
-      })
-    } catch { /* buiten een request-context bestaat `after` niet */ }
-  }
+  if (naarBouw7 > 0) await verversUrenVensterLater()
 
   return {
     ok: true,
@@ -519,6 +423,11 @@ export async function trekGoedkeuringIn(
     }).catch(() => { /* melding is bijzaak */ })
   }
 
+  // Het vinkje op /uren komt uit het bewaarde urenvenster; zonder verversing blijft de regel daar
+  // goedgekeurd staan en is hij niet aan te passen.
+  revalidatePath('/uren')
+  await verversUrenVensterLater()
+
   return { ok: true }
 }
 
@@ -541,14 +450,11 @@ export async function corrigeerUurregel(
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ik = await vereisSessie()
-  const jaar = new Date().getFullYear()
-  // Alleen deze ene regel; de autorisatiecontrole hieronder heeft niet meer nodig.
-  const mijn = await getMijnTeKeurenUren(`${jaar - 1}-01-01`, `${jaar + 1}-12-31`, [hourLogId])
-  if (mijn.fout) return { ok: false, error: mijn.fout }
-
-  const regel = [...mijn.alsTeamleider, ...mijn.alsProjectleider, ...mijn.alsVasteGoedkeurder]
-    .find(r => r.id === hourLogId)
-  if (!regel) return { ok: false, error: 'Deze uurregel staat niet op jouw akkoord.' }
+  // Aanpassen is ruimer dan goedkeuren: de projectleider mag ook een regel bijstellen die nog bij
+  // de teamleider ligt. Zie `bewerkrecht` voor de hele regel.
+  const gevonden = await vindBewerkbareRegel(hourLogId, ik.id)
+  if (!gevonden.ok) return gevonden
+  const regel = gevonden.regel
   if (wijziging.uren !== undefined && !(wijziging.uren > 0 && wijziging.uren <= 24)) {
     return { ok: false, error: 'Vul een aantal uren tussen 0 en 24 in.' }
   }
@@ -646,16 +552,7 @@ export async function corrigeerUurregel(
   }
 
   revalidatePath('/uren')
-  // /uren leest niet live uit Bouw7 maar uit het bewaarde urenvenster; zonder deze verversing
-  // toont het scherm na een correctie nog de oude waarde. Op de achtergrond, want de goedkeurder
-  // hoeft daar niet op te wachten -- zelfde route als `keurUrenGoed`.
-  try {
-    const { after } = await import('next/server')
-    after(async () => {
-      const { ververseGlobaleBron } = await import('@/lib/bouw7/snapshot')
-      await ververseGlobaleBron('uren_venster').catch(() => {})
-    })
-  } catch { /* buiten een request-context bestaat `after` niet */ }
+  await verversUrenVensterLater()
 
   return { ok: true }
 }

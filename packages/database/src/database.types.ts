@@ -17332,6 +17332,9 @@ export type Database = {
       }
       uren_bouw7_beoordeling: {
         Row: {
+          aangemaakt_door: string | null
+          aangemaakt_op: string | null
+          afgesplitst_van: number | null
           bouw7_fout: string | null
           bouw7_hour_log_id: number
           bouw7_status: string
@@ -17354,6 +17357,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string | null
+          afgesplitst_van?: number | null
           bouw7_fout?: string | null
           bouw7_hour_log_id: number
           bouw7_status?: string
@@ -17376,6 +17382,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aangemaakt_door?: string | null
+          aangemaakt_op?: string | null
+          afgesplitst_van?: number | null
           bouw7_fout?: string | null
           bouw7_hour_log_id?: number
           bouw7_status?: string
