@@ -16,7 +16,7 @@
  * openen en downloaden zitten in de kop van dat paneel.
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Search } from 'lucide-react'
 import { Button } from '@/components/ui'
 import type { BestandRij } from '@/lib/dossiers/bestand-rijen'
@@ -67,6 +67,7 @@ function sorteerWaarde(rij: BestandRij, veld: SorteerVeld): string | number {
 export default function BestandenLijst({
   rijen, inApp, onToggleApp, geselecteerd, onSelecteer, voettekst, legeTekst,
   inPortaal, onTogglePortaal, soorten, onZetSoort, mappen, fotos, onToonFotos,
+  onUploadNaar, sleepDoel, openNaar,
 }: {
   rijen: BestandRij[]
   /** Submappen van de SharePoint-dossiermap, ook lege. */
@@ -75,6 +76,12 @@ export default function BestandenLijst({
   fotos?: BestandRij[]
   /** Springt in de fotogalerij naar de foto's van deze map. */
   onToonFotos?: (pad: string) => void
+  /** Bestandskiezer voor uploaden in een map. Ontbreekt = geen uploadknop op de mapregels. */
+  onUploadNaar?: (pad: string) => void
+  /** Tijdens slepen: de map onder de muis ('' = de dossiermap); null = er wordt niet gesleept. */
+  sleepDoel?: string | null
+  /** Na een upload in een map: die map (en zijn ouders) openklappen. */
+  openNaar?: { pad: string; keer: number } | null
   /**
    * Sleutels van bestanden die de buitendienst in de mobiele app ziet (opt-in).
    * Net als de portaalkolom op de bronoverstijgende sleutel, dus ook voor
@@ -110,6 +117,16 @@ export default function BestandenLijst({
   const [open, setOpen] = useState<Set<string>>(new Set())
 
   const zoekt = zoek.trim() !== ''
+
+  useEffect(() => {
+    if (!openNaar?.pad) return
+    const delen = openNaar.pad.split('/')
+    setOpen(vorig => {
+      const nieuw = new Set(vorig)
+      for (let i = 1; i <= delen.length; i++) nieuw.add(delen.slice(0, i).join('/'))
+      return nieuw
+    })
+  }, [openNaar])
 
   const bronnen = useMemo(() => {
     const set = new Set(rijen.map(r => r.bron))
@@ -179,6 +196,9 @@ export default function BestandenLijst({
 
   const toonAppKolom = !!inApp && !!onToggleApp
   const toonPortaalKolom = !!inPortaal && !!onTogglePortaal
+  const kolommen = KOLOMMEN.length + (toonAppKolom ? 1 : 0) + (toonPortaalKolom ? 1 : 0)
+  // Alleen een submap licht op; de dossiermap zelf krijgt de overlay over alles.
+  const doelwit = (pad: string) => !!sleepDoel && sleepDoel === pad
 
   return (
     <>
@@ -273,8 +293,9 @@ export default function BestandenLijst({
                       diepte={regel.diepte}
                       open={regel.open}
                       onWissel={wissel}
-                      toonApp={toonAppKolom}
-                      toonPortaal={toonPortaalKolom}
+                      onUpload={onUploadNaar}
+                      doelwit={doelwit(regel.map.pad)}
+                      kolommen={kolommen}
                     />
                   )
                 case 'fotos':
@@ -286,8 +307,8 @@ export default function BestandenLijst({
                       map={regel.map}
                       diepte={regel.diepte}
                       onToonFotos={onToonFotos}
-                      toonApp={toonAppKolom}
-                      toonPortaal={toonPortaalKolom}
+                      doelwit={doelwit(regel.map.pad)}
+                      kolommen={kolommen}
                     />
                   )
                 case 'bestand':
@@ -298,6 +319,7 @@ export default function BestandenLijst({
                       diepte={regel.diepte}
                       inBoom={inBoom}
                       toonMap={zoekt}
+                      doelwit={inBoom && !zoekt && doelwit(regel.rij.map ?? '')}
                       geselecteerd={geselecteerd === regel.rij.sleutel}
                       onSelecteer={onSelecteer}
                       inApp={inApp}
@@ -326,7 +348,7 @@ export default function BestandenLijst({
               </tr>
             ) : (
               <tr>
-                <td colSpan={KOLOMMEN.length + (toonAppKolom ? 1 : 0) + (toonPortaalKolom ? 1 : 0)} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
+                <td colSpan={kolommen} className="px-3 py-6 text-center text-[12.5px] text-neutral-500">
                   Geen bestanden gevonden.
                 </td>
               </tr>

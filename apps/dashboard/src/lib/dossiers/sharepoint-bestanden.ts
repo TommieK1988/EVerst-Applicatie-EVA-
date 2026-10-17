@@ -5,6 +5,7 @@ import { appGraphFetch } from '@/lib/o365/graph'
 import { vereisSessie } from '@/lib/auth/rechten'
 import { assertDossierBewerkbaar } from './guards'
 import { lijstDossiermapInhoud, type SharePointSubmap } from '@/lib/o365/dossiermap-inhoud'
+import { bestandPadInMap, mapPadDelen } from '@/lib/o365/mappad'
 import {
   matchDossierFolder,
   resolveShareLink,
@@ -480,12 +481,16 @@ export async function koppelDossierMapViaLink(dossierId: string, shareLink: stri
   }
 }
 
-/* ─── Upload (bestanden meegestuurd bij een nieuwe aanvraag) ─────────────── */
+/* ─── Upload (Bestanden-tab en bestanden bij een nieuwe aanvraag) ─────────── */
 
 /**
- * Upload de meegestuurde bestanden van een (nieuwe) aanvraag naar de SharePoint-dossiermap.
+ * Upload de meegestuurde bestanden naar de SharePoint-dossiermap.
  * Bestaat de map nog niet, dan wordt hij aangemaakt. Gooit nooit — geeft per saldo een
  * `fout`-melding terug zodat de UI het kan tonen zonder de aanvraag te blokkeren.
+ *
+ * Met `submap` in de formdata (`Tekeningen/Revisie 2`) landen de bestanden in die
+ * submap. Dat pad komt van de client; `mapPadDelen` weigert alles waarmee het buiten
+ * de dossiermap zou kunnen komen, en het wordt altijd achter de dossiermap geplakt.
  */
 export async function uploadDossierBestandenNaarSharePoint(
   dossierId: string,
@@ -496,6 +501,9 @@ export async function uploadDossierBestandenNaarSharePoint(
 
   const files = formData.getAll('bestanden').filter((f): f is File => f instanceof File)
   if (files.length === 0) return { ok: true, geuploaded: 0 }
+
+  const submap = mapPadDelen(String(formData.get('submap') ?? ''))
+  if (!submap) return { ok: false, geuploaded: 0, fout: 'Deze map hoort niet bij de dossiermap.' }
 
   try {
     await vereisSessie()
@@ -517,7 +525,7 @@ export async function uploadDossierBestandenNaarSharePoint(
     for (const f of files) {
       try {
         const bytes = new Uint8Array(await f.arrayBuffer())
-        const res = await appGraphFetch(`/drives/${driveId}/items/${itemId}:/${encodeURIComponent(f.name)}:/content`, {
+        const res = await appGraphFetch(`${bestandPadInMap(driveId, itemId, submap, f.name)}/content`, {
           method: 'PUT',
           headers: { 'Content-Type': f.type || 'application/octet-stream' },
           body: bytes,

@@ -2,7 +2,7 @@
  * bestand-boom.ts
  *
  * De mappenstructuur van de SharePoint-dossiermap terug in de bestandenlijst: mappen
- * als uitklapbare regels, bestanden eronder. Bouw7 kent geen mappen; die bestanden
+ * als uitklapbare koppen, bestanden eronder. Bouw7 kent geen mappen; die bestanden
  * staan bovenaan, naast wat direct in de dossiermap staat.
  *
  * Foto's staan niet in de lijst maar in de fotogalerij. Een map vol foto's zou in de
@@ -101,24 +101,28 @@ function telOp(knoop: MapKnoop): void {
 }
 
 /**
- * De regels zoals de tabel ze toont: per map eerst de submappen, dan de bestanden,
- * dan de verwijzing naar de foto's. Alleen opengeklapte mappen tonen hun inhoud.
+ * De regels zoals de tabel ze toont. Een map staat als kop over de hele breedte, dus
+ * onder een kop moet alles bij die map horen: per map eerst de eigen bestanden en de
+ * verwijzing naar de foto's, dán pas de submappen. Andersom zouden de bestanden van
+ * een map onder de laatste submap belanden en daar bij lijken te horen. Alleen
+ * opengeklapte mappen tonen hun inhoud.
  */
 export function vlakAf(wortel: MapKnoop, open: ReadonlySet<string>): BoomRegel[] {
   const regels: BoomRegel[] = []
 
   function inhoud(knoop: MapKnoop, diepte: number) {
+    for (const rij of knoop.bestanden) regels.push({ soort: 'bestand', rij, diepte })
+    if (knoop.pad) {
+      if (knoop.fotosHier > 0) regels.push({ soort: 'fotos', map: knoop, diepte })
+      if (knoop.mappen.length === 0 && knoop.bestanden.length === 0 && knoop.fotosHier === 0) {
+        regels.push({ soort: 'leeg', map: knoop, diepte })
+      }
+    }
     for (const sub of knoop.mappen) {
       const isOpen = open.has(sub.pad)
       regels.push({ soort: 'map', map: sub, diepte, open: isOpen })
-      if (!isOpen) continue
-      inhoud(sub, diepte + 1)
-      if (sub.fotosHier > 0) regels.push({ soort: 'fotos', map: sub, diepte: diepte + 1 })
-      if (sub.mappen.length === 0 && sub.bestanden.length === 0 && sub.fotosHier === 0) {
-        regels.push({ soort: 'leeg', map: sub, diepte: diepte + 1 })
-      }
+      if (isOpen) inhoud(sub, diepte + 1)
     }
-    for (const rij of knoop.bestanden) regels.push({ soort: 'bestand', rij, diepte })
   }
 
   inhoud(wortel, 0)

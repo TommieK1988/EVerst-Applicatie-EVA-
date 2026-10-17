@@ -4,12 +4,18 @@
  * Een submap van de SharePoint-dossiermap in de bestandenlijst, plus de twee
  * hulpregels die in een opengeklapte map kunnen staan: de verwijzing naar de foto's
  * (die staan in de galerij, niet in de lijst) en "lege map".
+ *
+ * Een mapregel loopt over de hele breedte en begint helemaal links, vóór de
+ * vinkkolommen: een map is een kop boven zijn bestanden, geen bestand. De kolommen
+ * (soort, type, datum…) zeggen over een map ook niets.
+ *
+ * `data-map-pad` vertelt de upload waar iets landt dat je hier loslaat.
  */
 
 import React from 'react'
-import { ChevronRight, ExternalLink, Folder, FolderOpen, Image as ImageIcon } from 'lucide-react'
+import { ChevronRight, ExternalLink, Folder, FolderOpen, Image as ImageIcon, Upload } from 'lucide-react'
 import type { MapKnoop } from '@/lib/dossiers/bestand-boom'
-import { AANTAL_KOLOMMEN, BREED, CEL, CEL_BASIS, INSPRING_PX, PIJL_PX } from './lijst-cellen'
+import { CEL_BASIS, DOELWIT, INSPRING_PX, PIJL_PX } from './lijst-cellen'
 
 const meervoud = (n: number, een: string, meer: string) => `${n} ${n === 1 ? een : meer}`
 
@@ -22,32 +28,26 @@ function telling(map: MapKnoop): string {
   return delen.length ? delen.join(' · ') : 'leeg'
 }
 
-/** Lege cellen voor de vinkkolommen: een map zelf gaat niet in de app of het portaal. */
-function VinkCellen({ app, portaal }: { app: boolean; portaal: boolean }) {
-  return (
-    <>
-      {app && <td className={CEL} />}
-      {portaal && <td className={CEL} />}
-    </>
-  )
-}
-
-export function MapRegel({ map, diepte, open, onWissel, toonApp, toonPortaal }: {
+export function MapRegel({ map, diepte, open, onWissel, onUpload, doelwit, kolommen }: {
   map: MapKnoop
   diepte: number
   open: boolean
   onWissel: (pad: string) => void
-  toonApp: boolean
-  toonPortaal: boolean
+  /** Bestandskiezer voor deze map; ontbreekt = alleen-lezen, geen knop. */
+  onUpload?: (pad: string) => void
+  /** Er wordt boven deze map gesleept. */
+  doelwit: boolean
+  /** Alle kolommen van de tabel: de regel spant ze allemaal. */
+  kolommen: number
 }) {
   const Icoon = open ? FolderOpen : Folder
   return (
     <tr
+      data-map-pad={map.pad}
       onClick={() => onWissel(map.pad)}
-      className="cursor-pointer border-b border-neutral-100 hover:bg-neutral-50/70 [&>td:first-child]:pl-3"
+      className={`cursor-pointer border-b border-neutral-100 ${doelwit ? DOELWIT : 'hover:bg-neutral-50/70'}`}
     >
-      <VinkCellen app={toonApp} portaal={toonPortaal} />
-      <td className={`${CEL_BASIS} break-words`}>
+      <td colSpan={kolommen} className={`${CEL_BASIS} break-words pl-3`}>
         <span className="flex items-center gap-1" style={diepte ? { paddingLeft: diepte * INSPRING_PX } : undefined}>
           <ChevronRight
             className={`h-3 w-3 shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -62,7 +62,22 @@ export function MapRegel({ map, diepte, open, onWissel, toonApp, toonPortaal }: 
             >
               {map.naam}
             </button>
-            <span className="text-[10.5px] text-neutral-400">{telling(map)}</span>
+            {doelwit ? (
+              <span className="text-[10.5px] font-medium text-brand-700">Laat los om in deze map te zetten</span>
+            ) : (
+              <span className="text-[10.5px] text-neutral-400">{telling(map)}</span>
+            )}
+            {onUpload && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onUpload(map.pad) }}
+                title="Bestanden in deze map zetten"
+                aria-label={`Bestanden in ${map.naam} zetten`}
+                className="text-neutral-400 hover:text-brand-600"
+              >
+                <Upload className="h-3 w-3" />
+              </button>
+            )}
             {map.webUrl && (
               <a
                 href={map.webUrl}
@@ -79,28 +94,21 @@ export function MapRegel({ map, diepte, open, onWissel, toonApp, toonPortaal }: 
           </span>
         </span>
       </td>
-      {/* Soort, type, opgeslagen in, grootte, datum: zeggen niets over een map. */}
-      <td className={CEL} />
-      <td className={CEL} />
-      <td className={CEL} />
-      <td className={`${CEL} ${BREED}`} />
-      <td className={CEL} />
     </tr>
   )
 }
 
-export function MapHintRegel({ soort, map, diepte, onToonFotos, toonApp, toonPortaal }: {
+export function MapHintRegel({ soort, map, diepte, onToonFotos, doelwit, kolommen }: {
   soort: 'fotos' | 'leeg'
   map: MapKnoop
   diepte: number
   onToonFotos?: (pad: string) => void
-  toonApp: boolean
-  toonPortaal: boolean
+  doelwit: boolean
+  kolommen: number
 }) {
   return (
-    <tr className="border-b border-neutral-100 [&>td:first-child]:pl-3">
-      <VinkCellen app={toonApp} portaal={toonPortaal} />
-      <td colSpan={AANTAL_KOLOMMEN} className={`${CEL_BASIS} text-[11px] text-neutral-400`}>
+    <tr data-map-pad={map.pad} className={`border-b border-neutral-100 ${doelwit ? DOELWIT : ''}`}>
+      <td colSpan={kolommen} className={`${CEL_BASIS} pl-3 text-[11px] text-neutral-400`}>
         <span className="flex items-center gap-1.5" style={{ paddingLeft: diepte * INSPRING_PX + PIJL_PX }}>
           {soort === 'leeg' ? (
             'Lege map'

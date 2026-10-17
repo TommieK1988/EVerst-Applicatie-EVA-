@@ -17,7 +17,7 @@
  * indeling als in SharePoint.
  */
 
-import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import React, { useEffect, useMemo, useState, useTransition } from 'react'
 import toast from 'react-hot-toast'
 import { Button, Card, CardHeader, CardBody } from '@/components/ui'
 import { UploadCloud } from 'lucide-react'
@@ -31,7 +31,6 @@ import {
   hermatchDossierSharePoint,
   koppelDossierMap,
   ontkoppelDossierMap,
-  uploadDossierBestandenNaarSharePoint,
   type DossierSharePointData,
 } from '@/lib/dossiers/sharepoint-bestanden'
 import { bouw7Rij, sharePointRij, type BestandRij } from '@/lib/dossiers/bestand-rijen'
@@ -49,33 +48,7 @@ import Fotogalerij from './bestanden/Fotogalerij'
 import MailVenster from './bestanden/MailVenster'
 import MarkdownVenster from './bestanden/MarkdownVenster'
 import SharePointKoppeling from './bestanden/SharePointKoppeling'
-
-/**
- * Uploaden loopt via een server-action, en die heeft een maximale payload
- * (`serverActions.bodySizeLimit` in next.config.js, nu 8 MB). Eén sleepactie met tien
- * foto's gaat daar zo overheen, dus we versturen in groepen die eronder blijven.
- * De marge is voor de multipart-overhead.
- */
-const MAX_BESTAND_BYTES = 7 * 1024 * 1024
-const MAX_GROEP_BYTES = 6 * 1024 * 1024
-
-function maakGroepen(bestanden: File[]): File[][] {
-  const groepen: File[][] = []
-  let huidige: File[] = []
-  let omvang = 0
-
-  for (const b of bestanden) {
-    if (huidige.length && omvang + b.size > MAX_GROEP_BYTES) {
-      groepen.push(huidige)
-      huidige = []
-      omvang = 0
-    }
-    huidige.push(b)
-    omvang += b.size
-  }
-  if (huidige.length) groepen.push(huidige)
-  return groepen
-}
+import { useDossierUpload } from './bestanden/useDossierUpload'
 
 const fallbackFout = (e: unknown): DossierSharePointData => ({
   geconfigureerd: true,
@@ -239,137 +212,22 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
   const laadt = bouw7 == null || sharepoint == null
 
-  /* ─── Slepen en neerzetten ─── */
+  /* ─── Uploaden ─── */
 
-  // Uploaden gaat altijd naar SharePoint: Bouw7-bestanden zijn in EVA read-only, en
-  // de dossiermap is de plek waar collega's stukken bewaren. Bestaat die map nog
-  // niet, dan maakt de server-action hem aan.
   const kanUploaden = !readOnly && !!sharepoint?.geconfigureerd
-  const [sleept, setSleept] = useState(false)
-  const [uploadt, setUploadt] = useState(false)
-  const [uploadVoortgang, setUploadVoortgang] = useState({ klaar: 0, totaal: 0 })
-  // Elk kind-element vuurt zijn eigen dragenter/dragleave; tellen voorkomt geflikker.
-  const sleepDiepte = useRef(0)
-  const kiezer = useRef<HTMLInputElement>(null)
-
-  // Slepen binnen de pagina zelf (een foto uit de galerij, geselecteerde tekst) is geen
-  // upload. `dragstart` vuurt alleen voor sleepacties die in dit document beginnen.
-  const sleeptVanuitPagina = useRef(false)
-  useEffect(() => {
-    const start = () => { sleeptVanuitPagina.current = true }
-    const eind = () => { sleeptVanuitPagina.current = false }
-    window.addEventListener('dragstart', start)
-    window.addEventListener('dragend', eind)
-    window.addEventListener('drop', eind)
-    return () => {
-      window.removeEventListener('dragstart', start)
-      window.removeEventListener('dragend', eind)
-      window.removeEventListener('drop', eind)
-    }
-  }, [])
-
-  // Bewust níét alleen sleepacties met `Files` toelaten. Een bijlage uit de nieuwe
-  // Outlook of Outlook in de browser komt binnen als link, niet als bestand; weigerden
-  // we die, dan kon je hem niet eens loslaten (verbodsteken) en wist niemand waarom.
-  // Nu mag hij neer en legt opDrop uit wat er aan de hand is.
-  const isUploadSleep = () => kanUploaden && !sleeptVanuitPagina.current
-
-  function opDragEnter(e: React.DragEvent) {
-    if (!isUploadSleep()) return
-    e.preventDefault()
-    sleepDiepte.current++
-    setSleept(true)
-  }
-
-  function opDragOver(e: React.DragEvent) {
-    if (!isUploadSleep()) return
-    // Zonder preventDefault weigert de browser de drop en opent hij het bestand.
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-  }
-
-  function opDragLeave() {
-    // Bewust géén controle op de inhoud van de drag: niet elke browser vult
-    // `dataTransfer.types` bij dragleave, en dan zou de teller blijven hangen en de
-    // overlay in beeld blijven staan.
-    if (sleepDiepte.current === 0) return
-    sleepDiepte.current--
-    if (sleepDiepte.current === 0) setSleept(false)
-  }
-
-  async function opDrop(e: React.DragEvent) {
-    if (!isUploadSleep()) return
-    e.preventDefault()
-    sleepDiepte.current = 0
-    setSleept(false)
-
-    const gesleept = Array.from(e.dataTransfer.files)
-    if (gesleept.length === 0) {
-      // Uitgezocht (sept–okt 2026, foutenlog): het nieuwe Outlook geeft bij een gesleepte mail
-      // of bijlage alleen `attachment` / `maillistrow` / `multimaillistconversationrows` plus
-      // `chromium/x-drag-id` mee — een interne verwijzing, nooit de inhoud. Er valt dus niets
-      // op te halen; de uitleg hieronder is het enige wat we kunnen doen.
-      toast.error(
-        'Dit komt niet als bestand binnen — Outlook geeft hier alleen een verwijzing mee. ' +
-        'Sleep de bijlage eerst naar je bureaublad en van daar hierheen, of gebruik "Bestanden toevoegen".',
-        { duration: 9000 },
-      )
-      return
-    }
-    await uploadBestanden(gesleept)
-  }
-
-  function opGekozen(e: React.ChangeEvent<HTMLInputElement>) {
-    const gekozen = Array.from(e.target.files ?? [])
-    // Leegmaken, anders vuurt onChange niet als je hetzelfde bestand nog eens kiest.
-    e.target.value = ''
-    if (gekozen.length) void uploadBestanden(gekozen)
-  }
-
-  async function uploadBestanden(gesleept: File[]) {
-    // Te groot voor één server-action eruit filteren mét naam. Zonder deze check
-    // krijgt de gebruiker een nietszeggende netwerkfout terug.
-    const teGroot = gesleept.filter(b => b.size > MAX_BESTAND_BYTES)
-    const bestanden = gesleept.filter(b => b.size <= MAX_BESTAND_BYTES)
-    if (teGroot.length) {
-      toast.error(
-        `Te groot om via EVA te uploaden (max ${Math.floor(MAX_BESTAND_BYTES / 1024 / 1024)} MB): ` +
-        `${teGroot.map(b => b.name).join(', ')}. Zet die rechtstreeks in SharePoint.`,
-      )
-    }
-    if (bestanden.length === 0) return
-
-    setUploadt(true)
-    setUploadVoortgang({ klaar: 0, totaal: bestanden.length })
-
-    let geuploaded = 0
-    const fouten: string[] = []
-    try {
-      for (const groep of maakGroepen(bestanden)) {
-        const formData = new FormData()
-        for (const b of groep) formData.append('bestanden', b)
-
-        const res = await uploadDossierBestandenNaarSharePoint(dossierId, formData)
-        geuploaded += res.geuploaded
-        if (res.fout) fouten.push(res.fout)
-        setUploadVoortgang(v => ({ klaar: v.klaar + groep.length, totaal: v.totaal }))
-      }
-
-      if (geuploaded > 0) {
-        toast.success(`${geuploaded} bestand${geuploaded === 1 ? '' : 'en'} in SharePoint gezet.`)
-      }
-      if (fouten.length) toast.error(fouten.join(' · '))
-      else if (geuploaded === 0) toast.error('Er is niets geüpload.')
-
-      // Opnieuw ophalen: de map kan zojuist zijn aangemaakt én de lijst moet de
-      // nieuwe bestanden tonen.
-      setSharepoint(await getDossierSharePointBestanden(dossierId))
-    } catch (err) {
-      toast.error(`Uploaden mislukt: ${err instanceof Error ? err.message : 'onbekende fout'}`)
-    } finally {
-      setUploadt(false)
-    }
-  }
+  // Na een upload in een submap die map openklappen, zodat je ziet wat erbij kwam.
+  const [openNaar, setOpenNaar] = useState<{ pad: string; keer: number } | null>(null)
+  const upload = useDossierUpload({
+    dossierId,
+    kanUploaden,
+    onVernieuwd: (data, pad) => {
+      setSharepoint(data)
+      if (pad) setOpenNaar(v => ({ pad, keer: (v?.keer ?? 0) + 1 }))
+    },
+  })
+  // Boven een map wijst die map zichzelf aan; de overlay over alles is alleen voor de
+  // dossiermap zelf.
+  const sleepDoel = upload.sleept ? upload.sleepDoel : null
 
   // De koppelacties zijn identiek in de lege staat en in de voetregel; één keer
   // opschrijven scheelt twee blokken die uit elkaar kunnen gaan lopen.
@@ -405,21 +263,16 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
 
       {/* Lijst links, voorvertoning rechts; de foto's daaronder over de volle breedte.
           Het paneel blijft ook zonder selectie staan, zodat de indeling niet verspringt.
-          Onder lg stapelt alles. Het geheel is één dropzone: waar je iets loslaat maakt
-          niet uit — het landt toch in dezelfde SharePoint-map. */}
-      <div
-        className="relative space-y-5"
-        onDragEnter={opDragEnter}
-        onDragOver={opDragOver}
-        onDragLeave={opDragLeave}
-        onDrop={opDrop}
-      >
-        {(sleept || uploadt) && (
+          Onder lg stapelt alles. Het geheel is één dropzone: loslaten landt in de
+          dossiermap, behalve op een map (of een bestand in een map) in de lijst — dan
+          landt het in die map. */}
+      <div className="relative space-y-5" {...upload.zone}>
+        {(upload.uploadt || sleepDoel === '') && (
             <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[10px] border-2 border-dashed border-brand-400 bg-white/85">
               <span className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
                 <UploadCloud className="h-4 w-4" />
-                {uploadt
-                  ? `Bezig met uploaden… (${uploadVoortgang.klaar} van ${uploadVoortgang.totaal})`
+                {upload.uploadt
+                  ? `Bezig met uploaden… (${upload.voortgang.klaar} van ${upload.voortgang.totaal})`
                   : 'Laat los om in de SharePoint-dossiermap te zetten'}
               </span>
             </div>
@@ -447,8 +300,8 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 {/* Slepen lukt niet vanuit elk mailprogramma; kiezen werkt altijd. */}
                 {kanUploaden && (
                   <>
-                    <input ref={kiezer} type="file" multiple hidden onChange={opGekozen} />
-                    <Button variant="ghost" size="sm" disabled={uploadt} onClick={() => kiezer.current?.click()}>
+                    <input ref={upload.kiezer} type="file" multiple hidden onChange={upload.opGekozen} />
+                    <Button variant="ghost" size="sm" disabled={upload.uploadt} onClick={() => upload.kies()}>
                       <UploadCloud className="h-3.5 w-3.5" />
                       Bestanden toevoegen
                     </Button>
@@ -469,6 +322,9 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                 mappen={sharepoint?.status === 'gematcht' ? sharepoint.mappen : undefined}
                 fotos={fotos}
                 onToonFotos={pad => setFotoSprong(v => ({ pad, keer: (v?.keer ?? 0) + 1 }))}
+                onUploadNaar={kanUploaden ? upload.kies : undefined}
+                sleepDoel={sleepDoel}
+                openNaar={openNaar}
                 inApp={inApp}
                 onToggleApp={toggleApp}
                 inPortaal={inPortaal ?? undefined}
@@ -490,6 +346,7 @@ export default function BestandenTab({ dossierId }: { dossierId: string }) {
                     {kanUploaden && (
                       <p className="mt-1.5 text-[10.5px] text-neutral-400">
                         Sleep bestanden hierheen of gebruik "Bestanden toevoegen" om ze in de SharePoint-dossiermap te zetten.
+                        Laat je los op een map, of gebruik het uploadknopje bij een map, dan komen ze in die map.
                       </p>
                     )}
                   </div>

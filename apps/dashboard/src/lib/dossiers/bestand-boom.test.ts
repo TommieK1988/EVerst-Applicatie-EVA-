@@ -39,31 +39,31 @@ describe('bouwBoom + vlakAf', () => {
     { pad: 'Leeg', webUrl: null },
   ]
 
-  it('toont dichtgeklapt alleen de mappen en wat er bovenaan staat', () => {
+  it('toont dichtgeklapt wat er bovenaan staat, met de mappen daaronder', () => {
     const boom = bouwBoom(documenten, fotos, mappen)
     expect(alsTekst(vlakAf(boom, new Set()))).toEqual([
+      'offerte.pdf',
+      'bouw7.pdf',
       "> Foto's",
       '> Leeg',
       '> Tekeningen',
-      'offerte.pdf',
-      'bouw7.pdf',
     ])
   })
 
-  it('toont opengeklapt submappen vóór bestanden, ingesprongen', () => {
+  it('zet onder een map eerst zijn eigen bestanden, dan pas de submappen', () => {
     const boom = bouwBoom(documenten, fotos, mappen)
     const open = new Set(['Tekeningen', 'Tekeningen/Revisie 2', "Foto's", 'Leeg'])
     expect(alsTekst(vlakAf(boom, open))).toEqual([
+      'offerte.pdf',
+      'bouw7.pdf',
       "v Foto's",
       "  [1 foto's]",
       'v Leeg',
       '  [leeg]',
       'v Tekeningen',
+      '  tekening A.pdf',
       '  v Revisie 2',
       '    tekening B.pdf',
-      '  tekening A.pdf',
-      'offerte.pdf',
-      'bouw7.pdf',
     ])
   })
 

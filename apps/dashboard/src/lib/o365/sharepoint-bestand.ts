@@ -7,7 +7,7 @@
  */
 
 import { appGraphFetch } from './graph'
-import { MAX_MAPDIEPTE } from './dossiermap-inhoud'
+import { MAX_MAPDIEPTE } from './mappad'
 
 type BestandItem = {
   id: string

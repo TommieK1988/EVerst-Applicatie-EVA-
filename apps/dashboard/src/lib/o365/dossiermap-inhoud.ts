@@ -18,9 +18,8 @@
 
 import { appGraphGet } from './graph'
 import { alsBestand, KINDEREN_QUERY, type DriveItem, type SharePointBestand } from './sharepoint'
+import { MAX_MAPDIEPTE } from './mappad'
 
-/** Zoveel mapniveaus worden geopend, de dossiermap zelf meegeteld. */
-export const MAX_MAPDIEPTE = 8
 /** Zoveel mappen (de dossiermap zelf meegeteld) worden er maximaal geopend. */
 const MAX_MAPPEN = 150
 /** Gelijktijdige Graph-calls; meer levert vooral 429's op. */

@@ -11,7 +11,7 @@ import { formatteerGrootte, type BestandRij } from '@/lib/dossiers/bestand-rijen
 import { bepaalAutoSoort, type BestandSoortDef } from '@/lib/dossiers/bestand-soort'
 import { mapLabel } from '@/lib/dossiers/bestand-boom'
 import SoortCel from './SoortCel'
-import { BREED, CEL, CEL_BASIS, INSPRING_PX, PIJL_PX } from './lijst-cellen'
+import { BREED, CEL, CEL_BASIS, DOELWIT, INSPRING_PX } from './lijst-cellen'
 
 const BRON_STIJL: Record<BestandRij['bron'], string> = {
   Bouw7: 'bg-brand-50 text-brand-700',
@@ -19,15 +19,17 @@ const BRON_STIJL: Record<BestandRij['bron'], string> = {
 }
 
 export default function BestandRegel({
-  rij: r, diepte, inBoom, toonMap, geselecteerd, onSelecteer,
+  rij: r, diepte, inBoom, toonMap, doelwit, geselecteerd, onSelecteer,
   inApp, onToggleApp, inPortaal, onTogglePortaal, soorten, onZetSoort,
 }: {
   rij: BestandRij
   diepte: number
-  /** De lijst toont mappen: dan houdt de regel ruimte vrij voor het uitklappijltje. */
+  /** De lijst toont mappen: wat je op dit bestand loslaat, landt in zijn map. */
   inBoom: boolean
   /** Bij zoeken staat de lijst plat; dan zegt de regel zelf in welke map hij staat. */
   toonMap: boolean
+  /** Er wordt boven de map van dit bestand gesleept. */
+  doelwit: boolean
   geselecteerd: boolean
   onSelecteer: (rij: BestandRij) => void
   inApp?: Set<string>
@@ -39,14 +41,17 @@ export default function BestandRegel({
 }) {
   const toonAppKolom = !!inApp && !!onToggleApp
   const toonPortaalKolom = !!inPortaal && !!onTogglePortaal
-  const inspringing = diepte * INSPRING_PX + (inBoom ? PIJL_PX : 0)
+  // De map staat als kop links boven de bestanden; inspringen per niveau laat zien
+  // hoe diep een bestand zit.
+  const inspringing = diepte * INSPRING_PX
 
   return (
     <tr
       onClick={() => onSelecteer(r)}
       aria-selected={geselecteerd}
+      data-map-pad={inBoom && !toonMap ? r.map ?? '' : undefined}
       className={`cursor-pointer border-b border-neutral-100 [&>td:first-child]:pl-3 ${
-        geselecteerd ? 'bg-brand-50' : 'hover:bg-neutral-50/70'
+        doelwit ? DOELWIT : geselecteerd ? 'bg-brand-50' : 'hover:bg-neutral-50/70'
       }`}
     >
       {toonAppKolom && (

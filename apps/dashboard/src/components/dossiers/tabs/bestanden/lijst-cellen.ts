@@ -14,11 +14,14 @@ export const KOP = 'px-1.5 py-1 text-[10px] font-bold uppercase tracking-[0.03em
 
 /**
  * Inspringing per mapniveau, en de ruimte van het uitklappijltje (12px pijl + 4px
- * tussenruimte). Bestanden krijgen die ruimte ook, zodat hun naam precies onder de
- * naam van de map erboven begint.
+ * tussenruimte). De hulpregels in een map ("lege map", de foto's) beginnen daardoor
+ * precies onder de naam van die map.
  */
 export const INSPRING_PX = 20
 export const PIJL_PX = 16
 
-/** Het aantal kolommen naast de vinkjes; de mapregels vullen er evenveel. */
-export const AANTAL_KOLOMMEN = 6
+/**
+ * Een regel waar je boven sleept: hier landt het als je loslaat. Eén tint donkerder
+ * dan een geselecteerde regel, zodat die twee niet door elkaar lopen.
+ */
+export const DOELWIT = 'bg-brand-100'
